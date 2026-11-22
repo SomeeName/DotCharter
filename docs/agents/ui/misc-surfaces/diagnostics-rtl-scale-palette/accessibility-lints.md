@@ -124,7 +124,7 @@ signal (the `SwatchRing` child), which is the pattern to copy.
 
 ### What this pass looked at and did NOT act on
 
-- **`Controls/EqPlotControl` and `Controls/LivePlaySectionGraph` take pointer
+- **`Controls/ColumnFlowEqPlot` and `Controls/LivePlaySectionGraph` take pointer
   input and are neither `Focusable` nor `OnKeyDown`-handling** — unlike
   `ChordBoxControl` and `FireKnob`, which are both. Neither is the ONLY way to
   do its job (the EQ has numeric rows beside the plot; seeking and looping have

@@ -65,12 +65,19 @@ public sealed partial class SoundNextTaskViewModel : ObservableObject
         _ => _localization["Inspector_Task_AllDoneDetail"]
     };
 
-    /// <summary>The OTHER open tasks, one line each under the card.</summary>
-    public bool ShowFingeringRow => _queue.MissingFingeringCount > 0 && Filter != SoundQueueFilter.MissingFingering;
+    /// <summary>The three triage rows (design D's Task page): each lists its count and is offered while it has work.</summary>
+    public bool HasFingeringTask => _queue.MissingFingeringCount > 0;
 
-    public bool ShowUnnamedRow => _queue.UnnamedChordCount > 0 && Filter != SoundQueueFilter.UnnamedChord;
+    public bool HasUnnamedTask => _queue.UnnamedChordCount > 0;
 
-    public bool ShowBlockingRow => _queue.BlocksExportCount > 0 && Filter != SoundQueueFilter.BlocksExport;
+    public bool HasBlockers => _queue.BlocksExportCount > 0;
+
+    /// <summary>The Export readiness card's headline: "3 sounds with blocking errors", or ready to export.</summary>
+    public string ReadinessTitle => HasBlockers
+        ? _localization.Plural("Inspector_Task_BlockersOne", "Inspector_Task_Blockers", _queue.BlocksExportCount)
+        : _localization["Inspector_Task_Ready"];
+
+    public string ReadinessDetail => HasBlockers ? _localization["Inspector_Task_BlockersDetail"] : _localization["Inspector_Task_ReadyDetail"];
 
     private int TaskCount =>
         (_queue.MissingFingeringCount > 0 ? 1 : 0) + (_queue.UnnamedChordCount > 0 ? 1 : 0) + (_queue.BlocksExportCount > 0 ? 1 : 0);
@@ -99,8 +106,10 @@ public sealed partial class SoundNextTaskViewModel : ObservableObject
         OnPropertyChanged(nameof(Kicker));
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Detail));
-        OnPropertyChanged(nameof(ShowFingeringRow));
-        OnPropertyChanged(nameof(ShowUnnamedRow));
-        OnPropertyChanged(nameof(ShowBlockingRow));
+        OnPropertyChanged(nameof(HasFingeringTask));
+        OnPropertyChanged(nameof(HasUnnamedTask));
+        OnPropertyChanged(nameof(HasBlockers));
+        OnPropertyChanged(nameof(ReadinessTitle));
+        OnPropertyChanged(nameof(ReadinessDetail));
     }
 }

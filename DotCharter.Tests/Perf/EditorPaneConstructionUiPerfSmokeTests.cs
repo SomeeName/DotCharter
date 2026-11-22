@@ -33,13 +33,6 @@ public sealed class EditorPaneConstructionUiPerfSmokeTests
     }
 
     [Fact]
-    public async Task StemMixerView_buildsAndLaysOut()
-    {
-        await HeadlessSessionFixture.Dispatch(() => AttachAndLayout(new StemMixerView()),
-            CancellationToken.None);
-    }
-
-    [Fact]
     public async Task SheetMusicPaneView_buildsAndLaysOut()
     {
         await HeadlessSessionFixture.Dispatch(() => AttachAndLayout(new SheetMusicPaneView()),

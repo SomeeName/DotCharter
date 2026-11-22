@@ -68,14 +68,7 @@ public static class ToneDesignPromptBuilder
         new(() => BuildFewShotBlock(
             FewShotPresetIds.Where(id => id != AnchorReplacesFewShotId).ToList(), null), isThreadSafe: true);
 
-    /// <summary>One entry per (anchored, capture-catalogue) pair. There is one
-    /// system prompt per distinct capture library, and it must be the SAME string
-    /// every time that library is seen — a rebuilt prefix is a prompt-cache miss and
-    /// the catalogue charged at full price again. Keyed by the catalogue's
-    /// fingerprint, so a library that gained a capture gets a new prefix and an
-    /// unchanged one keeps hitting the old.</summary>
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string>
-        SystemPromptCache = new(StringComparer.Ordinal);
+    private static readonly ToneDesignPromptCache SystemPromptCache = new();
 
     /// <summary>The generated catalogue listing — one line per module plus its
     /// params as <c>id (min..max, default, unit)</c>. Cached: it is a few thousand
@@ -127,18 +120,14 @@ public static class ToneDesignPromptBuilder
     private static string CachedSystemPrompt(NamCaptureCatalog? captures, bool anchored, bool captureSearch)
     {
         var set = captures ?? NamCaptureCatalog.Empty;
-        var key = (anchored ? "a:" : "u:") + (captureSearch ? "s:" : "") + set.Fingerprint;
-        return SystemPromptCache.GetOrAdd(key, _ =>
+        return SystemPromptCache.GetOrAdd(set, anchored, captureSearch, () =>
         {
             var ids = anchored
                 ? FewShotPresetIds.Where(id => id != AnchorReplacesFewShotId).ToList()
                 : FewShotPresetIds;
             var fewShotIds = set.IsEmpty ? ids : ids.Append(CaptureFewShotPresetId).ToList();
-            return BuildSystemPrompt(
-                BuildFewShotBlock(fewShotIds, set.IsEmpty ? null : set),
-                fewShotIds.Count,
-                set,
-                captureSearch);
+            return BuildSystemPrompt(BuildFewShotBlock(fewShotIds, set.IsEmpty ? null : set),
+                fewShotIds.Count, set, captureSearch);
         });
     }
 
@@ -205,7 +194,7 @@ public static class ToneDesignPromptBuilder
             set.Anchor is not null
                 ? AnchoredSystemPromptFor(captures, captureSearch)
                 : SystemPromptFor(captures, captureSearch),
-            BuildMessages(request, set),
+            BuildMessages(request, set, captures),
             ToneDraftJson.Schema,
             ToneDraftJson.SchemaName);
     }
@@ -271,7 +260,7 @@ public static class ToneDesignPromptBuilder
     ///     "the changes" returns a diff nobody can apply, and the validator would
     ///     see a one-module rig.
     /// </summary>
-    private static List<ToneDesignTurn> BuildMessages(ToneDesignRequest request, ToneAnchorSet anchors)
+    private static List<ToneDesignTurn> BuildMessages(ToneDesignRequest request, ToneAnchorSet anchors, NamCaptureCatalog? captures)
     {
         var messages = new List<ToneDesignTurn>();
 
@@ -293,7 +282,9 @@ public static class ToneDesignPromptBuilder
         if (request.CurrentTone is { } current)
         {
             sb.AppendLine("This is the tone currently on the rig:");
-            sb.AppendLine(ToneDraftJson.Serialize(ToDraft(current)));
+            // Through the catalogue, so a neural amp keeps its capture id: a refine
+            // that asks only for less delay must not lose WHICH capture plays.
+            sb.AppendLine(ToneDraftJson.Serialize(ToDraft(current, captures)));
             sb.AppendLine();
             sb.AppendLine("Edit it as asked below and return the FULL chain, every module and every");
             sb.AppendLine("param you want set — not just what changed.");

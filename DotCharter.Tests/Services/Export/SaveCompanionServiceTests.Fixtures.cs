@@ -43,8 +43,14 @@ public sealed partial class SaveCompanionServiceTests : IDisposable
 
     // ---- helpers ------------------------------------------------------------
 
-    private static SaveCompanionService Create(AppConfig config, FakeAppLogger? logger = null) =>
-        new(new FakeConfigurationService { AppConfig = config }, logger ?? new FakeAppLogger());
+    private SaveCompanionService Create(AppConfig config, FakeAppLogger? logger = null, Action<string>? recycle = null) =>
+        new(new FakeConfigurationService { AppConfig = config }, logger ?? new FakeAppLogger(), recycle: recycle ?? RecycleCompanion);
+
+    private void RecycleCompanion(string path)
+    {
+        var bin = Directory.CreateDirectory(Path.Combine(_dir, ".dotcharter", "test-bin")).FullName;
+        File.Move(path, Path.Combine(bin, $"{Guid.NewGuid():N}_{Path.GetFileName(path)}"));
+    }
 
     private static ChartProject CreateProject()
     {

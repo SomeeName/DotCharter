@@ -59,40 +59,49 @@ internal static class RocksmithSngWriter
     /// <summary>Serializes the plain (unencrypted, uncompressed) SNG body.</summary>
     internal static byte[] WriteUnpacked(RocksmithSng sng)
     {
+        if (sng.Extension != null) throw new InvalidDataException("Extended arrangements require the RS Extended Range writer.");
         using var memory = new MemoryStream();
         using (var writer = new BinaryWriter(memory, Encoding.UTF8, true))
-        {
-            WriteArray(writer, sng.Beats, WriteBeat);
-            WriteArray(writer, sng.Phrases, WritePhrase);
-            WriteArray(writer, sng.Chords, WriteChordTemplate);
-            WriteArray(writer, sng.ChordNotes, WriteChordNotes);
-
-            WriteArray(writer, sng.Vocals, WriteVocal);
-            if (sng.Vocals.Count > 0)
-            {
-                WriteArray(writer, sng.SymbolsHeaders, WriteSymbolsHeader);
-                WriteArray(writer, sng.SymbolsTextures, WriteSymbolsTexture);
-                WriteArray(writer, sng.SymbolDefinitions, WriteSymbolDefinition);
-            }
-
-            WriteArray(writer, sng.PhraseIterations, WritePhraseIteration);
-            WriteArray(writer, sng.PhraseExtraInfos, WritePhraseExtraInfo);
-            WriteArray(writer, sng.NewLinkedDifficulties, WriteNewLinkedDifficulty);
-            WriteArray(writer, sng.Actions, WriteAction);
-
-            WriteArray(writer, sng.Events, WriteEvent);
-            WriteArray(writer, sng.Tones, WriteTone);
-
-            WriteArray(writer, sng.Dnas, WriteDna);
-
-            WriteArray(writer, sng.Sections, WriteSection);
-            WriteArray(writer, sng.Levels, WriteLevel);
-            WriteMetaData(writer, sng.MetaData);
-            // RS7X (7+ strings): inside the body, after MetaData, where the game stops reading.
-            if (sng.Extension != null) writer.Write(RsExtensionBlockWriter.Serialize(sng.Extension));
-        }
+            WriteBody(writer, sng);
 
         return memory.ToArray();
+    }
+
+    internal sealed record RecordWriters(
+        Action<BinaryWriter, RsChordTemplate> Template,
+        Action<BinaryWriter, RsChordNotes> ChordNotes,
+        Action<BinaryWriter, RsSection> Section,
+        Action<BinaryWriter, RsLevel> Level,
+        Action<BinaryWriter, RsMetaData> MetaData);
+
+    internal static void WriteBody(BinaryWriter writer, RocksmithSng sng, RecordWriters? records = null)
+    {
+        WriteArray(writer, sng.Beats, WriteBeat);
+        WriteArray(writer, sng.Phrases, WritePhrase);
+        WriteArray(writer, sng.Chords, records?.Template ?? WriteChordTemplate);
+        WriteArray(writer, sng.ChordNotes, records?.ChordNotes ?? WriteChordNotes);
+
+        WriteArray(writer, sng.Vocals, WriteVocal);
+        if (sng.Vocals.Count > 0)
+        {
+            WriteArray(writer, sng.SymbolsHeaders, WriteSymbolsHeader);
+            WriteArray(writer, sng.SymbolsTextures, WriteSymbolsTexture);
+            WriteArray(writer, sng.SymbolDefinitions, WriteSymbolDefinition);
+        }
+
+        WriteArray(writer, sng.PhraseIterations, WritePhraseIteration);
+        WriteArray(writer, sng.PhraseExtraInfos, WritePhraseExtraInfo);
+        WriteArray(writer, sng.NewLinkedDifficulties, WriteNewLinkedDifficulty);
+        WriteArray(writer, sng.Actions, WriteAction);
+
+        WriteArray(writer, sng.Events, WriteEvent);
+        WriteArray(writer, sng.Tones, WriteTone);
+
+        WriteArray(writer, sng.Dnas, WriteDna);
+
+        WriteArray(writer, sng.Sections, records?.Section ?? WriteSection);
+        WriteArray(writer, sng.Levels, records?.Level ?? WriteLevel);
+        (records?.MetaData ?? WriteMetaData)(writer, sng.MetaData);
     }
 
     private static void WriteBeat(BinaryWriter writer, RsBeat beat)
@@ -134,7 +143,7 @@ internal static class RocksmithSngWriter
         for (var i = 0; i < 6; i++) writer.Write(chordNotes.Vibrato[i]);
     }
 
-    private static void WriteBendData32(BinaryWriter writer, List<RsBendValue> bendValues)
+    internal static void WriteBendData32(BinaryWriter writer, IReadOnlyList<RsBendValue> bendValues)
     {
         var count = Math.Min(bendValues.Count, 32);
         for (var i = 0; i < 32; i++)
@@ -235,7 +244,9 @@ internal static class RocksmithSngWriter
         writer.Write(dna.DnaId);
     }
 
-    private static void WriteSection(BinaryWriter writer, RsSection section)
+    private static void WriteSection(BinaryWriter writer, RsSection section) => WriteSection(writer, section, null);
+
+    internal static void WriteSection(BinaryWriter writer, RsSection section, Func<sbyte, sbyte>? mask)
     {
         WriteFixedString(writer, section.Name, 32);
         writer.Write(section.Number);
@@ -243,17 +254,20 @@ internal static class RocksmithSngWriter
         writer.Write(section.EndTime);
         writer.Write(section.StartPhraseIterationId);
         writer.Write(section.EndPhraseIterationId);
-        WriteSBytes(writer, section.StringMask, 36, 0);
+        var values = mask == null ? section.StringMask : section.StringMask.Select(mask).ToArray();
+        WriteSBytes(writer, values, 36, 0);
     }
 
-    private static void WriteLevel(BinaryWriter writer, RsLevel level)
+    private static void WriteLevel(BinaryWriter writer, RsLevel level) => WriteLevel(writer, level, null);
+
+    internal static void WriteLevel(BinaryWriter writer, RsLevel level, Func<sbyte, sbyte>? stringIndex)
     {
         writer.Write(level.Difficulty);
         WriteArray(writer, level.Anchors, WriteAnchor);
         WriteArray(writer, level.AnchorExtensions, WriteAnchorExtension);
         WriteArray(writer, level.HandShapes, WriteFingerPrint);
         WriteArray(writer, level.Arpeggios, WriteFingerPrint);
-        WriteArray(writer, level.Notes, WriteNote);
+        WriteArray(writer, level.Notes, (w, note) => WriteNote(w, note, stringIndex));
         writer.Write(level.AverageNotesPerIteration.Length);
         foreach (var value in level.AverageNotesPerIteration) writer.Write(value);
         writer.Write(level.NotesInPhraseIterationsExclIgnored.Length);
@@ -294,13 +308,13 @@ internal static class RocksmithSngWriter
         writer.Write(fingerPrint.LastNoteTime);
     }
 
-    private static void WriteNote(BinaryWriter writer, RsNote note)
+    private static void WriteNote(BinaryWriter writer, RsNote note, Func<sbyte, sbyte>? stringIndex)
     {
         writer.Write(note.Mask);
         writer.Write(note.Flags);
         writer.Write(note.Hash);
         writer.Write(note.Time);
-        writer.Write(note.StringIndex);
+        writer.Write(stringIndex == null ? note.StringIndex : stringIndex(note.StringIndex));
         writer.Write(note.Fret);
         writer.Write(note.AnchorFret);
         writer.Write(note.AnchorWidth);
@@ -327,7 +341,9 @@ internal static class RocksmithSngWriter
         foreach (var bend in note.BendData) WriteBendValue(writer, bend);
     }
 
-    private static void WriteMetaData(BinaryWriter writer, RsMetaData metaData)
+    private static void WriteMetaData(BinaryWriter writer, RsMetaData metaData) => WriteMetaData(writer, metaData, metaData.Tuning);
+
+    internal static void WriteMetaData(BinaryWriter writer, RsMetaData metaData, short[] tuningOffsets)
     {
         writer.Write(metaData.MaxScore);
         writer.Write(metaData.MaxNotesAndChords);
@@ -339,8 +355,8 @@ internal static class RocksmithSngWriter
         WriteFixedString(writer, metaData.LastConversionDateTime, 32);
         writer.Write(metaData.Part);
         writer.Write(metaData.SongLength);
-        writer.Write(metaData.Tuning.Length);
-        foreach (var tuning in metaData.Tuning) writer.Write(tuning);
+        writer.Write(tuningOffsets.Length);
+        foreach (var tuning in tuningOffsets) writer.Write(tuning);
         // FirstNoteTime appears twice, always the same value.
         writer.Write(metaData.FirstNoteTime);
         writer.Write(metaData.FirstNoteTime);

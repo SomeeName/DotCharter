@@ -72,7 +72,7 @@ public sealed class ToneDesignUiPerfSmokeTests
     private sealed class StubSecretStore : IAiSecretStore
     {
         public string? Read(AiProviderKind kind) => "stored";
-        public void Write(AiProviderKind kind, string? secret) { }
+        public bool Write(AiProviderKind kind, string? secret) => true;
         public bool IsPersistent => true;
     }
 

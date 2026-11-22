@@ -93,7 +93,7 @@ public sealed unsafe class VulkanTimelineFontAtlas : ChartFontAtlas
 
         // Frames in flight may still sample the old sheet — idle first, then
         // swap the image under the (now unreferenced) descriptor set.
-        api.DeviceWaitIdle(_context.Device);
+        VulkanCheck.Ok(api.DeviceWaitIdle(_context.Device), "VulkanTimelineFontAtlas.DeviceWaitIdle");
         DestroyImage();
 
         _context.CreateImage(AtlasSize, AtlasSize, Format.R8G8B8A8Unorm, ImageTiling.Optimal,
@@ -101,13 +101,15 @@ public sealed unsafe class VulkanTimelineFontAtlas : ChartFontAtlas
             MemoryPropertyFlags.DeviceLocalBit, out _image, out _memory);
 
         var byteCount = (ulong)(AtlasSize * AtlasSize * 4);
-        _context.CreateBuffer(byteCount, BufferUsageFlags.TransferSrcBit,
-            MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit,
-            out var staging, out var stagingMemory);
+        var staging = default(Silk.NET.Vulkan.Buffer);
+        var stagingMemory = default(DeviceMemory);
         try
         {
+            _context.CreateBuffer(byteCount, BufferUsageFlags.TransferSrcBit,
+                MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit,
+                out staging, out stagingMemory);
             void* mapped;
-            api.MapMemory(_context.Device, stagingMemory, 0, byteCount, 0, &mapped);
+            VulkanCheck.Ok(api.MapMemory(_context.Device, stagingMemory, 0, byteCount, 0, &mapped), "VulkanTimelineFontAtlas.MapMemory");
             System.Buffer.MemoryCopy((void*)bitmap.GetPixels(), mapped, byteCount, byteCount);
             api.UnmapMemory(_context.Device, stagingMemory);
 
@@ -128,7 +130,7 @@ public sealed unsafe class VulkanTimelineFontAtlas : ChartFontAtlas
                     SType = StructureType.CommandBufferBeginInfo,
                     Flags = CommandBufferUsageFlags.OneTimeSubmitBit
                 };
-                api.BeginCommandBuffer(cmd, in begin);
+                VulkanCheck.Ok(api.BeginCommandBuffer(cmd, in begin), "VulkanTimelineFontAtlas.BeginCommandBuffer");
 
                 var subresource = new ImageSubresourceRange
                 { AspectMask = ImageAspectFlags.ColorBit, LevelCount = 1, LayerCount = 1 };
@@ -171,7 +173,7 @@ public sealed unsafe class VulkanTimelineFontAtlas : ChartFontAtlas
                 api.CmdPipelineBarrier(cmd, PipelineStageFlags.TransferBit, PipelineStageFlags.FragmentShaderBit,
                     0, 0, null, 0, null, 1, &toSampled);
 
-                api.EndCommandBuffer(cmd);
+                VulkanCheck.Ok(api.EndCommandBuffer(cmd), "VulkanTimelineFontAtlas.EndCommandBuffer");
 
                 var submit = new SubmitInfo
                 {
@@ -179,8 +181,8 @@ public sealed unsafe class VulkanTimelineFontAtlas : ChartFontAtlas
                     CommandBufferCount = 1,
                     PCommandBuffers = &cmd
                 };
-                api.QueueSubmit(_context.GraphicsQueue, 1, in submit, default);
-                api.QueueWaitIdle(_context.GraphicsQueue);
+                VulkanCheck.Ok(api.QueueSubmit(_context.GraphicsQueue, 1, in submit, default), "VulkanTimelineFontAtlas.QueueSubmit");
+                VulkanCheck.Ok(api.QueueWaitIdle(_context.GraphicsQueue), "VulkanTimelineFontAtlas.QueueWaitIdle");
             }
             finally
             {
@@ -189,8 +191,8 @@ public sealed unsafe class VulkanTimelineFontAtlas : ChartFontAtlas
         }
         finally
         {
-            api.DestroyBuffer(_context.Device, staging, null);
-            api.FreeMemory(_context.Device, stagingMemory, null);
+            if (staging.Handle != 0) api.DestroyBuffer(_context.Device, staging, null);
+            if (stagingMemory.Handle != 0) api.FreeMemory(_context.Device, stagingMemory, null);
         }
 
         _view = _context.CreateImageView(_image, Format.R8G8B8A8Unorm, ImageAspectFlags.ColorBit);

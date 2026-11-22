@@ -44,104 +44,219 @@
               Command="{Binding ShellDialogs.OpenPasteSpecialCommand}" InputGesture="{Binding ProjectState.Keybinds.PasteSpecial, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
     <Separator />
 
-    <!-- SELECTION. The "Select" submenu is GONE (2026-09-04): its third
-         row, Select by query, went with its dialog, and a submenu that
-         hides two rows is an extra click for nothing — the rule
-         MainMenuLocalizationTests.NoSubmenuHidesFewerThanThreeRows
-         enforces. The two survivors sit flat between the clipboard
-         verbs and Delete, which acts ON a selection rather than making
-         one. -->
-    <MenuItem Header="{localization:Loc Menu_SelectAll}" Command="{Binding SelectAllCommand}"
-              InputGesture="{Binding ProjectState.Keybinds.SelectAll, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
-        <MenuItem.Icon>
-            <PathIcon
-                Data="M3,5H21V7H3V5M3,17H21V19H3V17M6,9H18V15H6V9M8,11V13H16V11H8Z"
-                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
-        </MenuItem.Icon>
-    </MenuItem>
-    <MenuItem Header="{localization:Loc Menu_SelectLikePattern}"
-              Command="{Binding SelectLikePatternCommand}"
-              InputGesture="{Binding ProjectState.Keybinds.SelectLike, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
-        <MenuItem.Icon>
-            <PathIcon
-                Data="M3,5H21V7H3V5M3,17H21V19H3V17M6,9H18V15H6V9M8,11V13H16V11H8Z"
-                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
-        </MenuItem.Icon>
+    <!-- SELECTION. One "Select" group (#369): Select all, Select similar and the
+         Pattern builder sit side by side, and the user's saved patterns run from
+         it in one click. The group reads its patterns when it opens; Select
+         similar and a saved pattern say what they added on the status rail. -->
+    <MenuItem Header="{localization:Loc Menu_Select}" SubmenuOpened="OnSelectGroupOpened">
+        <MenuItem Header="{localization:Loc Menu_SelectAll}" Command="{Binding SelectAllCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.SelectAll, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M3,5H21V7H3V5M3,17H21V19H3V17M6,9H18V15H6V9M8,11V13H16V11H8Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_SelectLikePattern}"
+                  Command="{Binding SelectLikePatternCommand}"
+                  IsEnabled="{Binding EditingAvailability.Enabled[SelectLikePattern]}" ToolTip.Tip="{Binding EditingAvailability[SelectLikePattern]}" ToolTip.ShowOnDisabled="True"
+                  InputGesture="{Binding ProjectState.Keybinds.SelectLike, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M3,5H21V7H3V5M3,17H21V19H3V17M6,9H18V15H6V9M8,11V13H16V11H8Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_PatternBuilder}"
+                  Command="{Binding ShellDialogs.OpenPatternBuilderCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.PatternBuilder, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M14.6,16.6L19.2,12L14.6,7.4L16,6L22,12L16,18L14.6,16.6M9.4,16.6L4.8,12L9.4,7.4L8,6L2,12L8,18L9.4,16.6Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <!-- Dynamic rows, like File > Open Recent: each item carries its own command. -->
+        <MenuItem Header="{localization:Loc Menu_SavedPatterns}"
+                  ItemsSource="{Binding SelectionEdits.SavedPatterns}"
+                  IsEnabled="{Binding SelectionEdits.HasSavedPatterns}">
+            <MenuItem.ItemContainerTheme>
+                <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}"
+                              x:DataType="viewModels:SavedPatternItem">
+                    <Setter Property="Header" Value="{Binding Name}" />
+                    <Setter Property="Command" Value="{Binding RunCommand}" />
+                </ControlTheme>
+            </MenuItem.ItemContainerTheme>
+        </MenuItem>
     </MenuItem>
     <MenuItem Header="{localization:Loc Menu_DeleteSelected}" Command="{Binding DeleteSelectionCommand}"
               InputGesture="{Binding ProjectState.Keybinds.Delete, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
-    <MenuItem Header="{localization:Loc Menu_PatternBuilder}"
-              Command="{Binding ShellDialogs.OpenPatternBuilderCommand}"
-              InputGesture="{Binding ProjectState.Keybinds.PatternBuilder, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
-        <MenuItem.Icon>
-            <PathIcon
-                Data="M14.6,16.6L19.2,12L14.6,7.4L16,6L22,12L16,18L14.6,16.6M9.4,16.6L4.8,12L9.4,7.4L8,6L2,12L8,18L9.4,16.6Z"
-                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
-        </MenuItem.Icon>
-    </MenuItem>
     <Separator />
 
-    <!-- The four verbs that MOVE or RESIZE what is already there, as
-         opposed to creating or selecting it. -->
-    <MenuItem Header="{localization:Loc Menu_GroupSnapLength}">
+    <!-- The verbs that MOVE or RESIZE what is already there (snap, length, tempo
+         scaling, nudge), as opposed to creating or selecting it. -->
+    <MenuItem Header="{localization:Loc Menu_GroupMoveResize}">
         <MenuItem.Icon>
             <PathIcon
                 Data="M14.6,16.6L19.2,12L14.6,7.4L16,6L22,12L16,18L14.6,16.6M9.4,16.6L4.8,12L9.4,7.4L8,6L2,12L8,18L9.4,16.6Z"
                 Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
         </MenuItem.Icon>
-        <MenuItem Header="{localization:Loc Menu_SnapSelected}" Command="{Binding SnapSelectedCommand}"
+        <MenuItem Header="{localization:Loc Menu_SnapSelected}" Command="{Binding SnapSelectedCommand}" IsEnabled="{Binding EditingAvailability.Enabled[SnapSelected]}" ToolTip.Tip="{Binding EditingAvailability[SnapSelected]}" ToolTip.ShowOnDisabled="True"
                   InputGesture="{Binding ProjectState.Keybinds.SnapSelected, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
-        <MenuItem Header="{localization:Loc Menu_SnapAll}" Command="{Binding SnapAllCommand}"
+        <MenuItem Header="{localization:Loc Menu_SnapAll}" Command="{Binding SnapAllCommand}" IsEnabled="{Binding EditingAvailability.Enabled[SnapAll]}" ToolTip.Tip="{Binding EditingAvailability[SnapAll]}" ToolTip.ShowOnDisabled="True"
                   InputGesture="{Binding ProjectState.Keybinds.SnapAll, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
         <Separator />
-        <MenuItem Header="{localization:Loc Menu_IncreaseLength}" Command="{Binding IncreaseLengthCommand}"
+        <MenuItem Header="{localization:Loc Menu_IncreaseLength}" Command="{Binding IncreaseLengthCommand}" IsEnabled="{Binding EditingAvailability.Enabled[IncreaseLength]}" ToolTip.Tip="{Binding EditingAvailability[IncreaseLength]}" ToolTip.ShowOnDisabled="True"
                   InputGesture="{Binding ProjectState.Keybinds.IncreaseLength, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
-        <MenuItem Header="{localization:Loc Menu_DecreaseLength}" Command="{Binding DecreaseLengthCommand}"
+        <MenuItem Header="{localization:Loc Menu_DecreaseLength}" Command="{Binding DecreaseLengthCommand}" IsEnabled="{Binding EditingAvailability.Enabled[DecreaseLength]}" ToolTip.Tip="{Binding EditingAvailability[DecreaseLength]}" ToolTip.ShowOnDisabled="True"
                   InputGesture="{Binding ProjectState.Keybinds.DecreaseLength, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <Separator />
+        <!-- Double and half time rescale the tempo of the bars around the selection (the former Timing group). -->
+        <MenuItem Header="{localization:Loc Menu_DoubleTime}" Command="{Binding SelectionEdits.DoubleTimeCommand}"
+                  IsEnabled="{Binding SelectionEdits.HasSelection}" ToolTip.Tip="{localization:Loc Menu_Timing_Tip}" ToolTip.ShowOnDisabled="True"
+                  InputGesture="{Binding ProjectState.Keybinds.DoubleTime, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_HalfTime}" Command="{Binding SelectionEdits.HalfTimeCommand}"
+                  IsEnabled="{Binding SelectionEdits.HasSelection}" ToolTip.Tip="{localization:Loc Menu_Timing_Tip}" ToolTip.ShowOnDisabled="True"
+                  InputGesture="{Binding ProjectState.Keybinds.HalfTime, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <Separator />
+        <MenuItem Header="{localization:Loc Menu_NudgeInTime}"
+                  ToolTip.Tip="{localization:Loc Menu_NudgeInTime_Tip}">
+            <MenuItem Header="{localization:Loc Menu_NudgeEarlier}" Command="{Binding TimeNudge.EarlierCommand}" ToolTip.Tip="{Binding TimeNudge.DisabledReason}" ToolTip.ShowOnDisabled="True"
+                      InputGesture="{Binding ProjectState.Keybinds.NudgeEarlier, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <MenuItem Header="{localization:Loc Menu_NudgeLater}" Command="{Binding TimeNudge.LaterCommand}" ToolTip.Tip="{Binding TimeNudge.DisabledReason}" ToolTip.ShowOnDisabled="True"
+                      InputGesture="{Binding ProjectState.Keybinds.NudgeLater, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <Separator />
+            <MenuItem Header="{localization:Loc Menu_NudgeEarlier10Ms}" Command="{Binding TimeNudge.Earlier10MsCommand}" ToolTip.Tip="{Binding TimeNudge.DisabledReason}" ToolTip.ShowOnDisabled="True"
+                      InputGesture="{Binding ProjectState.Keybinds.NudgeEarlier10Ms, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <MenuItem Header="{localization:Loc Menu_NudgeLater10Ms}" Command="{Binding TimeNudge.Later10MsCommand}" ToolTip.Tip="{Binding TimeNudge.DisabledReason}" ToolTip.ShowOnDisabled="True"
+                      InputGesture="{Binding ProjectState.Keybinds.NudgeLater10Ms, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <MenuItem Header="{localization:Loc Menu_NudgeEarlier1Ms}" Command="{Binding TimeNudge.Earlier1MsCommand}" ToolTip.Tip="{Binding TimeNudge.DisabledReason}" ToolTip.ShowOnDisabled="True"
+                      InputGesture="{Binding ProjectState.Keybinds.NudgeEarlier1Ms, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <MenuItem Header="{localization:Loc Menu_NudgeLater1Ms}" Command="{Binding TimeNudge.Later1MsCommand}" ToolTip.Tip="{Binding TimeNudge.DisabledReason}" ToolTip.ShowOnDisabled="True"
+                      InputGesture="{Binding ProjectState.Keybinds.NudgeLater1Ms, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        </MenuItem>
     </MenuItem>
-    <MenuItem Header="{localization:Loc Menu_Bookmarks}">
-        <!-- CommandParameter must be a TYPED Int32: a string literal
-             makes RelayCommand<int>.CanExecute throw the moment the
-             submenu opens, which crashes the app. -->
-        <MenuItem Header="0" Command="{Binding ToggleBookmarkCommand}"
-                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=0}">
-            <MenuItem.CommandParameter><x:Int32>0</x:Int32></MenuItem.CommandParameter>
+    <!-- Every technique toggle, with the chord that also runs it. Each row says what it did on
+         the status rail ("Hammer-on set on 9 items"); the rows are enabled while there is a target. -->
+    <MenuItem Header="{localization:Loc Menu_GroupTechnique}"
+              ToolTip.Tip="{localization:Loc Menu_Technique_Tip}">
+        <MenuItem Header="{localization:Loc Menu_Tech_Hopo}" Command="{Binding SelectionEdits.ToggleHopoCommand}"
+                  IsEnabled="{Binding SelectionEdits.HasSelection}"
+                  InputGesture="{Binding ProjectState.Keybinds.ToggleHopo, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_Tech_Harmonic}" Command="{Binding SelectionEdits.ToggleHarmonicCommand}"
+                  IsEnabled="{Binding SelectionEdits.HasSelection}"
+                  InputGesture="{Binding ProjectState.Keybinds.ToggleHarmonic, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_Tech_Mute}" Command="{Binding SelectionEdits.ToggleMuteTechniqueCommand}"
+                  IsEnabled="{Binding SelectionEdits.HasSelection}"
+                  InputGesture="{Binding ProjectState.Keybinds.ToggleMute, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_Tech_LinkNext}" Command="{Binding SelectionEdits.ToggleLinkNextCommand}"
+                  IsEnabled="{Binding SelectionEdits.HasSelection}"
+                  InputGesture="{Binding ProjectState.Keybinds.ToggleLinkNext, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_Tech_Vibrato}" Command="{Binding SelectionEdits.ToggleVibratoCommand}"
+                  IsEnabled="{Binding SelectionEdits.HasSelection}"
+                  InputGesture="{Binding ProjectState.Keybinds.ToggleVibrato, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_Tech_Tremolo}" Command="{Binding SelectionEdits.ToggleTremoloCommand}"
+                  IsEnabled="{Binding SelectionEdits.HasSelection}"
+                  InputGesture="{Binding ProjectState.Keybinds.ToggleTremolo, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_Tech_Picking}" Command="{Binding SelectionEdits.TogglePickingCommand}"
+                  IsEnabled="{Binding SelectionEdits.HasSelection}"
+                  InputGesture="{Binding ProjectState.Keybinds.TogglePicking, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_Tech_Accent}" Command="{Binding SelectionEdits.ToggleAccentCommand}"
+                  IsEnabled="{Binding SelectionEdits.HasSelection}"
+                  InputGesture="{Binding ProjectState.Keybinds.ToggleAccent, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_Tech_Ignore}" Command="{Binding SelectionEdits.ToggleIgnoreCommand}"
+                  IsEnabled="{Binding SelectionEdits.HasSelection}"
+                  InputGesture="{Binding ProjectState.Keybinds.ToggleIgnore, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_Tech_PassOtherNotes}" Command="{Binding SelectionEdits.TogglePassOtherNotesCommand}"
+                  IsEnabled="{Binding SelectionEdits.HasSelection}"
+                  InputGesture="{Binding ProjectState.Keybinds.TogglePassOtherNotes, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <Separator />
+        <MenuItem Header="{localization:Loc Menu_TechniqueGroup}"
+                  ToolTip.Tip="{localization:Loc Menu_TechniqueGroup_Tip}">
+            <MenuItem Header="{localization:Loc Menu_TechAll_Hopo}" Command="{Binding SelectionEdits.ToggleHopoGroupCommand}"
+                      IsEnabled="{Binding SelectionEdits.HasSelection}"
+                      InputGesture="{Binding ProjectState.Keybinds.ToggleHopoGroup, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <MenuItem Header="{localization:Loc Menu_TechAll_Harmonic}" Command="{Binding SelectionEdits.ToggleHarmonicGroupCommand}"
+                      IsEnabled="{Binding SelectionEdits.HasSelection}"
+                      InputGesture="{Binding ProjectState.Keybinds.ToggleHarmonicGroup, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <MenuItem Header="{localization:Loc Menu_TechAll_Mute}" Command="{Binding SelectionEdits.ToggleMuteGroupCommand}"
+                      IsEnabled="{Binding SelectionEdits.HasSelection}"
+                      InputGesture="{Binding ProjectState.Keybinds.ToggleMuteGroup, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <MenuItem Header="{localization:Loc Menu_TechAll_LinkNext}" Command="{Binding SelectionEdits.ToggleLinkNextGroupCommand}"
+                      IsEnabled="{Binding SelectionEdits.HasSelection}"
+                      InputGesture="{Binding ProjectState.Keybinds.ToggleLinkNextGroup, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <MenuItem Header="{localization:Loc Menu_TechAll_Vibrato}" Command="{Binding SelectionEdits.ToggleVibratoGroupCommand}"
+                      IsEnabled="{Binding SelectionEdits.HasSelection}"
+                      InputGesture="{Binding ProjectState.Keybinds.ToggleVibratoGroup, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <MenuItem Header="{localization:Loc Menu_TechAll_Tremolo}" Command="{Binding SelectionEdits.ToggleTremoloGroupCommand}"
+                      IsEnabled="{Binding SelectionEdits.HasSelection}"
+                      InputGesture="{Binding ProjectState.Keybinds.ToggleTremoloGroup, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <MenuItem Header="{localization:Loc Menu_TechAll_Picking}" Command="{Binding SelectionEdits.TogglePickingGroupCommand}"
+                      IsEnabled="{Binding SelectionEdits.HasSelection}"
+                      InputGesture="{Binding ProjectState.Keybinds.TogglePickingGroup, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <MenuItem Header="{localization:Loc Menu_TechAll_Accent}" Command="{Binding SelectionEdits.ToggleAccentGroupCommand}"
+                      IsEnabled="{Binding SelectionEdits.HasSelection}"
+                      InputGesture="{Binding ProjectState.Keybinds.ToggleAccentGroup, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <MenuItem Header="{localization:Loc Menu_TechAll_Ignore}" Command="{Binding SelectionEdits.ToggleIgnoreGroupCommand}"
+                      IsEnabled="{Binding SelectionEdits.HasSelection}"
+                      InputGesture="{Binding ProjectState.Keybinds.ToggleIgnoreGroup, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            <MenuItem Header="{localization:Loc Menu_TechAll_PassOtherNotes}" Command="{Binding SelectionEdits.TogglePassOtherNotesGroupCommand}"
+                      IsEnabled="{Binding SelectionEdits.HasSelection}"
+                      InputGesture="{Binding ProjectState.Keybinds.TogglePassOtherNotesGroup, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
         </MenuItem>
-        <MenuItem Header="1" Command="{Binding ToggleBookmarkCommand}"
-                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=1}">
-            <MenuItem.CommandParameter><x:Int32>1</x:Int32></MenuItem.CommandParameter>
-        </MenuItem>
-        <MenuItem Header="2" Command="{Binding ToggleBookmarkCommand}"
-                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=2}">
-            <MenuItem.CommandParameter><x:Int32>2</x:Int32></MenuItem.CommandParameter>
-        </MenuItem>
-        <MenuItem Header="3" Command="{Binding ToggleBookmarkCommand}"
-                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=3}">
-            <MenuItem.CommandParameter><x:Int32>3</x:Int32></MenuItem.CommandParameter>
-        </MenuItem>
-        <MenuItem Header="4" Command="{Binding ToggleBookmarkCommand}"
-                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=4}">
-            <MenuItem.CommandParameter><x:Int32>4</x:Int32></MenuItem.CommandParameter>
-        </MenuItem>
-        <MenuItem Header="5" Command="{Binding ToggleBookmarkCommand}"
-                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=5}">
-            <MenuItem.CommandParameter><x:Int32>5</x:Int32></MenuItem.CommandParameter>
-        </MenuItem>
-        <MenuItem Header="6" Command="{Binding ToggleBookmarkCommand}"
-                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=6}">
-            <MenuItem.CommandParameter><x:Int32>6</x:Int32></MenuItem.CommandParameter>
-        </MenuItem>
-        <MenuItem Header="7" Command="{Binding ToggleBookmarkCommand}"
-                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=7}">
-            <MenuItem.CommandParameter><x:Int32>7</x:Int32></MenuItem.CommandParameter>
-        </MenuItem>
-        <MenuItem Header="8" Command="{Binding ToggleBookmarkCommand}"
-                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=8}">
-            <MenuItem.CommandParameter><x:Int32>8</x:Int32></MenuItem.CommandParameter>
-        </MenuItem>
-        <MenuItem Header="9" Command="{Binding ToggleBookmarkCommand}"
-                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=9}">
-            <MenuItem.CommandParameter><x:Int32>9</x:Int32></MenuItem.CommandParameter>
-        </MenuItem>
+    </MenuItem>
+    <!-- What a chord IS: notes into chords and back, power chords, fingerings, ghost gems.
+         Next to Technique, which is how its notes are played (moved here from Tools, #491). -->
+    <MenuItem Header="{localization:Loc Menu_GroupChords}">
+        <MenuItem.Icon>
+            <PathIcon Data="{DynamicResource IconGuitar}"
+                      Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_PickSlide}" Command="{Binding SelectionEdits.PickSlideCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.PickSlide, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_ConvertToPowerChordSmall}"
+                  Command="{Binding ConvertToPowerChordSmallCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.ConvertToPowerChordSmall, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_ConvertToPowerChordBig}"
+                  Command="{Binding ConvertToPowerChordBigCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.ConvertToPowerChordBig, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_MergeNotesIntoChord}"
+                  Command="{Binding MergeNotesIntoChordCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.MergeNotesIntoChord, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_SplitChordsIntoNotes}"
+                  Command="{Binding SplitChordsIntoNotesCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.SplitChordsIntoNotes, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_ToggleOctaveFingering}"
+                  Command="{Binding ToggleOctaveFingeringCommand}" />
+        <MenuItem Header="{localization:Loc Menu_TogglePowerChordFingering}"
+                  Command="{Binding TogglePowerChordFingeringCommand}" />
+        <MenuItem Header="{localization:Loc Menu_MutedStrumsToChord}"
+                  Command="{Binding MutedStrumsToChordCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.MutedStrumsToChord, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_ToggleGhostGems}"
+                  Command="{Binding ToggleGhostGemsCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.ToggleGhostGems, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}"
+                  ToolTip.Tip="{localization:Loc Menu_ToggleGhostGems_Tip}"
+                  AutomationProperties.Name="{localization:Loc Menu_ToggleGhostGems}" />
+        <MenuItem Header="{localization:Loc Menu_TappedHarmonic}"
+                  Command="{Binding TappedHarmonicCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.TappedHarmonic, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}"
+                  ToolTip.Tip="{localization:Loc Menu_TappedHarmonic_Tip}"
+                  AutomationProperties.Name="{localization:Loc Menu_TappedHarmonic}" />
+        <MenuItem Header="{localization:Loc Menu_GripsFromHeldNotes}"
+                  Command="{Binding GripsFromHeldNotesCommand}"
+                  IsEnabled="{Binding EditingAvailability.Enabled[GripsFromHeldNotes]}"
+                  ToolTip.Tip="{Binding EditingAvailability[GripsFromHeldNotes]}" ToolTip.ShowOnDisabled="True" />
+        <MenuItem Header="{localization:Loc Menu_HandShapesFromLetRing}"
+                  Command="{Binding HandShapesFromLetRingCommand}"
+                  IsEnabled="{Binding EditingAvailability.Enabled[HandShapesFromLetRing]}"
+                  ToolTip.Tip="{Binding EditingAvailability[HandShapesFromLetRing]}" ToolTip.ShowOnDisabled="True" />
+    </MenuItem>
+    <!-- One door to all ten slots with their times (#494); the Shift+0-9 keys and the palette's toggle rows still set, jump and clear. -->
+    <MenuItem Header="{localization:Loc Menu_Bookmarks}" Command="{Binding ShellDialogs.OpenBookmarksCommand}">
+        <MenuItem.Icon>
+            <PathIcon Data="{DynamicResource IconBookmark}"
+                      Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
     </MenuItem>
 </MenuItem>

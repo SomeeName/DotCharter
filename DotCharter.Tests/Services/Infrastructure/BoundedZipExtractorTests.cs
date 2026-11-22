@@ -24,6 +24,24 @@ public sealed class BoundedZipExtractorTests : IDisposable
 
     public void Dispose() => BestEffortDelete.Directory(_dir);
 
+    [Theory]
+    [InlineData(8, true)]
+    [InlineData(9, false)]
+    public void ReadEntryText_CountsInflatedBytesBeforeDecoding(int byteLimit, bool refused)
+    {
+        var path = WriteZip("manifest.zip", zip =>
+        {
+            using var entry = zip.CreateEntry("manifest.json", CompressionLevel.Optimal).Open();
+            entry.Write("\"\u00e9\u00e9\u00e9\" "u8);
+        });
+        using var archive = ZipFile.OpenRead(path);
+
+        var text = BoundedZipExtractor.ReadEntryText(archive.GetEntry("manifest.json")!, byteLimit);
+
+        if (refused) Assert.Null(text);
+        else Assert.Equal("\"\u00e9\u00e9\u00e9\" ", text);
+    }
+
     // ---- archive builders ---------------------------------------------------
 
     private string WriteZip(string name, Action<ZipArchive> fill)

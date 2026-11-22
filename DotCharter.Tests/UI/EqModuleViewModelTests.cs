@@ -20,6 +20,32 @@ public sealed class EqModuleViewModelTests
         return (new EqModuleViewModel(audio, FakeLocalization.English()), audio);
     }
 
+    [Fact]
+    public void TabbingThroughTheTypedFields_LeavesThePresetAndTheBand()
+    {
+        var (vm, audio) = Build();
+        vm.SelectedPresetKey = "FindTheGuitar";
+        var before = vm.Section.Bands.ToArray();
+        var pushes = audio.EqPushCount;
+
+        for (var i = 0; i < before.Length; i++)
+        {
+            vm.SelectedIndex = i;
+            vm.Edits.CommitFrequencyCommand.Execute(null);
+            vm.Edits.CommitGainCommand.Execute(null);
+            vm.Edits.CommitQCommand.Execute(null);
+        }
+
+        Assert.False(vm.IsCustom);
+        Assert.Equal(before, vm.Section.Bands);
+        Assert.Equal(pushes, audio.EqPushCount);
+
+        vm.SelectedIndex = 0;
+        vm.Edits.GainInput = (before[0].GainDb + 1).ToString("0.0", System.Globalization.CultureInfo.CurrentCulture);
+        vm.Edits.CommitGainCommand.Execute(null);
+        Assert.True(vm.IsCustom); // a typed change still makes the section custom
+    }
+
     // ── every gesture reaches the engine ─────────────────────────────────
 
     [Fact]
@@ -458,20 +484,130 @@ public sealed class EqModuleViewModelTests
             vm.SelectedFrequencyDefaultNormalized, 9);
     }
 
+    /// <summary>
+    ///     Design D's "Reset gain + Q" asks first, then puts the band's gain and Q back to the preset it was loaded
+    ///     from — not flat — and keeps its type, frequency and enable.
+    /// </summary>
     [Fact]
-    public void TheQDefault_IsTheSameNumberTheResetButtonWrites()
+    public void ResetGainAndQ_AsksFirst_ThenRestoresThePresetsBand_AndKeepsTheRest()
     {
-        // Two literals is how a double-click and the RESET button one row above
-        // it come to disagree about what "default" means.
-        var (vm, _) = Build();
+        var (vm, audio) = Build();
+        vm.SelectedPresetKey = "FindTheGuitar";
+        vm.SelectedIndex = 2;
+        var preset = vm.Section.Bands[2];
+        vm.SelectedGainDb = -9;
         vm.SelectedQNormalized = 0.9;
-        Assert.NotEqual(EqLimits.DefaultQ, vm.Section.Bands[vm.SelectedIndex].Q, 6);
+        vm.SelectedFrequencyNormalized = 0.3;
+        var moved = vm.Section.Bands[2];
+        Assert.Null(vm.Section.PresetKey);
 
-        vm.ResetSelectedCommand.Execute(null);
+        vm.Edits.ResetCommand.Execute(null);
+        Assert.True(vm.Edits.ResetConfirm.IsPending);
+        Assert.Contains("3", vm.Edits.ResetConfirm.Sentence);
+        Assert.Equal(-9, vm.Section.Bands[2].GainDb, 6);
 
-        Assert.Equal(EqLimits.DefaultQ, vm.Section.Bands[vm.SelectedIndex].Q, 9);
-        Assert.Equal(EqModuleViewModel.QDefaultNormalized, vm.SelectedQNormalized, 9);
-        Assert.Equal(EqModuleViewModel.GainDefaultDb, vm.SelectedGainDb, 9);
+        var pushes = audio.EqPushCount;
+        vm.Edits.ResetConfirm.ConfirmCommand.Execute(null);
+
+        var band = vm.Section.Bands[2];
+        Assert.Equal(preset.GainDb, band.GainDb, 9);
+        Assert.Equal(preset.Q, band.Q, 9);
+        Assert.Equal(moved.FrequencyHz, band.FrequencyHz, 9);
+        Assert.Equal(moved.Type, band.Type);
+        Assert.Equal(moved.Enabled, band.Enabled);
+        Assert.True(audio.EqPushCount > pushes, "the reset never reached the engine");
+        Assert.Equal(preset.GainDb, vm.SelectedGainDb, 9);
+    }
+
+    /// <summary>Design D's typed fields: an in-range value commits (and re-reads), an out-of-range or unreadable one names the range and changes nothing.</summary>
+    [Fact]
+    public void TypedFields_CommitInRange_AndNameTheRangeOtherwise()
+    {
+        var (vm, _) = Build();
+        vm.SelectedIndex = 2;
+        var before = vm.Section.Bands[2];
+
+        vm.Edits.FrequencyInput = "25000";
+        vm.Edits.CommitFrequencyCommand.Execute(null);
+        Assert.True(vm.Edits.HasError);
+        Assert.Contains("20000", vm.Edits.Error.Replace(",", "").Replace(".", ""));
+        Assert.Equal(before, vm.Section.Bands[2]);
+
+        vm.Edits.GainInput = "loud";
+        vm.Edits.CommitGainCommand.Execute(null);
+        Assert.True(vm.Edits.HasError);
+        Assert.Equal(before, vm.Section.Bands[2]);
+
+        vm.Edits.QInput = "0.1";
+        vm.Edits.CommitQCommand.Execute(null);
+        Assert.True(vm.Edits.HasError);
+
+        vm.Edits.FrequencyInput = "1234";
+        vm.Edits.CommitFrequencyCommand.Execute(null);
+        Assert.False(vm.Edits.HasError);
+        Assert.Equal(1234, vm.Section.Bands[2].FrequencyHz, 6);
+
+        vm.Edits.GainInput = "-6.5";
+        vm.Edits.CommitGainCommand.Execute(null);
+        Assert.Equal(-6.5, vm.Section.Bands[2].GainDb, 6);
+        Assert.Equal(-6.5, vm.SelectedGainDb, 6);
+
+        vm.Edits.QInput = "4";
+        vm.Edits.CommitQCommand.Execute(null);
+        Assert.Equal(4, vm.Section.Bands[2].Q, 6);
+
+        // a slider move re-reads the fields
+        vm.SelectedGainDb = 3;
+        Assert.Equal(3.0, double.Parse(vm.Edits.GainInput, System.Globalization.CultureInfo.CurrentCulture), 6);
+    }
+
+    /// <summary>The restored chip row: a chip selects its band in one click, its dot switches the band without selecting it, and both name the band.</summary>
+    [Fact]
+    public void TheChipRow_SelectsInOneClick_AndItsDotTogglesWithoutSelecting()
+    {
+        var (vm, _) = Build();
+        vm.Bands[3].SelectCommand.Execute(null);
+        Assert.Equal(3, vm.SelectedIndex);
+        Assert.True(vm.Bands[3].IsSelected);
+
+        var wasOn = vm.Bands[1].IsEnabled;
+        vm.Bands[1].ToggleEnabledCommand.Execute(null);
+        Assert.Equal(!wasOn, vm.Section.Bands[1].Enabled);
+        Assert.Equal(3, vm.SelectedIndex);
+        Assert.Contains("2", vm.Bands[1].ToggleLabel);
+        Assert.Equal("FireEqBand2", vm.Bands[1].ColorToken);
+        Assert.StartsWith("4 ", vm.Bands[3].ChipLabel, StringComparison.Ordinal);
+    }
+
+    // ── inspector design D: the Band card's picker and the Response card's Bypass ──
+
+    [Fact]
+    public void TheBandPicker_FollowsTheSelectedBand_AndNamesEachBand()
+    {
+        var (vm, _) = Build();
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        vm.SelectedIndex = 2;
+
+        Assert.Same(vm.Bands[2], vm.SelectedBand);
+        Assert.Contains(nameof(EqModuleViewModel.SelectedBand), changed);
+        Assert.Contains("3", vm.Bands[2].PickerLabel);
+        Assert.Contains(vm.Bands[2].TypeLabel, vm.Bands[2].PickerLabel);
+    }
+
+    [Fact]
+    public void Bypass_IsTheSectionSwitchInverted_AndReachesTheEngine()
+    {
+        var (vm, audio) = Build();
+        Assert.False(vm.IsBypassed);
+
+        vm.IsBypassed = true;
+
+        Assert.False(vm.IsSectionEnabled);
+        Assert.False(audio.LastEqSection!.IsEnabled);
+        vm.IsBypassed = false;
+        Assert.True(audio.LastEqSection!.IsEnabled);
     }
 }
 

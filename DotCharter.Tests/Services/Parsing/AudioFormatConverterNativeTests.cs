@@ -71,7 +71,7 @@ public sealed class AudioFormatConverterNativeTests : IDisposable
         Assert.False(converter.TryConvertWemToPlayable(_wem, out var playable, TestContext.Current.CancellationToken));
 
         Assert.Equal("", playable);
-        Assert.Contains(_log.Entries, e => e.Level == "WARN" && e.Message.Contains("not a wem", StringComparison.Ordinal));
+        Assert.Contains(_log.Entries, e => e.Level == "WARN" && e.Exception is InvalidDataException { Message: "not a wem" });
         AssertOnly(".wem");
     }
 

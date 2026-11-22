@@ -1,5 +1,6 @@
 using DotCharter.Services.Audio.LivePlay;
 using DotCharter.Services.Audio.LivePlay.Replays;
+using DotCharter.Services.Gameplay.Profiles;
 using DotCharter.Tone.Infrastructure.Storage;
 
 namespace DotCharter.Tests.Services.Audio.LivePlay;
@@ -44,6 +45,22 @@ public sealed class RunReplayTests : IDisposable
     }
 
     // ---- store --------------------------------------------------------------
+
+    [Fact]
+    public void SaveAfterAProfileSwitch_WritesIntoTheCapturedOwnersDirectory()
+    {
+        var players = new PlayerProfileService(FakeLocalization.English(), null, Path.Combine(_dir, "players.json"), "First");
+        var owner = players.ActiveProfile.Id;
+        var ownerDirectory = Path.Combine(players.GetDataDirectory(owner), ReplayStore.ReplaysDirectoryName);
+        var store = new ReplayStore(players);
+        players.SwitchTo(players.Create("Second").Id);
+
+        var name = store.Save(new RunReplay { SongKey = "song", ArrangementName = "lead" }, owner);
+
+        Assert.NotNull(name);
+        Assert.True(File.Exists(Path.Combine(ownerDirectory, name)));
+        Assert.False(File.Exists(Path.Combine(store.ReplaysDirectory, name)));
+    }
 
     [Fact]
     public void Store_RoundTrips()

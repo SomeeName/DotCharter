@@ -18,6 +18,22 @@
   systematically one output latency LATE, which is the bug v0.18 fixed.
   Scheduling is cleared on seek/pause/stop/speed change — the render clock keeps
   running while the transport does not.
+- The sandbox has one `VstSandboxSeat` context per seat. Host creation, lazy
+  teardown and recovery replay are serialized by the shared `_vstGate`; the
+  slot/desired-state maps use `_sandboxGate` only for short snapshots. A seat
+  move awaits the old child's unload before the destination load. Recovery
+  visits only the failed seat and validates the scheduled host under the VST
+  gate. An explicit edit cancels obsolete recovery before replacing a dead
+  host. Changed seats and missing desired slots participate in a chain edit;
+  unchanged seats in recovery or after giving up remain untouched. Per-seat
+  rejected/missing-file marks suppress load retries until that entry changes;
+  transport failures remain retryable. Slot state is
+  captured and handed to the destination before a move's unload, retained through
+  health capture until desired ownership ends, and restored after load. A source
+  that dies during unload cannot retain ownership or fail its move. Failures are
+  aggregated after independent seat edits and cleanup. Group shutdown requests
+  quit from all children before one shared bound. Engine swaps re-arm all surviving seat bridges
+  synchronously and queue every child's prepare behind `_vstGate`.
 - Engine/source/plugin mutation is serialized under `_gate`; VST load/unload is serialized by `_vstGate` off the UI thread. `_vstGate` is a `SemaphoreSlim`: the sandbox paths hold it across AWAITED pipe round trips (never a blocking wait — see the VST sandbox section of `audio-engine.md`); a Monitor is never held across an await. Never enumerate `_stems` outside `_gate` — snapshot under the lock and iterate the copy, so the lock is never held across a P/Invoke and `PositionChanged` is never raised with it held.
   **"Never across a P/Invoke" includes the SHORT ones that block the audio
   callback**, not only the multi-second opens: `dca_plugin_detach_from_input` is
@@ -61,6 +77,32 @@
   proving it at runtime would need a real device and a real multi-second
   decode). Engine create/destroy under `_gate` in `ReplaceEngineGated` stays —
   that path is the engine's exclusive owner by design.
+  A temporary cancellable master load retains the previous source during the
+  unlocked decode instead of detaching it. Publication checks cancellation
+  under `_gate`; a cancelled request discards its decoded source and keeps the
+  song. Its returned task cancels promptly while the native decoder unwinds
+  off-thread, so leaving Results does not wait for a long decode.
+  `LoadTemporaryAudioAsync` returns the owner generation synchronously. The pure
+  `Engine/MediaSourceOwnership` owns queue, worker admission, decode settlement,
+  publication, hand-back and rebuild decisions. `MediaSourceSwap` performs the
+  returned actions; native decode stays outside the playback gate. All ownership
+  transitions run under `_gate`, with no lock across an await. Requested identity,
+  loaded identity, temporary owner and pending restoration are separate axes,
+  covered by literal state/event rows in `MediaSourceOwnershipTests`.
+  A published take retains logical ownership when engine teardown clears the
+  native source. `TryRestoreAudioAsync` atomically registers hand-back against
+  that logical owner before replacement-engine replay; an unpublished take cannot
+  hand back. Its post-load seek rechecks ownership under the same gate. A newer
+  explicit song request wins before its worker runs; the latest queued temporary
+  request supersedes older take workers and blocks an earlier take's hand-back.
+  A matching candidate settles on failure or cancellation, including cancellation
+  before its worker starts; the previously published take can then hand back.
+  Logical loaded identity survives native teardown; explicit FreeAudio settles it
+  to the requested empty identity. Failure of an earlier ordinary decoder
+  settles its identity to empty at the same generation, so an already queued take
+  stays eligible. Pending restoration ends on publication or immediate empty
+  hand-back; an explicit replacement clears it. `MediaLoadOrderingTests` reorders
+  the actual request, swap, teardown and replay seams without clock assumptions.
 
 - Dispose order in `JuceAudioPlaybackService.Dispose` is deliberate (stop sources → detach instrument → unload guitar chain → free audio → destroy engine): VST hosts crash if teardown interleaves with the audio thread. Don't reorder.
 - The JuceSharp wrappers drain in-flight P/Invokes before destroying handles

@@ -1,10 +1,9 @@
 ﻿namespace DotCharter.Services.Editing;
 
 /// <summary>
-///     Builds the empty "draft layer" arrangement the two draft importers add
+///     Builds the empty "draft layer" arrangement the draft importers add
 ///     beside the arrangement the user is editing — the MIDI import
-///     (<c>ChartMaintenanceService.ApplyMidiDraft</c>) and chart-from-audio
-///     (<c>ChartFromAudioDialogViewModel.Apply</c>).
+///     (<c>ChartMaintenanceService.ApplyMidiDraft</c>).
 /// </summary>
 /// <remarks>
 ///     <b>It exists because both call sites carried the same five-property

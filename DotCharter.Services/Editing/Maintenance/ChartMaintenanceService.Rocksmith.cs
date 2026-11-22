@@ -40,7 +40,7 @@ public sealed partial class ChartMaintenanceService
         {
             // The same steps the export runs, whatever the export toggles say: this verb is asked for.
             var config = _configService.LoadAppConfig();
-            var steps = new DlcBuilderSteps(true, true, DlcBuilderSteps.ParseMode(config.ExportDdLevelCountMode));
+            var steps = DlcBuilderSteps.FromConfig(config) with { ApplyFixes = true, GenerateDynamicDifficulty = true };
             var audioLength = _projectState.TotalAudioLengthMs > 0 ? _projectState.TotalAudioLengthMs : (double?)null;
             var changed = RunOnSnapshot(project, after =>
             {
@@ -60,7 +60,7 @@ public sealed partial class ChartMaintenanceService
             // Freshly generated levels land on the TOP one, which is the chart the charter just had.
             if (shownWasSingleLevel && _projectState.ActiveArrangement is { Levels.Count: > 1 } shown)
             {
-                _projectState.ActiveLevel = shown.Levels.OrderBy(l => l.DifficultyIndex).Last();
+                _projectState.ActiveLevel = ChartLevels.Hardest(shown);
             }
 
             _projectState.SetMessage(changed > 0
@@ -103,6 +103,9 @@ public sealed partial class ChartMaintenanceService
             return 0;
         }
     }
+
+    public int GenerateShowlights() => _exportQuickFixes.GenerateShowlights();
+    public int CreateMissingToneDefinitions(Arrangement arrangement) => _exportQuickFixes.CreateMissingToneDefinitions(arrangement);
 
     /// <inheritdoc />
     public ToneKeyRepairProposal? RepairUndefinedToneKey(string undefinedKey)

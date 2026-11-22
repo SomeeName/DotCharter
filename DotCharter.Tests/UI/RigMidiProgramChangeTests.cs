@@ -54,6 +54,48 @@ public sealed class RigMidiProgramChangeTests
         Assert.Empty(posted);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ProgramAndControlChanges_DrainInReceivedOrder(bool programFirst)
+    {
+        var source = new Source();
+        var posted = new Queue<Action>();
+        var received = new List<string>();
+        using var model = new RigMidiInputViewModel(source, null, FakeLocalization.English(), posted.Enqueue,
+            (_, controller, value) => received.Add($"CC {controller} {value}"),
+            (_, program) => received.Add($"PC {program}"));
+
+        if (programFirst) source.SendProgram(0, 3);
+        source.SendControl(0, 80, 1);
+        if (!programFirst) source.SendProgram(0, 3);
+        Assert.Empty(received);
+        Assert.Single(posted);
+
+        posted.Dequeue()();
+
+        Assert.Equal(programFirst ? ["PC 3", "CC 80 1"] : new[] { "CC 80 1", "PC 3" }, received);
+    }
+
+    [Fact]
+    public void CoalescedControls_KeepTheOrderOfTheirLastReceivedValues()
+    {
+        var source = new Source();
+        var posted = new Queue<Action>();
+        var received = new List<string>();
+        using var model = new RigMidiInputViewModel(source, null, FakeLocalization.English(), posted.Enqueue,
+            (_, controller, value) => received.Add($"CC {controller} {value}"),
+            (_, program) => received.Add($"PC {program}"));
+        source.SendControl(0, 80, 1);
+        source.SendControl(0, 7, 10);
+        source.SendProgram(0, 3);
+        source.SendControl(0, 80, 2);
+
+        posted.Dequeue()();
+
+        Assert.Equal(["CC 7 10", "PC 3", "CC 80 2"], received);
+    }
+
     [Fact]
     public void ThePerformanceSettings_PersistAndReload()
     {
@@ -89,6 +131,9 @@ public sealed class RigMidiProgramChangeTests
 
         public void SendProgram(int channel, int program, int? generation = null) =>
             RigMidiProgramReceived?.Invoke(generation ?? RigMidiInputGeneration, channel, program);
+
+        public void SendControl(int channel, int controller, int value) =>
+            RigMidiControlReceived?.Invoke(RigMidiInputGeneration, channel, controller, value);
 
         // keep the compiler honest about the two events this fake never raises
         public void Unused()

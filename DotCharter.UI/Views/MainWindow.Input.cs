@@ -168,7 +168,7 @@ public partial class MainWindow
         // impossible to rebind (a focused KeybindCaptureBox would never see them) and Ctrl+Space
         // fire while the user typed in the Lyrics inspector. The rules and
         // their deliberate exceptions live in that file, side by side.
-        var gate = BuildChordGateContext(vm);
+        var gate = BuildChordGateContext(vm, sender);
 
         // Command palette: Ctrl+Shift+P toggles it from anywhere, and while it
         // is open the navigation keys are handled here (window tunnel) so they
@@ -176,7 +176,7 @@ public partial class MainWindow
         // search box — only these specific keys are intercepted.
         if (e.Key == Key.P && ctrl && shift && !alt && GlobalChordGate.AllowsPaletteToggle(gate))
         {
-            vm.CommandPalette.Toggle();
+            vm.KeybindHandler.HandleToggleKeyPress(e.Key, ctrl, shift, alt, vm.CommandPalette.Toggle);
             e.Handled = true;
             return;
         }
@@ -186,11 +186,11 @@ public partial class MainWindow
             switch (e.Key)
             {
                 case Key.Escape:
-                    vm.CommandPalette.Close();
+                    vm.KeybindHandler.HandleToggleKeyPress(e.Key, ctrl, shift, alt, vm.CommandPalette.Close);
                     e.Handled = true;
                     return;
                 case Key.Enter when !ctrl && !shift && !alt:
-                    vm.CommandPalette.ExecuteSelected();
+                    vm.KeybindHandler.HandleToggleKeyPress(e.Key, ctrl, shift, alt, vm.CommandPalette.ExecuteSelected);
                     e.Handled = true;
                     return;
                 case Key.Down when !ctrl && !shift && !alt:
@@ -212,10 +212,9 @@ public partial class MainWindow
         // priority chain: open dialog → gameplay pause/resume → Play Mode
         // back-navigation → clear editor selection. The editor branch (clear
         // selection) is harmless to run from here too.
-        if (e.Key == Key.Escape && !ctrl && !shift && !alt && GlobalChordGate.AllowsEscape(gate))
+        if (e.Key == Key.Escape && !ctrl && !shift && !alt)
         {
-            vm.HandleEscapeKey();
-            e.Handled = true;
+            RouteEscapeKey(e, vm, gate);
             return;
         }
 
@@ -248,7 +247,7 @@ public partial class MainWindow
              (e.Key == Key.Enter && alt && !ctrl && !shift)) &&
             GlobalChordGate.AllowsFullScreenToggle(gate))
         {
-            ToggleFullScreen();
+            vm.KeybindHandler.HandleToggleKeyPress(e.Key, ctrl, shift, alt, ToggleFullScreen);
             e.Handled = true;
             return;
         }
@@ -283,6 +282,21 @@ public partial class MainWindow
         }
     }
 
+    private static void RouteEscapeKey(KeyEventArgs e, MainWindowViewModel vm, GlobalChordGate.Context gate)
+    {
+        if (GlobalChordGate.AllowsEscape(gate))
+        {
+            vm.KeybindHandler.HandleToggleKeyPress(e.Key, false, false, false, vm.HandleEscapeKey);
+            e.Handled = true;
+        }
+        else if (!GlobalChordGate.IsRebinding(gate) && (gate.SearchBoxClaimsEscape || gate.InlineEditorClaimsEscape))
+        {
+            // Let the control clear/cancel once. Its next repeat must not reach
+            // the shell merely because clearing/cancelling changed the gate.
+            e.Handled = vm.KeybindHandler.NoteKeyPress(e.Key, false, false, false);
+        }
+    }
+
     /// <summary>
     /// Tunnel companion to <see cref="GlobalKeyDownPreview"/>: swallows the KeyUp
     /// of a key the tunnel just consumed as a global shortcut, so a focused
@@ -293,6 +307,8 @@ public partial class MainWindow
     /// </summary>
     private void GlobalKeyUpPreview(object? sender, KeyEventArgs e)
     {
+        // Every release, handled or not, ends the keybind handler's repeat hold.
+        (DataContext as MainWindowViewModel)?.KeybindHandler.HandleKeyRelease(e.Key);
         if (!_activationKeyUp.ShouldSwallow(e.Key)) return;
         e.Handled = true;
     }
@@ -309,7 +325,7 @@ public partial class MainWindow
         if (e.Handled) return;
         if (DataContext is not MainWindowViewModel vm) return;
         if (!vm.IsChartEditorVisible || vm.CommandPalette.IsOpen) return;
-        if (!CanRouteGlobalKeybinds()) return;
+        if (!CanRouteGlobalKeybinds(sender)) return;
 
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
         var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
@@ -325,15 +341,18 @@ public partial class MainWindow
     /// control (TextBox and everything embedding one — NumericUpDown,
     /// AutoCompleteBox — focuses the inner TextBox) or the keybind capture
     /// box owns the keyboard.</summary>
-    private bool CanRouteGlobalKeybinds() => FocusManager?.GetFocusedElement() is not (TextBox or KeybindCaptureBox);
+    private bool CanRouteGlobalKeybinds(object? sender) => FocusedIn(sender) is not (TextBox or KeybindCaptureBox);
+
+    /// <summary>The focused element of the window the key went to: a floating pane's own, not the shell's.</summary>
+    private IInputElement? FocusedIn(object? sender) => ((sender as TopLevel)?.FocusManager ?? FocusManager)?.GetFocusedElement();
 
     /// <summary>Snapshots the focus/shell state the window tunnel evaluates its
     /// global chords against. Read once per key press so every branch sees the
     /// same focus — and so the rules themselves stay pure and testable
     /// (<see cref="GlobalChordGate" />).</summary>
-    private GlobalChordGate.Context BuildChordGateContext(MainWindowViewModel vm)
+    private GlobalChordGate.Context BuildChordGateContext(MainWindowViewModel vm, object? sender)
     {
-        var focused = FocusManager?.GetFocusedElement();
+        var focused = FocusedIn(sender);
         return new GlobalChordGate.Context(
             TextInputFocused: focused is TextBox,
             KeybindCaptureFocused: focused is KeybindCaptureBox,
@@ -348,19 +367,20 @@ public partial class MainWindow
             // A song-search box with text in it empties itself on Esc instead of
             // leaving the screen. The rule lives in SearchBoxKeys; this tunnel is
             // the only place that can let the box have the key at all.
-            SearchBoxClaimsEscape: SearchBoxKeys.ClaimsEscape(focused));
+            SearchBoxClaimsEscape: SearchBoxKeys.ClaimsEscape(focused),
+            InlineEditorClaimsEscape: Editor.InlineEditOverlayView.ClaimsEscape(focused));
     }
 
     private void Minimap_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is Control control && DataContext is MainWindowViewModel vm)
+        // Lock the chart renderer into its continuous (vsync-aligned) frame
+        // loop while the user is scrubbing (paused, the renderer only repaints
+        // on demand and the playhead stutters). Only a press that STARTED a
+        // drag takes the pin: a right or middle click never released it.
+        if (sender is Control control && DataContext is MainWindowViewModel vm &&
+            _minimap.OnPointerPressed(control, e, vm, () => RequestTimelineRedraw(sender)))
         {
-            // Lock the chart renderer into its continuous (vsync-aligned)
-            // frame loop while the user is scrubbing. Without this, while
-            // playback is paused the renderer only repaints on demand and
-            // the playhead motion looks stuttery.
             this.FindControl<ChartRenderer>("MainChartRenderer")?.BeginContinuousRender();
-            _minimap.OnPointerPressed(control, e, vm, () => RequestTimelineRedraw(sender));
         }
     }
 
@@ -372,23 +392,20 @@ public partial class MainWindow
 
     private void Minimap_PointerReleased(object? sender, PointerReleasedEventArgs e)
     {
-        var wasDragging = _minimap.IsDragging;
         // The release carries the drop position, and the controller needs it: the
         // 60 Hz throttle almost always discards the last move of a drag, so this
-        // is where that position is flushed.
-        if (sender is Control control && DataContext is MainWindowViewModel vm)
-            _minimap.OnPointerReleased(control, e, vm, () => RequestTimelineRedraw(sender));
-        else
-            _minimap.OnPointerCaptureLost();
-        if (wasDragging)
+        // is where that position is flushed. Whichever exit ENDED the drag (this
+        // release, or the capture loss its Capture(null) raises) drops the pin.
+        var ended = sender is Control control && DataContext is MainWindowViewModel vm
+            ? _minimap.OnPointerReleased(control, e, vm, () => RequestTimelineRedraw(sender))
+            : _minimap.OnPointerCaptureLost();
+        if (ended)
             this.FindControl<ChartRenderer>("MainChartRenderer")?.EndContinuousRender();
     }
 
     private void Minimap_PointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
     {
-        var wasDragging = _minimap.IsDragging;
-        _minimap.OnPointerCaptureLost();
-        if (wasDragging)
+        if (_minimap.OnPointerCaptureLost())
             this.FindControl<ChartRenderer>("MainChartRenderer")?.EndContinuousRender();
     }
 
@@ -406,15 +423,21 @@ public partial class MainWindow
     /// pop-out flips on every play/pause. Hence one helper, not two call sites
     /// that can drift.
     /// </summary>
-    private void WireGlobalKeyRoutes(Window window)
+    internal void WireGlobalKeyRoutes(Window window)
     {
         window.AddHandler(KeyDownEvent, GlobalKeyDownPreview, RoutingStrategies.Tunnel, true);
         window.AddHandler(KeyUpEvent, GlobalKeyUpPreview, RoutingStrategies.Tunnel, true);
+        // The keybind registry's fallback too: Save and every editor verb a focused pane leaves unhandled.
+        window.AddHandler(KeyDownEvent, GlobalKeybindFallback, RoutingStrategies.Bubble);
         // Third member of the pair: once focus leaves, the KeyUp the tunnel is
         // owed will be delivered to another top-level (or not at all), so a
         // pending arm can only ever swallow an unrelated later release.
         window.Deactivated += ClearActivationLatch;
     }
 
-    private void ClearActivationLatch(object? sender, EventArgs e) => _activationKeyUp.Clear();
+    private void ClearActivationLatch(object? sender, EventArgs e)
+    {
+        _activationKeyUp.Clear();
+        (DataContext as MainWindowViewModel)?.KeybindHandler.ResetHeldKeys();
+    }
 }

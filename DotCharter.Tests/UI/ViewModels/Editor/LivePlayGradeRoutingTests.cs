@@ -155,7 +155,7 @@ public sealed class LivePlayGradeRoutingTests
             IReadOnlyList<PhraseMasteryOutcome>? phraseOutcomes = null,
             IReadOnlyList<SectionResult>? sections = null,
             IReadOnlyList<TechniqueResult>? techniques = null,
-            double? chartDifficulty = null, bool failed = false) => new();
+            double? chartDifficulty = null, bool failed = false, PracticeRunIdentity? run = null) => new();
 
         public IReadOnlyDictionary<string, PracticeArrangementProfile> GetAll() =>
             new Dictionary<string, PracticeArrangementProfile>();

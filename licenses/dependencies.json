@@ -9,18 +9,18 @@
     },
     {
       "id": "AlphaSkia",
-      "version": "3.4.135",
+      "version": "3.5.147",
       "license": "BSD-3-Clause"
     },
     {
       "id": "AlphaTab",
-      "version": "1.8.4",
+      "version": "1.9.0",
       "license": "MPL-2.0"
     },
     {
       "id": "Anthropic",
-      "version": "12.55.0",
-      "license": "MIT"
+      "version": "13.9.0",
+      "license": "Apache-2.0"
     },
     {
       "id": "Avalonia.Angle.Windows.Natives",
@@ -35,7 +35,7 @@
     },
     {
       "id": "Avalonia.Controls.ColorPicker",
-      "version": "12.1.4",
+      "version": "12.1.6",
       "license": "MIT"
     },
     {
@@ -44,8 +44,18 @@
       "license": "MIT"
     },
     {
+      "id": "Avalonia.Desktop",
+      "version": "12.1.6",
+      "license": "MIT"
+    },
+    {
       "id": "Avalonia.Fonts.Inter",
       "version": "12.1.4",
+      "license": "MIT"
+    },
+    {
+      "id": "Avalonia.Fonts.Inter",
+      "version": "12.1.6",
       "license": "MIT"
     },
     {
@@ -54,8 +64,18 @@
       "license": "MIT"
     },
     {
+      "id": "Avalonia.FreeDesktop.AtSpi",
+      "version": "12.1.6",
+      "license": "MIT"
+    },
+    {
       "id": "Avalonia.FreeDesktop",
       "version": "12.1.4",
+      "license": "MIT"
+    },
+    {
+      "id": "Avalonia.FreeDesktop",
+      "version": "12.1.6",
       "license": "MIT"
     },
     {
@@ -64,8 +84,13 @@
       "license": "MIT"
     },
     {
+      "id": "Avalonia.HarfBuzz",
+      "version": "12.1.6",
+      "license": "MIT"
+    },
+    {
       "id": "Avalonia.Headless",
-      "version": "12.1.4",
+      "version": "12.1.6",
       "license": "MIT"
     },
     {
@@ -74,8 +99,18 @@
       "license": "MIT"
     },
     {
+      "id": "Avalonia.Native",
+      "version": "12.1.6",
+      "license": "MIT"
+    },
+    {
       "id": "Avalonia.Remote.Protocol",
       "version": "12.1.4",
+      "license": "MIT"
+    },
+    {
+      "id": "Avalonia.Remote.Protocol",
+      "version": "12.1.6",
       "license": "MIT"
     },
     {
@@ -84,8 +119,18 @@
       "license": "MIT"
     },
     {
+      "id": "Avalonia.Skia",
+      "version": "12.1.6",
+      "license": "MIT"
+    },
+    {
       "id": "Avalonia.Themes.Fluent",
       "version": "12.1.4",
+      "license": "MIT"
+    },
+    {
+      "id": "Avalonia.Themes.Fluent",
+      "version": "12.1.6",
       "license": "MIT"
     },
     {
@@ -94,13 +139,28 @@
       "license": "MIT"
     },
     {
+      "id": "Avalonia.Win32",
+      "version": "12.1.6",
+      "license": "MIT"
+    },
+    {
       "id": "Avalonia.X11",
       "version": "12.1.4",
       "license": "MIT"
     },
     {
+      "id": "Avalonia.X11",
+      "version": "12.1.6",
+      "license": "MIT"
+    },
+    {
       "id": "Avalonia",
       "version": "12.1.4",
+      "license": "MIT"
+    },
+    {
+      "id": "Avalonia",
+      "version": "12.1.6",
       "license": "MIT"
     },
     {
@@ -119,63 +179,73 @@
       "license": "MIT"
     },
     {
+      "id": "coverlet.collector",
+      "version": "10.1.1",
+      "license": "MIT"
+    },
+    {
       "id": "coverlet.msbuild",
       "version": "10.1.0",
       "license": "MIT"
     },
     {
+      "id": "coverlet.msbuild",
+      "version": "10.1.1",
+      "license": "MIT"
+    },
+    {
       "id": "Dock.Avalonia.Themes.Fluent",
-      "version": "12.1.0.8",
+      "version": "12.1.5",
       "license": "MIT"
     },
     {
       "id": "Dock.Avalonia",
-      "version": "12.1.0.8",
+      "version": "12.1.5",
       "license": "MIT"
     },
     {
       "id": "Dock.Controls.DeferredContentControl",
-      "version": "12.1.0.8",
+      "version": "12.1.5",
       "license": "MIT"
     },
     {
       "id": "Dock.Controls.ProportionalStackPanel",
-      "version": "12.1.0.8",
+      "version": "12.1.5",
       "license": "MIT"
     },
     {
       "id": "Dock.Controls.Recycling.Model",
-      "version": "12.1.0.8",
+      "version": "12.1.5",
       "license": "MIT"
     },
     {
       "id": "Dock.Controls.Recycling",
-      "version": "12.1.0.8",
+      "version": "12.1.5",
       "license": "MIT"
     },
     {
       "id": "Dock.MarkupExtension",
-      "version": "12.1.0.8",
+      "version": "12.1.5",
       "license": "MIT"
     },
     {
       "id": "Dock.Model.Avalonia",
-      "version": "12.1.0.8",
+      "version": "12.1.5",
       "license": "MIT"
     },
     {
       "id": "Dock.Model.Mvvm",
-      "version": "12.1.0.8",
+      "version": "12.1.5",
       "license": "MIT"
     },
     {
       "id": "Dock.Model",
-      "version": "12.1.0.8",
+      "version": "12.1.5",
       "license": "MIT"
     },
     {
       "id": "Dock.Settings",
-      "version": "12.1.0.8",
+      "version": "12.1.5",
       "license": "MIT"
     },
     {
@@ -226,7 +296,7 @@
     },
     {
       "id": "Microsoft.CodeAnalysis.Analyzers",
-      "version": "5.9.0-1.26328.17",
+      "version": "5.9.0",
       "license": "MIT"
     },
     {
@@ -236,12 +306,12 @@
     },
     {
       "id": "Microsoft.CodeAnalysis.Common",
-      "version": "5.9.0",
+      "version": "5.12.0",
       "license": "MIT"
     },
     {
       "id": "Microsoft.CodeAnalysis.CSharp",
-      "version": "5.9.0",
+      "version": "5.12.0",
       "license": "MIT"
     },
     {
@@ -250,18 +320,23 @@
       "license": "MIT"
     },
     {
+      "id": "Microsoft.CodeCoverage",
+      "version": "18.12.0",
+      "license": "MIT"
+    },
+    {
       "id": "Microsoft.Data.Sqlite.Core",
-      "version": "10.0.12",
+      "version": "10.0.15",
       "license": "MIT"
     },
     {
       "id": "Microsoft.Data.Sqlite",
-      "version": "10.0.12",
+      "version": "10.0.15",
       "license": "MIT"
     },
     {
       "id": "Microsoft.DotNet.ILCompiler",
-      "version": "10.0.13",
+      "version": "10.0.14",
       "license": "MIT"
     },
     {
@@ -281,8 +356,13 @@
       "license": "MIT"
     },
     {
+      "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+      "version": "10.0.15",
+      "license": "MIT"
+    },
+    {
       "id": "Microsoft.Extensions.DependencyInjection",
-      "version": "10.0.12",
+      "version": "10.0.15",
       "license": "MIT"
     },
     {
@@ -309,7 +389,7 @@
     },
     {
       "id": "Microsoft.NET.ILLink.Tasks",
-      "version": "10.0.13",
+      "version": "10.0.14",
       "license": "MIT"
     },
     {
@@ -318,8 +398,18 @@
       "license": "MIT"
     },
     {
+      "id": "Microsoft.NET.Test.Sdk",
+      "version": "18.12.0",
+      "license": "MIT"
+    },
+    {
       "id": "Microsoft.Testing.Extensions.Telemetry",
       "version": "2.5.1",
+      "license": "MIT"
+    },
+    {
+      "id": "Microsoft.Testing.Extensions.Telemetry",
+      "version": "2.5.2",
       "license": "MIT"
     },
     {
@@ -328,8 +418,18 @@
       "license": "MIT"
     },
     {
+      "id": "Microsoft.Testing.Extensions.TrxReport.Abstractions",
+      "version": "2.5.2",
+      "license": "MIT"
+    },
+    {
       "id": "Microsoft.Testing.Platform.MSBuild",
       "version": "2.5.1",
+      "license": "MIT"
+    },
+    {
+      "id": "Microsoft.Testing.Platform.MSBuild",
+      "version": "2.5.2",
       "license": "MIT"
     },
     {
@@ -338,13 +438,28 @@
       "license": "MIT"
     },
     {
+      "id": "Microsoft.Testing.Platform",
+      "version": "2.5.2",
+      "license": "MIT"
+    },
+    {
       "id": "Microsoft.TestPlatform.ObjectModel",
       "version": "18.10.1",
       "license": "MIT"
     },
     {
+      "id": "Microsoft.TestPlatform.ObjectModel",
+      "version": "18.12.0",
+      "license": "MIT"
+    },
+    {
       "id": "Microsoft.TestPlatform.TestHost",
       "version": "18.10.1",
+      "license": "MIT"
+    },
+    {
+      "id": "Microsoft.TestPlatform.TestHost",
+      "version": "18.12.0",
       "license": "MIT"
     },
     {
@@ -354,7 +469,7 @@
     },
     {
       "id": "Microsoft.Win32.SystemEvents",
-      "version": "9.0.8",
+      "version": "10.0.14",
       "license": "MIT"
     },
     {
@@ -365,7 +480,7 @@
     },
     {
       "id": "runtime.win-x64.Microsoft.DotNet.ILCompiler",
-      "version": "10.0.13",
+      "version": "10.0.14",
       "license": "MIT"
     },
     {
@@ -445,7 +560,7 @@
     },
     {
       "id": "SkiaSharp.NativeAssets.macOS",
-      "version": "4.153.1",
+      "version": "4.156.1",
       "license": "MIT"
     },
     {
@@ -460,7 +575,7 @@
     },
     {
       "id": "SkiaSharp.NativeAssets.Win32",
-      "version": "4.153.1",
+      "version": "4.156.1",
       "license": "MIT"
     },
     {
@@ -470,7 +585,7 @@
     },
     {
       "id": "SkiaSharp",
-      "version": "4.153.1",
+      "version": "4.156.1",
       "license": "MIT"
     },
     {
@@ -501,7 +616,7 @@
     },
     {
       "id": "System.Drawing.Common",
-      "version": "9.0.8",
+      "version": "10.0.14",
       "license": "MIT"
     },
     {
@@ -516,7 +631,7 @@
     },
     {
       "id": "System.Security.Cryptography.ProtectedData",
-      "version": "10.0.12",
+      "version": "10.0.15",
       "license": "MIT"
     },
     {
@@ -535,6 +650,11 @@
       "license": "Apache-2.0"
     },
     {
+      "id": "xunit.analyzers",
+      "version": "2.3.0",
+      "license": "Apache-2.0"
+    },
+    {
       "id": "xunit.runner.visualstudio",
       "version": "4.0.1",
       "license": "Apache-2.0"
@@ -545,8 +665,18 @@
       "license": "Apache-2.0"
     },
     {
+      "id": "xunit.v3.assert",
+      "version": "4.0.3",
+      "license": "Apache-2.0"
+    },
+    {
       "id": "xunit.v3.common",
       "version": "4.0.2",
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "xunit.v3.common",
+      "version": "4.0.3",
       "license": "Apache-2.0"
     },
     {
@@ -555,8 +685,18 @@
       "license": "Apache-2.0"
     },
     {
+      "id": "xunit.v3.core.mtp-v2",
+      "version": "4.0.3",
+      "license": "Apache-2.0"
+    },
+    {
       "id": "xunit.v3.extensibility.core",
       "version": "4.0.2",
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "xunit.v3.extensibility.core",
+      "version": "4.0.3",
       "license": "Apache-2.0"
     },
     {
@@ -565,8 +705,18 @@
       "license": "Apache-2.0"
     },
     {
+      "id": "xunit.v3.mtp-v2",
+      "version": "4.0.3",
+      "license": "Apache-2.0"
+    },
+    {
       "id": "xunit.v3.runner.common",
       "version": "4.0.2",
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "xunit.v3.runner.common",
+      "version": "4.0.3",
       "license": "Apache-2.0"
     },
     {
@@ -575,8 +725,18 @@
       "license": "Apache-2.0"
     },
     {
+      "id": "xunit.v3.runner.inproc.console",
+      "version": "4.0.3",
+      "license": "Apache-2.0"
+    },
+    {
       "id": "xunit.v3",
       "version": "4.0.2",
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "xunit.v3",
+      "version": "4.0.3",
       "license": "Apache-2.0"
     },
     {

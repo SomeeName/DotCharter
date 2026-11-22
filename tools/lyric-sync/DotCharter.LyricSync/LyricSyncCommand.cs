@@ -1,9 +1,11 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using DotCharter.Analysis.Lyrics;
+using DotCharter.Core.Domain.Vocals;
+using DotCharter.Core.Linking;
 using DotCharter.Services.Audio.Lyrics;
 using DotCharter.Services.Export.Lyrics;
+using DotCharter.Tone.Infrastructure.Storage;
 
 namespace DotCharter.LyricSync;
 
@@ -39,6 +41,7 @@ public sealed class LyricSyncCommand
     private readonly TextWriter _error;
     private readonly Func<LyricSyncArguments, ILyricSyncCore> _core;
     private readonly Func<LyricSyncArguments, IProgress<string>?, CancellationToken, Task<bool>> _ensureModels;
+    private readonly Func<string, CancellationToken, LyricSyncBeatGrid>? _detectBeats;
 
     /// <param name="stdout">Where the report goes.</param>
     /// <param name="stderr">Where warnings and failures go — never mixed into the report.</param>
@@ -48,16 +51,23 @@ public sealed class LyricSyncCommand
     ///     afterwards. Separate from <paramref name="core" /> because it is the
     ///     only step that touches the network.
     /// </param>
+    /// <param name="detectBeats">
+    ///     Tracks the beat grid of the audio (<see cref="LyricSyncBeatGrid.Detect" />
+    ///     in the shipped tool). Null means no tracker: without <c>--bpm</c> the
+    ///     fixed fallback gap applies.
+    /// </param>
     public LyricSyncCommand(
         TextWriter stdout,
         TextWriter stderr,
         Func<LyricSyncArguments, ILyricSyncCore> core,
-        Func<LyricSyncArguments, IProgress<string>?, CancellationToken, Task<bool>> ensureModels)
+        Func<LyricSyncArguments, IProgress<string>?, CancellationToken, Task<bool>> ensureModels,
+        Func<string, CancellationToken, LyricSyncBeatGrid>? detectBeats = null)
     {
         _out = stdout;
         _error = stderr;
         _core = core;
         _ensureModels = ensureModels;
+        _detectBeats = detectBeats;
     }
 
     /// <summary>Parses and runs. Returns the process exit code.</summary>
@@ -107,7 +117,7 @@ public sealed class LyricSyncCommand
                 .ConfigureAwait(false);
         }
 
-        var status = new Progress<string>(m => _error.WriteLine(m));
+        var status = new StatusLines(_error);
 
         if (!await _ensureModels(arguments, status, ct).ConfigureAwait(false))
         {
@@ -136,11 +146,16 @@ public sealed class LyricSyncCommand
             AllowEnsemble = !arguments.NoEnsemble
         }, status, ct).ConfigureAwait(false);
 
+        ct.ThrowIfCancellationRequested();
+
         foreach (var warning in result.Warnings) await _error.WriteLineAsync(warning).ConfigureAwait(false);
+
+        ct.ThrowIfCancellationRequested();
 
         if (!result.Ran) return await FailRun(result.Error!).ConfigureAwait(false);
 
-        var syllables = SpanEnds(result.Syllables, arguments.SpanWordGap, result.Envelope);
+        var grid = await BeatGrid(arguments, result, ct).ConfigureAwait(false);
+        var syllables = LyricSyncSpacing.Apply(result, grid, SpacingOptions(arguments));
         var outputBase = arguments.OutputBase ?? DefaultOutputBase(arguments.AudioPath);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputBase))!);
 
@@ -148,27 +163,26 @@ public sealed class LyricSyncCommand
         if (arguments.Format is LyricSyncFormat.RsXml or LyricSyncFormat.Both)
         {
             var path = outputBase + "_vocals.xml";
-            RsVocalsSecondsWriter.WriteTo(path, syllables, arguments.Note);
+            RsVocalsSecondsWriter.WriteTo(path, syllables, arguments.Note, ct);
             written.Add(path);
         }
 
         if (arguments.Format is LyricSyncFormat.Lrc or LyricSyncFormat.Both)
         {
             var path = outputBase + ".lrc";
-            await File.WriteAllTextAsync(
-                path, LrcSecondsWriter.Write(syllables), new UTF8Encoding(false), ct).ConfigureAwait(false);
+            await AtomicFile.WriteAllTextAsync(path, LrcSecondsWriter.Write(syllables), ct).ConfigureAwait(false);
             written.Add(path);
         }
 
         if (arguments.Json)
         {
             var path = outputBase + ".lyricsync.json";
-            await File.WriteAllTextAsync(path, Json(result, syllables), new UTF8Encoding(false), ct)
+            await AtomicFile.WriteAllTextAsync(path, Json(result, syllables, grid), ct)
                 .ConfigureAwait(false);
             written.Add(path);
         }
 
-        await Report(result, syllables, written).ConfigureAwait(false);
+        await Report(result, syllables, grid, written).ConfigureAwait(false);
         return LyricSyncExit.Ok;
     }
 
@@ -212,7 +226,8 @@ public sealed class LyricSyncCommand
     }
 
     private async Task Report(
-        LyricSyncResult result, IReadOnlyList<LyricSyncSyllable> syllables, IReadOnlyList<string> written)
+        LyricSyncResult result, IReadOnlyList<LyricSyncSyllable> syllables, LyricSyncBeatGrid grid,
+        IReadOnlyList<string> written)
     {
         var sb = new StringBuilder();
         sb.Append(CultureInfo.InvariantCulture,
@@ -224,6 +239,8 @@ public sealed class LyricSyncCommand
             $"Model {result.Model}, onset bias {result.OnsetBiasSeconds * 1000.0:+0;-0;0} ms.\n");
         sb.Append(CultureInfo.InvariantCulture,
             $"{result.LowConfidenceCount} low-confidence, {result.InterpolatedCount} interpolated.\n");
+        sb.Append("Spacing: ").Append(DescribeSpacing(grid)).Append(".\n");
+        LyricSyncReviewReport.Append(sb, syllables);
         foreach (var path in written) sb.Append("Wrote ").Append(path).Append('\n');
 
         await _out.WriteAsync(sb.ToString()).ConfigureAwait(false);
@@ -238,38 +255,59 @@ public sealed class LyricSyncCommand
     }
 
     /// <summary>
-    ///     Turns the CTC end — which is a FLOOR, the last frame the model could
-    ///     still hear the syllable — into a sung length.
-    ///     <para>
-    ///         The ends come from <see cref="LyricSyllableEnds" />, as the app's
-    ///         (<c>LyricAutoSyncService.BuildPhrases</c>) do, so a stem's voice
-    ///         decides them here too (<see cref="VocalEndRefiner" />). Two inputs
-    ///         differ: the app spans to the next onset minus the chart's own
-    ///         note-spacing minimum, a fraction of a MEASURE that needs a beat grid,
-    ///         and with no grid the gap is a fixed <see cref="MinGapSeconds" />; and
-    ///         the CLI never spans a phrase break. Within a word it always spans,
-    ///         across a word boundary only when asked, never shortening what was
-    ///         heard, never past <see cref="MaxSyllableSeconds" />.
-    ///     </para>
+    ///     The app's span switches for this command line: within a word always,
+    ///     across a word boundary only with <c>--span-word-gap</c>, never across a
+    ///     phrase break. Everything else is <see cref="LyricAutoSyncOptions.Default" />,
+    ///     so the measured ends, the 4 s cap and the stem's voice follow the app.
     /// </summary>
-    internal const double MinGapSeconds = 0.030;
+    internal static LyricAutoSyncOptions SpacingOptions(LyricSyncArguments arguments) =>
+        LyricAutoSyncOptions.Default with
+        {
+            SpanWordEndToNextWord = arguments.SpanWordGap,
+            SpanPhraseEndToNextPhrase = false
+        };
 
-    /// <inheritdoc cref="MinGapSeconds" />
-    internal const double MaxSyllableSeconds = 4.0;
-
-    /// <inheritdoc cref="MinGapSeconds" />
-    internal static List<LyricSyncSyllable> SpanEnds(
-        IReadOnlyList<LyricSyncSyllable> syllables, bool spanWordGap, VocalEnvelope? envelope = null)
+    /// <summary>
+    ///     <c>--bpm</c> first, then the tracker unless <c>--no-beat-detect</c>; a
+    ///     tracker that fails or finds no tempo falls back to the fixed gap, said on stderr.
+    /// </summary>
+    private async Task<LyricSyncBeatGrid> BeatGrid(LyricSyncArguments arguments, LyricSyncResult result, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(syllables);
+        if (arguments.Bpm is { } bpm)
+        {
+            return LyricSyncBeatGrid.FromTempo(bpm, arguments.OffsetSeconds, arguments.BeatsPerBar,
+                Math.Max(result.AudioSeconds, result.Syllables.Count == 0 ? 0.0 : result.Syllables[^1].EndSeconds));
+        }
 
-        var ends = LyricSyllableEnds.Compute(
-            [.. syllables.Select(s => new LyricEndSyllable(
-                s.StartSeconds, s.EndSeconds, s.LineIndex, s.ContinuesWord || (spanWordGap && !s.EndsLine)))],
-            (_, nextStart) => nextStart - MinGapSeconds,
-            MaxSyllableSeconds, envelope, VocalEndOptions.Default);
-        return [.. syllables.Select((s, i) => s with { EndSeconds = ends[i] })];
+        if (arguments.NoBeatDetect || _detectBeats == null) return LyricSyncBeatGrid.None;
+
+        try
+        {
+            var detected = await Task.Run(() => _detectBeats(arguments.AudioPath, ct), ct).ConfigureAwait(false);
+            if (detected.Beats.Count >= 2) return detected;
+            await _error.WriteLineAsync(
+                "No beat grid could be tracked from the audio; syllables are spaced by the fixed gap.")
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await _error.WriteLineAsync(
+                $"Beat tracking failed ({ex.Message}); syllables are spaced by the fixed gap.").ConfigureAwait(false);
+        }
+
+        return LyricSyncBeatGrid.None;
     }
+
+    /// <summary>One line for the report and the JSON: which grid the spacing ran on.</summary>
+    internal static string DescribeSpacing(LyricSyncBeatGrid grid) => grid.Source switch
+    {
+        LyricSyncGridSource.Tempo => string.Create(CultureInfo.InvariantCulture,
+            $"one note gap (1/{SpacingGap.AppDefault.Divisor} measure) on the --bpm {grid.AverageBpm:0.##} grid"),
+        LyricSyncGridSource.Detected => string.Create(CultureInfo.InvariantCulture,
+            $"one note gap (1/{SpacingGap.AppDefault.Divisor} measure) on the beat grid tracked from the audio ({grid.Beats.Count} beats, ~{grid.AverageBpm:0} BPM)"),
+        _ => string.Create(CultureInfo.InvariantCulture,
+            $"fixed {LyricSyncSpacing.FallbackGapMilliseconds:0} ms gap (no beat grid)")
+    };
 
     /// <summary>Beside the audio, so a chart folder stays self-contained.</summary>
     internal static string DefaultOutputBase(string audioPath) =>
@@ -277,7 +315,7 @@ public sealed class LyricSyncCommand
             Path.GetDirectoryName(Path.GetFullPath(audioPath)) ?? ".",
             Path.GetFileNameWithoutExtension(audioPath));
 
-    private static string Json(LyricSyncResult result, IReadOnlyList<LyricSyncSyllable> syllables) =>
+    private static string Json(LyricSyncResult result, IReadOnlyList<LyricSyncSyllable> syllables, LyricSyncBeatGrid grid) =>
         JsonSerializer.Serialize(new
         {
             audio = result.AudioPath,
@@ -288,6 +326,8 @@ public sealed class LyricSyncCommand
             onsetBiasSeconds = result.OnsetBiasSeconds,
             lowConfidenceCount = result.LowConfidenceCount,
             interpolatedCount = result.InterpolatedCount,
+            spacing = DescribeSpacing(grid),
+            reviewCount = syllables.Count(s => s.ReviewReasons != LyricReviewReason.None),
             warnings = result.Warnings,
             syllables = syllables.Select(s => new
             {
@@ -299,7 +339,8 @@ public sealed class LyricSyncCommand
                 start = s.StartSeconds,
                 end = s.EndSeconds,
                 confidence = s.Confidence,
-                interpolated = s.IsInterpolated
+                interpolated = s.IsInterpolated,
+                reviewReasons = s.ReviewReasons.ToString()
             })
         }, new JsonSerializerOptions { WriteIndented = true });
 
@@ -334,6 +375,12 @@ public sealed class LyricSyncCommand
                                 measurably less accurate).
           --span-word-gap       Hold the last syllable of a word until the next word
                                 starts. Syllables inside a word always do this.
+          --bpm <n>             Space syllables on a constant tempo grid instead of
+                                the beats tracked from the audio.
+          --offset <seconds>    Time of the first downbeat of the --bpm grid. Default 0.
+          --beats-per-bar <n>   Beats per measure of the --bpm grid. Default 4.
+          --no-beat-detect      Do not track beats: without --bpm, syllables are
+                                spaced by a fixed 30 ms gap.
           --note <0-255>        The 'note' attribute in the vocals XML. Default 254
                                 (no pitch); Editor on Fire writes 255.
           --json                Also dump the syllable table with confidences.
@@ -342,8 +389,11 @@ public sealed class LyricSyncCommand
 
         Exit codes: 0 ok, 2 bad input, 3 model missing or failed, 4 audio decode failed.
 
-        Output times are SECONDS of the audio file. DotCharter itself additionally
-        snaps them to the chart's beat grid; this tool has no beat grid and does not.
+        Output times are SECONDS of the audio file. Inside a phrase a syllable ends one
+        note gap (1/64 measure, as DotCharter's note spacing) before the next, on the
+        beat grid tracked from the audio or given with --bpm; with no beat grid the gap
+        is a fixed 30 ms. Syllables flagged for review are listed in the report, as
+        comments in the vocals XML and in the --json table.
 
         Models are ~226 MB (multilingual) and ~189 MB (English, optional) and are
         downloaded once into a 'models' folder beside this executable.
@@ -395,4 +445,22 @@ public sealed class LyricSyncCommand
         you have got wrong.
 
         """;
+
+    /// <summary>
+    ///     Writes each status line to stderr before <c>Report</c> returns. Not a
+    ///     <see cref="Progress{T}" />: with no synchronization context that posts
+    ///     every line to the thread pool, so lines land out of order with the
+    ///     warnings, after the run has returned, or on a writer its owner already
+    ///     closed (#819). The lock keeps lines whole when the core reports from
+    ///     more than one thread.
+    /// </summary>
+    private sealed class StatusLines(TextWriter writer) : IProgress<string>
+    {
+        private readonly Lock _gate = new();
+
+        public void Report(string value)
+        {
+            lock (_gate) writer.WriteLine(value);
+        }
+    }
 }

@@ -11,6 +11,37 @@ namespace DotCharter.Tests.Services.Editing;
 /// </summary>
 public sealed class StructureGeneratorTests
 {
+    [Theory]
+    [InlineData(false, 1)]
+    [InlineData(false, 4)]
+    [InlineData(true, 1)]
+    [InlineData(true, 4)]
+    public void EndFollowsTheWholeSustainBeyondTheGrid(bool chord, int beatCount)
+    {
+        var arrangement = WithSounds();
+        var position = new FractionalPosition(2);
+        var sustain = new FractionalPosition(3, new Fraction(1, 2));
+        if (chord)
+        {
+            arrangement.Levels[0].Chords.Add(new Chord
+            {
+                Position = position,
+                ChordNotes = { new ChordNote { StringIndex = 0, Fret = 5, Sustain = sustain } }
+            });
+        }
+        else
+        {
+            arrangement.Levels[0].Notes.Add(new GuitarNote
+            {
+                Position = position, Sustain = sustain, StringIndex = 0, Fret = 5
+            });
+        }
+
+        var plan = StructureGenerator.Plan(arrangement, Beats(beatCount));
+
+        Assert.Equal(new FractionalPosition(6), plan.EndPhrase);
+    }
+
     /// <summary>A 120 BPM grid: one beat every 500 ms.</summary>
     private static List<BeatMarker> Beats(int count = 200)
     {
@@ -61,6 +92,21 @@ public sealed class StructureGeneratorTests
         Assert.True(plan.EndPhrase!.Value > new FractionalPosition(10));
     }
 
+    [Theory]
+    [InlineData("COUNT", 0)]
+    [InlineData("END", 12)]
+    public void AnImportedStructuralPhraseStillExistsBehindAnEditorMarker(string phrase, int beat)
+    {
+        var arrangement = WithSounds(Note(8, 1));
+        arrangement.Phrases.Add(phrase);
+        arrangement.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(beat), 0));
+        arrangement.EventPoints.Add(new EventPoint { Position = new FractionalPosition(beat), Phrase = "outro" });
+
+        var plan = StructureGenerator.Plan(arrangement, Beats());
+
+        Assert.Null(phrase == "COUNT" ? plan.CountPhrase : plan.EndPhrase);
+    }
+
     [Fact]
     public void PhrasesThatAlreadyExistAreNotProposedAgain()
     {
@@ -74,15 +120,16 @@ public sealed class StructureGeneratorTests
         Assert.Null(plan.EndPhrase);
     }
 
-    /// <summary>An imported chart carries its phrases in <c>Arrangement.Phrases</c>
-    ///     rather than on markers — the pass must see those too or it duplicates
-    ///     every END on the first run.</summary>
+    /// <summary>Imported phrase names require positioned iterations; those actual
+    /// markers must prevent duplicate COUNT and END generation.</summary>
     [Fact]
     public void APhraseOnTheImportedListAlsoCounts()
     {
         var arrangement = WithSounds(Note(4));
         arrangement.Phrases.Add("COUNT");
         arrangement.Phrases.Add("END");
+        arrangement.PhraseIterations.Add(new PhraseIteration(FractionalPosition.Zero, 0));
+        arrangement.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(50), 1));
 
         var plan = StructureGenerator.Plan(arrangement, Beats());
 

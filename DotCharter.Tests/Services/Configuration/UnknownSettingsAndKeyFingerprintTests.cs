@@ -92,12 +92,29 @@ public sealed class UnknownSettingsAndKeyFingerprintTests : IDisposable
                     """);
         var service = NewService();
 
-        Assert.Equal("D:\\test", service.LoadAppConfig().ExportTestFolder);
+        Assert.Empty(service.LoadAppConfig().ExportTestDefaultFolder);
+        Assert.Equal("D:\\test", service.LoadAppConfig().UnknownSettings!["ExportTestFolder"].GetString());
         LoadSave(service);
 
         var root = SavedRoot();
+        Assert.Equal("D:\\test", root.GetProperty("ExportTestFolder").GetString());
         Assert.Equal("a", root.GetProperty("DefaultExportPresetId").GetString());
         Assert.Equal("dc_house", root.GetProperty("ExportPresets")[0].GetProperty("DefaultToneKey").GetString());
+    }
+
+    [Fact]
+    public void The_default_test_export_folder_round_trips_as_a_known_setting()
+    {
+        var folder = Path.Combine(_tempDir, "packages");
+        WriteConfig(JsonSerializer.Serialize(new { ExportTestDefaultFolder = folder }));
+        var service = NewService();
+
+        Assert.Equal(folder, service.LoadAppConfig().ExportTestDefaultFolder);
+        LoadSave(service);
+
+        Assert.False(service.LoadAppConfig().UnknownSettings?.ContainsKey("ExportTestDefaultFolder") ?? false);
+        Assert.Equal(folder, SavedRoot().GetProperty("ExportTestDefaultFolder").GetString());
+        Assert.Equal(folder, NewService().LoadAppConfig().ExportTestDefaultFolder);
     }
 
     [Fact]

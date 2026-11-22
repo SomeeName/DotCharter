@@ -89,6 +89,46 @@ public sealed class LyricSecondaryModelDegradationTests
         Assert.True(blend > call, "the blend escaped the degradation seam.");
     }
 
+    private static CtcEmissions Pooled() =>
+        Emissions(-0.5f) with { Pooled = Emissions(-0.1f) };
+
+    private static LyricSheet Sheet(string paste) => LyricSheetParser.Parse(paste);
+
+    [Fact]
+    public void ARomajiSheetDoesNotTakeThePooledPath()
+    {
+        var sheet = Sheet("""
+            Mi-zu ta-ma-ri ni a-shi wo tsuk-kon-de
+            Ki-mi wa wa-ra-tte i-ta na-tsu no hi
+            So-ra wo mi-a-ge-te i-ta da-ke
+            Ka-ze ga fu-i-te ha-na ga chi-ru
+            """);
+
+        Assert.Null(LyricAutoSyncService.WithoutPooledForRomaji(Pooled(), sheet).Pooled);
+    }
+
+    [Fact]
+    public void AnEnglishSheetKeepsThePooledPath()
+    {
+        var sheet = Sheet("""
+            And I know that you don't care
+            All the things that we could have been
+            This is what they told me when
+            Just a lit-tle while long-er now
+            """);
+
+        Assert.NotNull(LyricAutoSyncService.WithoutPooledForRomaji(Pooled(), sheet).Pooled);
+    }
+
+    [Fact]
+    public void TheEnsembleBranchAppliesTheRomajiSkip()
+    {
+        var src = File.ReadAllText(RepoPath("DotCharter.Services/Audio/Lyrics/LyricAutoSyncService.cs"));
+        var branch = src.IndexOf("selection.Secondary is { } secondary", StringComparison.Ordinal);
+        Assert.True(branch > 0);
+        Assert.True(src.IndexOf("emissions = WithoutPooledForRomaji(emissions, sheet)", branch, StringComparison.Ordinal) > branch);
+    }
+
     private static string RepoPath(string relative) =>
         Path.Combine(TestPaths.RepoRoot(), relative.Replace('/', Path.DirectorySeparatorChar));
 }

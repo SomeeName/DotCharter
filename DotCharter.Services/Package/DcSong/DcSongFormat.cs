@@ -100,6 +100,6 @@ public enum DcSongAudioCodec
     /// <summary>Ogg Opus, 192 kb/s stereo. Playback only.</summary>
     Opus,
 
-    /// <summary>FLAC. Lossless: what chart-from-audio and stem separation need.</summary>
+    /// <summary>FLAC. Lossless: what stem separation needs.</summary>
     Flac
 }

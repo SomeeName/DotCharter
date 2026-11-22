@@ -1,5 +1,7 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using DotCharter.UI.ViewModels.Shell;
 
 namespace DotCharter.UI.Layout;
@@ -32,10 +34,20 @@ public sealed class MainWindowLayoutController
     private GridLength _savedDockRowHeight = Views.Shell.EditorSplitDefaults.DockRow;
     private GridLength _savedDockSplitterHeight = new(6);
 
-    // The AI chat column's width while it is hidden (a hidden column is 0 px wide).
-    private double _aiChatWidthPx = AiChatColumnPolicy.DefaultWidthPx;
+    // The side columns' widths as the user chose them: a narrow window narrows the columns,
+    // never these, and these are what is saved (a hidden chat column is 0 px wide).
+    private readonly SideColumnWidth _chatWidth = new();
+    private readonly SideColumnWidth _inspectorWidth = new();
 
-    public MainWindowLayoutController(Window window) => _window = window;
+    private bool _sideColumnClampHooked;
+
+    public MainWindowLayoutController(Window window)
+    {
+        _window = window;
+        _chatWidth.Prefer(AiChatColumnPolicy.DefaultWidthPx);
+    }
+
+    private double ChatPreferredPx => _chatWidth.PreferredPx ?? AiChatColumnPolicy.DefaultWidthPx;
 
     public void Bind(MainWindowViewModel vm)
     {
@@ -72,15 +84,12 @@ public sealed class MainWindowLayoutController
         // way for the user to re-enable it (the toggle button was removed).
         vm.ProjectState.Is3DPreviewVisible = true;
 
-        if (cfg.WindowMaximized)
-        {
-            _window.WindowState = WindowState.Maximized;
-        }
-        else
-        {
-            if (cfg.WindowWidth is { } w && w > 200) _window.Width = w;
-            if (cfg.WindowHeight is { } h && h > 200) _window.Height = h;
-        }
+        // The normal size first, maximized or not: PersistOnClose saves it only from the
+        // Normal state, and a maximized start that skipped it restored DOWN to the window's
+        // declared default instead.
+        if (cfg.WindowWidth is { } w && w > 200) _window.Width = w;
+        if (cfg.WindowHeight is { } h && h > 200) _window.Height = h;
+        if (cfg.WindowMaximized) _window.WindowState = WindowState.Maximized;
 
         // Restore dock row to its persisted size. We use **star** units
         // (not pixels) so the row remains proportional and shrinks together with
@@ -103,7 +112,7 @@ public sealed class MainWindowLayoutController
         }
 
         // The AI chat column: its width, then whether it shows (the flag's change applies both).
-        _aiChatWidthPx = AiChatColumnPolicy.Restored(cfg.LayoutAiChatWidth);
+        _chatWidth.Prefer(AiChatColumnPolicy.Restored(cfg.LayoutAiChatWidth));
         vm.IsAiChatVisible = cfg.LayoutAiChatVisible;
         ApplyAiChatColumn(vm.IsAiChatVisible);
 
@@ -114,7 +123,184 @@ public sealed class MainWindowLayoutController
         {
             inspGrid.ColumnDefinitions[0].Width = new GridLength(inspPx, GridUnitType.Pixel);
             inspGrid.ColumnDefinitions[2].Width = new GridLength(1, GridUnitType.Star);
+            _inspectorWidth.Prefer(inspPx);
         }
+
+        // Both side widths are absolute pixels from whatever monitor and scale they were
+        // saved on. They are clamped once the restored window has been laid out, and again
+        // whenever a split changes size; the clamp narrows the columns, not the preferred widths.
+        HookSideColumnClamp();
+        Dispatcher.UIThread.Post(ClampSideColumns, DispatcherPriority.Background);
+    }
+
+    /// <summary>
+    ///     Re-clamps the side columns whenever either split changes size, and takes a splitter
+    ///     drag's width as the preferred one when the drag ends.
+    /// </summary>
+    private void HookSideColumnClamp()
+    {
+        if (_sideColumnClampHooked) return;
+        _sideColumnClampHooked = true;
+        if (_window.FindControl<Grid>("MainSplitGrid") is { } split) split.SizeChanged += (_, _) => ClampSideColumns();
+        if (_window.FindControl<Grid>("InspectorSplitGrid") is { } insp) insp.SizeChanged += (_, _) => ClampSideColumns();
+        if (_window.FindControl<GridSplitter>("AiChatSplitter") is { } chatSplitter)
+            AdoptDrags(chatSplitter, ShownChatColumn, _chatWidth);
+        if (_window.FindControl<GridSplitter>("InspectorPreviewSplitter") is { } inspSplitter)
+            AdoptDrags(inspSplitter, PixelInspectorColumn, _inspectorWidth);
+        _window.Deactivated += (_, _) => CancelSideColumnDrags();
+    }
+
+    /// <summary>
+    ///     A drag that moved the splitter is the user's choice, even one that ends exactly on the
+    ///     narrowed width. A press and release without a move, or an Escape that puts the width
+    ///     back, also raises <c>DragCompleted</c> (Avalonia's <c>VectorEventArgs</c> carries no
+    ///     cancel flag), so only a width that differs from the one at <c>DragStarted</c> counts.
+    ///     The clamp leaves the column alone during the drag and re-fits it once the drag ends.
+    /// </summary>
+    private void AdoptDrags(GridSplitter splitter, Func<ColumnDefinition?> column, SideColumnWidth width)
+    {
+        splitter.DragStarted += (_, _) => width.BeginDrag(column()?.Width.Value);
+        splitter.DragCompleted += (_, _) =>
+        {
+            width.EndDrag(column()?.Width.Value);
+            ClampSideColumns();
+        };
+        WatchDragVisibility(splitter, CancelDrag);
+
+        void CancelDrag()
+        {
+            width.CancelDrag(column()?.Width.Value);
+            ClampSideColumns();
+        }
+    }
+
+    /// <summary>A splitter or any ancestor hiding cancels its drag; reparenting refreshes the visibility subscriptions.</summary>
+    private static void WatchDragVisibility(GridSplitter splitter, Action cancelDrag)
+    {
+        var sources = new List<Visual>();
+        splitter.AttachedToVisualTree += (_, _) => Hook();
+        splitter.DetachedFromVisualTree += (_, _) =>
+        {
+            cancelDrag();
+            Unhook();
+        };
+        Hook();
+
+        void VisibilityChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+        {
+            if (e.Property == Visual.IsVisibleProperty && e.NewValue is false) cancelDrag();
+        }
+
+        void Hook()
+        {
+            Unhook();
+            sources.Add(splitter);
+            sources.AddRange(splitter.GetVisualAncestors());
+            foreach (var source in sources) source.PropertyChanged += VisibilityChanged;
+        }
+
+        void Unhook()
+        {
+            foreach (var source in sources) source.PropertyChanged -= VisibilityChanged;
+            sources.Clear();
+        }
+    }
+
+    /// <summary>Cancels unfinished side-column drags and re-fits their original preferences.</summary>
+    public void CancelSideColumnDrags()
+    {
+        _chatWidth.CancelDrag(ShownChatColumn()?.Width.Value);
+        _inspectorWidth.CancelDrag(PixelInspectorColumn()?.Width.Value);
+        ClampSideColumns();
+    }
+
+    /// <summary>A width the splitter wrote into a side column becomes that column's preferred width.</summary>
+    private void ObserveSideColumns()
+    {
+        if (ShownChatColumn() is { } chat) _chatWidth.Observe(chat.Width.Value);
+        if (PixelInspectorColumn() is { } inspector) _inspectorWidth.Observe(inspector.Width.Value);
+    }
+
+    private ColumnDefinition? ShownChatColumn() =>
+        _window.FindControl<Grid>("MainSplitGrid") is { ColumnDefinitions.Count: >= 3 } split &&
+        split.ColumnDefinitions[2] is { Width.IsAbsolute: true, Width.Value: > 0 } chat
+            ? chat
+            : null;
+
+    /// <summary>
+    ///     The Inspector column while it shows a pixel width. A run collapses it to 0 px, and a
+    ///     collapsed column is never clamped back open (the Inspector would cover the highway).
+    /// </summary>
+    private ColumnDefinition? PixelInspectorColumn() =>
+        _window.FindControl<Grid>("InspectorSplitGrid") is { ColumnDefinitions.Count: >= 3 } insp &&
+        insp.ColumnDefinitions[0] is { Width.IsAbsolute: true, Width.Value: > 0 } inspector
+            ? inspector
+            : null;
+
+    /// <summary>
+    ///     Keeps the AI chat column and the Inspector column inside the split they live in, read
+    ///     from the grids' own bounds (inside the UI-scale transform, so already in the units the
+    ///     widths are in). A width saved on a wider monitor otherwise put its splitter off-screen
+    ///     and left the editor or the 3D preview no room. Each column shows its preferred width as
+    ///     far as the split allows, so a temporary shrink gives the width back when it grows.
+    /// </summary>
+    private void ClampSideColumns()
+    {
+        ObserveSideColumns();
+        if (!_chatWidth.IsDragging && _window.FindControl<Grid>("MainSplitGrid") is { } split && ShownChatColumn() is { } chat &&
+            _chatWidth.Shown(px => AiChatColumnPolicy.ClampToSplit(px, split.Bounds.Width)) is { } chatPx)
+        {
+            SetPixelWidth(chat, chatPx);
+        }
+
+        if (!_inspectorWidth.IsDragging && _window.FindControl<Grid>("InspectorSplitGrid") is { } insp &&
+            PixelInspectorColumn() is { } inspector && _inspectorWidth.Shown(px => ClampedInspectorWidth(px, insp.Bounds.Width)) is { } inspectorPx)
+        {
+            SetPixelWidth(inspector, inspectorPx);
+        }
+    }
+
+    /// <summary>
+    ///     Fits both side columns to their splits now: the end of a run writes back the Inspector
+    ///     width the run started with (<c>MainWindowShellLayout</c>), sized for the window as it was.
+    /// </summary>
+    public void RefitSideColumns() => ClampSideColumns();
+
+    private static void SetPixelWidth(ColumnDefinition column, double px)
+    {
+        if (Math.Abs(column.Width.Value - px) >= 0.01) column.Width = new GridLength(px, GridUnitType.Pixel);
+    }
+
+    /// <summary>The Inspector column's floor, the markup's <c>MinWidth</c> on that column.</summary>
+    internal const double MinInspectorWidthPx = 320;
+
+    /// <summary>What the 3D preview keeps beside a restored Inspector.</summary>
+    internal const double MinPreviewColumnPx = 200;
+
+    /// <summary>
+    ///     A restored Inspector width inside an <c>InspectorSplitGrid</c> that is
+    ///     <paramref name="gridWidthPx" /> wide: it leaves the splitter and
+    ///     <see cref="MinPreviewColumnPx" /> for the preview, never goes under
+    ///     <see cref="MinInspectorWidthPx" />, and is unchanged while the grid has no size yet.
+    /// </summary>
+    internal static double ClampedInspectorWidth(double widthPx, double gridWidthPx)
+    {
+        if (!double.IsFinite(gridWidthPx) || gridWidthPx <= 0) return widthPx;
+        var max = Math.Max(MinInspectorWidthPx, gridWidthPx - SplitterPx - MinPreviewColumnPx);
+        return Math.Min(widthPx, max);
+    }
+
+    /// <summary>
+    ///     View ▸ Reset Layout: the dock row's remembered heights go back to the defaults too.
+    ///     The reset turns the Inspector and the preview on, which POSTS
+    ///     <see cref="ApplyBottomDockRowSizing" />; that callback runs after the reset wrote the
+    ///     default rows and wrote the user's old dock height back over them.
+    /// </summary>
+    public void ResetDockRowMemory()
+    {
+        CancelSideColumnDrags();
+        _savedDockRowHeight = Views.Shell.EditorSplitDefaults.DockRow;
+        _savedDockSplitterHeight = new GridLength(SplitterPx);
     }
 
     /// <summary>Below this the bottom dock is not a usable pane area, so a saved
@@ -229,20 +415,25 @@ public sealed class MainWindowLayoutController
             }
         }
 
+        // A width the user dragged and never resized after is taken first; a narrowed column
+        // saves the user's width, not the narrowed one.
+        ObserveSideColumns();
         if (_window.FindControl<Grid>("InspectorSplitGrid") is { } inspGrid &&
             inspGrid.ColumnDefinitions.Count > 0)
         {
-            if (ShellGeometryPersistPolicy.InspectorWidthToPersistPx(
-                    inspGrid.ColumnDefinitions[0].ActualWidth, inRun) is { } px)
+            var measured = inspGrid.ColumnDefinitions[0].ActualWidth;
+            var inspectorPx = measured > 0 && PixelInspectorColumn() is not null &&
+                              _inspectorWidth.PreferredPx is { } preferred
+                ? preferred
+                : measured;
+            if (ShellGeometryPersistPolicy.InspectorWidthToPersistPx(inspectorPx, inRun) is { } px)
             {
                 cfg.LayoutInspectorWidth = px;
             }
         }
 
         if (!inRun) cfg.LayoutAiChatVisible = vm.IsAiChatVisible;
-        if (_window.FindControl<Grid>("MainSplitGrid") is { ColumnDefinitions.Count: >= 3 } split &&
-            AiChatColumnPolicy.ToPersist(split.ColumnDefinitions[2].ActualWidth, vm.IsAiChatVisible, inRun,
-                _aiChatWidthPx) is { } chatPx)
+        if (AiChatColumnPolicy.ToPersist(ChatPreferredPx, vm.IsAiChatVisible, inRun, ChatPreferredPx) is { } chatPx)
         {
             cfg.LayoutAiChatWidth = chatPx;
         }
@@ -286,11 +477,13 @@ public sealed class MainWindowLayoutController
             editor.MinWidth = AiChatColumnPolicy.MinEditorWidthPx;
             splitter.Width = new GridLength(AiChatColumnPolicy.SplitterPx);
             chat.MinWidth = AiChatColumnPolicy.MinWidthPx;
-            chat.Width = new GridLength(_aiChatWidthPx);
+            // A width remembered on a wider window comes back only as wide as the split allows.
+            var shown = _chatWidth.Shown(px => AiChatColumnPolicy.ClampToSplit(px, grid.Bounds.Width));
+            chat.Width = new GridLength(shown ?? AiChatColumnPolicy.DefaultWidthPx);
             return;
         }
 
-        if (chat.ActualWidth >= AiChatColumnPolicy.MinWidthPx) _aiChatWidthPx = chat.ActualWidth;
+        if (chat is { Width.IsAbsolute: true, Width.Value: > 0 }) _chatWidth.Observe(chat.Width.Value);
         editor.MinWidth = 0;
         splitter.Width = new GridLength(0);
         chat.MinWidth = 0;
@@ -300,7 +493,7 @@ public sealed class MainWindowLayoutController
     /// <summary>View ▸ Reset Layout: the chat column goes back to its first-show width.</summary>
     public void ResetAiChatColumn(bool visible)
     {
-        _aiChatWidthPx = AiChatColumnPolicy.DefaultWidthPx;
+        _chatWidth.Prefer(AiChatColumnPolicy.DefaultWidthPx);
         if (visible) ApplyAiChatColumn(true);
     }
 

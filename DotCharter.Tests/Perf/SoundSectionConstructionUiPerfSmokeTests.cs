@@ -13,7 +13,7 @@ namespace DotCharter.Tests.Perf;
 ///     <see cref="InspectorView" />) and MEASURES non-zero over the app's own
 ///     <see cref="InspectorViewModel" /> — a view whose styles or resources failed still arranges,
 ///     it just has no size. The tab as a whole, with real selections, is
-///     <see cref="SoundTabRailUiPerfSmokeTests" />.
+///     <see cref="NoteSectionStripUiPerfSmokeTests" />.
 /// </summary>
 [Collection("HeadlessUI")]
 public sealed class SoundSectionConstructionUiPerfSmokeTests
@@ -21,7 +21,11 @@ public sealed class SoundSectionConstructionUiPerfSmokeTests
     public static TheoryData<Type> Sections =>
     [
         typeof(SoundTaskView), typeof(SoundPlacementView), typeof(SoundShapeView), typeof(SoundBulkCardView),
-        typeof(SoundNoteTechniqueView), typeof(SoundChordTechniqueView), typeof(SoundFindingsView)
+        typeof(SoundNoteTechniqueView), typeof(SoundChordTechniqueView), typeof(SoundFindingsView),
+        // #751 P5: the Task, Library, Bends and Findings pages' cards.
+        typeof(SoundTaskReadinessView), typeof(SoundTaskPlayheadView), typeof(SoundLibraryView), typeof(SoundLibraryGripView),
+        typeof(SoundLibraryUsesView), typeof(SoundLibraryTemplateView), typeof(SoundBendsCurveView), typeof(SoundBendsPresetsView),
+        typeof(SoundBendsScopeView), typeof(SoundFindingsDetailView), typeof(SoundFindingsReviewView)
     ];
 
     [Theory]

@@ -8,7 +8,7 @@ using DotCharter.UI.Controls;
 namespace DotCharter.Tests.Perf;
 
 /// <summary>
-///     What ONE <see cref="EqPlotControl.Render" /> costs on the UI thread, in
+///     What ONE <see cref="ColumnFlowEqPlot.Render" /> costs on the UI thread, in
 ///     bytes — LOGGED, never asserted. The plot is repainted at ~15 Hz for as
 ///     long as the EQ module is attached (<c>EqModuleView</c>'s spectrum poll
 ///     writes <c>Spectrum</c>, which is <c>AffectsRender</c>), so a per-frame
@@ -52,7 +52,7 @@ public sealed class EqPlotRenderAllocationUiPerfSmokeTests(ITestOutputHelper out
             var spectrum = new float[128];
             for (var i = 0; i < spectrum.Length; i++) spectrum[i] = -40f + 20f * MathF.Sin(i / 9f);
 
-            var plot = new EqPlotControl
+            var plot = new ColumnFlowEqPlot
             {
                 Section = section,
                 SelectedBand = 2,
@@ -80,7 +80,7 @@ public sealed class EqPlotRenderAllocationUiPerfSmokeTests(ITestOutputHelper out
                 for (var i = 0; i < Frames; i++) RenderOnce(plot, target, spectrum, i);
                 var perFrame = (GC.GetAllocatedBytesForCurrentThread() - before) / (double)Frames;
 
-                output.WriteLine($"EqPlotControl.Render: {perFrame:0} B/frame over {Frames} frames (live spectrum, 2 audible bands, band 2 selected).");
+                output.WriteLine($"ColumnFlowEqPlot.Render: {perFrame:0} B/frame over {Frames} frames (live spectrum, 2 audible bands, band 2 selected).");
 
                 plot.Section = null;
                 before = GC.GetAllocatedBytesForCurrentThread();
@@ -96,7 +96,7 @@ public sealed class EqPlotRenderAllocationUiPerfSmokeTests(ITestOutputHelper out
         }, CancellationToken.None);
     }
 
-    private static void RenderOnce(EqPlotControl plot, RenderTargetBitmap target, float[] spectrum, int frame)
+    private static void RenderOnce(ColumnFlowEqPlot plot, RenderTargetBitmap target, float[] spectrum, int frame)
     {
         // A new spectrum every frame, as the poll delivers it — the cache must
         // not be "warm" because the data never changed.

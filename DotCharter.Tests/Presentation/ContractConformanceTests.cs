@@ -61,13 +61,7 @@ public sealed class ContractConformanceTests
     [Fact]
     public void Every_registered_product_view_model_conforms_to_its_contract()
     {
-        var services = new ServiceCollection();
-        NavigationModule.Register(services);
-        DialogsModule.Register(services);
-        DotCharter.Presentation.Screens.Editor.EditorModule.Register(services);
-        services.AddSingleton<DotCharter.Services.Plugins.IPackageFeatures>(DotCharter.Services.Plugins.PackageFeatures.All);
-        AddDialogDependencies(services);
-        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var provider = ProductGraph();
         using var scope = provider.CreateScope();
 
         var checkedContracts = new List<string>();
@@ -86,6 +80,33 @@ public sealed class ContractConformanceTests
             .Except(DesignOnlyDialogs);
         Assert.All(dialogs, name => Assert.Contains(name, checkedContracts));
         Assert.All(DesignOnlyDialogs, name => Assert.DoesNotContain(name, checkedContracts));
+    }
+
+    /// <summary>
+    ///     Resolving the Tone designer builds its preview targets, whose constructor probes the tonelab session. A REAL
+    ///     session discovers every <c>tonelab-&lt;pid&gt;</c> pipe on the machine and connects to the newest, so over this
+    ///     graph it would connect to a pipe mock of any test running beside it (this host or another one) and take the
+    ///     mock's single pipe instance. The product graph here therefore carries a session that never touches a pipe.
+    /// </summary>
+    [Fact]
+    public void TheProductGraph_CarriesASessionThatNeverTouchesAPipe()
+    {
+        using var provider = ProductGraph();
+
+        Assert.IsType<Infrastructure.FakeTonelabSession>(provider.GetRequiredService<DotCharter.Tone.Audio.Tonelab.ITonelabSession>());
+    }
+
+    private static ServiceProvider ProductGraph()
+    {
+        var services = new ServiceCollection();
+        NavigationModule.Register(services);
+        DialogsModule.Register(services);
+        DotCharter.Presentation.Screens.Editor.EditorModule.Register(services);
+        services.AddSingleton<DotCharter.Services.Plugins.IPackageFeatures>(DotCharter.Services.Plugins.PackageFeatures.All);
+        AddDialogDependencies(services);
+        // After the module, so it replaces the real session the module registers.
+        services.AddSingleton<DotCharter.Tone.Audio.Tonelab.ITonelabSession>(new Infrastructure.FakeTonelabSession());
+        return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }
 
     /// <summary>
@@ -110,9 +131,6 @@ public sealed class ContractConformanceTests
         services.AddSingleton<IAppLogger>(new FakeAppLogger());
         services.AddSingleton(new DotCharter.Services.Editing.Quality.ChartQualityReporter(
             new ArrangementValidationService(new FakeAppLogger())));
-        // The report's checks land where they ran (#690), so a command's notifications are observed with it,
-        // not raced against a pool thread; the off-thread path is ChartQualityReportOffThreadTests'.
-        services.AddSingleton(Dialogs.ChartQualityReportViewModelTests.Checks());
         services.AddSingleton(Dialogs.RecordingProxy.Create<DotCharter.Services.Editing.Linting.IAudioChartLintService>().Proxy);
         services.AddSingleton(Dialogs.RecordingProxy.Create<DotCharter.Tone.Audio.Abstractions.IPlaybackTransport>().Proxy);
         services.AddSingleton(Dialogs.RecordingProxy.Create<DotCharter.Services.Editing.Maintenance.IChartMaintenanceService>().Proxy);
@@ -130,12 +148,7 @@ public sealed class ContractConformanceTests
         services.AddSingleton<DotCharter.Tone.Infrastructure.Storage.IFileStorageService>(new FakeFileStorageService());
         services.AddSingleton<DotCharter.Tone.Infrastructure.Storage.IExportTargetWriter>(
             new DotCharter.Tone.Infrastructure.Storage.ExportTargetWriter());
-        services.AddSingleton(Dialogs.RecordingProxy.Create<DotCharter.Services.Import.Audio.IChartFromAudioStemLocator>().Proxy);
         services.AddSingleton(Dialogs.RecordingProxy.Create<DotCharter.Services.Audio.StemSeparation.ISongStemSeparation>().Proxy);
-        services.AddSingleton<DotCharter.Services.Import.Audio.IChartFromAudioAnalyzer>(
-            new DotCharter.Services.Import.Audio.ChartFromAudioAnalyzer());
-        services.AddSingleton(new DotCharter.Services.Editing.DraftMerge.DraftMergeReviewHost(chart.History,
-            new DotCharter.Services.Editing.FretAnchors.FretAnchorGenerationService()));
         services.AddSingleton<DotCharter.Services.Diagnostics.IMessagePrompt>(new Dialogs.ScriptedPrompt());
         services.AddSingleton<DotCharter.Services.State.Checkpoints.ICheckpointService>(
             new Dialogs.CheckpointsViewModelTests.FakeCheckpointService());
@@ -160,6 +173,7 @@ public sealed class ContractConformanceTests
                 new DotCharter.Services.Editing.EditingScope(chart.State), new FakeAppLogger()));
         services.AddSingleton<DotCharter.Tone.Diagnostics.IUiDispatcher>(new TestUiDispatcher());
         services.AddSingleton(Dialogs.RecordingProxy.Create<DotCharter.Services.Session.INewProjectSources>().Proxy);
+        services.AddSingleton<DotCharter.Services.Audio.Key.ISongKeyAudioEstimator>(new Infrastructure.FakeSongKeyAudioEstimator());
         services.AddSingleton<DotCharter.Services.Editing.Selection.ISelectionService>(
             new DotCharter.Services.Editing.Selection.SelectionService());
         services.AddSingleton(sp => new DotCharter.Services.Editing.Selection.Patterns.MatchPatternStore(

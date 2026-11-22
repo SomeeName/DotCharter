@@ -51,14 +51,7 @@ internal static class DdsImageConverter
             if (pngData == null)
                 return false;
 
-            var tempPath = pngPath + ".tmp";
-            Directory.CreateDirectory(Path.GetDirectoryName(pngPath) ?? ".");
-            using (var output = File.Create(tempPath))
-            {
-                pngData.SaveTo(output);
-            }
-
-            File.Move(tempPath, pngPath, true);
+            AtomicFile.Write(pngPath, output => pngData.SaveTo(output));
             return IsUsablePng(pngPath);
         }
         catch

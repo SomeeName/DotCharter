@@ -22,7 +22,7 @@ one instance (`App.AddAudioSeams`); none is `IDisposable` itself.
 
 | Seam (members) | Members (signatures) | Uses it today / will use it | Threading |
 |---|---|---|---|
-| `IPlaybackTransport` (20) | `CurrentTimeMs`, `RawPlayheadMs`, `IsPlaying`, `SeekGeneration` { get; }; `PlaybackSpeed` { get; set; }; `event EventHandler<double> PositionChanged`; `Play()`, `Pause()`, `Stop()`, `SeekTo(double)`; `LoadAudioAsync(string)`, `LoadAudioFromMemoryAsync(ReadOnlyMemory<byte>, string, string?)`, `FreeAudio()`, `GetTotalAudioLengthMs()`, `CurrentAudioPath`; `PlayMetronomeTick(bool)`, `PlayClap()`, `TryScheduleClick(int, double)`, `ClearScheduledClicks()`, `TryScheduleCalibrationClap(out long)` | **now:** `ChartRenderer`, `Preview3DRenderDriver`. **will:** every Play Mode screen that plays a song (Countdown, Playing HUD, Paused, Results listen-back), `AudioPlaybackCoordinator` | `PositionChanged` on a thread-pool timer at up to 250 Hz — coalesce to ≤ 60 Hz before UI state. `Play`/`Pause`/`Stop`/`SeekTo` reach `_gate` (short holds). Schedule against `RawPlayheadMs`, never `CurrentTimeMs` |
+| `IPlaybackTransport` (27) | `CurrentTimeMs`, `RawPlayheadMs`, `IsPlaying`, `SeekGeneration` { get; }; `PlaybackSpeed` { get; set; }; `event EventHandler<double> PositionChanged`; `Play()`, `Pause()`, `Stop()`, `SeekTo(double)`; `LoadAudioAsync(string)`, `LoadAudioAsync(string, CancellationToken)`, `CurrentMediaGeneration`, `OwnsMedia(string, long)`, `RunIfOwned(string, long, Action)`, `LoadTemporaryAudioAsync(string, CancellationToken, out long)`, `TryRestoreAudioAsync(string?, string, long, double)`, `LoadAudioFromMemoryAsync(ReadOnlyMemory<byte>, string, string?)`, `FreeAudio()`, `FreeMasterAudio()`, `GetTotalAudioLengthMs()`, `CurrentAudioPath`; `PlayMetronomeTick(bool)`, `PlayClap()`, `TryScheduleClick(int, double)`, `ClearScheduledClicks()`, `TryScheduleCalibrationClap(out long)` | **now:** `ChartRenderer`, `Preview3DRenderDriver`. **will:** every Play Mode screen that plays a song (Countdown, Playing HUD, Paused, Results listen-back), `AudioPlaybackCoordinator` | `PositionChanged` on a thread-pool timer at up to 250 Hz — coalesce to ≤ 60 Hz before UI state. `Play`/`Pause`/`Stop`/`SeekTo` reach `_gate` (short holds). Schedule against `RawPlayheadMs`, never `CurrentTimeMs` |
 | `IAudioDeviceControl` (22) | `ActiveSampleRate`, `ActualBufferFrames`, `EstimatedOutputLatencyMs`, `MeasuredOutputLatencyMs`, `IsDeviceLost` { get; }; `AudioDelayMs`, `MidiOffsetMs` { get; set; }; `event DeviceBufferFramesChanged` (`int`), `DeviceLost`, `DeviceReconnected` (`AudioDeviceReconnectedEventArgs`); `ApplyAudioConfiguration(AppConfig)`, `EnsureAsioDevicesProbed(AppConfig)`, `EnsureWasapiDevicesProbed(AppConfig)`, `TryOpenAsioControlPanel(IntPtr, out string?)`, `GetWasapiOutputDevices()`, `GetAsioDevices()`, `GetWasapiInputDevices()`, `GetAsioInputDevices()`, `GetInputDeviceChannelCount(string, string)`, `GetOutputDeviceChannelCount(string, string)`, `GetOutputChannelNames(string, string)`, `GetInputChannelNames(string, string)` | **now:** `LiveInputChannelViewModel`, the Settings ▸ Audio tab. **will:** the status bar, Diagnostics, the latency wizard | the three events may arrive on any thread (watchdog timer, engine rebuild). `ApplyAudioConfiguration`, the probes and the ASIO panel may rebuild or stop the engine — slow, never on a hot path |
 | `IStemMixer` (9) | `SongVolume` { get; set; }; `HasStems`, `LoadedStemNames` { get; }; `LoadStemsAsync(IReadOnlyList<StemLoadRequest>)`, `ClearStems()`, `SetStemVolume(string, double)`, `SetStemMute(string, bool)`, `SetStemSolo(string, bool)`, `SetMasterMixMuted(bool)` | **now:** `StemMixerViewModel`, `StemTrackViewModel`, `StemDuckFollower`. **will:** the rewritten mixer pane | no events; `LoadStemsAsync` opens the stem files (async) |
 | `IVstChainHost` (17) | `IsVstEffectEnabled`, `IsVstInstrumentEnabled` { get; set; }, `VstEffectVolume`, `VstInstrumentVolume` { get; set; }; `IsInstrumentVstLoaded`, `IsInstrumentVstLoading` { get; }; `IsGuitarVstSlotLoaded(Guid)`; events `InstrumentVstLoadChanged` (`bool`), `GuitarVstSlotLoadChanged` (`(Guid, bool)`), `GuitarVstSlotEditorClosed` (`Guid`), `InstrumentVstEditorClosed`; `ScanVstPlugins()`, `SetGuitarVstChain(IReadOnlyList<VstChainEntry>)`, `ToggleGuitarVstSlotEditor(Guid, bool)`, `SetGuitarVstSlotBypass(Guid, bool)`, `LoadInstrumentVst(string, bool)`, `ToggleInstrumentVstEditor(bool)` | **now: nobody — so it is NOT registered.** Its only caller, the editor's `TransportViewModel`, also drives the master bus and the transport. **will:** the editor wave's VST pane | events may arrive on the caller's thread or a worker (load task, sandbox pipe reader). A load returns before the plugin is up; the result is the `…LoadChanged` event |
@@ -75,6 +75,81 @@ so `ServiceProvider.Dispose` may call `Dispose` on it more than once.
 clean-shutdown path disposes the audio service explicitly BEFORE the container
 (`App.RunCleanShutdown`), so the engine's teardown order is unchanged.
 
+Decoded project master loads and stale-load compensation use `FreeMasterAudio`: the mixer
+can finish loading the current project's stems independently of the queued master.
+Full cleanup uses `FreeAudio`, which also clears stems. Master teardown
+detaches under the apply gate and disposes outside it. Both register an empty request
+first and release under the next `_gate` hold only while that request is still the
+newest: a song requested in between keeps its source and stems (`FreeAudioFor`,
+`FreeMasterAudioFor`).
+`MediaRebuildOwnershipTests` drives the orderings on the Null device. Native coverage:
+`LibraryDeviceRateAudioNativeTests.A_master_reset_preserves_native_stems_while_full_reset_clears_them`.
+
+## Rebuild publication (#530)
+
+Current controls of restored stems merge into pending recovery by stem name; missing
+stems keep their retained path, offset and controls. Explicit `ClearStems` clears
+retained stem intent even if no source reopened, and bumps `_stemClearGeneration`: a
+rebuild records it with its stem snapshot and restores nothing once it moved, checked
+before the replay and again before `LoadStemsCore` publishes the restored set.
+Ordinary `LoadStemsAsync` requests also capture the clear generation before queueing;
+publication drops the set if an explicit clear landed while it waited or decoded.
+Rebuild restores retain the same-song/borrowed-take ownership policy.
+Seat order uses the same validated
+device channel count as the engine mask, so a discarded mask keeps default order.
+
+- `Engine/MediaRebuildRecovery` keeps a durable song and stem-mix snapshot across
+  failed engine creation, master reopen and partial stem restore. It is released
+  only after media restoration succeeds, or superseded by logical media changes.
+  Rebuild replay uses the same guitar-chain request generation; it must not turn
+  an old captured chain into a newer request. Pending chains remain until applied.
+- Chain requests publish a generation before scheduling. Workers reject obsolete
+  generations after entering `_vstGate`, for both backends. In-process chain
+  changes and bypass toggles detach all slots before attaching active slots in
+  requested order through `Vst/VstInputOrder`, retaining plugin instances and state.
+  Rebuild snapshots preserve that order separately from dictionary insertion order.
+
+- Lock order is `_engineConfigGate` -> `_vstGate` -> `_mediaLoadGate` ->
+  `_mediaOperationGate` -> playback `_gate` -> `_midiGate`. Decoding holds only the
+  media-load gate. Ownership changes and publication take the operation lock before
+  the playback gate, including cancellation, hand-back, rebuild and teardown.
+  `RunIfOwned` checks ownership briefly under `_gate`, then runs synchronous transport
+  and mix actions holding only the operation lock. Owned native seek/play/stop waits do not
+  retain `_gate`; the audio callback takes neither lock. Owned callbacks must not load
+  media or rebuild the engine. `Engine/MediaRebuildReplay` accepts these gates and injected I/O.
+- A `MediaLoadRequest` keeps song identity (the normalized audio/display path)
+  separately from its master-load generation. An obsolete master reopen is dropped,
+  but its stem snapshot is restored when the identity still matches, including a
+  same-song reload queued during the rebuild or a failed master decode. A different
+  song or a cleared session does not receive the old stem mix. `_mediaLineage` counts
+  explicit loads and frees, not takes: a borrowed take handed back to its song during
+  the rebuild changes the identity but not the lineage, so the song's stems return.
+- Temporary cancellable take loads retain the previous source and requested song
+  identity until publication. Cancelled or failed decodes leave rebuild intent
+  unchanged. Publication rechecks cancellation and the preceding request under
+  `_gate`, so a later explicit load or `FreeAudio` supersedes the take. The loaded
+  and requested identities advance together only when that take is published.
+- In-process effects and the instrument capture opaque state before teardown through
+  `Vst/VstRebuildState`, calling only the wrapper's `SaveState()` once under `_vstGate`;
+  the wrapper repeats the copy itself when the state grew after its size query.
+  Stable state, including empty state, takes exactly two calls. Non-converging sizes
+  or a wrapper exception are logged and return null. Native imports belong only in
+  JuceSharp; the app declares no audio ABI binding.
+- `VstRebuildState` restores state before attachment and merges captured state into
+  queued slots only when ID and plugin path still match. Queued order, player, bypass
+  and explicit state remain authoritative; new or changed plugins inherit nothing.
+- MIDI frame bookkeeping belongs to one engine. Only explicit `ResetForEngine` on
+  replacement clears held notes, parked events and release guards. Render anchors
+  are sampled under `_midiGate`; a delayed tick is not evidence of an engine restart.
+- Chart-synth uploads and rebuild replay share a publication lock through the native
+  write and fingerprint publication. `IChartSynthBackend` provides an injectable
+  chart-source boundary; its native adapter retains the engine's identity.
+- `RebuildPublicationTests` exercises these publication paths through injected media,
+  plugin-state and synth collaborators, with controlled barriers. Its mutation checks
+  reject missing capture, suppressed media publication and an inverted engine check.
+  `EngineReplaceStemRestoreTests` checks the real mix snapshot; `MidiPreviewSchedulerTests`
+  exercises explicit replacement and delayed ticks without a device.
+
 ## MIDI chart preview (`JuceAudioPlaybackService.Midi.cs`)
 
 - **Pitch is `SoundingPitch`'s rule, never a table of its own.** `UpdateMidiNotes`
@@ -87,6 +162,14 @@ clean-shutdown path disposes the audio service explicitly BEFORE the container
   path, #161) is folded in as an octave of the note — a MIDI note has no cents.
   A fret below the capo plays AT the capo here
   (`SoundingPitch.MidiFor` refuses it). `MidiStringPitchesTests`.
+- MIDI preview keeps each of the supported nine strings independent in
+  `NoteLegatoIndex` and instrument MIDI channels. Ample's six stock channels
+  retain their reverse order; extra strings use channels 6..8. Invalid indices
+  are ignored by the legato index, never wrapped onto another string.
+  `NoteLegatoIndexTests` and `NoteEndComputationTests`.
+- Rig tuner choices use invariant ASCII identifiers; `TunerTunings.Find` also
+  accepts legacy Unicode minus signs and directional marks.
+  `TunerTuningsCultureTests` and `RigTunerTuningTests`.
 - **WHEN a preview event sounds is `Audio/Midi/MidiPreviewScheduler`'s — a pure
   type; `UpdateMidiNotes` only finds and prices the due notes.** For a VSTi in the
   engine — IN-PROCESS or in the out-of-process SANDBOX — it is sample-accurate:
@@ -100,7 +183,7 @@ clean-shutdown path disposes the audio service explicitly BEFORE the container
   shared mapping carries its sample offset to `juce_vst_host.exe`
   (`VstSandboxLayout.OffMidiOffsets`). Only WinMM / GS Wavetable stays immediate —
   it has no render clock. `juce_sharp.dll`, `juce_vst_host.exe` and
-  `VstSandboxLayout.BridgeVersion` must agree (3); a mismatched child is killed on
+  `VstSandboxLayout.BridgeVersion` must agree (4); a mismatched child is killed on
   its `hello` and the sandbox falls back to in-process hosting.
 - **A parked NoteOn survives every managed flush.** Pause/Stop/SeekTo and a jump
   (back > 50 ms, forward > 500 ms) send NoteOffs + All Sound Off NOW, which cannot
@@ -115,30 +198,74 @@ clean-shutdown path disposes the audio service explicitly BEFORE the container
 
 ## VST sandbox (out-of-process host)
 
-`JuceAudioPlaybackService.Sandbox.cs` drives `juce_vst_host.exe` over a named
-pipe (`Vst/Sandbox/VstSandboxHost`); audio crosses the native shared-memory
-bridge. **Every pipe round trip is AWAITED, never blocked on.** It goes through
-`Vst/Sandbox/VstSandboxCalls`: `TrySendAsync` (returns the reply or `null`
-after logging the same failure the old `catch` did; bounded by the host's reply
-timeout AND an outer `WaitAsync` of timeout + 2 s, which also covers the pipe
-write a wedged child can stall), `StopAsync` (bounded, kills on overrun) and
-`StopForDispose`. The `…Locked`/`…Core` methods are `async Task` and run on the
-`Task.Run` workers the public `IVstChainHost` members already spawn, holding
-`_vstGate` — a `SemaphoreSlim`, so holding it across an await is the same
-serialization as before. No Monitor (`_gate`, `_sandboxGate`, `_midiGate`) is
-ever held across an await. The public API did not change shape: those members
-were already fire-and-forget, with the result on the `…LoadChanged` events.
+`JuceAudioPlaybackService.Sandbox.cs` owns a fixed array of four
+`Vst/Sandbox/VstSandboxSeat` contexts (ABI v50). Each context owns one
+`juce_vst_host.exe` child, its live slots, desired state, recovery policy and
+state capture/replay. `IVstSandboxHost` extends the control-channel seam with
+the child lifecycle and its unique shared-memory/event names.
+
+- **Lazy lifecycle:** a seat's first sandboxed plugin starts its child; its
+  last unload stops it and disarms only that seat. The sandboxed instrument
+  belongs to seat 0 and keeps that child alive without a guitar-chain slot.
+  An empty seat has no child and no armed bridge. Mode switch off, shutdown
+  and dispose stop all children and disarm all four seats.
+- **Ownership:** load, unload, bypass, editor and state operations use the
+  slot owner's channel. A move awaits the old child's unload before loading
+  the slot on the destination. A rejected or failed unload from a live child
+  preserves its old ownership and aborts that move while unrelated edits continue.
+  A source that dies during unload cannot retain the slot or fail its move. The
+  source state is captured and copied to the destination's desired state before
+  unload, then restored after load. A failed capture logs the fallback to its last
+  saved copy. Health capture removes only state outside the desired chain and
+  instrument, preserving copies awaiting a destination load or retry.
+  `VstSandboxChainEdit` visits changed seats and retries missing desired slots
+  unless recovery is pending or has given up, or the slot's unchanged entry has a
+  remembered child rejection or missing file; transport failures stay retryable.
+  Entry changes clear those marks; there is no separate guitar-slot reload API.
+  It always cleans those seats up,
+  and reports failures together after all seat edits. `VstSandboxChainPlan.LoadRequest` carries
+  `VstChainEntry.Player`; processing order is sent separately to each child.
+- **Recovery:** crash reports, restart budgets, stale-host checks, heartbeat
+  reads (`TryGetRemoteBridgeStats(player, ...)`) and state replay are per seat.
+  Recovering one seat leaves every other child's channel and bridge alone.
+  An unchanged seat in backoff or after giving up is not ensured by another
+  seat's edit. Pending attempts retain their expected host identity and an
+  explicit edit invalidates obsolete attempts. Dead hosts are disposed before
+  replacement.
+  Empty-child teardown waits until both chain and instrument replay finish,
+  so one failed chain load cannot discard a recovered instrument.
+  `VstSandboxPerSeatTests` exercises these paths with injected hosts and engine.
+- **Rebuild:** `RearmSandboxAfterEngineSwapLocked` re-arms every surviving
+  child's bridge with `SetRemoteBridge(player, ...)` and its own object names.
+  Preparation visits every surviving child behind `_vstGate`; the instrument's
+  MIDI sink is rebound to the new engine on seat 0. A failed re-arm kills that
+  child and enters its normal crash budget and replay path.
+- **Native scheduling:** the engine posts all seats' requests, then collects
+  responses against one block deadline. A slow seat misses on its own bridge;
+  other seats continue processing. The shared layout stays bridge v4, and
+  object names are unique per child. See JuceSharp's ABI v50 contract.
+
+Every pipe round trip is awaited through `VstSandboxCalls.TrySendAsync`,
+bounded by both the host timeout and an outer timeout covering pipe writes.
+`StopAsync` kills on overrun; `StopForDispose` provides bounded synchronous
+teardown. `_vstGate` remains a `SemaphoreSlim` held across awaited control
+calls. No Monitor (`_gate`, `_sandboxGate`, `_midiGate`) crosses an await.
+The public `IVstChainHost` members return before loading finishes and report
+the result through their load events.
 
 - **Two places stay synchronous, both bounded.** `RearmSandboxAfterEngineSwapLocked`
   runs inside `ReplaceEngineGated` under the `_engineConfigGate` Monitor, so it
-  only re-arms the bridge (one native call) and QUEUES the `prepare` round trip
+  only re-arms the bridges (one native call per live seat) and QUEUES the `prepare` round trip
   via `NotifySandboxEngineReconfigured` behind the `_vstGate` it already holds
   (the bridge's own prepare generation re-prepares the child either way).
-  `DisposeSandbox` runs from the synchronous `Dispose` and waits in
-  `StopForDispose`: 3 s quit + 5 s grace inside the host, hard kill at 10 s.
+  `DisposeSandbox` uses `VstSandboxShutdown`: every child's quit is requested
+  before one wait over the group, bounded at 10 s, then unfinished stops are
+  killed. Mode switch off uses the same group and bound asynchronously.
+  `IVstSandboxStopWait` injects the shared wait for structural tests.
 - `SandboxBlockingWaitLintTests` forbids `.GetAwaiter().GetResult()`, `.Wait(`,
   `.Result` in `.Sandbox.cs`, `.VstChain.cs` and `Vst/Sandbox/`, with
-  `StopForDispose` its one allow-listed site; `SandboxNonBlockingCallTests` pins
+  `StopForDispose` (single-child convenience) and `WaitForDispose` (the group)
+  the bounded synchronous sites; `SandboxNonBlockingCallTests` pins
   that a call whose reply never arrives returns to its caller, still gives up at
   its bound, and still logs its fallback warning.
 
@@ -172,6 +299,17 @@ were already fire-and-forget, with the result on the `…LoadChanged` events.
   `DiTakeTests`, `RigReampViewModelTests`, `RigReampUiPerfSmokeTests` and
   `JuceSharp.Tests` `InputInjectionNullDeviceTests` + the RT gate's
   `RtInputInjectionReplacesTheSeatInputWithoutAllocating`.
+  `DiTakeRecorder` stops accepting samples permanently when the capture sample
+  rate changes; the rig's next poll saves the old-rate WAV and stops recording.
+  Stop and Dispose invalidate both pending decode and engine-upload work, so a
+  late take cannot restart the rig transport.
+
+  The cancellation-aware `IPlaybackTransport.LoadAudioAsync` overload is used
+  for Results listen-back. `SwapMasterSource` retains the previous source while
+  decoding this temporary load and checks cancellation before publication;
+  cancellation discards the decoded source without replacing the song. This
+  load never resumes playback implicitly. Ordinary loads retain their existing
+  detach-before-open behavior. Native opens still run outside `_gate`.
 
 ## External process insert (ABI v47)
 
@@ -304,7 +442,7 @@ step 0 the plumbing, step 1 + the bass step the voice; #50 the instrument models
   `PackBytes`); `ChartSynthNullDeviceTests` waits for it after a real rebuild.
 
 - **One switch plays the chart (#138): MIDI Out** (`TransportViewModel.MidiEnabled`;
-  the Mixer's "Play the chart" checkbox binds the same property). With a VST
+  the Mixer's "Chart sound on/off" checkbox binds the same property). With a VST
   instrument chosen it plays that plugin; without one it plays the built-in synth
   (`TransportViewModel.ApplyMidiOutRouting`). The Windows GS Wavetable fallback is
   gone: the per-tick MIDI preview runs only for a plugin, the effect chain, or a
@@ -381,21 +519,52 @@ step 0 the plumbing, step 1 + the bass step the voice; #50 the instrument models
   re-open). A disposed source unbinds natively. Pinned by
   `EngineRebuildStateReplayTests.TheSongClock_IsBoundWhereverTheSongIsPublished`.
 - **Rebuild:** enabled / voice / gain / the last upload / the instrument route /
-  both instrument selections are the REQUEST, held by `ChartSynthEngineDriver`, written by its one `PushTo` and replayed by
+  the seat route / both instrument selections are the REQUEST, held by `ChartSynthEngineDriver`, written by its one `PushTo` and replayed by
   its `ReplayTo` from `AttachPerPlayerStateToEngine`; an upload the engine
   refused is not remembered. Pinned by
   `EngineRebuildStateReplayTests.TheChartSynth_IsReplayedByThePerPlayerAttach`
   and behaviourally by `ChartSynthNullDeviceTests` (a real rebuild on the JUCE
   null device).
+- **Chart sound gain (#753).** The editor fader reaches 200%. The chart synth
+  and routed VSTi use the fader as input gain through unity. Above unity, the
+  generator enters the rig at unity and the seat's monitor ramp boosts the
+  processed chart and live guitar together. The final mix still goes through
+  the master limiter. Rebuild replays the full chart gain through
+  `ChartSynthEngineDriver.ReplayTo` and the instrument gain through
+  `ReapplyMasterBusStateLocked`. The callback derives the boost from those
+  requests. MIDI Out off caps a loaded plugin at unity.
 - **Isolation:** the generator enters the rig after the capture ring, so live
   detection, scoring and the tuner never hear it — `ChartSynthNullDeviceTests`
   drains the ring while notes play and asserts it is exactly silent.
-- **Instrument route** (`RouteInstrumentToRig`): the in-process VSTi into seat
-  0's rig instead of after the master. Unavailable while VSTs run in the
+- **Instrument route** (`RouteInstrumentToRig`): the in-process VSTi into the
+  rig instead of after the master. Unavailable while VSTs run in the
   sandbox (`CanRouteInstrumentToRig` is `!_outOfProcessVst`), and the toggles
-  print why.
-- **UI:** two `CheckBox`es in the editor's Mixer ▸ MIDI synth card
-  (`ChartSynthToggle`, `InstrumentThroughRigToggle`) and Play Mode's Amp/FX
+  print why. Saved since #751 (`AppConfig.InstrumentThroughRig`).
+- **Seat route (#751, ABI v51)** (`IChartSynthEngine.ChartSeatRoute`, Mixer
+  "Route instrument"): which live instrument seats' rigs the chart sound enters —
+  Guitar only (seat 0, the default and the pre-#751 path), Bass only (seat 1, the
+  second jack of a two-instrument input), Guitar and bass. The chart source's
+  mask and, while routed to the rig, the instrument's mask are written by
+  `ChartSynthEngineDriver.PushTo` through the pure `ChartSoundRouting.SeatMask`; with
+  one live seat every choice is seat 0 (`CanRouteChartToSeats` false, the Mixer shows
+  it disabled with `Mixer_ChartSound_SeatRoute_Unavailable`). Under Song tones the
+  chart SOURCE stays on seat 0 whatever the route (`ChartSoundRouting.ChartSourceSeatMask`,
+  `IChartSynthEngine.ChartSynthPlaysSongTones`): the song tone lives on seat 0's rig only,
+  so routed to seat 1 it would play through the bass player's own board. Two seats
+  each take 1/2 of a generator (native `shareRt`), so every route plays at one level. A live-seat change
+  (`PushRoutingToEngine` → `NotifyChartSeatsIfChanged`) re-pushes it and raises
+  `ChartSynthAvailabilityChanged`. Saved in `AppConfig.ChartSoundSeatRoute`.
+- **Sound source (#751)** (`TransportViewModel.SoundRouting`, `Inspector/ChartSoundRoutingViewModel`: the D Mixer's
+  four values, `Views/Editor/Inspector/ChartSoundRoutingView`'s segments) is NOT engine
+  state: Song tones / Own rig = the built-in voice with `ChartSynthPlaysOwnRig`
+  off / on; My instrument / Instrument through rig = the loaded VST instrument with
+  `RouteInstrumentToRig` off / on. "Use my instrument" is
+  `AppConfig.ChartSoundUsesInstrument` (default on = the old "a loaded plugin
+  plays"); without a loaded plugin the instrument values are refused and read
+  unavailable (`Mixer_ChartSound_MyInstrument_Unavailable`). `ChartSoundRoutingTests`,
+  `UI/ChartSoundRoutingTransportTests`.
+- **UI:** the editor's Mixer ▸ MIDI synth toggle (`ChartSynthToggle`; the instrument route is the Routing
+  card's Sound source value "Instrument + rig") and Play Mode's Amp/FX
   instrument card (`AmpFx…` twins), bound to `TransportViewModel.ChartSynth.cs` (the switch and the route),
   and between them ONE shared view, `Views/Editor/Inspector/ChartSynthInstrumentView`
   (guitar and bass model + pickup pickers, the coil split, a line saying whether
@@ -453,6 +622,18 @@ generic `cmake -G "Visual Studio 17 2022"` line does not work there.
   turns it off. **A gitlink bump publishes its pair**
   (`tools/release/Publish-NativeRuntime.ps1 -Upload`) and commits the pin with
   it — `Infrastructure/NativeRuntimeFetchTests` fails while the gitlink is unpinned.
+  The publish refuses a pair without a BUILD RECORD that binds both files' hashes to
+  the gitlink's `src/JuceSharp.Native` tree: use `tools/setup/Build-NativeRuntime.ps1`
+  with committed native sources. It clean-builds and deploys both targets, then records their
+  hashes in `artifacts/native-runtime/native-build.provenance.json`; a failed build
+  invalidates the previous record (`Infrastructure/NativeBuildProvenanceTests`).
+  That tree is every tracked input (the one CMake file and the dependency pins live in
+  it; the tests fail a CMake file or an include outside it). The untracked ones are shut
+  out: the configure runs with `--fresh` (a reused build folder's cached pins and
+  `FETCHCONTENT_SOURCE_DIR_*` are dropped), and `CFLAGS`/`CXXFLAGS`/`LDFLAGS`/
+  `CMAKE_TOOLCHAIN_FILE` in the environment refuse the build.
+  Public export with `-NativeDir` checks the same record against the exported native
+  source tree; `-ProvenancePath` selects a record from a build of that exported tree.
 - JuceSharp changes: commit in the submodule first, then bump the pointer here.
   **Push the submodule before the parent** or the gitlink dangles.
 - `PositionChanged` fires at up to 250 Hz on a timer thread. UI-visible state

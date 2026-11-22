@@ -26,6 +26,18 @@ namespace DotCharter.Tests.Services.Infrastructure.Recovery;
 /// </summary>
 public sealed class RecoveryCleanShutdownWiringTests
 {
+    [Fact]
+    public void Hard_shutdown_drains_companions_before_killing_the_process()
+    {
+        var body = MethodBody(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "App.Shutdown.cs")), "TerminateNow");
+        var drain = body.IndexOf("DrainSaveCompanions", StringComparison.Ordinal);
+        var kill = body.IndexOf("TerminateProcess", StringComparison.Ordinal);
+
+        Assert.True(drain >= 0 && drain < kill, "Queued companions must drain before hard termination.");
+        var session = File.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "DotCharter.Services", "Session", "ProjectSessionService.cs"));
+        Assert.Contains("DrainSaveCompanions() => _detachedCompanions.Stop()", session);
+    }
+
     /// <summary>
     ///     <c>TerminateNow</c> is the one shutdown path, so it is the last place
     ///     a clean close can retire its snapshot. It must ask for the recovery

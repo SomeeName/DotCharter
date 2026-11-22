@@ -67,7 +67,11 @@ public sealed class LineHeightTokenTests
             // rig's tone surfaces and module editor carry a JOB at the call site
             // instead of one of seven faces; the box it produces is the box
             // those call sites already had.
-            [16] = 9, [18] = 2,
+            // 2026-11-21, #751: 9 -> 8, and NOT a visual change. The dead
+            // `TextBlock.EqUnavailable` rule left with the old inspector EQ
+            // module styles; the D Mixer card states the same reason through
+            // its own card text.
+            [16] = 8, [18] = 2,
             // 2026-10-08, #428: 19 px 1 -> 2, and NOT a visual change. The
             // dialog grammar's `DlgBody` rule is stated twice since its
             // TextBlock half became the `DlgBodyText` ControlTheme: once there

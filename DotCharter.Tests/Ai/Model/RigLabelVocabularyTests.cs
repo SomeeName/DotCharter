@@ -135,8 +135,13 @@ public sealed class RigLabelVocabularyTests
         Assert.Equal(1f, RigLabelVocabulary.Normalise(spec, 5f));
     }
 
+    /// <summary>Set to <c>1</c> to rewrite the committed sidecar from the type.</summary>
+    public const string RegenVariable = "DOTCHARTER_REGEN_RIG_VOCAB";
+
+    private const string SidecarRelativePath = "tools/rig-model/rig_label_vocab.json";
+
     [Fact]
-    public void Sidecar_RoundTripsAndIsExportedForTheTrainer()
+    public void Sidecar_RoundTrips()
     {
         var json = RigLabelVocabulary.ToJson();
         var parsed = JsonSerializer.Deserialize<RigLabelVocabularySnapshot>(json);
@@ -149,18 +154,48 @@ public sealed class RigLabelVocabularyTests
         Assert.Equal(RigLabelVocabulary.KnobDimension, parsed.KnobDimension);
         Assert.Equal(RigLabelVocabulary.Modules.Count, parsed.Modules.Count);
         Assert.Equal(RigLabelVocabulary.Families, parsed.Families);
+    }
 
-        // Export it where tools/rig-model/vocab.py reads it. This is the "export
-        // the table to JSON from the tool so python and C# agree" step: the JSON
-        // in the tree is a BUILD PRODUCT of this type, never hand-edited, and
-        // running the gate refreshes it. Line endings are not content: the file
-        // is checked in with CRLF and the serializer writes the platform's, so
-        // comparing them raw rewrote a tracked file on every non-Windows run.
-        var target = Path.Combine(TestPaths.RepoRoot(), "tools", "rig-model", "rig_label_vocab.json");
-        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-        var existing = File.Exists(target) ? File.ReadAllText(target) : null;
-        if (existing?.ReplaceLineEndings() != json.ReplaceLineEndings()) File.WriteAllText(target, json);
+    /// <summary>
+    ///     The JSON <c>tools/rig-model/vocab.py</c> reads is a BUILD PRODUCT of this
+    ///     type, never hand-edited, and this is what keeps python and C# agreeing:
+    ///     the committed file must be exactly what the type exports.
+    ///     <para>
+    ///         It used to be REFRESHED here on every run and then only checked to
+    ///         exist: a catalogue change rewrote a tracked file from inside the
+    ///         gate (a dirty checkout, and in a worktree a change nobody reviews),
+    ///         and a stale sidecar could never fail. Now a default run only
+    ///         compares; <see cref="RegenVariable" /> is the explicit regeneration.
+    ///         Line endings are not content: the file is checked in with CRLF and
+    ///         the serializer writes the platform's.
+    ///     </para>
+    /// </summary>
+    [Fact]
+    public void TheCommittedSidecar_IsExactlyWhatTheTypeExports()
+    {
+        var json = RigLabelVocabulary.ToJson();
+        var target = Path.Combine(TestPaths.RepoRoot(), SidecarRelativePath);
 
-        Assert.True(File.Exists(target));
+        if (Environment.GetEnvironmentVariable(RegenVariable) == "1")
+            File.WriteAllText(target, json.ReplaceLineEndings("\r\n"));
+
+        Assert.True(File.Exists(target), $"missing {SidecarRelativePath}");
+        var committed = File.ReadAllText(target);
+        Assert.True(committed.ReplaceLineEndings("\n") == json.ReplaceLineEndings("\n"),
+            $"{SidecarRelativePath} is stale: the label vocabulary changed ({StaleDetail(committed, json)}). " +
+            $"Regenerate it with {RegenVariable}=1 and review the diff: the trainer reads this file.");
+    }
+
+    /// <summary>Where the committed file and the export first differ, for the failure message.</summary>
+    private static string StaleDetail(string committed, string exported)
+    {
+        var old = committed.ReplaceLineEndings("\n").Split('\n');
+        var now = exported.ReplaceLineEndings("\n").Split('\n');
+        for (var i = 0; i < Math.Min(old.Length, now.Length); i++)
+        {
+            if (old[i] != now[i]) return $"line {i + 1}: committed '{old[i].Trim()}', exported '{now[i].Trim()}'";
+        }
+
+        return $"{old.Length} lines committed, {now.Length} exported";
     }
 }

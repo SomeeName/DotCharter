@@ -2,6 +2,19 @@
 
 Part of the Play Mode reference. Router: [../play-mode.md](../play-mode.md).
 
+- A refused start calls `EndRunSideEffects` before returning to Get Ready;
+  leaving Get Ready also unwinds. The run's speed, scroll, pitch, backing
+  mutes and tone routing must not reach the editor. The player's picker values
+  remain available for another attempt (`PlayModeRunUnwindTests`).
+- `EndWatchTick` waits for the actual audio end. `LivePlayViewModel.CompleteSong`
+  keeps the existing detector worker draining through its final evidence horizon,
+  on a frozen capture-to-chart mapping, before ordinary stop records results.
+  `EndForProjectOpen` cancels countdowns and unwinds a run before a newly opened
+  project is shown; ordinary result-section navigation keeps its seek target. Pause and abort keep their partial-run
+  semantics (`LivePlaySessionServiceTests`).
+- Get Ready's Enter/T shortcuts stand down while the rig, Amp/FX or gameplay
+  settings overlay owns input, in both the view and its key-source consumer.
+
 - **EVERY way out of a run unwinds it, and `EndRunSideEffects` is the only
   place that does.** A run leaves six things applied — the practice playback
   speed, the per-playthrough highway scroll speed, the drop-tuner pitch shift,
@@ -174,7 +187,7 @@ Part of the Play Mode reference. Router: [../play-mode.md](../play-mode.md).
     coalesced 30 Hz tick as the score — no style animations on this hideable
     surface, and never the raw 250 Hz playhead.
 - **Count-in + metronome (0.14.4 C).** `BeginGameplay` optionally leads in with an
-  audible count-in (`AppConfig.GameplayCountInBeats` off/4/8) via
+  audible count-in (`AppConfig.GameplayCountInBeats` off/2/4/8) via
   `RunCountInThenStartAsync` (awaits the pure `CountInPlan` schedule, plays
   `TransportViewModel.PlayMetronomeClick`, THEN starts the transport; skipped on
   LAN sync runs). The gameplay metronome (`AppConfig.GameplayMetronomeEnabled`)

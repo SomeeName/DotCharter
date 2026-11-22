@@ -14,13 +14,34 @@ namespace DotCharter.Tests.Services.Export.Audio;
 ///     every MP3 project's export ran 1,729 samples (36 ms at 48 kHz) ahead of its
 ///     chart. FLAC, OGG and WAV were already identical.
 ///     <para>
-///         The MP3 fixtures are encoded on the fly with the repo's cached ffmpeg
-///         (tools/redist/win-x64); skipped where that or the native DLL is missing.
+///         The explicit-decoder MP3 fixtures are encoded with the configured tool from
+///         <see cref="PcmDecoderFixture" />. Both the native decoder and the ffmpeg
+///         resampler are selected explicitly rather than discovered by the loader.
+///         A stored synthetic MP3 also exercises public decoder selection without requiring a tool.
 ///     </para>
 /// </summary>
 public sealed class PcmAudioLoaderEditorParityTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "DotCharterTests", Guid.NewGuid().ToString("N"));
+
+    /// <summary>An authored burst fixture keeps production decoder selection covered without an optional tool.</summary>
+    [Fact]
+    public void Public_loader_preserves_the_editors_mp3_timing()
+    {
+        Assert.SkipWhen(PcmAudioLoader.TryLoadWithNativeDecoder(WriteBurstWav(48000), []) is null,
+            "the native decoder is unavailable");
+        var mp3 = Path.Combine(TestPaths.RepoRoot(), "DotCharter.Tests", "Services", "Export", "Audio", "Fixtures", "editor-burst.mp3");
+        var editor = JuceSharp.AudioIo.JuceAudioDecoder.Decode(mp3);
+
+        var exported = PcmAudioLoader.Load(mp3, []);
+        var editorOnset = FirstLoud(editor.Interleaved, editor.Channels, 0.25f) / (double)editor.SampleRate;
+        var exportOnset = FirstLoud(exported.Samples.Select(s => s / 32768f).ToArray(), exported.Channels, 0.25f)
+            / (double)exported.SampleRate;
+
+        Assert.Equal(PcmAudioLoader.RocksmithSampleRate, exported.SampleRate);
+        Assert.True(Math.Abs(exportOnset - editorOnset) < 0.0005,
+            $"public loader moved the MP3 by {(exportOnset - editorOnset) * 1000:0.00} ms relative to the editor");
+    }
 
     [Theory]
     [InlineData(48000)]
@@ -34,7 +55,7 @@ public sealed class PcmAudioLoaderEditorParityTests : IDisposable
         var editorOnsetSeconds = FirstLoud(editor.Interleaved, editor.Channels, 0.25f) / (double)editor.SampleRate;
 
         // What the export encodes: 48 kHz stereo 16-bit.
-        var exported = PcmAudioLoader.Load(mp3, [], RedistFfmpeg());
+        var exported = PcmAudioLoader.Load(mp3, [], JuceSharp.AudioIo.JuceAudioDecoder.Decode, RedistFfmpeg());
         Assert.Equal(PcmAudioLoader.RocksmithSampleRate, exported.SampleRate);
         var exportOnsetSeconds = FirstLoud(
             exported.Samples.Select(s => s / 32768f).ToArray(), exported.Channels, 0.25f) / (double)exported.SampleRate;
@@ -53,7 +74,7 @@ public sealed class PcmAudioLoaderEditorParityTests : IDisposable
     {
         var flac = Encode(48000, "flac", []);
         var editor = JuceSharp.AudioIo.JuceAudioDecoder.Decode(flac);
-        var exported = PcmAudioLoader.Load(flac, [], RedistFfmpeg());
+        var exported = PcmAudioLoader.Load(flac, [], JuceSharp.AudioIo.JuceAudioDecoder.Decode, RedistFfmpeg());
 
         Assert.Equal(FirstLoud(editor.Interleaved, editor.Channels, 0.25f),
             FirstLoud(exported.Samples.Select(s => s / 32768f).ToArray(), exported.Channels, 0.25f));
@@ -86,20 +107,23 @@ public sealed class PcmAudioLoaderEditorParityTests : IDisposable
 
     private string Encode(int rate, string extension, string[] codecArgs)
     {
-        var decoderProbe = PcmAudioLoader.TryLoadWithNativeDecoder(WriteBurstWav(rate), []);
-        Assert.SkipWhen(decoderProbe is null, "juce_sharp.dll not available in this run.");
+        Assert.NotNull(JuceSharp.AudioIo.JuceAudioDecoder.Decode(WriteBurstWav(rate)));
         var ffmpeg = RedistFfmpeg();
         Assert.SkipWhen(ffmpeg is null, "repo redist ffmpeg not cached on this machine.");
+        // With no -c:a, ffmpeg picks the encoder that carries the extension's name.
+        var codec = Array.IndexOf(codecArgs, "-c:a");
+        PcmDecoderFixture.RequireEncoder(ffmpeg!, codec >= 0 ? codecArgs[codec + 1] : extension);
 
         var output = Path.Combine(_dir, $"burst{rate}.{extension}");
-        var info = new System.Diagnostics.ProcessStartInfo(ffmpeg!) { UseShellExecute = false, CreateNoWindow = true };
+        var info = new System.Diagnostics.ProcessStartInfo(ffmpeg!);
         foreach (var a in (string[])["-hide_banner", "-loglevel", "error", "-y", "-i", Path.Combine(_dir, $"burst{rate}.wav")])
             info.ArgumentList.Add(a);
         foreach (var a in codecArgs) info.ArgumentList.Add(a);
         info.ArgumentList.Add(output);
-        using var encode = System.Diagnostics.Process.Start(info)!;
-        encode.WaitForExit(60_000);
-        Assert.SkipWhen(!File.Exists(output) || new FileInfo(output).Length == 0, $"{extension} encode failed on this machine.");
+        // #608: both pipes drain concurrently under one cap (a deadlock detector, never a budget); a hung ffmpeg fails the test.
+        var run = BoundedProcess.Run(info, TimeSpan.FromMinutes(2), "ffmpeg (parity fixture)");
+        Assert.True(run.ExitCode == 0, $"ffmpeg exited {run.ExitCode} encoding {extension}: {run.StandardError}");
+        Assert.True(File.Exists(output) && new FileInfo(output).Length > 0, $"ffmpeg produced no {extension} file.");
         return output;
     }
 
@@ -110,17 +134,7 @@ public sealed class PcmAudioLoaderEditorParityTests : IDisposable
         throw new InvalidOperationException("the fixture's burst was not found in the decoded audio");
     }
 
-    private static string? RedistFfmpeg()
-    {
-        var repo = AppContext.BaseDirectory;
-        for (var i = 0; i < 8 && repo != null; i++, repo = Path.GetDirectoryName(repo))
-        {
-            var candidate = Path.Combine(repo, "tools", "redist", "win-x64", "ffmpeg.exe");
-            if (File.Exists(candidate)) return candidate;
-        }
-
-        return null;
-    }
+    private static string RedistFfmpeg() => PcmDecoderFixture.Ffmpeg();
 
     public void Dispose() => BestEffortDelete.Directory(_dir);
 }

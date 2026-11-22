@@ -106,19 +106,13 @@ public sealed class StemRunScopedMuteExclusionTests : IDisposable
 
         // Settle on the STRIPS, never on a count — BuildStrips inserts the master
         // last, so `Tracks.Count > 1` goes true before it exists.
-        await SettleAsync(() =>
+        // The real-time cap is independent of the rebuild: a missing strip fails instead of hanging.
+        await BoundedWait.ForAsync(StemMixerSettle.Async(() =>
         {
             var tracks = ui.Snapshot(vm);
             return tracks.Any(t => t.IsMasterMix) && tracks.Any(t => t.Name == "guitar");
-        });
+        }), "the master and guitar mixer strips", TestContext.Current.CancellationToken);
 
         return (project, path, audio, ui, vm);
-    }
-
-    private static async Task SettleAsync(Func<bool> until)
-    {
-        for (var i = 0; i < 400 && !until(); i++) await Task.Delay(5);
-        Assert.True(until(), "the mixer never finished its rebuild");
-        for (var i = 0; i < 40; i++) await Task.Yield();
     }
 }

@@ -1,0 +1,21 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- The searchable gear picker's list (DeferredChoiceBox adds the GearPicker class to its box).
+         The popup's chrome (card, width, alignment) is set in code, where the field is known;
+         these are the row states: hover, the keyboard-highlighted row, and the picked one. -->
+    <Style Selector="AutoCompleteBox.GearPicker ListBoxItem">
+        <Setter Property="Padding" Value="8,5" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="AutoCompleteBox.GearPicker ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+    </Style>
+    <Style Selector="AutoCompleteBox.GearPicker ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireRowSelectedFill}" />
+    </Style>
+    <Style Selector="AutoCompleteBox.GearPicker ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireRowSelectedFill}" />
+    </Style>
+</Styles>

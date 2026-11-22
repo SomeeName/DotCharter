@@ -138,15 +138,15 @@ public sealed class ShellConstructionUiPerfSmokeTests
             var groups = view.GetVisualDescendants().OfType<StackPanel>()
                 .Where(p => p.Classes.Contains("TbGroup"))
                 .ToList();
-            // Counted from Views/Shell/ToolbarView.axaml: transport, edit, zoom
-            // and the grouped flyouts, plus the right-pinned quick cluster.
+            // Counted from Views/Shell/ToolbarView.axaml: playback, edit and view,
+            // plus the right-pinned quick cluster.
             // RE-COUNT there rather than nudging this number — a stale count pin
             // over derived markup is the failure this suite keeps having. The
             // charting-verbs group went to the menu in 0.48 (owner: those three
             // are once-per-chart and do not need the quick rail).
-            Assert.True(groups.Count >= 5,
-                $"the toolbar laid out {groups.Count} control groups — expected the four core " +
-                "groups plus the right-pinned quick cluster");
+            Assert.True(groups.Count >= 4,
+                $"the toolbar laid out {groups.Count} control groups — expected playback, edit and " +
+                "view plus the right-pinned quick cluster");
             Assert.All(groups, g => Assert.True(g.Bounds.Height > 1,
                 $"a toolbar group laid out as {g.Bounds}"));
 
@@ -170,12 +170,12 @@ public sealed class ShellConstructionUiPerfSmokeTests
             var quick = Find(view, "ToolbarQuickGroup");
             var toggles = quick.GetVisualDescendants().OfType<ToggleButton>().ToList();
 
-            // metronome · claps · play the chart (#574) · loop · inspector · 3D ·
-            // sheet · tone preview. The pedalboard toggle left in 2026-09 — the
-            // activity rail's Rig row beside this toolbar is the one door onto
-            // the same overlay.
-            Assert.True(toggles.Count >= 8,
-                $"the quick cluster laid out {toggles.Count} toggles — the three panel toggles " +
+            // inspector · 3D · sheet · AI chat · tone preview (#492 moved loop, metronome,
+            // claps and play-the-chart to the playback cluster). The pedalboard toggle
+            // left in 2026-09 — the activity rail's Rig row beside this toolbar is the
+            // one door onto the same overlay.
+            Assert.True(toggles.Count >= 5,
+                $"the quick cluster laid out {toggles.Count} toggles — the panel toggles " +
                 "the icon rail used to own, or the tone-preview toggle, are missing");
             Assert.All(toggles, t => Assert.True(t.Bounds.Width > 1 && t.Bounds.Height > 1,
                 $"a quick-cluster toggle laid out as {t.Bounds}"));
@@ -184,7 +184,9 @@ public sealed class ShellConstructionUiPerfSmokeTests
             // icon in a nine-button strip is not a strip. Compared by REFERENCE
             // — a `{DynamicResource IconX}` hands out the one StreamGeometry the
             // dictionary holds, and `Geometry.ToString()` is the type name.
+            // The disclosure carets (the Export chip's and the tone target's) are one shared glyph by design.
             var glyphs = quick.GetVisualDescendants().OfType<PathIcon>()
+                .Where(i => !i.Classes.Contains("TbCaret"))
                 .Select(i => i.Data)
                 .Where(d => d != null)
                 .ToList();
@@ -233,7 +235,9 @@ public sealed class ShellConstructionUiPerfSmokeTests
             var toggle = Assert.IsType<ToggleButton>(Find(view, "ChartSynthToolbarToggle"));
             Assert.True(toggle.Bounds.Width > 1 && toggle.Bounds.Height > 1,
                 $"the play-the-chart toggle laid out as {toggle.Bounds}");
-            Assert.Same(Find(view, "ToolbarQuickGroup"), toggle.GetVisualParent());
+            // #492: it sits in the playback cluster on the left rail, not the right-pinned group.
+            Assert.NotSame(Find(view, "ToolbarQuickGroup"), toggle.GetVisualParent());
+            Assert.Contains("TbGroup", Assert.IsType<StackPanel>(toggle.GetVisualParent()).Classes);
 
             Assert.True(Application.Current!.TryFindResource("IconPiano", out var piano),
                 "the IconPiano glyph is not in the app's icon dictionary");
@@ -304,7 +308,7 @@ public sealed class ShellConstructionUiPerfSmokeTests
         var dispatcher = new InlineUiDispatcher();
         using var vm = new StatusBarViewModel(
             new StatusBarService(dispatcher), state, new NullAudioPlaybackService(),
-            dispatcher, new StubProfiles(), new FakeFileStorageService(), FakeLocalization.English());
+            dispatcher, new StubProfiles(), new FakeFileStorageService(), FakeLocalization.English(), new FakeConfigurationService());
 
         await WithLaidOut(() => new StatusBar { DataContext = vm }, view =>
         {
@@ -539,7 +543,7 @@ public sealed class ShellConstructionUiPerfSmokeTests
         await WithLaidOut(() => new MainMenuView(), view =>
         {
             var menus = ((MainMenuView)view).TopLevelMenus();
-            Assert.Equal(8, menus.Count);
+            Assert.Equal(7, menus.Count);
 
             var realized = menus.Sum(m => MenuFlyoutPrewarmer.Realize(m, new Size(W, H)));
             Assert.True(realized > 100,

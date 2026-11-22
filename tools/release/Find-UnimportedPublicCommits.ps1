@@ -44,7 +44,7 @@ Import-Module (Join-Path $PSScriptRoot 'PublicSync.psm1') -Force
 
 if (-not $DevRepo) { $DevRepo = Join-Path $PSScriptRoot '../..' }
 $devGitDir = Invoke-SnapshotGit -Arguments @('-C', (Resolve-Path -LiteralPath $DevRepo).Path, 'rev-parse', '--path-format=absolute', '--git-common-dir')
-$devCommit = Invoke-SnapshotGit -Arguments @("--git-dir=$devGitDir", 'rev-parse', '--verify', "$DevRef^{commit}")
+$devCommit = Invoke-SnapshotGit -Arguments @('-C', (Resolve-Path -LiteralPath $DevRepo).Path, 'rev-parse', '--verify', "$DevRef^{commit}")
 if (-not $DevJuceSharpGitDir) { $DevJuceSharpGitDir = Join-Path $devGitDir 'modules/JuceSharp' }
 
 $scratch = Join-Path ([System.IO.Path]::GetTempPath()) ('dc-public-sync-' + [guid]::NewGuid().ToString('N'))

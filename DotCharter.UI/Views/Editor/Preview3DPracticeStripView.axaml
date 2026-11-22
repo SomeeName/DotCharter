@@ -1,0 +1,158 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:controls="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Preview3DPracticeStripView"
+             x:DataType="viewModels:MainWindowViewModel">
+
+    <!-- The 3D preview's practice suite strip: A/B loop with count-in, speed ladder,
+         dynamic difficulty, hit-window tightness, latency calibration and per-song
+         bests. Its own view so it can be built and laid out without the Vulkan
+         viewport Preview3DView hosts. It includes the workspace grammar itself
+         (Preview3DView includes it only on its own top bar, so each subtree has
+         it at one level), which also keeps it styled when the sweep builds it alone. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Editor/EditorWorkspaceStyles.axaml" />
+    </UserControl.Styles>
+    <Border Classes="HudBar">
+        <Grid RowDefinitions="Auto,Auto">
+            <!-- WRAPS: a docked preview is far narrower than this strip's one-line
+                 width (German captions widen it further), and a single horizontal row
+                 clipped the calibration, notation and stats controls off its right
+                 edge. Each group wraps its own items; the stats group drops to the
+                 next line when the controls fill this one. -->
+            <WrapPanel x:Name="PracticeStripPanel" Orientation="Horizontal" ItemSpacing="16" LineSpacing="2">
+                <WrapPanel x:Name="PracticeControlsGroup" Orientation="Horizontal" ItemSpacing="4" LineSpacing="2">
+                    <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_Loop}" Margin="0,0,2,0" />
+                    <Button Classes="HudAction"
+                            Command="{Binding LivePlay.SetLoopStartCommand}"
+                            Content="{localization:Loc LivePlay_LoopA}"
+                            ToolTip.Tip="{localization:Loc LivePlay_LoopA_Tip}" />
+                    <Button Classes="HudAction"
+                            Command="{Binding LivePlay.SetLoopEndCommand}"
+                            IsEnabled="{Binding LivePlay.LoopStartArmed}"
+                            Content="{localization:Loc LivePlay_LoopB}"
+                            ToolTip.Tip="{localization:Loc LivePlay_LoopB_Tip}" />
+                    <Button Classes="HudAction"
+                            Command="{Binding LivePlay.ClearLoopCommand}"
+                            IsEnabled="{Binding LivePlay.LoopActive}"
+                            Content="✕"
+                            ToolTip.Tip="{localization:Loc LivePlay_LoopClear_Tip}"
+                            AutomationProperties.Name="{localization:Loc LivePlay_LoopClear_Tip}" />
+                    <TextBlock Classes="HudStat" Text="{Binding LivePlay.LoopLabel}"
+                               IsVisible="{Binding LivePlay.LoopActive}" Margin="4,0,0,0" />
+                    <Border Background="{DynamicResource AccentHover}" CornerRadius="{StaticResource RadiusXs}" Padding="6,1"
+                            VerticalAlignment="Center" Margin="4,0,0,0"
+                            IsVisible="{Binding LivePlay.IsCountingIn}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock FontSize="{StaticResource FontSizeXs}"
+                                       Text="{localization:Loc LivePlay_CountIn}" />
+                            <TextBlock FontSize="{StaticResource FontSizeXs}" FontWeight="Bold"
+                                       Text="{Binding LivePlay.CountInRemaining}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Width="1" Background="{DynamicResource BorderSubtle}" Margin="8,1" />
+
+                    <ToggleButton Classes="HudAction"
+                                  IsChecked="{Binding LivePlay.IsSpeedLadderEnabled, Mode=TwoWay}"
+                                  Content="{localization:Loc LivePlay_SpeedLadder}"
+                                  ToolTip.Tip="{localization:Loc LivePlay_SpeedLadder_Tip}" />
+                    <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_Speed}" />
+                    <TextBlock Classes="HudStat"
+                               Text="{Binding LivePlay.CurrentSpeedPercent, StringFormat={}{0}%}" />
+                    <ToggleButton Classes="HudAction"
+                                  IsChecked="{Binding LivePlay.IsDynamicDifficultyOn, Mode=TwoWay}"
+                                  IsEnabled="{Binding LivePlay.CanUseDynamicDifficulty}"
+                                  Content="{localization:Loc LivePlay_DynDiff}"
+                                  ToolTip.Tip="{localization:Loc LivePlay_DynDiff_Tip}" />
+                    <!-- A chart with no notes cannot be levelled: the toggle is disabled and says why (#323).
+                         A one-level chart rides a ladder generated per run, and says that (#295). -->
+                    <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_DynDiff_Unavailable}"
+                               ToolTip.Tip="{localization:Loc LivePlay_DynDiff_Unavailable_Tip}"
+                               IsVisible="{Binding !LivePlay.CanUseDynamicDifficulty}" />
+                    <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_DynDiff_Generated}"
+                               ToolTip.Tip="{localization:Loc LivePlay_DynDiff_Generated_Tip}"
+                               IsVisible="{Binding LivePlay.IsDynamicDifficultyGenerated}" />
+                    <!-- A song with no ladder history starts where the player usually plays, with a way back to 0 (#295). -->
+                    <TextBlock x:Name="DynDiffFromHistoryText" Classes="HudLabel" Text="{localization:Loc LivePlay_DynDiff_FromHistory}"
+                               ToolTip.Tip="{localization:Loc LivePlay_DynDiff_FromHistory_Tip}"
+                               IsVisible="{Binding LivePlay.IsStartingFromHistory}" />
+                    <TextBlock Classes="HudStat" Text="{Binding LivePlay.HistoryStartPercent, StringFormat={}{0}%}"
+                               ToolTip.Tip="{localization:Loc LivePlay_DynDiff_FromHistory_Tip}"
+                               IsVisible="{Binding LivePlay.IsStartingFromHistory}" />
+                    <Button x:Name="DynDiffStartAtZeroButton" Classes="HudAction"
+                            Command="{Binding LivePlay.StartLadderAtBottomCommand}"
+                            Content="{localization:Loc LivePlay_DynDiff_StartAtZero}"
+                            ToolTip.Tip="{localization:Loc LivePlay_DynDiff_StartAtZero_Tip}"
+                            IsVisible="{Binding LivePlay.IsStartingFromHistory}" />
+                    <ComboBox SelectedIndex="{Binding LivePlay.HitWindowIndex, Mode=TwoWay}"
+                              FontSize="{StaticResource FontSizeSm}" Padding="8,2" MinWidth="90"
+                              ToolTip.Tip="{localization:Loc LivePlay_HitWindow_Tip}"
+                              AutomationProperties.Name="{localization:Loc PlayMode_HitWindow}">
+                        <ComboBoxItem Content="{localization:Loc LivePlay_HitWindow_Lenient}" />
+                        <ComboBoxItem Content="{localization:Loc LivePlay_HitWindow_Normal}" />
+                        <ComboBoxItem Content="{localization:Loc LivePlay_HitWindow_Strict}" />
+                    </ComboBox>
+                    <Button Classes="HudAction"
+                            Command="{Binding LivePlay.CalibrateLatencyCommand}"
+                            Content="{localization:Loc LivePlay_Calibrate}"
+                            ToolTip.Tip="{localization:Loc LivePlay_Calibrate_Tip}" />
+                    <ToggleButton AutomationProperties.Name="{localization:Loc Gameplay_Notation}" Classes="HudAction"
+                                  IsChecked="{Binding IsSheetMusicVisible, Mode=TwoWay}"
+                                  ToolTip.Tip="{localization:Loc Gameplay_Notation_Tip}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <PathIcon Data="{DynamicResource IconSheetMusic}" Width="12" Height="12" />
+                            <TextBlock Text="{localization:Loc Gameplay_Notation}"
+                                       FontSize="{StaticResource FontSizeSm}" />
+                        </StackPanel>
+                    </ToggleButton>
+                </WrapPanel>
+
+                <WrapPanel x:Name="PracticeStatsGroup" Orientation="Horizontal" ItemSpacing="10" LineSpacing="2">
+                    <TextBlock Classes="HudStat" Text="{Binding LivePlay.PassSummary}"
+                               IsVisible="{Binding LivePlay.PassSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <DropDownButton Padding="8,2" FontSize="{StaticResource FontSizeSm}"
+                                    IsVisible="{Binding !!LivePlay.MissedRecently.Count}"
+                                    Content="{localization:Loc LivePlay_Missed_Title}">
+                        <DropDownButton.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedRight">
+                                <ItemsControl ItemsSource="{Binding LivePlay.MissedRecently}" MinWidth="160">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <TextBlock Text="{Binding}" Theme="{StaticResource MonoText}" Classes="Mono"
+                                                       FontSize="{StaticResource FontSizeXs}"
+                                                       Foreground="{DynamicResource DangerColor}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Flyout>
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_Best}" />
+                        <TextBlock Classes="HudStat" Text="{Binding LivePlay.BestScore}" />
+                        <TextBlock Classes="HudStat"
+                                   Text="{Binding LivePlay.BestAccuracyPercent, StringFormat=({0:0.0}%)}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_Mastery}" />
+                        <TextBlock Classes="HudStat" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentHover}"
+                                   Text="{Binding LivePlay.MasteryPercent, StringFormat={}{0:0.0}%}" />
+                    </StackPanel>
+                    <controls:PracticeProgressGraph Width="110" Height="22"
+                                                    VerticalAlignment="Center"
+                                                    ToolTip.Tip="{localization:Loc LivePlay_Progress_Tip}"
+                                                    Sessions="{Binding LivePlay.ProfileSessions}"
+                                                    Version="{Binding LivePlay.ProfileVersion}" />
+                </WrapPanel>
+            </WrapPanel>
+            <TextBlock x:Name="CalibrationStatusText" Grid.Row="1" Classes="HudLabel"
+                       TextWrapping="Wrap"
+                       Text="{Binding LivePlay.CalibrationStatus}"
+                       IsVisible="{Binding LivePlay.CalibrationStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        </Grid>
+    </Border>
+</UserControl>

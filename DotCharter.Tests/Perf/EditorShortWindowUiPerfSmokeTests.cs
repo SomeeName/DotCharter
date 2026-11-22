@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -105,7 +106,7 @@ public sealed class EditorShortWindowUiPerfSmokeTests
 
     /// <summary>The tab count in <c>Views/Editor/InspectorView.axaml</c>'s <c>InspectorTabRow</c>;
     /// the shell supplies the Riff Library and Chord shapes, so all of them are visible.</summary>
-    private const int InspectorTabCount = 9;
+    private const int InspectorTabCount = 8;
 
     private const int AnnotationsTab = 5;
 
@@ -203,7 +204,8 @@ public sealed class EditorShortWindowUiPerfSmokeTests
             var top = NarrowWidthLayout.TopIn(i, list);
             return top >= -0.5 && top + i.Bounds.Height <= list.Bounds.Height + 0.5;
         });
-        var text = NarrowWidthLayout.Named<TextBox>(notes, "NotesComposerText");
+        // design D: the selected annotation's text box in the details card (the first row is selected)
+        var text = NarrowWidthLayout.Named<TextBox>(notes, "NotesSelectedText");
         NarrowWidthLayout.Report($"[short-window] annotations {at}: tab {notes.Bounds.Height:0.#} px, list {list.Bounds.Height:0.#} px, " +
                           $"{whole} whole row(s) of {AnnotationTexts.Length} (rows " +
                           string.Join(" ", items.Select(i => $"{i.Bounds.Height:0.#}")) + $"), note box {text.Bounds.Width:0.#} px");
@@ -270,8 +272,10 @@ public sealed class EditorShortWindowUiPerfSmokeTests
         var status = NarrowWidthLayout.Named<Control>(window, "StatusBarHost");
         var inspector = window.GetVisualDescendants().OfType<InspectorView>().Single();
         var sound = inspector.GetVisualDescendants().OfType<SoundInspectorView>().Single();
-        var body = NarrowWidthLayout.Named<ScrollViewer>(sound, "SoundSectionScroll");
         var section = NarrowWidthLayout.Named<Control>(sound, selected ? "SoundBulkCard" : "SoundTaskBody");
+        // the open section's card scrolls it (inspector design D, #751); the pinned footer closes the tab
+        var body = section.GetVisualAncestors().OfType<ScrollViewer>().First();
+        var footer = NarrowWidthLayout.Named<Control>(sound, "NoteFooter");
         var statusTop = NarrowWidthLayout.TopIn(status, window);
 
         Console.WriteLine($"[short-window] {at}: split {main.Bounds.Height:0.#} = " +
@@ -279,12 +283,21 @@ public sealed class EditorShortWindowUiPerfSmokeTests
                           $"; timeline {renderer.Bounds.Height:0.#}; inspector {inspector.Bounds.Height:0.#}, body {body.Viewport.Height:0.#}");
 
         Assert.True(section.IsEffectivelyVisible, $"{at} the Sound tab's {section.Name} is not the open section — repoint this test.");
+        // At the Tiny tier the pager row carries the card's "More below" cue (#751 P4): never over a page button.
+        var cards = NarrowWidthLayout.Named<ColumnFlowPanel>(sound, "NoteCards");
+        if (cards.PagerCueControl.IsVisible && cards.Pager.Buttons.Count > 0)
+        {
+            var last = cards.Pager.Buttons[^1];
+            var lastRight = last.TranslatePoint(default, cards)!.Value.X + last.Bounds.Width;
+            Assert.True(cards.PagerCueControl.Bounds.Left >= lastRight, $"{at} the pager row's cue covers the page button '{last.Name}'.");
+        }
+
         Assert.True(body.Viewport.Height >= MinBodyPx,
             $"{at} the Inspector's section body is {body.Viewport.Height:0.#} px tall (inspector {inspector.Bounds.Height:0.#}, " +
             $"dock row {main.RowDefinitions[2].ActualHeight:0.#}) — under the {MinBodyPx} px it needs to show rows (#211).");
 
         // The tab ends above the status rail: nothing of it is drawn under the window's chrome.
-        var tabBottom = NarrowWidthLayout.TopIn(body, window) + body.Bounds.Height;
+        var tabBottom = NarrowWidthLayout.TopIn(footer, window) + footer.Bounds.Height;
         Assert.True(tabBottom <= statusTop + 0.5,
             $"{at} the Sound tab ends at {tabBottom:0.#} px, under the status rail's top at {statusTop:0.#} (#211).");
 

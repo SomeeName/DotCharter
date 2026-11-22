@@ -289,10 +289,10 @@ public sealed class BatchChartLintServiceTests : IDisposable
             [rscp], SaveFixes, cancellationToken: TestContext.Current.CancellationToken).Charts);
 
         Assert.True(report.Saved, report.Error);
-        Assert.Equal(before, File.ReadAllBytes(rscp + ".bak"));
+        Assert.Equal(before, File.ReadAllBytes(Path.Combine(_tempDir, "backups", "chart.rscp.bak")));
         Assert.True(File.Exists(Path.Combine(_tempDir, "chart.dcproj")));
-        Assert.True(File.Exists(rscp));
-        Assert.False(CharterRscp.IsWrittenByDotCharter(rscp));
+        Assert.True(File.Exists(Path.Combine(_tempDir, "export", "chart.rscp")));
+        Assert.False(CharterRscp.IsWrittenByDotCharter(Path.Combine(_tempDir, "export", "chart.rscp")));
     }
 
     /// <summary>A <c>.dcproj</c> of that name is somebody's project: nothing is overwritten, nothing is lost.</summary>

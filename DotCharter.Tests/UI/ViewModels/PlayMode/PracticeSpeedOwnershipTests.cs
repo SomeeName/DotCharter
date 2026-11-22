@@ -31,6 +31,7 @@ namespace DotCharter.Tests.UI.ViewModels.PlayMode;
 /// </summary>
 public sealed class PracticeSpeedOwnershipTests : IDisposable
 {
+    private readonly List<(PlayModeViewModel Vm, LivePlayViewModel Live)> _runs = [];
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "DotCharterTests", Guid.NewGuid().ToString("N"));
 
     /// <summary>The player's OWN pick is never touched by an unwind, so a plain
@@ -93,14 +94,25 @@ public sealed class PracticeSpeedOwnershipTests : IDisposable
         var store = new PracticeProfileService(profiles, logger: null,
             legacyFilePath: Path.Combine(_dir, "legacy.json"));
         var config = new FakeConfigurationService();
+        config.AppConfig.LivePlayUseCqtVerifier = false;
         var audio = new FakeAudioPlaybackService { InputSampleRate = 48_000 };
         var state = new ProjectState();
+        var project = new ChartProject();
+        project.Beats.Add(new BeatMarker { Time = 0, Bpm = 120 });
+        project.Beats.Add(new BeatMarker { Time = 500, Bpm = 120 });
+        var arrangement = new Arrangement { Name = "Lead" };
+        arrangement.Levels.Add(new ChartLevel());
+        project.Arrangements.Add(arrangement);
+        state.ActiveProject = project;
+        state.ActiveArrangement = arrangement;
         transport = new TransportViewModel(audio, state, config, FakeLocalization.KeysOnly());
         var livePlay = LivePlayTestFactory.Create(audio, state, new FakeAppLogger(), config, store);
 
-        return TestRigBuilders.PlayMode(profiles, new GameplayStatsService(store),
+        var vm = TestRigBuilders.PlayMode(profiles, new GameplayStatsService(store),
             new LeaderboardService(profiles), state, FakeLocalization.English(), config,
             livePlay: livePlay, transport: transport);
+        _runs.Add((vm, livePlay));
+        return vm;
     }
 
     private static void BeginGameplay(PlayModeViewModel vm)
@@ -111,5 +123,14 @@ public sealed class PracticeSpeedOwnershipTests : IDisposable
         method!.Invoke(vm, null);
     }
 
-    public void Dispose() => BestEffortDelete.Directory(_dir);
+    public void Dispose()
+    {
+        foreach (var (vm, live) in _runs)
+        {
+            vm.BackToSongSelectCommand.Execute(null);
+            live.IsActive = false;
+        }
+
+        BestEffortDelete.Directory(_dir);
+    }
 }

@@ -15,6 +15,44 @@ namespace DotCharter.Tests.Services.Parsing.GuitarPro;
 /// </summary>
 public sealed class GpBeatTextAndMarkerImportTests
 {
+    [Theory]
+    [InlineData("3.00", true)]
+    [InlineData("4.06", true)]
+    [InlineData("5.00", true)]
+    [InlineData("5.10", true)]
+    [InlineData("5.10", false)]
+    public void LegacyMarkers_RespectSettingAndRepeatPlayback(string version, bool enabled)
+    {
+        var bar = new FxMeasure { Marker = " chorus ", RepeatStart = true, RepeatTotalPasses = 2 }
+            .AddVoice(FxBeat.Note(0, 0, 5));
+        var path = LegacyGpFixtureBuilder.WriteFile(version, [bar]);
+        try
+        {
+            var importer = new GpImporter();
+            var result = importer.ImportTracksWithMetadata(path, [1],
+                GpImportSettings.Default with { MarkersToSections = enabled });
+            var arrangement = Assert.Single(result.Arrangements);
+            if (!enabled)
+            {
+                Assert.Empty(arrangement.EventPoints);
+                return;
+            }
+
+            Assert.Equal([new FractionalPosition(0), new FractionalPosition(4)],
+                arrangement.EventPoints.Select(e => e.Position));
+            Assert.All(arrangement.EventPoints, e =>
+            {
+                Assert.Equal("chorus", e.Phrase);
+                Assert.Equal("chorus", e.Section);
+            });
+            Assert.Contains("chorus", arrangement.Phrases);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string WriteGpFile(string gpif)
     {
         var path = Path.Combine(Path.GetTempPath(), $"dotcharter-gpmarker-{Guid.NewGuid():N}.gp");

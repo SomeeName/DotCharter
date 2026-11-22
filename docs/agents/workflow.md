@@ -23,13 +23,13 @@ the root [`AGENTS.md`](../../AGENTS.md) § GitHub workflow; this is the loop aro
 
 1. **Issue first**: what happens, the cause with file paths, the fix and the test.
    - A bug or visual issue carries a SCREENSHOT.
-   - Upload images with `bash "$USERPROFILE/Desktop/dotcharter-screens/upload-issue-image.sh" <png> issues/<n>` (the owner's screenshot kit, outside the repo); it puts them on the orphan `issue-assets` branch and prints the markdown.
+   - Upload images through the GitHub contents API to the orphan `issue-assets` branch: `gh api -X PUT repos/SomeeName/DotCharter/contents/<dir>/<name>.png -f message="asset" -f branch=issue-assets -f content="$(base64 -w0 <png>)"`, with `<dir>` = `issues/<n>` for an issue or `prs/<n>` for a PR. Embed the returned `content.download_url` (or `https://github.com/SomeeName/DotCharter/blob/issue-assets/<dir>/<name>.png?raw=true`) as markdown. The old `Desktop/dotcharter-screens/upload-issue-image.sh` kit no longer exists.
    - **Never paste a local path (`C:\Users\…`) into GitHub**: nobody else can open it.
 2. **Branch and worktree** from `origin/main` (fetch first).
 3. **Test that would fail without the change**, in the default gate where possible.
    - **Prove it**: break the fix, watch the test fail, restore.
    - **The break must COMPILE.** A break that fails the build leaves the tests running the OLD binaries, and "it passed" means nothing. Check that the build line says OK before reading the result.
-4. **Gates**: `tools/agent/Invoke-Gate.ps1 -Gate` (4 shards), or `-Gate -Headless` after any view change (both suites at once when RAM allows). `-Gate` leaves out the slow **release lane** (`tools/ci/release-lane.json`): the train, the release preflight and CI run it for you; run a lane class yourself with `-FilterClass` when you change its subsystem.
+4. **Gates**: `tools/agent/Invoke-Gate.ps1 -Gate` (4 shards), or `-Gate -Headless` after any view change (both suites at once when RAM allows). `-Gate` leaves out the slow **release lane** (`tools/ci/release-lane.json`): the train, the release preflight and CI run it for you; run a lane class yourself with `-FilterClass` when you change its subsystem. **`-Headless` always runs the WHOLE headless suite, even with `-FilterClass`** (the filter then runs as a second pass); to run one headless class, use `-NoBuild -FilterClass "*<Class>"` WITHOUT `-Headless`. Every pattern needs its leading `*`.
    - While iterating, `Invoke-Gate.ps1 -Affected` runs only the classes that cover your diff (printed with the reason for each; `-SelectOnly` just prints). It is a loop aid: it records no green tree, falls back to the full gate on a change to `tools/`, a project or global config, and never replaces the full gate or the train.
    - A red class in a busy run is re-run ALONE before it is called a flake.
    - A test that flakes twice gets its own issue.
@@ -48,24 +48,78 @@ powershell -NoProfile -File tools/agent/Merge-Train.ps1 -Prs 142,143,144        
 powershell -NoProfile -File tools/agent/Merge-Train.ps1 -Prs 142,143,144 -Merge   # and merge
 ```
 
-It merges the PRs onto `origin/main` in order, runs the gate once (and the
-headless suite, 4 shards, if any PR touches a view), then the release lane
-(`Invoke-Gate.ps1 -ReleaseLane`, skipped only for a docs-only train), and with `-Merge` merges
-them on GitHub in the SAME order, refusing a PR whose head moved since it was
-tested. GitHub repeats exactly those merges, so the tested tree is the tree
-that lands. A PR that moves the JuceSharp gitlink is refused: merge it on its
+It merges the PRs onto `origin/main` in order, builds RELEASE (as CI) and runs
+the gate, the release lane and, if any PR touches a view, the headless suite in
+ONE `Invoke-Gate.ps1 -Gate -ReleaseLane [-Headless]` call, side by side out of
+one testhost budget (#325; the release lane is skipped only for a docs-only
+train). With `-Merge`, one plain, non-forced `git push origin <tested-tip>:refs/heads/main`
+lands the exact gated commits for every PR together (`Invoke-MergeTrainMerges`
+in `tools/agent/MergeTrain.psm1`). A divergent main advance rejects the push,
+leaves every PR unmerged, and posts no success comments. A PR head move found
+before push also refuses landing. A head move after that check cannot alter
+the immutable tip; an unconfirmed PR stops comments and requires inspection.
+The train polls GitHub for up to 60 seconds for every PR to report MERGED with a
+merge commit before posting any tested comment; expiry leaves the tested tip on
+the base and calls for inspection without rerunning the train. Local merge
+commits use GitHub's `Merge pull request #n from owner/branch` message plus the
+PR title, with repository `user.name` and `user.email`; the email must end in
+`@users.noreply.github.com`. Author/committer environment overrides are replaced
+with that identity during commit creation and restored afterwards. One exclusive lock handle keeps a second train out of
+the worktree for the whole run. A PR that moves the JuceSharp gitlink is refused: merge it on its
 own, after its JuceSharp PR. A headless run whose EVERY failure carries a
 harness-fault needle (`tools/ci/HeadlessShards.psm1`) is not a stop by itself:
 `Invoke-Gate.ps1 -Headless` re-runs those classes alone, up to `-RaceReruns`
 (2) times, and the train is green only if they pass; the verdict line and each
-merged PR's comment say so. A failure without a needle stops the train.
+merged PR's comment say so. A failure without a needle stops the train. Every shard and retry is also
+graded by `Get-HeadlessIncompleteClasses` / `Test-HeadlessExitAccepted`; an
+unexplained exit blocks local race recovery even if all classes reported results.
 
-A GREEN full-gate train records its tree id (with `+ headless` when the suite ran and
+A RED train records the lanes it actually executed and passed against its tree. Re-running the
+same train on the same main (same tree), in the same configuration and with
+the same release-lane list hash, runs only the lanes without a green record, so the red lane runs again in full and alone (`Get-MergeTrainLanePlan`);
+`-ForceGates` runs every lane. Planned lanes revoke their previous evidence
+before build/execution, including forced runs; only accepted greens are saved.
+Readers and writers use the same configuration and release-lane input hash.
+Release and export gates use Release, matching the train. Public/dev tree
+aliases are revoked together, so a failed run cannot reuse an older alias.
+All record reads and read/modify/write updates use one exclusive cross-process
+store lock, with a 10-second contention deadline and release in finally.
+A record is the verdict of the last COMPLETED run of that lane for that tree,
+configuration and lane inputs. A run killed or crashed before grading has no
+verdict: it cannot record green and does not erase another completed verdict.
+A completed red run erases the record.
+Evidence is checked immediately before each ref update, after all network preflight.
+A local file and a remote ref cannot close the remaining gap between that check
+and the server accepting the push: a verdict completed in that gap is no different
+from one completed just after landing, and does not affect a landing already made.
+
+An attempt writes only the accepted lanes it actually executed; reused lanes
+are never re-saved. Reused records are checked again under the store lock on
+their original tree and inputs before accepting the result, and before landing
+or declaring assets publishable. Lost evidence names its lane and stops the
+train, release or export; the next run executes that lane. The train checks both
+after its gates, then after the base/head network checks directly before pushing.
+The public export completes all push-plan preflight, then checks immediately
+before each push (including later repos). New-Release checks after its gates
+and after local metadata/asset preparation, before printing the publish command;
+it never executes that command or updates a remote ref.
+
+Full lanes are derived once for both execution and revocation. Adding a trailing
+`-FilterClass` still runs (and revokes) explicitly requested full lanes before
+the filtered pass. Only filtered/affected-only selections are exempt; an affected
+fallback runs and revokes the full default gate. `-ParseTrx` runs nothing.
+A non-default `-Project` has no configured class weights, so its default gate
+uses one unsharded run with its own assembly; foreign class includes and weight
+updates are never applied. An unexpected empty run (exit 8) remains red.
+
+A GREEN full-gate train records its executed lanes against the tree id (with `+ headless` when the suite ran and
 `+ release lane`) in the release cache (`tools/release/ReleaseCache.psm1`, see
 `tools/release/README.md` § Release caches). The public export's `-Gate` and
-`New-Release.ps1`'s headless preflight then skip that identical test run on the
-same tree (the release lane's record is reused the same way); `-ForceGate` /
-`-ForceHeadlessUi` / `-ForceReleaseLane` run it anyway.
+`New-Release.ps1`'s gates (default gate, headless suite, release lane) then skip
+that identical test run on the same tree; `-ForceGate` / `-ForceHeadlessUi` /
+`-ForceReleaseLane` run it anyway. **Before a release, run the last train with
+`-Headless`** so the release reuses the headless suite too and runs only the
+localized layout sweeps (`tools/release/README.md` § Fast release recipe).
 
 What keeps it fast:
 
@@ -86,10 +140,14 @@ What keeps it fast:
   `Directory.Build.targets` restore `obj/ref`'s timestamp when the bytes are equal;
   `Infrastructure/RefAssemblyStabilityLintTests` pins them. A public-API change
   still rebuilds the dependents.
-- **Its `juce_sharp.dll` is kept too.** When a FRESH train's worktree script
-  warns that the DLL was not built for the gitlink, copy one that was into the
-  train worktree's `JuceSharp/src/JuceSharp/runtimes/win-x64/native/`; it then
-  serves every train until the gitlink moves.
+- **The native pair is checked on every train.** After the PRs are merged
+  locally, both files' SHA-256 must match the tested tree's
+  `tools/setup/native-runtime.json` entry for its JuceSharp gitlink. A marker,
+  matching ABI or cached green lane is insufficient. A mismatch invokes that
+  tree's `tools/setup/Get-NativeRuntime.ps1 -Force` once (including support for
+  `DOTCHARTER_NATIVE_ASSET_DIR`), then rereads both hashes. A missing pin,
+  installation failure or remaining mismatch stops before any gate or landing.
+  This applies to fresh trains after gitlink moves and reused worktrees alike.
 - **Docs fast path.** When the train's combined change is only `*.md` and
   `docs/**` (a `.resx` is NOT docs), it runs the build plus the lints that read
   docs (`Get-MergeTrainDocsOnlyClasses` in `tools/agent/MergeTrain.psm1`, led by
@@ -101,7 +159,10 @@ What keeps it fast:
   CPUs 8-15 by default (no game detection), ALL cores only with `-AllCores`.
   `Invoke-Gate.ps1` decides the same way, so a gate needs no `cmd /c start
   /affinity` wrapper; the train passes `-AllCores` on to its child gates, and
-  the choice is the first line of the output. The decision is `DevBuild.psm1`'s `Get-DevCpuPlan`.
+  the choice is the first line of the output and the last (`cpus half|all`).
+  **A train when the owner is not gaming:** add `-AllCores`, nothing else (it
+  widens even a run started under `/affinity FF00`, and doubles `-Shards`):
+  `powershell -NoProfile -File tools/agent/Merge-Train.ps1 -Prs 142,143 -AllCores`. The decision is `DevBuild.psm1`'s `Get-DevCpuPlan`.
 
 The decisions are pinned by `Infrastructure/MergeTrainModuleTests`.
 
@@ -128,9 +189,13 @@ The decisions are pinned by `Infrastructure/MergeTrainModuleTests`.
   cleanup, a wrong submodule doc) gets its issue in `SomeeName/JuceSharp`.
 - JuceSharp PRs merge first, as merge commits; push the submodule before the parent.
 - **A worktree's `juce_sharp.dll` must be built for ITS JuceSharp commit.** The
-  same ABI number does not mean the same native code. The worktree script now
-  takes a clean DLL built at the right commit from another worktree, or warns
-  loudly when there is none.
+  same ABI number does not mean the same native code. The worktree script
+  takes a complete clean pair built at the right commit from another worktree,
+  or installs the pair pinned for the gitlink with its own
+  `tools/setup/Get-NativeRuntime.ps1 -Force` and verifies both installed hashes.
+  A missing pin or failed install warns with its reason and reports `warn`
+  in the final `native-pair: <JSON>` line; native can then be built locally.
+  The train requires the pinned hashes and stops if they cannot be installed.
 
 ## Releases
 
@@ -196,7 +261,14 @@ assignee is `SomeeName`.
    -Repo DotCharter|JuceSharp -Commit <sha> | -Pr <n>` makes the dev branch and
    PR with a `Public-Commit: <Repo>@<sha>` trailer. `Export-PublicSnapshot.ps1`
    REFUSES while a public commit since the last snapshot has no such trailer and
-   prints the import command, and `New-Release.ps1`'s preflight runs the same check
+   prints the import command (a public MERGE commit counts too when it changed
+   something by hand, e.g. a conflict resolution: `PublicSync.psm1`
+   `Get-PublicMergeOwnBase`; the import applies only that part after the merged
+   commits). Each diff retains an unchanged dev-only suffix as context on both sides
+   when the public base is an exact complete-line prefix of the staged dev file;
+   a public EOF edit then preserves the suffix. Other differences still use normal
+   three-way conflict detection. The gitlink is pinned to that diff's own base, and
+   `New-Release.ps1`'s preflight runs the same check
    (`Find-UnimportedPublicCommits.ps1 -FailOnMissing`). The scheduled
    `public-sync-watch.yml` does NOT run: Actions is off on the dev repos. To skip one
    on purpose, commit an empty dev commit with the trailer saying why. Never edit

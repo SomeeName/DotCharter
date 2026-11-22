@@ -57,7 +57,7 @@ public sealed class CustomStemModelStore
             {
                 _storeUnreadable = false;
                 _logger?.Warning(AppLogCategory.Audio,
-                    $"Failed to load custom stem models from '{_path}': {ex.Message}");
+                    $"Failed to load custom stem models from '{_path}'", ex);
                 return Array.Empty<StemModelDescriptor>();
             }
             catch (Exception ex)

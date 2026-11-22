@@ -16,27 +16,43 @@ namespace DotCharter.Core.Utilities;
 ///         field-by-field knowledge, and a second hand-written copy of it would
 ///         silently stop carrying any newly added model field.
 ///     </para>
+///     <para>
+///         History callers set <c>retainIdentities</c> so restore can reattach removed
+///         instances. Save/export/analysis copies leave it off and remain detached snapshots.
+///     </para>
 /// </summary>
 public static class ChartProjectCloner
 {
-    public static ChartProject Clone(ChartProject source)
+    public static ChartProject Clone(ChartProject source, bool retainIdentities = false)
     {
+        using var identities = retainIdentities ? ChartSnapshotIdentities.BeginCapture() : ChartSnapshotIdentities.BeginDetachedCopy();
         var clone = new ChartProject();
         ChartProjectRestorer.Restore(clone, source);
         return clone;
     }
 
-    public static Arrangement CloneArrangement(Arrangement source)
+    public static Arrangement CloneArrangement(Arrangement source, bool retainIdentities = false)
     {
+        using var identities = retainIdentities ? ChartSnapshotIdentities.BeginCapture() : ChartSnapshotIdentities.BeginDetachedCopy();
         var clone = new Arrangement();
         ChartProjectRestorer.RestoreArrangement(clone, source);
         return clone;
     }
 
-    public static ChartLevel CloneLevel(ChartLevel source)
+    public static ChartLevel CloneLevel(ChartLevel source, bool retainIdentities = false)
     {
+        using var identities = retainIdentities ? ChartSnapshotIdentities.BeginCapture() : ChartSnapshotIdentities.BeginDetachedCopy();
         var clone = new ChartLevel();
         ChartProjectRestorer.RestoreLevel(clone, source);
+        return clone;
+    }
+
+    /// <summary>Copies link metadata only; arrangement references remain the live owners.</summary>
+    public static List<LinkGroup> CloneLinkGroups(IList<LinkGroup> source, bool retainIdentities = false)
+    {
+        using var identities = retainIdentities ? ChartSnapshotIdentities.BeginCapture() : ChartSnapshotIdentities.BeginDetachedCopy();
+        var clone = new List<LinkGroup>();
+        ChartProjectRestorer.RestoreLinkGroups(clone, source);
         return clone;
     }
 }

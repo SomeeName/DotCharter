@@ -1,25 +1,9 @@
 namespace DotCharter.Services.Export.Rocksmith;
 
 /// <summary>
-/// The <c>&lt;package&gt;.chords-ext.json</c> sidecar: chord notes on the 7th/8th
-///     string, which the six-wide SNG chord records cannot hold, in <c>rs7chart</c>'s
-///     format (<c>format: rs7chart.chords-ext</c>, version 1): the SNG body's SHA-256, the
-///     templates with every column, and one event per projected chord keyed by (level,
-///     note index).
-///     <para>
-///         <b>Read only, for packages built before the RS7X block</b>
-///         (<see cref="Sng.Model.RsExtensionBlock" />), which now carries those columns
-/// inside the SNG and is what the game reads. This half names the files and
-///         lets an export remove the ones an older build of the same package left
-///         (<see cref="RemoveStale" />); reading them is the package reader's:
-///         a sidecar is applied ONLY when its
-///         digest matches the SNG it sits beside, and only when the SNG has no valid block.
-///     </para>
-///     <para>
-///         One arrangement per file: <c>&lt;base&gt;.chords-ext.json</c> (what <c>rs7chart</c>
-///         names it), or with several, <c>&lt;base&gt;.&lt;partition&gt;.chords-ext.json</c>.
-///         The reader takes both and matches each by its <c>sng</c> entry name.
-///     </para>
+///     Names legacy chord sidecars for package readers and lets an export remove
+///     the exact stale names belonging to its package and arrangement partitions.
+///     RS Extended Range carries every chord column in its positional chart records.
 /// </summary>
 internal static class Rs7ChordSidecar
 {
@@ -44,7 +28,7 @@ internal static class Rs7ChordSidecar
 
     /// <summary>
     ///     Deletes the sidecars an earlier build of <paramref name="packagePath" /> left
-    /// (the RS7X block replaced them) — only the exact names DotCharter
+    /// — only the exact names DotCharter
     ///     wrote for this package and its <paramref name="partitions" />, nothing else.
     /// </summary>
     public static void RemoveStale(string packagePath, IEnumerable<string> partitions)

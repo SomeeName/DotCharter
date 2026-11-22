@@ -85,6 +85,32 @@ public sealed class StartupWorkDeferralTests
             "constructor argument, so resolving it first makes the vmGraph phase report 0 ms.");
     }
 
+    /// <summary>
+    ///     The tone-rig catalogue read (a dependency of <c>TransportViewModel</c>, and
+    ///     the first P/Invoke, so it also loads the ~14 MB engine DLL) was the largest
+    ///     step of the startup <c>services</c> phase on the UI thread: 7 ms warm,
+    ///     ~73 ms cold (#793). <c>NativeEnginePrefetch</c> reads it on a worker, which
+    ///     only helps if it STARTS before the container is built, and only counts if
+    ///     the <c>IPlayerDspChains</c> factory ADOPTS it instead of reading it again.
+    /// </summary>
+    [Fact]
+    public void TheToneRigCatalogueIsReadOnAWorkerStartedBeforeTheContainerIsBuilt()
+    {
+        var source = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "App.axaml.cs")));
+        var audioServices = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "App.AudioServices.cs")));
+
+        var prefetchIndex = source.IndexOf("NativeEnginePrefetch.Start()", StringComparison.Ordinal);
+        var containerIndex = source.IndexOf("new ServiceCollection()", StringComparison.Ordinal);
+        var firstResolveIndex = source.IndexOf("GetRequiredService<", StringComparison.Ordinal);
+
+        Assert.True(prefetchIndex >= 0, "The composition root must start the tone-rig catalogue prefetch (#793).");
+        Assert.True(containerIndex >= 0 && firstResolveIndex >= 0, "The composition root must still build and resolve the container.");
+        Assert.True(prefetchIndex < containerIndex && prefetchIndex < firstResolveIndex,
+            "Start NativeEnginePrefetch before the ServiceCollection is built: started later, the " +
+            "catalogue read is already on the UI thread and the startup services phase pays for it again.");
+        Assert.Contains("NativeEnginePrefetch.TakeCatalogueSource()", audioServices, StringComparison.Ordinal);
+    }
+
     private static string ShellSource() => UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(
         TestPaths.RepoRoot(), "DotCharter.UI", "ViewModels", "Shell", "MainWindowViewModel.cs")));
 }

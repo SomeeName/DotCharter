@@ -18,4 +18,16 @@ public interface IRigConfigService
     ///     serialize throws "Collection was modified" and the save is dropped.
     /// </summary>
     void UpdateRigConfig(Action<RigConfig> mutate);
+
+    /// <summary>
+    ///     <see cref="UpdateRigConfig" />, then the write itself before returning: false when
+    ///     the change did not reach the disk (a refused or failed write). For a save the
+    ///     player is told about, such as a user tone preset. A store that keeps nothing on
+    ///     disk has nothing to fail, which is what this default answers.
+    /// </summary>
+    bool UpdateRigConfigAndWrite(Action<RigConfig> mutate)
+    {
+        UpdateRigConfig(mutate);
+        return true;
+    }
 }

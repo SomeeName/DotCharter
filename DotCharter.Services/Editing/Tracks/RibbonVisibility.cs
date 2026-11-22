@@ -1,21 +1,22 @@
+using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace DotCharter.Services.Editing.Tracks;
 
 /// <summary>
-/// Composable top-ribbon row visibility for one track. Each track decides
-/// whether to show tones, sections, phrases and lyrics independently — the
-/// renderer reflows the ribbon height around the visible rows so the lane
-/// area expands to fill any reclaimed space.
+/// Composable top-ribbon row visibility preferences for one track. Tones,
+/// sections and phrases have per-track toggles; lyrics belong to the active
+/// timeline. The renderer reflows the ribbon height around the visible rows
+/// so the lane area expands to fill any reclaimed space.
 ///
 /// These are the USER toggles only: `ChartRenderer.TopRibbon` additionally
-/// collapses rows that have no content (keeping the Sections row as the
-/// event-dialog entry point when no events exist at all), so an "on" toggle
+/// collapses rows that have no content (Sections
+/// stays as the event-dialog entry point when no events exist), so an "on" toggle
 /// does not guarantee the row occupies height.
 ///
-/// Stacked panels default to hiding the lyrics row (lyrics are a song-wide
-/// concept, redundant per-track), which trims ~24 px of dead space from
-/// each row in the multi-track view.
+/// Lyrics are song-wide: stacked renderers exclude that row regardless of
+/// ShowLyrics, including a saved layout that enables it. The active timeline
+/// keeps the lyrics row and its toggle.
 /// </summary>
 public partial class RibbonVisibility : ObservableObject
 {
@@ -38,14 +39,34 @@ public partial class RibbonVisibility : ObservableObject
     /// <summary>
     /// "Hide empty lanes automatically" (on by default): a lane whose
     /// toggle is on still gives its height back while the track has nothing
-    /// for it — no lyrics, no phrases, only ONE tone. Off, every toggled lane
-    /// keeps its row. Sections stays the entry point either way.
+    /// for it — no phrases, only ONE tone. Off, every toggled lane
+    /// keeps its row. Sections stays as the event dialog entry point; a lane switched on stays until switched off.
     /// </summary>
     [ObservableProperty] private bool _autoHideEmpty = true;
 
     /// <summary>"Compact rows": every ribbon row drawn shorter, the
     /// difference handed to the note lanes.</summary>
     [ObservableProperty] private bool _compactRows;
+
+    // Switching a lane's toggle ON (the menu, "Show all lanes") keeps its row even while
+    // empty, until the toggle goes off again. Session state, never saved.
+    [property: JsonIgnore]
+    [ObservableProperty]
+    private bool _forceTones;
+    [property: JsonIgnore]
+    [ObservableProperty]
+    private bool _forceSections;
+    [property: JsonIgnore]
+    [ObservableProperty]
+    private bool _forcePhrases;
+    [property: JsonIgnore]
+    [ObservableProperty]
+    private bool _forceLyrics;
+
+    partial void OnShowTonesChanged(bool value) => ForceTones = value;
+    partial void OnShowSectionsChanged(bool value) => ForceSections = value;
+    partial void OnShowPhrasesChanged(bool value) => ForcePhrases = value;
+    partial void OnShowLyricsChanged(bool value) => ForceLyrics = value;
 
     /// <summary>"Show all lanes": every lane toggle back on.</summary>
     public void ShowAllLanes()

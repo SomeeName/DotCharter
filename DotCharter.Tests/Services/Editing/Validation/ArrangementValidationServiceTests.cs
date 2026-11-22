@@ -11,6 +11,48 @@ public sealed class ArrangementValidationServiceTests
 
     private static IArrangementValidationService NewService() => new ArrangementValidationService(new FakeAppLogger());
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ALinkIntoAPrebentChordChecksTheActualLandingBend(bool chordSource)
+    {
+        var arr = NewArr();
+        var source = Note(1, 5, sustainBeats: 1);
+        source.LinkNext = true;
+        source.BendValues.Add(new BendValue(new FractionalPosition(2), 1));
+        if (chordSource)
+        {
+            var chord = new Chord { Position = source.Position };
+            chord.ChordNotes.Add(new ChordNote
+            {
+                StringIndex = 0, Fret = 5, Sustain = source.Sustain, LinkNext = true,
+                BendValues = source.BendValues
+            });
+            arr.Levels[0].Chords.Add(chord);
+        }
+        else
+        {
+            arr.Levels[0].Notes.Add(source);
+        }
+
+        var landing = new Chord { Position = new FractionalPosition(2) };
+        var landingNote = new ChordNote { StringIndex = 0, Fret = 5, Sustain = new FractionalPosition(1) };
+        var prebend = new BendValue(landing.Position, 1);
+        landingNote.BendValues.Add(prebend);
+        landing.ChordNotes.Add(landingNote);
+        arr.Levels[0].Chords.Add(landing);
+
+        var issues = NewService().Validate(arr, Beats());
+
+        Assert.DoesNotContain(issues, i => i.Type == ArrangementIssueType.LinkNextBendMismatch);
+        Assert.Same(prebend, Assert.Single(landingNote.BendValues));
+        Assert.Equal(1, prebend.Step);
+
+        prebend.Step = 2;
+        issues = NewService().Validate(arr, Beats());
+        Assert.Contains(issues, i => i.Type == ArrangementIssueType.LinkNextBendMismatch);
+    }
+
     private static Arrangement NewArr(ArrangementType type = ArrangementType.Lead)
     {
         var arr = new Arrangement { ArrangementType = type };

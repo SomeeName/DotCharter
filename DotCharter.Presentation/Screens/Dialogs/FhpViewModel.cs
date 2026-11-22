@@ -1,12 +1,12 @@
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
+using System.Collections.ObjectModel;
 using DotCharter.Core.Domain.Events;
 using DotCharter.Core.Domain.Primitives;
 using DotCharter.Core.Utilities;
 using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Dialogs;
-using DotCharter.Services.Editing;
-using DotCharter.Services.State;
+using DotCharter.Services.Editing.Anchors;
 using DotCharter.Tone.Infrastructure.Configuration;
 
 namespace DotCharter.Presentation.Screens.Dialogs;
@@ -16,6 +16,8 @@ public sealed class FhpViewModel : DialogViewModel<bool>, IFhpScreen, IDialogSet
 {
     private readonly ChartEditDialogServices _edit;
     private FretAnchor? _editing;
+    private ObservableCollection<FretAnchor> _anchors = [];
+    private IList<BeatMarker> _beats = [];
     private FractionalPosition _position;
     private int _fret = 1;
     private int _width = 4;
@@ -44,15 +46,18 @@ public sealed class FhpViewModel : DialogViewModel<bool>, IFhpScreen, IDialogSet
     public ICommand CancelCommand { get; }
 
     /// <summary>
-    ///     Edits the given anchor, else the one already on the snapped grid
-    ///     position; a new anchor starts from the one spanning that position, then
-    ///     from the selected note's fret.
+    ///     Edits the supplied row head (badge or marker) at its position; otherwise uses the captured row snap.
+    ///     With null, edits the anchor at the snapped time or drafts a new one there. New anchors
+    ///     take the preview fret or note-based suggestion and the width in force at that position.
     /// </summary>
     public void Configure(FhpRequest request)
     {
         var editor = _edit.Editor;
-        var snapped = editor.SnapToGrid(request.TimeMs >= 0 ? request.TimeMs : _edit.State.CurrentTimeMs);
-        _editing = request.Anchor ?? editor.Anchors.FirstOrDefault(a => a.Position == snapped);
+        var track = request.Target?.Track;
+        _anchors = track?.Anchors ?? editor.Anchors;
+        _beats = track?.Beats ?? editor.Beats;
+        var snapped = request.Target?.Position ?? editor.SnapToGrid(request.TimeMs >= 0 ? request.TimeMs : _edit.State.CurrentTimeMs);
+        _editing = request.Anchor ?? _anchors.FirstOrDefault(a => a.Position == snapped);
 
         if (_editing != null)
         {
@@ -62,8 +67,11 @@ public sealed class FhpViewModel : DialogViewModel<bool>, IFhpScreen, IDialogSet
         }
         else
         {
-            var spanning = editor.Anchors.LastOrDefault(a => a.Position <= snapped);
-            Fret = spanning?.Fret ?? editor.Selection.SelectedNote?.Fret ?? 1;
+            var spanning = FretAnchorLookup.InEffectAt(_anchors, snapped);
+            Fret = _edit.State.PreviewAnchorFret > 0
+                ? _edit.State.PreviewAnchorFret
+                : AnchorFretSuggester.Suggest(snapped, track?.Notes ?? editor.PlacedNotes, track?.Chords ?? editor.PlacedChords, _anchors,
+                    track?.Arrangement.Capo ?? editor.ActiveArrangement?.Capo ?? 0, spanning?.Fret ?? (track?.Selection ?? editor.Selection).SelectedNote?.Fret);
             Width = spanning?.Width ?? 4;
             _position = snapped;
         }
@@ -90,7 +98,7 @@ public sealed class FhpViewModel : DialogViewModel<bool>, IFhpScreen, IDialogSet
             after.Fret = Fret;
             after.Width = Width;
             after.Position = _position;
-            if (_edit.History.Do(new MutateAnchorAction(editor, _editing, before, after)))
+            if (_edit.History.Do(FhpAnchorEdit.Mutate(editor, _editing, before, after, _anchors)))
             {
                 _edit.Logger.Info(AppLogCategory.Editing,
                     $"FHP dialog saved existing anchor. Old position={Format(before.Position)}, oldFret={before.Fret}, " +
@@ -100,7 +108,7 @@ public sealed class FhpViewModel : DialogViewModel<bool>, IFhpScreen, IDialogSet
         else
         {
             var anchor = new FretAnchor { Position = _position, Fret = Fret, Width = Width };
-            _edit.History.Do(new AddAnchorAction(editor, anchor));
+            _edit.History.Do(FhpAnchorEdit.Add(editor, anchor, _anchors));
             _edit.Logger.Info(AppLogCategory.Editing,
                 $"FHP dialog created anchor. Position={Format(anchor.Position)}, fret={anchor.Fret}, width={anchor.Width}.");
         }
@@ -108,53 +116,5 @@ public sealed class FhpViewModel : DialogViewModel<bool>, IFhpScreen, IDialogSet
         Close(true);
     }
 
-    private string Format(FractionalPosition position) => position.FormatWithMs(_edit.Editor.Beats);
-
-    /// <summary>Re-sorts the anchors by position and redraws; both actions end here.</summary>
-    private static void Resort(IChartEditorSurface editor)
-    {
-        var sorted = editor.Anchors.OrderBy(a => a.Position).ToList();
-        editor.Anchors.Clear();
-        foreach (var anchor in sorted) editor.Anchors.Add(anchor);
-        editor.RequestRedraw();
-    }
-
-    private sealed class MutateAnchorAction(IChartEditorSurface editor, FretAnchor target, FretAnchor before, FretAnchor after)
-        : IChartAction, ILinkPolicyAction
-    {
-        /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
-        public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
-
-        public bool HasEffect => !ChartActionStateComparer.AnchorsEqual(before, after);
-
-        public void Execute() => Apply(after);
-
-        public void Undo() => Apply(before);
-
-        private void Apply(FretAnchor state)
-        {
-            target.Fret = state.Fret;
-            target.Width = state.Width;
-            target.Position = state.Position;
-            Resort(editor);
-        }
-    }
-
-    private sealed class AddAnchorAction(IChartEditorSurface editor, FretAnchor anchor) : IChartAction, ILinkPolicyAction
-    {
-        /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
-        public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
-
-        public void Execute()
-        {
-            editor.Anchors.Add(anchor);
-            Resort(editor);
-        }
-
-        public void Undo()
-        {
-            editor.Anchors.Remove(anchor);
-            Resort(editor);
-        }
-    }
+    private string Format(FractionalPosition position) => position.FormatWithMs(_beats);
 }

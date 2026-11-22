@@ -12,7 +12,7 @@ namespace DotCharter.Tests.Rendering.Headless;
 ///     Guitar Pro pick scrapes (#583) through the REAL gpif import and the REAL
 ///     renderers, on the Shinbatsu-m197-shaped score (<see cref="PickScrapeScenes" />)
 ///     plus a fourth bar: an A5 at fret 5 and a dead low E scraped UP. The import
-///     charts every scrape as tap + tremolo + fret-hand mute + ignore + an
+///     charts every scrape as tap + tremolo + ignore + an
 ///     unpitched slide; a two-string scrape is ONE chord split into notes (#599):
 ///     A+D 24 → 18 three times and E+A 24 → 12 off FHP 21, and the one-string
 ///     E 12 → 24 off FHP 5 is a note (#586: a scrape starts on 24 or 12). The 3D
@@ -44,7 +44,7 @@ public class HeadlessPickScrapeRenderTests
         var up = Assert.Single(level.Notes, n => n.Ignore);
         Assert.Equal((13, 12, 24), (up.Position.BeatId, up.Fret, up.SlideTo!.Value));
         Assert.All(scrapeChords.SelectMany(c => c.ChordNotes).Cast<IGuitarSound>().Append(up),
-            n => Assert.Equal((HopoType.Tap, true, true, MuteType.Full), (n.Hopo, n.Tremolo, n.UnpitchedSlide, n.Mute)));
+            n => Assert.Equal((HopoType.Tap, true, true, MuteType.None), (n.Hopo, n.Tremolo, n.UnpitchedSlide, n.Mute)));
         Assert.All(scrapeChords.Where(c => c.Position.BeatId is 4 or 5 or 6).SelectMany(c => c.ChordNotes),
             n => Assert.Equal((24, 18), (n.Fret, n.SlideTo!.Value)));
         Assert.All(scrapeChords.Single(c => c.Position.BeatId == 8).ChordNotes,

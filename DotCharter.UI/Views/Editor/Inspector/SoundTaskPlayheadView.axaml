@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspector="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
+             xmlns:panels="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundTaskPlayheadView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Task page's AT THE PLAYHEAD card (#751 P5, design D): where the playhead is, where the pen writes, what
+         is selected, and the step into the next sound the filter matches. The pen and strings rows say what the keyboard
+         is set to (and how to change it) in their tooltip. -->
+    <StackPanel x:Name="SoundTaskPlayhead" Spacing="{StaticResource SpaceXs}">
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowValue" Text="{Binding PlayheadLabel}" TextWrapping="Wrap" />
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}"
+              ToolTip.Tip="{localization:Loc Inspector_Queue_KeyboardTip}">
+            <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel" Text="{localization:Loc Inspector_Task_Pen}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowValue" Text="{Binding StringMask.PenFretReadout}" HorizontalAlignment="Right"
+                       TextTrimming="CharacterEllipsis" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}"
+              ToolTip.Tip="{localization:Loc Inspector_Queue_KeyboardTip}">
+            <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel" Text="{localization:Loc Inspector_Task_Strings}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowValue" Text="{Binding StringMask.MaskReadout}" HorizontalAlignment="Right"
+                       TextTrimming="CharacterEllipsis" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}">
+            <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel" Text="{localization:Loc Inspector_Task_Selection}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowValue" Text="{Binding SelectionSummary}" HorizontalAlignment="Right"
+                       TextTrimming="CharacterEllipsis" />
+        </Grid>
+        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Left"
+                Content="{localization:Loc Inspector_Empty_SelectNext}" AutomationProperties.Name="{localization:Loc Inspector_Empty_SelectNext}"
+                Command="{Binding Queue.NextMatchCommand}" IsEnabled="{Binding Queue.HasMatches}" />
+    </StackPanel>
+</UserControl>

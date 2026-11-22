@@ -18,6 +18,18 @@ namespace DotCharter.Tests.UI.ViewModels.Shell;
 /// </summary>
 public sealed class StemReplaceConfirmTests
 {
+    [Fact]
+    public void Loaded_stems_do_not_bypass_the_cache_before_separation()
+    {
+        var source = SourceText.StripComments(UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(
+            TestPaths.RepoRoot(), "DotCharter.UI", "ViewModels", "Shell", "StemSeparationViewModel.cs"))));
+        var lookup = source.IndexOf(".TryLoadCachedAsync(", StringComparison.Ordinal);
+        var model = source.IndexOf("_defaultModels.GetOfferAsync()", StringComparison.Ordinal);
+        Assert.True(lookup >= 0 && lookup < model);
+        Assert.DoesNotContain("!_stemMixer.HasStems", source[..lookup], StringComparison.Ordinal);
+        Assert.Contains("_stemCacheCoordinator.HasArchive(", source[lookup..model], StringComparison.Ordinal);
+    }
+
     private static StemSeparationViewModel.StemReplacePlan Plan(string[] existing, string[] model)
         => StemSeparationViewModel.StemReplacePlan.For(existing, model);
 

@@ -110,8 +110,10 @@ public static class LatencyBiasCalibrator
     /// <param name="baselineOffsetMs">The loopback-measured offset — the anchor the
     /// learned value is leashed to. Pass the current offset when nothing was measured.</param>
     /// <param name="timing">The run's timing report. Null/empty ⇒ no decision.</param>
+    /// <param name="speed">Playback speed of the run (1.0 = full). The report's residual is in
+    /// chart (transport) ms but the offset is wall-clock, so the step is divided by this.</param>
     public static LatencyBiasDecision Evaluate(
-        double currentOffsetMs, double baselineOffsetMs, LiveTimingReport? timing)
+        double currentOffsetMs, double baselineOffsetMs, LiveTimingReport? timing, double speed = 1.0)
     {
         if (timing is null || timing.HitCount == 0)
             return new LatencyBiasDecision(false, currentOffsetMs, "no timed hits");
@@ -136,7 +138,9 @@ public static class LatencyBiasCalibrator
         }
 
         // Late (+) => we are under-compensating => the offset must grow.
-        var target = currentOffsetMs + (residual * Alpha);
+        // The residual is chart time; the offset is wall-clock and is scaled by the speed
+        // when mapped back to chart time (LiveTimeMapping), so undo that scaling here.
+        var target = currentOffsetMs + (residual / LiveTimeMapping.NormalizeSpeed(speed) * Alpha);
 
         // Leash to the measurement, then to the absolute sane range.
         var low = Math.Max(MinOffsetMs, baselineOffsetMs - MaxDriftFromBaselineMs);

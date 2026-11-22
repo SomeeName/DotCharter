@@ -19,7 +19,7 @@ namespace DotCharter.Services.Export.Sheet;
 /// We never round-trip through PNG — the AlphaSkia pixels are copied once into
 /// an SKImage and reused for every paint.
 /// </summary>
-public sealed class SheetMusicRenderer
+public sealed class SheetMusicRenderer : ISheetMusicRenderer
 {
     /// <summary>
     ///     <see cref="EnsureAlphaSkiaLoaded" />'s completion barrier. This was an
@@ -208,71 +208,77 @@ public sealed class SheetMusicRenderer
 
             var renderer = new ScoreRenderer(settings) { Width = (float)width };
 
-            var chunks = new List<SheetChunk>();
-            var totalWidth = 0.0;
-            var totalHeight = 0.0;
-            var done = false;
-            Exception? error = null;
-
-            renderer.PartialRenderFinished.On(args =>
+            return RenderWithChunks(chunks =>
             {
-                if (args.RenderResult is AlphaTab.Platform.Skia.AlphaSkiaBridge.AlphaSkiaImage bridge && bridge.Image is { } img)
+                var totalWidth = 0.0;
+                var totalHeight = 0.0;
+                var done = false;
+                Exception? error = null;
+
+                renderer.PartialRenderFinished.On(args =>
                 {
-                    var skImage = ConvertToSkImage(img);
-                    if (skImage != null)
-                        chunks.Add(new SheetChunk(args.X, args.Y, args.Width, args.Height, skImage));
-                }
+                    if (args.RenderResult is AlphaTab.Platform.Skia.AlphaSkiaBridge.AlphaSkiaImage bridge && bridge.Image is { } img)
+                    {
+                        var skImage = ConvertToSkImage(img);
+                        if (skImage != null)
+                            chunks.Add(new SheetChunk(args.X, args.Y, args.Width, args.Height, skImage));
+                    }
+                });
+                renderer.RenderFinished.On(args =>
+                {
+                    totalWidth = args.TotalWidth;
+                    totalHeight = args.TotalHeight;
+                    done = true;
+                });
+                renderer.Error.On(e =>
+                {
+                    error = e;
+                    done = true;
+                });
+
+                renderer.RenderScore(score, new double[] { 0 }, new DefaultRenderHints());
+
+                if (error != null) throw error;
+                if (!done || chunks.Count == 0) return null;
+
+                ct.ThrowIfCancellationRequested();
+
+                var w = (int)Math.Ceiling(totalWidth);
+                var h = (int)Math.Ceiling(totalHeight);
+                if (w <= 0 || h <= 0) return null;
+
+                var measureBounds = ExtractMeasureBounds(renderer);
+                var (beatBounds, stringLattice) = ExtractBeatBounds(renderer);
+                var systemLattices = ExtractSystemLattices(renderer);
+                var masterBarCount = score.MasterBars.Count;
+                var diag =
+                    $"score.MasterBars={masterBarCount} chunks={chunks.Count} " +
+                    $"bounds={measureBounds.Count} totalWidth={totalWidth:F0} totalHeight={totalHeight:F0}";
+                // No %TEMP% side-file: appending a line to
+                // dotcharter-sheet-debug.log on every render would grow unconditionally and forever,
+                // with nothing to read, truncate or clean it up. Sheet
+                // render problems belong in the app log and the diagnostics bundle.
+                Debug.WriteLine("[SheetMusicRenderer] " + diag);
+
+                return new RenderResult(chunks, w, h, measureBounds, beatBounds, stringLattice, systemLattices);
             });
-            renderer.RenderFinished.On(args =>
-            {
-                totalWidth = args.TotalWidth;
-                totalHeight = args.TotalHeight;
-                done = true;
-            });
-            renderer.Error.On(e =>
-            {
-                error = e;
-                done = true;
-            });
-
-            renderer.RenderScore(score, new double[] { 0 }, new DefaultRenderHints());
-
-            if (error != null)
-            {
-                DisposeChunks(chunks);
-                throw error;
-            }
-            if (!done || chunks.Count == 0)
-            {
-                DisposeChunks(chunks);
-                return null;
-            }
-
-            ct.ThrowIfCancellationRequested();
-
-            var w = (int)Math.Ceiling(totalWidth);
-            var h = (int)Math.Ceiling(totalHeight);
-            if (w <= 0 || h <= 0)
-            {
-                DisposeChunks(chunks);
-                return null;
-            }
-
-            var measureBounds = ExtractMeasureBounds(renderer);
-            var (beatBounds, stringLattice) = ExtractBeatBounds(renderer);
-            var systemLattices = ExtractSystemLattices(renderer);
-            var masterBarCount = score.MasterBars.Count;
-            var diag =
-                $"score.MasterBars={masterBarCount} chunks={chunks.Count} " +
-                $"bounds={measureBounds.Count} totalWidth={totalWidth:F0} totalHeight={totalHeight:F0}";
-            // No %TEMP% side-file: appending a line to
-            // dotcharter-sheet-debug.log on every render would grow unconditionally and forever,
-            // with nothing to read, truncate or clean it up. Sheet
-            // render problems belong in the app log and the diagnostics bundle.
-            Debug.WriteLine("[SheetMusicRenderer] " + diag);
-
-            return new RenderResult(chunks, w, h, measureBounds, beatBounds, stringLattice, systemLattices);
         });
+    }
+
+    /// <summary>Retains ownership until every render/bounds step succeeds, including cancellation.</summary>
+    internal static RenderResult? RenderWithChunks(Func<List<SheetChunk>, RenderResult?> render)
+    {
+        var chunks = new List<SheetChunk>();
+        RenderResult? result = null;
+        try
+        {
+            result = render(chunks);
+            return result;
+        }
+        finally
+        {
+            if (result == null) DisposeChunks(chunks);
+        }
     }
 
     /// <summary>
@@ -316,7 +322,7 @@ public sealed class SheetMusicRenderer
                     for (var n = 0; n < beat.Notes.Count; n++)
                     {
                         var nb = beat.Notes[n];
-                        var domainString = (int)nb.Note.String - 1;
+                        var domainString = DomainStringOf(nb.Note);
                         if (domainString < 0) continue;
                         if (!ySamples.TryGetValue(domainString, out var list))
                             ySamples[domainString] = list = [];
@@ -339,6 +345,13 @@ public sealed class SheetMusicRenderer
 
         return systems;
     }
+
+    /// <summary>
+    /// The DOMAIN string index of a rendered tab note, or -1 when the note has
+    /// none. AlphaTab 1.9 reports an unset <c>Note.String</c> as NaN (1.8 used
+    /// -1), and <c>(int)NaN</c> is not a contract, so NaN is checked first.
+    /// </summary>
+    private static int DomainStringOf(Note note) => double.IsNaN(note.String) ? -1 : (int)note.String - 1;
 
     /// <summary>
     /// Extracts per-beat bounds (bar index + beat index within the bar + X span)
@@ -409,7 +422,7 @@ public sealed class SheetMusicRenderer
                     for (var n = 0; n < beat.Notes.Count; n++)
                     {
                         var nb = beat.Notes[n];
-                        var domainString = (int)nb.Note.String - 1;
+                        var domainString = DomainStringOf(nb.Note);
                         if (domainString < 0) continue;
                         if (!ySamples.TryGetValue(domainString, out var list))
                             ySamples[domainString] = list = [];

@@ -176,7 +176,15 @@ public static class ChartDifficultyEstimator
         if (chord.TemplateId >= 0) return chord.TemplateId;
         var hash = int.MinValue; // disjoint from non-negative template ids in practice
         foreach (var cn in chord.ChordNotes)
-            hash ^= (cn.StringIndex * 397) ^ (cn.Fret + 1) * 31;
+        {
+            // Mix each pair before the commutative fold: exchanging frets
+            // between strings must change the shape, not cancel out.
+            var memberHash = unchecked((uint)((cn.StringIndex << 16) ^ (cn.Fret + 1)));
+            memberHash = unchecked((memberHash ^ (memberHash >> 16)) * 0x85ebca6b);
+            memberHash = unchecked((memberHash ^ (memberHash >> 13)) * 0xc2b2ae35);
+            hash ^= unchecked((int)(memberHash ^ (memberHash >> 16)));
+        }
+
         return hash;
     }
 

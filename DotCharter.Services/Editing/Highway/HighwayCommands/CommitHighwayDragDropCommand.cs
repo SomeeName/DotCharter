@@ -73,6 +73,8 @@ internal sealed class CommitHighwayDragDropCommand : IHighwayEditCommand
     /// </summary>
     public ObservableCollection<HandShape>? SyncedHandShapes { get; init; }
 
+    public bool PreserveUnpastedSounds { get; init; }
+
     public IReadOnlyList<GuitarNote> TargetNotes => _targetNotes;
     public IReadOnlyList<GuitarNote> RequestedNewNotes { get; }
     public IReadOnlyList<GuitarNote> NewNotes => _newNotes;
@@ -125,7 +127,7 @@ internal sealed class CommitHighwayDragDropCommand : IHighwayEditCommand
 
         AddNormalizedRemovalActions(actions, normalizedSounds);
         AddHandShapeCollisionActions(actions);
-        AddMovedHandShapeOverrideActions(actions, normalizedSounds);
+        if (!PreserveUnpastedSounds) AddMovedHandShapeOverrideActions(actions, normalizedSounds);
         AddSoundCollisionActions(actions, normalizedSounds);
         AddAnchorCollisionActions(actions);
         AddNewElementActions(actions);
@@ -348,15 +350,13 @@ internal sealed class CommitHighwayDragDropCommand : IHighwayEditCommand
         foreach (var chord in _newChords)
         {
             if (!incoming.TryGetValue(chord.TemplateId, out var source)) continue;
-            chord.TemplateId = ChordTemplateResolver
-                .Resolve(arrangement, source.Frets, ArpeggioFlavour.Of(source), source.Name, _createdTemplates).Id;
+            chord.TemplateId = ChordTemplateResolver.ResolveAuthored(arrangement, source, _createdTemplates).Id;
         }
 
         foreach (var handShape in _newHandShapes)
         {
             if (!incoming.TryGetValue(handShape.TemplateId, out var source)) continue;
-            handShape.TemplateId = ChordTemplateResolver
-                .Resolve(arrangement, source.Frets, ArpeggioFlavour.Of(source), source.Name, _createdTemplates).Id;
+            handShape.TemplateId = ChordTemplateResolver.ResolveAuthored(arrangement, source, _createdTemplates).Id;
         }
     }
 
@@ -478,7 +478,11 @@ internal sealed class CommitHighwayDragDropCommand : IHighwayEditCommand
     {
         if (mergedChord.TemplateId < 0 || _scope.Arrangement is not { } arrangement) return;
 
-        mergedChord.TemplateId = ChordTemplateResolver.ResolveForChord(arrangement, mergedChord, _createdTemplates).Id;
+        var current = arrangement.FindChordTemplate(mergedChord.TemplateId)
+                      ?? _createdTemplates.FirstOrDefault(t => t.Id == mergedChord.TemplateId);
+        // A transfer that did not change the played grip keeps its complete authored identity.
+        if (current == null || !current.HasFrets(ChordTemplateResolver.FretsOf(mergedChord)))
+            mergedChord.TemplateId = ChordTemplateResolver.ResolveForChord(arrangement, mergedChord, _createdTemplates).Id;
         if (existingChords.FirstOrDefault(c => c.TemplateId >= 0) is not { } replaced) return;
 
         result.TemplateMoves.Add(new ChordHandShapeSync.ChordMove(replaced, replaced.TemplateId, mergedChord.TemplateId));

@@ -123,34 +123,21 @@ public sealed class VstChainSeatTests
     {
         var chain = Read("DotCharter.Tone", "Audio", "JuceAudioPlaybackService.VstChain.cs");
 
-        // The collected bypass transitions carry the seat…
-        Assert.Contains("toBypass = new List<(JuceAudioPlugin Plugin, bool Bypass, string Path, int Player)>", chain);
+        // Existing slots record their requested seat and bypass before the
+        // unlocked ordering pass applies both together.
+        Assert.Contains("_guitarSlotPlayer[entry.Id] = entry.Player;", chain);
+        Assert.Contains("_guitarSlotBypass[entry.Id] = entry.Bypass;", chain);
+        var applyPhase = Between(chain, "private void ApplyGuitarVstChainCore", "private void ReapplyGuitarInputOrder");
+        Assert.Contains("ReapplyGuitarInputOrder();", applyPhase);
 
-        // …and the unlocked apply phase asserts it before the flag is cleared.
-        var applyPhase = Between(chain, "foreach (var (plugin, bypass, path, player) in toBypass)", "// Phase 2");
-        Assert.Contains("if (!bypass) plugin.AttachToInput(player);", applyPhase);
-
-        // The Bypass BUTTON does not go through the diff at all — it needs the
-        // same guard, and it has to read the seat from the service's own record
-        // because the wrapper cannot be asked.
+        // The Bypass button uses the same ordered reattachment as a chain diff.
         var button = Between(chain, "public void SetGuitarVstSlotBypass", "public void LoadInstrumentVst");
-        Assert.Contains("player = _guitarSlotPlayer.GetValueOrDefault(id);", button);
-        Assert.Contains("if (!bypass) plugin.AttachToInput(player);", button);
+        Assert.Contains("ReapplyGuitarInputOrder();", button);
+        var order = Between(chain, "private void ReapplyGuitarInputOrder", "public void ToggleGuitarVstSlotEditor");
+        Assert.Contains("_guitarSlotPlayer.GetValueOrDefault(id)", order);
+        Assert.Contains("plugin.AttachToInput(player);", order);
 
-        // …and a re-seat is only applied to a slot that is actually ATTACHED.
-        // Re-attaching a bypassed plugin would put it back in the signal path
-        // while its wrapper still says bypassed.
-        //
-        // The "is it bypassed" half reads the SERVICE's record (`wasBypass`,
-        // from `_guitarSlotBypass`), not `existing.Bypass`, for the same reason
-        // the seat above does: since the ABI v36 wave the wrapper's property
-        // answers "not in any seat's input chain", so a slot that is loaded but
-        // not attached at this instant reads bypassed and the re-seat this line
-        // guards would be skipped for a slot the app considers active.
-        // `VstChainBypassIntentTests` lints that nothing in the service reads
-        // `.Bypass` off a plugin at all.
-        Assert.Contains("if (!entry.Bypass && !wasBypass) toReseat.Add(", chain);
-        Assert.Contains("var wasBypass = _guitarSlotBypass.GetValueOrDefault(entry.Id);", chain);
+        Assert.Contains("_guitarSlotBypass.GetValueOrDefault(id)", order);
     }
 
     // ---- helpers ------------------------------------------------------------

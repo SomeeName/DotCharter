@@ -136,8 +136,25 @@ public sealed class AppearanceSettingsViewModelTests
         Assert.Equal(0, r.Theme.ResetCalls);
         Assert.Equal("#123456", r.Theme.Color(ThemeTokens.AppBackground));
         Assert.Equal("#D55E00", r.Theme.Color(ThemeTokens.String1));
-        Assert.Equal(["appearance.SelectedStringPaletteIndex"], r.Vm.UnsavedSettings);
+        Assert.Equal(["appearance.SelectedStringPaletteIndex", AppearanceSettingsViewModel.ColorsKey], r.Vm.UnsavedSettings);
         Assert.True(r.Vm.IsPreviewDirty);
+    }
+
+    /// <summary>Saved string colours under the default palette: picking another palette is ONE change, though Save
+    /// then writes no string colours; a colour edited under the new palette still counts, as does one under the default.</summary>
+    [Fact]
+    public void PickingAPalette_OverSavedStringColours_CountsOneChange()
+    {
+        var r = NewRig();
+        Row(r.Vm, ThemeTokens.String1).Hex = "#AA0000";
+        Assert.Equal([AppearanceSettingsViewModel.ColorsKey], r.Vm.UnsavedSettings);
+        r.Vm.Save();
+
+        r.Vm.SelectedStringPaletteIndex = 1;
+
+        Assert.Equal(["appearance.SelectedStringPaletteIndex"], r.Vm.UnsavedSettings);
+        Row(r.Vm, ThemeTokens.Accent).Hex = "#ABCDEF";
+        Assert.Equal(["appearance.SelectedStringPaletteIndex", AppearanceSettingsViewModel.ColorsKey], r.Vm.UnsavedSettings);
     }
 
     [Fact]
@@ -153,19 +170,42 @@ public sealed class AppearanceSettingsViewModelTests
         Assert.Equal(["appearance.UiScaleChoiceIndex"], r.Vm.UnsavedSettings);
     }
 
-    /// <summary>A colour edit previews and is reverted by Cancel, but the footer does not count it.</summary>
+    /// <summary>A colour-only edit previews AND counts, so Save is offered; putting it back counts nothing.</summary>
     [Fact]
-    public void EditingAColour_PreviewsIt_WithoutCountingIt()
+    public void EditingAColour_PreviewsIt_AndCountsIt()
     {
         var r = NewRig();
         var row = Row(r.Vm, ThemeTokens.Accent);
+        var raised = new List<string?>();
+        r.Vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
         row.Hex = "#abcdef";
 
         Assert.Equal("#ABCDEF", r.Theme.Color(ThemeTokens.Accent));
         Assert.Equal("#ABCDEF", row.Hex);
-        Assert.Empty(r.Vm.UnsavedSettings);
+        Assert.Equal([AppearanceSettingsViewModel.ColorsKey], r.Vm.UnsavedSettings);
+        Assert.Contains(nameof(AppearanceSettingsViewModel.UnsavedSettings), raised);
         Assert.True(r.Vm.IsPreviewDirty);
+
+        row.Hex = Base;
+        Assert.Empty(r.Vm.UnsavedSettings);
+    }
+
+    /// <summary>Reset Colors over saved custom colours is an edit too: Save must be able to persist it.</summary>
+    [Fact]
+    public void ResetColors_OverSavedColours_CountsAsAnEdit_AndSaveWritesNoOverrides()
+    {
+        var r = NewRig();
+        Row(r.Vm, ThemeTokens.AppBackground).Hex = "#123456";
+        r.Vm.Save();
+        Assert.Empty(r.Vm.UnsavedSettings);
+
+        r.Vm.ResetColorsCommand.Execute(null);
+
+        Assert.Equal([AppearanceSettingsViewModel.ColorsKey], r.Vm.UnsavedSettings);
+        r.Vm.Save();
+        Assert.Empty(r.Config.AppConfig.ThemeColorOverrides);
+        Assert.Empty(r.Vm.UnsavedSettings);
     }
 
     [Fact]

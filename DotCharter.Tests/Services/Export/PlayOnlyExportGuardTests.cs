@@ -89,7 +89,7 @@ public sealed class PlayOnlyExportGuardTests : IDisposable
 
         service.SaveDlcBuilderXmlBundle(P("project.rscp"), PlayOnlyProject());
 
-        Assert.False(Directory.Exists(P(DlcBuilderBundle.DirectoryName)));
+        Assert.False(Directory.Exists(P(Path.Combine("export", DlcBuilderBundle.DirectoryName))));
     }
 
     [Fact]
@@ -230,7 +230,7 @@ public sealed class PlayOnlyExportGuardTests : IDisposable
         Assert.True(new FileInfo(P("song.eof")).Length > 0);
         Assert.True(new FileInfo(P("song.gp")).Length > 0);
         Assert.True(new FileInfo(P("song_lead.xml")).Length > 0);
-        Assert.NotEmpty(Directory.GetFiles(P(DlcBuilderBundle.DirectoryName), "*.xml"));
+        Assert.NotEmpty(Directory.GetFiles(P(Path.Combine("export", DlcBuilderBundle.DirectoryName)), "*.xml"));
     }
 
     [Fact]

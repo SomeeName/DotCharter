@@ -143,6 +143,113 @@ public sealed class ConfigBackupServiceTests : IDisposable
         Assert.True(result.FileCount > 0);
     }
 
+    [Fact]
+    public void Export_AReadFailure_PreservesTheExistingBackupAndRemovesStaging()
+    {
+        var root = CreatePopulatedConfigRoot();
+        var path = Path.Combine(_workDir, "backup.zip");
+        var service = new ConfigBackupService(root);
+        service.Export(path);
+        var good = File.ReadAllBytes(path);
+        var before = Directory.GetFiles(_workDir, "*", SearchOption.AllDirectories).Order().ToArray();
+        using var locked = new FileStream(Path.Combine(root, "keybinds.json"), FileMode.Open,
+            FileAccess.ReadWrite, FileShare.None);
+
+        Assert.Throws<IOException>(() => service.Export(path));
+
+        Assert.True(File.Exists(path), "The failed export removed the previous backup.");
+        Assert.Equal(good, File.ReadAllBytes(path));
+        Assert.Equal(before, Directory.GetFiles(_workDir, "*", SearchOption.AllDirectories).Order().ToArray());
+    }
+
+    [Fact]
+    public void Export_ReplacesAnExistingBackupWithACompleteNewArchive()
+    {
+        var root = CreatePopulatedConfigRoot();
+        // Use an allowed data filename so both destination and staging must be excluded.
+        var path = Path.Combine(root, "profiles", "default", "backup.json");
+        var service = new ConfigBackupService(root);
+        service.Export(path);
+        File.WriteAllText(Path.Combine(root, "keybinds.json"), "new keybinds");
+
+        service.Export(path);
+
+        using var zip = ZipFile.OpenRead(path);
+        using var reader = new StreamReader(zip.GetEntry("keybinds.json")!.Open());
+        Assert.Equal("new keybinds", reader.ReadToEnd());
+        Assert.Equal(8, zip.Entries.Count);
+        Assert.DoesNotContain(zip.Entries, e => e.FullName.StartsWith("profiles/default/backup", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal([path, Path.Combine(root, "profiles", "default", "stats.json")],
+            Directory.GetFiles(Path.Combine(root, "profiles", "default")).Order().ToArray());
+    }
+
+    [Fact]
+    public void Import_AcceptsAManifestAtTheByteLimit()
+    {
+        var root = CreatePopulatedConfigRoot();
+        var path = Path.Combine(_workDir, "bounded.zip");
+        var manifest = new ConfigBackupManifest(1, 0, null, DateTimeOffset.UtcNow, 1);
+        var json = ConfigBackupRules.SerializeManifest(manifest);
+        using (var zip = ZipFile.Open(path, ZipArchiveMode.Create))
+        {
+            WriteEntry(zip, ConfigBackupRules.ManifestEntryName, json + new string(' ', 65_536 - Encoding.UTF8.GetByteCount(json)));
+            WriteEntry(zip, "keybinds.json", "imported");
+        }
+
+        var result = new ConfigBackupService(root).Import(path);
+
+        Assert.Equal(1, result.FileCount);
+        Assert.Equal("imported", File.ReadAllText(Path.Combine(root, "keybinds.json")));
+    }
+
+    [Fact]
+    public void Import_BoundsManifestBytesRatherThanDecodedCharacters()
+    {
+        var root = CreatePopulatedConfigRoot();
+        var path = Path.Combine(_workDir, "multibyte.zip");
+        var manifest = new ConfigBackupManifest(1, 0, null, DateTimeOffset.UtcNow, 1);
+        var json = ConfigBackupRules.SerializeManifest(manifest);
+        var body = json[..^1] + ",\"padding\":\"" + new string((char)0x00e9, 32_768) + "\"}";
+        using (var zip = ZipFile.Open(path, ZipArchiveMode.Create))
+        {
+            WriteEntry(zip, ConfigBackupRules.ManifestEntryName, body);
+            WriteEntry(zip, "keybinds.json", "imported");
+        }
+
+        Assert.Throws<InvalidDataException>(() => new ConfigBackupService(root).Import(path));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Import_RefusesAnOversizedManifest_EvenWhenItsDeclaredLengthIsSmall(bool underdeclare)
+    {
+        var root = CreatePopulatedConfigRoot();
+        var path = Path.Combine(_workDir, "oversized.zip");
+        var manifest = new ConfigBackupManifest(1, 0, null, DateTimeOffset.UtcNow, 1);
+        var json = ConfigBackupRules.SerializeManifest(manifest);
+        using (var zip = ZipFile.Open(path, ZipArchiveMode.Create))
+        {
+            WriteEntry(zip, ConfigBackupRules.ManifestEntryName, json + new string(' ', 65_537 - Encoding.UTF8.GetByteCount(json)));
+            WriteEntry(zip, "keybinds.json", "imported");
+        }
+
+        if (underdeclare)
+        {
+            var bytes = File.ReadAllBytes(path);
+            var header = CentralDirectoryHeaderOffset(bytes, ConfigBackupRules.ManifestEntryName);
+            BitConverter.GetBytes(1U).CopyTo(bytes, header + 24);
+            File.WriteAllBytes(path, bytes);
+        }
+
+        var before = File.ReadAllBytes(Path.Combine(root, "keybinds.json"));
+
+        Assert.Throws<InvalidDataException>(() => new ConfigBackupService(root).Import(path));
+
+        Assert.Equal(before, File.ReadAllBytes(Path.Combine(root, "keybinds.json")));
+        Assert.False(Directory.Exists(Path.Combine(root, ConfigBackupService.ImportStagingFolderName)));
+    }
+
     // ---- round-trip --------------------------------------------------------------
 
     [Fact]

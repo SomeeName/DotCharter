@@ -23,6 +23,19 @@ invariant itself)
 
 ---
 
+Guitar Pro diff comparison parses both complete track inventories before applying
+the selected tracks. Choices use file-local IDs only within the newer file;
+across files, verified unique names establish correspondence. Duplicate names
+use IDs only when the complete name layout is unchanged. Every selected pair is
+validated before an undo step starts; an unpaired track keeps the dialog open
+with its localized error, and no selected track is applied.
+
+MIDI positions follow elapsed time on `MidiTempoMap`'s grid. `MidiBeatGrid`
+places onset and end as a pair: it constructs sustain directly from the checked
+fractional difference and whole-beat delta, avoiding normalized negation. Both
+the duration and end recomposition must fit `Fraction`; otherwise the endpoints
+share one bounded denominator. Ordinary exact fractions remain exact.
+
 - **An imported chord must NAME its template — `chord.TemplateId`, set by
   `ChordHandShapeBuilder` (2026-08-22).** The importers used to set `TemplateId`
   on the HAND SHAPE only and leave every chord on the `-1` sentinel until a save
@@ -63,7 +76,8 @@ invariant itself)
   whole `GpPostProcessor` → `ChordHandShapeBuilder` → `FretAnchorGenerationService`
   chain — so every one of them is correct by construction rather than by a second
   pass. **Sentinels are not frets and must never shift**: `SlideTo` `-1`
-  (resolve-to-next) and `GpNoteParser.SlideInFromBelow/Above` (`-2`/`-3`) are
+  (resolve-to-next), `GpNoteParser.SlideInFromBelow/Above` (`-2`/`-3`) and
+  `GpDeadNoteSlide` direction markers (`-4`/`-5`) are
   negative markers, and shifting `-2` on a capo-2 track would silently re-read as
   "slide to the open string". Sums past the model's 24-fret ceiling clamp
   (`GpCapoFrets.MaxAbsoluteFret`). Capo `0` is a strict no-op; pinned by
@@ -122,6 +136,15 @@ invariant itself)
   eight bars short and every later note landed early by that much — the gpif
   twin of the same score was correct, which is what made it read as "GP5 import
   is off" rather than as a dropped repeat.
+- Add-new Guitar Pro imports on the score's beat grid save `dcGpSource` v1
+  with written bar IDs, repeat passes, alternate-ending masks, playback block
+  edges, and rehearsal marks. `GpDirections` reads GPIF names such as `DaSegno`
+  and the equivalent GP5 direction slots. D.C. and D.S. returns play the final
+  ending of each repeated block once before an active Fine or Coda exit.
+  `GpRepeatUnfoldTests` pins the GP5 and GPIF playback order.
+  Rehearsal marks guide link suggestions
+  regardless of the setting that shows them as chart sections.
+  `GpSourceMap` checks measure geometry before reusing the saved provenance.
   - **The count byte is spelled differently per version**: GP5's is the TOTAL
     number of passes, GP3/GP4's counts only the EXTRA ones, so the binary
     reader adds 1 below v5 (alphaTab's `Gp3To5Importer` makes the same split).
@@ -215,10 +238,12 @@ invariant itself)
   `GpMetadataParser.Populate`; the binary path captures them in
   `ReadSongAttributes` → `GpLegacyParseResult`. The import dialog's
   `ApplyScoreMetadata` (AddNew mode only) copies a NON-EMPTY value onto
-  `ChartData.SongName`/`Artist`/`AlbumName`/`Charter` — exactly the fields the
+  `ChartData.SongName`/`Artist`/`AlbumName` — exactly the fields the
   `.rscp` round-trips, per the field-with-no-writer rule — and an empty one
   never erases an authored value (GP writes blank strings for unfilled score
-  properties). Songsterr is deliberately untouched: its dialog already fills
+  properties). `Tabber` is the tab author, NOT the chart author: it is parsed
+  but never written to `Charter` (#848; new projects get `DefaultCharterName`, pinned by `GpImportCharterTests`).
+  Songsterr is deliberately untouched: its dialog already fills
   the project from the API's song metadata. Pinned by `GpScoreMetadataTests`
   (both importers) and `GpImportViewModelTests` (the apply rule).
 - **Track names are normalized at every READ — `GpTrackNames.Normalize`
@@ -279,6 +304,7 @@ invariant itself)
   `GpPostProcessor.MaterializeGraceSlides` is the GP3-5 BINARY path's
   materializer.
   **Triplet feel (swing) is placement-only and two-sided**: a swung beat's onset
+  is measured relative to its measure start, so odd-meter downbeats stay put. It
   shifts (off-beat eighth 1/2 → 2/3) AND its effective sustain is the gap to the
   next beat's SWUNG onset — never the notated rhythm, which left link-next
   sustains short and handshapes overlapping. Beats that ARE tuplets never swing
@@ -286,8 +312,8 @@ invariant itself)
   own group → coincident notes + a same-fret slide). `NotationDuration` keeps
   the authored rhythm — swing never leaks into the sheet. Slide guards:
   `LinkSlides` drops a slide that resolves to its own fret (keeps the legato
-  link); a slide-out (or slide-to-next) on an OPEN string is dropped at parse —
-  no fretted start, and importing it emits inspector L09
+  link); a sounding note's slide-out (or slide-to-next) on an OPEN string is
+  dropped at parse: no fretted start, and importing it emits inspector L09
   (`SlideFromOpenString`) on every save. **The LANDING has the same rule
   (0.45):** `LinkSlides` drops the slide when the next sound on that string is
   an OPEN note, exactly as it drops the same-fret case — there is no fretted
@@ -308,8 +334,9 @@ invariant itself)
   slide-in origin-fret tests assert the default 2 end-to-end while `distance=1`
   (EOF) and `3` are pinned directly on `MaterializeSlideIns`. The sentinel
   must NEVER survive — `MaterializeSlideIns` runs FIRST in `Run` and `LinkSlides`
-  scrubs any leftover negative slide target (the notation-only sidecar voices run
-  `LinkSlides` without `MaterializeSlideIns`). A slide-in inside a CHORD
+  clears leftover slide-in targets (the notation-only sidecar voices run it
+  without `MaterializeSlideIns`). `LinkSlides` also clears unresolved dead-slide
+  direction markers, preserving the note and its mute. A slide-in inside a CHORD
   materializes an origin CHORD of just the sliding strings (a single origin note
   for one string), the shape `ApplyChordGraces` gives a GP5 "sl." chord grace.
   `MaterializeSlideIns` returns how many it made; `GpImportResult.
@@ -323,23 +350,71 @@ invariant itself)
   chord links into a chord). EOF does not match it: its slide is per chord,
   exported as the same fret delta on every fretted string, so it would slide
   the 8 to 9 too. Pinned by `GpPartialChordSlideTests`.
-  **A PICK SCRAPE is charted the way the owner charts it (#583, #599,
-  `GpPickScrape`)**: **tap + tremolo + fret-hand mute (FULL) + an unpitched slide
-  (`slideUnpitchTo`) in the scrape's direction + ignore** (ignore keeps it out of
-  scoring). **A scrape on several strings is ONE chord with
-  `Chord.SplitIntoNotes`** (Inspector ▸ Playback ▸ "Split notes", EOF's split
-  status) and `Chord.Ignore`, every technique on every chord note, so it selects
-  and edits as one scrape; a one-string scrape is a single note. Every export
-  writes the split chord as one `<note>` per string with no `<chord>` and no hand
-  shape (`LinkLandingBreakup`, RS XML and SNG alike) — exactly the owner's
-  reference (*Shinbatsu* m197, RS XML `<note … tremolo="1" mute="1" tap="1"
-  slideUnpitchTo="18" ignore="1" />` twice per scrape, `.rscp` `ignore="T"
-  mute="FULL" hopo="TAP" tremolo="T" … unpitchedSlide="T"`). Live Play's
-  `LiveNoteMatcher` judges a chord by the CHORD's own `Ignore`, which is why the
-  chord carries it. The chord plays a nameless template of its placed frets with
-  NO fingers (a fret-hand-muted scrape is no grip), so the inspector raises
-  neither L07 nor D11 on it (`validation-and-fixing.md`) — by the fully-muted
-  rule, not by `ChordTemplate.Fingerless`, which the GP import does not set.
+  **Untied bend continuations (`GpBendContinuation`, #806, gpif AND GP3-5,
+  single notes AND chords)**: GP writes "bend, hold, release" as a bend tied
+  to its held beat and an UNTIED release whose bend starts at the held value;
+  a ghost note (gpif `AntiAccent`, binary note header bit 0x04) on the same
+  fret right after a bent sound, at the pitch still held, is its tail. Both
+  link the sound before them (same voice, string and fret, no gap, no
+  slide-out), so `MergeTiedNotes` treats them like written ties. A prebend
+  from another pitch, or a ghost note after an unbent note, stays a pick. One
+  tracker per voice slot (`GpArrangementParser`'s slot state;
+  `GpLegacyParseState.BendContinuationFor(track, voice)`), the same decision
+  for both importers. A CHORD links only as a whole (`MergeTiedNotes` merges a
+  chord pair only when every string links, and EOF stores one link-next per
+  chord, `EofLoss.ChordMixedLinkNext`): over the same strings and frets as
+  the chord before, every string must continue by this rule or carry a
+  written tie, else nothing is linked. A single note after a chord, or a
+  chord after single notes, is never linked by it. Pinned by
+  `GpTiedBendLinkImportTests`, `GpBendContinuationChordTests`,
+  `GpLegacyBendContinuationTests`.
+  **Dead-note slide-outs (`GpDeadNoteSlide`, #712)** are fret-hand-muted,
+  unpitched slides, with no tap, tremolo, ignore or link-next. GPIF flags 4
+  (down) / 8 (up) and GP5 bits 0x04 / 0x08 use the same rule; GP4's discrete
+  values 3 / 4 map to those directions. GP3 has only slide-to-next, with no
+  directional slide-out value. The rule applies to every track type and to
+  every string of a fully dead chord, including notation-only voices.
+  An authored fret stays the start. A dead note written on fret 0 starts at
+  capo + 12 toward the nut or capo + 5 toward the bridge, clamped to the
+  track's last fret while leaving room to travel. Landing is the next
+  sounding fretted note on that track and voice, on any string, when its
+  fret lies in the direction of travel and at least two frets away. Open
+  strings, dead notes and pick scrapes are skipped; simultaneous chord strings
+  are considered in string-index order. A next fretted sound in the wrong
+  direction or less than two frets away uses the seven-fret fallback, as does
+  an absent next sound. Landings floor at capo + 1 and cap at the track's last
+  fret; slides with no room retain the parser's ordinary behaviour. Both
+  readers preserve direction as an import-only sentinel (-4 down / -5 up),
+  resolved after tie merging and before templates and FHP generation so the
+  hand position includes the start fret. A marker anywhere in a dead-note tie
+  chain stays on the one held sound, including chains across bar lines. Legacy
+  tie continuations inherit full mute only for a dead-note chain carrying a
+  slide-out marker; other ties retain each note's parsed mute. Grace ornaments
+  use ordinary slide parsing without these direction markers; the legacy grace
+  block stores its own fret hint. Placement gives a dead slide full mute even
+  with the binary palm-mute bit. A dead note without a slide-out keeps the
+  legacy palm bit's normal effect.
+  After meter conversion, only sounds placed by `GpDeadNoteSlide` receive a
+  sustain gap, in levels and notation-only voices. The gap is 1/32 beat,
+  independent of tempo metadata. If another sound in that level or voice starts
+  within 1/32 beat of the slide's original end (before, after or exactly on it),
+  the slide ends 1/32 beat before that onset. An earlier onset in the middle of
+  the slide cuts nothing. If the gap leaves no positive sustain, the authored
+  sustain stays intact. Other slides retain their authored sustain. The normal
+  inspector anchor and finger-change rules apply. Notation duration keeps the
+  authored rhythm. Guitar Pro stores direction without a landing fret: export
+  and re-import derive the landing by this same rule. Coverage:
+  `GpDeadNoteSlideImportTests`, `GpDeadNoteSlideEdgeTests` and
+  `GpDeadNoteSlideScopeTests`.
+  **A PICK SCRAPE (`GpPickScrape`)** is **tap + tremolo + an unpitched slide
+  (`slideUnpitchTo`) in its direction + ignore**, with **no string mute**.
+  A multi-string scrape is one `Chord.SplitIntoNotes` chord with `Chord.Ignore`
+  and those techniques on every string; a one-string scrape is a note. Export
+  projects split chords as individual notes without a chord box or hand shape.
+  The chord uses a template without fingers; split chords do not use a grip for
+  fingering validation. A mute on a charted scrape does not affect recognition.
+  Guitar Pro's dead-note and palm-mute bits are cleared by `Apply` and by
+  `IsolateScrapes` after every note effect has been read.
   **Start fret = 24 or 12 (#586)**, whichever is nearer
   the lane the convention prefers on the FHP in force at the scrape: toward the
   nut (GP "down") its 4th lane, `anchor + 3`; toward the bridge (GP "up") its
@@ -368,7 +443,7 @@ invariant itself)
   `GpPostProcessor.Run`) gives every scrape a sound of its own before any template
   or hand shape — the scrape strings of a strum become one split chord (or a note
   for one string), the strum's other strings stay a chord (or a note when one is
-  left), and every scrape string is set fret-hand muted whatever a later tab bit
+  left), and every scrape string is unmuted whatever a later tab bit
   said; the hand-shape planner skips split chords; `GpPickScrape.RunImportFhpPass`
   (in place of `ImportFhpPass.Run` in BOTH importers) lifts the scrape notes AND
   scrape chords out of the level while the anchors are generated — a tab's scrape
@@ -381,15 +456,19 @@ invariant itself)
   slide BITMASK above the six ordinary bits: **gpif `Slide` flags 64 = down,
   128 = up, and the GP5 binary slide byte 0x40 / 0x80**; GP3/GP4's discrete
   slide value has none, and the Songsterr JSON carries no scrape we have seen.
+  The editor's `PickSlideCommand` uses the same `Apply`, `Place`, `LastFret` and
+  fingerless-template resolver. It reads the edited level's unsorted anchors with
+  `FretAnchorLookup.InEffectAt`, falling back to the first anchor, then the capo floor,
+  through the import's `PlaceOnAnchor` helper. Conversion, direction reversal and pen placement each commit
+  one undo node, including template reassignment, hand-shape cuts and selection.
   **The Guitar Pro EXPORT writes it back (#637)**: `GpExporter.BuildNote` gives
-  every sound `GpPickScrape.IsChartedScrape` accepts (`IsScrape`, the predicate the
-  import keys on, plus the FULL mute) alphaTab's `PickSlideDown` (toward the nut,
-  `IsTowardNut`) or `PickSlideUp` — gpif flags 64 / 128 — and writes no dead note,
+  every sound `GpPickScrape.IsScrape` accepts (independent of mute) alphaTab's `PickSlideDown` (toward the nut,
+  `IsTowardNut`) or `PickSlideUp` — gpif flags 64 / 128 — and writes GP's dead-note notation,
   no slide-out and no beat tremolo for it; a split chord leaves as the strum it
   came from. Re-imported it is the same scrape (`GpExporterPickScrapeTests`).
   The scrape outranks every other slide bit (`ApplySlideFlags` and
   `GpLegacyNoteEffectsHelpers.ApplySlide` return early), and the GP5 reader's
-  later palm-mute bit must not turn its fret-hand mute into a palm mute. The GP5
+  later palm-mute bit cannot persist past the final isolation pass. The GP5
   chord builder copies `Ignore` onto its `ChordNote`s — `IsScrape` keys on it (GP
   import sets `Ignore` nowhere else). **What other importers do with a split
   chord** (#609): the EOF import maps EOF's split flag
@@ -455,6 +534,14 @@ invariant itself)
   other side, and `GpLetRingRefretSplitTests` pins both directions plus the
   E05 invariant itself). The two-beat run floor is unchanged, so a split can
   leave a fragment too short to earn a shape.
+  **A run takes the plain note that directly follows it when the grip plays
+  it** (`GpHandShapeBuilder.IsTrailingGripTone`): an arpeggio tabbed s1f1 LR,
+  s2f3 LR, s4f3 LR, s3f3 is ONE bar over four notes. The note must be a single
+  note, start within the last let-ring beat's authored ring-out, sit on a string
+  the run does not hold and fit the grip (`Editing/HandShapes/HandShapeGripFit`,
+  the same fit the hand-shape resize uses to grow a shared grip into a new
+  template); its own sustain is not trimmed. A beat of the OTHER run set (roll
+  vs authored let ring) is never a tail. Pinned by `GpLetRingTrailingGripToneTests`.
   **Two more rules, both from defects that FIRST cut introduced (2026-08-22,
   found by an independent re-import check, not by the gate):**
   (a) **A run also breaks where a NEW string would stretch the grip past a hand**
@@ -557,19 +644,18 @@ invariant itself)
   consistently within one file. The helper must run BEFORE the strum joins
   `chordsOut` — it scans the emitted sounds for the last end on each string and
   the target is not one.
-  (4) **Triplet feel is CAPTURED but not APPLIED here.** GP5 stores it per
+  (4) **Triplet feel controls binary note placement too.** GP5 stores it per
   measure header (`1` eighth, `2` sixteenth, else none); GP3/4 store ONE
   song-wide shuffle boolean in the pre-song block (Charter
   `readGlobalTripletFeel`) that stamps every bar. Both now fill
   `GpBarInfo.TripletFeel` with the verbatim GPIF spellings
   (`Triplet8th`/`Triplet16th`) — that string is compared BY VALUE in
   `GpArrangementParser.ApplyFeelToPosition`, so the two vocabularies must never
-  diverge. **The binary importer still places every note on its notated onset:**
-  swing placement lives in `GpArrangementParser.ParseVoiceBeats`, which this path
-  does not go through, and it is two-sided (onset shift AND sustain to the next
-  SWUNG onset) so it cannot be bolted onto a streaming per-beat reader without
-  first buffering a bar's beats. A swung .gp5 still imports straight — a known
-  gap, not a mapping bug.
+  diverge. The binary reader keeps one `GpLegacyTimedBeat` pending until the
+  next beat is read; `GpLegacyBeatTiming` applies the shared onset rule and sizes sustains to
+  the next swung onset before emitting notes, bends, chord names and finger hints.
+  Explicit tuplets stay on their authored onsets; `NotationDuration` stays straight.
+  Repeat clones also retain `_onBeatGraces` membership until grace materialization.
   (5) **A grace ornament's BEFORE-beat/ON-beat flavour is real and is now READ.**
   GP5 appends a grace FLAG byte after the grace duration; Charter
   `GP5FileReader.readGrace()` reads it only for `version >= 500` and spells the
@@ -665,9 +751,12 @@ invariant itself)
   BuildAndTrim`. Rules that must not be relaxed: (a) `ChordTemplateFingerSetter`
   stays a PURE function of the fret shape (the Core invariant) — the builder
   calls it and then overrides only the strings the file fingered; (b) authored
-  fingers are applied at template CREATION only, because a template found by
-  shape is shared and must never be mutated, so the FIRST fingering a shape is
-  seen with wins, exactly like its name; (c) the finger ids line up with ours
+  fingers are applied at template CREATION only, because an existing template
+  is shared and must never be mutated. Reuse requires the file's authored fingers
+  and name to agree; a differing variant gets a separate template and bar.
+  Every chord of an accepted run, including merged followers whose fingers equal
+  the suggestion, marks its template authored before the import FHP pass;
+  (c) the finger ids line up with ours
   already (GP `0` = thumb = our `T`, `1..4` = index..little, `-1`/`255` = none),
   and gpif spells them with the classical letters `P/I/M/A/C` — both mappings
   live in `GpAuthoredFingering`. Songsterr passes null (its payload carries no
@@ -687,7 +776,7 @@ invariant itself)
   (position → name), threaded `GpPostProcessor.Run(..., authoredChordNames)` →
   `ChordHandShapeBuilder.BuildAndTrim` → its `ImportGripSource`. Same rules as
   the fingering: applied at template CREATION only (a template found by shape is
-  shared and never mutated, so the FIRST name a shape is seen with wins), and a
+  shared and never mutated, so differing authored names get separate templates), and a
   BLANK diagram label is not a name — GP writes unlabelled diagrams and storing
   one would replace a useful guess with nothing. The name is normalised
   (`GpAuthoredChordNames.Normalize`: control characters stripped, capped at
@@ -754,7 +843,7 @@ invariant itself)
   `IHandShapeGripSource`; `ChordHandShapeBuilder` keeps only what an import does
   on top — the file's fingering and names on a minted template
   (`ImportGripSource`), the `TemplateId` repoint and the strike trim. The
-  editor's Tools ▸ Hand shapes ▸ Generate hand shapes (arrangement) and the D11
+  editor's Tools ▸ Generate ▸ Hand shapes (arrangement) and the D11
   auto-fix run the same planner (`ArrangementHandShapeGenerator`).** The lift is
   pinned output-identical: `ChordHandShapeBuilderEquivalenceTests` runs the
   pre-#478 body verbatim against the planner on the byte-pin GP files and a
@@ -777,9 +866,10 @@ invariant itself)
   charting-ready**: suggested fingering (`ChordTemplateFingerSetter`) + a
   suggested name (`ChordNameSuggester`, tuning-aware) — which is why all three
   tab importers now sync `Arrangement.Tuning` (names) from the file's tuning
-  offsets, not just `TuningPitches`. Find-or-create matches by FRETS alone
-  (non-arpeggio): a hand-authored template with the same shape is reused
-  verbatim, never mutated, never duplicated. Chords whose notes wear a sustain-visible
+  offsets, not just `TuningPitches`. Find-or-create matches non-arpeggio frets
+  and any authored name/fingering supplied for that chord. A compatible existing
+  template is reused verbatim; differing authored variants are kept separate,
+  including adjacent repeated strums. Chords whose notes wear a sustain-visible
   technique — bend / tremolo / vibrato / slide (pitched or unpitched) — keep
   their sustain but still get a handshape; HO/PO/tap do NOT exempt. The exemption
   is the single named `ChordHandShapePlanner.HasSustainVisibleTechnique`
@@ -897,8 +987,9 @@ invariant itself)
   rather than letting this flatten them silently
   (`GpSlapPopAndChordSustainTests` pins it). (2) beat-text techniques: a "T"/"S"/"P" `FreeText` (gpif) / beat-text
   (legacy binary) → tap/slap/pop on the PLAYABLE voice's note (`GpMarkerImport`);
-  default ON. (3) markers→sections (gpif only, default OFF): a MasterBar `<Section>`
-  and non-technique beat texts → `arr.EventPoints`/`arr.Phrases` — always a phrase,
+  default ON. (3) markers→sections (default OFF): a MasterBar `<Section>`
+  or GP3-5 measure-header marker (replayed at each unfolded bar by `GpLegacyMarkers`),
+  plus non-technique beat texts on the gpif path → `arr.EventPoints`/`arr.Phrases` — always a phrase,
   plus a section when the trimmed name is in the RS whitelist (`GpMarkerImport.
   IsRsSectionName`, mirrors `RsManifestGenerator.GetSectionUiName`). (4) TS/tempo:
   the beat map is built by the shared `GpBeatMapBuilder.Build` (GP + Songsterr
@@ -972,7 +1063,7 @@ constants), strings are compared by sounding pitch when the string counts differ
 
 ## `Import/` — YouTube, audio + metadata
 
-- `Import/` — audio (WAV) import. `Import/Youtube/` — File ▸ Import ▸ Audio from
+- `Import/` — audio (WAV) import. `Import/Youtube/` — File ▸ Audio ▸ Audio from
   YouTube (#820): `YoutubeUrl` accepts only a youtube.com / youtu.be video link,
   `YoutubeAudioDownload` downloads into the saved project's folder (or
   `%LOCALAPPDATA%\DotCharter\YouTube` for an unsaved one) via yt-dlp + ffmpeg
@@ -1045,8 +1136,8 @@ constants), strings are compared by sounding pitch when the string counts differ
   float; 8-bit, compressed and RF64 are refused); anything else goes through
   ffmpeg with the bake's filter (song → Vorbis, stem → float WAVE). All or
   nothing: a failed stem deletes every file of the run. The padded stems are
-  saved to the stem cache under the padded song's key, so they are never
-  re-separated. `Editing/Maintenance/ProjectSilencePadder.AddSilenceAsync` (owned by `ChartMaintenanceService`) then records ONE
+  saved through `StemCacheSource.ResolveForStore` under the padded song's key,
+  including verified sampled-signature collisions, so they are never re-separated. `Editing/Maintenance/ProjectSilencePadder.AddSilenceAsync` (owned by `ChartMaintenanceService`) then records ONE
   `AudioSpliceAction` (a project snapshot that also reloads the audio both
   ways); at the start `Editing/Maintenance/SilenceSpliceTimeline` moves every
   absolute-ms field (`SilenceSpliceTimelineTests` fails on a new one) and adds

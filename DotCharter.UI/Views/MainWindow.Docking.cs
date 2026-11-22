@@ -1,10 +1,11 @@
 // MainWindow: the three dock hosts (pane registry, layout restore/persist/
-// reset) and the 3D-preview / chart-timeline pop-out windows.
+// reset) and the click forwarders of the pop-out windows (Shell/MainWindowPopOuts).
 
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using DotCharter.UI.Docking;
 using DotCharter.UI.ViewModels.Shell;
+using DotCharter.UI.Views.Shell;
 
 namespace DotCharter.UI.Views;
 
@@ -21,175 +22,35 @@ public partial class MainWindow
     ///     own close or float-window close removes it.
     /// </summary>
     private bool _aiChatInLayout = true;
-    private Window? _preview3DWindow;
 
+    /// <summary>The 3D-preview and timeline pop-out windows (<see cref="MainWindowPopOuts" />), built on
+    /// first use: it holds no state until something pops out.</summary>
+    private MainWindowPopOuts? _popOutWindows;
 
-    /// <summary>
-    /// Set once <see cref="OnClosing" /> has passed the unsaved-changes gate.
-    ///
-    /// <para>Both pop-out windows are OWNED (<c>Show(this)</c>), so closing the
-    /// main window closes them — which runs their <c>Closed</c> handler, which
-    /// re-parents the single <c>Preview3DView</c> / <c>TimelineGrid</c> instance
-    /// back into a window that is going away. For the 3D panel that is a
-    /// composition surface rebuilt (and its render loop restarted from
-    /// <c>OnAttachedToVisualTree</c>) against a top-level mid-teardown — GPU
-    /// work for no benefit, since nothing will ever paint it. The
-    /// handlers consult this flag and do nothing on the shutdown path.</para>
-    /// </summary>
-    private bool _shuttingDown;
+    private MainWindowPopOuts PopOuts => _popOutWindows ??= new MainWindowPopOuts(this);
 
-    /// <summary>Closes any pop-out window, without restoring its content — the
-    /// window is closing because the app is. Called from
-    /// <see cref="OnClosing" /> after the data-loss gate.</summary>
-    private void MarkShuttingDownAndClosePopOuts()
-    {
-        _shuttingDown = true;
-        _preview3DWindow?.Close();
-        _timelineWindow?.Close();
-    }
+    /// <summary>The end of a run put back the Inspector width it started with: fit it to the window now.</summary>
+    internal void RefitSideColumns() => _layout.RefitSideColumns();
 
-    /// <summary>
-    ///     Brings both pop-outs home (their <c>Closed</c> handlers put the single
-    ///     instance back in its slot). The pop-outs are NOT Dock.Avalonia panes,
-    ///     so <c>Rebuild()</c> cannot see them and every "bring it home" path has
-    ///     to name them: View → Reset Layout, and entering the gameplay
-    ///     presentation.
-    /// </summary>
-    internal void ClosePopOutWindows()
-    {
-        _preview3DWindow?.Close();
-        _timelineWindow?.Close();
-    }
+    /// <summary>A run must cancel a splitter drag before snapshotting or collapsing its column.</summary>
+    internal void CancelSideColumnDrags() => _layout.CancelSideColumnDrags();
 
-    /// <summary>
-    /// Moves the single <c>Preview3DView</c> instance into its own window.
-    /// The move is a detach + attach of <c>Preview3DComposedCanvas</c>: the
-    /// detach stops the loop and retires the old window's surface and pump, the
-    /// attach builds new ones against the new window's compositor and restarts
-    /// the loop (guarded by its attach generation).
-    /// </summary>
+    /// <summary>Brings both pop-outs home: View → Reset Layout and entering the gameplay presentation.</summary>
+    internal void ClosePopOutWindows() => PopOuts.ClosePopOutWindows();
+
+    /// <summary>The timeline's pop-out window, or null while it is docked, plus the pop-out verb
+    /// itself (the env-gated UI autopilots in <c>Views/Shell/MainWindowDiagnostics</c> float the
+    /// timeline mid-run and close it again).</summary>
+    internal Window? TimelinePopOutWindow => PopOuts.TimelineWindow;
+
+    internal void PopOutTimelineWindow() => PopOuts.PopOutTimeline(LocalizationService.Instance["Menu_FloatTimeline"]);
+
     private void Preview3DPopOut_Click(object? sender, RoutedEventArgs e)
-    {
-        if (_preview3DWindow != null)
-        {
-            _preview3DWindow.Activate();
-            return;
-        }
+        => PopOuts.PopOutPreview3D(LocalizationService.Instance["Menu_Panel3DPreview"]);
 
-        var view = Preview3DPane;
-        var width = Math.Max(640, view.Bounds.Width);
-        var height = Math.Max(360, view.Bounds.Height);
-        Preview3DSlot.Content = null;
+    private void Preview3DRestore_Click(object? sender, RoutedEventArgs e) => PopOuts.ClosePreview3DWindow();
 
-        var window = new Window
-        {
-            Title = LocalizationService.Instance["Menu_Panel3DPreview"],
-            Width = width,
-            Height = height,
-            Background = Background,
-            Icon = Icon,
-            DataContext = DataContext,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = view
-        };
-        WireGlobalKeyRoutes(window);
-        window.Closed += (_, _) =>
-        {
-            _preview3DWindow = null;
-            window.Content = null;
-            // Shutdown path: never re-attach the native Vulkan child HWND to a
-            // main window that is itself tearing down (see _shuttingDown).
-            if (_shuttingDown) return;
-            Preview3DSlot.Content ??= view;
-            UpdatePreview3DPlaceholder();
-        };
-
-        _preview3DWindow = window;
-        UpdatePreview3DPlaceholder();
-        window.Show(this);
-    }
-
-    private void Preview3DRestore_Click(object? sender, RoutedEventArgs e)
-        => _preview3DWindow?.Close();
-
-    private void UpdatePreview3DPlaceholder()
-    {
-        Preview3DPlaceholder.IsVisible = _preview3DWindow != null;
-        Preview3DSlot.IsVisible = _preview3DWindow == null;
-    }
-
-    private Window? _timelineWindow;
-
-    /// <summary>The timeline's pop-out window, or null while it is docked, plus the
-    /// pop-out verb itself. This is the ONE tie
-    /// <c>Views/Shell/MainWindowDiagnostics</c> had to this partial when it was
-    /// extracted — the env-gated UI autopilots float the timeline mid-run and close
-    /// it again — exposed as members instead of left a shared field.</summary>
-    internal Window? TimelinePopOutWindow => _timelineWindow;
-
-    internal void PopOutTimelineWindow() => PopOutTimeline();
-
-
-    /// <summary>
-    /// Moves the chart timeline composite (track header, renderer, stacked
-    /// tracks) into its own window. The renderer's backend is torn down and
-    /// re-created for the new top-level (composed-Vulkan rebuilds surface +
-    /// pump on re-attach; the GL fallback handles context loss in its inner
-    /// control); all pointer/key handlers are attached to the subtree
-    /// itself, so editing keeps working in the float window.
-    /// </summary>
-    private void PopOutTimeline()
-    {
-        if (_timelineWindow != null)
-        {
-            _timelineWindow.Activate();
-            return;
-        }
-
-        var timeline = TimelineGrid;
-        var width = Math.Max(800, timeline.Bounds.Width);
-        var height = Math.Max(320, timeline.Bounds.Height);
-        TimelineSlot.Content = null;
-
-        var window = new Window
-        {
-            Title = LocalizationService.Instance["Menu_FloatTimeline"],
-            Width = width,
-            Height = height,
-            Background = Background,
-            Icon = Icon,
-            DataContext = DataContext,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = timeline
-        };
-        WireGlobalKeyRoutes(window);
-        window.Closed += (_, _) =>
-        {
-            _timelineWindow = null;
-            window.Content = null;
-            // Shutdown path: re-attaching rebuilds the composed-Vulkan surface
-            // + pump against a dying top-level, and Focus() on a closing window
-            // is what leaves the app keyboard-deaf on its way out.
-            if (_shuttingDown) return;
-            TimelineSlot.Content ??= timeline;
-            UpdateTimelinePlaceholder();
-            timeline.Focus();
-        };
-
-        _timelineWindow = window;
-        UpdateTimelinePlaceholder();
-        window.Show(this);
-        timeline.Focus();
-    }
-
-    private void TimelineRestore_Click(object? sender, RoutedEventArgs e)
-        => _timelineWindow?.Close();
-
-    private void UpdateTimelinePlaceholder()
-    {
-        TimelinePlaceholder.IsVisible = _timelineWindow != null;
-        TimelineSlot.IsVisible = _timelineWindow == null;
-    }
+    private void TimelineRestore_Click(object? sender, RoutedEventArgs e) => PopOuts.CloseTimelineWindow();
 
     // Contexts are VIEW MODELS, not view instances. Each dock host (main
     // DockControl, floated HostWindow) materializes its own view through the
@@ -217,7 +78,7 @@ public partial class MainWindow
             // IsPhraseCatalogVisible and InspectorViewModel.RiffLibraryTabIndex.
         };
 
-        _dockController = new DockLayoutController(BottomDock, bottomPanes);
+        _dockController = new DockLayoutController(BottomDock, bottomPanes) { FloatingWindowCreated = PrepareDockWindow };
         _dockController.Rebuild();
 
         var topPanes = new List<DockPaneDefinition>
@@ -233,7 +94,7 @@ public partial class MainWindow
             }
         };
 
-        _topDockController = new DockLayoutController(TopDock, topPanes);
+        _topDockController = new DockLayoutController(TopDock, topPanes) { FloatingWindowCreated = PrepareDockWindow };
         _topDockController.Rebuild();
 
         InitializeSideDock(vm);
@@ -268,12 +129,19 @@ public partial class MainWindow
             }
         };
 
-        _sideDockController = new DockLayoutController(SideDock, sidePanes);
+        _sideDockController = new DockLayoutController(SideDock, sidePanes) { FloatingWindowCreated = PrepareDockWindow };
         _sideDockController.Rebuild();
         DockAiChatHomeButton.Click += (_, _) => _sideDockController?.DockPaneHome(AiChatPaneId);
     }
 
     internal const string AiChatPaneId = "AiChat";
+
+    /// <summary>A Dock float window is a top-level of the shell like the pop-outs: its key routes, scale and direction.</summary>
+    private void PrepareDockWindow(Window window)
+    {
+        WireGlobalKeyRoutes(window);
+        FloatingWindowShell.HostTemplated(window, WindowRootGrid);
+    }
 
     /// <summary>The side dock (tests read its layout).</summary>
     internal DockLayoutController? SideDockController => _sideDockController;
@@ -383,6 +251,9 @@ public partial class MainWindow
             mainGrid.RowDefinitions[2].Height = Shell.EditorSplitDefaults.DockRow;
         }
 
+        // The rows a posted dock-visibility change restores are the defaults now too.
+        _layout.ResetDockRowMemory();
+
         if (this.FindControl<Grid>("InspectorSplitGrid") is { } inspGrid && inspGrid.ColumnDefinitions.Count >= 3)
         {
             inspGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
@@ -412,5 +283,6 @@ public partial class MainWindow
         // manual dock checklist tests for on the dock side. Close() runs the
         // Closed handler, which puts the single instance back in its slot.
         ClosePopOutWindows();
+        _shellLayout.ResetGameplayLayoutMemory(vm, _gameplayDock);
     }
 }

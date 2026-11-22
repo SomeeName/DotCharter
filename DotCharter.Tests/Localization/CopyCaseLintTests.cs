@@ -16,7 +16,7 @@ public sealed class CopyCaseLintTests
     /// Shrink-only in spirit: a new entry is a word nobody should shout.</summary>
     private static readonly HashSet<string> Acronyms = new(StringComparer.Ordinal)
     {
-        "BPM", "HOPO", "GUI", "CDLC", "FHP", "GPU", "CPU"
+        "BPM", "HOPO", "GUI", "CDLC", "FHP", "GPU", "CPU", "RS7X"
     };
 
     [Fact]

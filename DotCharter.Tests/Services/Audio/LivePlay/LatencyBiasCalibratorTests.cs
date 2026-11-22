@@ -35,6 +35,19 @@ public class LatencyBiasCalibratorTests
     }
 
     [Fact]
+    public void The_residual_is_converted_from_chart_time_by_the_playback_speed()
+    {
+        // +40 ms of chart time at half speed is 80 ms of wall clock; Alpha 0.4 of it is 32.
+        var half = LatencyBiasCalibrator.Evaluate(
+            currentOffsetMs: 50, baselineOffsetMs: 50, Run(medianMs: 40), speed: 0.5);
+        var full = LatencyBiasCalibrator.Evaluate(
+            currentOffsetMs: 50, baselineOffsetMs: 50, Run(medianMs: 40), speed: 1.0);
+
+        Assert.Equal(82.0, half.NewOffsetMs, 1);
+        Assert.Equal(66.0, full.NewOffsetMs, 1);
+    }
+
+    [Fact]
     public void A_consistently_late_run_raises_the_offset()
     {
         // Late (+) means we are under-compensating for the device's latency.

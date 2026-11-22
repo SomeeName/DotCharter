@@ -23,9 +23,9 @@ are #559's.
 - `ChartProjectRestorer` copies it (a clone is the same project). It is not chart
   content: no edit or undo touches it.
 
-## Storage: a folder beside the project, keyed by the id
+## Storage: a folder under hidden project metadata, keyed by the id
 
-`<project folder>/ai-chats/<project id>/<conversation id>.json`, one file per
+`<project folder>/.dotcharter/ai-chats/<project id>/<conversation id>.json`, one file per
 conversation (`AiChatStore`). Chosen over storing chats INSIDE the `.rscp`:
 
 - chat text is not chart content — inside the project it would ride every
@@ -73,7 +73,7 @@ conversation (`AiChatStore`). Chosen over storing chats INSIDE the `.rscp`:
   `Perf/AiChatDockUiPerfSmokeTests` in the real shell.
 
 - **Save As to another folder carries the chats** (#633): `ProjectSaver` copies
-  `ai-chats/<id>/*.json` into the new folder after the write, next to the
+  `.dotcharter/ai-chats/<id>/*.json` into the new folder after the write, next to the
   checkpoint carry (`AiChatSaveAsCarry`). COPIED, so the old project keeps its
   own; a file already at the target is never replaced; each copy lands under a
   temporary name and is renamed in without overwriting. Best effort: a failure is
@@ -97,3 +97,7 @@ save, folder copy, isolation, tamper, bounds, damaged files).
   share their chats.
 - A legacy file re-saved by another tool before DotCharter saves it gets a new
   derived id; chats made before that are no longer found.
+
+Chat deletion retains its validated file when recycling is unsupported or refused.
+`AiChatStore.Delete` returns `WriteFailed`; `AiChatHistory` logs that refusal through
+the existing error path, without reporting successful deletion.

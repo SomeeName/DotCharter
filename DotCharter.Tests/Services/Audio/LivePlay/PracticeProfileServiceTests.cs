@@ -1,4 +1,5 @@
 using DotCharter.Services.Audio.LivePlay;
+using DotCharter.Services.Gameplay.Profiles;
 using DotCharter.Tone.Infrastructure.Storage;
 
 namespace DotCharter.Tests.Services.Audio.LivePlay;
@@ -15,6 +16,29 @@ public sealed class PracticeProfileServiceTests : IDisposable
         int hits = 8, int misses = 2, int total = 20, int bestStreak = 5,
         double speedPercent = 100, double duration = 60)
         => new(score, accuracy, hits, misses, total, bestStreak, duration, speedPercent, (hits + misses) / (double)total);
+
+    [Fact]
+    public void Record_SlowedRun_DoesNotRaiseBestsButIsStillRecorded()
+    {
+        var service = NewService();
+        var slow = service.Record("song", "lead", Result(score: 9000, accuracy: 1.0, hits: 20, misses: 0, total: 20,
+            bestStreak: 20, speedPercent: 25));
+
+        Assert.Equal(0, slow.BestScore);
+        Assert.Equal(0.0, slow.BestAccuracy);
+        Assert.Equal(0, slow.BestStreak);
+        Assert.False(slow.FullComboAchieved);
+        Assert.Single(slow.Sessions);
+        Assert.True(slow.MasteryPercent > 0);
+
+        var full = service.Record("song", "lead", Result(score: 9000, accuracy: 1.0, hits: 20, misses: 0, total: 20,
+            bestStreak: 20, speedPercent: 100));
+
+        Assert.Equal(9000, full.BestScore);
+        Assert.Equal(1.0, full.BestAccuracy);
+        Assert.Equal(20, full.BestStreak);
+        Assert.True(full.FullComboAchieved);
+    }
 
     [Fact]
     public void UnplayedSong_ReturnsEmptyProfile()
@@ -145,6 +169,104 @@ public sealed class PracticeProfileServiceTests : IDisposable
 
         Assert.Equal(500, service.GetProfile("song", "lead").BestScore);
         Assert.Equal(900, service.GetProfile("song", "bass").BestScore);
+    }
+
+    [Fact]
+    public void DelayedAttachments_TargetTheCapturedProfileAndSession_Once()
+    {
+        Directory.CreateDirectory(_dir);
+        var players = new PlayerProfileService(FakeLocalization.English(), null, Path.Combine(_dir, "players.json"), "First");
+        var service = new PracticeProfileService(players, legacyFilePath: Path.Combine(_dir, "legacy.json"));
+        var firstProfile = players.ActiveProfile.Id;
+        var run = service.CaptureRun();
+        service.Record("song", "lead", Result(score: 1), run: run);
+        service.Record("song", "lead", Result(score: 2));
+        var second = players.Create("Second");
+        players.SwitchTo(second.Id);
+        service.Record("song", "lead", Result(score: 3));
+
+        Assert.True(service.AttachTakeFile("song", "lead", "first.wav", run));
+        Assert.True(service.AttachReplayFile("song", "lead", "first.json", run));
+        Assert.False(service.AttachTakeFile("song", "lead", "overwrite.wav", run));
+        Assert.False(service.AttachReplayFile("song", "lead", "overwrite.json", run));
+        var active = Assert.Single(service.GetProfile("song", "lead").Sessions);
+        Assert.Null(active.TakeFile);
+        Assert.Null(active.ReplayFile);
+
+        players.SwitchTo(firstProfile);
+        service.InvalidateCache();
+        var saved = service.GetProfile("song", "lead").Sessions;
+        var owner = Assert.Single(saved, s => s.Id == run.SessionId);
+        Assert.Equal("first.wav", owner.TakeFile);
+        Assert.Equal("first.json", owner.ReplayFile);
+        Assert.Null(Assert.Single(saved, s => s.Id != run.SessionId).TakeFile);
+        Assert.False(service.AttachTakeFile("song", "lead", "missing.wav", run with { SessionId = Guid.NewGuid() }));
+    }
+
+    [Fact]
+    public void ARunRecordedAfterAProfileSwitch_StillBelongsToTheProfileAtStart()
+    {
+        Directory.CreateDirectory(_dir);
+        var players = new PlayerProfileService(FakeLocalization.English(), null, Path.Combine(_dir, "players.json"), "First");
+        var service = new PracticeProfileService(players, legacyFilePath: Path.Combine(_dir, "legacy.json"));
+        var first = players.ActiveProfile.Id;
+        var run = service.CaptureRun();
+        players.SwitchTo(players.Create("Second").Id);
+        service.Record("song", "lead", Result(), run: run);
+        Assert.Empty(service.GetProfile("song", "lead").Sessions);
+        players.SwitchTo(first);
+        Assert.Equal(run.SessionId, Assert.Single(service.GetProfile("song", "lead").Sessions).Id);
+    }
+
+    [Fact]
+    public void Retention_PreservesStarredAndReampSessions_AndStillTrimsOrdinaryHistory()
+    {
+        var service = NewService();
+        var profile = service.Record("song", "lead", Result(score: 1));
+        var starred = profile.Sessions[0];
+        starred.TakeStarred = true;
+        starred.TakeFile = "keeper.wav";
+        service.Record("song", "lead", Result(score: 2));
+        var reamped = profile.Sessions[1];
+        reamped.ReampFiles = ["render.wav"];
+        for (var i = 0; i < 205; i++) service.Record("song", "lead", Result(score: 10 + i));
+
+        var saved = NewService().GetProfile("song", "lead").Sessions;
+        Assert.Contains(saved, s => s.TakeStarred == true && s.TakeFile == "keeper.wav");
+        Assert.Contains(saved, s => s.ReampFiles is { Count: > 0 } && s.ReampFiles.Contains("render.wav"));
+        Assert.Equal(200, saved.Count);
+        Assert.DoesNotContain(saved, s => s.Score == 10);
+    }
+
+    [Fact]
+    public void FullProtectedHistory_KeepsTheNewRunAndItsExactTakeAndReplayAttachments()
+    {
+        var service = NewService();
+        var profile = service.Record("song", "lead", Result(score: 1));
+        profile.Sessions.Clear();
+        for (var i = 0; i < 200; i++)
+        {
+            profile.Sessions.Add(new PracticeSessionRecord
+            {
+                Id = Guid.NewGuid(), EndedUtc = DateTime.UnixEpoch.AddSeconds(i),
+                TakeStarred = i % 2 == 0 ? true : null,
+                ReampFiles = i % 2 != 0 ? ["keeper-render.wav"] : null
+            });
+        }
+        var keepers = profile.Sessions.Select(session => session.Id).ToArray();
+        var run = service.CaptureRun();
+
+        service.Record("song", "lead", Result(score: 2), run: run);
+
+        Assert.Equal(201, profile.Sessions.Count);
+        Assert.Contains(profile.Sessions, session => session.Id == run.SessionId);
+        Assert.True(service.AttachTakeFile("song", "lead", "new-take.wav", run));
+        Assert.True(service.AttachReplayFile("song", "lead", "new-replay.json", run));
+        var saved = NewService().GetProfile("song", "lead").Sessions;
+        var newest = Assert.Single(saved, session => session.Id == run.SessionId);
+        Assert.Equal("new-take.wav", newest.TakeFile);
+        Assert.Equal("new-replay.json", newest.ReplayFile);
+        Assert.All(keepers, id => Assert.Contains(saved, session => session.Id == id));
     }
 
     [Fact]

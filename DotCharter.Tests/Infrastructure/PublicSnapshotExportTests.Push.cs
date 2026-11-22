@@ -109,14 +109,20 @@ public sealed partial class PublicSnapshotExportTests
         WriteTree(devDc, "tools/setup/native-runtime.json",
             failure == "pending-pin" ? Manifest() : Manifest((devJuceCommit, DllHash, HostHash)));
         WriteTree(devDc, "tools/agent/Invoke-Gate.ps1",
-            "param([switch]$Public, [switch]$Build, [switch]$Gate)\n" +
+            "param([switch]$Public, [switch]$Build, [switch]$Gate, [string]$Configuration)\n" +
             "Set-Content -LiteralPath $env:DC_FAKE_GATE_MARKER -Value $(if ($Gate) { 'ran -Gate' } else { 'ran -Build' })\n" +
+            "if ($env:DC_FAKE_GATE_REVOKE_TREE) {\n" +
+            "    Import-Module $env:DC_FAKE_GATE_CACHE_MODULE -Force\n" +
+            "    $scope = Get-GateRecordInputs -RepoRoot (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path -Configuration Release\n" +
+            "    Start-GateRecordRun -Trees @($env:DC_FAKE_GATE_REVOKE_TREE) -Kinds gate @scope\n" +
+            "}\n" +
             // "main-moved": someone pushes to public JuceSharp while the gate runs.
             "if ($env:DC_FAKE_GATE_MOVE) {\n" +
             "    $m = Join-Path $env:DC_FAKE_GATE_MOVE_SCRATCH 'mover'; git init -q -b main $m; Set-Content (Join-Path $m 'x.txt') x\n" +
             "    git -C $m add x.txt; git -C $m -c user.name=X -c user.email=x@example.com commit -q -m x; git -C $m push -q $env:DC_FAKE_GATE_MOVE main\n" +
             "}\n" +
             "exit [int]$env:DC_FAKE_GATE_EXIT\n");
+        WriteTree(devDc, "tools/ci/release-lane.json", File.ReadAllText(Path.Combine(Root, "tools", "ci", "release-lane.json")));
         Git(devDc, "add", "--", ".");
         Git(devDc, "update-index", "--add", "--cacheinfo", $"160000,{devJuceCommit},JuceSharp");
         Commit(devDc, "first dev commit");

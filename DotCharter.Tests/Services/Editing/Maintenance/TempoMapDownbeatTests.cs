@@ -36,7 +36,9 @@ public sealed class TempoMapDownbeatTests
         var beats = h.State.ActiveProject!.Beats;
         Assert.True(beats[0].IsMeasure,
             "The beat inserted at index 0 became the start of the chart and must carry the bar line.");
+        // The extra beat joins bar 1, which now reads 5/4; no bar line is added or moved.
         Assert.Equal(barLinesBefore, beats.Count(b => b.IsMeasure));
+        Assert.Equal(5, beats[0].BeatsInMeasure);
     }
 
     [Fact]

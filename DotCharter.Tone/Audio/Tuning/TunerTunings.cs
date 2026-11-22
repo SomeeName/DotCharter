@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace DotCharter.Tone.Audio.Tuning;
 
 /// <summary>
@@ -48,13 +50,21 @@ public static class TunerTunings
 
     /// <summary>The tuning with <paramref name="id" />, or null for chromatic or
     /// an id this build does not know (a hand-edited config).</summary>
-    public static TunerTuning? Find(string? id) =>
-        string.IsNullOrEmpty(id) || id == ChromaticId ? null : All.FirstOrDefault(t => t.Id == id);
+    public static TunerTuning? Find(string? id)
+    {
+        if (string.IsNullOrEmpty(id) || id == ChromaticId) return null;
+        var normalized = id.Replace('\u2212', '-')
+            .Replace("\u061c", "", StringComparison.Ordinal)
+            .Replace("\u200e", "", StringComparison.Ordinal)
+            .Replace("\u200f", "", StringComparison.Ordinal);
+        return All.FirstOrDefault(t => t.Id == normalized);
+    }
 
     private static TunerTuning Guitar(params int[] steps) => new(IdOf(false, steps), false, steps);
     private static TunerTuning Bass(params int[] steps) => new(IdOf(true, steps), true, steps);
 
     /// <summary>A stable id off the steps themselves ("guitar:-2,0,0,0,0,0"), so a
     /// persisted choice survives a rename or a reorder of this list.</summary>
-    private static string IdOf(bool bass, int[] steps) => $"{(bass ? "bass" : "guitar")}:{string.Join(',', steps)}";
+    private static string IdOf(bool bass, int[] steps)
+        => $"{(bass ? "bass" : "guitar")}:{string.Join(',', steps.Select(s => s.ToString(CultureInfo.InvariantCulture)))}";
 }

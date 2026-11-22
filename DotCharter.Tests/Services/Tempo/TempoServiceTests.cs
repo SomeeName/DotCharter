@@ -160,6 +160,35 @@ public class TempoServiceTests
         Assert.Equal(0.25, pos.Fraction.DoubleValue, 6);
     }
 
+    [Theory]
+    [InlineData(2500, 5, 0)]
+    [InlineData(2625, 5, 1)]
+    [InlineData(-625, -2, 3)]
+    public void SnapToGrid_ExtrapolatesMultipleBeatsOnEitherSide(double ms, int beat, int numerator)
+    {
+        var svc = new TempoService(new FakeAppLogger());
+        var beats = BuildBeats(3);
+
+        var snapped = svc.SnapToGrid(ms, beats, 4);
+
+        Assert.Equal(new FractionalPosition(beat, new Fraction(numerator, 4)), snapped);
+        Assert.Equal(ms, snapped.GetPositionMs(beats), 6);
+    }
+
+    [Theory]
+    [InlineData(60, 0, 12)]
+    [InlineData(240, 3, 0)]
+    public void SnapToGrid_SingleBeatUsesItsTempo(double bpm, int beat, int numerator)
+    {
+        var svc = new TempoService(new FakeAppLogger());
+        var beats = new List<BeatMarker> { new() { Time = 100, Bpm = bpm } };
+
+        var snapped = svc.SnapToGrid(850, beats, 16);
+
+        Assert.Equal(new FractionalPosition(beat, new Fraction(numerator, 16)), snapped);
+        Assert.Equal(850.0, snapped.GetPositionMs(beats), 6);
+    }
+
     /// <summary>
     ///     Past the end of the beat map the snap has to extrapolate, and it must
     ///     extrapolate off the LAST interval — the same rule
@@ -168,7 +197,7 @@ public class TempoServiceTests
     ///     different instant than the click that placed it, with no error anywhere.
     ///     <para>
     ///         This is the third copy of a bug already fixed in
-    ///         <c>TimelineMath.PositionFromMs</c> and <c>AudioToChartAnalyzer</c>,
+    ///         <c>TimelineMath.PositionFromMs</c>,
     ///         and it is reachable after any RS-XML/EOF import (whose beat map ends
     ///         with the chart, not with the audio) or a Remove Beat.
     ///     </para>

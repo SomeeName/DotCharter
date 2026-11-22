@@ -31,12 +31,15 @@ public sealed partial class RigReampViewModel : ObservableObject, IDisposable
     private readonly DiTakeLibrary _library;
     private readonly IShellLauncher? _shell;
     private readonly IFileStorageService? _files;
+    private readonly IRigConfigService _config;
     private readonly IAppLogger? _logger;
     private readonly Func<string, (float[] Mono, int SampleRate)> _loader;
     private readonly Func<string, TimeSpan?> _probe;
     private DiTakeRecorder? _recorder;
     private DispatcherTimer? _timer;
     private bool _pushingPosition;
+    private int _loadGeneration;
+    private bool _disposed;
 
     /// <param name="engine">The engine seam, or null (no engine / null transport).</param>
     /// <param name="library">The takes folder.</param>
@@ -46,12 +49,15 @@ public sealed partial class RigReampViewModel : ObservableObject, IDisposable
     /// <param name="logger">Optional.</param>
     /// <param name="loader">Test seam: decodes a take to mono (default <see cref="DiTakeLibrary.LoadMono" />).</param>
     /// <param name="probe">Test seam: a take's duration (default: the decoder's header probe).</param>
+    /// <param name="config">Where the import picker remembers its folder; the dialog default when it has none yet.</param>
     public RigReampViewModel(IReampEngine? engine, DiTakeLibrary library, ILocalizationService localization,
+        IRigConfigService config,
         IShellLauncher? shell = null,
         IFileStorageService? files = null, IAppLogger? logger = null,
         Func<string, (float[] Mono, int SampleRate)>? loader = null,
         Func<string, TimeSpan?>? probe = null)
     {
+        _config = config;
         _engine = engine;
         _library = library ?? throw new ArgumentNullException(nameof(library));
         _loc = localization;
@@ -106,7 +112,7 @@ public sealed partial class RigReampViewModel : ObservableObject, IDisposable
     /// <summary>The recording's input level, dBFS (for the Fire level meter).</summary>
     [ObservableProperty] private double _recordLevelDb = double.NegativeInfinity;
 
-    private bool CanToggleRecord() => IsRecording || (IsAvailable && !IsReamping && !IsLoading);
+    private bool CanToggleRecord() => !_disposed && (IsRecording || (IsAvailable && !IsReamping && !IsLoading));
 
     [RelayCommand(CanExecute = nameof(CanToggleRecord))]
     private void ToggleRecord()
@@ -125,7 +131,7 @@ public sealed partial class RigReampViewModel : ObservableObject, IDisposable
         try { started = recorder.Start(path); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"DI recorder: could not start '{path}': {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, $"DI recorder: could not start '{path}'", ex);
             started = false;
         }
         if (!started)
@@ -154,7 +160,7 @@ public sealed partial class RigReampViewModel : ObservableObject, IDisposable
         try { saved = recorder.Stop(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"DI recorder: saving the take failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "DI recorder: saving the take failed", ex);
             Status = _loc["Rig_Reamp_RecordFailed"];
         }
         finally { recorder.Dispose(); }
@@ -240,8 +246,10 @@ public sealed partial class RigReampViewModel : ObservableObject, IDisposable
         if (_files == null) return;
         var patterns = DiTakeLibrary.SupportedExtensions.Select(e => "*" + e).ToArray();
         var path = await _files.OpenFilePickerAsync(_loc["Rig_Reamp_ImportTitle"],
-            [new FilePickerFilter(_loc["Rig_Reamp_AudioFiles"], patterns)]);
+            [new FilePickerFilter(_loc["Rig_Reamp_AudioFiles"], patterns)],
+            _config.StartFolder(c => c.LastReampDiDir));
         if (string.IsNullOrWhiteSpace(path)) return;
+        _config.RememberFileFolder(path, (c, d) => c.LastReampDiDir = d);
         var take = _library.Import(path);
         if (take == null) { Status = _loc["Rig_Reamp_ImportFailed"]; return; }
         Status = null;
@@ -297,14 +305,15 @@ public sealed partial class RigReampViewModel : ObservableObject, IDisposable
         _engine?.SeekTake(Player, value);
     }
 
-    private bool CanReampTake(RigDiTakeRow? row) => row != null && IsAvailable && !IsRecording && !IsLoading;
+    private bool CanReampTake(RigDiTakeRow? row) => !_disposed && row != null && IsAvailable && !IsRecording && !IsLoading;
 
     /// <summary>Loads a take into the seat's input and starts it: from here the
     /// rig hears the take instead of the guitar.</summary>
     [RelayCommand(CanExecute = nameof(CanReampTake))]
     private async Task ReampTake(RigDiTakeRow? row)
     {
-        if (row == null || _engine == null) return;
+        if (!CanReampTake(row) || row == null || _engine == null) return;
+        var generation = ++_loadGeneration;
         IsLoading = true;
         Status = null;
         try
@@ -312,11 +321,16 @@ public sealed partial class RigReampViewModel : ObservableObject, IDisposable
             var path = row.Take.FilePath;
             var loop = Loop;
             var player = Player;
-            var loaded = await Task.Run(() =>
+            var (mono, rate) = await Task.Run(() => _loader(path));
+            if (_disposed || generation != _loadGeneration) return;
+            var loaded = await Task.Run(() => _engine.LoadTake(player, mono, rate, loop));
+            if (_disposed || generation != _loadGeneration)
             {
-                var (mono, rate) = _loader(path);
-                return _engine.LoadTake(player, mono, rate, loop);
-            });
+                // Stop can also race the engine upload, which runs off-thread.
+                // No newer load is allowed until this command finishes.
+                _engine.ClearTake(player);
+                return;
+            }
             if (!loaded)
             {
                 Status = _loc["Rig_Reamp_LoadFailed"];
@@ -334,8 +348,8 @@ public sealed partial class RigReampViewModel : ObservableObject, IDisposable
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException
                                        or ArgumentException or InvalidOperationException)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Re-amp: could not load '{row.Take.FilePath}': {ex.Message}");
-            Status = _loc["Rig_Reamp_LoadFailed"];
+            _logger?.Warning(AppLogCategory.Audio, $"Re-amp: could not load '{row.Take.FilePath}'", ex);
+            if (!_disposed && generation == _loadGeneration) Status = _loc["Rig_Reamp_LoadFailed"];
         }
         finally { IsLoading = false; }
     }
@@ -352,6 +366,8 @@ public sealed partial class RigReampViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Stop()
     {
+        _loadGeneration++;
+        if (IsLoading) _engine?.ClearTake(Player);
         if (!IsReamping) return;
         _engine?.ClearTake(Player);
         IsReamping = false;
@@ -373,12 +389,17 @@ public sealed partial class RigReampViewModel : ObservableObject, IDisposable
             try { _recorder.Poll(); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                _logger?.Warning(AppLogCategory.Audio, $"DI recorder: writing failed: {ex.Message}");
+                _logger?.Warning(AppLogCategory.Audio, "DI recorder: writing failed", ex);
                 Status = _loc["Rig_Reamp_RecordFailed"];
                 StopRecording();
                 return;
             }
             RecordTimeText = FormatTime(_recorder.ElapsedSeconds);
+            if (_recorder.CaptureRateChanged)
+            {
+                StopRecording();
+                return;
+            }
             var peak = _recorder.LastPeak;
             var db = peak > 0 ? 20.0 * Math.Log10(peak) : double.NegativeInfinity;
             // Fall back gently, like a hardware meter; rise at once.
@@ -465,6 +486,9 @@ public sealed partial class RigReampViewModel : ObservableObject, IDisposable
     /// away — closing the app mid-take keeps what was played.</summary>
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+        Stop();
         _timer?.Stop();
         var recorder = _recorder;
         _recorder = null;
@@ -472,7 +496,7 @@ public sealed partial class RigReampViewModel : ObservableObject, IDisposable
         try { recorder.Stop(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"DI recorder: saving the take at shutdown failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "DI recorder: saving the take at shutdown failed", ex);
         }
         finally { recorder.Dispose(); }
     }

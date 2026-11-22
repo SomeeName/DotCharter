@@ -42,7 +42,7 @@ public sealed class AlignToRecordingCorpusProbeTests(ITestOutputHelper output)
     public void AlignEveryTabToItsRecording_AndMeasureAgainstTheHandSyncedGrid()
     {
         Assert.SkipWhen(Environment.GetEnvironmentVariable(EnvVar) != "1", $"Set {EnvVar}=1 to run the align-to-recording corpus probe.");
-        var root = AutoChartCorpusProbeTests.FindTestDataRoot();
+        var root = FindTestDataRoot();
         Assert.SkipWhen(root is null, "No TestData/ (it is git-ignored).");
         var eof = Path.Combine(root!, "EOF");
         Assert.SkipWhen(!Directory.Exists(eof), "No TestData/EOF corpus.");
@@ -57,7 +57,7 @@ public sealed class AlignToRecordingCorpusProbeTests(ITestOutputHelper output)
         foreach (var dir in Directory.EnumerateDirectories(eof).OrderBy(d => d, StringComparer.Ordinal))
         {
             var tab = PickTab(dir);
-            var wav = AutoChartCorpusProbeTests.FindMixWav(dir);
+            var wav = FindMixWav(dir);
             var xml = Directory.EnumerateFiles(dir, "*.xml")
                 .Where(f => !f.EndsWith(".debug.xml", StringComparison.OrdinalIgnoreCase) && XDocument.Load(f).Root?.Element("ebeats") != null)
                 .Order(StringComparer.Ordinal).FirstOrDefault();
@@ -258,5 +258,25 @@ public sealed class AlignToRecordingCorpusProbeTests(ITestOutputHelper output)
         if (values.Count == 0) return "—";
         var sorted = values.Order().ToArray();
         return sorted[(int)Math.Round(q * (sorted.Length - 1))].ToString("0.0", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The song's own mix WAV: never a preview (<c>guitar_preview.wav</c>) and never a stem.</summary>
+    private static string? FindMixWav(string songDir)
+        => Directory.EnumerateFiles(songDir, "*.wav")
+            .Where(f => !Path.GetFileName(f).Contains("preview", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .FirstOrDefault();
+
+    private static string? FindTestDataRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, "TestData");
+            if (Directory.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+
+        return null;
     }
 }

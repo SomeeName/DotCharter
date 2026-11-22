@@ -36,6 +36,8 @@ public sealed partial class ToneEditorViewModel : ObservableObject, IToneEditor
         _gearSlots = new Lazy<IReadOnlyList<ToneGearSlot>>(BuildGearSlots);
     }
 
+    private bool _gearChosen;
+
     public event EventHandler? Changed;
 
     /// <summary>The tone the editor holds; null with none selected.</summary>
@@ -43,6 +45,9 @@ public sealed partial class ToneEditorViewModel : ObservableObject, IToneEditor
 
     /// <summary>A user edit since the last load or commit.</summary>
     public bool IsDirty { get; set; }
+
+    /// <summary>The last <see cref="Changed" /> was one picked value (a gear swap, a descriptor), not a tick of a drag or of typing: it is its own undo step.</summary>
+    public bool LastChangeDiscrete { get; private set; }
 
     public ToneDescriptorChoice None { get; }
 
@@ -188,14 +193,18 @@ public sealed partial class ToneEditorViewModel : ObservableObject, IToneEditor
         OnPropertyChanged(nameof(VolumeAttenuation));
         MarkChanged();
     }
-    partial void OnDescriptor1Changed(ToneDescriptorChoice value) => MarkChanged();
-    partial void OnDescriptor2Changed(ToneDescriptorChoice value) => MarkChanged();
-    partial void OnDescriptor3Changed(ToneDescriptorChoice value) => MarkChanged();
+    partial void OnDescriptor1Changed(ToneDescriptorChoice value) => MarkChanged(true);
+    partial void OnDescriptor2Changed(ToneDescriptorChoice value) => MarkChanged(true);
+    partial void OnDescriptor3Changed(ToneDescriptorChoice value) => MarkChanged(true);
 
-    private void MarkChanged()
+    private void MarkChanged() => MarkChanged(false);
+
+    private void MarkChanged(bool discrete)
     {
         if (_loading || Loaded is null) return;
         IsDirty = true;
+        LastChangeDiscrete = discrete || _gearChosen;
+        _gearChosen = false;
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -253,6 +262,7 @@ public sealed partial class ToneEditorViewModel : ObservableObject, IToneEditor
         for (var i = 1; i <= 4; i++) slots.Add(new(_loc.Format("Dialog_Tones_SlotPre", i), RsGearRole.PrePedal, i, pedals, MarkChanged));
         for (var i = 1; i <= 4; i++) slots.Add(new(_loc.Format("Dialog_Tones_SlotLoop", i), RsGearRole.PostPedal, i, pedals, MarkChanged));
         for (var i = 1; i <= 4; i++) slots.Add(new(_loc.Format("Dialog_Tones_SlotRack", i), RsGearRole.Rack, i, racks, MarkChanged));
+        foreach (var slot in slots) slot.GearChosen = () => _gearChosen = true;
         return slots;
     }
 }

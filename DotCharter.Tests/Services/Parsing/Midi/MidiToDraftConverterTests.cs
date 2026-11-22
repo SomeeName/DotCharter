@@ -8,6 +8,137 @@ public sealed class MidiToDraftConverterTests
     private const int Ppq = 480;
 
     [Fact]
+    public void Convert_HighTempoFractions_DoNotOverflowDuringPositionNormalization()
+    {
+        var file = TempoPairFile(4_000_001, 4_166_667, 1, 400);
+
+        var draft = MidiToDraftConverter.Convert(file);
+        var note = Assert.Single(draft.Notes).Note;
+        var beats = draft.SuggestedBeats.ToList();
+        var map = new MidiTempoMap(Ppq, file.TempoEvents);
+
+        Assert.Equal(map.TicksToMs(1), note.Position.GetPositionMs(beats), 6);
+        Assert.Equal(map.TicksToMs(400), (note.Position + note.Sustain).GetPositionMs(beats), 6);
+    }
+
+    [Fact]
+    public void Convert_FixedSeedTempoPairs_KeepEverySpanRepresentable()
+    {
+        var random = new Random(0x2D5A);
+        var tempos = new[] { 1, 31, 500_001, 1_999_833, 4_000_001, 4_166_667, 16_777_215 };
+        var cases = new List<(int First, int Next, int Start, int End)> { (4_000_001, 4_166_667, 1, 400) };
+        for (var i = 0; i < 128; i++)
+        {
+            var start = random.Next(1, Ppq);
+            cases.Add((tempos[random.Next(tempos.Length)], tempos[random.Next(tempos.Length)], start, start + random.Next(1, Ppq * 3)));
+        }
+        foreach (var (first, next, start, end) in cases)
+        {
+            var file = TempoPairFile(first, next, start, end);
+            var draft = MidiToDraftConverter.Convert(file);
+            var note = Assert.Single(draft.Notes).Note;
+            var beats = draft.SuggestedBeats.ToList();
+            var map = new MidiTempoMap(Ppq, file.TempoEvents);
+
+            Assert.True(note.Sustain > FractionalPosition.Zero);
+            Assert.Equal(map.TicksToMs(start), note.Position.GetPositionMs(beats), 3);
+            Assert.Equal(map.TicksToMs(end), (note.Position + note.Sustain).GetPositionMs(beats), 3);
+        }
+    }
+
+    private static MidiFileData TempoPairFile(int first, int next, int start, int end) => new(0, Ppq,
+        [new MidiTrackData("Lead", [new MidiNoteEvent(0, 40, 100, start, end - start)])],
+        [new MidiTempoEvent(0, first), new MidiTempoEvent(1, next)], []);
+
+    [Fact]
+    public void Convert_CoprimeTempoFractions_PreservesTheNoteSpanWithoutOverflow()
+    {
+        var file = new MidiFileData(0, Ppq,
+            [new MidiTrackData("Lead", [new MidiNoteEvent(0, 40, 100, 120, 480)])],
+            [new MidiTempoEvent(0, 500_000), new MidiTempoEvent(240, 500_001), new MidiTempoEvent(720, 500_003)], []);
+
+        var draft = MidiToDraftConverter.Convert(file);
+        var note = Assert.Single(draft.Notes);
+        var beats = draft.SuggestedBeats.ToList();
+
+        Assert.Equal(0.125, note.TimeSeconds, 9);
+        Assert.Equal(125.0, note.Note.Position.GetPositionMs(beats), 5);
+        Assert.Equal(625.00075, (note.Note.Position + note.Note.Sustain).GetPositionMs(beats), 5);
+        Assert.True(note.Note.Sustain > FractionalPosition.Zero);
+    }
+
+    [Fact]
+    public void Convert_TempoChangeInsideBeat_PreservesNoteTimesAndEndsOnSuggestedGrid()
+    {
+        var midi = MidiFileParser.Parse(SmfFile(0, Ppq, Track(
+            SetTempo(0, 500_000),
+            NoteOn(120, 0, 40, 100),
+            SetTempo(120, 250_000),
+            NoteOff(120, 0, 40),
+            EndOfTrack())));
+
+        var draft = MidiToDraftConverter.Convert(midi);
+        var note = Assert.Single(draft.Notes);
+        var beats = draft.SuggestedBeats.ToList();
+
+        Assert.Equal(0.125, note.TimeSeconds, 6);
+        Assert.Equal(125.0, note.Note.Position.GetPositionMs(beats), 6);
+        Assert.Equal(312.5, (note.Note.Position + note.Note.Sustain).GetPositionMs(beats), 6);
+        Assert.Equal(new FractionalPosition(0, new Fraction(1, 3)), note.Note.Position);
+    }
+
+    [Theory]
+    [InlineData(0, 0.5, 4, 4)]
+    [InlineData(1, 1.0, 7, 8)]
+    public void Convert_FormatTwoSelection_UsesOnlyThatTracksTempoAndMeter(
+        int trackIndex, double seconds, int numerator, int denominator)
+    {
+        var midi = IndependentTracks();
+
+        var draft = MidiToDraftConverter.Convert(midi, new MidiDraftOptions { TrackIndex = trackIndex });
+        var note = Assert.Single(draft.Notes);
+        var beats = draft.SuggestedBeats.ToList();
+
+        Assert.Equal(seconds, note.TimeSeconds, 6);
+        Assert.Equal(seconds * 1000, note.Note.Position.GetPositionMs(beats), 6);
+        Assert.Equal(seconds * 2000, (note.Note.Position + note.Note.Sustain).GetPositionMs(beats), 6);
+        Assert.Equal(numerator, beats[0].BeatsInMeasure);
+        Assert.Equal(denominator, beats[0].NoteDenominator);
+    }
+
+    [Fact]
+    public void Convert_FormatTwoAllTracks_PreservesIndependentTimesOnOneGrid()
+    {
+        var draft = MidiToDraftConverter.Convert(IndependentTracks());
+        var beats = draft.SuggestedBeats.ToList();
+
+        Assert.Equal([0.5, 1.0], draft.Notes.Select(n => n.TimeSeconds));
+        Assert.All(draft.Notes, n => Assert.Equal(0, n.Note.StringIndex));
+        Assert.Equal([500.0, 1000.0], draft.Notes.Select(n => n.Note.Position.GetPositionMs(beats)));
+        Assert.Equal([1000.0, 2000.0], draft.Notes.Select(n => (n.Note.Position + n.Note.Sustain).GetPositionMs(beats)));
+    }
+
+    private static MidiFileData IndependentTracks() => MidiFileParser.Parse(SmfFile(2, Ppq,
+        Track(SetTempo(0, 500_000), TimeSignature(0, 4, 2), NoteOn(Ppq, 0, 40, 100),
+            NoteOff(Ppq, 0, 40), EndOfTrack()),
+        Track(SetTempo(0, 1_000_000), TimeSignature(0, 7, 3), NoteOn(Ppq, 0, 40, 100),
+            NoteOff(Ppq, 0, 40), EndOfTrack())));
+
+    [Theory]
+    [InlineData(1, 1.0)]
+    [InlineData(2, 0.5)]
+    public void Convert_SelectedTrack_UsesSharedTempoOnlyForParallelFiles(int format, double seconds)
+    {
+        var midi = MidiFileParser.Parse(SmfFile(format, Ppq,
+            Track(SetTempo(0, 1_000_000), EndOfTrack()),
+            Track(NoteOn(Ppq, 0, 40, 100), NoteOff(Ppq, 0, 40), EndOfTrack())));
+
+        var draft = MidiToDraftConverter.Convert(midi, new MidiDraftOptions { TrackIndex = 1 });
+
+        Assert.Equal(seconds, Assert.Single(draft.Notes).TimeSeconds, 6);
+    }
+
+    [Fact]
     public void Convert_MapsOpenStringPitches_AndExactGridPositions()
     {
         // E2 (40) at tick 0 for one beat, A2 (45) at tick 600 for half a beat.

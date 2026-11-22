@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Shell.Popovers.ExportPopoverView"
+             x:CompileBindings="True"
+             x:DataType="viewModels:MainWindowViewModel">
+    <!-- EXPORT. The toolbar's Export button: a second door onto File > Export,
+         the SAME commands in the SAME order, Rocksmith package first (the goal of the
+         workflow). `UI/ToolbarClusterTests` compares this list with the File menu's, so
+         a row added to one and not the other fails the gate. A row closes the popover
+         before its command opens a dialog or a file picker. -->
+    <controls:FirePopover Width="300"
+                          Title="{localization:Loc Toolbar_Export}"
+                          Icon="{DynamicResource IconExport}">
+        <controls:FirePopover.Footer>
+            <Grid Theme="{StaticResource FirePopoverFooterGrid}" Classes="FirePopoverFooter" ColumnDefinitions="*">
+                <TextBlock VerticalAlignment="Center" Theme="{StaticResource FirePopoverNoteText}" Classes="FirePopoverNote"
+                           TextWrapping="Wrap"
+                           Text="{localization:Loc Toolbar_Export_Tip}" />
+            </Grid>
+        </controls:FirePopover.Footer>
+
+        <StackPanel Theme="{StaticResource FirePopoverBodyPanel}" Classes="FirePopoverBody">
+            <Button Theme="{StaticResource FirePopoverOptionButton}" Classes="FirePopoverOption"
+                    Command="{Binding ShellDialogs.OpenRocksmithExportCommand}"
+                    AutomationProperties.Name="{localization:Loc Menu_ExportRocksmith}" Click="OnRowClick">
+                <TextBlock Classes="FirePopoverOptionName" Text="{localization:Loc Menu_ExportRocksmith}" />
+            </Button>
+            <Button Theme="{StaticResource FirePopoverOptionButton}" Classes="FirePopoverOption"
+                    Command="{Binding ShellDialogs.OpenDcSongExportCommand}"
+                    AutomationProperties.Name="{localization:Loc Menu_ExportDcSong}" Click="OnRowClick">
+                <TextBlock Classes="FirePopoverOptionName" Text="{localization:Loc Menu_ExportDcSong}" />
+            </Button>
+            <Button Theme="{StaticResource FirePopoverOptionButton}" Classes="FirePopoverOption"
+                    Command="{Binding Export.ExportGuitarProCommand}"
+                    AutomationProperties.Name="{localization:Loc Menu_ExportGuitarPro}" Click="OnRowClick">
+                <TextBlock Classes="FirePopoverOptionName" Text="{localization:Loc Menu_ExportGuitarPro}" />
+            </Button>
+            <Button Theme="{StaticResource FirePopoverOptionButton}" Classes="FirePopoverOption"
+                    Command="{Binding Export.ExportEditorOnFireCommand}"
+                    AutomationProperties.Name="{localization:Loc Menu_ExportEof}" Click="OnRowClick">
+                <TextBlock Classes="FirePopoverOptionName" Text="{localization:Loc Menu_ExportEof}" />
+            </Button>
+            <Button Theme="{StaticResource FirePopoverOptionButton}" Classes="FirePopoverOption"
+                    Command="{Binding Export.ExportSheetPdfCommand}"
+                    AutomationProperties.Name="{localization:Loc Menu_ExportSheetPdf}" Click="OnRowClick">
+                <TextBlock Classes="FirePopoverOptionName" Text="{localization:Loc Menu_ExportSheetPdf}" />
+            </Button>
+            <Button Theme="{StaticResource FirePopoverOptionButton}" Classes="FirePopoverOption"
+                    Command="{Binding Export.CaptureHighwayScreenshotCommand}"
+                    AutomationProperties.Name="{localization:Loc Menu_Screenshot}" Click="OnRowClick">
+                <TextBlock Classes="FirePopoverOptionName" Text="{localization:Loc Menu_Screenshot}" />
+            </Button>
+        </StackPanel>
+    </controls:FirePopover>
+</UserControl>

@@ -17,28 +17,17 @@ internal static class RsPackageMetadataFactory
     /// before a build.</summary>
     internal static RsPackageMetadata Create(ChartProject project, RocksmithBuildOptions options)
     {
-        var title = string.IsNullOrWhiteSpace(project.Chart.SongName) ? "Untitled" : project.Chart.SongName.Trim();
-
-        // Artist / album / year are real Arrangement fields (RsXmlSongReader
-        // fills them, and RsXmlSongWriter PREFERS them over the chart-level
-        // values). Reading only project.Chart.* meant a psarc-imported chart
-        // whose metadata lives on the arrangement shipped as "Unknown Artist"
-        // with an empty album in the manifest — the strings the game's song list
-        // shows — while the XML beside it carried the real ones.
-        var artist = FirstNonBlank(
-            FirstArrangementValue(project, a => a.ArtistName),
-            project.Chart.Artist,
-            "Unknown Artist");
-        var artistSort = FirstNonBlank(
-            FirstArrangementValue(project, a => a.ArtistNameSort),
-            project.Chart.ArtistSort);
+        var (artist, artistSort, title) = CreateNames(project);
         var album = FirstNonBlank(
             FirstArrangementValue(project, a => a.AlbumName),
             project.Chart.AlbumName);
 
-        var dlcKey = string.IsNullOrWhiteSpace(options.DlcKey)
-            ? RocksmithDlcKey.Create(artist, title)
-            : SanitizeDlcKey(options.DlcKey);
+        // The build's own key wins, then the chart's (DLC Builder's DLC Key field), then the derived one.
+        var dlcKey = !string.IsNullOrWhiteSpace(options.DlcKey)
+            ? SanitizeDlcKey(options.DlcKey)
+            : !string.IsNullOrWhiteSpace(project.Chart.DlcKey)
+                ? SanitizeDlcKey(project.Chart.DlcKey.Trim())
+                : RocksmithDlcKey.Create(artist, title);
 
         int? year = null;
         foreach (var arrangement in NonVocalArrangements(project))
@@ -65,6 +54,8 @@ internal static class RsPackageMetadataFactory
             Title = title,
             Artist = artist,
             ArtistSortOverride = artistSort,
+            TitleSortOverride = project.Chart.TitleSort?.Trim() ?? "",
+            AlbumSortOverride = project.Chart.AlbumSort?.Trim() ?? "",
             Album = album,
             JapaneseTitle = project.Chart.JapaneseTitle?.Trim() ?? "",
             JapaneseArtist = project.Chart.JapaneseArtist?.Trim() ?? "",
@@ -77,6 +68,27 @@ internal static class RsPackageMetadataFactory
             AverageTempo = (float)Math.Max(1.0, RsXmlSongWriter.AverageTempo(project.Beats)),
             Charter = charter
         };
+    }
+
+    /// <summary>Artist/title metadata for file-name hints, without validating the independent DLC key.</summary>
+    internal static (string Artist, string ArtistSort, string Title) CreateNames(ChartProject project)
+    {
+        var title = string.IsNullOrWhiteSpace(project.Chart.SongName) ? "Untitled" : project.Chart.SongName.Trim();
+
+        // Artist / album / year are real Arrangement fields (RsXmlSongReader
+        // fills them, and RsXmlSongWriter PREFERS them over the chart-level
+        // values). Reading only project.Chart.* meant a psarc-imported chart
+        // whose metadata lives on the arrangement shipped as "Unknown Artist"
+        // with an empty album in the manifest — the strings the game's song list
+        // shows — while the XML beside it carried the real ones.
+        var artist = FirstNonBlank(
+            FirstArrangementValue(project, a => a.ArtistName),
+            project.Chart.Artist,
+            "Unknown Artist");
+        var artistSort = FirstNonBlank(
+            FirstArrangementValue(project, a => a.ArtistNameSort),
+            project.Chart.ArtistSort);
+        return (artist, artistSort, title);
     }
 
     /// <summary>

@@ -218,6 +218,23 @@ public sealed partial class ChartSynthInstrumentViewModel : ViewModelBase
         }
     }
 
+    /// <summary>The instrument card's reset question (design D).</summary>
+    public InspectorPendingAction ResetConfirm { get; } = new();
+
+    /// <summary>
+    ///     "Reset instrument" (design D): asks, then the guitar and bass back to the default models and pickups (coil split
+    ///     off) and a playing tone's own instrument dropped. The player profile keeps the instrument, not the project.
+    /// </summary>
+    [RelayCommand]
+    private void ResetInstrument() =>
+        ResetConfirm.Ask(_localization.Format("Mixer_Midi_ResetInstrumentAsk", 6), () =>
+        {
+            if (HasToneOverride) _instruments?.UseProfileInstrument();
+            ApplyInstrument(ChartSynthInstrumentSelection.DefaultGuitar);
+            ApplyInstrument(ChartSynthInstrumentSelection.DefaultBass);
+            Refresh();
+        });
+
     /// <summary>"Only for this tone": the playing song tone gets its own instrument.</summary>
     [RelayCommand]
     private void OverrideTone()

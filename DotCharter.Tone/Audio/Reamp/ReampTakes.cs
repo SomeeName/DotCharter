@@ -67,7 +67,7 @@ internal sealed class ReampTakes
         try { engine.ClearInputInjection(player); }
         catch (Exception ex) when (ex is ObjectDisposedException or JuceAudioException)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Re-amp: clearing player {player + 1}'s take failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, $"Re-amp: clearing player {player + 1}'s take failed", ex);
         }
     }
 
@@ -186,7 +186,7 @@ internal sealed class ReampTakes
         }
         catch (Exception ex) when (ex is ObjectDisposedException or JuceAudioException or ArgumentException)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Re-amp: loading player {player + 1}'s take failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, $"Re-amp: loading player {player + 1}'s take failed", ex);
             return false;
         }
     }

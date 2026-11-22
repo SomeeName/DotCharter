@@ -20,6 +20,13 @@ public class ChartKeybindHandler(
     /// </summary>
     private readonly List<Func<IEnumerable<KeybindRegistration>>> _registrations = [];
 
+    /// <summary>
+    ///     The chord whose key is down and not yet released. Avalonia reports an
+    ///     auto-repeat as another KeyDown with no flag, so a second press of the
+    ///     same chord with no release between is the OS repeating it.
+    /// </summary>
+    private string? _heldChord;
+
     public void Register(Expression<Func<KeyChord>> chordLookup, Action action, string? label = null)
     {
         ArgumentNullException.ThrowIfNull(chordLookup);
@@ -91,6 +98,8 @@ public class ChartKeybindHandler(
         return _activeBinds.TryGetValue(GetKeyHash(chord), out var bind) ? bind.Label : null;
     }
 
+    public Func<string, bool>? Gate { get; set; }
+
     public bool HandleKeyPress(Key key, bool ctrl, bool shift, bool alt)
     {
         // Guard: ignore standalone modifier presses so Ctrl alone doesn't fire
@@ -98,8 +107,13 @@ public class ChartKeybindHandler(
         if (key is Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl
             or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin)
         {
+            // A new key going down ends the OS repeat of the one held before it.
+            _heldChord = null;
             return false;
         }
+
+        var hash = GetKeyHash(key, ctrl, shift, alt);
+        var isRepeat = NoteKeyPress(key, ctrl, shift, alt);
 
         if (isInputBlocked())
         {
@@ -108,19 +122,60 @@ public class ChartKeybindHandler(
             return false;
         }
 
-        var hash = GetKeyHash(key, ctrl, shift, alt);
         if (_activeBinds.TryGetValue(hash, out var bind))
         {
+            // Holding a toggle's key flipped it on every repeat (play/pause
+            // stuttering, a note entered and removed); incremental verbs (nudges,
+            // fret steps, seeks) keep their repeat. Still consumed, so the focused
+            // control does not act on the key either.
+            if (isRepeat && IsToggleVerb(bind.Label)) return true;
+
             // Counted before the action runs, so a verb that opens a dialog or
             // throws still registers as used. This is the ONE dispatch point for
             // every editor shortcut, which is what makes the count complete.
             usage?.Record(UsageKind.Keybind, bind.Label);
-            bind.Action.Invoke();
+            if (Gate?.Invoke(bind.Label) != true) bind.Action.Invoke();
             return true;
         }
 
         return false;
     }
+
+    /// <summary>Already-gated window actions share the registered verbs' held-key filter.</summary>
+    public void HandleToggleKeyPress(Key key, bool ctrl, bool shift, bool alt, Action action)
+    {
+        if (!NoteKeyPress(key, ctrl, shift, alt)) action();
+    }
+
+    /// <summary>Records a press, including one delegated to a focused control; true means repeat.</summary>
+    internal bool NoteKeyPress(Key key, bool ctrl, bool shift, bool alt)
+    {
+        var hash = GetKeyHash(key, ctrl, shift, alt);
+        var repeated = hash == _heldChord;
+        _heldChord = hash;
+        return repeated;
+    }
+
+    /// <summary>The key-up half of the repeat filter: a release ends the hold, so the
+    /// next press of that key is a new press.</summary>
+    public void HandleKeyRelease(Key key)
+    {
+        if (_heldChord is { } held && held.StartsWith($"{key}_", StringComparison.Ordinal)) _heldChord = null;
+    }
+
+    /// <summary>The window lost activation: its key-ups go elsewhere, so nothing is held any more.</summary>
+    public void ResetHeldKeys() => _heldChord = null;
+
+    /// <summary>
+    ///     A verb that FLIPS state, so an auto-repeat must not run it again: play/pause,
+    ///     every <c>Toggle…</c> verb and the digit families that toggle a slot (a
+    ///     bookmark, a mask string, a pen string). Everything else repeats.
+    /// </summary>
+    internal static bool IsToggleVerb(string label) =>
+        label == "PlayPause"
+        || label.StartsWith("Toggle", StringComparison.Ordinal)
+        || label is "BookmarkBase" or "StringMaskBase" or "PenToggleStringBase" or "ClearSelection"
+            or "OpenMixPopover" or "OpenToolsPopover" or "OpenTracksPopover";
 
     /// <summary>
     ///     Runs the verb registered under <paramref name="label" /> — the
@@ -139,7 +194,7 @@ public class ChartKeybindHandler(
         }
 
         usage?.Record(UsageKind.Keybind, label);
-        action.Invoke();
+        if (Gate?.Invoke(label) != true) action.Invoke();
         return true;
     }
 

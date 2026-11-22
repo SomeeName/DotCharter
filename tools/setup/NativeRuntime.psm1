@@ -276,6 +276,74 @@ function Install-NativeRuntime {
     finally { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
-Export-ModuleMember -Function Get-NativeRuntimePairFiles, Get-NativeRuntimeAssetName, Get-JuceSharpGitlink, Get-HeaderAbiVersion,
+# --- build provenance ---------------------------------------------------------
+# An ABI number does not say which sources a pair was built from: an old pair with the
+# same ABI passes every other check. So a build is RECORDED right after it finishes
+# (Write-NativeBuildProvenance: the JuceSharp commit, the git tree of its native sources,
+# both files' SHA-256), and a pair is pinned or published only when that record holds
+# exactly these files AND the native source tree of the gitlink (Test-NativeBuildProvenance).
+# The record lives under artifacts/, outside the runtimes folder the build copies.
+
+# The git tree id of src/JuceSharp.Native at $Rev of the JuceSharp repo in $JuceSharpDir.
+function Get-NativeSourceTree {
+    param([Parameter(Mandatory)][string]$JuceSharpDir, [Parameter(Mandatory)][string]$Rev)
+    $tree = & git -C $JuceSharpDir rev-parse --verify -q "${Rev}:src/JuceSharp.Native" 2>$null
+    if ($LASTEXITCODE -ne 0 -or "$tree".Trim() -notmatch '^[0-9a-f]{40,64}$') {
+        throw "No src/JuceSharp.Native tree at $Rev in $JuceSharpDir (is the JuceSharp submodule fetched?)."
+    }
+    return "$tree".Trim()
+}
+
+function Get-NativeBuildProvenancePath {
+    param([Parameter(Mandatory)][string]$RepoRoot)
+    return (Join-Path $RepoRoot 'artifacts/native-runtime/native-build.provenance.json')
+}
+
+# Records the pair in $NativeDir as built from the JuceSharp checkout's HEAD. Refuses
+# while the native sources have uncommitted changes: such a build matches no commit.
+function Write-NativeBuildProvenance {
+    param([Parameter(Mandatory)][string]$RepoRoot, [string]$NativeDir, [string]$Path)
+    $juce = Join-Path $RepoRoot 'JuceSharp'
+    if (-not $NativeDir) { $NativeDir = Join-Path $juce 'src/JuceSharp/runtimes/win-x64/native' }
+    if (-not $Path) { $Path = Get-NativeBuildProvenancePath $RepoRoot }
+    $dirty = & git -C $juce status --porcelain -- src/JuceSharp.Native 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "git status failed in $juce." }
+    if ($dirty) { throw "The native sources in $juce have uncommitted changes; commit them, rebuild, then record the build." }
+    $commit = "$(& git -C $juce rev-parse HEAD)".Trim()
+    $files = [ordered]@{}
+    foreach ($file in $script:PairFiles) {
+        $full = Join-Path $NativeDir $file
+        if (-not (Test-Path -LiteralPath $full)) { throw "$full is missing; record the pair ONE native build deployed." }
+        $files[$file] = Get-FileSha256 $full
+    }
+    $record = [pscustomobject][ordered]@{ commit = $commit; nativeSourceTree = (Get-NativeSourceTree $juce 'HEAD'); files = [pscustomobject]$files }
+    $parent = Split-Path -Parent $Path
+    if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+    [System.IO.File]::WriteAllText($Path, ($record | ConvertTo-Json -Depth 4) + "`n", [System.Text.UTF8Encoding]::new($false))
+    return $Path
+}
+
+# Why the pair ($Hashes: file -> SHA-256) may not be pinned as built from
+# $NativeSourceTree, one line each; nothing when the build record binds them.
+function Test-NativeBuildProvenance {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$NativeSourceTree,
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Hashes
+    )
+    if (-not (Test-Path -LiteralPath $Path)) { return "no build provenance record at $Path" }
+    try { $record = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json }
+    catch { return "the build provenance record $Path is unreadable: $($_.Exception.Message)" }
+    if ("$($record.nativeSourceTree)" -cne $NativeSourceTree) {
+        "the pair was recorded as built from native sources '$($record.nativeSourceTree)' (JuceSharp $($record.commit)), not '$NativeSourceTree'"
+    }
+    foreach ($file in $script:PairFiles) {
+        $recorded = if ($record.files) { "$($record.files.$file)" } else { '' }
+        if ($recorded -cne "$($Hashes[$file])") { "$file has SHA-256 $($Hashes[$file]), but the build record holds '$recorded'" }
+    }
+}
+
+Export-ModuleMember -Function Get-NativeSourceTree, Get-NativeBuildProvenancePath, Write-NativeBuildProvenance, Test-NativeBuildProvenance,
+    Get-NativeRuntimePairFiles, Get-NativeRuntimeAssetName, Get-JuceSharpGitlink, Get-HeaderAbiVersion,
     Get-FileSha256, Read-NativeRuntimeManifest, Get-NativeRuntimeEntry, Read-DllAbiVersion, Read-DllAbiVersionInProcess,
     New-DllAbiProbeStartInfo, Install-NativeRuntime

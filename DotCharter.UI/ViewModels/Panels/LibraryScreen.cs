@@ -31,22 +31,22 @@ public sealed class LibraryScreen : ObservableObject, ILibraryScreen, ILibraryVi
     public LibraryScreen(SongBrowserViewModel browser)
     {
         _browser = browser;
-        var loc = browser.Localization;
         _columns =
         [
-            new(browser, loc["Dialog_SongBrowser_SortArtist"], "song", () => browser.SongSortGlyph, []),
-            new(browser, loc["SongBrowser_Col_Paths"], null, () => "", [(browser.PathFacet, null)]),
-            new(browser, loc["SongBrowser_Col_Tuning"], "tuning", () => browser.TuningSortGlyph,
-                [(browser.TuningFacet, null), (browser.CapoFacet, loc["SongBrowser_Facet_Capo"])], browser.ClearTuningAndCapoCommand),
-            new(browser, loc["SongBrowser_Col_Year"], "year", () => browser.YearSortGlyph, [(browser.YearFacet, null)]),
-            new(browser, loc["SongBrowser_Col_Difficulty"], "difficulty", () => browser.DifficultySortGlyph, [(browser.DifficultyFacet, null)]),
-            new(browser, loc["SongBrowser_Col_Time"], "time", () => browser.TimeSortGlyph, [(browser.LengthFacet, null)]),
-            new(browser, loc["SongBrowser_Col_Status"], null, () => "",
-                [(browser.StatusFacet, null), (browser.OriginFacet, loc["SongBrowser_Facet_Origin"])], browser.ClearStatusPopoverCommand,
-                new LibraryLessonsOption(browser, loc["SongBrowser_Facet_ShowLessons"])),
-            new(browser, loc["Dialog_SongBrowser_SortTitle"], "title", () => browser.TitleSortGlyph, []),
-            new(browser, loc["Dialog_SongBrowser_SortPack"], "pack", () => browser.PackSortGlyph, [])
+            new(browser, "Dialog_SongBrowser_SortArtist", "song", () => browser.SongSortGlyph, []),
+            new(browser, "SongBrowser_Col_Paths", null, () => "", [(browser.PathFacet, null)]),
+            new(browser, "SongBrowser_Col_Tuning", "tuning", () => browser.TuningSortGlyph,
+                [(browser.TuningFacet, null), (browser.CapoFacet, "SongBrowser_Facet_Capo")], browser.ClearTuningAndCapoCommand),
+            new(browser, "SongBrowser_Col_Year", "year", () => browser.YearSortGlyph, [(browser.YearFacet, null)]),
+            new(browser, "SongBrowser_Col_Difficulty", "difficulty", () => browser.DifficultySortGlyph, [(browser.DifficultyFacet, null)]),
+            new(browser, "SongBrowser_Col_Time", "time", () => browser.TimeSortGlyph, [(browser.LengthFacet, null)]),
+            new(browser, "SongBrowser_Col_Status", null, () => "",
+                [(browser.StatusFacet, null), (browser.OriginFacet, "SongBrowser_Facet_Origin")], browser.ClearStatusPopoverCommand,
+                new LibraryLessonsOption(browser, "SongBrowser_Facet_ShowLessons")),
+            new(browser, "Dialog_SongBrowser_SortTitle", "title", () => browser.TitleSortGlyph, []),
+            new(browser, "Dialog_SongBrowser_SortPack", "pack", () => browser.PackSortGlyph, [])
         ];
+        browser.LanguageChanged += OnLanguageChanged;
         browser.Songs.CollectionChanged += OnSongsChanged;
         browser.ActiveFilterChips.CollectionChanged += (_, _) => RebuildChips();
         browser.ArrangementChoices.CollectionChanged += (_, _) => RebuildPaths();
@@ -250,6 +250,15 @@ public sealed class LibraryScreen : ObservableObject, ILibraryScreen, ILibraryVi
                 foreach (var row in _rowList.OfType<LibraryRow>()) row.RefreshSubtitle();
                 break;
         }
+    }
+
+    /// <summary>After the browser re-read its songs' and facets' words: the headers and the rail follow.
+    /// The rows, the picks and the ticked filters are the same objects throughout.</summary>
+    private void OnLanguageChanged()
+    {
+        foreach (var column in _columns) column.Relabel();
+        RebuildPaths();
+        Raise(nameof(DetailFacts), nameof(DetailProblem), nameof(LoadTip));
     }
 
     /// <summary>The selected song's cover usually decodes AFTER it is picked; the rail follows it as it arrives.</summary>

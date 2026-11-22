@@ -5,6 +5,9 @@ namespace DotCharter.UI.ViewModels.PlayMode;
 
 public partial class PlayModeViewModel
 {
+    internal bool CanHandleGetReadyKeys => IsTuningCheckScreen &&
+        !ToneRig.IsPedalboardOpen && !Settings.IsGameplaySettingsOpen && !IsAmpFxOpen;
+
     /// <summary>
     ///     Takes the Get Ready screen's key presses from <paramref name="keys" />,
     ///     which the view hosting the screen publishes into. A screen hosted from
@@ -23,7 +26,7 @@ public partial class PlayModeViewModel
     /// </summary>
     private void OnGetReadyKey(object? sender, ScreenKeyEventArgs e)
     {
-        if (e.Handled || !IsTuningCheckScreen) return;
+        if (e.Handled || !CanHandleGetReadyKeys) return;
 
         var action = GetReadyKeys.Resolve(e.Key, e.TextInputFocused);
         if (!GetReadyKeys.IsClaimedByTheScreen(action)) return;

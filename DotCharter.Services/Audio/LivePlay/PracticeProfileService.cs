@@ -5,9 +5,15 @@ using DotCharter.Services.Library;
 
 namespace DotCharter.Services.Audio.LivePlay;
 
+/// <summary>The profile and session allocated when a practice run starts.</summary>
+public readonly record struct PracticeRunIdentity(Guid ProfileId, Guid SessionId);
+
 /// <summary>One finished practice session in an arrangement's history.</summary>
 public sealed class PracticeSessionRecord
 {
+    /// <summary>Stable run identity; empty on sessions written by older versions.</summary>
+    public Guid Id { get; set; }
+
     public DateTime EndedUtc { get; set; }
     public long Score { get; set; }
     /// <summary>Accuracy over judged sounds, 0..1.</summary>
@@ -247,6 +253,16 @@ public sealed class PracticeArrangementProfile
 
 public interface IPracticeProfileService
 {
+    /// <summary>The current profile, or empty for a fixed-path store.</summary>
+    Guid ActiveProfileId => Guid.Empty;
+
+    /// <summary>Allocates an identity before capture or any asynchronous archive work.</summary>
+    PracticeRunIdentity CaptureRun() => new(ActiveProfileId, Guid.NewGuid());
+
+    /// <summary>Reads the profile that owned the run, even after a profile switch.</summary>
+    PracticeArrangementProfile GetProfile(string songKey, string arrangementName, PracticeRunIdentity run) =>
+        GetProfile(songKey, arrangementName);
+
     /// <summary>Progress for one song + arrangement; empty profile when unplayed.</summary>
     PracticeArrangementProfile GetProfile(string songKey, string arrangementName);
 
@@ -274,12 +290,16 @@ public interface IPracticeProfileService
         IReadOnlyList<SectionResult>? sections = null,
         IReadOnlyList<TechniqueResult>? techniques = null,
         double? chartDifficulty = null,
-        bool failed = false);
+        bool failed = false, PracticeRunIdentity? run = null);
 
     /// <summary>Snapshot of the whole store, keyed "songKey|arrangementName"
     /// (see <see cref="PracticeProfileService.TryParseKey"/>). Feeds the
     /// per-profile statistics/leaderboard aggregations.</summary>
     IReadOnlyDictionary<string, PracticeArrangementProfile> GetAll();
+
+    /// <summary>One owning profile's authoritative archive references, or null when it cannot be read.</summary>
+    IReadOnlyDictionary<string, PracticeArrangementProfile>? GetArchiveProfiles(Guid profileId) =>
+        IsStoreAuthoritative ? GetAll() : null;
 
     /// <summary>Attaches a finalized take file to the MOST RECENT session of
     /// the arrangement (takes finalize asynchronously after
@@ -288,10 +308,16 @@ public interface IPracticeProfileService
     bool AttachTakeFile(string songKey, string arrangementName, string takeFileName);
 
     /// <summary>v0.32: attaches a saved run replay to the MOST RECENT session
-    /// (same lifecycle as <see cref="AttachTakeFile"/> — replays persist
+    /// (same lifecycle as <see cref="AttachTakeFile(string, string, string)"/> — replays persist
     /// off-thread right after <see cref="Record"/>). False when no session
     /// exists or the newest one already carries a replay.</summary>
     bool AttachReplayFile(string songKey, string arrangementName, string replayFileName);
+
+    /// <summary>Attaches only to this exact profile and session; never falls back to the latest run.</summary>
+    bool AttachTakeFile(string songKey, string arrangementName, string takeFileName, PracticeRunIdentity run) => false;
+
+    /// <summary>Attaches only to this exact profile and session; never falls back to the latest run.</summary>
+    bool AttachReplayFile(string songKey, string arrangementName, string replayFileName, PracticeRunIdentity run) => false;
 
     /// <summary>
     ///     Moves every arrangement stored under the own-chart song key <paramref name="fromSongKey" /> (a
@@ -460,22 +486,49 @@ public sealed class PracticeProfileService : IPracticeProfileService
     /// </summary>
     public const double MinCoverageForBestAccuracy = 0.5;
 
+    /// <summary>Lowest playback speed (percent) whose run may raise a stored best; slower runs
+    /// are practice and only count towards Sessions and mastery.</summary>
+    public const double MinSpeedPercentForBests = 99.5;
+
+    /// <summary>Whether <paramref name="result" /> ran at full speed, so it may raise the
+    /// stored score, streak, accuracy, full-combo flag and detector bests.</summary>
+    public static bool QualifiesForBests(LivePlaySessionResult result) => result.SpeedPercent >= MinSpeedPercentForBests;
+
     /// <summary>Whether <paramref name="result" /> is representative enough of the
     /// whole arrangement to set <see cref="PracticeArrangementProfile.BestAccuracy" />.
     /// The single home of the rule, so the results screen's "new best accuracy"
     /// banner cannot claim something the store did not record.</summary>
     public static bool QualifiesForBestAccuracy(LivePlaySessionResult result) => result.Coverage >= MinCoverageForBestAccuracy;
 
+    public Guid ActiveProfileId => _playerProfiles?.ActiveProfile.Id ?? Guid.Empty;
+
+    public PracticeRunIdentity CaptureRun() => new(ActiveProfileId, Guid.NewGuid());
+
+    public PracticeArrangementProfile GetProfile(string songKey, string arrangementName, PracticeRunIdentity run)
+    {
+        lock (_gate)
+        {
+            if (!HasProfile(run.ProfileId)) return new PracticeArrangementProfile();
+            var profiles = LoadLocked(run.ProfileId);
+            return profiles.TryGetValue(Key(songKey, arrangementName), out var profile) ? profile : new PracticeArrangementProfile();
+        }
+    }
+
+    private bool HasProfile(Guid profileId) => _playerProfiles == null
+        ? profileId == Guid.Empty
+        : _playerProfiles.Profiles.Any(p => p.Id == profileId);
+
     public PracticeArrangementProfile Record(string songKey, string arrangementName, LivePlaySessionResult result,
         string? displayName = null, IReadOnlyList<PhraseMasteryOutcome>? phraseOutcomes = null,
         IReadOnlyList<SectionResult>? sections = null,
         IReadOnlyList<TechniqueResult>? techniques = null,
         double? chartDifficulty = null,
-        bool failed = false)
+        bool failed = false, PracticeRunIdentity? run = null)
     {
         lock (_gate)
         {
-            var profiles = LoadLocked();
+            if (run is { } owner && !HasProfile(owner.ProfileId)) return new PracticeArrangementProfile();
+            var profiles = LoadLocked(run?.ProfileId);
             var key = Key(songKey, arrangementName);
             if (!profiles.TryGetValue(key, out var profile))
                 profiles[key] = profile = new PracticeArrangementProfile();
@@ -491,8 +544,9 @@ public sealed class PracticeProfileService : IPracticeProfileService
 
             var endedUtc = DateTime.UtcNow;
             var detector = LiveDetectorModes.StoreKey(result.Detector);
-            profile.Sessions.Add(new PracticeSessionRecord
+            var recorded = new PracticeSessionRecord
             {
+                Id = run?.SessionId ?? Guid.NewGuid(),
                 EndedUtc = endedUtc,
                 Detector = detector,
                 Score = result.Score,
@@ -512,39 +566,42 @@ public sealed class PracticeProfileService : IPracticeProfileService
                 // Null (not false) when the run wasn't a fail-out, so the JSON
                 // store doesn't grow a field on every ordinary run.
                 Failed = failed ? true : null
-            });
-            // Keep the list ascending even when the clock steps backwards, so
-            // the cap below trims the genuinely OLDEST record and every reader's
-            // `Sessions[^1]` really is the newest run. See SortSessions.
+            };
+            profile.Sessions.Add(recorded);
             SortSessions(profile);
-            while (profile.Sessions.Count > SessionHistoryCap) profile.Sessions.RemoveAt(0);
+            TrimSessionHistory(profile, recorded);
 
             // Best-run metadata follows the SAME ranking as the best itself:
             // score alone. Re-stamped on a strictly better score (or when no
             // metadata exists yet and the run at least matches the best, e.g.
             // the first recorded run); an equal-score FC upgrades the flag;
             // a worse run never touches it — the stored best stands intact.
-            if (result.Score > profile.BestScore ||
-                (profile.BestRunFullCombo is null && result.Score >= profile.BestScore))
+            if (QualifiesForBests(result) && (result.Score > profile.BestScore ||
+                (profile.BestRunFullCombo is null && result.Score >= profile.BestScore)))
             {
                 profile.BestRunFullCombo = result.IsFullCombo;
                 profile.BestRunPerfects = result.PerfectCount;
                 profile.BestRunGreats = result.GreatCount;
                 profile.BestRunGoods = result.GoodCount;
             }
-            else if (result.Score == profile.BestScore && result.IsFullCombo)
+            else if (QualifiesForBests(result) && result.Score == profile.BestScore && result.IsFullCombo)
             {
                 profile.BestRunFullCombo = true;
             }
 
-            if (result.IsFullCombo) profile.FullComboAchieved = true;
+            // Slowed-down runs never raise the bests (see QualifiesForBests); they still
+            // land in Sessions and in mastery, which is scaled by speed.
+            var qualifiesForBests = QualifiesForBests(result);
+            if (qualifiesForBests && result.IsFullCombo) profile.FullComboAchieved = true;
 
-            profile.BestScore = Math.Max(profile.BestScore, result.Score);
+            if (qualifiesForBests)
+                profile.BestScore = Math.Max(profile.BestScore, result.Score);
             // Coverage-gated: see MinCoverageForBestAccuracy. Never LOWERS the
             // stored value — a short run simply does not get to raise it.
-            if (QualifiesForBestAccuracy(result))
+            if (qualifiesForBests && QualifiesForBestAccuracy(result))
                 profile.BestAccuracy = Math.Max(profile.BestAccuracy, result.Accuracy);
-            profile.BestStreak = Math.Max(profile.BestStreak, result.BestStreak);
+            if (qualifiesForBests)
+                profile.BestStreak = Math.Max(profile.BestStreak, result.BestStreak);
 
             // The same bests per detector; an unknown detector records none.
             if (detector != null)
@@ -552,10 +609,10 @@ public sealed class PracticeProfileService : IPracticeProfileService
                 profile.DetectorBests ??= [];
                 if (!profile.DetectorBests.TryGetValue(detector, out var detectorBest))
                     profile.DetectorBests[detector] = detectorBest = new PracticeDetectorBest();
-                detectorBest.BestScore = Math.Max(detectorBest.BestScore, result.Score);
-                if (QualifiesForBestAccuracy(result))
+                if (qualifiesForBests) detectorBest.BestScore = Math.Max(detectorBest.BestScore, result.Score);
+                if (qualifiesForBests && QualifiesForBestAccuracy(result))
                     detectorBest.BestAccuracy = Math.Max(detectorBest.BestAccuracy, result.Accuracy);
-                detectorBest.BestStreak = Math.Max(detectorBest.BestStreak, result.BestStreak);
+                if (qualifiesForBests) detectorBest.BestStreak = Math.Max(detectorBest.BestStreak, result.BestStreak);
                 detectorBest.LastPlayedUtc = endedUtc;
             }
 
@@ -607,41 +664,47 @@ public sealed class PracticeProfileService : IPracticeProfileService
         }
     }
 
-    public bool AttachTakeFile(string songKey, string arrangementName, string takeFileName)
+    public IReadOnlyDictionary<string, PracticeArrangementProfile>? GetArchiveProfiles(Guid profileId)
     {
-        if (string.IsNullOrWhiteSpace(takeFileName)) return false;
         lock (_gate)
         {
-            var profiles = LoadLocked();
-            if (!profiles.TryGetValue(Key(songKey, arrangementName), out var profile) ||
-                profile.Sessions.Count == 0)
-            {
-                return false;
-            }
-
-            var latest = profile.Sessions[^1];
-            if (!string.IsNullOrEmpty(latest.TakeFile)) return false;
-            latest.TakeFile = takeFileName;
-            SaveLocked(profiles);
-            return true;
+            if (!HasProfile(profileId)) return null;
+            var profiles = LoadLocked(profileId);
+            return _storeUnreadable ? null : new Dictionary<string, PracticeArrangementProfile>(profiles);
         }
     }
 
+    public bool AttachTakeFile(string songKey, string arrangementName, string takeFileName)
+        => AttachFile(songKey, arrangementName, takeFileName, null, replay: false);
+
     public bool AttachReplayFile(string songKey, string arrangementName, string replayFileName)
+        => AttachFile(songKey, arrangementName, replayFileName, null, replay: true);
+
+    public bool AttachTakeFile(string songKey, string arrangementName, string takeFileName, PracticeRunIdentity run)
+        => AttachFile(songKey, arrangementName, takeFileName, run, replay: false);
+
+    public bool AttachReplayFile(string songKey, string arrangementName, string replayFileName, PracticeRunIdentity run)
+        => AttachFile(songKey, arrangementName, replayFileName, run, replay: true);
+
+    private bool AttachFile(string songKey, string arrangementName, string fileName, PracticeRunIdentity? run, bool replay)
     {
-        if (string.IsNullOrWhiteSpace(replayFileName)) return false;
+        if (string.IsNullOrWhiteSpace(fileName)) return false;
         lock (_gate)
         {
-            var profiles = LoadLocked();
+            if (run is { } owner && (!HasProfile(owner.ProfileId) || owner.SessionId == Guid.Empty)) return false;
+            var profiles = LoadLocked(run?.ProfileId);
             if (!profiles.TryGetValue(Key(songKey, arrangementName), out var profile) ||
                 profile.Sessions.Count == 0)
             {
                 return false;
             }
 
-            var latest = profile.Sessions[^1];
-            if (!string.IsNullOrEmpty(latest.ReplayFile)) return false;
-            latest.ReplayFile = replayFileName;
+            var session = run is { } target
+                ? profile.Sessions.FirstOrDefault(s => s.Id == target.SessionId)
+                : profile.Sessions[^1];
+            if (session == null || !string.IsNullOrEmpty(replay ? session.ReplayFile : session.TakeFile)) return false;
+            if (replay) session.ReplayFile = fileName;
+            else session.TakeFile = fileName;
             SaveLocked(profiles);
             return true;
         }
@@ -785,9 +848,9 @@ public sealed class PracticeProfileService : IPracticeProfileService
     ///         ladder and session record the player had with a single entry.
     ///     </para>
     /// </summary>
-    private Dictionary<string, PracticeArrangementProfile> LoadLocked()
+    private Dictionary<string, PracticeArrangementProfile> LoadLocked(Guid? profileId = null)
     {
-        var path = ResolveStorePathLocked();
+        var path = ResolveStorePathLocked(profileId);
         if (_profiles != null && path == _loadedPath) return _profiles;
 
         _profiles = null;
@@ -854,9 +917,8 @@ public sealed class PracticeProfileService : IPracticeProfileService
     ///         <b>Readers treat that order as a fact without enforcing it.</b>
     ///         <c>Sessions[^1]</c> is "last played" in
     ///         <c>GameplayStatsService</c> (three methods), and
-    ///         <see cref="Record" />'s history cap trims with
-    ///         <c>Sessions.RemoveAt(0)</c>, i.e. it deletes whatever happens to be
-    ///         FIRST. (The history, trends and weak-spot read-models that also
+    ///         <see cref="Record" />'s history cap trims the FIRST unprotected
+    ///         session in that order. (The history, trends and weak-spot read-models that also
     ///         leaned on it are gone.)
     ///     </para>
     ///     <para>
@@ -876,6 +938,20 @@ public sealed class PracticeProfileService : IPracticeProfileService
     {
         foreach (var profile in profiles.Values) SortSessions(profile);
         return profiles;
+    }
+
+    private static void TrimSessionHistory(PracticeArrangementProfile profile, PracticeSessionRecord recorded)
+    {
+        // Legacy rows have no ID. Give them temporary decision keys without changing the store.
+        var candidates = profile.Sessions.Select(session => (
+            Session: session, Id: session.Id == Guid.Empty ? Guid.NewGuid() : session.Id,
+            Protected: session.TakeStarred == true || session.ReampFiles is { Count: > 0 })).ToArray();
+        var newId = candidates.Single(candidate => ReferenceEquals(candidate.Session, recorded)).Id;
+        var removals = PracticeHistoryTrim.SelectRemovals(
+            candidates.Select(candidate => (candidate.Id, candidate.Protected)).ToArray(), newId, SessionHistoryCap)
+            .ToHashSet();
+        foreach (var candidate in candidates)
+            if (removals.Contains(candidate.Id)) profile.Sessions.Remove(candidate.Session);
     }
 
     /// <summary>Ascending by <c>EndedUtc</c>; a no-op (one comparison per
@@ -909,7 +985,7 @@ public sealed class PracticeProfileService : IPracticeProfileService
 
         try
         {
-            File.Move(path, quarantine, true);
+            AtomicFile.MoveAside(path, quarantine);
             _logger?.Warning(AppLogCategory.Audio,
                 $"Practice profile store was unparseable ({cause.Message}); moved to " +
                 $"'{Path.GetFileName(quarantine)}' and starting fresh.");
@@ -930,11 +1006,13 @@ public sealed class PracticeProfileService : IPracticeProfileService
     ///     config root is MOVED into the default profile's data directory the
     ///     first time that profile's store is resolved.
     /// </summary>
-    private string ResolveStorePathLocked()
+    private string ResolveStorePathLocked(Guid? profileId = null)
     {
         if (_playerProfiles == null) return _fixedFilePath!;
 
-        var active = _playerProfiles.ActiveProfile;
+        var active = profileId is { } id
+            ? _playerProfiles.Profiles.First(p => p.Id == id)
+            : _playerProfiles.ActiveProfile;
         var path = Path.Combine(_playerProfiles.GetDataDirectory(active.Id), StoreFileName);
 
         if (active.IsDefault && !File.Exists(path) && File.Exists(_legacyFilePath))
@@ -949,7 +1027,7 @@ public sealed class PracticeProfileService : IPracticeProfileService
             catch (Exception ex)
             {
                 _logger?.Warning(AppLogCategory.Audio,
-                    $"Practice score migration failed, keeping legacy store readable: {ex.Message}");
+                    "Practice score migration failed, keeping legacy store readable", ex);
                 return _legacyFilePath;
             }
         }
@@ -980,7 +1058,7 @@ public sealed class PracticeProfileService : IPracticeProfileService
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Practice profile store not writable: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Practice profile store not writable", ex);
         }
     }
 }

@@ -8,7 +8,7 @@ namespace DotCharter.Tests.UI.ViewModels.Editor;
 ///     #601: the Sound tab's rail, pure — which sections each selection type offers, which one is
 ///     open, what the ONE pinned "Apply to" row governs and that a chord has no Playback section.
 ///     The headless half (the real view at the default pane size, the chips, the picker, the edits)
-///     is <c>Perf/SoundTabRailUiPerfSmokeTests</c>.
+///     is <c>Perf/NoteSectionStripUiPerfSmokeTests</c>.
 /// </summary>
 public sealed class SoundSectionsViewModelTests
 {
@@ -88,6 +88,40 @@ public sealed class SoundSectionsViewModelTests
         Assert.Equal(chordScope, vm.HasChordScope);
         Assert.Equal(chordScope && section == SoundSection.Technique, vm.ShowChordTechnique);
         Assert.Equal(!chordScope && section == SoundSection.Technique, vm.ShowNoteTechnique);
+    }
+
+    /// <summary>#584: two chords are <see cref="SoundSelectionKind.MultiSame" /> like two notes, and
+    /// their Technique section showed the NOTE card, whose edits write only the selected notes: none,
+    /// so every control did nothing. A multi-selection holding chords shows the chord card (its
+    /// edits write the selected chords); a mixed one shows both, each writing its own type.</summary>
+    [Theory]
+    [InlineData(SoundSelectionKind.MultiSame, true, true, false)]
+    [InlineData(SoundSelectionKind.MultiSame, false, false, true)]
+    [InlineData(SoundSelectionKind.MultiMixed, true, true, true)]
+    [InlineData(SoundSelectionKind.Note, false, false, true)]
+    [InlineData(SoundSelectionKind.Chord, true, true, false)]
+    public void AMultiSelection_ShowsTheTechniqueCardOfEachSelectedSoundType(SoundSelectionKind kind, bool hasChords,
+        bool chordCard, bool noteCard)
+    {
+        var vm = new SoundSectionsViewModel { Kind = kind, HasChords = hasChords };
+        vm.ChooseCommand.Execute(SoundSection.Technique);
+
+        Assert.Equal(chordCard, vm.ShowChordTechnique);
+        Assert.Equal(noteCard, vm.ShowNoteTechnique);
+    }
+
+    /// <summary>The chord flag alone moves the cards, so it re-announces them.</summary>
+    [Fact]
+    public void TheChordFlag_ReannouncesTheTechniqueCards()
+    {
+        var vm = new SoundSectionsViewModel { Kind = SoundSelectionKind.MultiSame };
+        var raised = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        vm.HasChords = true;
+
+        Assert.Contains(nameof(SoundSectionsViewModel.ShowChordTechnique), raised);
+        Assert.Contains(nameof(SoundSectionsViewModel.ShowNoteTechnique), raised);
     }
 
     /// <summary>The open section is remembered PER SELECTION TYPE: a chord stays on Technique across

@@ -16,7 +16,7 @@ namespace DotCharter.Tests.Services.Session;
 ///     replaced.
 ///     <para>
 ///         <c>ProjectSessionService.LoadFile</c> calls
-///         <c>NotifyProjectSwitched()</c> in its finally, which resets the
+///         <c>MarkClean()</c> before awaiting audio, which resets the
 ///         snapshot scheduler and retires the outgoing project's snapshot.
 ///         <c>SongBrowserViewModel.LoadSongItem</c> — the path Play Mode's song
 ///         select drives — called only <c>MarkProjectClean()</c>, so after a

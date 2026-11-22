@@ -13,6 +13,184 @@ public class EofExporterTests
     }
 
     [Fact]
+    public void Grace_at_a_tempo_boundary_survives_millisecond_quantization()
+    {
+        var project = new ChartProject();
+        foreach (var time in new[] { 0.0, 1536.0, 2688.0 })
+            project.Beats.Add(new BeatMarker { Time = time });
+        var position = new FractionalPosition(1, new Fraction(9, 256));
+        var original = new GuitarNote
+        {
+            Position = position, Sustain = new FractionalPosition(0, new Fraction(1, 4)),
+            StringIndex = 0, Fret = 7, GraceFret = 5
+        };
+        project.Arrangements.Add(new Arrangement { Name = "Lead", Levels = { new ChartLevel { Notes = { original } } } });
+        var path = WriteTempEof(project);
+        try
+        {
+            var imported = new EofImporter().ImportTracksWithMetadata(path, [9]);
+            var note = Assert.Single(Assert.Single(Assert.Single(imported.Arrangements).Levels).Notes);
+            var beats = imported.Metadata.Beats.Select(b => new BeatMarker { Time = b.TimeMs }).ToList();
+
+            Assert.Equal(5, note.GraceFret);
+            Assert.Equal(7, note.Fret);
+            Assert.InRange(Math.Abs(note.Position.GetPositionMs(beats) - position.GetPositionMs(project.Beats)), 0, 1);
+            Assert.InRange(Math.Abs((note.Position + note.Sustain).GetPositionMs(beats) - (position + original.Sustain).GetPositionMs(project.Beats)), 0, 1);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData(40)]
+    [InlineData(30)]
+    [InlineData(120)]
+    public void GracePairs_RoundTripAtSlowAndNormalTempos(int bpm)
+    {
+        var project = EofExportTestCharts.BuildRepresentativeProject();
+        project.Arrangements.Clear();
+        for (var i = 0; i < project.Beats.Count; i++)
+        {
+            project.Beats[i].Time = i * 60000.0 / bpm;
+            project.Beats[i].Bpm = bpm;
+        }
+
+        var arrangement = new Arrangement { Name = "Lead" };
+        var level = new ChartLevel();
+        level.Notes.Add(new GuitarNote
+        {
+            Position = new FractionalPosition(2), Sustain = new FractionalPosition(1),
+            StringIndex = 0, Fret = 7, GraceFret = 5
+        });
+        var chord = new Chord { Position = new FractionalPosition(4) };
+        chord.ChordNotes.Add(new ChordNote
+        {
+            StringIndex = 0, Fret = 7, GraceFret = 5, Sustain = new FractionalPosition(1)
+        });
+        chord.ChordNotes.Add(new ChordNote
+        {
+            StringIndex = 1, Fret = 9, GraceFret = 7, Sustain = new FractionalPosition(1)
+        });
+        level.Chords.Add(chord);
+        arrangement.Levels.Add(level);
+        project.Arrangements.Add(arrangement);
+
+        var path = WriteTempEof(project);
+        try
+        {
+            var imported = Assert.Single(new EofImporter().ImportTracksWithMetadata(path, [9]).Arrangements);
+            var importedLevel = Assert.Single(imported.Levels);
+            var note = Assert.Single(importedLevel.Notes);
+            Assert.Equal(5, note.GraceFret);
+            Assert.Equal(new FractionalPosition(2), note.Position);
+            Assert.Equal(new FractionalPosition(1), note.Sustain);
+            Assert.Equal(2, importedLevel.Chords.Count);
+            var ornament = importedLevel.Chords[0];
+            var target = importedLevel.Chords[1];
+            Assert.Equal(new FractionalPosition(4), ornament.Position);
+            Assert.Equal(new[] { 5, 7 }, ornament.ChordNotes.Select(n => n.Fret));
+            Assert.Equal(new[] { 7, 9 }, target.ChordNotes.Select(n => n.Fret));
+            Assert.All(importedLevel.Chords.SelectMany(c => c.ChordNotes), n => Assert.Null(n.GraceFret));
+            Assert.Equal(Math.Round(ornament.Position.GetPositionMs(project.Beats)) +
+                EofGraceTiming.LengthAt(new FractionalPosition(4), project.Beats), Math.Round(target.Position.GetPositionMs(project.Beats)));
+            Assert.All(target.ChordNotes, n => Assert.Equal(5 * 60000.0 / bpm,
+                (target.Position + n.Sustain).GetPositionMs(project.Beats), 6));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Ordinary_sixteenth_slide_at_100_bpm_stays_two_played_notes()
+    {
+        var project = EofExportTestCharts.BuildRepresentativeProject();
+        project.Arrangements.Clear();
+        for (var i = 0; i < project.Beats.Count; i++)
+        {
+            project.Beats[i].Time = i * 600.0;
+            project.Beats[i].Bpm = 100;
+        }
+        var arrangement = new Arrangement { Name = "Lead" };
+        arrangement.Levels.Add(new ChartLevel
+        {
+            Notes =
+            {
+                new GuitarNote { Position = new FractionalPosition(1), Sustain = new FractionalPosition(0, new Fraction(1, 4)), StringIndex = 0, Fret = 5, SlideTo = 7, LinkNext = true },
+                new GuitarNote { Position = new FractionalPosition(1, new Fraction(1, 4)), Sustain = new FractionalPosition(0, new Fraction(1, 4)), StringIndex = 0, Fret = 7 }
+            }
+        });
+        project.Arrangements.Add(arrangement);
+        var path = WriteTempEof(project);
+        try
+        {
+            var imported = new EofImporter().ImportTracksWithMetadata(path, [9]);
+            var notes = Assert.Single(Assert.Single(imported.Arrangements).Levels).Notes;
+            Assert.Equal(2, notes.Count);
+            Assert.Equal(600, notes[0].Position.GetPositionMs(project.Beats));
+            Assert.Equal(750, (notes[0].Position + notes[0].Sustain).GetPositionMs(project.Beats));
+            Assert.Equal(750, notes[1].Position.GetPositionMs(project.Beats));
+            Assert.Equal(7, notes[0].SlideTo);
+            Assert.All(notes, note => Assert.Null(note.GraceFret));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void FoldingGracePairs_KeepsEachSurvivingChordsOwnFingering()
+    {
+        var project = EofExportTestCharts.BuildRepresentativeProject();
+        project.Arrangements.Clear();
+        var arrangement = new Arrangement { Name = "Lead", Capo = 2 };
+        for (var i = 0; i < 3; i++)
+        {
+            var template = new ChordTemplate { Id = i };
+            template.Frets[0] = 7;
+            template.Frets[1] = 9;
+            template.Fingers[0] = i == 0 ? 0 : i;
+            template.Fingers[1] = i + 2;
+            arrangement.ChordTemplates.Add(template);
+            var chord = new Chord { Position = new FractionalPosition(2 + i * 2), TemplateId = i };
+            chord.ChordNotes.Add(new ChordNote
+            {
+                StringIndex = 0, Fret = 7, GraceFret = i == 0 ? 5 : null, Sustain = new FractionalPosition(1)
+            });
+            chord.ChordNotes.Add(new ChordNote
+            {
+                StringIndex = 1, Fret = 9, GraceFret = i == 0 ? 7 : null, Sustain = new FractionalPosition(1)
+            });
+            if (i != 1) arrangement.Levels.Add(new ChartLevel { DifficultyIndex = i == 0 ? 0 : 1 });
+            arrangement.Levels[^1].Chords.Add(chord);
+        }
+
+        project.Arrangements.Add(arrangement);
+        var path = WriteTempEof(project);
+        try
+        {
+            var imported = Assert.Single(new EofImporter().ImportTracksWithMetadata(path, [9]).Arrangements);
+            var chords = imported.Levels.SelectMany(l => l.Chords).OrderBy(c => c.Position).ToList();
+            Assert.Equal(4, chords.Count);
+            var targets = chords.Where(c => c.ChordNotes[0].Fret == 7).ToList();
+            Assert.Equal(3, targets.Count);
+            for (var i = 0; i < targets.Count; i++)
+            {
+                var template = imported.ChordTemplates.Single(t => t.Id == targets[i].TemplateId);
+                Assert.Equal(arrangement.ChordTemplates[i].Fingers, template.Fingers);
+            }
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Export_StartsWithEofProjectHeader()
     {
         var bytes = EofExporter.Export(EofExportTestCharts.BuildRepresentativeProject()).Bytes;
@@ -215,10 +393,8 @@ public class EofExporterTests
     [Fact]
     public void Export_ChordGraceHints_SurviveRoundTripAsAnEofGracePair()
     {
-        // A chord grace exports as ONE short slide-in note carrying every graced
-        // string (EOF stores one flag set + one slide end fret per note) with the
-        // strum displaced after it; the importer folds that exact shape back into
-        // per-string ChordNote.GraceFret hints. Previously the hints were dropped.
+        // Chord ornaments stay unnamed to avoid exporting a synthetic manual
+        // chord name from EOF to Rocksmith. Import keeps both played chords.
         var project = EofExportTestCharts.BuildRepresentativeProject();
         var lead = project.Arrangements.First(a => a.Name == "Lead");
         AddGracedChord(lead, graceOnString1: 5, graceOnString2: 7); // uniform +2
@@ -230,18 +406,16 @@ public class EofExporterTests
             var result = new EofImporter().ImportTracksWithMetadata(path, [9]);
             var imported = Assert.Single(result.Arrangements);
 
-            var graced = Assert.Single(imported.Levels[0].Chords,
-                c => c.ChordNotes.Any(cn => cn.GraceFret != null));
-            var byString = graced.ChordNotes.ToDictionary(cn => cn.StringIndex, cn => cn.GraceFret);
-            Assert.Equal(5, byString[1]);
-            Assert.Equal(7, byString[2]);
-            Assert.Equal(7, graced.ChordNotes.First(cn => cn.StringIndex == 1).Fret);
-            Assert.Equal(9, graced.ChordNotes.First(cn => cn.StringIndex == 2).Fret);
-
-            // The grace note was folded away again: same chord count, and the
-            // strum sits back on its authored beat.
-            Assert.Equal(EofExportTestCharts.Pos(22), graced.Position);
-            Assert.Equal(sourceChordCount, imported.Levels[0].Chords.Count);
+            var position = EofExportTestCharts.Pos(22);
+            var onset = position.GetPositionMs(project.Beats);
+            var targetTime = onset + EofGraceTiming.LengthAt(position, project.Beats);
+            var ornament = Assert.Single(imported.Levels[0].Chords, c => c.Position == position);
+            var target = Assert.Single(imported.Levels[0].Chords,
+                c => Math.Round(c.Position.GetPositionMs(project.Beats)) == targetTime);
+            Assert.Equal(new[] { 5, 7 }, ornament.ChordNotes.OrderBy(n => n.StringIndex).Select(n => n.Fret));
+            Assert.Equal(new[] { 7, 9 }, target.ChordNotes.OrderBy(n => n.StringIndex).Select(n => n.Fret));
+            Assert.All(ornament.ChordNotes.Concat(target.ChordNotes), n => Assert.Null(n.GraceFret));
+            Assert.Equal(sourceChordCount + 1, imported.Levels[0].Chords.Count);
         }
         finally
         {

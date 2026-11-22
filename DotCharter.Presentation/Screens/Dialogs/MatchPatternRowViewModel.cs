@@ -143,11 +143,18 @@ public sealed partial class MatchPatternRowViewModel : ObservableObject, IMatchP
     [ObservableProperty] private PatternChoice<SustainRule> _selectedSustain;
     [ObservableProperty] private string _summary = string.Empty;
 
-    public MatchPatternRowViewModel(MatchPattern pattern, PatternChoiceSet choices)
+    private readonly ILocalizationService _loc;
+    private readonly string _storedName;
+    private readonly string _shownName;
+
+    public MatchPatternRowViewModel(MatchPattern pattern, PatternChoiceSet choices, ILocalizationService loc)
     {
         Id = pattern.Id;
         Choices = choices;
-        _name = pattern.Name;
+        _loc = loc;
+        _storedName = pattern.Name;
+        _shownName = MatchPatternCatalog.DisplayName(pattern, loc);
+        _name = _shownName;
         _scopeNotes = pattern.Scope.HasFlag(PatternScope.Notes);
         _scopeChords = pattern.Scope.HasFlag(PatternScope.Chords);
         _scopeHandShapes = pattern.Scope.HasFlag(PatternScope.HandShapes);
@@ -191,7 +198,7 @@ public sealed partial class MatchPatternRowViewModel : ObservableObject, IMatchP
     public ObservableCollection<PatternCompanionToggle> Companions { get; } = [];
 
     public string KeyLabel => string.Join("  ·  ",
-        new[] { SelectKey, NextKey, PreviousKey }.Where(k => k.IsBound).Select(k => k.ToString()));
+        new[] { SelectKey, NextKey, PreviousKey }.Where(k => k.IsBound).Select(k => k.ToDisplayString(_loc)));
 
     public bool HasKeys => SelectKey.IsBound || NextKey.IsBound || PreviousKey.IsBound;
 
@@ -254,7 +261,8 @@ public sealed partial class MatchPatternRowViewModel : ObservableObject, IMatchP
         return new MatchPattern
         {
             Id = Id,
-            Name = Name,
+            // An untouched localized built-in name is stored under its original name, so the store never holds a translation.
+            Name = Name == _shownName ? _storedName : Name,
             Scope = scope,
             Grouping = SelectedGrouping.Value,
             Fret = SelectedFretRule.Value,

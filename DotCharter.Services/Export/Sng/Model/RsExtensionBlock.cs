@@ -24,17 +24,10 @@ internal sealed record RsExtTech(uint Mask, sbyte SlideTo, sbyte SlideUnpitchTo,
 }
 
 /// <summary>
-///     The RS7X extension block, version 1 (the rs7string mod's
-///     <c>docs/sng-extension.md</c>): appended INSIDE the zlib SNG body right after
-///     MetaData, it carries what the stock six-slot chord records cannot — the chord
-///     template columns (<c>CHDT</c>) and chord-note technique data (<c>CHNT</c>) of
-///     every string past the sixth, listed in <c>STRS</c>. The stock loader stops
-///     reading at the end of MetaData, so the game is unaffected by it.
-///     <para>
-///         The model is general (any string count 7..16, columns 6..n-1); which
-///         arrangements may be EXPORTED with it is
-///         <see cref="Export.Rocksmith.Rs7StringLayout.ExportRefusal(Arrangement)" />'s call.
-///     </para>
+///     Extra columns and techniques of the internal slot-order model. Guitar templates
+///     and chord techniques keep the columns beyond the six stock slots here; bass
+///     marks its instrument/count and uses stock columns. RsxrSngWriter combines the
+///     model into positional records. RS7X constants describe legacy input for readers.
 /// </summary>
 internal sealed class RsExtensionBlock
 {
@@ -43,8 +36,9 @@ internal sealed class RsExtensionBlock
     public const ushort HeaderSize = 16;
     public const int SectionHeaderSize = 12;
     public const byte InstrumentGuitar = 0;
+    public const byte InstrumentBass = 1;
     public const int MaxStrings = 16;
-    public const int MaxFret = 24;
+    public const int MaxFret = FretLimits.MaxFret;
     public const int MaxBends = 32;
     /// <summary>Section flag: a reader that does not know the section must reject the block.</summary>
     public const ushort Critical = 1;
@@ -68,14 +62,23 @@ internal sealed class RsExtensionBlock
     public List<RsExtTech[]>? ChordNotes { get; set; }
 
     /// <summary>An empty guitar block for <paramref name="stringCount" /> strings, both
-    /// sections present (a writer always writes all three, even with zero counts).
-    /// Bytes: <see cref="RsExtensionBlockWriter" />.</summary>
+    /// column collections present, including when empty.
+    /// The RS Extended Range writer combines these columns with the stock slots.</summary>
     public static RsExtensionBlock ForStrings(int stringCount) => new()
     {
         StringCount = stringCount,
         Strings = [.. Enumerable.Range(6, stringCount - 6)],
         Templates = [],
         ChordNotes = []
+    };
+
+    /// <summary>The block of a 5-/6-string bass: <c>STRS</c> only (instrument 1, no columns, six
+    /// MetaData tuning entries). The extra strings use the stock six slots, so there is no
+    /// <c>CHDT</c> / <c>CHNT</c> (RS7X: they may be omitted).</summary>
+    public static RsExtensionBlock ForBass(int stringCount) => new()
+    {
+        Instrument = InstrumentBass,
+        StringCount = stringCount
     };
 
     /// <summary>The column of package string <paramref name="sngIndex" />, -1 when it has none.</summary>

@@ -116,6 +116,25 @@ public sealed class SongCoverPipelineTests
         Assert.Equal(1, service.CoverCalls);
     }
 
+    // ── the publish rule ──────────────────────────────────────────────────────
+
+    /// <summary>A recycle parks a row WITHOUT bumping its generation, so a decode
+    /// past its last wanted check still reaches the publish. That bitmap must
+    /// join the byte-capped park: shown live it sits on an item no container
+    /// shows, outside every budget, until the item itself is collected.</summary>
+    [Fact]
+    public void ACoverDecodedForARecycledRow_IsParked_NotShown()
+    {
+        Assert.Equal(PsarcSongListItem.CoverPublish.Show,
+            PsarcSongListItem.DecideCoverPublish(sameGeneration: true, wanted: true));
+        Assert.Equal(PsarcSongListItem.CoverPublish.Park,
+            PsarcSongListItem.DecideCoverPublish(sameGeneration: true, wanted: false));
+        Assert.Equal(PsarcSongListItem.CoverPublish.Drop,
+            PsarcSongListItem.DecideCoverPublish(sameGeneration: false, wanted: true));
+        Assert.Equal(PsarcSongListItem.CoverPublish.Drop,
+            PsarcSongListItem.DecideCoverPublish(sameGeneration: false, wanted: false));
+    }
+
     // ── the wiring, which no unit test can see ────────────────────────────────
 
     [Fact]

@@ -36,11 +36,31 @@ namespace DotCharter.Tests.Services.Infrastructure.Recovery;
 ///         <c>ProjectSessionRecoveryWiringTests</c>).
 ///     </para>
 /// </summary>
-public sealed class CrashRecoverySnapshotGateTests : IDisposable
+public sealed partial class CrashRecoverySnapshotGateTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"dc_recgate_{Guid.NewGuid():N}");
 
     public void Dispose() => BestEffortDelete.Directory(_root);
+
+    [Theory]
+    [InlineData(@"\\server\share\missing.wav")]
+    [InlineData(@"\\?\C:\missing.wav")]
+    [InlineData("song.wav:stream")]
+    public async Task ARejectedAudioReference_IsNotPersistedAsPlayableSnapshotAudio(string reference)
+    {
+        var h = new Harness(_root);
+        h.OpenPsarcSong();
+        h.State.ActiveProject!.AudioFileName = reference;
+        h.IsDirty = true;
+        h.Service.NotifyProjectChanged();
+
+        await h.Service.RunTickAsync(DateTimeOffset.UtcNow.AddMinutes(1));
+
+        var session = Assert.Single(h.Store.ListSessions());
+        Assert.Equal(reference, session.Metadata.OriginalAudioFileName);
+        // The serializer writes the local song.wav fallback for empty audio.
+        Assert.Equal("song.wav", h.Store.LoadSnapshot(session.SnapshotPath).AudioFileName);
+    }
 
     /// <summary>
     ///     THE REPRODUCTION. A PSARC-sourced session (no project path ⇒ the

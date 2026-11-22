@@ -60,6 +60,10 @@ arms; both exit paths flush).
 
 ## A degraded READ is never authoritative — the rule for every JSON store
 
+Quarantine uses `AtomicFile.MoveAside`, which preserves the original source
+when the move fails. `ReplaceWithRetry` is only for disposable staged files:
+its failure cleanup deletes the source (`JsonConfigurationServiceTests`).
+
 **Three outcomes, and telling them apart is the whole job.** ABSENT is a new
 install (start fresh, write). **CORRUPT** (`JsonException`, or a document that
 parses as literal `null`) is readable bytes that are not a store: move the file
@@ -118,9 +122,34 @@ that — see the take-sweep bullet in `gameplay.md`.
   back, so a newer build's setting survives an older build's save. Only those two
   objects keep unknowns; a new nested settings class that must survive needs the
   same property. Builds before v0.70 still drop them.
+- `JsonConfigurationService.WriteAppConfigNow` discards the retired
+  `ExtendedRangeFormat` member before serialization. Its value cannot select an
+  export target. Other unknown top-level settings retain their JSON values
+  (`AppConfigExtendedRangeTests`).
 - The wipe of the Rocksmith keys by such an old build is detected, not prevented:
   `RocksmithKeysFingerprint` keeps `rocksmith-keys.fingerprint` (a SHA-256 under a
   domain prefix, never a key) beside `appconfig.json`. Keys set: the record is
   refreshed on load. Keys empty and a record present: `JsonConfigurationService`
   logs a WARNING (status bar) every launch. No record (first run): silent. The file
   is on `PayloadReceiptFilter`'s exclusion list and in no backup.
+
+## Remembered file-dialog folders (#832)
+
+Every file dialog opens in the folder of the last pick of its kind (empty = none yet).
+
+- **Where the settings live.** `AppConfig` derives from `FolderConfig` (Services, the
+  app-level `Last*Dir` strings: profile, profile picture, diagnostics, backup, lyrics,
+  chart diff, conversion output, `.dcsong`), which derives from `RigConfig` (Tone, the
+  tone-side ones: `LastToneFileDir`, `LastPsarcToneDir`, `LastNamCaptureDir`,
+  `LastIrDir`, `LastPresetDir`, `LastReampDiDir`). The JSON file is unchanged. The older
+  per-purpose folders (`LastAudioDir`, `LastExportDir`, ...) stay on `AppConfig`.
+- **Reading and writing.** App code uses `PickerDirectoryMemory.StartDirectory` /
+  `RememberDirectory`; Tone code uses `PickerFolders.StartFolder` /
+  `RememberFileFolder` (extensions on `IRigConfigService`). A folder deleted since, an
+  unreadable config or no wired config gives `null` (the dialog's own default), and a
+  failed save just forgets: neither throws.
+- **Backup.** All the new settings are on the `AppConfigBackupFilter` allowlist as
+  `DataFolder`, so a restore keeps one only when it is a local directory that exists here.
+- **Tests.** `Infrastructure/PickerFolderMemoryTests` (round trip, fallback, reamp),
+  `PickerFolderWiringTests` (NAM, IR, preset, backup; the tone designer's two pickers
+  are in `ToneDesignerViewModelTests`) and `PickerStartFolderLintTests`.

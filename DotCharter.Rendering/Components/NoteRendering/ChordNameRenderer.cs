@@ -248,7 +248,7 @@ internal static class ChordNameRenderer
         var maxFret = minFret + Math.Max(1, anchorWidth) - 1;
         // The camera's own widening, mirrored — see CameraMinSpanFrets.
         if (maxFret - minFret < CameraMinSpanFrets - 1) maxFret = minFret + CameraMinSpanFrets - 1;
-        maxFret = Math.Min(24, maxFret);
+        maxFret = Math.Min(FretLimits.MaxFret, maxFret);
 
         var right = FretboardConstants.GetLinearFretPosition(maxFret);
         var left = FretboardConstants.GetLinearFretPosition(minFret - 1);
@@ -259,16 +259,17 @@ internal static class ChordNameRenderer
         return Math.Max(0f, centre - (right - left) * LeftOfCentreFraction);
     }
 
-    private static bool TryLabel(
+    internal static bool TryLabel(
         RenderContext context, int templateId, double time, out string name, out float z)
     {
         name = string.Empty;
         z = 0;
 
         if (time < context.TimeMs || time >= context.TimeMs + context.HorizonMs) return false;
-        if (templateId < 0 || templateId >= context.Snapshot.TemplateCount) return false;
+        var templateIndex = context.Snapshot.FindTemplateIndex(templateId);
+        if (templateIndex < 0) return false;
 
-        var template = context.Snapshot.Templates[templateId];
+        var template = context.Snapshot.Templates[templateIndex];
         if (string.IsNullOrEmpty(template.Name)) return false;
 
         z = context.GetZDepthForTime(time, context.TimeMs);

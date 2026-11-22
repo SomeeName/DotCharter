@@ -30,7 +30,7 @@ public sealed class RigReampUiPerfSmokeTests
         Directory.CreateDirectory(dir);
         foreach (var name in new[] { "DI 2026-09-27 14-03-12", "Verse riff", "Chorus (clean) take with a long name" })
             WavIo.WriteFloat32(Path.Combine(dir, name + ".wav"), new AudioBuffer(new float[480], 48000, 1));
-        return new RigReampViewModel(engine, new DiTakeLibrary(dir), LocalizationService.Instance,
+        return new RigReampViewModel(engine, new DiTakeLibrary(dir), LocalizationService.Instance, new FakeConfigurationService(),
             loader: _ => (new float[48000 * 83], 48000),
             probe: _ => TimeSpan.FromSeconds(83))
         {

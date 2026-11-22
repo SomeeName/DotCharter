@@ -62,10 +62,12 @@ internal static class GpLegacyNoteEffectsHelpers
     /// export-blocking <c>KeyNoteBelowCapo</c>. Default <c>0</c> ⇒ the historical
     /// fret-1 floor.</param>
     /// <returns><c>true</c> when the value was a GP5 pick scrape — the caller
-    /// must then not let a later palm-mute bit override the scrape's fret-hand
-    /// mute.</returns>
+    /// must then not let a later palm-mute bit override the scrape's unmuted
+    /// strings.</returns>
     public static bool ApplySlide(int slideFlag, GuitarNote note, bool isVersion5, int capo = 0)
     {
+        if (GpDeadNoteSlide.MarkLegacy(note, slideFlag, isVersion5)) return false;
+
         var minFret = GpCapoFrets.MinFrettedFret(capo);
         if (!isVersion5)
         {

@@ -22,9 +22,15 @@ param(
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'PublicSnapshot.psm1') -Force
 if (-not $DevRepo) { $DevRepo = Join-Path $PSScriptRoot '../..' }
-$devGitDir = Invoke-SnapshotGit -Arguments @('-C', (Resolve-Path -LiteralPath $DevRepo).Path, 'rev-parse', '--path-format=absolute', '--git-common-dir')
-$devCommit = Invoke-SnapshotGit -Arguments @("--git-dir=$devGitDir", 'rev-parse', '--verify', "$DevRef^{commit}")
-if (-not $DevJuceSharpGitDir) { $DevJuceSharpGitDir = Join-Path $devGitDir 'modules/JuceSharp' }
+$DevRepo = (Resolve-Path -LiteralPath $DevRepo).Path
+$devGitDir = Invoke-SnapshotGit -Arguments @('-C', $DevRepo, 'rev-parse', '--path-format=absolute', '--git-common-dir')
+# The ref is resolved in THIS work tree: a linked worktree's HEAD is its own, while the common dir's HEAD is the main checkout's.
+$devCommit = Invoke-SnapshotGit -Arguments @('-C', $DevRepo, 'rev-parse', '--verify', "$DevRef^{commit}")
+if (-not $DevJuceSharpGitDir) { $DevJuceSharpGitDir = Resolve-DevJuceSharpGitDir -DevRepo $DevRepo -DevGitCommon $devGitDir }
+if (-not $DevJuceSharpGitDir) {
+    Write-Host 'JuceSharp: no JuceSharp object store is reachable from this tree (pass -DevJuceSharpGitDir), so its version cannot be compared'
+    exit 1
+}
 $devJuce = Invoke-SnapshotGit -Arguments @("--git-dir=$devGitDir", 'rev-parse', "${devCommit}:JuceSharp")
 $version = Get-MsBuildVersion (Invoke-SnapshotGit -Arguments @("--git-dir=$DevJuceSharpGitDir", 'show', "${devJuce}:Directory.Build.props"))
 

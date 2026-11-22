@@ -37,6 +37,17 @@ public sealed class SongBrowserRowFactsTests
 
     // ── One tuning cell, shared with the Play Mode library ─────────────────
 
+    [Theory]
+    [InlineData(3599, "59:59")]
+    [InlineData(3600, "1:00:00")]
+    [InlineData(90061, "25:01:01")]
+    public void Song_lengths_preserve_elapsed_hours(double seconds, string expected)
+    {
+        var row = new PsarcSongListItem(new LibrarySongEntry { SongLength = seconds }, FakeLocalization.English());
+
+        Assert.Equal(expected, row.SongLengthFormatted);
+    }
+
     [Fact]
     public void TuningAndCapoShareOneCell()
     {

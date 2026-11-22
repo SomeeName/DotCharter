@@ -1,6 +1,8 @@
 using DotCharter.Core.Domain.Vocals;
 using DotCharter.Services.Audio.Lyrics;
 using DotCharter.Services.Editing.Selection;
+using DotCharter.Services.Editing.Lyrics;
+using DotCharter.Services.Import.Lyrics;
 using DotCharter.Services.Parsing.Lrc;
 using DotCharter.Tone.Infrastructure.Storage;
 using DotCharter.UI.ViewModels.Editor;
@@ -64,6 +66,7 @@ public sealed class LyricsInspectorStaleSelectionTests : IDisposable
         await rig.Inspector.ImportLrcCommand.ExecuteAsync(null);
 
         rig.Inspector.SelectedLyricText = "typo-fixed";
+        rig.Inspector.CommitSelectedLyricText();
         rig.Inspector.ToggleSelectedWordPart();
         rig.Inspector.ToggleSelectedPhraseEnd();
 
@@ -100,6 +103,60 @@ public sealed class LyricsInspectorStaleSelectionTests : IDisposable
         await rig.Inspector.ImportLrcCommand.ExecuteAsync(null);
 
         Assert.Same(other, rig.Selection.SelectedLyric);
+    }
+
+    [Theory]
+    [InlineData("text")]
+    [InlineData("word")]
+    [InlineData("phrase")]
+    [InlineData("pitch")]
+    public void History_refreshes_the_selected_fields_without_recording_an_edit(string field)
+    {
+        var rig = Build();
+        var lyric = rig.Track.Phrases[0].Lyrics[0];
+        // Phrase-end now edits the containers. Give this selected syllable a
+        // following syllable so setting the flag is a real split, not a final-line no-op.
+        if (field == "phrase")
+            rig.Track.Phrases[0].Lyrics.Add(new LyricEvent { Text = "tail", IsPhraseEnd = true });
+        lyric.Note = 60;
+        rig.Selection.SelectedLyric = lyric;
+        void Edit()
+        {
+            switch (field)
+            {
+                case "text":
+                    rig.Inspector.SelectedLyricText = "changed";
+                    rig.Inspector.CommitSelectedLyricText();
+                    break;
+                case "word": rig.Inspector.ToggleSelectedWordPart(); break;
+                case "phrase": rig.Inspector.ToggleSelectedPhraseEnd(); break;
+                case "pitch": rig.Inspector.SelectedLyricNote = 67; break;
+            }
+        }
+        void AssertSynced()
+        {
+            Assert.Same(lyric, rig.Selection.SelectedLyric);
+            Assert.Equal(lyric.Text, rig.Inspector.SelectedLyricText);
+            Assert.Equal(lyric.IsWordPart, rig.Inspector.SelectedLyricIsWordPart);
+            Assert.Equal(lyric.IsPhraseEnd, rig.Inspector.SelectedLyricIsPhraseEnd);
+            Assert.Equal(lyric.Note, rig.Inspector.SelectedLyricNote);
+            Assert.Equal(LyricsInspectorViewModel.MidiToNoteName(lyric.Note), rig.Inspector.SelectedLyricNoteName);
+        }
+        Edit();
+        rig.History.Undo();
+        AssertSynced();
+        Assert.True(rig.History.CanRedo);
+        rig.History.Redo();
+        AssertSynced();
+        rig.History.Undo();
+        Edit();
+        Assert.True(field switch
+        {
+            "text" => lyric.Text == "changed",
+            "word" => lyric.IsWordPart,
+            "phrase" => lyric.IsPhraseEnd,
+            _ => lyric.Note == 67
+        });
     }
 
     // ---- rig ---------------------------------------------------------------
@@ -152,7 +209,8 @@ public sealed class LyricsInspectorStaleSelectionTests : IDisposable
 
         var storage = new FakeFileStorageService { NextOpenFile = lrc };
         var inspector = new LyricsInspectorViewModel(editor, history, state, logger, storage,
-            new LrcLyricsParser(), new NoopAutoSync(), FakeLocalization.English());
+            new LyricsFileService(new ExportTargetWriter(), new LrcLyricsParser()),
+            new LyricAutoSyncRunner(new NoopAutoSync(), null, null, state), FakeLocalization.English());
 
         return new Rig(inspector, editor, selection, history, track);
     }

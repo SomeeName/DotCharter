@@ -98,18 +98,25 @@ public sealed partial class PedalParamViewModel : ObservableObject
 {
     private readonly IDspChainService _dsp;
     private readonly int _nodeId;
+    private readonly ILocalizationService _localization;
+    private readonly IReadOnlyList<string>? _englishLabels;
+    private string _englishName;
 
-    public PedalParamViewModel(IDspChainService dsp, int nodeId, DspParamInfo info, float value)
+    public PedalParamViewModel(IDspChainService dsp, int nodeId, DspParamInfo info, float value,
+        ILocalizationService localization)
     {
         _dsp = dsp;
         _nodeId = nodeId;
         Id = info.Id;
-        _displayName = info.DisplayName is { Length: > 0 } name ? name : info.Id;
+        _localization = localization;
+        _englishName = info.DisplayName is { Length: > 0 } name ? name : info.Id;
+        _englishLabels = info.ValueLabels;
+        _displayName = DspParamText.Of(localization, _englishName);
         Minimum = info.Min;
         Maximum = info.Max;
         Default = info.Default;
         IsUnitRange = info.Min == 0f && info.Max == 1f;
-        ValueLabels = info.ValueLabels;
+        ValueLabels = info.ValueLabels?.Select(label => DspParamText.Of(localization, label)).ToList();
         Step = info.Step;
         // Decided ONCE, from the catalogue metadata, by the pure seam — never
         // per frame and never from a per-module table. See KnobMath.TaperFor.
@@ -119,6 +126,23 @@ public sealed partial class PedalParamViewModel : ObservableObject
         // lrounded by the native core anyway — showing it un-snapped would put a
         // number on the face that the DSP is not running.
         _value = Snap(value);
+        WeakLanguageSubscription.Subscribe(localization, this, static param => param.Relabel());
+    }
+
+    /// <summary>Changes the engine caption when an amp model assigns a different knob role.</summary>
+    internal void Rename(string english)
+    {
+        _englishName = english;
+        DisplayName = DspParamText.Of(_localization, english);
+    }
+
+    private void Relabel()
+    {
+        DisplayName = DspParamText.Of(_localization, _englishName);
+        ValueLabels = _englishLabels?.Select(label => DspParamText.Of(_localization, label)).ToList();
+        OnPropertyChanged(nameof(ValueLabels));
+        OnPropertyChanged(nameof(CurrentLabel));
+        OnPropertyChanged(nameof(DisplayText));
     }
 
     public string Id { get; }
@@ -178,7 +202,7 @@ public sealed partial class PedalParamViewModel : ObservableObject
     /// <summary>Named labels for a discrete "model picker" param (ABI v24: amp
     /// voicing, cab/od/dist model) — null for a continuous param (→ a knob).
     /// When present, the pedal renders a labelled selector instead of a knob.</summary>
-    public IReadOnlyList<string>? ValueLabels { get; }
+    public IReadOnlyList<string>? ValueLabels { get; private set; }
 
     /// <summary>True when this param is a model picker (has value labels).</summary>
     public bool HasValueLabels => ValueLabels is { Count: > 0 };
@@ -286,6 +310,7 @@ public sealed partial class PedalParamViewModel : ObservableObject
 /// </summary>
 public sealed partial class PedalStringParamViewModel : ObservableObject
 {
+    private readonly string _englishName;
     private readonly IDspChainService _dsp;
     private readonly int _nodeId;
     private readonly DotCharter.Tone.Infrastructure.Storage.IFileStorageService? _files;
@@ -305,6 +330,9 @@ public sealed partial class PedalStringParamViewModel : ObservableObject
     /// closure reads lazily on purpose: the owning node assigns its badge param
     /// AFTER the string params are built.</summary>
     private readonly Func<string?>? _builtinLabel;
+
+    /// <summary>Where a file pick remembers its folder (the NAM capture and IR folders); null = the dialog's default.</summary>
+    internal IRigConfigService? PickerConfig { get; set; }
 
     /// <summary>Native cap on parsed miku syllables (dcdsp_miku.h kMaxSyllables).</summary>
     private const int MaxSyllables = 64;
@@ -326,7 +354,7 @@ public sealed partial class PedalStringParamViewModel : ObservableObject
         _captureLookup = captureLookup;
         _builtinLabel = builtinLabel;
         Id = info.Id;
-        DisplayName = info.DisplayName is { Length: > 0 } name ? name : info.Id;
+        _englishName = info.DisplayName is { Length: > 0 } name ? name : info.Id;
         FileFilter = info.FileFilter ?? string.Empty;
         _value = value ?? string.Empty;
         _lyricsDraft = _value;
@@ -340,12 +368,22 @@ public sealed partial class PedalStringParamViewModel : ObservableObject
             ? libraryChoices(FileFilter) ?? []
             : [];
         _selectedLibraryChoice = FindLibraryChoice(_value);
+        WeakLanguageSubscription.Subscribe(localization, this, static param => param.Relabel());
     }
 
     private readonly Func<string, IReadOnlyList<NamCaptureChoice>>? _libraryChoicesSource;
 
     public string Id { get; }
-    public string DisplayName { get; }
+    public string DisplayName => DspParamText.Of(_loc, _englishName);
+
+    private void Relabel()
+    {
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(FileLabel));
+        OnPropertyChanged(nameof(SyllableHint));
+        OnPropertyChanged(nameof(CaptureByline));
+        OnPropertyChanged(nameof(CaptureFormatLabel));
+    }
 
     /// <summary>";"-separated wildcard list (e.g. "*.nam;*.aidax"); empty = free text.</summary>
     public string FileFilter { get; }
@@ -502,9 +540,17 @@ public sealed partial class PedalStringParamViewModel : ObservableObject
     {
         if (_files == null || !IsFilePicker) return;
         var filters = BuildFilters(FileFilter, DisplayName);
+        var capture = FileFilter.Contains(".nam", StringComparison.OrdinalIgnoreCase);
         var picked = await _files.OpenFilePickerAsync(
-            _loc.Format("Dsp_ChooseFileTitle", DisplayName), filters);
-        if (!string.IsNullOrEmpty(picked)) Commit(picked);
+            _loc.Format("Dsp_ChooseFileTitle", DisplayName), filters,
+            PickerConfig.StartFolder(c => capture ? c.LastNamCaptureDir : c.LastIrDir));
+        if (string.IsNullOrEmpty(picked)) return;
+        PickerConfig.RememberFileFolder(picked, (c, d) =>
+        {
+            if (capture) c.LastNamCaptureDir = d;
+            else c.LastIrDir = d;
+        });
+        Commit(picked);
     }
 
     [RelayCommand]
@@ -699,9 +745,14 @@ public sealed partial class PedalTransportStateViewModel : ObservableObject
     public int Index { get; }
 
     /// <summary>The state's name, straight off the ABI labels ("Record",
-    /// "Overdub"). A proper noun of the engine's, deliberately not localized —
-    /// the same rule every other value label follows.</summary>
-    public string Label { get; }
+    /// "Overdub"), translated for the current UI language.</summary>
+    public string Label { get; private set; }
+
+    internal void Relabel(string label)
+    {
+        Label = label;
+        OnPropertyChanged(nameof(Label));
+    }
 
     /// <summary>True while the ENGINE reports this state. Refreshed by the
     /// owner's poll, never latched from the click.</summary>
@@ -731,21 +782,32 @@ public sealed partial class PedalTransportParamViewModel : ObservableObject
     private readonly IDspChainService _dsp;
     private readonly int _nodeId;
     private int _selectedIndex;
+    private readonly DspParamInfo _info;
+    private readonly ILocalizationService _localization;
 
-    internal PedalTransportParamViewModel(IDspChainService dsp, int nodeId, DspParamInfo info)
+    internal PedalTransportParamViewModel(IDspChainService dsp, int nodeId, DspParamInfo info, ILocalizationService localization)
     {
         _dsp = dsp;
         _nodeId = nodeId;
         Id = info.Id;
-        DisplayName = info.DisplayName is { Length: > 0 } name ? name : info.Id;
+        _info = info;
+        _localization = localization;
         Minimum = info.Min;
         var labels = info.ValueLabels ?? [];
-        States = labels.Select((label, i) => new PedalTransportStateViewModel(this, i, label)).ToList();
+        States = labels.Select((label, i) => new PedalTransportStateViewModel(this, i, DspParamText.Of(localization, label))).ToList();
+        WeakLanguageSubscription.Subscribe(localization, this, static param => param.Relabel());
         Refresh();
     }
 
     public string Id { get; }
-    public string DisplayName { get; }
+    public string DisplayName => DspParamText.Of(_localization, _info.DisplayName);
+
+    private void Relabel()
+    {
+        OnPropertyChanged(nameof(DisplayName));
+        for (var i = 0; i < States.Count; i++) States[i].Relabel(DspParamText.Of(_localization, _info.ValueLabels![i]));
+        OnPropertyChanged(nameof(CurrentLabel));
+    }
 
     /// <summary>The param's minimum — the native value of state 0.</summary>
     public float Minimum { get; }
@@ -813,27 +875,37 @@ public sealed partial class PedalMomentaryParamViewModel : ObservableObject
     private readonly IDspChainService _dsp;
     private readonly int _nodeId;
     private readonly float _triggerValue;
+    private readonly DspParamInfo _info;
+    private readonly ILocalizationService _localization;
 
-    internal PedalMomentaryParamViewModel(IDspChainService dsp, int nodeId, DspParamInfo info)
+    internal PedalMomentaryParamViewModel(IDspChainService dsp, int nodeId, DspParamInfo info, ILocalizationService localization)
     {
         _dsp = dsp;
         _nodeId = nodeId;
         Id = info.Id;
-        DisplayName = info.DisplayName is { Length: > 0 } name ? name : info.Id;
+        _info = info;
+        _localization = localization;
         var labels = info.ValueLabels ?? [];
         // The ACTION is the last named value ("-", "Undo" ⇒ 1) and the resting
         // value is the first. Derived from the labels rather than hard-coded to
         // 1 so a future three-state trigger still fires its real action.
-        ActionLabel = labels.Count > 0 ? labels[^1] : DisplayName;
+        WeakLanguageSubscription.Subscribe(localization, this, static param => param.Relabel());
         _triggerValue = labels.Count > 0 ? info.Min + (labels.Count - 1) : info.Max;
     }
 
     public string Id { get; }
-    public string DisplayName { get; }
+    public string DisplayName => DspParamText.Of(_localization, _info.DisplayName);
+
+    private void Relabel()
+    {
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(ActionLabel));
+    }
 
     /// <summary>The button's caption: the ABI's name for the ACTION ("Undo"),
-    /// not for the resting state. An engine proper noun, not localized.</summary>
-    public string ActionLabel { get; }
+    /// not for the resting state, translated in the current UI language.</summary>
+    public string ActionLabel => _info.ValueLabels is { Count: > 0 } labels
+        ? DspParamText.Of(_localization, labels[^1]) : DisplayName;
 
     /// <summary>Fires the trigger once.</summary>
     [RelayCommand]

@@ -77,7 +77,8 @@ public sealed class RigDatasetRenderTests
     private static async Task<string[]> RenderAsync(string root, int seed)
     {
         var di = MakeDiPool(root);
-        Environment.SetEnvironmentVariable("DCA_ENABLE_NULL_DEVICE", "1");
+        // Restored when the render is over, on the skip and failure paths too (#606).
+        using var nullDevice = NullDeviceEnvScope.Enable();
         try
         {
             using var probe = RenderCommand.OpenDevicelessEngine(Rate, requireNull: true);

@@ -69,8 +69,11 @@ internal static class ChordRenderer
         // (HandShapeRenderer): the chord keeps only a slim outline frame
         // — no solid gradient fill — and its notes render individually.
         var isArpeggio = false;
-        if (activeHs is { } tplHs && tplHs.TemplateId >= 0 && tplHs.TemplateId < context.Snapshot.TemplateCount)
-            isArpeggio = context.Snapshot.Templates[tplHs.TemplateId].Arpeggio;
+        if (activeHs is { } tplHs)
+        {
+            var tplIndex = context.Snapshot.FindTemplateIndex(tplHs.TemplateId);
+            isArpeggio = tplIndex >= 0 && context.Snapshot.Templates[tplIndex].Arpeggio;
+        }
 
         // The repeat box is DATA: ChordFlags.Repeat says the export
         // ships this chord without chord notes, which is exactly what the
@@ -251,13 +254,14 @@ internal static class ChordRenderer
             if (drawNotes)
             {
                 context.QuadBatcher.SetTexture(resources.NotesTexture);
-                // Iterate strings high-index first → low-index last so that when
-                // bends/vibrato push two chord-notes onto the same Y, the lower
-                // string index (closer to the treble side, drawn later) wins
-                // the alpha-blend. Without this, e.g. blue (string 2) would
-                // cover yellow (string 1) merely because of source ordering.
-                for (var j = chord.NoteCount - 1; j >= 0; j--)
+                // Lowest lane first, highest lane last, so that when bends/vibrato
+                // push two chord-notes onto the same Y the higher lane wins the
+                // alpha-blend, whatever InvertStrings says about string order.
+                // Chord notes are ordered by string index; the lane runs the other way
+                // when strings are inverted, so walk them in lane order either way.
+                for (var step = 0; step < chord.NoteCount; step++)
                 {
+                    var j = context.Snapshot.InvertStrings ? step : chord.NoteCount - 1 - step;
                     var cn = context.Snapshot.ChordNotes[chord.NoteOffset + j];
                     int actualFret = cn.Fret;
                     var bendYOffset =

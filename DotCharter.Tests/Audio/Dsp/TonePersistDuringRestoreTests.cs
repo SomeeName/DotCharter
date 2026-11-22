@@ -83,6 +83,27 @@ public sealed class TonePersistDuringRestoreTests : IDisposable
     /// persists": an ordinary edit that does NOT span a restore is still saved.
     /// </summary>
     [Fact]
+    public void ANewerFlushFinishingInsideAnOlderSnapshot_CannotBeOverwritten()
+    {
+        var store = new ProfileToneRigStore(_dir);
+        store.SetRig(0, Rig("overdrive"));
+        var chain = new PersistDuringRestoreChain();
+        var config = new FakeConfigurationService();
+        using var session = new ToneSessionService(chain, config, new DspTonePresetService(chain, config), store);
+        session.Start();
+        chain.AttachEngine(EngineA);
+        chain.OnNextRead(truncateTo: 1, then: () =>
+        {
+            chain.AddNode("chorus");
+            session.Flush();
+        });
+
+        session.Flush();
+
+        Assert.Equal(["overdrive", "chorus"], Stored(new ProfileToneRigStore(_dir)));
+    }
+
+    [Fact]
     public void AnOrdinaryPersistStillWritesTheBoard()
     {
         var store = new ProfileToneRigStore(_dir);

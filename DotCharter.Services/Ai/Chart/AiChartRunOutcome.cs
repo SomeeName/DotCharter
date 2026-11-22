@@ -82,6 +82,17 @@ public sealed record AiChartInstructedRun(
 {
     /// <summary>Fix with AI: findings each chunk reaching them must remove; null for none.</summary>
     public IReadOnlyList<AiChartFindingTarget>? Targets { get; init; }
+
+    /// <summary>The naming style of the <see cref="AiChartJob.ChordNames" /> job; unused by every other job.</summary>
+    public ChordNamingStyle Style { get; init; } = ChordNamingStyle.Eof;
+
+    /// <summary>A later arrangement of one chat request: its review queues behind the one showing
+    /// instead of replacing it.</summary>
+    public bool QueueBehindHeld { get; init; }
+
+    /// <summary>Sections and phrases: the arrangements an event marker edit applies to by default (the dialog's
+    /// "Apply to arrangements") — ONE shared edit over all of them; null allows no event edit in this run.</summary>
+    public IReadOnlyList<Arrangement>? EventArrangements { get; init; }
 }
 
 /// <summary>

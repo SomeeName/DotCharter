@@ -6,6 +6,8 @@ using DotCharter.Presentation.Contracts.Home;
 using DotCharter.Presentation.Contracts.Shell;
 using DotCharter.Presentation.Navigation;
 using DotCharter.Services.Session;
+using DotCharter.Tone.Infrastructure.Configuration;
+using DotCharter.Tone.Logging;
 
 namespace DotCharter.Presentation.Screens.Home;
 
@@ -26,6 +28,7 @@ public sealed class HomeViewModel : ObservableObject, IHomeScreen, IScreenLifecy
     private readonly ILocalizationService _localization;
     private readonly Func<DateTime> _nowUtc;
     private readonly Func<Func<HomeSnapshot>, Task<HomeSnapshot>> _offTheUiThread;
+    private readonly IAppLogger _logger;
     private int _reads;
 
     private HomeSnapshot _snapshot = HomeSnapshot.Empty;
@@ -38,9 +41,11 @@ public sealed class HomeViewModel : ObservableObject, IHomeScreen, IScreenLifecy
         IShellDestinations shell,
         IProjectSessionService session,
         ILocalizationService localization,
+        IAppLogger logger,
         Func<DateTime>? nowUtc = null,
         Func<Func<HomeSnapshot>, Task<HomeSnapshot>>? offTheUiThread = null)
     {
+        _logger = logger;
         _source = source;
         _shell = shell;
         _session = session;
@@ -86,8 +91,16 @@ public sealed class HomeViewModel : ObservableObject, IHomeScreen, IScreenLifecy
         var read = ++_reads;
         var live = _source.CaptureLive();
         var now = _nowUtc();
-        var snapshot = await _offTheUiThread(() => _source.Read(live, now));
-        if (read == _reads) Publish(snapshot);
+        try
+        {
+            var snapshot = await _offTheUiThread(() => _source.Read(live, now));
+            if (read == _reads) Publish(snapshot);
+        }
+        catch (Exception ex)
+        {
+            // Keep the previous snapshot: a busy index is not worth a crash report.
+            _logger.Error(AppLogCategory.Application, "Refreshing the Home screen failed.", ex);
+        }
     }
 
     private void Publish(HomeSnapshot snapshot)

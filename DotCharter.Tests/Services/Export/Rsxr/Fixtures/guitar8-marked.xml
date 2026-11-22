@@ -1,0 +1,189 @@
+<song version="8">
+  <title>rsxr</title>
+  <arrangement>Lead</arrangement>
+  <part>1</part>
+  <offset>0.000</offset>
+  <centOffset>0</centOffset>
+  <songLength>31.999</songLength>
+  <lastConversionDateTime>11-01-26 12:00</lastConversionDateTime>
+  <startBeat>0.000</startBeat>
+  <averageTempo>120.000</averageTempo>
+  <tuning extendedRange="1" strings="8" string0="4" string1="3" string2="-3" string3="-2" string4="-1" string5="0" string6="1" string7="2" />
+  <capo>0</capo>
+  <artistName>DotCharter</artistName>
+  <artistNameSort>DotCharter</artistNameSort>
+  <albumName>RS7 test suite</albumName>
+  <albumYear>2026</albumYear>
+  <crowdSpeed>1</crowdSpeed>
+  <arrangementProperties represent="1" bonusArr="0" standardTuning="0" nonStandardChords="0" barreChords="0" powerChords="0" dropDPower="0" openChords="0" fingerPicking="0" pickDirection="0" doubleStops="0" palmMutes="1" harmonics="0" pinchHarmonics="0" hopo="0" tremolo="0" slides="1" unpitchedSlides="0" bends="1" tapping="0" vibrato="1" fretHandMutes="0" slapPop="0" twoFingerPicking="0" fifthsAndOctaves="0" syncopation="0" bassPick="0" sustain="1" pathLead="1" pathRhythm="0" pathBass="0" />
+  <phrases count="3">
+    <phrase name="COUNT" maxDifficulty="0" />
+    <phrase name="p0" maxDifficulty="0" />
+    <phrase name="END" maxDifficulty="0" />
+  </phrases>
+  <phraseIterations count="3">
+    <phraseIteration time="0.000" phraseId="0" />
+    <phraseIteration time="2.000" phraseId="1" />
+    <phraseIteration time="9.000" phraseId="2" />
+  </phraseIterations>
+  <newLinkedDiffs count="0" />
+  <linkedDiffs count="0" />
+  <phraseProperties count="0" />
+  <chordTemplates count="1">
+    <chordTemplate chordName="Full" displayName="Full" finger0="1" finger1="2" finger2="3" finger3="4" finger4="1" finger5="2" finger6="3" finger7="4" fret0="3" fret1="4" fret2="5" fret3="3" fret4="4" fret5="5" fret6="3" fret7="4" />
+  </chordTemplates>
+  <fretHandMuteTemplates count="0" />
+  <ebeats count="65">
+    <ebeat time="0.000" measure="1" />
+    <ebeat time="0.500" />
+    <ebeat time="1.000" />
+    <ebeat time="1.500" />
+    <ebeat time="2.000" measure="2" />
+    <ebeat time="2.500" />
+    <ebeat time="3.000" />
+    <ebeat time="3.500" />
+    <ebeat time="4.000" measure="3" />
+    <ebeat time="4.500" />
+    <ebeat time="5.000" />
+    <ebeat time="5.500" />
+    <ebeat time="6.000" measure="4" />
+    <ebeat time="6.500" />
+    <ebeat time="7.000" />
+    <ebeat time="7.500" />
+    <ebeat time="8.000" measure="5" />
+    <ebeat time="8.500" />
+    <ebeat time="9.000" />
+    <ebeat time="9.500" />
+    <ebeat time="10.000" measure="6" />
+    <ebeat time="10.500" />
+    <ebeat time="11.000" />
+    <ebeat time="11.500" />
+    <ebeat time="12.000" measure="7" />
+    <ebeat time="12.500" />
+    <ebeat time="13.000" />
+    <ebeat time="13.500" />
+    <ebeat time="14.000" measure="8" />
+    <ebeat time="14.500" />
+    <ebeat time="15.000" />
+    <ebeat time="15.500" />
+    <ebeat time="16.000" measure="9" />
+    <ebeat time="16.500" />
+    <ebeat time="17.000" />
+    <ebeat time="17.500" />
+    <ebeat time="18.000" measure="10" />
+    <ebeat time="18.500" />
+    <ebeat time="19.000" />
+    <ebeat time="19.500" />
+    <ebeat time="20.000" measure="11" />
+    <ebeat time="20.500" />
+    <ebeat time="21.000" />
+    <ebeat time="21.500" />
+    <ebeat time="22.000" measure="12" />
+    <ebeat time="22.500" />
+    <ebeat time="23.000" />
+    <ebeat time="23.500" />
+    <ebeat time="24.000" measure="13" />
+    <ebeat time="24.500" />
+    <ebeat time="25.000" />
+    <ebeat time="25.500" />
+    <ebeat time="26.000" measure="14" />
+    <ebeat time="26.500" />
+    <ebeat time="27.000" />
+    <ebeat time="27.500" />
+    <ebeat time="28.000" measure="15" />
+    <ebeat time="28.500" />
+    <ebeat time="29.000" />
+    <ebeat time="29.500" />
+    <ebeat time="30.000" measure="16" />
+    <ebeat time="30.500" />
+    <ebeat time="31.000" />
+    <ebeat time="31.500" />
+    <ebeat time="32.000" measure="17" />
+  </ebeats>
+  <tones count="0" />
+  <sections count="2">
+    <section name="riff" number="1" startTime="2.000" />
+    <section name="noguitar" number="1" startTime="9.000" />
+  </sections>
+  <events count="1">
+    <event time="0.000" code="TS:4/4" />
+  </events>
+  <transcriptionTrack difficulty="-1">
+    <notes count="0" />
+    <chords count="0" />
+    <anchors count="0" />
+    <handShapes count="0" />
+  </transcriptionTrack>
+  <levels count="1">
+    <level difficulty="0">
+      <notes count="8">
+        <note time="2.000" string="0" fret="3" />
+        <note time="2.500" string="1" fret="3" />
+        <note time="3.000" string="2" fret="3" />
+        <note time="3.500" string="3" fret="3" />
+        <note time="4.000" string="4" fret="3" />
+        <note time="4.500" string="5" fret="3" />
+        <note time="5.000" string="6" fret="3" />
+        <note time="5.500" string="7" fret="3" />
+      </notes>
+      <chords count="1">
+        <chord time="7.000" chordId="0" palmMute="1">
+          <chordNote time="7.000" string="0" fret="3" sustain="1.500" leftHand="1" vibrato="80" bend="2.000" palmMute="1" slideTo="6">
+            <bendValues count="2">
+              <bendValue time="7.500" step="2.000" />
+              <bendValue time="8.000" />
+            </bendValues>
+          </chordNote>
+          <chordNote time="7.000" string="1" fret="4" sustain="1.500" leftHand="2" vibrato="80" bend="2.000" palmMute="1" slideTo="7">
+            <bendValues count="2">
+              <bendValue time="7.500" step="2.000" />
+              <bendValue time="8.000" />
+            </bendValues>
+          </chordNote>
+          <chordNote time="7.000" string="2" fret="5" sustain="1.500" leftHand="3" vibrato="80" bend="2.000" palmMute="1" slideTo="8">
+            <bendValues count="2">
+              <bendValue time="7.500" step="2.000" />
+              <bendValue time="8.000" />
+            </bendValues>
+          </chordNote>
+          <chordNote time="7.000" string="3" fret="3" sustain="1.500" leftHand="4" vibrato="80" bend="2.000" palmMute="1" slideTo="6">
+            <bendValues count="2">
+              <bendValue time="7.500" step="2.000" />
+              <bendValue time="8.000" />
+            </bendValues>
+          </chordNote>
+          <chordNote time="7.000" string="4" fret="4" sustain="1.500" leftHand="1" vibrato="80" bend="2.000" palmMute="1" slideTo="7">
+            <bendValues count="2">
+              <bendValue time="7.500" step="2.000" />
+              <bendValue time="8.000" />
+            </bendValues>
+          </chordNote>
+          <chordNote time="7.000" string="5" fret="5" sustain="1.500" leftHand="2" vibrato="80" bend="2.000" palmMute="1" slideTo="8">
+            <bendValues count="2">
+              <bendValue time="7.500" step="2.000" />
+              <bendValue time="8.000" />
+            </bendValues>
+          </chordNote>
+          <chordNote time="7.000" string="6" fret="3" sustain="1.500" leftHand="3" vibrato="80" bend="2.000" palmMute="1" slideTo="6">
+            <bendValues count="2">
+              <bendValue time="7.500" step="2.000" />
+              <bendValue time="8.000" />
+            </bendValues>
+          </chordNote>
+          <chordNote time="7.000" string="7" fret="4" sustain="1.500" leftHand="4" vibrato="80" bend="2.000" palmMute="1" slideTo="7">
+            <bendValues count="2">
+              <bendValue time="7.500" step="2.000" />
+              <bendValue time="8.000" />
+            </bendValues>
+          </chordNote>
+        </chord>
+      </chords>
+      <fretHandMutes count="0" />
+      <anchors count="2">
+        <anchor time="0.000" fret="1" width="4.000" />
+        <anchor time="7.000" fret="3" width="6.000" />
+      </anchors>
+      <handShapes count="0" />
+    </level>
+  </levels>
+</song>

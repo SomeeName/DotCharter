@@ -26,10 +26,12 @@ public class RscpHeaderParser
         "chartFormatVersion", "editMode", "arrangement", "level", "time", "title",
         "artistName", "artistNameSort", "albumName", "dcJapaneseTitle", "dcJapaneseArtist",
         "albumYear", "dcCharter", "dcGenre", "dcReleaseDate", "dcCoverArt",
-        "dcKeyAccidentals", "dcKeyIsMinor", "barsAdded", "selectedStem",
+        "dcKeyAccidentals", "dcKeyIsMinor", "dcKeyLocked", "barsAdded", "selectedStem",
         "mainAudioOffsetAdded", "musicFileName", "dcBeatMapLocked", "text",
         "stems", "arrangementFiles", "showlights", "bookmarks", "dcAnnotations",
-        "dcToneDefinitions", "dcSynthPlayStyle", "dcProjectId", "dcProvenance", "dcVersion"
+        "dcToneDefinitions", "dcSynthPlayStyle", "dcProjectId", "dcProvenance", "dcVersion",
+        "dcAudioVolume", "dcPreviewVolume", "dcAudioVolumeSig", "dcPreviewVolumeSig", "dcAudioVolumeManual", "dcPreviewVolumeManual",
+        "dcTitleSort", "dcAlbumSort", "dcDlcKey", "dcPreviewStartMs"
     ];
 
     public void ParseChartHeader(XDocument doc, string filePath, ChartProject project)
@@ -90,6 +92,8 @@ public class RscpHeaderParser
                 ? keyAcc
                 : 0,
             KeyIsMinor = header.First("dcKeyIsMinor")?.Value == "true",
+            // The key locked as the song's key; absent before it, which reads unlocked.
+            KeyLocked = header.First("dcKeyLocked")?.Value == "true",
             BarsAdded = int.TryParse(header.First("barsAdded")?.Value,
                 NumberStyles.Integer, CultureInfo.InvariantCulture, out var ba) ? ba : 0,
             SelectedStem = int.TryParse(header.First("selectedStem")?.Value, CultureInfo.InvariantCulture, out var stemId)
@@ -100,6 +104,9 @@ public class RscpHeaderParser
                 ? offset
                 : 0.0
         };
+
+        ParseVolumes(header, project.Chart);
+        ParseSongFields(header, project.Chart);
 
         // The stable project identity. Only a well-formed id is taken: the
         // chat history names a directory after it, so a hand-edited value is not
@@ -223,6 +230,29 @@ public class RscpHeaderParser
                 Text = el.Value
             });
         }
+    }
+
+    /// <summary>The song's own export volumes (dB), the signatures they were measured from and the manual flags; absent reads unset.</summary>
+    private static void ParseVolumes(RscpFirstElementIndex header, ChartData chart)
+    {
+        chart.AudioVolume = ReadDb(header.First("dcAudioVolume")?.Value);
+        chart.PreviewVolume = ReadDb(header.First("dcPreviewVolume")?.Value);
+        chart.AudioVolumeSignature = header.First("dcAudioVolumeSig")?.Value.Trim() ?? "";
+        chart.PreviewVolumeSignature = header.First("dcPreviewVolumeSig")?.Value.Trim() ?? "";
+        chart.AudioVolumeManual = header.First("dcAudioVolumeManual")?.Value == "true";
+        chart.PreviewVolumeManual = header.First("dcPreviewVolumeManual")?.Value == "true";
+        chart.PreviewStartMs = ReadDb(header.First("dcPreviewStartMs")?.Value) is { } start && start >= 0 ? start : null;
+    }
+
+    private static double? ReadDb(string? text) =>
+        double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && double.IsFinite(value) ? value : null;
+
+    /// <summary>The sort names and DLC key the charter authored (DLC Builder's fields); absent reads blank, which derives them.</summary>
+    private static void ParseSongFields(RscpFirstElementIndex header, ChartData chart)
+    {
+        chart.TitleSort = header.First("dcTitleSort")?.Value ?? "";
+        chart.AlbumSort = header.First("dcAlbumSort")?.Value ?? "";
+        chart.DlcKey = header.First("dcDlcKey")?.Value.Trim() ?? "";
     }
 
     /// <summary>How the chart synth plays this song. Absent reads as the

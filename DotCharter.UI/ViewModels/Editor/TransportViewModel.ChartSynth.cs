@@ -1,27 +1,28 @@
-// TransportViewModel: the built-in chart synth (ABI v38/v40) - the play-the-chart switch, its tooltip and the instrument route.
+// TransportViewModel: the built-in chart synth (ABI v38/v40) - the play-the-chart switch, its tooltip, the instrument route and the sound routing.
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Tone.Audio.ChartSynth;
 
 namespace DotCharter.UI.ViewModels.Editor;
 
-// The built-in chart synth (ABI v38/v40) and the instrument route: the toggles and
-// the INSTRUMENT pickers (guitar / bass model, pickup selector, coil split)
-// next to the MIDI synth, in the editor's Mixer and in Play Mode's Amp/FX panel
-// (both host Views/Editor/Inspector/ChartSynthInstrumentView over
-// ChartSynthInstrument, its own view model). The audio service is reached with an
-// `as` cast, so the null transport has no synth and everything shows disabled
-// with its reason.
+// The built-in chart synth (ABI v38/v40) and the instrument route: the toggles and the
+// INSTRUMENT pickers, in the Mixer and Play Mode's Amp/FX panel (ChartSynthInstrumentView
+// over ChartSynthInstrument). The service is reached with an `as` cast, so the null
+// transport has no synth and shows everything disabled with its reason.
 public partial class TransportViewModel
 {
-    private IChartSynthEngine? ChartSynth => _audioService as IChartSynthEngine;
+    internal IChartSynthEngine? ChartSynth => _audioService as IChartSynthEngine;
 
-    // The instrument pickers' and the EQ's labels. DI hands it in; a test transport
-    // built without one shows the resx KEYS, which no test reads as English.
+    // Labels for the instrument pickers and the EQ; a test transport without one shows resx KEYS.
     private readonly DotCharter.Localization.ILocalizationService _localization;
 
     /// <summary>The instrument pickers and the song-tone override, bound by
     /// <c>ChartSynthInstrumentView</c> in the Mixer and in Play Mode's Amp/FX panel.</summary>
     public Inspector.ChartSynthInstrumentViewModel ChartSynthInstrument { get; }
+
+    /// <summary>The Mixer's routing card.</summary>
+    public Inspector.ChartSoundRoutingViewModel SoundRouting => _soundRouting ??= new(this, _configService, _localization);
+
+    private Inspector.ChartSoundRoutingViewModel? _soundRouting;
 
     /// <summary>
     ///     The audio service has a chart synth (false on the null transport). Not
@@ -47,7 +48,7 @@ public partial class TransportViewModel
     /// tooltip says so. False while the model table is still loading, and with a
     /// VST instrument loaded (that plays instead).</summary>
     public bool ChartSynthPlaysStandIn =>
-        !HasInstrumentVst && ChartSynthInstrument.NoVoicePackInstalled;
+        !PlaysInstrumentVst && ChartSynthInstrument.NoVoicePackInstalled;
 
     /// <summary>The toolbar toggle's tooltip: a format whose <c>{0}</c> is the live
     /// keybind — what the switch does, or why it cannot.</summary>
@@ -70,6 +71,7 @@ public partial class TransportViewModel
         OnPropertyChanged(nameof(ChartSynthPlaysStandIn));
         OnPropertyChanged(nameof(ChartSynthToggleTip));
         ToggleChartSynthCommand.NotifyCanExecuteChanged();
+        ResetRoutingCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>
@@ -91,12 +93,13 @@ public partial class TransportViewModel
 
     // ---- MIDI Out ---------------------------------------------------------
     //
-    // ONE switch plays the chart: MIDI Out (MidiEnabled, Tools ▸ MIDI instrument).
-    // With a VST instrument chosen it plays that plugin, as it always did; without
-    // one it plays the built-in guitar / bass voice (never the Windows GS Wavetable). A MIDI device picked in Settings ▸ Audio
-    // (an external synth) still receives the notes alongside.
+    // ONE switch plays the chart: MIDI Out (MidiEnabled). A VST instrument plays that
+    // plugin; otherwise the built-in guitar / bass voice (never the Windows GS Wavetable).
+    // A MIDI device picked in Settings ▸ Audio still receives the notes alongside.
 
-    private bool HasInstrumentVst => !string.IsNullOrEmpty(SelectedInstrumentVst?.PluginPath);
+    internal bool HasInstrumentVst => !string.IsNullOrEmpty(SelectedInstrumentVst?.PluginPath);
+
+    internal bool PlaysInstrumentVst => HasInstrumentVst && _configService.LoadAppConfig().ChartSoundUsesInstrument;
 
     /// <summary>The MIDI preview's note feed goes to a MIDI output device the user
     /// picked in Settings (not the default mapper / GS Wavetable). Read when Out is
@@ -107,12 +110,14 @@ public partial class TransportViewModel
     /// with MIDI Out and the instrument choice.</summary>
     internal void ApplyMidiOutRouting()
     {
-        var plugin = HasInstrumentVst;
+        var plugin = PlaysInstrumentVst;
         _audioService.IsVstInstrumentEnabled = MidiEnabled && plugin;
+        ApplyInstrumentVolume(EffectiveChartSoundVolume);
         ChartSynthEnabled = MidiEnabled && !plugin;
         PreviewsMidiToExternalDevice = MidiEnabled && !plugin && ChoosesExternalMidiDevice();
         // A loaded or dropped instrument plugin changes whether the stand-in plays.
         RaiseChartSynthToggleState();
+        SoundRouting.Raise();
     }
 
     private bool ChoosesExternalMidiDevice()
@@ -135,16 +140,13 @@ public partial class TransportViewModel
             var synth = ChartSynth;
             if (synth == null || synth.RouteInstrumentToRig == value) return;
             synth.RouteInstrumentToRig = value;
+            SoundRouting.SaveThroughRig(value);
             OnPropertyChanged();
         }
     }
 
-    /// <summary>
-    /// The synth's tone: the player's own rig instead of the chart's tones.
-    ///     Saved in the app config; <c>ToneRigViewModel</c> hands it to the editor's
-    ///     tone preview, which stops (or never starts) driving the chart's tones for
-    ///     the synth.
-    /// </summary>
+    /// <summary>The synth's tone: the player's own rig instead of the chart's tones.
+    /// Saved; <c>ToneRigViewModel</c> hands it to the editor's tone preview.</summary>
     public bool ChartSynthPlaysOwnRig
     {
         get => _configService.LoadAppConfig().ChartSynthPlaysOwnRig;
@@ -156,6 +158,7 @@ public partial class TransportViewModel
             _configService.SaveAppConfig(cfg);
             OnPropertyChanged();
             OnPropertyChanged(nameof(ChartSynthPlaysSongTones));
+            SoundRouting.Raise();
         }
     }
 
@@ -177,6 +180,7 @@ public partial class TransportViewModel
         OnPropertyChanged(nameof(RouteInstrumentToRig));
         OnPropertyChanged(nameof(ChartSynthEnabled));
         RaiseChartSynthToggleState();
+        SoundRouting.Raise();
         ChartSynthInstrument.Refresh();
     }
 
@@ -189,4 +193,20 @@ public partial class TransportViewModel
     }
 
     private string Loc(string key) => _localization[key];
+
+    /// <summary>The MIDI routing card's reset question (design D).</summary>
+    public Inspector.InspectorPendingAction ResetRoutingConfirm { get; } = new();
+
+    /// <summary>
+    ///     "Reset routing" (design D): asks, then the synth plays the song tones again, the offset goes back to 0 ms and the
+    ///     instrument stops going through the rig. The other MIDI cards stay. All three are install settings, not the project's.
+    ///     Disabled, like the routing rows, while the chart cannot sound (the card says why).
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanPlayChart))]
+    private void ResetRouting() => ResetRoutingConfirm.Ask(_localization.Format("Mixer_Midi_ResetRoutingAsk", 3), () =>
+    {
+        ChartSynthPlaysSongTones = true;
+        MidiOffsetMs = 0;
+        RouteInstrumentToRig = false;
+    });
 }

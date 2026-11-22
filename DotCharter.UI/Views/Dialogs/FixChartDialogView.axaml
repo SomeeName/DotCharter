@@ -1,0 +1,84 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.FixChartDialogView"
+             x:DataType="contracts:IFixChartScreen"
+             x:CompileBindings="True">
+
+    <!-- Tools > Fix chart. Grammar: Views/Dialogs/DialogStyles.axaml. Hosted by Views/Shell/DialogHost, which
+         focuses `ApplyButton`'s neighbour `ErrorsBox` on open (FocusOnOpen). It LISTS what each group would
+         change (counted on a copy of the chart) before anything changes; Apply runs the ticked groups as one undo step. -->
+    <Grid x:Name="DialogGrid" Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconAlert}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_FixChart_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_FixChart_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" MaxHeight="440" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="{DynamicResource FireSpaceMd}">
+                        <ProgressBar x:Name="CheckingBar" IsIndeterminate="True" IsVisible="{Binding IsChecking}" />
+
+                        <StackPanel x:Name="ErrorsGroup" Spacing="{DynamicResource FireSpaceXs}">
+                            <CheckBox x:Name="ErrorsBox" dlgv:FocusOnOpen.IsTarget="True" IsChecked="{Binding FixErrors}"
+                                      Content="{localization:Loc Dialog_FixChart_Errors}"
+                                      AutomationProperties.Name="{localization:Loc Dialog_FixChart_Errors}" />
+                            <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" TextWrapping="Wrap"
+                                       Text="{localization:Loc Dialog_FixChart_ErrorsHint}" />
+                            <TextBlock x:Name="ErrorsSummaryText" Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" TextWrapping="Wrap"
+                                       Text="{Binding ErrorsSummary}" />
+                            <ItemsControl x:Name="ErrorsList" ItemsSource="{Binding ErrorsChanges}" IsVisible="{Binding HasErrorsChanges}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IFixChartChange">
+                                        <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" TextWrapping="Wrap" Text="{Binding Text}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <StackPanel x:Name="PolishGroup" Spacing="{DynamicResource FireSpaceXs}">
+                            <CheckBox x:Name="PolishBox" IsChecked="{Binding FixPolish}"
+                                      Content="{localization:Loc Dialog_FixChart_Polish}"
+                                      AutomationProperties.Name="{localization:Loc Dialog_FixChart_Polish}" />
+                            <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" TextWrapping="Wrap"
+                                       Text="{localization:Loc Dialog_FixChart_PolishHint}" />
+                            <TextBlock x:Name="PolishSummaryText" Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" TextWrapping="Wrap"
+                                       Text="{Binding PolishSummary}" />
+                            <ItemsControl x:Name="PolishList" ItemsSource="{Binding PolishChanges}" IsVisible="{Binding HasPolishChanges}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IFixChartChange">
+                                        <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" TextWrapping="Wrap" Text="{Binding Text}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{DynamicResource FireSpaceMd}">
+                        <TextBlock x:Name="TotalText" Grid.Column="0" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Text="{Binding TotalSummary}" />
+                        <StackPanel Grid.Column="1" Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                            <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                    Command="{Binding CancelCommand}" IsCancel="True" />
+                            <Button x:Name="ApplyButton" Classes="DlgAction Primary" Content="{localization:Loc Dialog_FixChart_Apply}"
+                                    AutomationProperties.Name="{localization:Loc Dialog_FixChart_Apply}"
+                                    IsEnabled="{Binding CanApply}"
+                                    Command="{Binding ApplyCommand}" IsDefault="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

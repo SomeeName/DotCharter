@@ -17,18 +17,7 @@ public sealed class PcmAudioLoaderNativeDecodeTests : IDisposable
     private const int Sr = 44100;
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "DotCharterTests", Guid.NewGuid().ToString("N"));
 
-    private static string? RedistFfmpeg()
-    {
-        // Repo-root cache the release packer fills; not on PATH by design.
-        var repo = AppContext.BaseDirectory;
-        for (var i = 0; i < 8 && repo != null; i++, repo = Path.GetDirectoryName(repo))
-        {
-            var candidate = Path.Combine(repo, "tools", "redist", "win-x64", "ffmpeg.exe");
-            if (File.Exists(candidate)) return candidate;
-        }
-
-        return null;
-    }
+    private static string RedistFfmpeg() => PcmDecoderFixture.Ffmpeg();
 
     private string WriteToneWav()
     {
@@ -68,17 +57,17 @@ public sealed class PcmAudioLoaderNativeDecodeTests : IDisposable
         Assert.SkipWhen(ffmpeg is null, "repo redist ffmpeg not cached on this machine.");
 
         var flac = Path.Combine(_dir, "tone.flac");
-        var encode = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(ffmpeg!)
+        // #608: both pipes drain concurrently under one cap (a deadlock detector, never a budget); a hung ffmpeg fails the test.
+        var encode = new System.Diagnostics.ProcessStartInfo(ffmpeg!)
         {
-            ArgumentList = { "-hide_banner", "-loglevel", "error", "-y", "-i", wav, flac },
-            UseShellExecute = false,
-            CreateNoWindow = true
-        })!;
-        encode.WaitForExit(60_000);
-        Assert.SkipWhen(!File.Exists(flac) || new FileInfo(flac).Length == 0, "flac encode failed on this machine.");
+            ArgumentList = { "-hide_banner", "-loglevel", "error", "-y", "-i", wav, flac }
+        };
+        var run = BoundedProcess.Run(encode, TimeSpan.FromMinutes(2), "ffmpeg (flac fixture)");
+        Assert.True(run.ExitCode == 0, $"ffmpeg exited {run.ExitCode} encoding flac: {run.StandardError}");
+        Assert.True(File.Exists(flac) && new FileInfo(flac).Length > 0, "ffmpeg produced no flac file.");
 
         var warnings = new List<string>();
-        var pcm = PcmAudioLoader.TryLoadWithNativeDecoder(flac, warnings);
+        var pcm = PcmAudioLoader.Load(flac, warnings, JuceSharp.AudioIo.JuceAudioDecoder.Decode, ffmpeg);
 
         Assert.NotNull(pcm);
         Assert.Equal(PcmAudioLoader.RocksmithChannels, pcm!.Channels);
@@ -90,6 +79,54 @@ public sealed class PcmAudioLoaderNativeDecodeTests : IDisposable
         // The native decode is the PRIMARY path now (the editor's decoder — see
         // PcmAudioLoaderEditorParityTests), so it no longer warns about itself;
         // only a linear resample, when no ffmpeg can be found, still does.
+    }
+
+    /// <summary>
+    ///     A mono file decodes at the same level whether or not an ffmpeg is found: ffmpeg's
+    ///     mono-to-stereo upmix is 3 dB down, and which ffmpeg the loader resolves depends on
+    ///     where the build output sits, so the recording-alignment stems came back at 1/sqrt(2)
+    ///     in one checkout and at full level in another. The ffmpeg is handed in explicitly.
+    /// </summary>
+    [Theory]
+    [InlineData(48000)]
+    [InlineData(44100)]
+    public void MonoSource_DecodesAtFullLevel_WhenFfmpegIsAvailable(int sampleRate)
+    {
+        var wav = WriteConstantMonoWav(sampleRate, 1000);
+        Assert.SkipWhen(PcmAudioLoader.TryLoadWithNativeDecoder(wav, []) is null, "juce_sharp.dll not available in this run.");
+        var ffmpeg = RedistFfmpeg();
+        Assert.SkipWhen(ffmpeg is null, "repo redist ffmpeg not cached on this machine.");
+
+        var pcm = PcmAudioLoader.Load(wav, [], JuceSharp.AudioIo.JuceAudioDecoder.Decode, ffmpeg);
+
+        Assert.Equal(PcmAudioLoader.RocksmithChannels, pcm.Channels);
+        Assert.Equal(PcmAudioLoader.RocksmithSampleRate, pcm.SampleRate);
+        // The middle of the file: a resampler may ramp the first and last few samples.
+        var middle = pcm.Samples.AsSpan(pcm.Samples.Length / 10, pcm.Samples.Length * 8 / 10).ToArray();
+        Assert.All(middle, s => Assert.InRange(s, (short)990, (short)1010));
+    }
+
+    private string WriteConstantMonoWav(int sampleRate, short value)
+    {
+        Directory.CreateDirectory(_dir);
+        var path = Path.Combine(_dir, $"mono-{sampleRate}.wav");
+        var n = sampleRate; // 1 second
+        using var writer = new BinaryWriter(new FileStream(path, FileMode.Create, FileAccess.Write));
+        writer.Write("RIFF"u8);
+        writer.Write(36 + (n * 2));
+        writer.Write("WAVE"u8);
+        writer.Write("fmt "u8);
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write((short)1);
+        writer.Write(sampleRate);
+        writer.Write(sampleRate * 2);
+        writer.Write((short)2);
+        writer.Write((short)16);
+        writer.Write("data"u8);
+        writer.Write(n * 2);
+        for (var i = 0; i < n; i++) writer.Write(value);
+        return path;
     }
 
     [Fact]

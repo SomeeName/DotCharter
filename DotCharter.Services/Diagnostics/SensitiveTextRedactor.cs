@@ -88,7 +88,7 @@ public static class SensitiveTextRedactor
     // placeholder is never re-consumed (keeps the pass idempotent).
     private static readonly Regex WindowsUserPath = new(
         @"(?<p>[A-Za-z]:[\\/]+Users[\\/]+)[^\\/\r\n""'<>|]+",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static readonly Regex UnixHomePath = new(
         @"(?<p>/(?:home|Users)/)[^/\r\n""'<>|]+",
@@ -99,9 +99,10 @@ public static class SensitiveTextRedactor
         RegexOptions.Compiled);
 
     // GitHub PAT/OAuth (ghp_/gho_/ghu_/ghs_/ghr_), fine-grained GitHub PAT
-    // (github_pat_…), Slack (xoxb-…), AWS access key id (AKIA…), OpenAI (sk-…).
+    // (github_pat_…), Slack (xoxb-…), AWS access key id (AKIA…), OpenAI and
+    // Anthropic (sk-…, including hyphens/underscores through the end of the key).
     private static readonly Regex TokenPrefix = new(
-        @"\b(?:github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,})\b",
+        @"\b(?:(?:github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})\b|sk-[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-]))",
         RegexOptions.Compiled);
 
     private static readonly Regex Bearer = new(
@@ -130,7 +131,7 @@ public static class SensitiveTextRedactor
     /// </summary>
     private static readonly Regex RocksmithKey = new(
         """(?<![A-Za-z0-9_\-])(?<k>PsarcToc|SngPc|SngMac|psarc-toc|sng-pc|sng-mac)(?<sep>["']?\s*[:=][ \t]*["']?)(?<v>[^"'\s<][^"'\r\n]*)""",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static readonly Regex LongHexRun = new(
         // Standalone long hex runs that look like keys (>= 40 chars), e.g. a hex
@@ -151,24 +152,25 @@ public static class SensitiveTextRedactor
 
         var s = text;
 
-        // 1. The literal user name, anywhere (paths, "Welcome Alex", etc.).
-        //    Guard against 1-char names which would shred unrelated text.
-        if (!string.IsNullOrWhiteSpace(userName) && userName.Trim().Length >= 2)
-            s = Regex.Replace(s, Regex.Escape(userName.Trim()), UserPlaceholder, RegexOptions.IgnoreCase);
-
-        // 2. Home-directory path segments (covers other machines' paths in logs).
-        s = WindowsUserPath.Replace(s, "${p}" + UserPlaceholder);
-        s = UnixHomePath.Replace(s, "${p}" + UserPlaceholder);
-
-        // 3. Structured secrets. Order matters: token-shaped values first, so an
-        //    "Authorization: Bearer <jwt>" is fully scrubbed even though the
-        //    key=value value-terminator stops at the first space.
+        // Redact structured secrets before a matching user name can split them.
         s = Jwt.Replace(s, "<redacted-jwt>");
         s = TokenPrefix.Replace(s, "<redacted-token>");
         s = Bearer.Replace(s, "${k}" + Redacted);
         s = RocksmithKey.Replace(s, "${k}${sep}" + Redacted);
         s = KeyValuePair.Replace(s, RedactWhenKeyIsSensitive);
         s = LongHexRun.Replace(s, "<redacted-hex>");
+
+        // The literal user name, anywhere (paths, "Welcome Alex", etc.).
+        //    Guard against 1-char names which would shred unrelated text.
+        if (!string.IsNullOrWhiteSpace(userName) && userName.Trim().Length >= 2)
+        {
+            s = Regex.Replace(s, Regex.Escape(userName.Trim()), UserPlaceholder,
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        // Home-directory path segments (covers other machines' paths in logs).
+        s = WindowsUserPath.Replace(s, "${p}" + UserPlaceholder);
+        s = UnixHomePath.Replace(s, "${p}" + UserPlaceholder);
 
         return s;
     }

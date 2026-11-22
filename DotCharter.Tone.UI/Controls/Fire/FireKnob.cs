@@ -704,6 +704,13 @@ public sealed class FireKnob : FireDrawnControl
         e.Handled = true;
     }
 
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        _dragging = false;
+        Repaint();
+    }
+
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
@@ -806,6 +813,7 @@ public sealed class FireKnob : FireDrawnControl
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
+        _dragging = false;
         base.OnDetachedFromVisualTree(e);
         // A detached knob has no business holding a platform cursor.
         Cursor = null;

@@ -56,7 +56,18 @@ public interface IToneDesignerScreen : IDialogScreen<bool>
 
     ICommand DuplicateToneCommand { get; }
 
+    /// <summary>Removes ONLY the selected tone's definition, at once and without a prompt (the Delete key on the list does the same).
+    /// Slots, starting tone, declared names and tone changes keep the key. One undo step.</summary>
     ICommand DeleteToneCommand { get; }
+
+    /// <summary>Ctrl+Z while the designer is open: the app's one history, which the main window's chord cannot reach behind a dialog.</summary>
+    ICommand UndoCommand { get; }
+
+    /// <summary>Ctrl+Y / Ctrl+Shift+Z while the designer is open.</summary>
+    ICommand RedoCommand { get; }
+
+    /// <summary>The user let go of a control or left a field: the next edit is a new undo step (so a drag is one step), and a typed key is recorded when <paramref name="leavingField" />.</summary>
+    void EndEditGesture(bool leavingField = false);
 
     /// <summary>One tone per PLACED tone change on the active arrangement, from the audio it governs.</summary>
     ICommand GenerateTonesFromAudioCommand { get; }
@@ -165,6 +176,13 @@ public interface IToneChoice
 public interface ISearchableChoice : IToneChoice
 {
     string SearchKey { get; }
+}
+
+/// <summary>A choice a picker lists under a heading (a gear's category). Choices of one group are shown together, headed once;
+/// an empty name is no group. A control capability, not a view binding.</summary>
+public interface IGroupedChoice : IToneChoice
+{
+    string GroupName { get; }
 }
 
 public interface IProjectTone : INotifyPropertyChanged

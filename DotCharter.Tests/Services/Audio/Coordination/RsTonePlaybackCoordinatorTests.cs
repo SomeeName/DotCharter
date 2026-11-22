@@ -259,6 +259,66 @@ public sealed class RsTonePlaybackCoordinatorTests
         coord.EndRun();
     }
 
+    /// <summary>A run that begins while the next song's prepare is being handed over (its arrangement
+    /// already recorded, its summary not yet built) must skip, never drive the next song with the
+    /// previous song's summary. The hook runs inside that hand-over, right after the prepare begins.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ARunBegunDuringThePrepareHandOver_SkipsInsteadOfReadingThePreviousSummary(bool async)
+    {
+        var chain = new FakeDspChainService(Catalog());
+        var config = new FakeConfigurationService { AppConfig = { UseInGameTones = true } };
+        var coord = NewCoordinator(chain, StateWithBeats(), config, ("clean", CleanJson), ("heavy", HeavyJson));
+        await coord.PrepareForSongAsync("first.psarc", CleanToHeavyArrangement());
+        Assert.True(coord.LastSummary.HasTones);
+
+        bool? ranInHandOver = null;
+        coord.PrepareBegunForTesting = () => ranInHandOver = coord.BeginRun();
+        // The next song is an own chart with no tones: nothing it prepares can drive the rig.
+        var next = new Arrangement { ToneBase = "clean" };
+        if (async) await coord.PrepareForSongAsync(null, next);
+        else coord.PrepareForSong(null, next);
+        coord.PrepareBegunForTesting = null;
+
+        Assert.False(ranInHandOver ?? throw new InvalidOperationException("the hand-over hook never ran"));
+        Assert.False(coord.IsDriving);
+        Assert.False(coord.LastSummary.HasTones);
+        Assert.False(coord.BeginRun());
+        Assert.False(coord.IsPrepareInFlight);
+    }
+
+    [Fact]
+    public async Task OverlappingPrepare_AnOlderConversionFinishingLast_DoesNotReplaceTheNewerSummary()
+    {
+        var chain = new FakeDspChainService(Catalog());
+        var config = new FakeConfigurationService { AppConfig = { UseInGameTones = true } };
+        using var gate = new ManualResetEventSlim(false);
+        var converting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var coord = new RsTonePlaybackCoordinator(chain, new DcRigApplier(chain), StateWithBeats(), config)
+        {
+            ToneDefinitionSource = _ =>
+            {
+                converting.SetResult();
+                gate.Wait(TimeSpan.FromSeconds(60)); // the older song's conversion is still running
+                return new[] { new PsarcToneDefinition("clean", "clean", CleanJson) };
+            }
+        };
+
+        var older = coord.PrepareForSongAsync("older.psarc", CleanToHeavyArrangement());
+        await converting.Task.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        Assert.True(coord.IsPrepareInFlight);
+        var newer = await coord.PrepareForSongAsync(null, null);
+        Assert.False(newer.HasTones);
+
+        gate.Set();
+        await older;
+
+        Assert.Same(newer, coord.LastSummary);
+        Assert.False(coord.BeginRun()); // the newer song has no tones to drive
+        Assert.False(coord.IsDriving);
+    }
+
     // ---------------------------------------- per-song tone preference (2.4)
 
     [Fact]

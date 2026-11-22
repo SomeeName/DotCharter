@@ -1,8 +1,9 @@
 // Stem separation (htdemucs): the never-regenerate cache-first run, the
-// keep/replace backup dance around an existing stem set, and registering the
+// keep/replace backup dance around an uncached stem folder, and registering the
 // finished stems on the project and in the durable cache. Also the app's
-// ISongStemSeparation, so a screen (chart from audio) drives THIS run.
+// ISongStemSeparation (the seam a screen can drive; not registered while none does).
 using CommunityToolkit.Mvvm.Input;
+using DotCharter.Presentation;
 using DotCharter.Services.Audio.StemSeparation;
 using DotCharter.Services.Audio.StemSeparation.Cache;
 using DotCharter.Services.Diagnostics;
@@ -56,9 +57,8 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
         _stemCacheCoordinator = stemCacheCoordinator;
         _defaultModels = defaultModels;
 
-        // Tools ▸ Separate Stems over a song that already HAS stems overwrites
-        // them, and "stems are never regenerated" is a hard rule — so the
-        // re-separate stays explicit. A menu
+        // The durable cache always wins. Only an uncached folder can reach
+        // this replacement prompt (for example, stems imported from a package). A menu
         // verb takes the app-wide prompt, and the message NAMES what is lost.
         ConfirmStemReplaceAsync = (plan, backend) => _dialogs.Message.ShowAsync(
             _localization["Dialog_StemRegenerate_Title"],
@@ -89,6 +89,13 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
     ///     slow) is discarded rather than averaged in — see
     ///     <see cref="StemSeparationCost" />.
     /// </summary>
+    private void AfterSuccessfulRun(StemSeparationResult result, double elapsedSeconds)
+    {
+        RecordStemSeparationCost(elapsedSeconds);
+        if (result.GpuRunFellBackToCpu)
+            _projectState.SetMessage(_localization["Progress_StemGpuFailedCpu"], StatusSeverity.Warning);
+    }
+
     private void RecordStemSeparationCost(double elapsedSeconds)
     {
         var audioSeconds = _projectState.TotalAudioLengthMs / 1000.0;
@@ -229,29 +236,31 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
         }
         var outputDir = Path.Combine(projectDir, "stems");
         var run = begin(inputAudio);
+        var cacheIdentity = BuildStemCacheIdentity(inputAudio);
 
         // Never-regenerate fast path: if this exact song + audio was separated
         // before, expand the cached archive and load it — no separation runs,
         // and no active model is even required. A genuinely corrupt archive is
         // deleted and falls through to a fresh run; an environmental decode
-        // failure (e.g. Opus cache but ffmpeg went missing) also falls through
-        // but KEEPS the archive for when the tool returns.
-        //
-        // The escape hatch (re-run to try another model) is gated on stems being
-        // loaded in THIS session, not on WAVs existing on disk: a PSARC song's
-        // output dir is %LocalAppData%/…/PsarcAudioCache/<song>/stems, which
-        // survives a restart. Gating on the files would mean the cache is never
-        // consulted after a relaunch — the exact "don't re-run the long
-        // separation every launch" complaint this cache exists to fix.
-        if (_stemCacheCoordinator != null && !_stemMixer.HasStems)
+        // failure (e.g. Opus cache but ffmpeg went missing) keeps the archive
+        // and stops the run. Loaded stems never bypass the durable cache.
+        if (_stemCacheCoordinator != null)
         {
             var cached = await _stemCacheCoordinator
-                .TryLoadCachedAsync(BuildStemCacheIdentity(inputAudio), inputAudio, outputDir)
+                .TryLoadCachedAsync(cacheIdentity, inputAudio, outputDir, run.Token)
                 .ConfigureAwait(false);
+            run.Token.ThrowIfCancellationRequested();
             if (cached is { Count: > 0 })
             {
-                await RegisterAndPersistStemsAsync(project, cached, projectDir, projectPath, cached.Count);
+                await RegisterAndPersistStemsAsync(project, cached, projectDir, projectPath, cached.Count, run.Token);
                 return Outcome(SongStemSeparationStatus.LoadedFromCache);
+            }
+
+            if (_stemCacheCoordinator.HasArchive(cacheIdentity, inputAudio))
+            {
+                _logger.Warning(AppLogCategory.Audio,
+                    "Cached stems could not be loaded; keeping the archive and refusing to regenerate them.");
+                return Outcome(SongStemSeparationStatus.Failed, _localization["StemSeparation_CacheUnavailable"]);
             }
         }
 
@@ -289,9 +298,8 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
             return Outcome(SongStemSeparationStatus.Unavailable, _localization["Dialog_StemsNoModel_Message"]);
         }
 
-        // Pre-flight: if stems already exist on disk, the run OVERWRITES them,
-        // and "stems are never regenerated" is a hard rule — so the re-separate
-        // has to be explicit. A destructive verb reached from a MENU takes the
+        // Pre-flight for an uncached stem folder: replacement has to be
+        // explicit. A destructive verb reached from a MENU takes the
         // app-wide prompt instead, which is the rule in docs/agents/ui/dialogs.md.
         // Stems the model cannot produce are still moved aside and restored
         // afterwards, so a re-run never silently DROPS one — the earlier
@@ -387,10 +395,10 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
             _logger.Error(AppLogCategory.Audio, $"Stem separation failed: {result.ErrorMessage}");
             // Restore backups so we don't lose the user's previous stems on failure.
             folder.Restore();
-            return Outcome(SongStemSeparationStatus.Failed, result.ErrorMessage ?? "");
+            return Outcome(SongStemSeparationStatus.Failed, StemFailureText.Resolve(result, _localization));
         }
 
-        RecordStemSeparationCost(costClock.Elapsed.TotalSeconds);
+        AfterSuccessfulRun(result, costClock.Elapsed.TotalSeconds);
 
         var finalStems = folder.ApplyKept(result.Stems);
 
@@ -400,7 +408,7 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
         // %LocalAppData%/DotCharter/StemCache, keyed by song identity + audio
         // content hash. Best-effort: a cache write failure must not lose the
         // user's just-computed stems.
-        await SaveStemsToCacheAsync(inputAudio, finalStems);
+        await SaveStemsToCacheAsync(cacheIdentity, inputAudio, finalStems);
 
         await RegisterAndPersistStemsAsync(project, finalStems, projectDir, projectPath, keepFromExisting.Count);
         return Outcome(SongStemSeparationStatus.Separated);
@@ -417,12 +425,11 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
             : StemCacheIdentity.ForAudioFile(inputAudio);
     }
 
-    private async Task SaveStemsToCacheAsync(string inputAudio, IReadOnlyList<StemTrack> stems)
+    private async Task SaveStemsToCacheAsync(StemCacheIdentity identity, string inputAudio, IReadOnlyList<StemTrack> stems)
     {
         if (_stemCache == null || stems.Count == 0) return;
         try
         {
-            var identity = BuildStemCacheIdentity(inputAudio);
             // StemCacheSource, same as the read side: a library song is keyed on its
             // source .wem, anything else on its audio. Its TryDerive guard is
             // the one described here: ComputeFile swallows every
@@ -433,7 +440,7 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
             // never hit — and which any later transient read failure DOES hit, so
             // the user gets stale stems after replacing the audio in place. A
             // missing save costs one re-separation; a poisoned one is permanent.
-            var source = StemCacheSource.TryResolve(identity, inputAudio);
+            var source = StemCacheSource.ResolveForStore(_stemCache, identity, inputAudio);
             if (source == null)
             {
                 _logger.Warning(AppLogCategory.Audio,
@@ -448,7 +455,7 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
         }
         catch (Exception ex)
         {
-            _logger.Warning(AppLogCategory.Audio, $"Failed to write stems to durable cache: {ex.Message}");
+            _logger.Warning(AppLogCategory.Audio, "Failed to write stems to durable cache", ex);
         }
     }
 
@@ -459,10 +466,11 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
     /// </summary>
     private Task RegisterAndPersistStemsAsync(
         ChartProject project, IReadOnlyList<StemTrack> finalStems,
-        string audioDir, string? projectPath, int keptCount)
+        string audioDir, string? projectPath, int keptCount, CancellationToken ct = default)
     {
-        return _ui.InvokeAsync(() =>
+        return _ui.InvokeAsync(async () =>
         {
+            ct.ThrowIfCancellationRequested();
             // Identity check on the UI thread (the only thread that switches
             // projects): the caller captured `project` BEFORE a multi-minute
             // separation / archive expansion. If the user opened another song
@@ -476,7 +484,7 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
                 _logger.Warning(AppLogCategory.Audio,
                     "Stems finished for a song that is no longer open — not applying them to the current " +
                     "project. They are cached; re-open that song to load them.");
-                return;
+                return false;
             }
 
             // For transient sessions (PSARC imports, audio-only) there is no
@@ -518,6 +526,7 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
                     });
                 }
             }
+            if (finalStems.Count > 0) _projectSession.MarkProjectDirty();
             _logger.Info(AppLogCategory.Audio, $"Stems ready. Added/updated {finalStems.Count} stems (kept {keptCount}).");
             _stemMixer.Rebuild();
             StemsApplied?.Invoke();
@@ -531,16 +540,29 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
             // write a stray "project.dcproj" into the working directory.
             if (hasProject)
             {
-                // SaveProjectAsync handles its own faults; fire-and-forget is
-                // safe here and this sync dispatcher lambda cannot await it.
-                try { _ = _projectSession.SaveProjectAsync(); }
-                catch (Exception ex) { _logger.Warning(AppLogCategory.Audio, $"Failed to auto-save project after stem separation: {ex.Message}"); }
+                try
+                {
+                    if (!await _projectSession.SaveProjectAsync(SaveInitiator.Unattended)) ReportStemSaveFailure(project);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(AppLogCategory.Audio, "Failed to auto-save project after stem separation", ex);
+                    ReportStemSaveFailure(project);
+                }
             }
             else
             {
                 _logger.Info(AppLogCategory.Audio, "Stems ready for an unsaved session; skipping auto-save (no project file on disk).");
             }
+            return true;
         });
+    }
+
+    private void ReportStemSaveFailure(ChartProject project)
+    {
+        _logger.Warning(AppLogCategory.Audio, "Stem separation auto-save did not save the updated project.");
+        if (ReferenceEquals(_projectState.ActiveProject, project))
+            _projectState.SetMessage(_localization["Status_StemSaveFailed"], StatusSeverity.Warning);
     }
 
     /// <summary>

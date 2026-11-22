@@ -46,6 +46,11 @@ public sealed class LibraryService : ILibraryService, ILibraryAudioPreparer, ILi
     /// concurrent parses or fail one archive.</summary>
     internal Func<string, Func<IReadOnlyList<LibrarySongEntry>>, IReadOnlyList<LibrarySongEntry>>? ScanParseInterceptorForTests { get; init; }
 
+    /// <summary>Test seam: the scheduler the scan itself runs on; unset, the thread pool.
+    /// A test that waits on the scan's progress hands in a dedicated thread, so a starved
+    /// pool cannot delay the scan's first step.</summary>
+    internal TaskScheduler? ScanSchedulerForTests { get; init; }
+
     private int ScanDegreeOfParallelism =>
         ScanParallelismForTests ?? LibraryScanParallelParse.DegreeFor(Environment.ProcessorCount);
 
@@ -64,7 +69,7 @@ public sealed class LibraryService : ILibraryService, ILibraryAudioPreparer, ILi
         IProgress<IReadOnlyList<LibrarySongEntry>>? songFound,
         CancellationToken cancellationToken)
     {
-        return Task.Run<IReadOnlyList<LibrarySongEntry>>(() =>
+        return Task.Factory.StartNew<IReadOnlyList<LibrarySongEntry>>(() =>
         {
             if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
                 return [];
@@ -195,7 +200,7 @@ public sealed class LibraryService : ILibraryService, ILibraryAudioPreparer, ILi
                         if (outcome.Error is { } ex)
                         {
                             _logger.Warning(AppLogCategory.Import,
-                                $"Library scan skipped '{path}'. Type={ex.GetType().Name}, message='{ex.Message}'.");
+                                $"Library scan skipped '{path}': {ex.Message}", ex);
                         }
                         else
                         {
@@ -225,7 +230,7 @@ public sealed class LibraryService : ILibraryService, ILibraryAudioPreparer, ILi
                 .OrderBy(song => song.Artist, StringComparer.CurrentCultureIgnoreCase)
                 .ThenBy(song => song.Title, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
-        }, cancellationToken);
+        }, cancellationToken, TaskCreationOptions.DenyChildAttach, ScanSchedulerForTests ?? TaskScheduler.Default);
     }
 
     /// <summary>Opens a library song through the source that owns its file.</summary>
@@ -292,7 +297,7 @@ public sealed class LibraryService : ILibraryService, ILibraryAudioPreparer, ILi
         catch (Exception ex)
         {
             _logger.Warning(AppLogCategory.Import,
-                $"Library index write failed for '{path}'. Type={ex.GetType().Name}, message='{ex.Message}'.");
+                $"Library index write failed for '{path}'.", ex);
         }
     }
 
@@ -310,7 +315,7 @@ public sealed class LibraryService : ILibraryService, ILibraryAudioPreparer, ILi
         catch (Exception ex)
         {
             _logger.Warning(AppLogCategory.Import,
-                $"Library index unavailable; scanning without cache. Type={ex.GetType().Name}, message='{ex.Message}'.");
+                "Library index unavailable; scanning without cache.", ex);
             return null;
         }
     }

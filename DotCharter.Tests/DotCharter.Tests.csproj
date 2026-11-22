@@ -37,6 +37,7 @@
     <ItemGroup>
         <ProjectReference Include="..\DotCharter.Analysis\DotCharter.Analysis.csproj" />
         <ProjectReference Include="..\DotCharter.Core\DotCharter.Core.csproj" />
+        <ProjectReference Include="..\JuceSharp\src\JuceSharp.AudioIo\JuceSharp.AudioIo.csproj" />
         <ProjectReference Include="..\DotCharter.Services\DotCharter.Services.csproj" />
         <ProjectReference Include="..\DotCharter.Tone\DotCharter.Tone.csproj" />
         <ProjectReference Include="..\DotCharter.Tone.UI\DotCharter.Tone.UI.csproj" />

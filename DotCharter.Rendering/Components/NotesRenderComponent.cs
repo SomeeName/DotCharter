@@ -14,6 +14,9 @@ public sealed class NotesRenderComponent : IRenderable
     public void Render(RenderContext context)
     {
         context.QuadBatcher.SetTexture(null);
+        // The stems and floor markers lie on the board, under every tail, so they go first:
+        // this pass writes no depth, so a far marker staged later would cover a nearer tail.
+        for (var i = context.Snapshot.NoteCount - 1; i >= 0; i--) NoteHeadRenderer.RenderNoteFloor(context, i);
         SustainRenderer.Render(context);
 
         RenderHeadsFarthestFirst(context);

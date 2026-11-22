@@ -30,6 +30,7 @@ internal static class E
 
     // Tuning
     public const string Tuning = "tuning";
+    public const string ExtendedRange = "extendedRange";
     public const string Strings = "strings";
 
     // ArrangementProperties

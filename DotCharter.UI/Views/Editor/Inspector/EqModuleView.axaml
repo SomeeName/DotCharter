@@ -2,290 +2,265 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
              xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:inspector="using:DotCharter.UI.Views.Editor.Inspector"
              xmlns:converters="using:DotCharter.UI.Converters"
              xmlns:convertersRig="using:DotCharter.Tone.UI.Converters"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
-             xmlns:locSvc="clr-namespace:DotCharter.Localization;assembly=DotCharter.Localization"
              x:Class="DotCharter.UI.Views.Editor.Inspector.EqModuleView"
              x:DataType="vm:EqModuleViewModel">
-    <!-- The inspector's EQ module, rebuilt to `EQ and Filters.dc.html` (the
-         MIXER TAB module — the mockup's larger "advanced editor" is deliberately
-         out of scope).
-
-         LAYOUT, which the mockup leaves open and the pane does not:
-
-           • WIDTH is genuinely variable — the inspector is a dockable pane and
-             also floats into its own window — so nothing here is width-pinned.
-             The chip row is a 6-column UniformGrid, the type picker a 6-column
-             UniformGrid, and every label/value rail is `Auto` with the control
-             on a star. The mockup draws 420 and 800; both fall out of that, and
-             so does 1200.
-
-           • HEIGHT is the real question, and it has TWO answers because one is
-             not enough. Down to the module's floor the PLOT absorbs it: the
-             grid is `Auto` header, `*` plot, `Auto` everything else, so the
-             curve is the only thing that gives space back — and it is the only
-             thing that still reads at half size, because a squeezed slider row
-             is unusable while a squeezed curve is merely smaller.
-
-             Below that floor the module SCROLLS. It has to: a Grid star row
-             STARVES its child rather than containing it (this repo's own
-             documented trap), so without the scroller a 250 px dock drew the
-             plot straight through the header and the chip row — which is
-             exactly what the first render of the short case showed. The
-             `ScrollViewer` here is what turns "overlapping" into "scrolled",
-             and the `MinHeight` below is the number it starts scrolling at.
-             Horizontal scrolling is DISABLED, because width is not the axis
-             that runs out.
-
-             …and the star row NEEDS A CHILD THAT ASKS FOR A HEIGHT, which is
-             what shipped wrong. A ScrollViewer measures its content with
-             INFINITE height, so the star row is worth exactly the plot's
-             desired size on every measure pass — and with no desired height of
-             its own it collapsed to the well's `MinHeight`, giving the owner a
-             58 px curve against the mockup's 104 ("so squished together in
-             height that it isn't even readable"). `EqPlotControl.MeasureOverride`
-             asks for `PreferredHeight` (102 px inside a 1 px frame = the
-             mockup's 104) and the row still GROWS in a taller pane, because a
-             preference is not a floor.
-
-             There is deliberately NO `MinHeight` on this Grid any more. It used
-             to be 232 and it was the number the module started scrolling at —
-             but that only worked BECAUSE the plot asked for nothing; now the
-             plot's own preference sets the natural height, the ScrollViewer
-             starts scrolling there, and a second number here could only ever
-             disagree with it.
-
-         `IsLive` is the honesty gate. When the engine has no parametric EQ,
-         every interactive control is disabled and the reason is PRINTED under
-         the plot — never a live-looking control over nothing.
-
-         Every slider carries `ResetOnDoubleClick.DefaultValue`, bound to the
-         view model rather than typed here: the number a double-click writes and
-         the number the RESET button writes are the same fact and may not be
-         stated twice. -->
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                  VerticalScrollBarVisibility="Auto">
-    <Grid RowDefinitions="Auto,*,Auto,Auto,Auto,Auto"
-          RowSpacing="{StaticResource FireSpaceSm}">
-
-        <!-- ── header: dot · eyebrow · n/6 · preset · power ──────────── -->
-        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto,Auto"
-              ColumnSpacing="{StaticResource FireSpaceSm}" Height="30">
-            <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_EqFilters}" Classes="EqEyebrow"
-                       VerticalAlignment="Center" />
-            <Border Grid.Column="1" Classes="EqCountBadge" VerticalAlignment="Center">
-                <TextBlock Text="{Binding ActiveBadge}" Classes="EqCountBadgeText" />
-            </Border>
-
-            <ComboBox Grid.Column="3" Classes="EqPresetPicker"
-                      AutomationProperties.Name="{localization:Loc Inspector_EqPreset}"
-                      ItemsSource="{Binding Presets}"
-                      SelectedItem="{Binding SelectedPresetKey}"
-                      IsEnabled="{Binding IsLive}"
-                      PlaceholderText="{localization:Loc Inspector_EqPresetCustom}"
-                      ToolTip.Tip="{localization:Loc Inspector_EqPresetTip}">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                        <TextBlock Text="{Binding Converter={x:Static converters:EqPresetLabelConverter.Instance}}" />
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
-
-            <ToggleButton Grid.Column="4" Classes="EqPower"
-                          IsChecked="{Binding IsSectionEnabled}"
-                          IsEnabled="{Binding IsLive}"
-                          AutomationProperties.Name="{localization:Loc Inspector_EqPowerTip}"
-                          ToolTip.Tip="{localization:Loc Inspector_EqPowerTip}">
-                <PathIcon Data="{DynamicResource IconPower}" Classes="EqPowerGlyph" />
-            </ToggleButton>
-        </Grid>
-
-        <!-- ── the plot ─────────────────────────────────────────────── -->
-        <Border Grid.Row="1" Classes="EqPlotWell" MinHeight="72"
-                ToolTip.Tip="{localization:Loc Inspector_EqPlotTip}">
-            <Panel>
-                <ctl:EqPlotControl x:Name="Plot"
-                                   Section="{Binding Section}"
-                                   SelectedBand="{Binding SelectedIndex, Mode=TwoWay}"
-                                   Spectrum="{Binding Spectrum}"
-                                   IsLive="{Binding IsLive}"
-                                   PreviewLabel="{localization:Loc Inspector_EqPreviewTag}"
-                                   TextElement.FontFamily="{StaticResource FireFontMono}" />
-                <Border Classes="EqBypassTag" VerticalAlignment="Top" HorizontalAlignment="Right"
-                        IsVisible="{Binding !IsSectionEnabled}">
-                    <TextBlock Text="{localization:Loc Inspector_EqBypassed}" Classes="EqBypassTagText" />
-                </Border>
-            </Panel>
-        </Border>
-
-        <!-- The engine's own reason, printed. Only ever visible when the module
-             is NOT live, which is the whole point: a disabled control that does
-             not say why is the control that lies by omission. -->
-        <TextBlock Grid.Row="2" Text="{Binding UnavailableReason}"
-                   Classes="EqUnavailable" IsVisible="{Binding !IsLive}" />
-
-        <!-- ── the band chip row ────────────────────────────────────── -->
-        <ItemsControl Grid.Row="3" ItemsSource="{Binding Bands}" IsEnabled="{Binding IsLive}">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <UniformGrid Columns="6" />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:EqBandChipViewModel">
-                    <!-- The chip SELECTS; the dot inside it TOGGLES. Two
-                         separate buttons rather than one with a modifier,
-                         because the mockup makes them separate targets and a
-                         modifier is not discoverable. -->
-                    <Button AutomationProperties.Name="{Binding TypeLabel}" Classes="EqChip" Classes.selected="{Binding IsSelected}"
-                            Classes.EqBandOff="{Binding !IsEnabled}"
-                            Command="{Binding SelectCommand}"
-                            Margin="0,0,3,0">
-                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXxs}"
-                                    HorizontalAlignment="Center">
-                            <Button Classes="EqChipDot"
-                                    Background="{Binding ColorToken, Converter={x:Static convertersRig:FireTokenBrushConverter.Instance}}"
-                                    BorderBrush="{Binding ColorToken, Converter={x:Static convertersRig:FireTokenBrushConverter.Instance}}"
-                                    Command="{Binding ToggleEnabledCommand}">
-                                <!-- The dot is a COLOURED CIRCLE and nothing else,
-                                     so without this it reaches a screen reader as
-                                     an unnamed button and its on/off state as no
-                                     signal at all. The name has to name the BAND
-                                     too — six of these sit in one row. -->
-                                <AutomationProperties.Name>
-                                    <MultiBinding
-                                        Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
-                                        <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
-                                                 Path="[Inspector_EqBandToggle]" />
-                                        <Binding Path="TypeLabel" />
-                                    </MultiBinding>
-                                </AutomationProperties.Name>
-                            </Button>
-                            <TextBlock Text="{Binding TypeLabel}" Classes="EqChipLabel" />
-                        </StackPanel>
-                    </Button>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <!-- ── the selected band's editor ───────────────────────────── -->
-        <Border Grid.Row="4" Classes="EqBandCard"
-                BorderBrush="{Binding SelectedColorToken, Converter={x:Static convertersRig:FireTokenBrushConverter.Instance}}">
+    <!-- The Mixer tab's EQ section in inspector design D: a ColumnFlowPanel of three cards.
+           * Response (the left column): preset, Bypass, the ColumnFlowEqPlot (drag a handle, or press
+             anywhere to move the selected band there; Ctrl + wheel = Q, double-click = reset), the
+             engine's reason when it has no parametric EQ, and the n/6 badge.
+           * Band: the band picker, Enable / Solo / Reset, the six types, frequency, gain (or the slope of a
+             gainless type) and Q. Every slider resets on a double-click to the same value Reset writes.
+           * Routing: what the EQ is applied to, and the output trim.
+         Small and Tiny page the Band and Routing cards (Tiny pages all three, ColumnFlowPages); a wide pane
+         gives each its own column. Every control writes through EqModuleViewModel's one commit path, which
+         pushes the section to the engine: nothing here touches audio. -->
+    <ctl:ColumnFlowPanel x:Name="EqCards">
+        <ctl:ColumnFlowCard x:Name="EqResponseCard" ctl:ColumnFlowPanel.Title="{localization:Loc Mixer_Card_Response}">
             <StackPanel Spacing="{StaticResource FireSpaceXs}">
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
-                    <Ellipse Grid.Column="0" Classes="EqBandDot" VerticalAlignment="Center"
-                             Fill="{Binding SelectedColorToken, Converter={x:Static convertersRig:FireTokenBrushConverter.Instance}}" />
-                    <TextBlock Grid.Column="1" Text="{Binding SelectedTitle}" Classes="EqBandTitle" />
-                    <ToggleButton Grid.Column="2" Classes="EqMicroToggle"
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                               Text="{localization:Loc Mixer_Eq_Response}" />
+                    <TextBlock Grid.Column="1" x:Name="EqActiveBadge" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp"
+                               Text="{Binding ActiveBadge}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceXs}">
+                    <ComboBox Grid.Column="0" x:Name="EqPreset" Classes="ColumnFlowField"
+                              AutomationProperties.Name="{localization:Loc Inspector_EqPreset}"
+                              ItemsSource="{Binding Presets}"
+                              SelectedItem="{Binding SelectedPresetKey}"
+                              IsEnabled="{Binding IsLive}"
+                              PlaceholderText="{localization:Loc Inspector_EqPresetCustom}"
+                              ToolTip.Tip="{localization:Loc Inspector_EqPresetTip}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Text="{Binding Converter={x:Static converters:EqPresetLabelConverter.Instance}}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ToggleButton Grid.Column="1" x:Name="EqBypass" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                                  Content="{localization:Loc Mixer_Eq_Bypass}"
+                                  IsChecked="{Binding IsBypassed}"
+                                  IsEnabled="{Binding IsLive}"
+                                  AutomationProperties.Name="{localization:Loc Mixer_Eq_Bypass}"
+                                  ToolTip.Tip="{localization:Loc Inspector_EqPowerTip}" />
+                </Grid>
+                <Border Background="{DynamicResource FireSurfaceSunken}" CornerRadius="{StaticResource FireRadiusMicro}"
+                        ToolTip.Tip="{localization:Loc Inspector_EqPlotTip}">
+                    <ctl:ColumnFlowEqPlot x:Name="Plot" PreferredHeight="96"
+                                          Section="{Binding Section}"
+                                          SelectedBand="{Binding SelectedIndex, Mode=TwoWay}"
+                                          Spectrum="{Binding Spectrum}"
+                                          IsLive="{Binding IsLive}"
+                                          PreviewLabel="{localization:Loc Inspector_EqPreviewTag}"
+                                          TextElement.FontFamily="{StaticResource FireFontMono}" />
+                </Border>
+                <!-- The engine's own reason: a control that is off says why. -->
+                <TextBlock x:Name="EqUnavailableText" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                           Foreground="{DynamicResource FireWarning}"
+                           Text="{Binding UnavailableReason}" IsVisible="{Binding !IsLive}" />
+                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                           Text="{localization:Loc Mixer_Eq_Hint}" IsVisible="{Binding IsLive}" />
+            </StackPanel>
+        </ctl:ColumnFlowCard>
+
+        <ctl:ColumnFlowCard x:Name="EqBandCard" ctl:ColumnFlowPanel.Title="{localization:Loc Mixer_Card_Band}">
+            <StackPanel Spacing="{StaticResource FireSpaceXs}" IsEnabled="{Binding IsLive}">
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}">
+                    <Ellipse x:Name="EqBandTitleDot" Width="10" Height="10" VerticalAlignment="Center" Fill="{Binding SelectedColorToken, Converter={x:Static convertersRig:FireTokenBrushConverter.Instance}}" />
+                    <TextBlock x:Name="EqBandTitle" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" Text="{Binding SelectedTitle}" />
+                </StackPanel>
+                <!-- the chip row (restored): a chip selects its band in one click; its dot switches the band on or off
+                     without selecting it. The colour is the band's plot handle. -->
+                <ItemsControl x:Name="EqBandChips" ItemsSource="{Binding Bands}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="3" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:EqBandChipViewModel">
+                            <Grid ColumnDefinitions="Auto,*" Margin="0,0,3,3">
+                                <Button Grid.Column="0" x:Name="EqChipPower" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                        MinWidth="24" Padding="0"
+                                        Command="{Binding ToggleEnabledCommand}"
+                                        AutomationProperties.Name="{Binding ToggleLabel}"
+                                        ToolTip.Tip="{Binding ToggleLabel}">
+                                    <Ellipse Width="10" Height="10" Fill="{Binding ColorToken, Converter={x:Static convertersRig:FireTokenBrushConverter.Instance}}"
+                                             Opacity="{Binding !IsEnabled, Converter={x:Static converters:BoolConverters.ToDimmedOpacity}}" />
+                                </Button>
+                                <ToggleButton Grid.Column="1" x:Name="EqChipSelect" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                                              HorizontalAlignment="Stretch" Padding="2,0"
+                                              Content="{Binding ChipLabel}"
+                                              IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                              Command="{Binding SelectCommand}"
+                                              AutomationProperties.Name="{Binding PickerLabel}"
+                                              ToolTip.Tip="{Binding PickerLabel}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+                    <ComboBox Grid.Column="0" x:Name="EqBandPicker" Classes="ColumnFlowField"
+                              AutomationProperties.Name="{localization:Loc Mixer_Card_Band}"
+                              ItemsSource="{Binding Bands}"
+                              SelectedIndex="{Binding SelectedIndex}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:EqBandChipViewModel">
+                                <!-- a band that is off reads dimmed, as its plot handle does -->
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}"
+                                            Opacity="{Binding !IsEnabled, Converter={x:Static converters:BoolConverters.ToDimmedOpacity}}">
+                                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{Binding ColorToken, Converter={x:Static convertersRig:FireTokenBrushConverter.Instance}}" />
+                                    <TextBlock Text="{Binding PickerLabel}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ToggleButton Grid.Column="1" x:Name="EqBandEnable" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                                  HorizontalAlignment="Stretch"
+                                  Content="{localization:Loc Mixer_Eq_Enable}"
+                                  IsChecked="{Binding SelectedBand.IsEnabled, Mode=OneWay}"
+                                  Command="{Binding SelectedBand.ToggleEnabledCommand}"
+                                  AutomationProperties.Name="{localization:Loc Mixer_Eq_Enable}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+                    <ToggleButton Grid.Column="0" x:Name="EqBandSolo" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                                  HorizontalAlignment="Stretch"
                                   Content="{localization:Loc Inspector_EqSolo}"
                                   IsChecked="{Binding IsSelectedSoloed, Mode=OneWay}"
                                   Command="{Binding ToggleSoloCommand}"
-                                  IsEnabled="{Binding IsLive}"
-                                  ToolTip.Tip="{localization:Loc Inspector_EqSoloTip}" />
-                    <Button Grid.Column="3" Classes="EqMicroButton"
-                            Content="{localization:Loc Inspector_EqReset}"
-                            Command="{Binding ResetSelectedCommand}"
-                            IsEnabled="{Binding IsLive}" />
+                                  IsEnabled="{Binding SelectedBand.IsEnabled}"
+                                  ToolTip.ShowOnDisabled="True"
+                                  AutomationProperties.Name="{localization:Loc Inspector_EqSolo}"
+                                  ToolTip.Tip="{localization:Loc Mixer_Eq_SoloTip}" />
+                    <Button Grid.Column="1" x:Name="EqBandReset" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                            HorizontalAlignment="Stretch"
+                            Content="{localization:Loc Mixer_Eq_ResetGainQ}"
+                            Command="{Binding Edits.ResetCommand}"
+                            ToolTip.Tip="{localization:Loc Mixer_Eq_ResetGainQTip}"
+                            AutomationProperties.Name="{localization:Loc Mixer_Eq_ResetGainQ}" />
                 </Grid>
-
-                <!-- Type picker. Six equal cells so it reads as one segmented
-                     control at every width the pane can take. -->
-                <Border Classes="EqSegTrack">
-                    <ItemsControl ItemsSource="{Binding Types}" IsEnabled="{Binding IsLive}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <UniformGrid Columns="6" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:EqTypeOptionViewModel">
-                                <Button Classes="EqSegItem" Classes.selected="{Binding IsSelected}"
-                                        Content="{Binding Label}"
-                                        Command="{Binding PickCommand}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Border>
-
-                <!-- Freq -->
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}"
-                      Classes="EqParamRow">
-                    <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_EqFreq}" Classes="EqParamLabel" />
+                <!-- Reset gain + Q and the typed Frequency / Gain / Q fields bind EqBandEdits (EqModuleViewModel.Edits): its
+                     ResetCommand, CommitFrequencyCommand, CommitGainCommand and CommitQCommand. -->
+                <inspector:InspectorConfirmRow x:Name="EqResetConfirm" DataContext="{Binding Edits.ResetConfirm}" />
+                <ItemsControl x:Name="EqBandTypes" ItemsSource="{Binding Types}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="3" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:EqTypeOptionViewModel">
+                            <ToggleButton Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle" Margin="0,0,3,3"
+                                          HorizontalAlignment="Stretch"
+                                          Content="{Binding Label}"
+                                          AutomationProperties.Name="{Binding Label}"
+                                          IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                          Command="{Binding PickCommand}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{localization:Loc Inspector_EqFreq}" />
                     <Slider Grid.Column="1" Classes="MixerSlider" Minimum="0" Maximum="1"
                             AutomationProperties.Name="{localization:Loc Inspector_EqFreq}" Value="{Binding SelectedFrequencyNormalized}"
-                            IsEnabled="{Binding IsLive}"
                             ctl:ResetOnDoubleClick.DefaultValue="{Binding SelectedFrequencyDefaultNormalized}"
                             ToolTip.Tip="{localization:Loc Inspector_DoubleClickReset}"
-                            Foreground="{Binding SelectedColorToken, Converter={x:Static convertersRig:FireTokenBrushConverter.Instance}}" />
-                    <TextBlock Grid.Column="2" Text="{Binding SelectedFrequencyText}" Classes="EqParamValue" />
+                            Foreground="{DynamicResource FireAccent}" />
+                    <TextBox Grid.Column="2" x:Name="EqFreqField" Classes="ColumnFlowField" Width="76"
+                             Text="{Binding Edits.FrequencyInput}" Tag="{Binding Edits.CommitFrequencyCommand}"
+                             LostFocus="CommitField"
+                             AutomationProperties.Name="{localization:Loc Inspector_EqFreq}"
+                             ToolTip.Tip="{Binding SelectedFrequencyText}">
+                        <TextBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding Edits.CommitFrequencyCommand}" />
+                        </TextBox.KeyBindings>
+                        <TextBox.InnerRightContent>
+                            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" VerticalAlignment="Center" Margin="0,0,4,0" Text="Hz" />
+                        </TextBox.InnerRightContent>
+                    </TextBox>
                 </Grid>
-
-                <!-- Gain — or, for a shape that has none, the SLOPE. The row
-                     ADAPTS rather than showing a dead slider: a gain track on a
-                     high pass would be a control the filter cannot honour. -->
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}"
-                      Classes="EqParamRow" IsVisible="{Binding SelectedHasGain}">
-                    <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_EqGain}" Classes="EqParamLabel" />
+                <!-- Gain, or the slope of a type that has none: never a gain the filter cannot apply. -->
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}" IsVisible="{Binding SelectedHasGain}">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{localization:Loc Inspector_EqGain}" />
                     <Slider Grid.Column="1" Classes="MixerSlider" Minimum="-18" Maximum="18"
                             AutomationProperties.Name="{localization:Loc Inspector_EqGain}" Value="{Binding SelectedGainDb}"
-                            IsEnabled="{Binding IsLive}"
                             ctl:ResetOnDoubleClick.DefaultValue="{Binding GainDefaultDb}"
                             ToolTip.Tip="{localization:Loc Inspector_DoubleClickReset}"
-                            Foreground="{Binding SelectedColorToken, Converter={x:Static convertersRig:FireTokenBrushConverter.Instance}}" />
-                    <TextBlock Grid.Column="2" Text="{Binding SelectedGainText}" Classes="EqParamValue" />
+                            Foreground="{DynamicResource FireAccent}" />
+                    <TextBox Grid.Column="2" x:Name="EqGainField" Classes="ColumnFlowField" Width="76"
+                             Text="{Binding Edits.GainInput}" Tag="{Binding Edits.CommitGainCommand}"
+                             LostFocus="CommitField"
+                             AutomationProperties.Name="{localization:Loc Inspector_EqGain}"
+                             ToolTip.Tip="{Binding SelectedGainText}">
+                        <TextBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding Edits.CommitGainCommand}" />
+                        </TextBox.KeyBindings>
+                        <TextBox.InnerRightContent>
+                            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" VerticalAlignment="Center" Margin="0,0,4,0" Text="dB" />
+                        </TextBox.InnerRightContent>
+                    </TextBox>
                 </Grid>
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}"
-                      Classes="EqParamRow" IsVisible="{Binding !SelectedHasGain}">
-                    <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_EqSlopeLabel}"
-                               Classes="EqParamLabel" />
-                    <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_EqNoGain}"
-                               Classes="EqParamNote" VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="2" Text="{Binding SelectedSlopeText}" Classes="EqParamValue" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}" IsVisible="{Binding !SelectedHasGain}">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{localization:Loc Inspector_EqSlopeLabel}" />
+                    <TextBlock Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{localization:Loc Inspector_EqNoGain}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="2" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowValue" Text="{Binding SelectedSlopeText}" />
                 </Grid>
-
-                <!-- Q -->
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}"
-                      Classes="EqParamRow">
-                    <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_EqQ}" Classes="EqParamLabel" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{localization:Loc Inspector_EqQ}" />
                     <Slider Grid.Column="1" Classes="MixerSlider" Minimum="0" Maximum="1"
                             AutomationProperties.Name="{localization:Loc Inspector_EqQ}" Value="{Binding SelectedQNormalized}"
-                            IsEnabled="{Binding IsLive}"
                             ctl:ResetOnDoubleClick.DefaultValue="{Binding QDefaultNormalized}"
                             ToolTip.Tip="{localization:Loc Inspector_DoubleClickReset}"
                             Foreground="{DynamicResource FireBorderStrong}" />
-                    <TextBlock Grid.Column="2" Text="{Binding SelectedQText}" Classes="EqParamValue" />
+                    <TextBox Grid.Column="2" x:Name="EqQField" Classes="ColumnFlowField" Width="76"
+                             Text="{Binding Edits.QInput}" Tag="{Binding Edits.CommitQCommand}"
+                             LostFocus="CommitField"
+                             AutomationProperties.Name="{localization:Loc Inspector_EqQ}"
+                             ToolTip.Tip="{Binding SelectedQText}">
+                        <TextBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding Edits.CommitQCommand}" />
+                        </TextBox.KeyBindings>
+                    </TextBox>
+                </Grid>
+                <TextBlock x:Name="EqFieldError" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                           Foreground="{DynamicResource FireWarning}"
+                           IsVisible="{Binding Edits.HasError}" Text="{Binding Edits.Error}" />
+            </StackPanel>
+        </ctl:ColumnFlowCard>
+
+        <ctl:ColumnFlowCard x:Name="EqRoutingCard" ctl:ColumnFlowPanel.Title="{localization:Loc Mixer_Card_Routing}">
+            <StackPanel Spacing="{StaticResource FireSpaceXs}" IsEnabled="{Binding IsLive}">
+                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" Text="{localization:Loc Mixer_Eq_Routing}" />
+                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap" Text="{localization:Loc Inspector_EqRouteTip}" />
+                <UniformGrid Columns="3">
+                    <ToggleButton x:Name="EqRouteSong" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle" Margin="0,0,3,0"
+                                  HorizontalAlignment="Stretch"
+                                  Content="{localization:Loc Inspector_EqRouteSong}" AutomationProperties.Name="{localization:Loc Inspector_EqRouteSong}"
+                                  IsChecked="{Binding IsRouteSong, Mode=OneWay}" Command="{Binding SetRouteSongCommand}" />
+                    <ToggleButton x:Name="EqRouteGuitar" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle" Margin="0,0,3,0"
+                                  HorizontalAlignment="Stretch"
+                                  Content="{localization:Loc Inspector_EqRouteGuitar}" AutomationProperties.Name="{localization:Loc Inspector_EqRouteGuitar}"
+                                  IsChecked="{Binding IsRouteGuitar, Mode=OneWay}" Command="{Binding SetRouteGuitarCommand}" />
+                    <ToggleButton x:Name="EqRouteBoth" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                                  HorizontalAlignment="Stretch"
+                                  Content="{localization:Loc Inspector_EqRouteBoth}" AutomationProperties.Name="{localization:Loc Inspector_EqRouteBoth}"
+                                  IsChecked="{Binding IsRouteBoth, Mode=OneWay}" Command="{Binding SetRouteBothCommand}" />
+                </UniformGrid>
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{localization:Loc Inspector_EqTrim}" />
+                    <Slider Grid.Column="1" Classes="MixerSlider" Minimum="-12" Maximum="12"
+                            AutomationProperties.Name="{localization:Loc Inspector_EqTrim}" Value="{Binding TrimDb}"
+                            ctl:ResetOnDoubleClick.DefaultValue="{Binding TrimDefaultDb}"
+                            ToolTip.Tip="{localization:Loc Inspector_DoubleClickReset}"
+                            Foreground="{DynamicResource FireAccent}" />
+                    <TextBlock Grid.Column="2" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowValue" Text="{Binding TrimText}" />
                 </Grid>
             </StackPanel>
-        </Border>
-
-        <!-- ── footer: routing · trim ───────────────────────────────── -->
-        <Grid Grid.Row="5" ColumnDefinitions="Auto,*,Auto,Auto,Auto"
-              ColumnSpacing="{StaticResource FireSpaceSm}" Classes="EqFooter">
-            <Border Grid.Column="0" Classes="EqSegTrack"
-                    ToolTip.Tip="{localization:Loc Inspector_EqRouteTip}">
-                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXxs}">
-                    <Button Classes="EqSegItem" Classes.selected="{Binding IsRouteSong}"
-                            Content="{localization:Loc Inspector_EqRouteSong}"
-                            Command="{Binding SetRouteSongCommand}" IsEnabled="{Binding IsLive}" />
-                    <Button Classes="EqSegItem" Classes.selected="{Binding IsRouteGuitar}"
-                            Content="{localization:Loc Inspector_EqRouteGuitar}"
-                            Command="{Binding SetRouteGuitarCommand}" IsEnabled="{Binding IsLive}" />
-                    <Button Classes="EqSegItem" Classes.selected="{Binding IsRouteBoth}"
-                            Content="{localization:Loc Inspector_EqRouteBoth}"
-                            Command="{Binding SetRouteBothCommand}" IsEnabled="{Binding IsLive}" />
-                </StackPanel>
-            </Border>
-
-            <TextBlock Grid.Column="2" Text="{localization:Loc Inspector_EqTrim}"
-                       Classes="EqParamLabel" VerticalAlignment="Center" />
-            <Slider Grid.Column="3" Classes="MixerSlider" Width="84" Minimum="-12" Maximum="12"
-                    AutomationProperties.Name="{localization:Loc Inspector_EqTrim}" Value="{Binding TrimDb}" IsEnabled="{Binding IsLive}"
-                    ctl:ResetOnDoubleClick.DefaultValue="{Binding TrimDefaultDb}"
-                    ToolTip.Tip="{localization:Loc Inspector_DoubleClickReset}"
-                    Foreground="{DynamicResource FireAccent}" />
-            <TextBlock Grid.Column="4" Text="{Binding TrimText}" Classes="EqParamValue" />
-        </Grid>
-    </Grid>
-    </ScrollViewer>
+        </ctl:ColumnFlowCard>
+    </ctl:ColumnFlowPanel>
 </UserControl>

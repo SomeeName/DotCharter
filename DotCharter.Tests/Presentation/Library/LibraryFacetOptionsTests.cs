@@ -16,7 +16,7 @@ public sealed class LibraryFacetOptionsTests
         => [.. LibraryFacetOptions.For(facet, songs, Loc).Select(o => o.Value)];
 
     /// <summary>Every distinct raw tuning is its own option, labelled with its name AND its
-    /// letters — so two spellings of one tuning read apart and each is reachable.</summary>
+    /// display letters; every raw filter value remains reachable under the shared spelling.</summary>
     [Fact]
     public void Tunings_OfferEveryRawSpelling_LabelledWithNameAndLetters_UnknownLast()
     {
@@ -34,7 +34,7 @@ public sealed class LibraryFacetOptionsTests
         [
             ("D A D G B E", "Drop D (D A D G B E)"),
             ("E A D G B E", "E Standard (E A D G B E)"),
-            ("D# G# C# F# A# D#", "Eb Standard (D# G# C# F# A# D#)"),
+            ("D# G# C# F# A# D#", "Eb Standard (Eb Ab Db Gb Bb Eb)"),
             ("Eb Ab Db Gb Bb Eb", "Eb Standard (Eb Ab Db Gb Bb Eb)"),
             ("", "SongBrowser_Facet_Unknown")
         ], options);

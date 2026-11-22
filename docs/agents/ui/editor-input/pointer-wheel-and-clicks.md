@@ -39,6 +39,14 @@ charting muscle memory and stays the bare gesture.** Alt is the coherent VIEW
 modifier instead — Alt+wheel pans exactly like Alt+left-drag pans. Do not
 re-flip without an explicit owner decision.
 
+**A middle-drag / Alt+left-drag pan can never stay stuck (#514).** `TimelineInteractionManager`
+ends it on the button's release, on `PointerCaptureLost` (a popup, menu or window took the
+pointer; no release follows) and on Escape (a tunnel handler on the `TopLevel`, attached only
+for the pan's life), through ONE `EndPan` that runs once, balances `EndContinuousRender` and
+resets the cursor. A `PointerExited` while the capture is held still does NOT end it. The cursor
+cache `_cursorType` is set to SizeAll with the cursor; without that the release saw "same zone"
+and left SizeAll on. Pinned by `Perf/TimelineMiddlePanUiPerfSmokeTests`.
+
 **…and the unclaimed-notch FALLBACK went the same way (owner, 2026-08-22):**
 it used to pan, which made the one gesture edit or scroll depending on where the
 pointer happened to sit — a notch that missed the note by one lane scrolled the
@@ -67,8 +75,10 @@ play identically is untouched. A hand shape travels only when EVERY sound under
 it is shared — a bar covering one source-only lick would declare a string the
 target never sounds. An anchor travels when the target has a shared sound in the
 region it governs. Template ids are arrangement-LOCAL, so a copied grip is
-resolved into the target by SHAPE and the source's FINGERING is written onto it
-(the same grip is played with the same fingers). It OVERWRITES, in one undo
+resolved into the target by the full grip and intent, including fingers,
+fingerless status, name and arpeggio flags. A compatible template is reused;
+otherwise a clone is minted, leaving other target users' grips untouched.
+It OVERWRITES the matched sounds, in one undo
 step, and the dialog previews the counts before you press anything.
 
 **Drawing a bar on the hand-shape lane (#481).** A right-press over EMPTY lane
@@ -90,7 +100,7 @@ it. `UI/Input/Tools/HandShapeDrawGestureTests`.
 proposals as DASHED bars (View ▸ Show suggested hand shapes, on by default): runs of
 single notes, or notes mixed with ONE chord shape, that one grip holds. A left-click
 on one accepts it as a PLAIN bar, Alt+left-click as an ARPEGGIO; hovering one prints
-how in the status line. Tools ▸ Hand shapes ▸ Accept suggested hand shapes in
+how in the status line. Tools ▸ Generate ▸ Accept suggested hand shapes in
 selection (`Ctrl+Shift+U`) and …as arpeggios (`Shift+Alt+U`, the Alt row of the same
 letter, as Generate arpeggio is of Generate hand shape; #639) accept every dashed bar
 holding a selected sound. Each
@@ -107,7 +117,7 @@ over the same inputs; `SongMapMarks.CollectSuggestions`).
 **Every new bar is named from its template** — the drawn bar, both selection
 generators — or left empty; never the literal `"Chord"` (the `HandShape.Name`
 default, which import paths still write). **Generate arpeggio from selection**
-(`Shift+Alt+G`, Tools ▸ Hand shapes) is `HandShapeFromSelectionGenerator.Generate`
+(`Shift+Alt+G`, Tools ▸ Generate) is `HandShapeFromSelectionGenerator.Generate`
 with `arpeggio: true`: it reuses an arpeggio template the chart already declares
 in EITHER spelling, else mints through `ChordTemplateResolver` with `Arpeggio`
 set — the flag the chord-template panel's box writes.
@@ -115,8 +125,9 @@ set — the flag the chord-template panel's box writes.
 
 **A hand-shape resize also rebuilds the bar's GRIP** — the frets it now covers,
 fingering filled in — but only on a template the bar owns ALONE
-(`Core/Utilities/HandShapeAutoTemplate`). A shared template belongs to a real
-chord and is never rewritten. Both halves ride in ONE mergeable action
+(`Core/Utilities/HandShapeAutoTemplate`). Ownership checks every difficulty's
+chords and hand shapes and every notation voice's chords; any other user prevents
+an in-place rebuild. Both halves ride in ONE mergeable action
 (`Input/Actions/ResizeHandShapesAction`) so a whole wheel sweep stays a single
 undo step: a template edit pushed separately would undo without the length.
 
@@ -143,15 +154,28 @@ through `IHighwayEditingService`), pinned against the real service by
 declines.
 
 - The model is the pure `Input/TimelineContextMenuBuilder` (items, order,
-  actions, and that every LocKey exists in both resx files are pinned by
+  actions, and that every LocKey exists in the resx files are pinned by
   `UI/Input/TimelineContextMenuBuilderTests`); `ChartRenderer.ShowContextMenu`
-  (`IChartViewport`) only realizes it into a `MenuFlyout` at the pointer — a
-  popup is its own HWND, so it renders over the native 3D panel.
+  (`IChartViewport`) only realizes it into an in-window `MenuFlyout` at the pointer,
+  above the composed 3D panel.
 - On a note/chord (near-miss tolerant, the same `ChartHitTester` pass every
-  click uses): Delete · Duplicate · Open in Inspector · Set fret (0–24
-  submenu) · Add hand shape from selection · Add FHP anchor here. On empty
+  click uses; #490): Cut · Copy · Duplicate · Delete · Set fret (0–24
+  submenu) · Technique ▸ (the 10 toggles of Edit ▸ Technique) · Chord ▸ (the
+  rows of Edit ▸ Chord: merge needs 2 notes, split and
+  the fingerings need a chord) · Move & resize ▸ (snap selected, sustain steps,
+  and earlier/later nudges by grid step, 10 ms or 1 ms) · Add hand shape / Hand shapes from let ring / Arpeggio from selection ·
+  Add FHP anchor here · Optimize fretting · Link identical measures · Open in
+  Inspector. Rows run a command-palette id (`Run`), show that verb's CURRENT
+  chord (`ChordOf`). Unavailable commands stay visible and disabled, with the
+  palette's reason (or their selection requirement) in a tooltip that also opens
+  on disabled rows. Their delegates cannot invoke a disabled command. The Edit
+  menu keeps its existing movement commands.
+  "Apply DLC Builder fixes" is not here any more (Tools ▸ Fix & clean up). On empty
   highway: Add note here · Paste here · Select all in view · Add section/event
   here (the existing Event dialog).
+- On a hand-shape bar, the menu lists Grips from held notes and Hand shapes
+  from let ring, also paired in Edit ▸ Chord. The first uses selected bars.
+  The second uses selected notes and chords.
 - **Every item reuses an EXISTING command/service verb** — the same undo
   actions the keybinds ride. Duplicate and Paste capture the CLICKED time into
   the closure (`MainWindowViewModel.DuplicateSelectionAt` / `PasteAt` — one
@@ -163,6 +187,44 @@ declines.
   selection.
 - The menu is armed on the right-PRESS and shown on the right-RELEASE —
   opening a flyout while the button is down lets the release light-dismiss it.
+
+## Fret-hand positions and sections are edited IN PLACE (#498)
+
+The two most-opened dialogs of the chart view are small cards on the timeline now.
+`Views/Editor/InlineEditOverlayView` (`InlineEditOverlay` in `MainWindow.axaml`, over the main
+timeline, `IPrewarmableSurfaces`) hosts both over `Presentation/Screens/Dialogs/InlineEditViewModel`
+(`ShellDialogs.InlineEdit`):
+
+- **Fret-hand position** (`FhpInlineEditorViewModel`): right-click on the FHP lane, the timeline
+  menu's "Add fret-hand position here", the Edit FHP key and palette entry (at the playhead), and a double-click on an
+  anchor put a Fret box (selected for typing) and a Width box (Tab) on the FHP row. Right-click and
+  double-click edit an anchor on its drawn number badge (including its sticky position), or its
+  marker on a row without labels (a 15 px minimum pointer width); the
+  tail or empty lane drafts a new anchor at the snapped pointer position. If that snapped position
+  already holds an anchor, it edits that anchor. Hover highlights a badge or occupied snapped position
+  and previews placement on the tail. Left-click selection and dragging accept the whole tail.
+  A plain click on an unselected anchor selects it alone; a plain click on an already selected
+  anchor keeps the sound/anchor selection for dragging and clears event points and tones.
+  Ctrl toggles that anchor without clearing other content;
+  Shift extends the anchor range while keeping the rest of the selection.
+  `FhpRequest.Target` retains the clicked track and its row-specific snap for both editor paths;
+  each editor captures that row's anchor collection before commit and undo, independent of active-track changes.
+  A new anchor is
+  only ADDED on Enter, so Esc leaves no edit and no undo entry; the pre-filled fret is the
+  `AnchorFretSuggester` answer the one-click placement uses (a wheeled preview fret wins).
+- **Section** (`SectionQuickAddViewModel`): right-click on an empty Sections row and the menu's
+  add-section-or-event verb open a name box under the row with the known section names as
+  suggestions; "More..." hands the typed name to the full event dialog (`EventRequest.SectionName`).
+  Double-clicking an existing marker or any other event row still opens the dialog.
+- Both commit through the dialogs' own edits (`FhpAnchorEdit`, `EventMarkerEdit`): ONE undo step.
+- **Clicking away CANCELS** (focus leaving the card): nothing is written the user did not confirm.
+- Position: `Input/InlineEditPlacement` maps the editor's song time through
+  `ProjectState.TimelineViewAnchorEffectiveMs` (pure; `UI/InlineEditPlacementTests`), so a panned or
+  zoomed view keeps the card on its row.
+- **The dialogs stay**: Go to anything's Edit FHP entry, the double-click on an existing marker and
+  the fallback when the clicked timeline cannot host the cards (a stacked row, no timeline on screen:
+  `ShellDialogsViewModel.EditFhpInPlace` / `AddSectionInPlace` check `InlineEdit.Hosts(viewport)`).
+- Tests: `Presentation/Dialogs/InlineEditorViewModelTests`, `Perf/InlineEditConstructionUiPerfSmokeTests`.
 
 ## Double-click, pan aliases and the cursor
 

@@ -112,19 +112,6 @@ internal static class Fmt
     public static string DateTime(DateTime dt)
         => $"{dt.Month}-{dt.Day}-{dt.Year % 100} {dt.Hour}:{dt.Minute:D2}";
 
-    public static DateTime? ParseDateTime(string? s)
-    {
-        if (string.IsNullOrWhiteSpace(s)) return null;
-        // Pattern "M-d-yy H:mm"
-        if (System.DateTime.TryParseExact(s, "M-d-yy H:mm",
-                CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
-        {
-            return dt;
-        }
-
-        return null;
-    }
-
     // ──────────────────────── CountedList ─────────────────────────────────
 
     /// <summary>
@@ -169,17 +156,8 @@ internal static class Fmt
         return int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : null;
     }
 
-    public static double AttrDouble(XElement el, string name, double def = 0.0)
-    {
-        var val = el.Attribute(name)?.Value;
-        return double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : def;
-    }
-
     public static string AttrStr(XElement el, string name, string def = "")
         => el.Attribute(name)?.Value ?? def;
-
-    public static bool AttrBool(XElement el, string name)
-        => AttrInt(el, name) != 0;
 
     public static XmlWriterSettings GetWriterSettings() => new()
     {

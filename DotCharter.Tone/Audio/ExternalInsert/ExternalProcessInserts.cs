@@ -89,7 +89,7 @@ internal sealed class ExternalProcessInserts
         try { _engine()?.Close(player); }
         catch (Exception ex) when (ex is ObjectDisposedException or JuceAudioException)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"External process insert (seat {player + 1}): close failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, $"External process insert (seat {player + 1}): close failed", ex);
         }
     }
 
@@ -145,7 +145,7 @@ internal sealed class ExternalProcessInserts
             catch (Exception ex) when (ex is ObjectDisposedException or JuceAudioException)
             {
                 _logger?.Warning(AppLogCategory.Audio,
-                    $"External process insert (seat {player + 1}): replay after the engine rebuild failed: {ex.Message}");
+                    $"External process insert (seat {player + 1}): replay after the engine rebuild failed", ex);
             }
         }
     }
@@ -167,7 +167,7 @@ internal sealed class ExternalProcessInserts
         }
         catch (Exception ex) when (ex is ObjectDisposedException or JuceAudioException)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"External process insert (seat {player + 1}): re-open failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, $"External process insert (seat {player + 1}): re-open failed", ex);
         }
     }
 
@@ -177,7 +177,7 @@ internal sealed class ExternalProcessInserts
         try { return engine.Open(player, mappingName, magic); }
         catch (Exception ex) when (ex is ObjectDisposedException or JuceAudioException)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"External process insert (seat {player + 1}): open failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, $"External process insert (seat {player + 1}): open failed", ex);
             return ExternalProcessInsertOpenResult.Failed;
         }
     }

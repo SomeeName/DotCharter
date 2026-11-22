@@ -294,15 +294,20 @@
 
                     <!-- HOW IT PLAYS -->
                     <Border x:Name="GetReadyFeelPanel" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
-                        <StackPanel Spacing="{StaticResource FireSpaceLg}">
+                        <StackPanel Spacing="{StaticResource FireSpaceLg}" Grid.IsSharedSizeScope="True">
                             <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
                                        Text="{localization:Loc PlayMode_GetReady_HowItPlays}" />
 
                             <!-- Hit window. Persisted app-wide the moment it
                                  changes, which is why there is no per-row
                                  save action next to it. -->
-                            <Grid ColumnDefinitions="92,12,*">
-                                <TextBlock Grid.Column="0" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="92" SharedSizeGroup="GetReadyFeelLabel" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" x:Name="GetReadyHitWindowLabel" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
                                            VerticalAlignment="Center"
                                            Text="{localization:Loc PlayMode_HitWindow}" />
                                 <Border Grid.Column="2" x:Name="GetReadyHitWindow"
@@ -325,7 +330,12 @@
                             </Grid>
 
                             <!-- Chords -->
-                            <Grid ColumnDefinitions="92,12,*">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="92" SharedSizeGroup="GetReadyFeelLabel" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
                                            VerticalAlignment="Center"
                                            Text="{localization:Loc PlayMode_ChordStrictness}" />
@@ -350,7 +360,12 @@
 
                             <!-- Speed. The mockup draws three segments; the
                                  app really offers six, so six are drawn. -->
-                            <Grid ColumnDefinitions="92,12,*">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="92" SharedSizeGroup="GetReadyFeelLabel" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
                                            VerticalAlignment="Center"
                                            Text="{localization:Loc PlayMode_Speed}" />
@@ -388,7 +403,18 @@
                                  unit where lower is faster, so it is useless
                                  alone — the derived "N.N S ON SCREEN" under
                                  the label is what it MEANS. -->
-                            <Grid ColumnDefinitions="92,12,Auto,10,*,10,Auto,10,44">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="92" SharedSizeGroup="GetReadyFeelLabel" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="44" />
+                                </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center"
                                             Spacing="{StaticResource FireSpaceXxs}">
                                     <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
@@ -401,7 +427,7 @@
                                              longer translation. -->
                                     <TextBlock x:Name="GetReadyOnScreenLabel"
                                                Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
-                                               TextWrapping="Wrap"
+                                               TextWrapping="Wrap" MaxWidth="92"
                                                Text="{Binding RunVisibleSecondsOnScreenLabel}" />
                                 </StackPanel>
                                 <Button Grid.Column="2" x:Name="GetReadyScrollDown"

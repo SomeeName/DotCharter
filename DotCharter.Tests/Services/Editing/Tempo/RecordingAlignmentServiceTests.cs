@@ -19,6 +19,46 @@ public sealed class RecordingAlignmentServiceTests : IDisposable
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    [Theory]
+    [InlineData(0.5, "offset 0.5")]
+    [InlineData(-0.5, "offset -0.5")]
+    public async Task ADeclaredInstrumentOffsetRejectsStemsWithMatchingRawDurations(double offset, string offsetText)
+    {
+        var (h, _, _, audio) = Build(new RecordingAlignmentFixture());
+        var folder = Directory.CreateDirectory(Path.Combine(_dir, "stems")).FullName;
+        var guitar = Path.Combine(folder, "guitar.wav");
+        File.Copy(audio, guitar);
+        h.Project.Stems.Add(new Stem { Name = "guitar", Path = guitar, Offset = offset });
+        var logger = new FakeAppLogger();
+        var service = new RecordingAlignmentService(new BeatResyncService(), h.History,
+            new FakeConfigurationService(), h.Transport, h.Editor, logger);
+
+        var result = await service.AnalyzeAsync(h.Project, RecordingAlignmentRange.WholeSong, true, audio, Ct);
+
+        Assert.Equal(RecordingAlignmentFailure.None, result.Failure);
+        Assert.NotNull(result.Proposal);
+        Assert.Equal(RecordingAlignmentSource.Mix, result.Proposal.Source);
+        Assert.True(logger.HasEntryContaining("WARN", guitar));
+        Assert.True(logger.HasEntryContaining("WARN", offsetText));
+    }
+
+    [Fact]
+    public async Task AnalysisUsesTheProjectsPaddedInstrumentStem()
+    {
+        var (h, _, service, audio) = Build(new RecordingAlignmentFixture());
+        var folder = Directory.CreateDirectory(Path.Combine(_dir, "stems", "silence-2")).FullName;
+        var padded = Path.Combine(folder, "guitar.wav");
+        File.Copy(audio, padded);
+        File.WriteAllText(Path.Combine(_dir, "stems", "guitar.wav"), "unusable old stem");
+        h.Project.Stems.Add(new Stem { Name = "guitar", Path = padded });
+
+        var result = await service.AnalyzeAsync(h.Project, RecordingAlignmentRange.WholeSong, true, audio, Ct);
+
+        Assert.Equal(RecordingAlignmentFailure.None, result.Failure);
+        Assert.NotNull(result.Proposal);
+        Assert.Equal(RecordingAlignmentSource.Stems, result.Proposal.Source);
+    }
+
     public void Dispose()
     {
         try
@@ -149,6 +189,68 @@ public sealed class RecordingAlignmentServiceTests : IDisposable
         Assert.False(proposal.Sections[2].SuggestApply, $"confidence {proposal.Sections[2].Confidence:0.00}");
         Assert.Equal(RecordingAlignmentApplyStatus.Applied, service.Apply(h.Project, proposal, AllSuggested(proposal)));
         for (var i = 1; i < h.Project.Beats.Count; i++) Assert.True(h.Project.Beats[i].Time > h.Project.Beats[i - 1].Time);
+    }
+
+    [Fact]
+    public async Task AChartWithoutNotes_IsRefusedBeforeAnyAudioIsDecoded()
+    {
+        var (h, _, service, _) = Build(new RecordingAlignmentFixture());
+        h.Project.Arrangements[0].Levels[0].Notes.Clear();
+
+        var analysis = await service.AnalyzeAsync(h.Project, RecordingAlignmentRange.WholeSong, true, Undecodable(), Ct);
+
+        Assert.Equal(RecordingAlignmentFailure.NoNotes, analysis.Failure);
+        Assert.Null(analysis.Proposal);
+    }
+
+    [Fact]
+    public async Task ARangeWithoutNotes_IsRefusedBeforeAnyAudioIsDecoded_AndARangeWithNotesStillRuns()
+    {
+        var (h, _, service, audio) = Build(new RecordingAlignmentFixture());
+        var notes = h.Project.Arrangements[0].Levels[0].Notes;
+        foreach (var note in notes.Where(n => n.Position.BeatId >= 48).ToList()) notes.Remove(note);
+
+        Assert.Equal(RecordingAlignmentFailure.NoNotes,
+            (await service.AnalyzeAsync(h.Project, RecordingAlignmentRange.FromBarNumber(13), true, Undecodable(), Ct)).Failure);
+        Assert.Equal(RecordingAlignmentFailure.NoNotes,
+            (await service.AnalyzeAsync(h.Project, RecordingAlignmentRange.Span(24_000, 31_500), true, Undecodable(), Ct)).Failure);
+        Assert.Equal(RecordingAlignmentFailure.None,
+            (await service.AnalyzeAsync(h.Project, RecordingAlignmentRange.FromBarNumber(9), true, audio, Ct)).Failure);
+    }
+
+    [Fact]
+    public async Task Apply_NeverTakesTheAlignmentOfASectionWithoutNotes_EvenWhenAskedTo()
+    {
+        var (h, _, service, audio) = Build(new RecordingAlignmentFixture());
+        var notes = h.Project.Arrangements[0].Levels[0].Notes;
+        foreach (var note in notes.Where(n => n.Position.BeatId is >= 32 and < 48).ToList()) notes.Remove(note);
+        var before = h.Project.Beats.Select(b => b.Time).ToList();
+        var steps = h.History.GetUndoSteps().Count;
+
+        var proposal = (await service.AnalyzeAsync(h.Project, RecordingAlignmentRange.WholeSong, true, audio, Ct)).Proposal!;
+        Assert.False(proposal.Sections[2].HasNotes);
+        Assert.False(proposal.Sections[2].SuggestApply);
+        Assert.NotEqual(before.Skip(32).Take(16), proposal.AlignedTimes.Skip(32).Take(16));
+
+        // Asked for alone, nothing moves: no beat of the chart, no undo step.
+        Assert.Equal(RecordingAlignmentApplyStatus.NothingSelected, service.Apply(h.Project, proposal, new HashSet<int> { 2 }));
+        Assert.Equal(before, h.Project.Beats.Select(b => b.Time));
+        Assert.Equal(steps, h.History.GetUndoSteps().Count);
+
+        // Asked for beside the others, it is treated as left out: the grid is the one the other three give.
+        Assert.Equal(RecordingAlignmentApplyStatus.Applied, service.Apply(h.Project, proposal, new HashSet<int> { 0, 1, 2, 3 }));
+        var withIt = h.Project.Beats.Select(b => b.Time).ToList();
+        h.History.Undo();
+        Assert.Equal(RecordingAlignmentApplyStatus.Applied, service.Apply(h.Project, proposal, new HashSet<int> { 0, 1, 3 }));
+        Assert.Equal(h.Project.Beats.Select(b => b.Time), withIt);
+    }
+
+    /// <summary>A file that exists and is not audio: reaching the decoder with it answers DecodeFailed.</summary>
+    private string Undecodable()
+    {
+        var path = Path.Combine(_dir, $"not-audio-{Guid.NewGuid():N}.wav");
+        File.WriteAllBytes(path, [1, 2, 3, 4]);
+        return path;
     }
 
     private static HashSet<int> AllSuggested(RecordingAlignmentProposal proposal) =>

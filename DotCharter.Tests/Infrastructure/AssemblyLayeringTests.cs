@@ -78,7 +78,7 @@ public sealed class AssemblyLayeringTests
         // held off by the fact further down.
         ("DotCharter.Presentation",
             ["DotCharter.Core", "DotCharter.Localization", "DotCharter.Services", "DotCharter.Tone"]),
-        // Services-free fakes of those contracts, for the gallery and the tests.
+        // Fakes of those contracts may share pure catalogs; runtime services remain real-app concerns.
         ("DotCharter.Presentation.Fakes",
             ["DotCharter.Presentation", "DotCharter.Core", "DotCharter.Localization", "DotCharter.Services", "DotCharter.Tone"])
     ];

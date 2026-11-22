@@ -26,6 +26,10 @@ internal static class AppStatics
         // The static chord-creation paths read "Name new chords automatically" here; the
         // config read is cached, so each new chord sees the current setting.
         var config = services.GetRequiredService<IConfigurationService>();
-        NewChordNames.Configure(() => config.LoadAppConfig().AutoNameNewChords);
+        var state = services.GetService<ProjectState>();
+        NewChordNames.Configure(() => config.LoadAppConfig().AutoNameNewChords,
+            () => NewChordNames.OptionsFor(config.LoadAppConfig()),
+            () => config.LoadAppConfig().ChordNamingStyle,
+            arrangement => state?.ActiveProject is { } project && project.Arrangements.Contains(arrangement) ? project.Chart : null);
     }
 }

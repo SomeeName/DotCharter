@@ -1,0 +1,79 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspector="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
+             xmlns:panels="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundBendsPresetsView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Bends page's PRESETS card (#751 P5, design D): the seven Guitar Pro shapes and No bend, each drawn small
+         beside its name (no arrows: the drawing is the shape; a compound name wraps onto a second line). A preset STAGES like a curve edit; the footer's Apply writes it. -->
+    <UniformGrid x:Name="SoundBendsPresets" Columns="2" RowSpacing="{StaticResource SpaceXs}" ColumnSpacing="{StaticResource SpaceXs}">
+        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                Command="{Binding Staged.Bends.Editor.PresetBendCommand, FallbackValue={x:Null}}"
+                AutomationProperties.Name="{localization:Loc Inspector_Bends_PresetBend}">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceXs}">
+                <ctl:ColumnFlowBendPreview Preset="Bend" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Bends_PresetBend}" TextWrapping="Wrap" MaxLines="2" TextTrimming="None" VerticalAlignment="Center" />
+            </Grid>
+        </Button>
+        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                Command="{Binding Staged.Bends.Editor.PresetReleaseCommand, FallbackValue={x:Null}}"
+                AutomationProperties.Name="{localization:Loc Inspector_Bends_PresetRelease}">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceXs}">
+                <ctl:ColumnFlowBendPreview Preset="Release" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Bends_PresetRelease}" TextWrapping="Wrap" MaxLines="2" TextTrimming="None" VerticalAlignment="Center" />
+            </Grid>
+        </Button>
+        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                Command="{Binding Staged.Bends.Editor.PresetBendReleaseCommand, FallbackValue={x:Null}}"
+                AutomationProperties.Name="{localization:Loc Inspector_Bends_PresetBendRelease}">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceXs}">
+                <ctl:ColumnFlowBendPreview Preset="BendRelease" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Bends_PresetBendRelease}" TextWrapping="Wrap" MaxLines="2" TextTrimming="None" VerticalAlignment="Center" />
+            </Grid>
+        </Button>
+        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                Command="{Binding Staged.Bends.Editor.PresetHoldCommand, FallbackValue={x:Null}}"
+                AutomationProperties.Name="{localization:Loc Inspector_Bends_PresetHold}">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceXs}">
+                <ctl:ColumnFlowBendPreview Preset="Hold" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Bends_PresetHold}" TextWrapping="Wrap" MaxLines="2" TextTrimming="None" VerticalAlignment="Center" />
+            </Grid>
+        </Button>
+        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                Command="{Binding Staged.Bends.Editor.PresetPrebendCommand, FallbackValue={x:Null}}"
+                AutomationProperties.Name="{localization:Loc Inspector_Bends_PresetPrebend}">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceXs}">
+                <ctl:ColumnFlowBendPreview Preset="Prebend" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Bends_PresetPrebend}" TextWrapping="Wrap" MaxLines="2" TextTrimming="None" VerticalAlignment="Center" />
+            </Grid>
+        </Button>
+        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                Command="{Binding Staged.Bends.Editor.PresetPrebendBendCommand, FallbackValue={x:Null}}"
+                AutomationProperties.Name="{localization:Loc Inspector_Bends_PresetPrebendBend}">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceXs}">
+                <ctl:ColumnFlowBendPreview Preset="PrebendBend" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Bends_PresetPrebendBend}" TextWrapping="Wrap" MaxLines="2" TextTrimming="None" VerticalAlignment="Center" />
+            </Grid>
+        </Button>
+        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                Command="{Binding Staged.Bends.Editor.PresetPrebendReleaseCommand, FallbackValue={x:Null}}"
+                AutomationProperties.Name="{localization:Loc Inspector_Bends_PresetPrebendRelease}">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceXs}">
+                <ctl:ColumnFlowBendPreview Preset="PrebendRelease" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Bends_PresetPrebendRelease}" TextWrapping="Wrap" MaxLines="2" TextTrimming="None" VerticalAlignment="Center" />
+            </Grid>
+        </Button>
+        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                Command="{Binding Staged.Bends.Editor.ResetCommand, FallbackValue={x:Null}}"
+                AutomationProperties.Name="{localization:Loc Inspector_Bends_NoBend}">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceXs}">
+                <ctl:ColumnFlowBendPreview Preset="None" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Bends_NoBend}" TextWrapping="Wrap" MaxLines="2" TextTrimming="None" VerticalAlignment="Center" />
+            </Grid>
+        </Button>
+    </UniformGrid>
+</UserControl>

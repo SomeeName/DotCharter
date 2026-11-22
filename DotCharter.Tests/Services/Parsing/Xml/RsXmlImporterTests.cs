@@ -12,6 +12,89 @@ public class RsXmlImporterTests
     private const string MissingSongXml =
         "No RS-XML song fixture: TestData/EOF/**/*_RS2.xml is absent (TestData/ is git-ignored).";
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ApplySong_PreservesSourceTimes_OnTheLiveHostGrid(bool emptyHostAtPrepare)
+    {
+        const string xml =
+            """
+            <song>
+              <arrangement>Lead</arrangement>
+              <ebeats>
+                <ebeat time="0.000" measure="0" />
+                <ebeat time="1.000" measure="-1" />
+                <ebeat time="2.000" measure="-1" />
+                <ebeat time="3.000" measure="-1" />
+              </ebeats>
+              <phrases><phrase name="intro" maxDifficulty="0" /></phrases>
+              <phraseIterations><phraseIteration time="1.000" phraseId="0" /></phraseIterations>
+              <chordTemplates><chordTemplate chordName="Test" fret0="3" fret1="5" /></chordTemplates>
+              <tones><tone time="1.000" name="clean" /></tones>
+              <events><event time="1.000" code="B0" /></events>
+              <levels><level difficulty="0">
+                <notes><note time="1.000" string="2" fret="7" sustain="1.000">
+                  <bendValues><bendValue time="1.500" step="1" /></bendValues>
+                </note></notes>
+                <chords><chord time="2.000" chordId="0">
+                  <chordNote time="2.000" string="0" fret="3" sustain="1.000">
+                    <bendValues><bendValue time="2.500" step="1" /></bendValues>
+                  </chordNote>
+                  <chordNote time="2.000" string="1" fret="5" sustain="0.500" />
+                </chord></chords>
+                <anchors><anchor time="1.000" fret="3" width="4" /></anchors>
+                <fretHandMutes><fretHandMute time="1.000" /></fretHandMutes>
+                <handShapes><handShape startTime="1.000" endTime="3.000" chordId="0" /></handShapes>
+              </level></levels>
+            </song>
+            """;
+        var path = Path.Combine(Path.GetTempPath(), $"rsxml_host_grid_{Guid.NewGuid():N}.xml");
+        File.WriteAllText(path, xml);
+        try
+        {
+            var host = new ChartProject();
+            if (!emptyHostAtPrepare) host.Beats.Add(new BeatMarker { Time = 0 });
+            var plan = RsXmlImporter.Prepare(path, host.Beats);
+            // Apply must use the live grid, even if it appeared after Prepare.
+            host.Beats.Clear();
+            foreach (var time in new[] { 0.0, 500.0, 1000.0, 2000.0, 3000.0 })
+                host.Beats.Add(new BeatMarker { Time = time });
+            var existing = new Arrangement { Name = "Existing" };
+            existing.Levels.Add(new ChartLevel());
+            existing.Levels[0].Notes.Add(new GuitarNote { Position = new FractionalPosition(1, Fraction.Zero) });
+            host.Arrangements.Add(existing);
+
+            var result = new RsXmlImporter().Apply(host, plan);
+
+            Assert.False(result.ReplacedHostBeats);
+            Assert.Equal(new[] { 0.0, 500.0, 1000.0, 2000.0, 3000.0 }, host.Beats.Select(b => b.Time));
+            Assert.Equal(1, existing.Levels[0].Notes[0].Position.BeatId);
+            var imported = host.Arrangements[1];
+            var level = Assert.Single(imported.Levels);
+            var note = Assert.Single(level.Notes);
+            Assert.Equal(1000, TimelineMath.CalculateTimeMs(note.Position, host.Beats));
+            Assert.Equal(2000, TimelineMath.CalculateTimeMs(note.EndPosition, host.Beats));
+            Assert.Equal(1500, TimelineMath.CalculateTimeMs(Assert.Single(note.BendValues).Position, host.Beats));
+            var chord = Assert.Single(level.Chords);
+            Assert.Equal(2000, TimelineMath.CalculateTimeMs(chord.Position, host.Beats));
+            Assert.Equal(3000, TimelineMath.CalculateTimeMs(chord.Position + chord.ChordNotes[0].Sustain, host.Beats));
+            Assert.Equal(2500, TimelineMath.CalculateTimeMs(chord.Position + chord.ChordNotes[1].Sustain, host.Beats));
+            Assert.Equal(2500, TimelineMath.CalculateTimeMs(Assert.Single(chord.ChordNotes[0].BendValues).Position, host.Beats));
+            Assert.Equal(1000, TimelineMath.CalculateTimeMs(Assert.Single(level.Anchors).Position, host.Beats));
+            Assert.Equal(1000, TimelineMath.CalculateTimeMs(Assert.Single(level.FretHandMutes).Position, host.Beats));
+            var shape = Assert.Single(level.HandShapes);
+            Assert.Equal(1000, TimelineMath.CalculateTimeMs(shape.Position, host.Beats));
+            Assert.Equal(3000, TimelineMath.CalculateTimeMs(shape.EndPosition, host.Beats));
+            Assert.Equal(1000, TimelineMath.CalculateTimeMs(Assert.Single(imported.EventPoints).Position, host.Beats));
+            Assert.Equal(1000, TimelineMath.CalculateTimeMs(Assert.Single(imported.ToneChanges).Position, host.Beats));
+            Assert.Equal(1000, TimelineMath.CalculateTimeMs(Assert.Single(imported.PhraseIterations).Position, host.Beats));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void ImportInto_SongXml_AppendsArrangement()
     {
@@ -69,6 +152,95 @@ public class RsXmlImporterTests
         Assert.NotEqual(importedName, host.Arrangements[1].Name);
         Assert.Contains("(2)", host.Arrangements[1].Name);
         Assert.Equal(host.Arrangements[1].Name, result.AddedArrangementName);
+    }
+
+    [Theory]
+    [InlineData(MinNoteDistanceMode.Milliseconds, 62.5, 62.5)]
+    [InlineData(MinNoteDistanceMode.MeasureFraction, 23.4375, 39.0625)]
+    public void ImportVocalsUsesHostSpacingAcrossMeterChanges(MinNoteDistanceMode mode,
+        double firstMeasureGapMs, double secondMeasureGapMs)
+    {
+        var host = new ChartProject();
+        for (var i = 0; i < 8; i++)
+        {
+            host.Beats.Add(new BeatMarker
+            {
+                Time = i * 500, Bpm = 120, IsMeasure = i is 0 or 3, BeatsInMeasure = i < 3 ? 3 : 5
+            });
+        }
+        var config = new AppConfig { MinNoteDistanceMode = mode, MinNoteDistanceMs = 62.5, MinNoteDistanceDivisor = 64 };
+        const string xml = """
+            <vocals>
+              <vocal time="0.5" length="0.125" lyric="a" />
+              <vocal time="1" length="0.125" lyric="b" />
+              <vocal time="1.5" length="0.125" lyric="c" />
+              <vocal time="2" length="0.125" lyric="d+" />
+            </vocals>
+            """;
+
+        ImportVocals(host, xml, config);
+
+        var lyrics = Assert.Single(Assert.Single(host.VocalTracks).Phrases).Lyrics;
+        Assert.Equal([500, 1000, 1500, 2000], lyrics.Select(lyric => (int)lyric.Position.GetPositionMs(host.Beats)));
+        Assert.Equal(1000 - firstMeasureGapMs, lyrics[0].EndPosition.GetPositionMs(host.Beats), 1.0);
+        Assert.Equal(1500 - firstMeasureGapMs, lyrics[1].EndPosition.GetPositionMs(host.Beats), 1.0);
+        Assert.Equal(2000 - secondMeasureGapMs, lyrics[2].EndPosition.GetPositionMs(host.Beats), 1.0);
+        Assert.Equal(2125, lyrics[3].EndPosition.GetPositionMs(host.Beats), 1.0);
+    }
+
+    [Fact]
+    public void ImportVocalsWithWordSpanningOffKeepsWordFinalEndsAndSpansInsideWords()
+    {
+        var host = new ChartProject();
+        for (var i = 0; i < 8; i++)
+            host.Beats.Add(new BeatMarker { Time = i * 500, IsMeasure = i % 4 == 0 });
+        const string xml = """
+            <vocals>
+              <vocal time="0" length="0.125" lyric="a" />
+              <vocal time="0.5" length="0.125" lyric="vo-" />
+              <vocal time="1" length="0.125" lyric="cal+" />
+            </vocals>
+            """;
+
+        ImportVocals(host, xml, new AppConfig { LyricSpanWordGap = false });
+
+        var lyrics = Assert.Single(Assert.Single(host.VocalTracks).Phrases).Lyrics;
+        Assert.Equal(125, lyrics[0].EndPosition.GetPositionMs(host.Beats), 1.0);
+        Assert.Equal(968.75, lyrics[1].EndPosition.GetPositionMs(host.Beats), 1.0);
+    }
+
+    [Fact]
+    public void ImportVocalsWithoutHostBeatsUsesTheReadersSecondsGrid()
+    {
+        var host = new ChartProject();
+        const string xml = """
+            <vocals>
+              <vocal time="0" length="0.125" lyric="a" />
+              <vocal time="1" length="0.125" lyric="b+" />
+            </vocals>
+            """;
+        var config = new AppConfig { MinNoteDistanceMode = MinNoteDistanceMode.Milliseconds, MinNoteDistanceMs = 125 };
+
+        ImportVocals(host, xml, config);
+
+        var lyrics = Assert.Single(Assert.Single(host.VocalTracks).Phrases).Lyrics;
+        Assert.Equal(new FractionalPosition(new Fraction(7, 8)), lyrics[0].EndPosition);
+    }
+
+    private static void ImportVocals(ChartProject host, string xml, AppConfig config)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"rsxml_vocals_{Guid.NewGuid():N}.xml");
+        File.WriteAllText(path, xml);
+        try
+        {
+            var plan = RsXmlImporter.Prepare(path, host.Beats, config);
+            var result = new RsXmlImporter().Apply(host, plan);
+            Assert.Equal(RsXmlImportKind.Vocals, result.Kind);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DotCharter.Core.Domain.Project;
 using DotCharter.Core.Utilities;
 using DotCharter.Localization;
 using DotCharter.Presentation.Contracts.Dialogs;
@@ -132,6 +133,7 @@ public sealed class CheckpointsViewModel : DialogViewModel<bool>, ICheckpointsSc
     {
         if (row is not CheckpointRow item || IsBusy) return;
         Disarm();
+        var previous = _edit.State.ActiveProject;
 
         // Restoring REPLACES the open project and clears its undo history, so
         // both questions are asked first — and a "no" to either leaves the list
@@ -144,6 +146,12 @@ public sealed class CheckpointsViewModel : DialogViewModel<bool>, ICheckpointsSc
             return;
         }
 
+        if (!ReferenceEquals(previous, _edit.State.ActiveProject)) return;
+        // A successful Save may move the checkpoint store and rebase audio.
+        var identity = Identity;
+        var previousAudio = _edit.State.CurrentAudioFileName;
+        bool MayRestore() => ReferenceEquals(previous, _edit.State.ActiveProject) && identity == Identity &&
+                             previousAudio == _edit.State.CurrentAudioFileName;
         if (RestoreWouldDiscardHistorySilently && !await ConfirmDiscardHistoryAsync())
         {
             _edit.Logger.Info(AppLogCategory.Project,
@@ -152,11 +160,15 @@ public sealed class CheckpointsViewModel : DialogViewModel<bool>, ICheckpointsSc
             return;
         }
 
+        if (!MayRestore()) return;
         IsBusy = true;
+        ChartProject? restored = null;
         try
         {
-            var identity = Identity;
             var project = await Task.Run(() => _checkpoints.Restore(identity, item.Entry));
+            if (!MayRestore()) return;
+            restored = project;
+            var restoredAudio = project.AudioFileName ?? "";
 
             // The old undo tree holds actions bound to the old graph.
             _edit.Editor.ApplyProject(project, resetHistory: true);
@@ -167,6 +179,12 @@ public sealed class CheckpointsViewModel : DialogViewModel<bool>, ICheckpointsSc
             _transport.Bpm = project.Bpm;
             // DIRTY on purpose: the restored project deliberately differs from the file on disk.
             _session.MarkProjectDirty();
+            await _session.ReloadProjectAudioAsync();
+            if (!ReferenceEquals(project, _edit.State.ActiveProject) || identity != Identity ||
+                restoredAudio != _edit.State.CurrentAudioFileName)
+            {
+                return;
+            }
             _edit.Editor.RequestRedraw();
 
             _edit.State.SetMessage(L.Format("Checkpoints_Restored", item.Name), StatusSeverity.Success);
@@ -176,7 +194,8 @@ public sealed class CheckpointsViewModel : DialogViewModel<bool>, ICheckpointsSc
         catch (Exception ex)
         {
             _edit.Logger.Error(AppLogCategory.Project, $"Restoring checkpoint '{item.Name}' failed.", ex);
-            _edit.State.SetMessage(L.Format("Checkpoints_RestoreFailed", ex.Message), StatusSeverity.Error);
+            if (MayRestore() || (restored != null && ReferenceEquals(restored, _edit.State.ActiveProject) && identity == Identity))
+                _edit.State.SetMessage(L.Format("Checkpoints_RestoreFailed", ex.Message), StatusSeverity.Error);
         }
         finally
         {

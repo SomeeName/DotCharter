@@ -139,7 +139,7 @@ implementation (or does nothing, for the shell and clipboard).
   beside-the-exe-or-up-the-tree lookup.
 - `Infrastructure/Storage/IExportTargetWriter` (`ExportTargetWriter`) — exists /
   copy / read / write / create-with-folder / find for the export and import
-  dialogs (Rocksmith export, EOF, MIDI, chart-from-audio, new project,
+  dialogs (Rocksmith export, EOF, MIDI, new project,
   batch lint, the tone designer), the tone-file and lyrics imports, the highway
   screenshot and the recent-project check. The dialogs keep the choice of path.
 - `Infrastructure/Input/IKeyGestureSource` + `ScreenKey` — keys without a UI
@@ -435,7 +435,7 @@ the plan in [dialogs/hosted-dialogs.md](dialogs/hosted-dialogs.md)).
   module, because it needs the app's logger.
 
 **Slice 2 (2026-09-22):** Paste special, Arrangement sync, Keyboard shortcuts,
-Vocal track settings, Chart from audio, and the three file importers (Rocksmith
+Vocal track settings, and the three file importers (Rocksmith
 XML, MIDI, Editor on Fire). Two shapes the first slice did not have:
 
 - **Work before a dialog opens lives in a LAUNCHER** — `EofImportLauncher`,
@@ -447,9 +447,7 @@ XML, MIDI, Editor on Fire). Two shapes the first slice did not have:
 - **State kept across opens** moves to the `DialogMemory` singleton, since a
   scoped view model starts clean every time.
 - Seams: `IEditorTransport.GridDivisor`, `IChartEditorSurface.ExecuteSeek`,
-  `Contracts/Shell/IShortcutCatalog` (shell-implemented) and
-  `Services/Import/Audio/IChartFromAudioAnalyzer` (the Analysis assembly stays
-  out of Presentation). Detail in [dialogs/hosted-dialogs.md](dialogs/hosted-dialogs.md).
+  `Contracts/Shell/IShortcutCatalog` (shell-implemented). Detail in [dialogs/hosted-dialogs.md](dialogs/hosted-dialogs.md).
 
 ## 4. Enforced rules
 

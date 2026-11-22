@@ -36,6 +36,10 @@ public interface IAudioDeviceControl
     double MidiOffsetMs { get; set; }
     bool IsDeviceLost { get; }
 
+    /// <summary>Audio dropout bursts the health monitor has detected since the engine started (0 when
+    /// nothing is monitored). The status rail shows its full audio readout while this keeps rising.</summary>
+    long DropoutCount => 0;
+
     /// <summary>
     ///     The audio callback's load, measured INSIDE the callback by the native
     ///     engine (<c>dca_engine_get_callback_load</c>, ABI v46): what the rig's

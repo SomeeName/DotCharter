@@ -113,10 +113,6 @@ internal sealed class ProjectAutoBackup : IDisposable
         }
 
         _lastBackupUtc = DateTimeOffset.UtcNow;
-        // Captured BEFORE the write, from the same state CreateBackupAsync is
-        // about to assemble: an edit made while the zip is being written must
-        // count as a change the next backup still owes.
-        _lastBackupStamp = _dirtyTracker.ChangeStamp;
         // Fire-and-forget is safe: CreateBackupAsync catches everything
         // internally and _inProgress prevents overlap.
         _ = CreateBackupAsync();
@@ -130,7 +126,8 @@ internal sealed class ProjectAutoBackup : IDisposable
             return;
         }
 
-        if (_projectState.ActiveProject == null)
+        var project = _projectState.ActiveProject;
+        if (project == null)
         {
             return;
         }
@@ -168,7 +165,10 @@ internal sealed class ProjectAutoBackup : IDisposable
             // the CLONE — handing it the live mutable project raced against
             // concurrent edits and could write a torn/corrupt backup (same
             // protection as SaveProjectAsync / CrashRecoveryService).
-            var assembled = _documentService.AssembleProject(_projectState.ActiveProject, _transport.Bpm,
+            // Remember the snapshot's stamp, not any edits made during the write.
+            // It becomes the gate's committed stamp only after promotion succeeds.
+            var backupStamp = _dirtyTracker.ChangeStamp;
+            var assembled = _documentService.AssembleProject(project, _transport.Bpm,
                 _projectState.CurrentAudioFileName, _chartEditor.LyricPhrases);
             var snapshot = ChartProjectCloner.Clone(assembled);
 
@@ -188,13 +188,45 @@ internal sealed class ProjectAutoBackup : IDisposable
                 var path = UniqueArchivePath(backupDirectory, baseName, timestamp);
                 _documentService.SaveChart(backupTempPath, snapshot);
 
-                using (var archive = ZipFile.Open(path, ZipArchiveMode.Create))
-                    archive.CreateEntryFromFile(backupTempPath, entryName, CompressionLevel.Optimal);
+                // Written beside the final name and swapped in only once it reads
+                // back: a crash, kill or full disk mid-write must never leave a
+                // truncated zip under a name PruneBackups counts as the newest.
+                var stagedPath = path + StagedSuffix;
+                try
+                {
+                    using (var archive = ZipFile.Open(stagedPath, ZipArchiveMode.Create))
+                        archive.CreateEntryFromFile(backupTempPath, entryName, CompressionLevel.Optimal);
+
+                    using (var verify = ZipFile.OpenRead(stagedPath))
+                    {
+                        var staged = verify.GetEntry(entryName) ?? throw new InvalidDataException("The staged backup has no entry.");
+                        using var entryStream = staged.Open();
+                        entryStream.CopyTo(Stream.Null);
+                    }
+
+                    AtomicFile.ReplaceWithRetry(stagedPath, path);
+                }
+                catch
+                {
+                    try
+                    {
+                        File.Delete(stagedPath);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        // Best effort; PruneBackups sweeps stale stages.
+                    }
+
+                    throw;
+                }
 
                 // Only after a successful write, and only this project's own zips.
                 PruneBackups(backupDirectory, baseName, _configService.LoadAppConfig().AutoBackupKeepCount, _logger);
                 return path;
             });
+
+            // A project switch forgets the old stamp even if its write finishes later.
+            if (ReferenceEquals(_projectState.ActiveProject, project)) _lastBackupStamp = backupStamp;
 
             _logger.Info(AppLogCategory.Project,
                 $"Auto backup saved. Archive='{archivePath}', entry='{entryName}', intervalMinutes={_configService.LoadAppConfig().AutoBackupIntervalMinutes}.");
@@ -220,13 +252,16 @@ internal sealed class ProjectAutoBackup : IDisposable
                 catch (Exception ex)
                 {
                     _logger.Warning(AppLogCategory.Project,
-                        $"Could not delete temporary auto backup file '{tempPath}'. Message='{ex.Message}'.");
+                        $"Could not delete temporary auto backup file '{tempPath}'.", ex);
                 }
             }
 
             _inProgress = false;
         }
     }
+
+    /// <summary>The suffix a backup zip carries while it is being written.</summary>
+    internal const string StagedSuffix = ".tmp";
 
     /// <summary>
     ///     Deletes this project's oldest auto-backups beyond <paramref name="keep" />.
@@ -238,7 +273,23 @@ internal sealed class ProjectAutoBackup : IDisposable
     /// </summary>
     internal static int PruneBackups(string backupDirectory, string baseName, int keep, IAppLogger? logger = null)
     {
-        if (keep <= 0 || !Directory.Exists(backupDirectory)) return 0;
+        if (!Directory.Exists(backupDirectory)) return 0;
+
+        // A stage left by a killed write. Never counted as a backup; swept here.
+        foreach (var stale in Directory.EnumerateFiles(backupDirectory, "*" + StagedSuffix))
+        {
+            if (!Path.GetFileName(stale).StartsWith(baseName + "_", StringComparison.OrdinalIgnoreCase)) continue;
+            try
+            {
+                File.Delete(stale);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger?.Warning(AppLogCategory.Project, $"Could not remove stale staged backup '{stale}'", ex);
+            }
+        }
+
+        if (keep <= 0) return 0;
 
         var pattern = new Regex("^" + Regex.Escape(baseName) + @"_(\d{8}_\d{6})(?:_(\d+))?\.(?:dcproj|rscp)\.zip$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -266,7 +317,7 @@ internal sealed class ProjectAutoBackup : IDisposable
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                logger?.Warning(AppLogCategory.Project, $"Could not prune old auto backup '{old.Path}': {ex.Message}");
+                logger?.Warning(AppLogCategory.Project, $"Could not prune old auto backup '{old.Path}'", ex);
             }
         }
 

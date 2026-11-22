@@ -118,6 +118,7 @@ internal sealed class Preview3DRenderDriver
     // are still caught by the per-frame visible scan in Fretboard3DEngine.
     // It holds those two collections WEAKLY — see ChartTextRegistrationLatch.
     private readonly ChartTextRegistrationLatch _textRegistration = new();
+    private int _resetTextRegistrations;
 
     // Per-frame ferry fields for RunSnapshotUpdate. Kept as fields (not
     // method parameters) so RunSnapshotUpdate stays parameterless and we
@@ -173,6 +174,9 @@ internal sealed class Preview3DRenderDriver
     private readonly Func<bool> _visibilityProbe;
     // The editor hands over its localization service; null until an editor is set.
     private volatile ShowlightChipLabelSource? _showlightChipLabels;
+
+    // Set when the render loop starts: the diagnostics setting (minimum log level) the render statistics line follows.
+    private IConfigurationService? _configService;
 
     private Action<Fretboard3DEngine>? _initializeEngine;
 
@@ -260,18 +264,17 @@ internal sealed class Preview3DRenderDriver
 
     private void OnProjectStateChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Every change wakes, the playhead and each 3D setting the snapshot reads
-        // alike (all are written through ProjectState), so a parked loop whose
-        // trickle has relaxed to 1 Hz still shows a toggle at once.
-        RequestRender();
-
         // A project switch must FORGET the project it closed. Fretboard3DEngine
         // is an app-wide singleton and its glyph sheet is only ever ADDED to, so
         // every lyric, section and phrase name of every song opened in the
         // session stayed packed into a fixed 2048² sheet — which eventually
         // overflows and renders the excess glyphs BLANK. Same ActiveProject hook
         // TrackContextRegistry prunes on; see docs/agents/ui/project-lifecycle.md.
-        if (e.PropertyName == nameof(ProjectState.ActiveProject)) _engine?.ResetTextRegistrations();
+        // Publish only a request here. The render worker owns registration,
+        // reset and atlas enumeration; mutating its HashSet on the UI thread races.
+        if (e.PropertyName == nameof(ProjectState.ActiveProject))
+            Interlocked.Exchange(ref _resetTextRegistrations, 1);
+        RequestRender();
     }
 
     private void SyncEditorSubscription(ChartEditorViewModel? editor)
@@ -291,7 +294,10 @@ internal sealed class Preview3DRenderDriver
             _editorSafe = editor;
         }
 
-        _showlightChipLabels = editor is null ? null : new ShowlightChipLabelSource(editor.Localization);
+        // The replaced source is disposed: it follows the process-wide localization
+        // service, so every re-attach would otherwise leave one more behind.
+        var labels = editor is null ? null : new ShowlightChipLabelSource(editor.Localization);
+        Interlocked.Exchange(ref _showlightChipLabels, labels)?.Dispose();
 
         SyncEditorSubscription(editor);
         RequestRender();
@@ -390,6 +396,7 @@ internal sealed class Preview3DRenderDriver
     public void DetachWakeSources()
     {
         SyncEditorSubscription(null);
+        Interlocked.Exchange(ref _showlightChipLabels, null)?.Dispose();
         ChartTheme.ThemeChanged -= OnThemeChanged;
         _projectState?.PropertyChanged -= OnProjectStateChanged;
         _selectionService?.SelectionChanged -= OnSelectionChanged;
@@ -498,7 +505,9 @@ internal sealed class Preview3DRenderDriver
         var consecutiveDeclines = 0;
         var declineStallReported = false;
         const int declineStallThreshold = 2000; // ~2 s of nothing but declines
-        var logger = App.Services?.GetService<IAppLogger>();
+        var services = App.Services;
+        var logger = services?.GetService<IAppLogger>();
+        _configService = services?.GetService<IConfigurationService>();
 
         try
         {
@@ -846,7 +855,7 @@ internal sealed class Preview3DRenderDriver
                     if (consecutiveFailures == 1)
                     {
                         logger?.Warning(AppLogCategory.Rendering,
-                            $"3D preview frame failed (will retry): {frameEx.Message}");
+                            "3D preview frame failed (will retry)", frameEx);
                     }
 
                     if (consecutiveFailures >= maxConsecutiveFailures)
@@ -879,6 +888,13 @@ internal sealed class Preview3DRenderDriver
 
         try
         {
+            // Consume before pre-registration, on the same worker that renders.
+            if (Interlocked.Exchange(ref _resetTextRegistrations, 0) != 0)
+            {
+                _engine?.ResetTextRegistrations();
+                _textRegistration.Reset();
+            }
+
             // ONE read of the active arrangement for the whole snapshot. It is a
             // mutable property on a view model the UI thread owns, and this runs
             // on the render thread: read three separate times (tones, Arrangement,
@@ -989,12 +1005,14 @@ internal sealed class Preview3DRenderDriver
             _updateContext.Arrangement = arrangement;
             // The corner render-stats line is a diagnostic, not game HUD (Preview3DStatsLine.Shown).
             _updateContext.DebugText = Preview3DStatsLine.Shown(_gameplayPresentation,
-                _pendingLivePlay?.ShowDetectionMonitor == true, Preview3DStatsLine.HiddenByEnvironment)
+                _pendingLivePlay?.ShowDetectionMonitor == true, Preview3DStatsLine.HiddenByEnvironment,
+                Preview3DStatsLine.DiagnosticsOn(_configService?.LoadAppConfig().MinimumLogLevel ?? AppLogLevel.Info))
                 ? _currentDebugText
                 : string.Empty;
             // The show-light chip is a charting aid: the editor's preview
             // shows it, an immersive Play Mode run does not.
             _updateContext.ShowlightChipLabels = _gameplayPresentation ? null : _showlightChipLabels?.Current();
+            _updateContext.ShowlightEditorOpen = localEditor.IsShowlightsEditorOpen;
             _updateContext.EventPoints = localEditor.EventPoints;
             _updateContext.PreviewEventPoints = localEditor.PreviewEventPoints;
             _updateContext.LyricPhrases = localEditor.LyricPhrases;
@@ -1007,6 +1025,7 @@ internal sealed class Preview3DRenderDriver
             _updateContext.ActiveTemplates = arrangement?.ChordTemplates ??
                                              (IList<ChordTemplate>)[];
             _updateContext.ActiveBeats = beats;
+            _updateContext.BeatsVersion = localEditor.HistoryRevision;
             _updateContext.BeatStart = bStart;
             _updateContext.BeatEnd = bEnd;
             _updateContext.ActiveAnchors = anchors;

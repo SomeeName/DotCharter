@@ -94,10 +94,7 @@ public partial class LivePlayViewModel
 
     // ---- A/B loop + riff repeater -------------------------------------------
 
-    /// <summary>Whether THIS session runs a speed ladder (the config toggle at
-    /// session start). Stop restores the pre-session speed off this, not the
-    /// live toggle — a mid-session toggle flip must not strand the transport at
-    /// a ladder speed.</summary>
+    /// <summary>The session-start ladder setting controls speed restoration at Stop.</summary>
     private bool _sessionHadLadder;
 
     /// <summary>Punch-in: arms the loop start at the current playhead.</summary>
@@ -131,6 +128,7 @@ public partial class LivePlayViewModel
         lock (_sessionGate)
         {
             _session.ClearLoop();
+            if (_audio.IsPlaying) RearmCompletion();
             _pendingLoopStartMs = null;
             LoopActive = false;
             LoopStartArmed = false;
@@ -162,6 +160,7 @@ public partial class LivePlayViewModel
         LoopLabel = $"{TimeLabel(loop.StartMs)} - {TimeLabel(loop.EndMs)}";
         StatusHint = string.Empty;
         _audio.SeekTo(target);
+        RearmCompletion();
         if (!_audio.IsPlaying) _audio.Play();
         PublishStats();
     }

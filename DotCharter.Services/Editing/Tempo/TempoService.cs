@@ -10,37 +10,14 @@ public class TempoService : ITempoService
 
     public FractionalPosition SnapToGrid(double timeMs, IList<BeatMarker>? beats, int gridDivisor)
     {
-        if (beats == null || beats.Count == 0) return FractionalPosition.Zero;
-
-        var beatIdx = TimelineMath.BinarySearchBeats(beats, timeMs);
-        if (beatIdx < 0) beatIdx = 0;
-        var beat = beats[beatIdx];
-        var nextBeatTime = beatIdx + 1 < beats.Count
-            ? beats[beatIdx + 1].Time
-            // Past the grid, extrapolate off the LAST interval. This is the third
-            // copy of a bug fixed twice before (TimelineMath.PositionFromMs,
-            // AudioToChartAnalyzer): using the FIRST interval disagrees with
-            // CalculateTimeMs on any chart with a tempo change, so the snapped
-            // position renders at a DIFFERENT time than the click that produced
-            // it. On a 60→240 BPM chart whose beat map ends before the audio, a
-            // click 200 ms past the end snapped to a position rendering 153 ms
-            // BEFORE the click. Reachable after any RS-XML/EOF import or a Remove
-            // Beat.
-            : beat.Time + (beats.Count >= 2 ? beats[^1].Time - beats[^2].Time : 500);
-
-        var frac = (timeMs - beat.Time) / Math.Max(1.0, nextBeatTime - beat.Time);
-        frac = Math.Clamp(frac, 0.0, 0.999);
+        if (beats == null || !TimelineMath.TryBeatOffsetFromMs(timeMs, beats, out var beatIdx, out var offsetBeats))
+            return FractionalPosition.Zero;
 
         var den = gridDivisor > 0 ? gridDivisor : 16;
-        var num = (int)Math.Round(frac * den);
-
-        if (num == den)
-        {
-            beatIdx++;
-            num = 0;
-        }
-
-        return new FractionalPosition(beatIdx, new Fraction(num, den));
+        offsetBeats = Math.Clamp(offsetBeats, -1_000_000.0, 1_000_000.0);
+        var wholeBeats = Math.Floor(offsetBeats);
+        var ticks = (long)Math.Round((offsetBeats - wholeBeats) * den);
+        return new FractionalPosition(beatIdx + (int)wholeBeats, new Fraction(ticks, den));
     }
 
     public void UpdateBpm(IList<BeatMarker> beats, int beatIndex, double newBpm)

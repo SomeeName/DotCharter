@@ -29,13 +29,17 @@ public sealed class MediaProcessTests : IDisposable
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Uses a .cmd script.");
 
-        // Far more than the ~4 KB pipe buffer on BOTH streams: undrained, this
-        // never returns.
+        // Far more than the ~4 KB pipe buffer on BOTH streams (~25 KB each):
+        // undrained, this never returns. `type` writes each file in one go; a
+        // 600-pass `echo` loop moved the same bytes but cost ~100 s of starved
+        // cmd.exe time in the gate.
+        File.WriteAllText(Path.Combine(_dir, "a.txt"), string.Concat(Enumerable.Repeat(new string('A', 40) + "\r\n", 600)));
+        File.WriteAllText(Path.Combine(_dir, "b.txt"), string.Concat(Enumerable.Repeat(new string('B', 40) + "\r\n", 600)));
         var script = WriteScript("flood.cmd",
             """
             @echo off
-            for /L %%i in (1,1,600) do echo AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-            for /L %%i in (1,1,600) do echo BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB 1>&2
+            type "%~dp0a.txt"
+            type "%~dp0b.txt" 1>&2
             exit /b 0
             """);
 
@@ -95,27 +99,33 @@ public sealed class MediaProcessTests : IDisposable
     ///     would simply wait the child out and find it there. That distinguishes
     ///     "cancelled" from "eventually finished" without any threshold.</para>
     /// </summary>
+    /// <remarks>#607: the token used to be cancelled after a fixed 200 ms, which can
+    /// fire before the child even started, and the marker was written by the
+    /// <c>cmd</c> itself, which a kill of the parent alone also stops. Now the
+    /// cancel comes only once the tree's <c>ping</c> GRANDCHILD is running
+    /// (<see cref="OwnedChildTree" />), and the test waits for that grandchild to
+    /// be gone: a kill that spares the descendants leaves it holding its file.</remarks>
     [Fact]
-    public void Run_CancelledMidFlight_KillsTheTreeAndThrows()
+    public async Task Run_CancelledMidFlight_KillsTheTreeAndThrows()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Uses a .cmd script.");
+        var ct = TestContext.Current.CancellationToken;
 
-        var marker = Path.Combine(_dir, "survived.txt");
-        var script = WriteScript("cancelme.cmd",
-            $"""
-            @echo off
-            ping -n 60 127.0.0.1 >nul
-            echo survived > "{marker}"
-            exit /b 0
-            """);
-
+        var tree = OwnedChildTree.Create(_dir);
         using var cts = new CancellationTokenSource();
-        cts.CancelAfter(TimeSpan.FromMilliseconds(200));
+        var run = Task.Run(() => MediaProcess.Run(tree.Script, [], TimeSpan.FromMinutes(5), cts.Token), ct);
+        try
+        {
+            await tree.WaitUntilRunningAsync(ct);
+        }
+        finally
+        {
+            cts.Cancel();
+        }
 
-        Assert.ThrowsAny<OperationCanceledException>(() =>
-            MediaProcess.Run(script, [], TimeSpan.FromMinutes(5), cts.Token));
-        Assert.False(File.Exists(marker),
-            "the child outlived its cancellation — the process tree was not killed.");
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            BoundedWait.ForAsync(run, "the cancelled Run to return", ct));
+        await tree.WaitUntilGoneAsync("the child tree outlived its cancellation: the process tree was not killed", ct);
     }
 
     /// <summary>An already-cancelled token never starts the child at all.</summary>

@@ -127,7 +127,7 @@ public sealed partial class PlayModeViewModel
         {
             // The launch screen is the app's boot surface — a library that
             // cannot be scanned must leave it standing, chip and all.
-            _logger.Warning(AppLogCategory.Application, $"Launch-screen library warm-up failed: {ex.Message}");
+            _logger.Warning(AppLogCategory.Application, "Launch-screen library warm-up failed", ex);
         }
         finally
         {

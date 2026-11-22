@@ -2,6 +2,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using DotCharter.Services.Export.Audio;
 using DotCharter.Services.Export.Rocksmith;
 
 namespace DotCharter.Services.Export.DlcBuilder;
@@ -90,12 +91,14 @@ public static class Rs2DlcProjectBuilder
         // Deterministic, so re-saving an unchanged project rewrites an identical
         // file: a random key would churn the folder on every Ctrl+S and make DLC
         // Builder treat each import as a different DLC.
-        var dlcKey = Rs2DlcStrings.CreateDlcKey(
-            charter, artist, title, StableLetter(charter, artist, title));
+        // A key the charter set (the DLC Key field) is theirs; only an unset one is derived.
+        var dlcKey = !string.IsNullOrWhiteSpace(chart.DlcKey)
+            ? chart.DlcKey.Trim()
+            : Rs2DlcStrings.CreateDlcKey(charter, artist, title, StableLetter(charter, artist, title));
 
         return new Rs2DlcProjectDto
         {
-            Version = "1",
+            Version = string.IsNullOrWhiteSpace(chart.Version) ? "1" : chart.Version.Trim(),
             Author = string.IsNullOrWhiteSpace(charter) ? null : charter,
             DlcKey = dlcKey,
             ArtistName = new Rs2DlcSortableString
@@ -108,12 +111,16 @@ public static class Rs2DlcProjectBuilder
             Title = new Rs2DlcSortableString
             {
                 Value = title,
-                SortValue = Rs2DlcStrings.TitleSortValue(title)
+                SortValue = !string.IsNullOrWhiteSpace(chart.TitleSort)
+                    ? Rs2DlcStrings.SortField(chart.TitleSort.Trim())
+                    : Rs2DlcStrings.TitleSortValue(title)
             },
             AlbumName = new Rs2DlcSortableString
             {
                 Value = album,
-                SortValue = Rs2DlcStrings.AlbumSortValue(album)
+                SortValue = !string.IsNullOrWhiteSpace(chart.AlbumSort)
+                    ? chart.AlbumSort.Trim()
+                    : Rs2DlcStrings.AlbumSortValue(album)
             },
             // Both fields have existed on the model since it was written and
             // nothing ever filled them, so every .rs2dlc this app emitted
@@ -123,13 +130,14 @@ public static class Rs2DlcProjectBuilder
             JapaneseArtistName = string.IsNullOrWhiteSpace(chart.JapaneseArtist) ? null : chart.JapaneseArtist.Trim(),
             Year = ParseYear(chart.AlbumYear),
             AlbumArtFile = options.CoverArtFileName,
-            AudioFile = new Rs2DlcAudioFile { Path = options.AudioFileName },
+            AudioFile = new Rs2DlcAudioFile { Path = options.AudioFileName, Volume = ProjectVolumes.AudioOrDefault(chart) },
             AudioFileLength = options.AudioLengthMs is > 0 ? options.AudioLengthMs / 1000.0 : null,
             // DotCharter has no separate preview clip. Upstream requires the field,
             // and DLC Builder generates the preview itself from the main audio when
             // this file is missing — so it names the conventional sibling rather
             // than leaving a path that resolves to the project folder.
-            AudioPreviewFile = new Rs2DlcAudioFile { Path = PreviewPathFor(options.AudioFileName) },
+            AudioPreviewFile = new Rs2DlcAudioFile { Path = PreviewPathFor(options.AudioFileName), Volume = ProjectVolumes.PreviewOrDefault(chart) },
+            AudioPreviewStartTime = PreviewStartTime.ToRs2DlcSeconds(chart.PreviewStartMs),
             IgnoredIssues = [],
             Arrangements = BuildArrangements(project, dlcKey, options.IncludeVocals, options.SixStringProjection),
             Tones = BuildTones(project)
@@ -226,6 +234,7 @@ public static class Rs2DlcProjectBuilder
             // A Vocal arrangement has no instrumental XML in the bundle — the
             // vocals come from ChartProject.VocalTracks below.
             if (arrangement.ArrangementType == ArrangementType.Vocal) continue;
+            if (RsxrStringLayout.XmlExportRefusal(arrangement, sixStringProjection) != null) continue;
 
             var xml = i < project.ArrangementFiles.Count
                 ? project.ArrangementFiles[i]
@@ -309,15 +318,19 @@ public static class Rs2DlcProjectBuilder
     public static short[] TuningVector(Arrangement arrangement) => TuningVector(arrangement, false);
 
     /// <summary>
-    ///     The tuning slots of <paramref name="arrangement" />. With <paramref name="allStrings" /> an
-    ///     extended (7-/8-string) guitar gets one slot per string in the rs7string package order, the
-    ///     values and order of the XML's <c>string0</c>..<c>stringN</c>; every other arrangement, and
-    ///     an extended guitar without it, gets the six stock slots.
+    ///     Tuning offsets matching the written XML. Every extended bass and an all-string
+    ///     guitar use positional order; a five-string bass pads its sixth attribute with zero.
+    ///     A six-string guitar copy keeps the six stock slots. Stock content keeps six slots.
     /// </summary>
     public static short[] TuningVector(Arrangement arrangement, bool allStrings)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
 
+        if (Rs7StringLayout.IsExtendedBass(arrangement) || allStrings && Rs7StringLayout.IsExtendedGuitar(arrangement))
+        {
+            var positional = RsxrStringLayout.TuningOffsets(arrangement);
+            return [.. positional.Select(s => (short)s), .. Enumerable.Repeat((short)0, Math.Max(0, TuningSlots - positional.Length))];
+        }
         var offsets = TuningOffsetResolution.Resolve(arrangement);
         var extended = Rs7StringLayout.IsExtendedGuitar(arrangement);
         var slots = extended && allStrings ? arrangement.StringCount : TuningSlots;

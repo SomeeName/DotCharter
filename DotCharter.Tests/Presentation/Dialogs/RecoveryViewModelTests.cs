@@ -49,10 +49,12 @@ public sealed class RecoveryViewModelTests
         public void SaveAppConfig() { }
         public void FreeAudio() { }
 
-        public Task LoadFile(string filePath)
+        public Func<Task>? LoadPass { get; set; }
+
+        public async Task LoadFile(string filePath)
         {
             _state.CurrentProjectPath = filePath;
-            return Task.CompletedTask;
+            if (LoadPass != null) await LoadPass();
         }
 
         public Task LoadAudioFile(string filePath, bool generateBeats = true,
@@ -61,7 +63,8 @@ public sealed class RecoveryViewModelTests
         public Task<bool> AttachAudioAsync(string sourcePath) => Task.FromResult(true);
         public Task LoadSilentTransportAsync(double projectLengthMs) => Task.CompletedTask;
         public Task OpenProject() => Task.CompletedTask;
-        public Task<bool> SaveProjectAsync() => Task.FromResult(true);
+        public bool HasUnsavedWork() => IsProjectDirty;
+        public Task<bool> SaveProjectAsync(SaveInitiator initiator) => Task.FromResult(true);
         public Task<bool> SaveProjectAsAsync() => Task.FromResult(true);
         public IReadOnlyList<RecentProjectEntry> GetRecentProjects() => [];
         public event Action? RecentProjectsChanged { add { } remove { } }
@@ -125,6 +128,30 @@ public sealed class RecoveryViewModelTests
         Assert.Equal(@"C:\charts\a.rscp", state.CurrentProjectPath);
         Assert.Equal(1, session.DirtyMarks);
         Assert.False(vm.Result.IsCompleted, "one session is left — the dialog must stay open for it");
+    }
+
+    [Fact]
+    public async Task An_obsolete_recovery_does_not_change_the_new_sessions_status_or_save_target()
+    {
+        var (vm, _, session, state) = Build(Session("a", @"C:\charts\a.rscp"));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.LoadPass = async () =>
+        {
+            entered.SetResult();
+            await release.Task;
+        };
+        var recovery = Recover(vm);
+        await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+        state.ActiveProject = new ChartProject();
+        state.CurrentProjectPath = @"C:\charts\B.rscp";
+        state.MainDisplayMessage = "new session";
+        release.SetResult();
+        await recovery;
+
+        Assert.Equal(@"C:\charts\B.rscp", state.CurrentProjectPath);
+        Assert.Equal("new session", state.MainDisplayMessage);
+        Assert.Equal(0, session.DirtyMarks);
     }
 
     [Fact]

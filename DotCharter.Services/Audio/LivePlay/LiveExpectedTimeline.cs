@@ -47,8 +47,9 @@ public sealed class LiveExpectedTimeline
         var spans = BuildPhraseSpans(arrangement, beats);
         if (spans.Count == 0)
         {
-            var idx = arrangement.Levels.Count - 1;
-            AppendLevelRegion(expected, arrangement, arrangement.Levels[idx], beats,
+            var level = ChartLevels.Hardest(arrangement)!;
+            var idx = arrangement.Levels.IndexOf(level);
+            AppendLevelRegion(expected, arrangement, level, beats,
                 double.NegativeInfinity, double.PositiveInfinity, idx, -1, transposeSemitones);
         }
         else
@@ -165,6 +166,7 @@ public sealed class LiveExpectedTimeline
             if (timeMs < startMs || timeMs >= endMs) continue;
             var chordNotes = ChordShape(arrangement, chord);
             var midis = new List<int>(chordNotes.Count);
+            var bends = new List<int>(chordNotes.Count);
             var palm = false;
             var full = chordNotes.Count > 0;
             var slapOrPop = false;
@@ -204,6 +206,7 @@ public sealed class LiveExpectedTimeline
                 if (cn.Mute == MuteType.Full) continue;
                 if (ExpectedMidi(arrangement, cn.StringIndex, cn.Fret, transposeSemitones) is not { } m) continue;
                 midis.Add(m);
+                bends.Add(LivePitchAcceptance.MaxBendSemis(cn.BendValues));
                 mask |= 1 << cn.StringIndex;
             }
 
@@ -211,6 +214,7 @@ public sealed class LiveExpectedTimeline
             {
                 TimeMs = timeMs,
                 MidiNotes = midis.ToArray(),
+                ChordBendSemis = bends.ToArray(),
                 IsChord = midis.Count > 1,
                 PalmMute = palm,
                 FullMute = full,

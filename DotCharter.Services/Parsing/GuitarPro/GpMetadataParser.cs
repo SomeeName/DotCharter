@@ -41,6 +41,10 @@ public static class GpMetadataParser
             var bar = ReadBar(mb);
             bar.SourceBarIndex = entry.OriginalIndex;
             bar.RepeatPass = entry.RepeatPass;
+            bar.EndingMask = entry.EndingMask;
+            bar.StartsBlock = entry.StartsBlock;
+            bar.EndsBlock = entry.EndsBlock;
+            bar.Marker = GpArrangementParser.ReadMasterBarSection(mb)?.Trim() ?? "";
             meta.Bars.Add(bar);
             if (!firstKeyCaptured)
                 firstKeyCaptured = TryReadKey(mb, meta);

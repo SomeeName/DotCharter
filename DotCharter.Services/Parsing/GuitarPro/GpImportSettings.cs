@@ -38,7 +38,7 @@ public sealed record GpImportSettings
     public bool BeatTextTechniques { get; init; } = true;
 
     /// <summary>Import section markers (and qualifying beat texts) as RS phrases +
-    /// section EventPoints. Default OFF. gpif only.</summary>
+    /// section EventPoints. Default OFF. Includes GP3-5 measure markers.</summary>
     public bool MarkersToSections { get; init; }
 
     /// <summary>How far below/above the target a materialized slide-in's origin

@@ -1,10 +1,48 @@
 using System.Xml.Linq;
 using DotCharter.Services.Parsing.Xml;
+using DotCharter.Services.Parsing.Xml.Vocals;
 
 namespace DotCharter.Tests.Services.Parsing.Roundtrip;
 
 public sealed partial class RsXmlVocalsRoundtripTests
 {
+    [Fact]
+    public void Standalone_load_and_save_preserve_absolute_vocal_timestamps()
+    {
+        var path = TempPath("source-vocals.xml");
+        File.WriteAllText(path, """
+            <vocals count="2">
+              <vocal time="1.234" length="0.567" lyric="hello+" note="64"/>
+              <vocal time="9.876" length="1.234" lyric="world+" note="67"/>
+            </vocals>
+            """);
+        var serializer = new XmlChartSerializer();
+
+        var loaded = serializer.Load(path);
+        var lyrics = loaded.VocalTracks.Single().Phrases.SelectMany(p => p.Lyrics).ToArray();
+        Assert.Equal(1234, TimelineMath.ToWholeMs(lyrics[0].Position.GetPositionMs(loaded.Beats)));
+        Assert.Equal(1801, TimelineMath.ToWholeMs(lyrics[0].EndPosition.GetPositionMs(loaded.Beats)));
+        Assert.Equal(9876, TimelineMath.ToWholeMs(lyrics[1].Position.GetPositionMs(loaded.Beats)));
+        Assert.Equal(11110, TimelineMath.ToWholeMs(lyrics[1].EndPosition.GetPositionMs(loaded.Beats)));
+
+        var saved = TempPath("saved-vocals.xml");
+        serializer.Save(saved, loaded);
+        var vocals = XDocument.Load(saved).Root!.Elements("vocal").ToArray();
+        Assert.Equal(["1.234", "9.876"], vocals.Select(v => v.Attribute("time")!.Value));
+        Assert.Equal(["0.567", "1.234"], vocals.Select(v => v.Attribute("length")!.Value));
+    }
+
+    [Fact]
+    public void UnmarkedVocals_NormalizeGapAndFinalPhraseEnds()
+    {
+        var phrases = RsVocalPhraseBuilder.Build(
+            [new RsVocalSyllable(0, 500, "one", 60), new RsVocalSyllable(6000, 6500, "two", 62)],
+            ms => TimelineMath.PositionFromMs(ms, Beats120()));
+
+        Assert.Equal(2, phrases.Count);
+        Assert.All(phrases, p => Assert.True(Assert.Single(p.Lyrics).IsPhraseEnd));
+    }
+
     [Fact]
     public void SaveLoad_PreservesLyricCount()
     {

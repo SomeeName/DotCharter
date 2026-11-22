@@ -1,8 +1,10 @@
 # Downloads a file pinned by SHA-256 from an ordered list of mirrors (#449).
 # Every mirror is held to the SAME pin: a mirror that serves other bytes (an
 # HTML interstitial, a truncated file, a different release) is skipped and the
-# next one is tried. Bytes land in "<Dest>.partial" and are moved into place
-# only after they hash to the pin, so nothing unverified ever reaches the cache.
+# next one is tried. Bytes land in a stage of their own, "<Dest>.<guid>.partial",
+# and are renamed over <Dest> in one step only after they hash to the pin, so
+# nothing unverified ever reaches the cache and two downloads of one file at
+# once never delete, hash or move each other's half-written bytes.
 # Used by Build-MinimalFfmpeg.ps1; tested by
 # DotCharter.Tests/Infrastructure/PinnedDownloadMirrorTests with a fake
 # downloader (no network).
@@ -35,7 +37,7 @@ function Save-PinnedFile {
         Remove-Item -LiteralPath $Dest -Force
     }
 
-    $tmp = "$Dest.partial"
+    $tmp = "$Dest.$([guid]::NewGuid().ToString('N')).partial"
     $refusals = [System.Collections.Generic.List[string]]::new()
     foreach ($url in $Urls) {
         if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force }
@@ -58,7 +60,8 @@ function Save-PinnedFile {
             Write-Warning "  $name : $url served SHA-256 $actual, expected $pin; trying the next mirror."
             continue
         }
-        Move-Item -LiteralPath $tmp $Dest -Force
+        # One rename, replacing whatever a concurrent run published: it holds the same pinned bytes.
+        [System.IO.File]::Move($tmp, $Dest, $true)
         Write-Host "  $name <- $url"
         return $url
     }

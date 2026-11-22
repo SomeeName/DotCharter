@@ -117,8 +117,9 @@ public sealed class ChartDiffViewModel : DialogViewModel<bool>, IChartDiffScreen
     {
         if (_isBusy) return;
         var path = await _storage.OpenFilePickerAsync(_l["ChartDiff_PickFile"],
-            [new FilePickerFilter("DotCharter Project", [.. ProjectFiles.OpenablePatterns])], _config.LoadAppConfig().LastRscpDir);
+            [new FilePickerFilter("DotCharter Project", [.. ProjectFiles.OpenablePatterns])], _config.StartDirectory(c => c.LastChartDiffDir));
         if (string.IsNullOrEmpty(path)) return;
+        _config.RememberDirectory(path, (c, d) => c.LastChartDiffDir = d);
 
         _isBusy = true;
         // The previous comparison goes BEFORE the next loads: two songs are never held at once.
@@ -219,7 +220,7 @@ public sealed class ChartDiffViewModel : DialogViewModel<bool>, IChartDiffScreen
         _ => _l["ChartDiff_Changed"]
     };
 
-    private static string Clock(double timeMs) => TimeSpan.FromMilliseconds(Math.Max(0, timeMs)).ToString(@"m\:ss\.fff");
+    private static string Clock(double timeMs) => ElapsedTimeLabel.Format(timeMs, 3);
 
     private Row ToRow(ChartSoundDiff entry, int difficultyIndex, IList<BeatMarker> beats)
     {
@@ -227,7 +228,7 @@ public sealed class ChartDiffViewModel : DialogViewModel<bool>, IChartDiffScreen
         var sound = entry.Kind == ChartDiffSoundKind.Chord
             ? _l["ChartDiff_Chord"]
             : _l.Format("ChartDiff_NoteOnString", entry.StringIndex + 1);
-        var detail = entry.ChangedFields.Count > 0 ? string.Join(", ", entry.ChangedFields) : DescribeSound(entry);
+        var detail = entry.ChangedFields.Count > 0 ? FieldsText(entry.ChangedFields) : DescribeSound(entry);
         return new Row(ChangeText(entry.Change), position, sound, detail, entry.Change);
     }
 
@@ -235,7 +236,7 @@ public sealed class ChartDiffViewModel : DialogViewModel<bool>, IChartDiffScreen
     {
         // A chord template has no timeline position at all; only the per-level kinds have a difficulty.
         string position;
-        if (entry.Kind is ChartDiffElementKind.ChordTemplate or ChartDiffElementKind.ArrangementHeader)
+        if (entry.Kind is ChartDiffElementKind.ChordTemplate or ChartDiffElementKind.ArrangementHeader or ChartDiffElementKind.PhraseInfo)
         {
             position = _l["ChartDiff_PositionNone"];
         }
@@ -258,10 +259,32 @@ public sealed class ChartDiffViewModel : DialogViewModel<bool>, IChartDiffScreen
             ChartDiffElementKind.ChordTemplate => _l["ChartDiff_ChordTemplate"],
             ChartDiffElementKind.PhraseIteration => _l["ChartDiff_PhraseIteration"],
             ChartDiffElementKind.ArrangementHeader => _l["ChartDiff_ArrangementHeader"],
+            ChartDiffElementKind.PhraseInfo => _l["ChartDiff_PhraseInfo"],
             _ => entry.Kind.ToString()
         };
-        var detail = entry.ChangedFields.Count > 0 ? string.Join(", ", entry.ChangedFields) : entry.Label;
+        var detail = entry.ChangedFields.Count > 0 ? FieldsText(entry.ChangedFields) : entry.Label;
+        if (entry.Kind == ChartDiffElementKind.PhraseInfo)
+            detail = _l.Format("ChartDiff_PhraseInfoDetail", entry.Label, detail);
         return new Row(ChangeText(entry.Change), position, kind, detail, entry.Change);
+    }
+
+    private string FieldsText(IReadOnlyList<string> fields)
+    {
+        return string.Join(", ", fields.Select(field => field switch
+        {
+            "LeftHandFinger" => _l["ChartDiff_Field_LeftHandFinger"],
+            "PickDirection" => _l["ChartDiff_Field_PickDirection"],
+            "Strum" => _l["ChartDiff_Field_Strum"],
+            "ExplicitSustain" => _l["ChartDiff_Field_ExplicitSustain"],
+            "NotationDuration" => _l["ChartDiff_Field_NotationDuration"],
+            "GraceFret" => _l["ChartDiff_Field_GraceFret"],
+            "Solo" => _l["ChartDiff_Field_Solo"],
+            "MaxDifficulty" => _l["ChartDiff_Field_MaxDifficulty"],
+            "FingerPicking" => _l["ChartDiff_Field_FingerPicking"],
+            "TwoFingerPicking" => _l["ChartDiff_Field_TwoFingerPicking"],
+            "Syncopation" => _l["ChartDiff_Field_Syncopation"],
+            _ => field
+        }));
     }
 
     /// <summary>An added or removed sound carries no changed fields; the fret identifies it instead.</summary>

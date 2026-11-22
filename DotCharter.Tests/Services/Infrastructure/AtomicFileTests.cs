@@ -1,4 +1,4 @@
-﻿using DotCharter.Tone.Infrastructure.Storage;
+using DotCharter.Tone.Infrastructure.Storage;
 
 namespace DotCharter.Tests.Services.Infrastructure;
 
@@ -28,6 +28,127 @@ public sealed class AtomicFileTests : IDisposable
     public void Dispose() => BestEffortDelete.Directory(_dir);
 
     private string Path_(string name) => System.IO.Path.Combine(_dir, name);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PublishNew_PreservesAnExistingDestination(bool exists)
+    {
+        Directory.CreateDirectory(_dir);
+        var stage = Path_("stage.bin");
+        var destination = Path_("destination.bin");
+        File.WriteAllBytes(stage, [2]);
+        if (exists) File.WriteAllBytes(destination, [1]);
+
+        Assert.Equal(!exists, PublishNew(stage, destination));
+
+        Assert.Equal(exists ? [1] : [2], File.ReadAllBytes(destination));
+        Assert.False(File.Exists(stage));
+    }
+
+    [Fact]
+    public async Task PublishNew_ConcurrentPublishersHaveExactlyOneWinner()
+    {
+        Directory.CreateDirectory(_dir);
+        var destination = Path_("winner.bin");
+        var stages = new[] { Path_("first.bin"), Path_("second.bin") };
+        File.WriteAllBytes(stages[0], [1]);
+        File.WriteAllBytes(stages[1], [2]);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var publishers = stages.Select(stage => Task.Run(async () =>
+        {
+            await release.Task;
+            return PublishNew(stage, destination);
+        }, TestContext.Current.CancellationToken)).ToArray();
+        release.SetResult();
+
+        var published = await Task.WhenAll(publishers);
+
+        Assert.Equal(1, published.Count(won => won));
+        Assert.Equal(new byte[] { (byte)(Array.IndexOf(published, true) + 1) }, File.ReadAllBytes(destination));
+        Assert.All(stages, stage => Assert.False(File.Exists(stage)));
+    }
+
+    [Fact]
+    public void PublishNew_RejectsUsingTheDestinationAsItsOwnStage()
+    {
+        Directory.CreateDirectory(_dir);
+        var path = Path_("same.bin");
+        File.WriteAllBytes(path, [1]);
+
+        var error = Assert.Throws<System.Reflection.TargetInvocationException>(() => PublishNew(path, path));
+
+        Assert.IsType<ArgumentException>(error.InnerException);
+        Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(path));
+    }
+
+    [Fact]
+    public void PublishNew_FailureKeepsTheDestinationAndSweepsTheStage()
+    {
+        Directory.CreateDirectory(_dir);
+        var stage = Path_("failed-stage.bin");
+        var destination = Path_("directory");
+        Directory.CreateDirectory(destination);
+        File.WriteAllBytes(stage, [1]);
+
+        var error = Assert.Throws<System.Reflection.TargetInvocationException>(() => PublishNew(stage, destination));
+
+        Assert.IsAssignableFrom<IOException>(error.InnerException);
+        Assert.True(Directory.Exists(destination));
+        Assert.False(File.Exists(stage));
+    }
+
+    private static bool PublishNew(string stage, string destination)
+    {
+        var publish = typeof(AtomicFile).GetMethod("PublishNew");
+        Assert.NotNull(publish);
+        return (bool)publish.Invoke(null, [stage, destination])!;
+    }
+
+    [Fact]
+    public async Task Cancellation_during_replacement_backoff_prevents_the_next_publication_attempt()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Uses Windows file locking.");
+        Directory.CreateDirectory(_dir);
+        var path = Path_("cancel.json");
+        File.WriteAllText(path, "previous");
+        using var cancellation = new CancellationTokenSource();
+        using var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => AtomicFile.WriteAllTextCoreAsync(
+            path, "replacement", cancellation.Token, (_, _) =>
+            {
+                cancellation.Cancel();
+                held.Dispose();
+            }));
+
+        Assert.Equal("previous", File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_dir));
+    }
+
+    [Fact]
+    public void TextEncodingFailure_PreservesDestinationAndRemovesStage()
+    {
+        var path = Path_("encoding.json");
+        AtomicFile.WriteAllText(path, "previous");
+
+        Assert.Throws<System.Text.EncoderFallbackException>(() => AtomicFile.WriteAllText(path, "\uD800"));
+
+        Assert.Equal("previous", File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_dir));
+    }
+
+    [Fact]
+    public void ByteWriteFailure_PreservesDestinationAndRemovesStage()
+    {
+        var path = Path_("bytes.bin");
+        AtomicFile.WriteAllBytes(path, [7]);
+
+        Assert.ThrowsAny<Exception>(() => AtomicFile.WriteAllBytes(path, null!));
+
+        Assert.Equal(new byte[] { 7 }, File.ReadAllBytes(path));
+        Assert.Equal([path], Directory.GetFiles(_dir));
+    }
 
     [Fact]
     public void WritesTheContent()
@@ -187,31 +308,118 @@ public sealed class AtomicFileTests : IDisposable
     /// handle); it had only made the retry's gaps more likely. The writer now
     /// renames with POSIX semantics first, which a share-delete handle DOES let
     /// through — <see cref="ReplaceWithRetry_SucceedsWhileAShareDeleteReaderHoldsTheDestination"/>
-    /// is the deterministic version of this race.</para></summary>
+    /// is the deterministic version of this race.</para>
+    /// <para>#607: the hammer used to pass with NO read inside a write. The 60
+    /// writes could all finish before the pool started the reader, and the token
+    /// then ended it after zero reads. Now the reader has completed a read before
+    /// the first write, every read is checked against a write ticket (bumped
+    /// before and after each write), and the test fails when fewer than
+    /// <see cref="RequiredOverlaps" /> reads had a write start, end or run inside
+    /// them. The proof that does not depend on timing at all is
+    /// <see cref="AReaderInsideAHalfWrittenWrite_StillSeesTheWholeOldFile" />.</para></summary>
     [Fact]
     public async Task AConcurrentReader_NeverSeesATornFile()
     {
+        var ct = TestContext.Current.CancellationToken;
         var p = Path_("hot.json");
         var a = new string('a', 20_000);
         var b = new string('b', 20_000);
         AtomicFile.WriteAllText(p, a);
 
-        using var cts = new CancellationTokenSource();
+        long ticket = 0;
+        var overlapped = 0;
+        var reads = 0;
+        var writerDone = false;
+        var firstRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var reader = Task.Run(() =>
         {
-            while (!cts.IsCancellationRequested)
+            while (!Volatile.Read(ref writerDone))
             {
+                var before = Interlocked.Read(ref ticket);
                 string seen;
                 try { seen = AtomicFile.ReadAllText(p); }
                 catch (IOException) { continue; }   // transient sharing during the swap
+                var after = Interlocked.Read(ref ticket);
                 // Whatever we saw, it must be ONE of the two whole files.
                 Assert.True(seen == a || seen == b, $"torn read: {seen.Length} bytes");
+                if (before != after || (before & 1) == 1) Interlocked.Increment(ref overlapped);
+                Interlocked.Increment(ref reads);
+                firstRead.TrySetResult();
             }
-        }, TestContext.Current.CancellationToken);
+        }, ct);
 
-        for (var i = 0; i < 60; i++) AtomicFile.WriteAllText(p, i % 2 == 0 ? b : a);
-        cts.Cancel();
-        await reader;
+        // Either the first read or the reader's own failure ends this wait.
+        await BoundedWait.ForAsync(Task.WhenAny(firstRead.Task, reader), "the reader's first completed read", ct);
+
+        var writes = 0;
+        while (!reader.IsCompleted && writes < MaxHammerWrites
+               && (writes < MinHammerWrites || Volatile.Read(ref overlapped) < RequiredOverlaps))
+        {
+            Interlocked.Increment(ref ticket);
+            AtomicFile.WriteAllText(p, writes % 2 == 0 ? b : a);
+            Interlocked.Increment(ref ticket);
+            writes++;
+        }
+
+        Volatile.Write(ref writerDone, true);
+        await BoundedWait.ForAsync(reader, "the reader to finish its last read", ct);
+
+        Assert.True(overlapped >= RequiredOverlaps,
+            $"Only {overlapped} of {reads} reads overlapped one of {writes} writes (need {RequiredOverlaps}): " +
+            "the reader was starved, so this run says nothing about a torn read.");
+    }
+
+    /// <summary>The hammer writes at least this often, as it always did.</summary>
+    private const int MinHammerWrites = 60;
+
+    /// <summary>Where the hammer gives up waiting for overlaps and fails.</summary>
+    private const int MaxHammerWrites = 5_000;
+
+    /// <summary>Reads that must have had a write start, end or run inside them.</summary>
+    private const int RequiredOverlaps = 20;
+
+    /// <summary>
+    ///     The torn-file guarantee without a race (#607): the write is stopped
+    ///     half-way through its bytes, flushed, and the destination is read while
+    ///     it stands there. A staged write shows the reader the whole OLD file; a
+    ///     write in place (truncate, then fill) shows it half of the new one, every
+    ///     time, however the threads are scheduled.
+    /// </summary>
+    [Fact]
+    public async Task AReaderInsideAHalfWrittenWrite_StillSeesTheWholeOldFile()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var p = Path_("hot.json");
+        var old = new string('a', 20_000);
+        var replacement = new string('b', 20_000);
+        AtomicFile.WriteAllText(p, old);
+
+        var halfWritten = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var finish = new ManualResetEventSlim();
+        var write = Task.Run(() => AtomicFile.Write(p, stream =>
+        {
+            var bytes = System.Text.Encoding.UTF8.GetBytes(replacement);
+            var half = bytes.Length / 2;
+            stream.Write(bytes, 0, half);
+            stream.Flush();
+            halfWritten.TrySetResult();
+            BoundedWait.For(finish, "the test to let the half-written write finish");
+            stream.Write(bytes, half, bytes.Length - half);
+        }), ct);
+
+        try
+        {
+            await BoundedWait.ForAsync(Task.WhenAny(halfWritten.Task, write), "the write to reach its half-way point", ct);
+            Assert.False(write.IsCompleted, "The write ended before its callback reached the half-way point.");
+            Assert.Equal(old, AtomicFile.ReadAllText(p));
+        }
+        finally
+        {
+            finish.Set();
+        }
+
+        await BoundedWait.ForAsync(write, "the half-written write to publish", ct);
+        Assert.Equal(replacement, AtomicFile.ReadAllText(p));
     }
 
     /// <summary>
@@ -335,6 +543,147 @@ public sealed class AtomicFileTests : IDisposable
     {
         Directory.CreateDirectory(_dir);
         Assert.Throws<FileNotFoundException>(() => AtomicFile.FlushFile(Path_("nope.bin")));
+    }
+
+    [Fact]
+    public void Write_StreamsIntoAnAtomicallyReplacedFile()
+    {
+        var p = Path_("stream.bin");
+        AtomicFile.Write(p, s => s.Write([1, 2, 3]));
+        AtomicFile.Write(p, s => s.Write([4, 5]));
+
+        Assert.Equal([4, 5], File.ReadAllBytes(p));
+        Assert.Equal([p], Directory.GetFiles(_dir));
+    }
+
+    [Fact]
+    public void Write_ThrowingCallbackLeavesTheDestinationAndNoTemp()
+    {
+        var p = Path_("stream.bin");
+        AtomicFile.WriteAllBytes(p, [9]);
+
+        Assert.Throws<InvalidOperationException>(() => AtomicFile.Write(p, s =>
+        {
+            s.Write([1, 2, 3]);
+            throw new InvalidOperationException();
+        }));
+
+        Assert.Equal([9], File.ReadAllBytes(p));
+        Assert.Equal([p], Directory.GetFiles(_dir));
+    }
+
+    [Fact]
+    public void Write_SucceedsWhileAShareDeleteReaderHoldsTheDestination()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows rename semantics.");
+        var p = Path_("held.bin");
+        AtomicFile.WriteAllBytes(p, [1]);
+        using var held = new FileStream(p, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+        AtomicFile.Write(p, s => s.Write([2]));
+
+        Assert.Equal([2], AtomicFile.ReadAllBytes(p));
+    }
+
+    [Fact]
+    public void WriteAllText_SucceedsWhileAShareDeleteReaderHoldsTheDestination()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows rename semantics.");
+        var p = Path_("held.json");
+        AtomicFile.WriteAllText(p, "old");
+        using var held = new FileStream(p, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+        AtomicFile.WriteAllText(p, "new");
+
+        Assert.Equal("new", AtomicFile.ReadAllText(p));
+    }
+
+    [Fact]
+    public void WriteAllBytes_SucceedsWhileAShareDeleteReaderHoldsTheDestination()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows rename semantics.");
+        var p = Path_("held-bytes.bin");
+        AtomicFile.WriteAllBytes(p, [1]);
+        using var held = new FileStream(p, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+        AtomicFile.WriteAllBytes(p, [3, 3]);
+
+        Assert.Equal([3, 3], AtomicFile.ReadAllBytes(p));
+    }
+
+    [Fact]
+    public void Publish_SucceedsWhileAShareDeleteReaderHoldsTheDestination()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows rename semantics.");
+        var p = Path_("held-pub.bin");
+        AtomicFile.WriteAllBytes(p, [1]);
+        var staged = Path_("held-pub.bin.part");
+        File.WriteAllBytes(staged, [8, 8]);
+        using var held = new FileStream(p, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+        AtomicFile.Publish(staged, p);
+
+        Assert.Equal([8, 8], AtomicFile.ReadAllBytes(p));
+        Assert.False(File.Exists(staged));
+    }
+
+    [Fact]
+    public void MoveAside_SucceedsWhileAShareDeleteReaderHoldsTheSource()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows rename semantics.");
+        var p = Path_("held-store.json");
+        var aside = Path_("held-store.corrupt.json");
+        AtomicFile.WriteAllText(p, "bad");
+        using var held = new FileStream(p, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+        AtomicFile.MoveAside(p, aside);
+
+        Assert.False(File.Exists(p));
+        Assert.Equal("bad", File.ReadAllText(aside));
+    }
+    [Fact]
+    public void Publish_ReplacesTheDestinationWithTheStagedFile()
+    {
+        var p = Path_("pub.bin");
+        AtomicFile.WriteAllBytes(p, [1]);
+        var staged = Path_("pub.bin.part");
+        File.WriteAllBytes(staged, [7, 7]);
+
+        AtomicFile.Publish(staged, p);
+
+        Assert.Equal([7, 7], File.ReadAllBytes(p));
+        Assert.False(File.Exists(staged));
+    }
+
+    [Fact]
+    public void MoveAside_MovesTheFileAndKeepsItsBytes()
+    {
+        Directory.CreateDirectory(_dir);
+        var p = Path_("store.json");
+        var aside = Path_("store.corrupt.json");
+        File.WriteAllText(p, "bad");
+        File.WriteAllText(aside, "older");
+
+        AtomicFile.MoveAside(p, aside);
+
+        Assert.False(File.Exists(p));
+        Assert.Equal("bad", File.ReadAllText(aside));
+    }
+
+    [Fact]
+    public void MoveAside_FailureLeavesTheSourceInPlace()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows sharing semantics.");
+        Directory.CreateDirectory(_dir);
+        var p = Path_("store.json");
+        var aside = Path_("store.corrupt.json");
+        File.WriteAllText(p, "bad");
+        File.WriteAllText(aside, "older");
+        using var holder = new FileStream(aside, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        Assert.ThrowsAny<Exception>(() => AtomicFile.MoveAside(p, aside));
+
+        Assert.Equal("bad", File.ReadAllText(p));
     }
 
     /// <summary>

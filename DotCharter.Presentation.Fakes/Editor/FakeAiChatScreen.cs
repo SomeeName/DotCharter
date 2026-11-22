@@ -23,7 +23,6 @@ public sealed class FakeAiChatScreen : ObservableObject, IAiChatScreen
     private string _errorText = "";
     private string _inputText = "";
     private bool _isBusy;
-    private IAiChatOption? _selectedArrangement;
     private IAiChatOption? _selectedJob;
     private IAiChatOption? _selectedModel;
     private IAiChatOption? _selectedScope;
@@ -42,8 +41,8 @@ public sealed class FakeAiChatScreen : ObservableObject, IAiChatScreen
         _selectedJob = Jobs[0];
         Scopes = FakeAiChatData.Scopes();
         _selectedScope = Scopes[1];
-        Arrangements = FakeAiChatData.Arrangements();
-        _selectedArrangement = Arrangements[0];
+        ArrangementPicker = new FakeAiChatArrangementPicker(FakeAiChatData.ArrangementChoices());
+        ArrangementPicker.Changed += () => OnPropertyChanged(nameof(ScopeSummary));
         _title = title ?? (turns.Count > 0 ? turns[0].Text : NewChatTitle);
         _send = new RelayCommand(Send, () => HasProvider && !IsBusy && !string.IsNullOrWhiteSpace(InputText));
         _cancel = new RelayCommand(() => IsBusy = false, () => IsBusy);
@@ -157,7 +156,7 @@ public sealed class FakeAiChatScreen : ObservableObject, IAiChatScreen
     public static FakeAiChatScreen EmptyExplain()
     {
         var screen = Empty();
-        screen.SelectedJob = screen.Jobs[3];
+        screen.SelectedJob = screen.Jobs[6];
         return screen;
     }
 
@@ -165,7 +164,7 @@ public sealed class FakeAiChatScreen : ObservableObject, IAiChatScreen
     public static FakeAiChatScreen Unanswered()
     {
         var screen = Default();
-        screen.SelectedJob = screen.Jobs[3];
+        screen.SelectedJob = screen.Jobs[6];
         screen.InputText = "What's wrong in bar 34? The export report flags a fingering there.";
         screen.Send();
         screen.IsBusy = false;
@@ -241,15 +240,13 @@ public sealed class FakeAiChatScreen : ObservableObject, IAiChatScreen
         }
     }
 
-    public IReadOnlyList<IAiChatOption> Arrangements { get; }
+    public FakeAiChatArrangementPicker ArrangementPicker { get; }
 
-    public IAiChatOption? SelectedArrangement
-    {
-        get => _selectedArrangement;
-        set => SetProperty(ref _selectedArrangement, value);
-    }
+    IAiChatArrangementPicker IAiChatScreen.ArrangementPicker => ArrangementPicker;
 
-    public string ScopeSummary => _selectedScope?.Detail ?? "";
+    public string ScopeSummary => ArrangementPicker.Choices.Skip(1).Count(c => c.IsChecked) is var n and > 1
+        ? $"{n} arrangements: {n * 1325} notes · {n * 6} chords"
+        : _selectedScope?.Detail ?? "";
 
     public IReadOnlyList<IAiChatTurn> Turns
     {

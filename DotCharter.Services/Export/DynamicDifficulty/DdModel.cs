@@ -236,6 +236,10 @@ internal sealed class DdChordTemplate
 
     /// <summary>The element it was read from, written back unchanged; null for a new one.</summary>
     public XElement? Source { get; init; }
+
+    /// <summary>The authored template this one is a reduced grip of: set on the copies the
+    /// muted-string cleanup mints (and the generator cuts for a shape over one), else null.</summary>
+    public DdChordTemplate? ReducedFrom { get; init; }
 }
 
 internal sealed class DdLevel
@@ -245,6 +249,10 @@ internal sealed class DdLevel
     public int Difficulty { get; }
     public List<DdNote> Notes { get; init; } = [];
     public List<DdChord> Chords { get; init; } = [];
+
+    /// <summary>Position-only mute events, retained verbatim including unknown XML attributes.</summary>
+    public List<XElement> FretHandMutes { get; init; } = [];
+
     public List<DdAnchor> Anchors { get; init; } = [];
     public List<DdHandShape> HandShapes { get; init; } = [];
 }

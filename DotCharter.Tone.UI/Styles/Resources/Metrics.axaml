@@ -43,11 +43,10 @@
         <!-- Dense-form metrics (0.36 inspector redesign §11.3). PaddingCard
              (16,12) is too generous for a ~420 px dock pane and PaddingRow
              (12,8) means "list-row card", so the inspector's card interior gets
-             its own step. The label rail and field-row height were hard-coded
+             its own step. The field-row height (and a label rail, retired with #751) was hard-coded
              (74 / 28) in a dozen places across the two inspector tabs; 74
              already truncated Inspector_Picking in de-DE and 28 reads squished
              next to a NumericUpDown. -->
-        <x:Double x:Key="FieldLabelRail">84</x:Double>
         <x:Double x:Key="RowHeightField">32</x:Double>
         <Thickness x:Key="GapChip">0,0,4,4</Thickness>            <!-- chip cluster gaps -->
 

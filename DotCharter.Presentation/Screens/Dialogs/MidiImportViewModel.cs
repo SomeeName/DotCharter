@@ -1,6 +1,5 @@
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
-using DotCharter.Core.Domain.Project;
 using DotCharter.Core.Utilities;
 using DotCharter.Localization;
 using DotCharter.Presentation.Contracts.Dialogs;
@@ -214,7 +213,7 @@ public sealed class MidiImportViewModel : DialogViewModel<bool>, IMidiImportScre
         var notes = attempt.Draft?.Notes.Count ?? 0;
         HasDraft = notes > 0;
         Summary = HasDraft
-            ? _localization.Format("Dialog_MidiImport_Summary", notes)
+            ? _localization.Plural("Dialog_MidiImport_SummaryOne", "Dialog_MidiImport_Summary", notes)
             : _localization["Dialog_MidiImport_NothingFound"];
     }
 
@@ -270,30 +269,10 @@ public sealed class MidiImportViewModel : DialogViewModel<bool>, IMidiImportScre
         var arrangement = _state.ActiveArrangement;
         if (arrangement == null) return MidiDraftOptions.StandardGuitarMidi;
 
-        var open = BaseOpenStringMidi(arrangement.ArrangementType,
-            Math.Clamp(arrangement.StringCount, 4, StandardOpenStrings.MaxStringCount));
-
-        // GetOffsets…, not TryGet…: an unmapped pitch is DROPPED from the draft,
-        // so a standard-tuning assumption beats no mapping at all.
-        var offsets = arrangement.TuningPitches.Count >= open.Length
-            ? arrangement.TuningPitches.Take(open.Length).Select(t => t.Step).ToArray()
-            : TuningUtilities.GetOffsetsForTuningType(arrangement.TuningType, open.Length);
-
-        for (var i = 0; i < open.Length; i++) open[i] += i < offsets.Length ? offsets[i] : 0;
-        return open;
-    }
-
-    /// <summary>
-    ///     The standard open strings the arrangement's offsets are measured against, as the
-    ///     app sounds them (<see cref="SoundingPitch.OpenStringMidi" />): the guitar row an
-    ///     octave down for a bass. A 5-string bass is therefore E A D G B and a 6-string
-    ///     E A D G B E — a B E A D G bass carries <c>-5 -5 -5 -5 -4</c>.
-    /// </summary>
-    private static int[] BaseOpenStringMidi(ArrangementType type, int stringCount)
-    {
-        var open = StandardOpenStrings.SemitonesAboveLowE(stringCount);
-        var lowE = StandardOpenStrings.GuitarLowEMidi - (type == ArrangementType.Bass ? 12 : 0);
-        for (var i = 0; i < open.Length; i++) open[i] += lowE;
+        var stringCount = Math.Clamp(arrangement.StringCount, 4, StandardOpenStrings.MaxStringCount);
+        var open = new int[stringCount];
+        for (var i = 0; i < open.Length; i++)
+            open[i] = SoundingPitch.OpenSoundingMidi(arrangement, i) ?? 0;
         return open;
     }
 

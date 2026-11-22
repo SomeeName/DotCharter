@@ -1,0 +1,129 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:shell="using:DotCharter.UI.Views.Shell"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.IssuesDetailView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Issues tab's "Fixes" card (design D): the finding last jumped to (IssueAiViewModel.Issue), its
+         severity and sentence, and every way to act on it:
+           * Jump (seek and select it again) and Explain (the AI chat explains it, writes nothing);
+           * the fix menu (#618, IssueFixViewModel): the default fix first — re-finger as the arrangement plays
+             the grip under this anchor, else move the anchor; the tone change "a 16th note earlier" for I30 —
+             and the alternative under it, each one undo step; a guard that blocks the fix prints why. A finding
+             no rule can repair shows the default fix disabled, with that reason;
+           * the AI row (#803): fix the phrase's findings, or this one, as a scoped pass held for review; a
+             finding no AI job can fix says so instead. -->
+    <StackPanel Spacing="{StaticResource FireSpaceXs}">
+        <StackPanel x:Name="IssueDetailNone" Spacing="{StaticResource FireSpaceXs}" IsVisible="{Binding !Issues.IssueAi.HasIssue}">
+            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" Text="{localization:Loc Issues_Detail_Title}" />
+            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap" Text="{localization:Loc Issues_Detail_None}" />
+        </StackPanel>
+
+        <StackPanel x:Name="IssueDetail" Spacing="{StaticResource FireSpaceXs}" IsVisible="{Binding Issues.IssueAi.HasIssue}">
+            <TextBlock x:Name="IssueDetailMessage" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" TextWrapping="Wrap"
+                       TextTrimming="None"
+                       Text="{Binding Issues.IssueAi.Issue, Converter={x:Static converters:IssueMessageConverter.Instance}}" />
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                <TextBlock x:Name="IssueDetailSeverity" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody"
+                           Text="{Binding Issues.IssueAi.Issue.Severity, Converter={x:Static converters:SeverityToLabelConverter.Instance}, FallbackValue={x:Null}}"
+                           Foreground="{Binding Issues.IssueAi.Issue.Severity, Converter={x:Static converters:SeverityToBrushConverter.Instance}, FallbackValue={x:Null}}" />
+                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp" Text="{Binding Issues.IssueAi.Issue.Code, FallbackValue={x:Null}}" />
+            </StackPanel>
+            <!-- design D's status: the whole-project check's verdict on this finding -->
+            <TextBlock x:Name="IssueDetailStatus" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody"
+                       Foreground="{DynamicResource FireWarning}" Text="{Binding Issues.IssueStatus}" />
+
+            <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+                <Button Grid.Column="0" x:Name="IssueDetailJump" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                        Content="{localization:Loc Issues_Detail_Jump}"
+                        AutomationProperties.Name="{localization:Loc Issues_Detail_Jump}"
+                        ToolTip.Tip="{localization:Loc Issues_Detail_JumpTip}"
+                        Command="{Binding Issues.JumpToIssueCommand}"
+                        CommandParameter="{Binding Issues.IssueAi.Issue}" />
+                <!-- design D's offline Explain: the rule, the finding, its status and the remedy, no AI needed -->
+                <Button Grid.Column="1" x:Name="IssueRuleInfoButton" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                        Content="{localization:Loc Inspector_Issues_About}"
+                        AutomationProperties.Name="{localization:Loc Inspector_Issues_About}"
+                        ToolTip.Tip="{localization:Loc Inspector_Issues_AboutTip}">
+                    <Button.Flyout>
+                        <shell:PrewarmableFlyout Placement="BottomEdgeAlignedRight">
+                            <StackPanel x:Name="IssueRuleInfo" Spacing="{StaticResource FireSpaceXs}" MaxWidth="300">
+                                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" TextWrapping="Wrap" TextTrimming="None"
+                                           Text="{Binding Issues.IssueAi.Issue, Converter={x:Static converters:IssueMessageConverter.Instance}}" />
+                                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp" Text="{Binding Issues.IssueAi.Issue.Code, FallbackValue={x:Null}}" />
+                                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody" Foreground="{DynamicResource FireWarning}"
+                                           Text="{Binding Issues.IssueStatus}" />
+                                <TextBlock x:Name="IssueRuleSuggestion" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                                           Text="{Binding Issues.IssueSuggestion}" />
+                                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                                           IsVisible="{Binding Issues.IssueFix.HasAlternative}" Text="{Binding Issues.IssueFix.AlternativeTip}" />
+                                <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                                        Content="{localization:Loc Inspector_Issues_AskAssistant}"
+                                        AutomationProperties.Name="{localization:Loc Inspector_Issues_AskAssistant}"
+                                        ToolTip.Tip="{localization:Loc Inspector_IssueAi_ExplainTip}"
+                                        Command="{Binding Issues.IssueAi.ExplainCommand}" />
+                            </StackPanel>
+                        </shell:PrewarmableFlyout>
+                    </Button.Flyout>
+                </Button>
+                <Button Grid.Column="2" x:Name="IssueAiExplainButton" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                        Content="{localization:Loc Inspector_IssueAi_Explain}"
+                        ToolTip.Tip="{localization:Loc Inspector_IssueAi_ExplainTip}"
+                        AutomationProperties.Name="{localization:Loc Inspector_IssueAi_Explain}"
+                        Command="{Binding Issues.IssueAi.ExplainCommand}" />
+            </Grid>
+
+            <!-- the fix menu -->
+            <StackPanel x:Name="IssueFixRow" Spacing="{StaticResource FireSpaceXs}" IsVisible="{Binding Issues.IssueFix.HasFix}">
+                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap" Text="{Binding Issues.IssueFix.Title}" />
+                <Button x:Name="IssueFixDefaultButton" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary"
+                        HorizontalAlignment="Stretch"
+                        Content="{Binding Issues.IssueFix.DefaultLabel}"
+                        ToolTip.Tip="{Binding Issues.IssueFix.DefaultTip}"
+                        AutomationProperties.Name="{Binding Issues.IssueFix.DefaultLabel}"
+                        Command="{Binding Issues.IssueFix.ApplyDefaultCommand}" />
+                <TextBlock x:Name="IssueFixBlockedReason" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                           Foreground="{DynamicResource FireWarning}"
+                           IsVisible="{Binding Issues.IssueFix.IsBlocked}"
+                           Text="{Binding Issues.IssueFix.BlockedReason}" />
+                <Button x:Name="IssueFixAlternativeButton" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                        HorizontalAlignment="Stretch"
+                        IsVisible="{Binding Issues.IssueFix.HasAlternative}"
+                        Content="{Binding Issues.IssueFix.AlternativeLabel}"
+                        ToolTip.Tip="{Binding Issues.IssueFix.AlternativeTip}"
+                        AutomationProperties.Name="{Binding Issues.IssueFix.AlternativeLabel}"
+                        Command="{Binding Issues.IssueFix.ApplyAlternativeCommand}" />
+            </StackPanel>
+            <Button x:Name="IssueFixNoneButton" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    IsVisible="{Binding !Issues.IssueFix.HasFix}" IsEnabled="False"
+                    Content="{localization:Loc Issues_Detail_NoFix}"
+                    AutomationProperties.Name="{localization:Loc Issues_Detail_NoFix}"
+                    ToolTip.Tip="{localization:Loc Issues_Detail_NoFixTip}" ToolTip.ShowOnDisabled="True" />
+
+            <!-- the AI row -->
+            <StackPanel x:Name="IssueAiRow" Spacing="{StaticResource FireSpaceXs}">
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceXs}" IsVisible="{Binding Issues.IssueAi.CanFix}">
+                    <Button Grid.Column="0" x:Name="IssueAiFixPhraseButton" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                            HorizontalAlignment="Stretch"
+                            IsEnabled="{Binding Issues.IssueAi.HasPhraseFix}"
+                            Content="{Binding Issues.IssueAi.FixPhraseLabel}"
+                            ToolTip.Tip="{localization:Loc Inspector_IssueAi_FixPhraseTip}"
+                            AutomationProperties.Name="{Binding Issues.IssueAi.FixPhraseLabel}"
+                            IsVisible="{Binding Issues.IssueAi.HasPhraseFix}"
+                            Command="{Binding Issues.IssueAi.FixPhraseCommand}" />
+                    <Button Grid.Column="1" x:Name="IssueAiFixButton" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                            HorizontalAlignment="Stretch"
+                            Content="{localization:Loc Inspector_IssueAi_Fix}"
+                            ToolTip.Tip="{localization:Loc Inspector_IssueAi_FixTip}"
+                            AutomationProperties.Name="{localization:Loc Inspector_IssueAi_Fix}"
+                            Command="{Binding Issues.IssueAi.FixCommand}" />
+                </Grid>
+                <TextBlock x:Name="IssueAiNoJobText" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                           IsVisible="{Binding Issues.IssueAi.HasNoJob}"
+                           Text="{Binding Issues.IssueAi.NoJobText}" />
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

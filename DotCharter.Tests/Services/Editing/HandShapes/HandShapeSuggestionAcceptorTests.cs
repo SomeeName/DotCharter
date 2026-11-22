@@ -61,6 +61,18 @@ public sealed class HandShapeSuggestionAcceptorTests
     }
 
     [Fact]
+    public void AcceptingAFlatTuningSuggestion_NamesTheMintWithFlats()
+    {
+        var (h, level, acceptor) = Chart();
+        h.Arrangement.Tuning = ["Eb", "Ab", "Db", "Gb", "Bb", "Eb"];
+        var suggestion = HandShapeSuggester.Suggest(h.Arrangement, level)[1];
+
+        Assert.Equal(1, acceptor.Accept(h.Arrangement, level, [suggestion], arpeggio: false));
+
+        Assert.Equal("Abmin", Assert.Single(h.Arrangement.ChordTemplates).Name);
+    }
+
+    [Fact]
     public void APlainAccept_ReusesTheDeclaredShape_AndMintsNothing()
     {
         var (h, level, acceptor) = Chart();

@@ -20,7 +20,8 @@ public sealed class AppCommand
         Action execute,
         Func<KeyChord>? shortcut = null,
         Func<bool>? canExecute = null,
-        string? usageId = null)
+        string? usageId = null,
+        Func<string?>? disabledReason = null)
     {
         Id = id;
         Title = title;
@@ -28,6 +29,7 @@ public sealed class AppCommand
         UsageId = string.IsNullOrWhiteSpace(usageId) ? id : usageId;
         Shortcut = shortcut ?? (static () => KeyChord.None);
         CanExecute = canExecute ?? (static () => true);
+        DisabledReason = disabledReason ?? (static () => null);
 
         // Counting HERE rather than at each call site is what makes the usage
         // statistics complete by construction: a command that runs without being
@@ -66,4 +68,7 @@ public sealed class AppCommand
     public Action Execute { get; }
     public Func<KeyChord> Shortcut { get; }
     public Func<bool> CanExecute { get; }
+
+    /// <summary>Why the command is unavailable right now (null when it is available) — the palette's disabled-row subtitle.</summary>
+    public Func<string?> DisabledReason { get; }
 }

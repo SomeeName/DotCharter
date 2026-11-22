@@ -1,17 +1,17 @@
 using System.Collections.Concurrent;
+using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Services.Export.Audio;
 using DotCharter.Services.Export.Charter;
 using DotCharter.Services.Export.DlcBuilder;
 using DotCharter.Services.Export.DynamicDifficulty;
 using DotCharter.Services.Export.Validation;
-using DotCharter.Services.Import.Youtube;
 using DotCharter.Services.Parsing.Eof;
 using DotCharter.Services.Parsing.Rscp;
 
 namespace DotCharter.Services.Export;
 
 /// <summary>
-///     Writes the derived artifacts that sit alongside a saved project: a Charter
+///     Writes the derived artifacts that sit in the saved project's export folder: a Charter
 ///     <c>.rscp</c>, an Editor on Fire <c>.eof</c>, a DLC Builder <c>.rs2dlc</c> and a
 ///     Rocksmith <c>.psarc</c>.
 /// </summary>
@@ -23,7 +23,8 @@ namespace DotCharter.Services.Export;
 ///         Derived does NOT mean disposable. The <c>.rscp</c>, the <c>.eof</c> and the
 ///         <c>.rs2dlc</c> are three other editors' own project formats, so all three go through
 ///         <see cref="CompanionOwnership" />: a save overwrites only the file it
-///         wrote itself. The <c>.psarc</c> and the XML bundle are unconditional.
+///         wrote itself. The <c>.psarc</c> primary write and XML bundle are unconditional;
+///         removing an alternate package requires this instance's publication record.
 ///     </para>
 ///     <para>
 ///         The <c>.eof</c> is cheap (a plain binary write) and goes on every save.
@@ -34,7 +35,7 @@ namespace DotCharter.Services.Export;
 public interface ISaveCompanionService
 {
     /// <summary>
-    ///     Writes the Charter-compatible <c>&lt;project&gt;.rscp</c> beside the <c>.dcproj</c>:
+    ///     Writes the Charter-compatible <c>&lt;project&gt;.rscp</c> in <c>export/</c>:
     ///     the project's XML cut down to what Charter's model knows
     ///     (<see cref="CharterProjectSchema" />), so the folder opens in Charter too. Returns
     ///     the path, or null when the project is play-only, when the project path is itself
@@ -48,7 +49,7 @@ public interface ISaveCompanionService
     string? WriteCharterProject(string projectPath, ChartProject snapshot) => null;
 
     /// <summary>
-    ///     Writes <c>&lt;project&gt;.eof</c> next to the project and, when enabled,
+    ///     Writes <c>&lt;project&gt;.eof</c> in <c>export/</c> and, when enabled,
     ///     makes sure the <c>.ogg</c> it references actually exists there — EOF
     ///     resolves its audio relative to the folder the <c>.eof</c> lives in, and
     ///     prompts when it is missing. Returns the path, or null when disabled — or
@@ -57,7 +58,7 @@ public interface ISaveCompanionService
     string? WriteEof(string projectPath, ChartProject snapshot);
 
     /// <summary>
-    ///     Writes the DLC Builder project file into the <c>DTRS XML</c> bundle, so
+    ///     Writes the DLC Builder project file beside the <c>DTRS XML</c> bundle, so
     ///     the RS-XML the bundle already contains is openable in DLC Builder — and
     ///     droppable onto CustomsForge's "Import rs2dlc" control — without a manual
     ///     export step. Returns the path, or null when disabled, when the bundle is
@@ -66,13 +67,13 @@ public interface ISaveCompanionService
     /// </summary>
     /// <remarks>
     ///     Must run AFTER <c>IProjectDocumentService.SaveDlcBuilderXmlBundle</c>: it
-    ///     writes into the folder that method swaps into place, and it names the
+    ///     references the folder that method swaps into place, and it names the
     ///     files that method wrote.
     /// </remarks>
     string? WriteDlcBuilderProject(string projectPath, ChartProject snapshot, double? audioLengthMs);
 
     /// <summary>
-    ///     Builds <c>&lt;DlcKey&gt;_p.psarc</c> next to the project. Returns the path,
+    ///     Builds the shared artist/title/version release name in <c>export/</c>. Returns the path,
     ///     or null when disabled or when the project has no usable audio.
     /// </summary>
     /// <remarks>
@@ -89,19 +90,28 @@ public interface ISaveCompanionService
 
 public sealed class SaveCompanionService : ISaveCompanionService
 {
-    /// <summary>Upper bound on the EOF companion's ogg transcode. Generous for a
-    /// full song, but it MUST be bounded — this runs inside the save worker.</summary>
-    private static readonly TimeSpan EofAudioTranscodeTimeout = TimeSpan.FromMinutes(5);
-
     private readonly IConfigurationService _config;
     private readonly IAppLogger _logger;
+    private readonly Action<string> _recycle;
     private readonly RocksmithPackageBuilder _builder;
+    private readonly Func<string, PcmAudio> _decodeVolume;
+    private readonly Func<string, IReadOnlyList<string>, TimeSpan, MediaProcess.MediaProcessResult> _runMedia;
 
     /// <summary>The last drop summary logged per companion path, so an unchanged loss is logged once, not per save.</summary>
     private readonly ConcurrentDictionary<string, string> _charterDropsLogged = new(StringComparer.OrdinalIgnoreCase);
 
     public SaveCompanionService(IConfigurationService config, IAppLogger logger)
+        : this(config, logger, (executable, arguments, timeout) => MediaProcess.Run(executable, arguments, timeout))
     {
+    }
+
+    internal SaveCompanionService(IConfigurationService config, IAppLogger logger,
+        Func<string, IReadOnlyList<string>, TimeSpan, MediaProcess.MediaProcessResult>? runMedia = null,
+        Func<string, PcmAudio>? decodeVolume = null, Action<string>? recycle = null)
+    {
+        _runMedia = runMedia ?? ((executable, arguments, timeout) => MediaProcess.Run(executable, arguments, timeout));
+        _recycle = recycle ?? RecycleBin.Remove;
+        _decodeVolume = decodeVolume ?? (path => PcmAudioLoader.Load(path, []));
         _config = config;
         _logger = logger;
         _builder = new RocksmithPackageBuilder(logger);
@@ -124,12 +134,15 @@ public sealed class SaveCompanionService : ISaveCompanionService
         ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
         ArgumentNullException.ThrowIfNull(snapshot);
 
-        var companionPath = CharterRscp.CompanionPath(projectPath);
+        if (CharterRscp.IsCharterProject(projectPath)) return null;
+        var companionPath = ProjectFolderLayout.CompanionPath(projectPath, ".rscp");
         if (string.Equals(Path.GetFullPath(companionPath), Path.GetFullPath(projectPath), StringComparison.OrdinalIgnoreCase))
             return null;
         if (RefusedAsPlayOnly(snapshot, "Charter .rscp companion")) return null;
 
-        var doc = CharterRscpProjection.Build(snapshot, out var dropped);
+        var config = _config.LoadAppConfig();
+        EnsureCompanionMedia(projectPath, snapshot, null, config);
+        var doc = CharterRscpProjection.Build(ExportCompanionMedia.Snapshot(snapshot), out var dropped);
 
         // Charter's own project format: a charter who opened and saved it in Charter,
         // or a Charter project this one was imported from, is never overwritten.
@@ -166,8 +179,9 @@ public sealed class SaveCompanionService : ISaveCompanionService
         if (!config.SaveCompanionEof) return null;
         if (RefusedAsPlayOnly(snapshot, "SaveCompanionEof")) return null;
 
-        var directory = ProjectDirectory(projectPath);
-        var eofPath = Path.Combine(directory, Path.GetFileNameWithoutExtension(projectPath) + ".eof");
+        var directory = ProjectFolderLayout.ExportDirectory(projectPath);
+        var eofPath = ProjectFolderLayout.CompanionPath(projectPath, ".eof");
+        if (config.SaveCompanionEofAudio) EnsureCompanionMedia(projectPath, snapshot, null, config);
 
         // Same rule as the .rs2dlc below: the .eof is Editor on Fire's own project
         // format, so a charter who opened and edited it there must not lose that
@@ -175,15 +189,14 @@ public sealed class SaveCompanionService : ISaveCompanionService
         EofExportResult? result = null;
         if (!CompanionOwnership.WriteIfUnmodified(eofPath,
                 target => result = EofExporter.ExportToFile(
-                    snapshot, target, VocalsExportPolicy.IncludeVocals(config)),
+                    ExportCompanionMedia.Snapshot(snapshot), target, VocalsExportPolicy.IncludeVocals(config)),
                 out var skipReason))
         {
             _logger.Info(AppLogCategory.Project,
                 $"Leaving the .eof alone: {skipReason}. Path='{eofPath}'.");
             // The .eof we did NOT write still resolves its audio beside itself, so
             // the sibling ogg stays this companion's job.
-            if (config.SaveCompanionEofAudio)
-                TryEnsureEofAudio(directory, snapshot.AudioFileName, config.FfmpegPath);
+
             return null;
         }
 
@@ -195,8 +208,7 @@ public sealed class SaveCompanionService : ISaveCompanionService
             $"approximated={losses.Approximated}, dropped={losses.Dropped}" +
             (losses.IsLossless ? "." : $" ({losses.LogLine()})."));
 
-        if (config.SaveCompanionEofAudio)
-            TryEnsureEofAudio(directory, snapshot.AudioFileName, config.FfmpegPath);
+
 
         return eofPath;
     }
@@ -225,15 +237,14 @@ public sealed class SaveCompanionService : ISaveCompanionService
 
         // Reference what actually resolved on disk, by name relative to the
         // project folder — the builder turns that into the bundle-relative "..\".
-        var audio = ResolveAudio(directory, snapshot.AudioFileName);
-        var coverArt = ResolveCoverArt(directory, snapshot.Chart.CoverArtPath);
-
-        var dto = DlcBuilderProjectFile.Build(config, snapshot, directory, audio, coverArt, audioLengthMs);
+        var media = EnsureCompanionMedia(projectPath, snapshot, audioLengthMs, config);
+        directory = ProjectFolderLayout.ExportDirectory(projectPath);
+        var dto = DlcBuilderProjectFile.Build(config, snapshot, directory, media.Audio, media.Cover, audioLengthMs);
 
         // The PROJECT ROOT, not the bundle: SaveDlcBuilderXmlBundle swaps the
         // bundle in by renaming the old one aside, so a file written inside it is
         // moved to 'DTRS XML.old' on the next save and deleted on the one after.
-        var path = DlcBuilderProjectFile.PathIn(directory, snapshot);
+        var path = ProjectFolderLayout.CompanionPath(projectPath, ".rs2dlc");
 
         // The .rs2dlc is DLC Builder's own project format, so the charter opens it
         // and assigns TONES there — which we always write empty. Overwrite only the
@@ -249,6 +260,23 @@ public sealed class SaveCompanionService : ISaveCompanionService
         _logger.Info(AppLogCategory.Project,
             $"DLC Builder project written. Path='{path}', arrangements={dto.Arrangements.Length}, key='{dto.DlcKey}'.");
         return path;
+    }
+
+    /// <summary>
+    ///     This song's own volumes: what the project holds, measured first (off the UI thread) when unset or measured
+    ///     from other audio. The snapshot is a copy, so a measurement made here is not kept; attaching the audio and
+    ///     exporting keep it in the project.
+    /// </summary>
+    internal async Task<(double Audio, double Preview)> VolumesForAsync(ChartProject snapshot, string? audioPath)
+    {
+        if (!string.IsNullOrWhiteSpace(audioPath) && File.Exists(audioPath))
+        {
+            var targetLufs = _config.LoadAppConfig().ExportAutoVolumeTargetLufs;
+            await Task.Run(() => ProjectVolumes.Measure(snapshot.Chart, audioPath, null, null,
+                warning => _logger.Warning(AppLogCategory.Project, warning), _decodeVolume, targetLufs));
+        }
+
+        return (ProjectVolumes.AudioOrDefault(snapshot.Chart), ProjectVolumes.PreviewOrDefault(snapshot.Chart));
     }
 
     public async Task<string?> BuildPsarcAsync(
@@ -297,9 +325,8 @@ public sealed class SaveCompanionService : ISaveCompanionService
             return null;
         }
 
-        var dlcKey = RocksmithDlcKey.Create(
-            snapshot.Chart.Artist ?? "", snapshot.Chart.SongName ?? "");
-        var output = Path.Combine(directory, $"{dlcKey}_p.psarc");
+        var (audioVolume, previewVolume) = await VolumesForAsync(snapshot, audio);
+        var output = Path.Combine(ProjectFolderLayout.ExportDirectory(projectPath), ExportPathDefaults.PackageFileName(snapshot));
 
         // Build to a temp file and swap, so a cancelled or failed build never
         // replaces a good psarc with a truncated one.
@@ -310,6 +337,7 @@ public sealed class SaveCompanionService : ISaveCompanionService
             var result = await _builder.BuildPsarcAsync(snapshot, new RocksmithBuildOptions
             {
                 OutputPath = staging,
+                ProjectDirectory = directory,
                 // A stale 7-string chord sidecar is looked for beside the FINAL package.
                 ChordSidecarPackagePath = output,
                 AudioPath = audio,
@@ -321,10 +349,11 @@ public sealed class SaveCompanionService : ISaveCompanionService
                 AudioCodec = ParseCodec(config.SaveCompanionPsarcCodec),
                 AppId = string.IsNullOrWhiteSpace(config.LastExportAppId) ? "248750" : config.LastExportAppId,
                 FallbackCharter = config.DefaultCharterName,
-                AudioVolume = config.ExportAudioVolume,
-                PreviewVolume = config.ExportPreviewVolume,
+                AudioVolume = audioVolume,
+                PreviewVolume = previewVolume,
                 IncludeVocals = VocalsExportPolicy.IncludeVocals(config),
-                DlcBuilderSteps = DlcBuilderSteps.FromConfig(config)
+                DlcBuilderSteps = DlcBuilderSteps.FromConfig(config),
+                ChordNameOptions = DotCharter.Services.Editing.ChordShapes.NewChordNames.OptionsFor(config)
             }, progress: null, cancellationToken);
 
             // The build's warnings are the ONLY notice this path can give of a
@@ -338,7 +367,15 @@ public sealed class SaveCompanionService : ISaveCompanionService
                 _logger.Warning(AppLogCategory.Project, $"Companion psarc: {warning}");
 
             cancellationToken.ThrowIfCancellationRequested();
-            AtomicFile.ReplaceWithRetry(staging, output);
+            output = Path.Combine(Path.GetDirectoryName(output)!,
+                RocksmithPackageName.For(snapshot, snapshot.Chart.Version, extended: result.IsPsxr));
+            if (!CompanionOwnership.WriteIfUnmodified(output,
+                destination => AtomicFile.ReplaceWithRetry(result.PsarcPath, destination), out var reason))
+            {
+                _logger.Warning(AppLogCategory.Project, $"Companion psarc was left in place: {reason}.");
+                return null;
+            }
+            RemovePublishedSiblings(output, snapshot);
 
             _logger.Info(AppLogCategory.Project,
                 $"Companion psarc built. Path='{output}', warnings={result.Warnings.Count}.");
@@ -347,101 +384,49 @@ public sealed class SaveCompanionService : ISaveCompanionService
         finally
         {
             // best-effort cleanup; the real error propagates
-            BestEffortDelete.File(staging);
+            if (File.Exists(staging)) _recycle(staging);
         }
     }
 
-    /// <summary>
-    ///     EOF references its audio as <c>&lt;stem&gt;.ogg</c> relative to the project
-    ///     folder (see <see cref="EofExporter" />). Make that file exist so EOF opens
-    ///     the project without prompting for audio.
-    /// </summary>
-    private void TryEnsureEofAudio(string directory, string audioFileName, string? configuredFfmpeg)
+    private void RemovePublishedSiblings(string output, ChartProject snapshot)
     {
-        try
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            var source = ResolveAudio(directory, audioFileName);
-            if (source is null) return;
-
-            var target = Path.Combine(
-                directory, Path.GetFileNameWithoutExtension(source) + ".ogg");
-
-            if (string.Equals(source, target, StringComparison.OrdinalIgnoreCase)) return;
-            if (File.Exists(target) &&
-                File.GetLastWriteTimeUtc(target) >= File.GetLastWriteTimeUtc(source))
-            {
-                return;
-            }
-
-            var ffmpeg = MediaToolResolver.Resolve(
-                "ffmpeg", AppContext.BaseDirectory, configuredFfmpeg,
-                MediaToolResolver.CurrentPathDirs(), File.Exists, OperatingSystem.IsWindows());
-
-            if (ffmpeg is null)
-            {
-                _logger.Info(AppLogCategory.Project,
-                    $"EOF companion: ffmpeg not found, so '{Path.GetFileName(target)}' was not created. " +
-                    "Editor on Fire will prompt for the audio when opening the project.");
-                return;
-            }
-
-            // Drained + bounded: this runs INSIDE the save worker, so an ffmpeg
-            // that blocks on a full stderr pipe would wedge every later save.
-            var result = MediaProcess.Run(
-                ffmpeg,
-                [
-                    "-hide_banner", "-loglevel", "error", "-y",
-                    "-i", source,
-                    .. FfmpegAudioOnly.Args,
-                    "-c:a", "libvorbis", "-q:a", "5",
-                    target
-                ],
-                EofAudioTranscodeTimeout);
-
-            if (result.Succeeded)
-            {
-                _logger.Info(AppLogCategory.Project, $"EOF companion audio written. Path='{target}'.");
-            }
-            else if (result.ExitCode is null)
-            {
-                _logger.Warning(AppLogCategory.Project,
-                    $"EOF companion audio transcode timed out after {EofAudioTranscodeTimeout.TotalSeconds:0}s " +
-                    $"and was killed. Path='{target}'.");
-            }
-            else
-            {
-                _logger.Warning(AppLogCategory.Project,
-                    $"EOF companion audio transcode failed (exit {result.ExitCode}). Path='{target}'. " +
-                    $"{result.StandardError.Trim()}");
-            }
-        }
-        catch (Exception ex)
+            RocksmithDlcKey.Create(snapshot.Chart.Artist ?? "", snapshot.Chart.SongName ?? "")
+        };
+        if (!string.IsNullOrWhiteSpace(snapshot.Chart.DlcKey) && !RocksmithDlcKey.IsInvalidTypedKey(snapshot.Chart.DlcKey))
+            keys.Add(new string(snapshot.Chart.DlcKey.Where(char.IsAsciiLetterOrDigit).ToArray()));
+        foreach (var sibling in Directory.EnumerateFiles(Path.GetDirectoryName(output)!, "*.psarc"))
         {
-            // Audio is a convenience — never let it take down the .eof write.
-            _logger.Warning(AppLogCategory.Project, $"EOF companion audio could not be prepared: {ex.Message}");
+            if (sibling.Equals(output, StringComparison.OrdinalIgnoreCase) ||
+                !sibling.EndsWith("_p.psarc", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            var legacy = keys.Any(key => Path.GetFileName(sibling).Equals(key + "_p.psarc", StringComparison.OrdinalIgnoreCase) ||
+                Path.GetFileName(sibling).Equals(key + "_rsxr_p.psarc", StringComparison.OrdinalIgnoreCase));
+            if (!legacy && !RocksmithPackageName.IsReleaseFor(snapshot, sibling)) continue;
+            if (CompanionOwnership.IsUnmodified(sibling))
+            {
+                _recycle(sibling);
+                if (!File.Exists(sibling)) CompanionOwnership.Forget(sibling);
+                continue;
+            }
+            _logger.Warning(AppLogCategory.Project,
+                $"Companion psarc: '{sibling}' was left in place; it holds an older package of this song.");
         }
     }
+
+    private (string? Audio, string? Cover) EnsureCompanionMedia(string projectPath, ChartProject snapshot,
+        double? audioLengthMs, AppConfig config) =>
+        new ExportCompanionMedia(_logger, _runMedia).Ensure(projectPath, snapshot, audioLengthMs, config);
 
     /// <summary>The project's audio on disk. AudioFileName is normally a bare file
     /// name resolved against the project folder, but may be an absolute path.</summary>
-    private static string? ResolveAudio(string directory, string audioFileName)
+    internal static string? ResolveAudio(string directory, string audioFileName, Func<string, bool>? fileExists = null)
     {
-        if (string.IsNullOrWhiteSpace(audioFileName)) return null;
-
-        var full = Path.IsPathRooted(audioFileName)
-            ? audioFileName
-            : Path.Combine(directory, audioFileName);
-
-        if (File.Exists(full)) return full;
-
-        // The referenced file may be gone but a sibling encode of it may not be.
-        foreach (var extension in new[] { ".wem", ".wav", ".ogg", ".mp3", ".flac" })
-        {
-            var candidate = Path.ChangeExtension(full, extension);
-            if (File.Exists(candidate)) return candidate;
-        }
-
-        return null;
+        if (!ProjectRelativePath.IsReadableMediaReference(audioFileName)) return null;
+        return ProjectAudioLocator.TryResolve(Path.Combine(directory, "project.dcproj"), audioFileName, fileExists ?? File.Exists);
     }
 
     /// <summary>The chart's cover art on disk. CoverArtPath is a bare file name

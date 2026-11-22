@@ -28,7 +28,7 @@ public sealed class MirrorRocksmithStarterTests
 
     private MirrorRocksmithStarter Starter(bool steamRunning = true, string mirrorRoot = Mirror) =>
         new(new TonelabGameMirror(_disk, mirrorRoot), () => Game, () => steamRunning, _creator,
-            () => new Hashtable { ["PATH"] = @"C:\Windows", ["SteamAppId"] = "1" });
+            () => new Hashtable { ["PATH"] = @"C:\Windows", ["SteamAppId"] = "1" }, null);
 
     [Fact]
     public async Task ItStartsTheMirrorsExe_Hidden_InTheMirror_WithSteamsAppId()
@@ -48,6 +48,17 @@ public sealed class MirrorRocksmithStarterTests
         Assert.Equal("221680", request.Environment["SteamGameId"]);
         Assert.Equal(@"C:\Windows", request.Environment["PATH"]);
         Assert.True(_disk.FileExists(Path.Combine(Mirror, "RS_ASIO.ini")), "the mirror is brought up to date before the start");
+    }
+
+    [Fact]
+    public async Task EveryStart_UsesTheMirror_NothingIsRememberedBetweenStarts()
+    {
+        var starter = new MirrorRocksmithStarter(new TonelabGameMirror(_disk, Mirror), () => Game, () => true, _creator, () => new Hashtable(), null);
+
+        Assert.Equal(RocksmithStartStatus.Started, (await starter.StartAsync(Ct)).Status);
+        Assert.Equal(RocksmithStartStatus.Started, (await starter.StartAsync(Ct)).Status);
+        Assert.Equal(2, _creator.Requests.Count);
+        Assert.False(_disk.FileExists(Path.Combine(Path.GetDirectoryName(Mirror)!, "dotcharter-mirror-failed.txt")));
     }
 
     [Fact]

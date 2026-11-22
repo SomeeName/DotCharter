@@ -179,6 +179,7 @@ public sealed class FireClassReachabilityTests
                 {
                     if (!declaredBy.TryGetValue((element.Name.LocalName, cls), out var views)) continue;
                     worn++;
+                    if (ViewStyleScopes.HasLocalSelector(element, (element.Name.LocalName, cls))) continue;
                     if (views.Any(v => ViewStyleScopes.Reaches(v, file, element))) continue;
                     // A wearer the markup cannot place is judged only for a grammar of the
                     // RIG (a DotCharter.Tone.UI view, every one of them derivably hosted): such
@@ -209,6 +210,45 @@ public sealed class FireClassReachabilityTests
         Assert.True(offenders.Count == 0,
             "A class whose only selector is in a view's own Styles is a silent no-op outside that view (#242):\n  " +
             string.Join("\n  ", offenders));
+    }
+
+    [Theory]
+    [InlineData("inside", true)]
+    [InlineData("outside", false)]
+    public void LocalStyleRulesReachTheirChildrenButNotTheirSiblings(string name, bool expected)
+    {
+        var root = XElement.Parse("""
+            <Grid>
+              <Border>
+                <Border.Styles><Style Selector="Button.ProbeScoped" /></Border.Styles>
+                <Button Name="inside" Classes="ProbeScoped" />
+              </Border>
+              <Button Name="outside" Classes="ProbeScoped" />
+            </Grid>
+            """);
+        var element = root.Descendants().Single(e => (string?)e.Attribute("Name") == name);
+        Assert.Equal(expected, ViewStyleScopes.HasLocalSelector(element, ("Button", "ProbeScoped")));
+        Assert.False(ViewStyleScopes.HasLocalSelector(element, ("TextBlock", "ProbeScoped")));
+    }
+
+    [Theory]
+    [InlineData("inside", true)]
+    [InlineData("outside", false)]
+    public void LocalIncludesReachTheirChildrenButNotTheirSiblings(string name, bool expected)
+    {
+        var root = XElement.Parse("""
+            <Grid>
+              <Border>
+                <Border.Styles>
+                  <StyleInclude Source="avares://DotCharter/Views/Editor/EditorWorkspaceStyles.axaml" />
+                </Border.Styles>
+                <Button Name="inside" Classes="HudAction" />
+              </Border>
+              <Button Name="outside" Classes="HudAction" />
+            </Grid>
+            """);
+        var element = root.Descendants().Single(e => (string?)e.Attribute("Name") == name);
+        Assert.Equal(expected, ViewStyleScopes.HasLocalSelector(element, ("Button", "HudAction")));
     }
 
     private static bool IsRigView(string view) =>

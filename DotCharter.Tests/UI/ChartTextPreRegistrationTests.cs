@@ -84,6 +84,32 @@ public sealed class ChartTextPreRegistrationTests
     }
 
     [Fact]
+    public void Annotation_text_and_in_place_edits_register_non_seed_glyphs()
+    {
+        var atlas = new HeadlessChartFontAtlas();
+        var annotation = new ChartAnnotation { Text = "\u591c\u306e\u5408\u56f3" };
+        var annotations = new ObservableCollection<ChartAnnotation> { annotation };
+        var seed = atlas.RegisteredCharacterCount;
+
+        ChartTextPreRegistration.RegisterAnnotations(atlas, annotations);
+        Assert.True(atlas.RegisteredCharacterCount > seed);
+        var registered = atlas.RegisteredCharacterCount;
+        atlas.RegisterCharacters(annotation.Text);
+        Assert.Equal(registered, atlas.RegisteredCharacterCount);
+
+        // Neither the collection identity nor its count changes.
+        annotation.Text = "\u96e8";
+        ChartTextPreRegistration.RegisterAnnotations(atlas, annotations);
+        Assert.Equal(registered + 1, atlas.RegisteredCharacterCount);
+        atlas.RegisterCharacters(annotation.Text);
+        Assert.Equal(registered + 1, atlas.RegisteredCharacterCount);
+
+        atlas.ResetToSeedCharacters();
+        ChartTextPreRegistration.RegisterAnnotations(atlas, annotations);
+        Assert.Equal(seed + 1, atlas.RegisteredCharacterCount);
+    }
+
+    [Fact]
     public void TheUppercasedSection_IsRegisteredInItsDrawnForm()
     {
         var atlas = new HeadlessChartFontAtlas();

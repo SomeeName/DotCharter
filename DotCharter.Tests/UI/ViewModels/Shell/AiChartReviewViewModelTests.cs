@@ -62,6 +62,18 @@ public sealed partial class AiChartReviewViewModelTests
     });
 
     [Fact]
+    public void Review_spans_preserve_elapsed_hours()
+    {
+        var plan = new AiChartChunkPlan(0, FractionalPosition.Zero, null, null, [], null);
+        var chunk = new AiChartReviewChunk(plan, 3_723_456, 7_200_000, "solo",
+            new AiChartApplySummary(0, 0, 0, 0, 0, 0), AiChartApplyTargets.None);
+        var row = new AiChartReviewRowViewModel(_vm, chunk, "detail");
+
+        Assert.Equal("1:02:03.4 – 2:00:00.0", row.Span);
+        Assert.Equal("1:02:03.4–2:00:00.0", row.Where);
+    }
+
+    [Fact]
     public async Task A_held_review_opens_the_card_and_marks_every_proposal_on_the_timeline()
     {
         Assert.False(_vm.IsOpen);
@@ -273,7 +285,7 @@ public sealed partial class AiChartReviewViewModelTests
 
         Assert.Equal("0:00.0–0:08.0", _vm.Rows[0].Where);
         var unnamed = new AiChartReviewRowViewModel(_vm, new AiChartReviewChunk(
-            new AiChartChunkPlan(9, new(0), new(8), null, []), 1000, 2500, "", new AiChartApplySummary(0, 1, 0, 0, 0, 0),
+            new AiChartChunkPlan(9, new(0), new(8), null, [], null), 1000, 2500, "", new AiChartApplySummary(0, 1, 0, 0, 0, 0),
             AiChartApplyTargets.None), "x");
         Assert.Equal("0:01.0 – 0:02.5", unnamed.Name);
         Assert.Equal(string.Empty, unnamed.Where);

@@ -13,6 +13,7 @@ public sealed class ShapesPanelViewModelTests
     private readonly ChordShapesFixture _f = new();
     private readonly ShapesPanelViewModel _vm;
     private readonly ScriptedDialogs _dialogs;
+    private ChordNamingStyle _namingStyle;
     private Action<object> _script = screen =>
     {
         if (screen is IShapeCleanupScreen cleanup) cleanup.ApplyCommand.Execute(null);
@@ -34,7 +35,63 @@ public sealed class ShapesPanelViewModelTests
         _vm = new ShapesPanelViewModel(_chart.Editor, _chart.History, _chart.State, FakeLocalization.English(),
             new TestUiDispatcher(),
             new ShapesPanelParts(ChordShapePlacementServiceTests.Build(_chart.State, _chart.Editor.Selection, _chart.History),
-                _chart.Transport, _dialogs));
+                _chart.Transport, _dialogs)
+            {
+                Naming = arrangement => ChordNamingOptions.For(_namingStyle, arrangement, _chart.Project.Chart)
+            });
+    }
+
+    [Fact]
+    public void GeneratedSuggestion_UsesFlatTuningSpelling_AndLeavesAuthoredNamesAlone()
+    {
+        var arrangement = _f.Arrangement;
+        arrangement.Tuning = TuningUtilities.GetTuningNames(6, [-1, -1, -1, -1, -1, -1]);
+        arrangement.TuningPitches.Clear();
+        for (var i = 0; i < 6; i++) arrangement.TuningPitches.Add(new TuningOffset(-1));
+        var unnamed = new ChordTemplate
+        {
+            Id = 100,
+            Frets = { [0] = 5, [1] = 7, [2] = 7, [3] = 6, [4] = 5, [5] = 5 }
+        };
+        var authored = unnamed.Clone();
+        authored.Id = 101;
+        authored.Name = "G#";
+        arrangement.ChordTemplates.Add(unnamed);
+        arrangement.ChordTemplates.Add(authored);
+        _vm.Refresh();
+        Assert.Contains("Ab", Row(unnamed).SuggestionLabel, StringComparison.Ordinal);
+        Assert.DoesNotContain("G#", Row(unnamed).SuggestionLabel, StringComparison.Ordinal);
+        Assert.Equal("", unnamed.Name);
+        Assert.Equal("G#", authored.Name);
+        Assert.Equal("G#", Row(authored).NameText);
+        Assert.False(Row(authored).HasSuggestion);
+    }
+
+    [Theory]
+    [InlineData(ChordNamingStyle.Eof, "A#min7")]
+    [InlineData(ChordNamingStyle.Musical, "Bbm7")]
+    public void ShapeSuggestion_UsesTheSelectedStyleAndKey_AndRestoresTheSameName(ChordNamingStyle style, string expected)
+    {
+        _namingStyle = style;
+        var arrangement = _f.Arrangement;
+        _chart.Project.Chart.KeyAccidentals = -5;
+        arrangement.ChordTemplates.Clear();
+        foreach (var level in arrangement.Levels)
+        {
+            level.Notes.Clear();
+            level.Chords.Clear();
+        }
+        var template = new ChordTemplate { Id = 100, Frets = { [1] = 1, [2] = 3, [3] = 1, [4] = 2 } };
+        arrangement.ChordTemplates.Add(template);
+        _vm.Refresh();
+        var row = Row(template);
+        Assert.Contains(expected, row.SuggestionLabel, StringComparison.Ordinal);
+        Assert.Equal("", template.Name);
+        row.UseSuggestionCommand.Execute(null);
+        Assert.Equal(expected, template.Name);
+        row.IsNoName = true;
+        row.IsNoName = false;
+        Assert.Equal(expected, template.Name);
     }
 
     private ShapePanelRowViewModel Row(ChordTemplate template) =>
@@ -109,8 +166,8 @@ public sealed class ShapesPanelViewModelTests
         Assert.True(_vm.HasPending);
         Assert.False(_vm.IsPendingDestructive);
         Assert.Equal("Merge", _vm.PendingConfirmLabel);
-        Assert.Equal("Merge “Am (2)” into “Am”. Moved onto “Am”: 3 chords · 1 hand shape. “Am (2)” is removed, " +
-                     "and “Am” keeps its own fingers and name. One undo step.", _vm.PendingText);
+        Assert.Equal("Merge “Am (2)” into “Am”: 3 chords · 1 hand shape will use “Am” instead. “Am (2)” is deleted; " +
+                     "“Am” keeps its own name and fingering. Undo reverts it in one step.", _vm.PendingText);
         Assert.Equal(6, _f.Arrangement.ChordTemplates.Count);
         Assert.False(_chart.History.CanUndo);
         Assert.True(copy.IsMergeSource);
@@ -247,6 +304,30 @@ public sealed class ShapesPanelViewModelTests
     }
 
     [Fact]
+    public void ANamelessShape_OffersTheChordNamersName_UntilItIsNamedOrMarkedNoName()
+    {
+        var c = Row(_f.C);
+        Assert.False(c.HasSuggestion);
+
+        _f.C.Name = "";
+        _vm.Refresh();
+        var suggested = ChordNameSuggester.SuggestFirstChordName(_f.Arrangement, _f.C.Frets);
+        Assert.NotEqual("", suggested);
+        Assert.True(c.HasSuggestion);
+        Assert.Contains(suggested, c.SuggestionLabel);
+
+        c.UseSuggestionCommand.Execute(null);
+        Assert.Equal(suggested, _f.C.Name);
+        Assert.False(c.HasSuggestion);
+
+        // A deliberate No name is never overridden by the offer.
+        c.IsNoName = true;
+        _vm.Refresh();
+        Assert.False(c.HasSuggestion);
+        Assert.Equal("", _f.C.Name);
+    }
+
+    [Fact]
     public void NoName_ClearsTheNameOnPurpose_AndUnticking_OffersTheSuggestedOne()
     {
         var c = Row(_f.C);
@@ -298,7 +379,7 @@ public sealed class ShapesPanelViewModelTests
         Row(_f.C).FixCommand.Execute(null);
 
         Assert.Empty(_f.C.Fingers);
-        Assert.Equal("This shape is pinned, so its fingers are left as they are.", Status);
+        Assert.Equal("This chord shape is locked, so its fingering was not changed.", Status);
         Assert.False(_chart.History.CanUndo);
     }
 

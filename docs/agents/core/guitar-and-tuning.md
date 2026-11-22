@@ -6,6 +6,10 @@ places a chart states its tuning, how templates and hand shapes compare, how
 chords are named, and the two Rocksmith marker vocabularies. The time/graph
 invariants are in [timeline-and-project.md](timeline-and-project.md).
 
+`TuningUtilities.GetTuningNames` adds offsets in `long` and normalizes pitch
+classes with modulo arithmetic; even `int.MinValue` and `int.MaxValue` offsets
+take bounded work and retain the correct pitch class.
+
 - **Frets are ABSOLUTE on the un-capoed neck; fret `0` = open, which a capo
   stops at the capo fret.** So a sound's sounding offset is `max(fret, capo)`,
   and a NON-ZERO fret below `Arrangement.Capo` is unplayable/malformed
@@ -93,6 +97,25 @@ invariants are in [timeline-and-project.md](timeline-and-project.md).
   COUNT/END/noguitar. **A new reader of phrases goes through it, and one that
   also cares about SECTIONS unions `EventPoint.Section` itself** — sections are
   not phrases and `PhraseMarkers` deliberately does not carry them.
+- **Generated chord names share spelling.** `NewChordNames` applies the selected
+  naming style and resolves the key from the arrangement and its project or source
+  score. `TuningDisplayNames.ChordSuggestion` uses tuning spelling when there is
+  no resolved key. Shape editing, new templates, Guitar Pro imports, sheet
+  chord labels, chat candidates and the chord work queue share that rule.
+  Clearing No name restores a remembered name as written. Without a remembered
+  name, the inspector and Shapes panel use the automatic and two-note settings.
+
+- **Display note spelling is `TuningDisplayNames`, separate from persisted tuning letters.**
+  It compares resolved offsets with `ExtendedRangeTunings.StandardOffsets`: any string
+  below standard and none above selects flats; otherwise sharps. Unchanged open
+  strings keep their standard names, including extended-range F# and C#. Bass
+  spelling uses `ArrangementInstrument.IsBassPart`, including A220 guitar paths.
+  Display labels recover known signed offsets through the resolver metadata; an
+  unrecognized tuning keeps its authored string letters. Pitch labels keep the
+  flat preference of unresolved extended tuning letters as well.
+  `TuningUtilities.GetTuningNames` keeps its historical mixed spelling for storage
+  and export; do not replace a writer's call with the display helper.
+
 - **A chart states its tuning on the ARRANGEMENT, and there is no project-level
   copy — do not add one back (0.44.2).** `ChartData.Tuning` existed until then
   and was a LIE in every path that filled it. The psarc importer's back-fill,
@@ -129,16 +152,17 @@ invariants are in [timeline-and-project.md](timeline-and-project.md).
   only letters exported as E standard — silently, in four places at once.**
   The resolver is deliberately CONSERVATIVE: authored offsets ALWAYS win, so
   every chart that has them is byte-identical; only a completely EMPTY vector
-  falls back to deriving from the letters.
-  **That derivation covers 4- and 6-string instruments ONLY.** A 5-string bass
-  offset has no agreed base — GP measures against B-E-A-D-G, the RS SNG path
-  against E-A-D-G-B, the same ambiguity `TuningUtilities.GetTuningNames` documents
-  and refuses to resolve — and guessing would write a WRONG tuning into a shipped
-  package, which is worse than the zeros it replaces. Every other string count
-  keeps those zeros. The derived offset is the nearest signed spelling in
+  resolves a known tuning name or derives from the letters. A known name supplies
+  octave and extended-string offsets when its pitch classes agree with every
+  letter (or when letters are absent). Conflicting letters win; unreadable letters
+  do not authorize a named fallback. Without a coherent name, letter derivation
+  covers four and six strings only. Its offset is the nearest signed spelling in
   `[-6, +5]`, so the letters re-derive EXACTLY and `TuningNameResolver` names a
   derived vector the same way it names the letters it came from —
   `TuningOffsetResolutionTests` pins that round trip.
+  Editing, MIDI import, metadata and
+  tuner targets share this resolver. `SoundingPitch.OpenStringMidi` supplies the
+  path-relative open pitch; `OpenSoundingMidi` also folds in the reference octave.
 - **A tuning NAME the table does not know is not "E standard" — it is an unknown,
   and `TuningUtilities.TryGetOffsetsForTuningType` is the call that says so.**
   `GetOffsetsForTuningType` ended in `_ => new[] { 0,0,0,0,0,0,0,0,0 }`, so any
@@ -152,9 +176,9 @@ invariants are in [timeline-and-project.md](timeline-and-project.md).
   `RscpArrangementParser` (⇒ empty offsets and `?` names rather than fabricated
   zeros), `RscpWriter` and `PhraseCatalogFragment` (⇒ an undecodable name is
   never certified as a valid shorthand) and `LibraryDoctorAnalyzer`.
-  `GetOffsetsForTuningType` survives as the DELIBERATE default for the two that
-  need some vector to do fret arithmetic against — `RefretPlanner` and the MIDI
-  import dialog — and both say so at the call site.
+  `GetOffsetsForTuningType` provides an explicit standard default for callers
+  that need it. `RefretPlanner` and the MIDI import dialog instead read the shared
+  `SoundingPitch` open pitches, including letter-only tunings.
   `Core/Utilities/UnknownTuningNameTests`.
 - **"Bass" is a PART, not only a PATH — ask `Utilities/ArrangementInstrument`
   (#161).** Rocksmith has no 5/6-string bass path, so CDLC charts one on a GUITAR
@@ -228,6 +252,11 @@ invariants are in [timeline-and-project.md](timeline-and-project.md).
   and (0.41) both predicates in
   `GlobalEditingCoordinator.DeleteSelectedRelated`, where it meant an emptied
   shape looked occupied and "delete + related" never collected the orphan.
+- **A hand shape can override its template's ghost mask.** Rendering,
+  validation and EOF export use the bar's effective mask. A null
+  `HandShape.GhostMask` inherits the template's mask. A zero override clears
+  the ghost bits for just that bar. The project stores an override on the
+  `handShape` element's optional `ghost` attribute.
 - **`ChordNameSuggester` names at SOUNDING pitch, capo included.** The
   `Arrangement` overload reads `Arrangement.Capo` itself; the raw-tuning overload
   takes an optional `capo` (default `0`). A capoed open shape therefore names
@@ -260,7 +289,14 @@ invariants are in [timeline-and-project.md](timeline-and-project.md).
   alone under 8 notes. A GP tab's key is its first bar's signature, and of the
   owner's 12 tabs five say C major over flat-key songs — authored-key-only
   spelling scores 77% where the estimate scores 89%. `KeyAccidentals == 0`
-  major is "unset". No notes and no key ⇒ no key ⇒ today's sharp-then-flat order.
+  major is "unset" — unless `ChartData.KeyLocked` (`dcKeyLocked`): a LOCKED key
+  is the charter's override and always wins, C major included. No notes and no
+  key ⇒ no key ⇒ today's sharp-then-flat order. The key SHOWN to the charter
+  (File ▸ Song metadata) is `SongKeyEstimator`: every arrangement's hardest level
+  at sounding pitch (`SoundingPitch` + `CentOffset` to the nearest semitone),
+  weighted 0.5 + sustain beats, ranked into best / runner-up / confidence; with
+  no notes, `Services/Audio/Key/SongKeyAudioEstimator` sums the mix's chroma
+  (`Analysis/Key/ChromaKeyHistogram`) through the same correlation.
   **(c) spelling touches only the five black keys** (`SpellsFlat`): a note in
   the scale follows the signature; outside it, ♭2/♭3/♭6/♭7 are flats and ♯4 a
   sharp in major, ♭2 a flat and the raised 3rd/4th/6th/7th sharps in minor.
@@ -301,11 +337,12 @@ invariants are in [timeline-and-project.md](timeline-and-project.md).
   already on disk; mutating the shared template's NAME in place is safe there
   precisely because no fret moves.
 - **`ChordTemplateFingerSetter` is a PURE FUNCTION OF THE FRET SHAPE — keep it
-  that way.** Templates dedupe by frets, so one shape can carry only one
-  fingering; making the suggestion context-dependent (what the hand did before)
-  would need one shape to back several templates, which collides with the
-  "never mutate a shared template in place" invariant that caused a real
-  corruption bug in v0.33.2. Measured with `tools/chart-eval` over the owner's
+  that way.** An automatic suggestion gives one answer per fret shape; authored
+  variants may carry different fingers and are preserved by transfer/import.
+  The setter never guesses from preceding hand positions and never edits a shared
+  template in place. Extended arrangements use their string count for the heuristic;
+  the six-string shape catalogue is skipped for wider grips, including 7–9-string
+  same-fret barres. Measured with `tools/chart-eval` over the owner's
   86 finished charts (43,517 fingered chords, `--split all`): **81.0% exact,
   88.1% per string, against a ceiling of 92.4%** for ANY function of the fret
   shape (each shape's most common fingering) — train 80.2%, holdout 84.3%
@@ -388,32 +425,26 @@ invariants are in [timeline-and-project.md](timeline-and-project.md).
   mixed arrangement, 2 + 2 templates split by fret, goes the other way).
 - **GHOST GEMS live in a hand shape's GRIP, never in a note (#785).**
   `ChordTemplate.GhostMask` is EOF's per-note ghost bitmask (`song.h:200`, bit n =
-  string n, our numbering): strings the hand HOLDS (frets + fingers, the chord box,
-  the Rocksmith template) and never plays. EOF exports a partially ghosted chord's
+  string n, our numbering): strings the hand holds at the opening (frets and
+  fingers in the chord box and Rocksmith template). EOF exports a partially ghosted chord's
   chord tag from a ghost-less clone and its handshape tag from the full shape
-  (`rs.c:2369-2420`), so in a package a ghost IS a hand-shape template fret nothing
-  under the shape plays — that is how we store it, which makes "never played,
-  scored, detected or exported as a note" true by construction (no `ChordNotes`
-  consumer sees it). A chord's own template is always exactly what it plays:
+  (`rs.c:2369-2420`), so in a package a ghost is a hand-shape grip fret absent
+  from the first pitched onset the bar covers. The ghost gem has no sound of its own. Later picks
+  on that string keep their own notes. A chord's template describes what it plays:
   `HasFrets` (the find-or-create key) and `DescribesChordNotes` never match a ghost
   grip. The verbs are `Services/Editing/ChordShapes/GhostGems` (Ctrl+G
   `ToggleGhostGems`: selected notes / masked chord strings → ghosts of the bar over
   them, a bar alone → plain frets again; the inspector's per-string boxes;
   `TappedHarmonic`, Ctrl+Shift+R, holding `AppConfig.TappedHarmonicFretOffset`
-  frets lower, never below the nut or behind the capo). Imports: the RS-XML reader
-  and the package reader's SNG mapper mark a template fret ghost
-  (`GhostGems.MarkUnplayedHandShapeFrets`) only when NO chord names the template
-  and the fret is unplayed under every bar naming it that covers a sound. **Limit
-  (#795): a ghost string some OTHER sound under the same bar plays at the same fret
-  reads back as a plain fret.** Rocksmith XML / SNG have no ghost attribute: a
-  hand-shape template fret is the same data whether it is held or played, and "bar
-  over picked notes / partial first strum, its strings played later" is the common
-  official shape, so treating such a fret as a ghost would invent ghosts in stock
-  content (`GhostGemTests.Import_NeverReadsAGhostIntoATemplateAChordPlays_NorUnderAShapeThatCoversNothing`
-  pins the conservative side). The
-  `.eof` importer copies EOF's ghost bits (pure-ghost notes register their shape
-  too). `.rscp` writes `ghost="2,4"` / `pinned="T"`, absent at the default.
-  `HandShapeContentRule` (E05) never judges a ghost string. The `.eof` exporter
+  frets lower, never below the nut or behind the capo). Rocksmith XML has no
+  ghost attribute. `GhostGems.MarkUnplayedHandShapeFrets` compares each bar's
+  grip with its opening frets and stores the difference on the bar, leaving its
+  template shareable. The `.eof` importer copies the carrier's ghost bits and
+  takes other played frets at that onset from their own notes. `.rscp` writes
+  `ghost="2,4"` / `pinned="T"`, absent at the default.
+  `HandShapeContentRule` (E05) checks later picks against the grip's fret,
+  including ghost strings. A tapped harmonic can sound at its tap fret over
+  the ghost fret held by the fretting hand. The `.eof` exporter
   (`EofNoteBuilder.AddGhostGems`) writes a bar's ghosts as ghost-flagged gems of
   its CARRIER (`GhostCarrier`, #795): the first sound inside the bar that plays none
   of the ghost strings and only the grip's own frets, skipping single notes but
@@ -494,5 +525,75 @@ invariants are in [timeline-and-project.md](timeline-and-project.md).
   POSITION across levels; a Warning, because every hit measured on finished
   charts is a chord ON a shape's end (DLC Builder's retired I19). A chord with
   `SplitIntoNotes` never needs a shape (it exports as single notes).
+  `D12` (`ShowlightSequence`, `ShowlightRule`) warns when authored showlights
+  lack a fog or beam note and when the final in-song fog colour has no distinct
+  change at the song end. It uses the attached audio boundary or the last beat
+  of an audio-less chart. Missing lanes jump to the first showlight. The
+  closing-fog warning jumps to the fog cue that needs a follow-up.
+  `D13` (`LyricStyle`, `LyricStyleRule`) is a lyric style Warning from the
+  community charting guides. Lyrics belong to the project, so it is NOT an
+  `IArrangementRule`: the Issues tab's pass adds it (also with no instrument
+  arrangement active) and `ChartQualityReporter` lists it once, under no
+  arrangement. One finding per syllable; `ArrangementIssue.Lyric` (`LyricPlace`:
+  track, phrase, syllable index) survives the tab's copy, and a jump activates
+  that vocal track, shows the lyrics row and selects the syllable. A LINE is the
+  `RsVocalLyricEncoding.EncodeLine` line. It flags a line whose first letter is
+  lowercase (quote-only syllables are skipped; scripts without case never match;
+  a line whose first syllable continues the previous word is no line start), a
+  stray period or comma (ellipses, numbers, abbreviations such as S.O.S., L.A.,
+  Ph.D., also split over syllables or followed by 's or a hyphen, and titles such
+  as Mr. stay allowed), and a syllable holding a space between words (several
+  words or a whole line in one syllable). It never guesses syllable boundaries
+  inside a word.
+  `D14` (`DifficultyLevelCount`, `DifficultyLevelRule`) is a dynamic-difficulty
+  Warning from the community charting guides, per arrangement and only when it
+  has 2 or more levels (a one-level chart has no authored ladder; the export
+  generates one). It keeps no level reader of its own: the iterations, their
+  names and owning starts are the export's (`RsPhraseExportData.Unresolved` +
+  `Order`), and an iteration's max is `RsLevelLadder.IterationMaxima`, the
+  per-span half of `ForExport` (authored max as the floor, raised to the highest
+  level whose whole content in the span differs from the level below; top level
+  when fully levelled). Its level COUNT is that max plus one. A PLAYABLE
+  iteration has notes or chords at its own max level; empty ones (COUNT,
+  noguitar, END) are exempt. Once per export phrase it flags fewer than 2
+  levels, more than 30 (levels 0 to 29), and the first repeat whose count
+  differs from the most common count (a tie goes to the higher count); the
+  count-neutral message names both counts. Every finding jumps to the phrase
+  start.
+  `D15` (`HandShapeGap`, `HandShapeGapRule`) warns when a hand shape ends on
+  the next ATTACKED note or chord on its level or closer to it than the
+  minimum note distance setting (`SpacingGap`, default 1/64 measure = 1/16
+  beat in 4/4: the gap `ChartSpacingEnforcer` parks every shape at, so a
+  spaced shape is never reported, #808). A held chord gets no larger gap
+  (#817). The rule reads the setting
+  through `IConfigurationService` on every run (`SpacingGap.AppDefault`
+  without one); Improve Chart passes its `AppConfig`'s. The attack test (a
+  note that only continues a linked note on its string is held, not struck; a
+  chord striking any new string is an attack) and the trim live in
+  `Editing/HandShapes/HandShapeGap`, which Tools ▸ Improve Chart's hand-shape
+  lengths (the Polish group of Fix chart; Errors never moves a shape end)
+  also trims to, so the pass never leaves a D15 shape. The guides ask for a
+  gap even before the same chord but name no length; on finished charts almost every gap under 1/8 beat is zero.
+  Gaps are grid beats; a minimum note distance set in milliseconds is converted at the shape start, so tempo matters then. Notes
+  inside the shape and a level's last shape (by position) are exempt. One
+  finding per shape end across levels, on the shape of the greatest
+  `DifficultyIndex`; the jump seeks to the shape's end and selects it (an
+  anchor finding never selects the shape it names as context).
+  `D16` (`SectionNameVariety`, `SectionNameVarietyRule`) warns once per
+  arrangement when one section label covers more than `MaxDominantShare` (two
+  thirds) of at least `MinSections` (5) playable sections, because Rocksmith's
+  recommendations read section names. Names group by the label the game shows
+  (the manifest's `GetSectionUiName`: case and digits ignored, so `verse` and
+  `verse2` are one label, unknown names show as Riff); `noguitar` gaps count
+  nowhere, so the closing noguitar an XML round trip adds cannot tip a chart
+  over. Finished corpus charts peak at 55 % (chorus-heavy songs), hence two
+  thirds, not half. The finding names the first section of that label as
+  written and the count, asks the charter to check the label fits (a strophic
+  song is fine) and jumps to that section.
   Several string formats (tuning names, `EventPoint.Events`, tuning aliases) are
   "compatible with rscharter" — treat them as an external contract.
+
+- **A resized Fingerless grip stays fingerless (#527).** `HandShapeAutoTemplate.Rebuild`
+  preserves `Fingerless` and leaves its finger map empty; the resize action copies
+  that map directly, as does SNG export. Automatic rebuilds must not generate
+  fingering that the charter deliberately omitted.

@@ -1,3 +1,4 @@
+using DotCharter.Services.Audio.StemSeparation.Cache;
 using DotCharter.Services.Audio.StemSeparation.GuitarRoles;
 
 namespace DotCharter.Services.Audio.StemSeparation;
@@ -26,11 +27,11 @@ public readonly record struct StemProbe(
 public static class StemFolderProbe
 {
     /// <summary>
-    ///     Pure filesystem probing. Runs on a worker thread — it touches nothing
-    ///     but the snapshot it is handed.
+    ///     Runs on a worker: cleans verified completion markers and returns the stem
+    ///     snapshot. The caller applies project and UI state.
     /// </summary>
     public static StemProbe Probe(string projectDir, string legacyDir, IReadOnlyList<Stem> declared,
-        bool rolesWanted, IGuitarRoleStems? guitarRoleStems)
+        bool rolesWanted, IGuitarRoleStems? guitarRoleStems, IAppLogger? logger = null)
     {
         var recovered = new List<(string, string)>();
         var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -45,6 +46,13 @@ public static class StemFolderProbe
             {
                 var stemsDir = Path.Combine(baseDir, "stems");
                 if (!Directory.Exists(stemsDir)) continue;
+                // Busy (no handle, no failure) hides the folder. A lock that cannot be
+                // opened at all must not: those stems would stay hidden on every open.
+                using var exclusion = StemCacheExpansion.TryAcquire(stemsDir, out var failure);
+                var readable = exclusion != null
+                    ? StemCacheExpansion.CanRecoverLocked(stemsDir)
+                    : failure != null && StemCacheExpansion.CanReadUnlocked(stemsDir, failure, logger);
+                if (!readable) continue;
 
                 foreach (var wav in Directory.EnumerateFiles(stemsDir, "*.wav", SearchOption.TopDirectoryOnly)
                              .OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
@@ -111,8 +119,8 @@ public static class StemFolderProbe
 
     private static IEnumerable<string> Bases(string projectDir, string legacyDir)
     {
-        if (!string.IsNullOrEmpty(projectDir)) yield return projectDir;
-        if (!string.IsNullOrEmpty(legacyDir) &&
+        if (ProjectRelativePath.IsReadableMediaReference(projectDir)) yield return projectDir;
+        if (ProjectRelativePath.IsReadableMediaReference(legacyDir) &&
             !string.Equals(legacyDir, projectDir, StringComparison.OrdinalIgnoreCase))
         {
             yield return legacyDir;
@@ -123,6 +131,7 @@ public static class StemFolderProbe
     {
         if (string.IsNullOrWhiteSpace(path)) return string.Empty;
         if (Path.IsPathRooted(path)) return path;
-        return string.IsNullOrEmpty(baseDir) ? path : Path.Combine(baseDir, path);
+        var resolved = string.IsNullOrEmpty(baseDir) ? path : Path.Combine(baseDir, path);
+        return ProjectRelativePath.IsReadableMediaReference(resolved) ? resolved : string.Empty;
     }
 }

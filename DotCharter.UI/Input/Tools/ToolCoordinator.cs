@@ -24,6 +24,7 @@ public class ToolCoordinator
     private IEditorTool? _activeTool; // Tool currently dragging
     private IEditorTool? _currentHoverTool; // Tool currently being hovered
     private long _lastMoveTicks;
+
     private bool _rulerScrubbing; // Left-drag on the time ruler = scrub-seek
     private readonly Arrangement? _boundArrangement;
 
@@ -145,7 +146,13 @@ public class ToolCoordinator
         if (ResolveTrack() == null) return;
         var now = Stopwatch.GetTimestamp();
         if (now - _lastMoveTicks < ThrottleTimestamps) return;
+
         _lastMoveTicks = now;
+        DeliverMove(e, p, props);
+    }
+
+    private void DeliverMove(PointerEventArgs e, Point p, PointerPointProperties props)
+    {
         UpdateContext(e, p, props);
 
         if (_rulerScrubbing)
@@ -171,12 +178,21 @@ public class ToolCoordinator
 
     public void HandlePointerReleased(PointerReleasedEventArgs e, Point p, PointerPointProperties props)
     {
-        if (ResolveTrack() == null) return;
+        if (ResolveTrack() == null)
+        {
+            CancelGesture();
+            return;
+        }
+
+        // Finalize at the release, retaining the gesture's held buttons for its
+        // last move. Release properties have already cleared those buttons.
+        // Skip an unchanged position: a duplicate seek flushes the audio again.
+        var changed = _rulerScrubbing ? p.X != _context.Position.X : p != _context.Position;
+        if ((_rulerScrubbing || _activeTool != null) && changed)
+            DeliverMove(e, p, _context.Properties);
         UpdateContext(e, p, props);
         if (_rulerScrubbing)
         {
-            // The last throttled move already sought the drop position; a
-            // third identical seek is the minimap's documented dropout risk.
             _rulerScrubbing = false;
             _history.EndGesture();
             return;
@@ -196,6 +212,17 @@ public class ToolCoordinator
         var routingTool = _activeTool ?? DetermineTool(_context.Position.Y);
         routingTool.OnPointerExited(e, _context);
         _currentHoverTool = null;
+    }
+
+    /// <summary>Capture loss never commits a preview or leaves a tool armed for the next press.</summary>
+    public void CancelGesture()
+    {
+        _activeTool?.Cancel(_context);
+        if (!ReferenceEquals(_currentHoverTool, _activeTool)) _currentHoverTool?.Cancel(_context);
+        _activeTool = null;
+        _currentHoverTool = null;
+        _rulerScrubbing = false;
+        _history.EndGesture();
     }
 
     private IEditorTool DetermineTool(double yPosition)

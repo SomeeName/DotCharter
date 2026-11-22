@@ -59,11 +59,11 @@ public sealed class IssueDotSeverityTests
     public void TheDotBindsTheProperty_AndTheProperty_IsRecomputedWhereTheGroupsAre()
     {
         var markup = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor",
-            "Inspector", "IssuesInspectorView.axaml")));
+            "Inspector", "IssuesListView.axaml")));
         var noComments = Regex.Replace(markup, "<!--.*?-->", string.Empty, RegexOptions.Singleline);
 
-        var dot = Regex.Match(noComments, @"<Border[^>]*Classes=""IssueDot""[\s\S]*?/>");
-        Assert.True(dot.Success, "IssuesInspectorView no longer has a Border.IssueDot — this guard is blind");
+        var dot = Regex.Match(noComments, @"<Border[^>]*x:Name=""IssueDot""[\s\S]*?/>");
+        Assert.True(dot.Success, "IssuesListView no longer has the IssueDot Border — this guard is blind");
         Assert.Contains("Binding Issues.TopIssueSeverity", dot.Value, StringComparison.Ordinal);
 
         var rebuild = BodyOf(InspectorSource(), "private void RebuildIssueGroups()");

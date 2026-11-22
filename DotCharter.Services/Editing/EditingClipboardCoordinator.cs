@@ -197,9 +197,6 @@ public sealed class EditingClipboardCoordinator
 
         var payload = ResolvePastePayload(track, currentTimeMs, gridDivisor);
         if (payload == null) return null;
-        var check = CheckFits(payload, track, "Paste");
-        if (check.IsBlocked) return new PhrasePasteOutcome(PhrasePasteResult.Blocked, check);
-
         var cfg = _configService.LoadAppConfig();
         var notes = cfg.PasteIncludeNotes ? payload.Notes : [];
         var chords = cfg.PasteIncludeChords ? payload.Chords : [];
@@ -208,17 +205,36 @@ public sealed class EditingClipboardCoordinator
         var events = cfg.PasteIncludeEvents ? payload.EventPoints : [];
         var tones = cfg.PasteIncludeTones ? payload.ToneChanges : [];
 
+        var included = new ClipboardPayload
+        {
+            BasePosition = payload.BasePosition,
+            Source = payload.Source,
+            Notes = notes,
+            Chords = chords,
+            HandShapes = hs,
+            Anchors = anchors,
+            EventPoints = events,
+            ToneChanges = tones,
+            ChordTemplates = payload.ChordTemplates
+        };
+        var check = CheckFits(included, track, "Paste");
+        if (check.IsBlocked) return new PhrasePasteOutcome(PhrasePasteResult.Blocked, check);
+
         _logger.Info(AppLogCategory.Editing,
             $"Pasting clipboard into track '{track.Arrangement.Name}' at currentTimeMs={currentTimeMs:0.###}, gridDivisor={gridDivisor}. Notes={notes.Count}/{payload.Notes.Count}, chords={chords.Count}/{payload.Chords.Count}, handshapes={hs.Count}/{payload.HandShapes.Count}, events={events.Count}/{payload.EventPoints.Count}, tones={tones.Count}/{payload.ToneChanges.Count}, anchors={anchors.Count}/{payload.Anchors.Count}.");
 
+        var (rangeStart, rangeEnd) = ComputePayloadRange(included);
+        var mode = cfg.PasteReplacesExisting ? PasteSpecialMode.OverwriteSameType : PasteSpecialMode.Preserve;
+        var removals = CollectOverwriteTargets(track, included, mode, rangeStart, rangeEnd,
+            cfg.PasteIncludeNotes, cfg.PasteIncludeChords);
         ApplyPasteCommit(track,
-            [], notes,
-            [], chords,
-            [], hs,
-            [], anchors,
-            [], events,
-            [], tones,
-            payload.ChordTemplates);
+            removals.notes, notes,
+            removals.chords, chords,
+            removals.hs, hs,
+            removals.anchors, anchors,
+            removals.events, events,
+            removals.tones, tones,
+            payload.ChordTemplates, removals.retainedHandShapes);
         return Outcome(check);
     }
 
@@ -239,7 +255,7 @@ public sealed class EditingClipboardCoordinator
         if (check.IsBlocked) return new PhrasePasteOutcome(PhrasePasteResult.Blocked, check);
 
         var (rangeStart, rangeEnd) = ComputePayloadRange(payload);
-        var (notesToRemove, chordsToRemove, hsToRemove, anchorsToRemove, eventsToRemove, tonesToRemove) =
+        var (notesToRemove, chordsToRemove, hsToRemove, anchorsToRemove, eventsToRemove, tonesToRemove, retainedHandShapes) =
             CollectOverwriteTargets(track, payload, mode, rangeStart, rangeEnd);
 
         _logger.Info(AppLogCategory.Editing,
@@ -254,7 +270,7 @@ public sealed class EditingClipboardCoordinator
             anchorsToRemove, payload.Anchors,
             eventsToRemove, payload.EventPoints,
             tonesToRemove, payload.ToneChanges,
-            payload.ChordTemplates);
+            payload.ChordTemplates, retainedHandShapes, mode != PasteSpecialMode.OverwriteAll);
         return Outcome(check);
     }
 
@@ -373,20 +389,8 @@ public sealed class EditingClipboardCoordinator
         return (start, end);
     }
 
-    /// <summary>
-    ///     The LAST ONSET in the payload - not its last END. Visible for testing.
-    ///     <para>
-    ///         <see cref="ComputePayloadRange" /> returns the span the payload
-    ///         OCCUPIES, i.e. one sustain past the last onset, and a hand shape is
-    ///         correctly cleared by overlapping that span. A note, chord, anchor,
-    ///         marker or tone change is a POINT, and the ones the paste replaces
-    ///         are the ones at an onset the paste writes to. Testing those against
-    ///         the span's end over-reached by exactly the last sustain: copy a run
-    ///         whose last note holds to beat 8, paste-special it, and the existing
-    ///         sound starting at beat 8 - the neighbour immediately AFTER the
-    ///         pasted content, which nothing was pasted over - was deleted too.
-    ///     </para>
-    /// </summary>
+    /// <summary>The last onset across the whole payload, used by Overwrite all.
+    /// Sustains do not extend point-item deletion; hand shapes use their occupied spans.</summary>
     public static FractionalPosition ComputePayloadLastOnset(ClipboardPayload payload)
     {
         FractionalPosition? last = null;
@@ -406,10 +410,11 @@ public sealed class EditingClipboardCoordinator
         return last ?? FractionalPosition.Zero;
     }
 
-    /// <summary>Visible for testing.</summary>
-    internal static (List<GuitarNote> notes, List<Chord> chords, List<HandShape> hs, List<FretAnchor> anchors, List<EventPoint> events, List<ToneChange> tones)
+    /// <summary>Each included kind owns its replacement range; Overwrite all uses the whole payload.</summary>
+    internal static (List<GuitarNote> notes, List<Chord> chords, List<HandShape> hs, List<FretAnchor> anchors,
+        List<EventPoint> events, List<ToneChange> tones, List<HandShape> retainedHandShapes)
         CollectOverwriteTargets(TrackEditorContext track, ClipboardPayload payload, PasteSpecialMode mode,
-            FractionalPosition rangeStart, FractionalPosition rangeEnd)
+            FractionalPosition rangeStart, FractionalPosition rangeEnd, bool includeNotes = true, bool includeChords = true)
     {
         var notes = new List<GuitarNote>();
         var chords = new List<Chord>();
@@ -417,53 +422,52 @@ public sealed class EditingClipboardCoordinator
         var anchors = new List<FretAnchor>();
         var events = new List<EventPoint>();
         var tones = new List<ToneChange>();
-
-        if (mode == PasteSpecialMode.Preserve) return (notes, chords, hs, anchors, events, tones);
+        var retained = new List<HandShape>();
+        if (mode == PasteSpecialMode.Preserve) return (notes, chords, hs, anchors, events, tones, retained);
 
         var clearAll = mode == PasteSpecialMode.OverwriteAll;
+        var wholeRange = (Start: rangeStart, End: ComputePayloadLastOnset(payload));
+        var soundRange = clearAll ? wholeRange : OnsetRange(payload.Notes.Select(n => n.Position)
+            .Concat(payload.Chords.Select(c => c.Position)));
+        if (includeNotes && (clearAll || payload.Notes.Count > 0 || payload.Chords.Count > 0))
+            notes.AddRange(track.Notes.Where(n => n.Position >= soundRange.Start && n.Position <= soundRange.End));
+        if (includeChords && (clearAll || payload.Notes.Count > 0 || payload.Chords.Count > 0))
+            chords.AddRange(track.Chords.Where(c => c.Position >= soundRange.Start && c.Position <= soundRange.End));
 
-        // Point-like objects are replaced at the ONSETS the paste writes to;
-        // only the hand-shape test below is a span OVERLAP, and it is the one
-        // that wants rangeEnd. See ComputePayloadLastOnset.
-        var lastOnset = ComputePayloadLastOnset(payload);
-
-        if (clearAll || payload.Notes.Count > 0)
+        if (clearAll)
         {
-            notes.AddRange(track.Notes
-                .Where(n => n.Position >= rangeStart && n.Position <= lastOnset));
+            hs.AddRange(track.HandShapes.Where(h => h.EndPosition > rangeStart && h.Position < rangeEnd));
+        }
+        else if (payload.HandShapes.Count > 0)
+        {
+            hs.AddRange(track.HandShapes.Where(h => payload.HandShapes.Any(p =>
+                p.EndPosition > p.Position && h.EndPosition > p.Position && h.Position < p.EndPosition)));
+            var survivingSoundPositions = track.Notes.Except(notes).Concat(payload.Notes).Select(n => n.Position)
+                .Concat(track.Chords.Except(chords).Concat(payload.Chords).Select(c => c.Position)).ToList();
+            retained = HandShapeSplitter.RetainOutsideSpans(hs, payload.HandShapes, survivingSoundPositions);
         }
 
-        if (clearAll || payload.Chords.Count > 0)
-        {
-            chords.AddRange(track.Chords
-                .Where(c => c.Position >= rangeStart && c.Position <= lastOnset));
-        }
+        CollectPointOverwriteTargets(track.Anchors, payload.Anchors, anchors, clearAll, wholeRange, a => a.Position);
+        CollectPointOverwriteTargets(track.EventPoints, payload.EventPoints, events, clearAll, wholeRange, e => e.Position);
+        CollectPointOverwriteTargets(track.Tones, payload.ToneChanges, tones, clearAll, wholeRange, t => t.Position);
+        return (notes, chords, hs, anchors, events, tones, retained);
+    }
 
-        if (clearAll || payload.HandShapes.Count > 0)
-        {
-            hs.AddRange(track.HandShapes
-                .Where(h => h.EndPosition > rangeStart && h.Position < rangeEnd));
-        }
+    private static void CollectPointOverwriteTargets<T>(IEnumerable<T> existing, IReadOnlyCollection<T> pasted,
+        List<T> targets, bool clearAll, (FractionalPosition Start, FractionalPosition End) wholeRange,
+        Func<T, FractionalPosition> position)
+    {
+        var range = clearAll ? wholeRange : OnsetRange(pasted.Select(position));
+        if (clearAll || pasted.Count > 0)
+            targets.AddRange(existing.Where(item => position(item) >= range.Start && position(item) <= range.End));
+    }
 
-        if (clearAll || payload.Anchors.Count > 0)
-        {
-            anchors.AddRange(track.Anchors
-                .Where(a => a.Position >= rangeStart && a.Position <= lastOnset));
-        }
-
-        if (clearAll || payload.EventPoints.Count > 0)
-        {
-            events.AddRange(track.EventPoints
-                .Where(e => e.Position >= rangeStart && e.Position <= lastOnset));
-        }
-
-        if (clearAll || payload.ToneChanges.Count > 0)
-        {
-            tones.AddRange(track.Tones
-                .Where(t => t.Position >= rangeStart && t.Position <= lastOnset));
-        }
-
-        return (notes, chords, hs, anchors, events, tones);
+    private static (FractionalPosition Start, FractionalPosition End) OnsetRange(IEnumerable<FractionalPosition> onsets)
+    {
+        var positions = onsets.ToList();
+        return positions.Count == 0
+            ? (FractionalPosition.Zero, FractionalPosition.Zero)
+            : (positions.Min(), positions.Max());
     }
 
     private void ApplyPasteCommit(TrackEditorContext track,
@@ -473,9 +477,15 @@ public sealed class EditingClipboardCoordinator
         List<FretAnchor> anchorsToRemove, List<FretAnchor> anchorsToAdd,
         List<EventPoint> eventsToRemove, List<EventPoint> eventsToAdd,
         List<ToneChange> tonesToRemove, List<ToneChange> tonesToAdd,
-        IReadOnlyDictionary<int, ChordTemplate>? incomingTemplates = null)
+        IReadOnlyDictionary<int, ChordTemplate>? incomingTemplates = null,
+        List<HandShape>? retainedHandShapes = null, bool preserveUnpastedSounds = true)
     {
         var additionalActions = new List<IChartAction>();
+        if (retainedHandShapes is { Count: > 0 })
+        {
+            additionalActions.Add(new AddHandShapesAction(track.HandShapes, retainedHandShapes,
+                _highwayEditingService.GetLinkNextUpdater()));
+        }
         if (eventsToRemove.Count > 0)
             additionalActions.Add(new RemoveEventPointsAction(track.EventPoints, eventsToRemove));
         if (eventsToAdd.Count > 0)
@@ -491,6 +501,6 @@ public sealed class EditingClipboardCoordinator
             hsToRemove, hsToAdd,
             anchorsToRemove, anchorsToAdd,
             additionalActions,
-            incomingTemplates);
+            incomingTemplates, preserveUnpastedSounds: preserveUnpastedSounds);
     }
 }

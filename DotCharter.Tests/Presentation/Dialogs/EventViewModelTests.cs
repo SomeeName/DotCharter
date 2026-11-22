@@ -1,3 +1,4 @@
+using DotCharter.Localization;
 using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Screens.Dialogs;
 using DotCharter.Services.Editing;
@@ -164,19 +165,58 @@ public sealed class EventViewModelTests
         Assert.Empty(ContractConformanceTests.Violations(typeof(IEventScreen), vm));
     }
 
+    /// <summary>
+    ///     In German the section and event pickers read German, a section with no German word of its own
+    ///     keeps EOF's label, and the marker still stores Rocksmith's own names.
+    /// </summary>
+    [Fact]
+    public void In_German_the_catalogue_labels_are_German_and_the_stored_names_stay_Rocksmiths()
+    {
+        var german = FakeLocalization.For("de-DE");
+        var vm = new Rig(german).Open(OneSecond);
+        var preChorus = vm.SectionOptions[1 + RsSectionCatalog.Names.ToList().IndexOf("prechorus")];
+        var intro = vm.SectionOptions[1 + RsSectionCatalog.Names.ToList().IndexOf("intro")];
+        var slowCrowd = vm.EventToggles[RsEventCatalog.Events.ToList().FindIndex(e => e.Code == "e0")];
+
+        Assert.Equal(german["Dialog_SectionName_prechorus"], preChorus.Display);
+        Assert.NotEqual("Pre Chorus", preChorus.Display);
+        Assert.Equal("Intro", intro.Display);
+        Assert.Equal(german["Dialog_EventName_e0"], slowCrowd.Display);
+        Assert.NotEqual("Crowd speed slow (e0)", slowCrowd.Display);
+
+        vm.SelectedSection = preChorus;
+        Assert.Equal("prechorus", vm.SectionName);
+    }
+
     private static IEventSectionOption Section(IEventScreen vm, string display) =>
         vm.SectionOptions.First(o => o.Display == display);
 
+    [Fact]
+    public void In_Japanese_every_section_has_a_translated_label_and_keeps_its_key()
+    {
+        var japanese = FakeLocalization.For("ja-JP");
+        var vm = new Rig(japanese).Open(OneSecond);
+        foreach (var name in RsSectionCatalog.Names)
+        {
+            var option = vm.SectionOptions[1 + RsSectionCatalog.Names.ToList().IndexOf(name)];
+            Assert.Equal(japanese["Dialog_SectionName_" + name], option.Display);
+            Assert.NotEqual(RsSectionCatalog.DisplayName(name), option.Display);
+            vm.SelectedSection = option;
+            Assert.Equal(name, vm.SectionName);
+        }
+    }
+
     private sealed class Rig
     {
-        public Rig()
+        public Rig(ILocalizationService? localization = null)
         {
+            Chart = new ChartEditHarness(localization);
             var selection = new SelectionService();
             Events = new EventEditingService(Chart.State, selection, Chart.History, new EditingScope(Chart.State),
                 new FakeAppLogger());
         }
 
-        public ChartEditHarness Chart { get; } = new();
+        public ChartEditHarness Chart { get; }
 
         public EventEditingService Events { get; }
 

@@ -16,15 +16,24 @@ public sealed class FakeLinkGroupsScreen : FakeDialog<bool>, ILinkGroupsScreen
         DeleteCommand = new RelayCommand<ILinkGroupRow>(_ => { });
         GoToCommand = new RelayCommand<ILinkPlacementRow>(_ => { });
         LinkSelectedCommand = suggestions.Count > 0 ? new RelayCommand(() => { }) : Disabled();
+        DetectCommand = new RelayCommand(() => { });
+        CancelDetectionCommand = Disabled();
         CloseCommand = Answer(true);
     }
+
+    public bool IsDetecting => false;
+    public string DetectionStatus { get; private init; } = string.Empty;
+    public bool ShowDetectionRetry => DetectionStatus.Length > 0;
+    public ICommand DetectCommand { get; }
+    public ICommand CancelDetectionCommand { get; }
 
     public static IReadOnlyList<FakeVariant<ILinkGroupsScreen>> Variants { get; } =
     [
         new(FakeVariantNames.Default, Default),
         new(FakeVariantNames.Empty, Empty),
         new(FakeVariantNames.LongText, LongText),
-        new(FakeVariantNames.Full, Full)
+        new(FakeVariantNames.Full, Full),
+        new(FakeVariantNames.Error, Error)
     ];
 
     /// <summary>Two groups and, as after an import's Review, two suggestions.</summary>
@@ -41,6 +50,11 @@ public sealed class FakeLinkGroupsScreen : FakeDialog<bool>, ILinkGroupsScreen
 
     /// <summary>What the dialog shows before anything is linked.</summary>
     public static FakeLinkGroupsScreen Empty() => new([], []);
+
+    public static FakeLinkGroupsScreen Error() => new([], [])
+    {
+        DetectionStatus = "Search stopped at the limit, results may be incomplete"
+    };
 
     public static FakeLinkGroupsScreen LongText() => new(
     [

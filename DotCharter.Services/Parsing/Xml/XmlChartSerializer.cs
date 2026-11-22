@@ -29,11 +29,17 @@ public class XmlChartSerializer : IChartSerializer
     /// </summary>
     public bool SixStringProjection { get; set; }
 
+
+    public Action<string>? Warning { get; set; }
+
     /// <summary>
     ///     Write a phrase that starts on a note between two beats as moveR&lt;N&gt; on the beat
     ///     before it. Set by the caller from <c>AppConfig.RsXmlMoverPhrases</c>.
     /// </summary>
     public bool MoverPhrases { get; set; }
+
+    /// <summary>The caller's double-stop naming policy for the song XML.</summary>
+    public DoubleStopNameOptions ChordNameOptions { get; set; } = DoubleStopNameOptions.Default;
 
     public ChartProject Load(string filePath)
     {
@@ -59,33 +65,42 @@ public class XmlChartSerializer : IChartSerializer
     ///     have no <c>songLength</c> element.
     /// </remarks>
     public void Save(string filePath, ChartProject project, double? audioLengthMs = null)
-    {
-        // Rocksmith XML of play-only content is never exported.
-        PlayOnlyExportGuard.ThrowIfPlayOnly(project, "Rocksmith XML export");
-        using var _ = _logger?.BeginTimedOperation(AppLogCategory.Project, "XML Save", filePath);
+        => Save(filePath, project, GetDocumentKind(filePath, project), audioLengthMs);
 
-        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+    /// <summary>The XML document selected from the destination before staging.</summary>
+    public enum DocumentKind { Song, Vocals, Showlights }
+
+    /// <summary>Resolves the destination's filename convention or project content.</summary>
+    public static DocumentKind GetDocumentKind(string destinationPath, ChartProject project)
+    {
+        var ext = Path.GetExtension(destinationPath).ToLowerInvariant();
 
         if (ext == ".xml")
         {
             // Detect by filename convention or content
-            var fileName = Path.GetFileNameWithoutExtension(filePath).ToLowerInvariant();
+            var fileName = Path.GetFileNameWithoutExtension(destinationPath).ToLowerInvariant();
             if (fileName.EndsWith("_showlights") || fileName.StartsWith("showlights"))
-            {
-                SaveShowlights(filePath, project);
-                return;
-            }
+                return DocumentKind.Showlights;
 
             if (fileName.EndsWith("_vocals") || fileName.StartsWith("vocals") ||
                 project.VocalTracks.Count > 0 && project.Arrangements.Count == 0)
             {
-                SaveVocals(filePath, project);
-                return;
+                return DocumentKind.Vocals;
             }
         }
 
-        // Default: song XML
-        SaveSong(filePath, project, audioLengthMs);
+        return DocumentKind.Song;
+    }
+
+    /// <summary>Writes the selected document; a main document must fail when its arrangement is refused.</summary>
+    public void Save(string filePath, ChartProject project, DocumentKind kind, double? audioLengthMs = null,
+        bool failOnRefusal = false)
+    {
+        PlayOnlyExportGuard.ThrowIfPlayOnly(project, "Rocksmith XML export");
+        using var _ = _logger?.BeginTimedOperation(AppLogCategory.Project, "XML Save", filePath);
+        if (kind == DocumentKind.Showlights) SaveShowlights(filePath, project);
+        else if (kind == DocumentKind.Vocals) SaveVocals(filePath, project);
+        else SaveSong(filePath, project, audioLengthMs, failOnRefusal);
     }
 
     /// <summary>Writes the RS2014 <c>&lt;song&gt;</c> document.</summary>
@@ -95,10 +110,16 @@ public class XmlChartSerializer : IChartSerializer
     ///     Audio length in milliseconds, or <see langword="null" /> when the caller
     ///     has none — see <see cref="RsXmlSongWriter.Write(ChartProject, double?)" />.
     /// </param>
-    private void SaveSong(string filePath, ChartProject project, double? audioLengthMs)
+    /// <param name="failOnRefusal">Throw for the main document; companion exports skip a refused arrangement.</param>
+    private void SaveSong(string filePath, ChartProject project, double? audioLengthMs, bool failOnRefusal)
     {
-        var writer = new RsXmlSongWriter { SixStringProjection = SixStringProjection, MoverPhrases = MoverPhrases };
-        var doc = writer.Write(project, audioLengthMs);
+        var writer = new RsXmlSongWriter
+        {
+            SixStringProjection = SixStringProjection, MoverPhrases = MoverPhrases, ChordNameOptions = ChordNameOptions,
+            Warning = Warning ?? (message => _logger?.Warning(AppLogCategory.Project, message))
+        };
+        var doc = failOnRefusal ? writer.Write(project, audioLengthMs) : writer.TryWrite(project, audioLengthMs);
+        if (doc == null) return;
         using var xw = XmlWriter.Create(filePath, Fmt.GetWriterSettings());
         doc.WriteTo(xw);
         if (writer.LastLoss is { IsEmpty: false } loss && project.Arrangements.Count > 0)

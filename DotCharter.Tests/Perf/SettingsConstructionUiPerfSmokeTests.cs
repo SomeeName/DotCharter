@@ -1,10 +1,13 @@
 ﻿using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
+using DotCharter.Localization;
 using DotCharter.Presentation.Fakes.Settings;
 using DotCharter.UI.Views.Settings;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DotCharter.Tests.Perf;
 
@@ -63,6 +66,87 @@ public sealed class SettingsConstructionUiPerfSmokeTests
         nameof(AiSettingsView)
     ];
 
+    [Fact]
+    public async Task EditorTab_PasteReplacementRowMeasuresAndBinds()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var screen = FakeEditorSettingsScreen.Default();
+            var tab = new EditorSettingsView { DataContext = screen };
+            WithLaidOutTab(tab, () =>
+            {
+                var checkbox = tab.GetLogicalDescendants().OfType<CheckBox>()
+                    .Single(c => c.Name == "PasteReplacesExisting");
+                Assert.True(checkbox.IsEffectivelyVisible);
+                Assert.True(checkbox.Bounds.Width > 0 && checkbox.Bounds.Height > 0);
+                Assert.True(checkbox.IsChecked);
+                checkbox.IsChecked = false;
+                Assert.False(screen.PasteReplacesExisting);
+                var hint = tab.GetLogicalDescendants().OfType<TextBlock>()
+                    .Single(t => t.Name == "PasteReplacesExistingHint");
+                Assert.True(hint.Bounds.Width > 0 && hint.Bounds.Height > 0);
+                Assert.False(string.IsNullOrWhiteSpace(hint.Text));
+            });
+        }, CancellationToken.None);
+    }
+
+    /// <summary>#805: the inspector's Apply step row measures and its switch binds both ways.</summary>
+    [Fact]
+    public async Task EditorTab_InspectorApplyStepRowMeasuresAndBinds()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var screen = FakeEditorSettingsScreen.Default();
+            var tab = new EditorSettingsView { DataContext = screen };
+            WithLaidOutTab(tab, () =>
+            {
+                var row = tab.GetLogicalDescendants().OfType<Grid>().Single(g => g.Name == "EditorInspectorApplyStepRow");
+                var toggle = tab.GetLogicalDescendants().OfType<ToggleSwitch>().Single(t => t.Name == "EditorInspectorApplyStepToggle");
+                Assert.True(row.IsEffectivelyVisible && row.Bounds is { Width: > 0, Height: > 0 }, $"the row laid out as {row.Bounds}");
+                Assert.True(toggle.Bounds is { Width: > 0, Height: > 0 }, $"the switch laid out as {toggle.Bounds}");
+                Assert.False(toggle.IsChecked);
+                toggle.IsChecked = true;
+                Assert.True(screen.InspectorApplyStep);
+            });
+        }, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task EditorTab_LyricSpanSettingsMeasureAndBind()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var screen = FakeEditorSettingsScreen.Default();
+            var tab = new EditorSettingsView { DataContext = screen };
+            var localization = DotCharter.UI.App.Services!.GetRequiredService<ILocalizationService>();
+            WithLaidOutTab(tab, () =>
+            {
+                var toggles = tab.GetLogicalDescendants().OfType<ToggleSwitch>().ToArray();
+                var word = Assert.Single(toggles, control =>
+                    AutomationProperties.GetName(control) == localization["Settings_LyricSpanWordGap"]);
+                var phrase = Assert.Single(toggles, control =>
+                    AutomationProperties.GetName(control) == localization["Settings_LyricSpanPhraseGap"]);
+                Assert.True(word.Bounds is { Width: > 0, Height: > 0 });
+                Assert.True(phrase.Bounds is { Width: > 0, Height: > 0 });
+                Assert.True(word.IsChecked);
+                Assert.False(phrase.IsChecked);
+                Assert.True(phrase.IsEffectivelyEnabled);
+                if (UiSweepRunner.CaptureEnabled)
+                {
+                    var window = (Window)TopLevel.GetTopLevel(tab)!;
+                    window.Background = Avalonia.Media.Brush.Parse("#14161A");
+                    phrase.BringIntoView();
+                    CaptureTab(tab, "733-lyric-settings-restored");
+                }
+                phrase.IsChecked = true;
+                word.IsChecked = false;
+                Assert.False(screen.LyricSpanWordGap);
+                Assert.True(screen.LyricSpanPhraseGap);
+                Assert.False(phrase.IsEffectivelyEnabled);
+            });
+        }, CancellationToken.None);
+    }
+
     public static TheoryData<string> TabNames => [.. AllTabs];
 
     private static Control CreateTab(string name) => name switch
@@ -102,7 +186,7 @@ public sealed class SettingsConstructionUiPerfSmokeTests
             config.AppConfig.StartupScreen = StartupScreen.Editor;
             config.AppConfig.LanguageCulture = "en-US";
             var vm = new DotCharter.Presentation.Screens.Settings.GeneralSettingsViewModel(
-                config, DotCharter.Localization.LocalizationService.Instance, new NoSetup());
+                config, DotCharter.Localization.LocalizationService.Instance, new NoSetup(), new FakeFileStorageService());
             vm.Load();
             var language = vm.SelectedLanguageIndex;
             Assert.Equal(1, vm.SelectedStartupScreenIndex);
@@ -645,6 +729,57 @@ public sealed class SettingsConstructionUiPerfSmokeTests
         }, CancellationToken.None);
     }
 
+    [Fact]
+    public async Task DefaultTestExportFolderRow_LaysOutInGeneralAdvanced()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var screen = FakeGeneralSettingsScreen.AdvancedOpen();
+            var tab = new GeneralSettingsView { DataContext = screen };
+            WithLaidOutTab(tab, () =>
+            {
+                var row = Assert.Single(tab.GetLogicalDescendants().OfType<Grid>(),
+                    control => control.Name == "DefaultTestExportFolderRow");
+                Assert.True(row.IsEffectivelyVisible);
+                Assert.True(row.Bounds.Width > 1 && row.Bounds.Height > 1, $"Test export folder row bounds: {row.Bounds}");
+                var input = Assert.Single(row.GetLogicalDescendants().OfType<TextBox>(),
+                    control => control.Name == "DefaultTestExportFolderInput");
+                Assert.True(input.Bounds.Width > 1 && input.Bounds.Height > 1, $"Test export folder input bounds: {input.Bounds}");
+                input.Text = "test-exports";
+                Assert.Equal(input.Text, screen.ExportTestDefaultFolder);
+                var commands = row.GetLogicalDescendants().OfType<Button>().Select(button => button.Command).ToArray();
+                Assert.Contains(screen.BrowseTestExportDefaultFolderCommand, commands);
+                Assert.Contains(screen.ClearTestExportDefaultFolderCommand, commands);
+            });
+        }, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task AutoVolumeTargetRow_LaysOutAndBindsInGeneralAdvanced()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var screen = FakeGeneralSettingsScreen.AdvancedOpen();
+            var tab = new GeneralSettingsView { DataContext = screen };
+            WithLaidOutTab(tab, () =>
+            {
+                var input = Assert.Single(tab.GetLogicalDescendants().OfType<NumericUpDown>(),
+                    control => control.Name == "AutoVolumeTargetInput");
+                var row = Assert.IsType<Grid>(input.Parent);
+                Assert.True(row.IsEffectivelyVisible);
+                Assert.True(row.Bounds.Width > 1 && row.Bounds.Height > 1, $"Auto volume row bounds: {row.Bounds}");
+                Assert.Equal(-20m, input.Minimum);
+                Assert.Equal(-10m, input.Maximum);
+                Assert.Equal(1m, input.Increment);
+                Assert.Equal(-14m, input.Value);
+                screen.ExportAutoVolumeTargetLufs = -20;
+                Assert.Equal(-20m, input.Value);
+                input.Value = -10;
+                Assert.Equal(-10, screen.ExportAutoVolumeTargetLufs);
+            });
+        }, CancellationToken.None);
+    }
+
     /// <summary>
     ///     String order is a reading preference: one picker on Editor (the 2D
     ///     timeline + editor preview) and one on Play (the game's highway), each
@@ -678,6 +813,52 @@ public sealed class SettingsConstructionUiPerfSmokeTests
             });
         }, CancellationToken.None);
     }
+
+    [Fact]
+    public Task AiTab_FailedKeySaveKeepsInputAndVisibleFailure() =>
+        HeadlessSessionFixture.Dispatch(() =>
+        {
+            if (!OperatingSystem.IsWindows()) Assert.Skip("DPAPI is Windows-only.");
+            var path = Path.Combine(Path.GetTempPath(), $"dc-ai-capture-{Guid.NewGuid():N}.bin");
+            try
+            {
+                var store = new DotCharter.Tone.Ai.DpapiAiSecretStore(filePath: path);
+                Assert.True(store.Write(DotCharter.Tone.Ai.AiProviderKind.OpenAiCompatible, "other-provider-key"));
+                using var vm = DotCharter.Tests.Presentation.Settings.AiTabRig.Create(
+                    new FakeConfigurationService(), store, new DotCharter.Tone.Ai.ToneDesignModelFactory(store));
+                vm.Load();
+                vm.SelectedProvider = vm.Providers.Single(p => p.Kind == DotCharter.Tone.Ai.AiProviderKind.Claude);
+                vm.ApiKeyEntry = "synthetic-pending-key";
+                var tab = new AiSettingsView { DataContext = vm };
+                WithLaidOutTab(tab, () =>
+                {
+                    CaptureTab(tab, "round1-ai-secret-before");
+                    var keyBox = tab.GetLogicalDescendants().OfType<TextBox>().Single(t => t.Name == "AiApiKeyBox");
+                    Assert.True(keyBox.IsEffectivelyVisible && keyBox.Bounds is { Width: > 1, Height: > 1 });
+                    Assert.Equal("synthetic-pending-key", keyBox.Text);
+
+                    using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Write | FileShare.Delete))
+                        vm.Save();
+                    Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                    CaptureTab(tab, "round1-ai-secret-after");
+
+                    var status = tab.GetLogicalDescendants().OfType<TextBlock>().Single(t => t.Name == "AiStatus");
+                    Assert.True(status.IsEffectivelyVisible && status.Bounds is { Width: > 1, Height: > 1 });
+                    Assert.True(keyBox.IsEffectivelyVisible && keyBox.Bounds is { Width: > 1, Height: > 1 });
+                    Assert.True(vm.IsStatusError);
+                    Assert.Contains("error", status.Classes);
+                    Assert.Equal(vm.StatusText, status.Text);
+                    Assert.Equal(FakeLocalization.English()["Ai_KeySaveFailed"], status.Text);
+                    Assert.Equal("synthetic-pending-key", vm.ApiKeyEntry);
+                    Assert.Equal(vm.ApiKeyEntry, keyBox.Text);
+                    Assert.Equal("other-provider-key", store.Read(DotCharter.Tone.Ai.AiProviderKind.OpenAiCompatible));
+                });
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }, TestContext.Current.CancellationToken);
 
     private static List<Border> VisibleGroups(Control tab) =>
         tab.GetLogicalDescendants().OfType<Border>()

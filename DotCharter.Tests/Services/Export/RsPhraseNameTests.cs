@@ -59,6 +59,43 @@ public sealed class RsPhraseNameTests
 
     private static readonly string[] AuthoredNames = ["COUNT", "Solo (fast)", "サビ", "Riff!", "Riff?", "Riff", "END"];
 
+    [Fact]
+    public void SanitizeAll_AllocatesDistinctLegalNamesAfterTruncation_AndReservesUnchangedNames()
+    {
+        var prefix = new string('A', RsPhraseName.SngMaxLength);
+        var reserved = new string('A', RsPhraseName.SngMaxLength - 2) + " 2";
+        var names = new[] { prefix + "x", prefix + "y", reserved, prefix, "Verse", "Verse" };
+
+        var exported = RsPhraseName.SanitizeAll(names, RsPhraseName.SngMaxLength);
+
+        Assert.Equal([new string('A', 29) + " 3", new string('A', 29) + " 4", reserved, prefix, "Verse", "Verse"],
+            exported);
+        Assert.All(exported, n => Assert.InRange(n.Length, 1, RsPhraseName.SngMaxLength));
+        Assert.Equal(5, exported.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public void TheSng_KeepsLongLegalPhraseNamesDistinct_AndTheirIterationsAndSoloFlags()
+    {
+        var project = ProjectWithAuthoredNames();
+        var arrangement = project.Arrangements[0];
+        var prefix = new string('A', RsPhraseName.SngMaxLength);
+        arrangement.Phrases[1] = prefix + "x";
+        arrangement.Phrases[2] = prefix + "y";
+        arrangement.PhraseInfos[arrangement.Phrases[1]] = new PhraseInfo(0, true);
+
+        var sng = SngFromDomainMapper.BuildInstrumental(arrangement, project.Beats, 20000).Sng;
+
+        AssertLegalAndUnique(sng.Phrases.Select(p => p.Name).ToList());
+        Assert.Equal(prefix, sng.Phrases[1].Name);
+        Assert.Equal(new string('A', 29) + " 2", sng.Phrases[2].Name);
+        Assert.Equal((sbyte)1, sng.Phrases[1].Solo);
+        Assert.Equal((sbyte)0, sng.Phrases[2].Solo);
+        Assert.Equal([0, 1, 2, 3, 4, 5, 6], sng.PhraseIterations.Select(p => p.PhraseId));
+        Assert.Equal(prefix + "x", arrangement.Phrases[1]);
+        Assert.Equal(prefix + "y", arrangement.Phrases[2]);
+    }
+
     private static ChartProject ProjectWithAuthoredNames()
     {
         var arrangement = new Arrangement { Name = "Lead", ArrangementType = ArrangementType.Lead, StringCount = 6 };

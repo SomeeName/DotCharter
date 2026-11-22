@@ -8,7 +8,9 @@
 /// <param name="Soloed">The channel is soloed; any solo silences everything unsoloed.
 /// A soloed channel that is also <paramref name="Muted" /> stays silent — see
 /// <see cref="StemWaveformMix.Audible" />.</param>
-public readonly record struct StemMixChannel(string Name, bool IsMasterMix, double Gain, bool Muted, bool Soloed);
+/// <param name="OffsetMs">Saved timing: positive delays the stem, negative trims its start.</param>
+public readonly record struct StemMixChannel(string Name, bool IsMasterMix, double Gain, bool Muted, bool Soloed,
+    double OffsetMs = 0);
 
 /// <summary>
 ///     Builds the waveform of what the mixer is actually PLAYING, rather than
@@ -29,6 +31,21 @@ public readonly record struct StemMixChannel(string Name, bool IsMasterMix, doub
 /// </summary>
 public static class StemWaveformMix
 {
+    /// <summary>Applies playback's padding or trimming at the waveform's base-block resolution.</summary>
+    public static WaveformSamples ApplyOffset(WaveformSamples waveform, double offsetMs)
+    {
+        if (!waveform.HasData || offsetMs == 0) return waveform;
+        if (!double.IsFinite(offsetMs)) throw new ArgumentOutOfRangeException(nameof(offsetMs));
+
+        var peaks = waveform.Mipmaps[0];
+        var blocks = Math.Round(offsetMs / waveform.BaseBlockMs);
+        var skip = (int)Math.Min(peaks.Length, Math.Max(0, -blocks));
+        var padding = checked((int)Math.Max(0, blocks));
+        var shifted = new float[checked(peaks.Length - skip + padding)];
+        Array.Copy(peaks, skip, shifted, padding, peaks.Length - skip);
+        return WaveformSamples.FromBasePeaks(shifted, waveform.BaseBlockMs);
+    }
+
     /// <summary>
     ///     Which channels are audible, with the gain each contributes.
     ///     <para>

@@ -6,27 +6,16 @@
           x:Class="DotCharter.UI.Views.Shell.Menus.TempoMapMenu"
           x:DataType="viewModels:MainWindowViewModel"
           Classes="FireMenuTop" Header="{localization:Loc Menu_TempoMap}">
-    <!-- The four verbs that change the song's EDGES — silence and beats
-         before bar one, silence after the last. They are set once per
-         chart and were sitting on top of the two playhead verbs, which
-         are used constantly; those stay one click away. -->
-    <MenuItem Header="{localization:Loc Menu_GroupStartEnd}">
+    <!-- The verbs that change the song's EDGES — silence and beats before bar one,
+         silence after the last — are ONE dialog (#494); the five palette ids open it
+         on their own choice. Set once per chart, so they sit above the playhead verbs. -->
+    <MenuItem Header="{localization:Loc Menu_StartEnd}"
+              Command="{Binding ShellDialogs.OpenStartEndDialogCommand}">
         <MenuItem.Icon>
             <PathIcon
                 Data="M6,4H8V20H6V4M10.5,4H12.5V20H10.5V4M15,4H17V20H15V4Z"
                 Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
         </MenuItem.Icon>
-        <MenuItem Header="{localization:Loc Menu_SetDefaultStartSilence}"
-                  Command="{Binding ShellDialogs.OpenSetDefaultStartSilenceDialogCommand}" />
-        <MenuItem Header="{localization:Loc Menu_AddSilenceAtStart}"
-                  Command="{Binding ShellDialogs.OpenAddSilenceAtStartDialogCommand}" />
-        <MenuItem Header="{localization:Loc Menu_AddMeasuresAtStart}"
-                  Command="{Binding ShellDialogs.OpenAddMeasuresAtStartDialogCommand}" />
-        <Separator />
-        <MenuItem Header="{localization:Loc Menu_AddSilenceAtEnd}"
-                  Command="{Binding ShellDialogs.OpenAddSilenceAtEndDialogCommand}" />
-        <MenuItem Header="{localization:Loc Menu_AddMeasuresAtEnd}"
-                  Command="{Binding ShellDialogs.OpenAddMeasuresAtEndDialogCommand}" />
     </MenuItem>
     <MenuItem Header="{localization:Loc Menu_InsertBeatAtPlayhead}"
               Command="{Binding InsertBeatAtPlayheadCommand}"
@@ -34,6 +23,9 @@
     <MenuItem Header="{localization:Loc Menu_RemoveBeatAtPlayhead}"
               Command="{Binding RemoveBeatAtPlayheadCommand}"
               InputGesture="{Binding ProjectState.Keybinds.RemoveBeatAtPlayhead, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    <MenuItem Header="{localization:Loc Menu_InsertMeasuresAtPlayhead}"
+              Command="{Binding ShellDialogs.OpenInsertMeasuresAtPlayheadDialogCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.InsertMeasuresAtPlayhead, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
     <Separator />
     <MenuItem Header="{localization:Loc Menu_SetAllBpm}" Command="{Binding ShellDialogs.OpenSetBpmDialogCommand}">
         <MenuItem.Icon>
@@ -44,8 +36,14 @@
     </MenuItem>
     <MenuItem Header="{localization:Loc Menu_AlignBeatGrid}"
               Command="{Binding ShellDialogs.OpenAlignBeatGridDialogCommand}" />
+    <!-- Matches the chart's notes against the audio, so on a chart without notes the row is
+         disabled and its tooltip says why (the menu asks again each time it opens). -->
     <MenuItem Header="{localization:Loc Menu_AlignToRecording}"
-              Command="{Binding ShellDialogs.OpenAlignToRecordingDialogCommand}" />
+              Command="{Binding ShellDialogs.OpenAlignToRecordingDialogCommand}"
+              IsEnabled="{Binding EditingAvailability.Enabled[OpenAlignToRecordingDialog]}"
+              ToolTip.Tip="{Binding EditingAvailability[OpenAlignToRecordingDialog]}" ToolTip.ShowOnDisabled="True" />
+    <MenuItem Header="{localization:Loc Menu_EstimateBpm}"
+              Command="{Binding ShellDialogs.OpenEstimateBpmDialogCommand}" />
     <Separator />
     <MenuItem Header="{localization:Loc Menu_LockBeatMap}" ToggleType="CheckBox"
               IsChecked="{Binding IsBeatMapLocked}"

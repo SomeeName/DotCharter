@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspector="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
+             xmlns:panels="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundTaskReadinessView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Task page's EXPORT READINESS card (#751 P5, design D): how many sounds would stop the export (the lint's
+         count, in SOUNDS; the verdict is the Issues tab's, #119), the step to the next one, the Issues tab's export
+         check, and Generate all fingerings. -->
+    <StackPanel x:Name="SoundTaskReadiness" Spacing="{StaticResource SpaceXs}">
+        <TextBlock x:Name="SoundTaskReadinessTitle" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" Text="{Binding NextTask.ReadinessTitle}"
+                   TextWrapping="Wrap" />
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{Binding NextTask.ReadinessDetail}" TextWrapping="Wrap" />
+        <WrapPanel ItemSpacing="{StaticResource SpaceXs}" LineSpacing="{StaticResource SpaceXs}">
+            <Button Grid.Column="0" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc Inspector_Task_NextBlocker}" AutomationProperties.Name="{localization:Loc Inspector_Task_NextBlocker}"
+                    ToolTip.Tip="{Binding Queue.BlocksExportTileTip}" ToolTip.ShowOnDisabled="True"
+                    Command="{Binding NextTask.TriageCommand}" CommandParameter="{x:Static viewModels:SoundQueueFilter.BlocksExport}"
+                    IsEnabled="{Binding NextTask.HasBlockers}" />
+            <!-- Opens the Issues tab, the ONE home of Check export (#119). -->
+            <Button Grid.Column="1" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc Inspector_Export_Open}" AutomationProperties.Name="{localization:Loc Inspector_Export_Open}"
+                    ToolTip.Tip="{localization:Loc Inspector_Export_OpenTip}" Command="{Binding ShowExportReadinessCommand}" />
+        </WrapPanel>
+        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc ChordTemplate_GenerateAllFingerings}" AutomationProperties.Name="{localization:Loc ChordTemplate_GenerateAllFingerings}"
+                    Command="{Binding ChordTemplateEditor.GenerateAllFingeringsCommand}" ToolTip.Tip="{localization:Loc ChordTemplate_GenerateAllFingeringsTip}" />
+    </StackPanel>
+</UserControl>

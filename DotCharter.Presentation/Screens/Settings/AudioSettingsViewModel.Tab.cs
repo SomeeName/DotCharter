@@ -11,26 +11,15 @@ namespace DotCharter.Presentation.Screens.Settings;
 /// <summary>The Settings-tab half (tracking, search), the driver predicates, the guitar-jack and output-pair pickers, and the contract.</summary>
 public partial class AudioSettingsViewModel : ISettingsTab, ISettingsChangeSource
 {
-    /// <summary>
-    ///     The settings the footer counts. Device ROWS are absent on purpose: the
-    ///     name is what persists, and each index lands on its value when the
-    ///     worker's probe returns, which is not an edit.
-    /// </summary>
-    private static readonly string[] Tracked =
-    [
-        nameof(SelectedDriver), nameof(AsioOutputChannelLeft), nameof(AsioOutputChannelRight), nameof(EnableInput),
-        nameof(SelectedInputDriver), nameof(AsioInputChannelLeft), nameof(AsioInputChannelRight), nameof(AsioInputMono),
-        nameof(InputChannelsAreSeparateGuitars), nameof(SelectedDropTunerEngineIndex), nameof(AutoFollowDeviceSettings),
-        nameof(SampleRate), nameof(BufferSizeFrames), nameof(AudioDelayMs), nameof(AutoCalibrateTiming),
-        nameof(TakeRecorderEnabled), nameof(EnableHighProcessPriority), nameof(OutOfProcessVst),
-        nameof(EnableStreamingMirror), nameof(MidiDelayMs)
-    ];
-
     /// <summary>The names the footer counts, for the round-trip and reachability lints.</summary>
-    internal static IReadOnlyList<string> TrackedSettings => Tracked;
+    internal static IReadOnlyList<string> TrackedSettings => AudioSettingsTracking.Tracked;
 
-    private readonly SettingsChangeSet _changes = new();
-    private bool _tracking;
+    /// <summary>The picked devices' one entry in the count; see <see cref="AudioSettingsTracking" />.</summary>
+    internal const string DeviceSelectionKey = AudioSettingsTracking.DeviceSelectionKey;
+
+    private AudioSettingsTracking? _tracker;
+
+    private AudioSettingsTracking Changes => _tracker ??= new AudioSettingsTracking(this);
 
     [ObservableProperty] private bool _isAdvancedOpen;
 
@@ -39,6 +28,15 @@ public partial class AudioSettingsViewModel : ISettingsTab, ISettingsChangeSourc
     public string ReadoutDevice => PickName(IsAsioOutput ? AsioDevices : WasapiDevices,
         IsAsioOutput ? SelectedAsioOutputIndex : SelectedWasapiOutputIndex) is { Length: > 0 } name
         ? name : _localization["Settings_Audio_ReadoutNoDevice"];
+
+    /// <summary>A language switch: the lines formatted from a resx string are read again.</summary>
+    internal void RaiseTextsChanged()
+    {
+        OnPropertyChanged(nameof(ReadoutDevice));
+        OnPropertyChanged(nameof(BufferLatencyDescription));
+        OnPropertyChanged(nameof(ActualBufferDescription));
+        OnPropertyChanged(nameof(ReadoutBuffer));
+    }
 
     // The readouts say what the ENGINE runs (the status bar reads the same), not the
     // request: an ASIO device fixed at 48 kHz ignores a 44.1 kHz request.
@@ -57,7 +55,7 @@ public partial class AudioSettingsViewModel : ISettingsTab, ISettingsChangeSourc
 
     public Type? Screen => typeof(IAudioSettingsScreen);
 
-    public IReadOnlyList<string> UnsavedSettings => _changes.Differences();
+    public IReadOnlyList<string> UnsavedSettings => Changes.Differences();
 
     public IReadOnlyList<SettingsSearchGroup> SearchGroups => AudioSettingsCatalog.Groups(_localization);
 
@@ -76,8 +74,7 @@ public partial class AudioSettingsViewModel : ISettingsTab, ISettingsChangeSourc
 
     public void Rebaseline()
     {
-        EnsureTracking();
-        _changes.Rebaseline();
+        Changes.Rebaseline();
         OnPropertyChanged(nameof(UnsavedSettings));
     }
 
@@ -88,21 +85,15 @@ public partial class AudioSettingsViewModel : ISettingsTab, ISettingsChangeSourc
         if (query.Length > 0 && kept.Skip(AudioSettingsCatalog.FirstAdvancedGroup).Any(k => k)) IsAdvancedOpen = true;
     }
 
-    private void EnsureTracking()
+    private void RebaselineDevices()
     {
-        if (_tracking) return;
-        _tracking = true;
-        foreach (var name in Tracked)
-        {
-            var property = typeof(AudioSettingsViewModel).GetProperty(name)!;
-            _changes.Track(name, () => property.GetValue(this));
-        }
+        if (Changes.RebaselineDevices()) OnPropertyChanged(nameof(UnsavedSettings));
     }
 
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (_tracking && e.PropertyName is { } name && Tracked.Contains(name))
+        if (e.PropertyName is { } name && Changes.Counts(name))
             base.OnPropertyChanged(new PropertyChangedEventArgs(nameof(UnsavedSettings)));
         if (e.PropertyName is nameof(SelectedDriver) or nameof(SelectedWasapiOutputIndex)
             or nameof(SelectedAsioOutputIndex) or nameof(SampleRate) or nameof(BufferSizeFrames))
@@ -152,18 +143,16 @@ public partial class AudioSettingsViewModel : ISettingsTab, ISettingsChangeSourc
 
     partial void OnAsioInputChannelLeftChanged(int value) => _jacks.Sync(value);
 
-    /// <summary>Another capture device means another jack count, enumerated off the UI thread like the probe.</summary>
+    /// <summary>Another capture device means another jack count, enumerated off the UI thread; a device of the other driver re-reads nothing.</summary>
     partial void OnSelectedAsioInputIndexChanged(int value)
     {
-        if (value < 0 || value >= AsioInputDevicesList.Count) return;
-        _jacks.ProbeDevice("ASIO", AsioInputDevicesList[value]);
+        if (IsAsioInput) _jacks.ProbeDevice("ASIO", AsioInputDevicesList, value);
     }
 
     /// <summary>The WASAPI capture device's jack count, read the same way: the engine masks its jacks too.</summary>
     partial void OnSelectedWasapiInputIndexChanged(int value)
     {
-        if (value < 0 || value >= WasapiInputDevicesList.Count || SelectedInputDriver == "ASIO") return;
-        _jacks.ProbeDevice("WASAPI", WasapiInputDevicesList[value]);
+        if (IsWasapiInput) _jacks.ProbeDevice("WASAPI", WasapiInputDevicesList, value);
     }
 
     /// <summary>The playback device's output count behind <see cref="OutputPairOptions" />; 0 = not known yet.</summary>
@@ -229,6 +218,9 @@ public partial class AudioSettingsViewModel : ISettingsTab, ISettingsChangeSourc
         OnPropertyChanged(nameof(IsAsioActive));
         OnPropertyChanged(nameof(IsWasapiInput));
         OnPropertyChanged(nameof(IsAsioInput));
+        // The new driver's device: a read of the old driver's still running must not land for it.
+        if (IsAsioInput) _jacks.ProbeDevice("ASIO", AsioInputDevicesList, SelectedAsioInputIndex);
+        else _jacks.ProbeDevice("WASAPI", WasapiInputDevicesList, SelectedWasapiInputIndex);
     }
 
     partial void OnBufferSizeFramesChanged(int value) => OnPropertyChanged(nameof(BufferLatencyDescription));

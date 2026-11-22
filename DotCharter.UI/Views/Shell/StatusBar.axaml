@@ -152,7 +152,7 @@
                 IsVisible="{Binding HasActiveTask}" Classes="ShellChip Accent"
                 HorizontalAlignment="Right" MinWidth="160"
                 ClipToBounds="True"
-                ToolTip.Tip="{Binding ActiveTaskLabel}"
+                ToolTip.Tip="{Binding ActiveTaskTip}"
                 Margin="{StaticResource FireGapLeftRow}">
           <!-- The label fills what the glyph, the bar and the cancel button
                leave, so it is the part that trims; a DockPanel (unlike a star
@@ -248,8 +248,8 @@
                    ToolTip.Tip="{localization:Loc StatusBar_UnsavedChanges_Tip}" />
         <Border Classes="StatusDivider" IsVisible="{Binding HasProject}" />
 
-        <!-- Editing-state readouts (P1-11): SNAP grid label · SEL count ·
-             ZOOM factor, plus the string-edit MASK only while one is set.
+        <!-- Editing-state readouts (P1-11): SEL count · ZOOM factor (the grid snap
+             is the toolbar's, #495), plus the string-edit MASK only while one is set.
              Plain strings refreshed through ONE coalesced Background post
              (selection changes fire in bursts) — never per-frame bindings.
              The MASK is not Faint on purpose: it is active modal state the
@@ -261,7 +261,6 @@
           <StackPanel Orientation="Horizontal" IsVisible="{Binding ShowsEditReadouts}"
                       Spacing="{StaticResource FireSpaceSmPlus}" VerticalAlignment="Center"
                       ToolTip.Tip="{localization:Loc StatusBar_EditReadouts_Tip}">
-            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding SnapLabel}" VerticalAlignment="Center" />
             <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding SelectionLabel}" VerticalAlignment="Center" />
             <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding ZoomLabel}" VerticalAlignment="Center" />
             <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono" Text="{Binding MaskLabel}" VerticalAlignment="Center"
@@ -308,7 +307,17 @@
         </StackPanel>
         <Border Classes="StatusDivider" IsVisible="{Binding HasActiveTone}" />
 
-        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding AudioStatus}" VerticalAlignment="Center" />
+        <!-- Audio health (#495): one dot, the detail in its tooltip; the detail prints beside the dot,
+             in the warning colour, only while something is wrong (no device, device lost, dropouts). -->
+        <StackPanel x:Name="StatusAudioHealth" Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}"
+                    VerticalAlignment="Center"
+                    ToolTip.Tip="{Binding AudioStatus}"
+                    AutomationProperties.Name="{Binding AudioStatus}">
+          <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                   Classes="StatusAudioDot" Classes.Problem="{Binding HasAudioProblem}" />
+          <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Warn" Text="{Binding AudioStatus}"
+                     IsVisible="{Binding HasAudioProblem}" VerticalAlignment="Center" />
+        </StackPanel>
 
         <!-- ⚠ chart-lint warnings (live audit #7). These chips used to count
              the WARN/ERROR log lines since launch, so the badge climbed

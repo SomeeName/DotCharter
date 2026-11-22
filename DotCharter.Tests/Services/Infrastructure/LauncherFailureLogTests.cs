@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using DotCharter.Launcher;
 using DotCharter.Tone.Infrastructure.Storage;
 
@@ -103,4 +104,109 @@ public sealed class LauncherFailureLogTests : IDisposable
         Assert.Null(LaunchCommandLine.TryWriteFailureLog(
             Path.Combine(file, "a"), Path.Combine(file, "b"), "line"));
     }
+
+    // ---- #383: a failed start is shown, through a seam ----------------------
+
+    [Fact]
+    public void FailureMessage_NamesTheReasonTheExitCodeAndTheLog()
+    {
+        var text = LaunchCommandLine.FailureMessage("the file does not exist", LaunchCommandLine.MissingAppExitCode, @"C:\x\log.txt");
+
+        Assert.Contains("the file does not exist", text);
+        Assert.Contains("0x44430001", text);
+        Assert.Contains(@"C:\x\log.txt", text);
+    }
+
+    [Fact]
+    public void ReportFailure_HandsTheMessageToTheReporter_AndReturnsTheExitCode()
+    {
+        var shown = new List<string>();
+
+        var code = LaunchCommandLine.ReportFailure(
+            Path.Combine(_root, "launcher"), Temp(), @"C:\x\app\DotCharter.exe", "the file does not exist",
+            LaunchCommandLine.MissingAppExitCode, showDialog: true, shown.Add);
+
+        Assert.Equal(LaunchCommandLine.MissingAppExitCode, code);
+        var message = Assert.Single(shown);
+        Assert.Contains("the file does not exist", message);
+        Assert.Contains(Path.Combine(_root, "launcher", LaunchCommandLine.FailureLogName), message);
+    }
+
+    [Fact]
+    public void ReportFailure_StaysSilentWhenNoDialogIsWanted()
+    {
+        var shown = new List<string>();
+
+        LaunchCommandLine.ReportFailure(
+            Path.Combine(_root, "launcher"), Temp(), "x", "r", LaunchCommandLine.StartFailedExitCode, false, shown.Add);
+
+        Assert.Empty(shown);
+        Assert.True(File.Exists(Path.Combine(_root, "launcher", LaunchCommandLine.FailureLogName)));
+    }
+
+    [Theory]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    public void ShouldShowDialog_IsOnlyForAPersonAtTheDesktop(bool redirected, bool desktop, bool expected)
+        => Assert.Equal(expected, LaunchCommandLine.ShouldShowDialog(redirected, desktop));
+
+    /// <summary>
+    ///     #605: the app missing on a redirected or hidden-desktop launch writes the note and
+    ///     shows NO dialog; a person at the desktop still gets the missing-app message. The
+    ///     policy is decided inside the missing-app path from the STARTUPINFO flags it is handed.
+    /// </summary>
+    [Theory]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    public void AMissingApp_ShowsTheDialogOnlyToAPersonAtTheDesktop(bool redirected, bool desktop, bool dialog)
+    {
+        var shown = new List<string>();
+        var launcher = Path.Combine(_root, "launcher");
+
+        var code = LaunchCommandLine.ReportIfAppMissing(
+            launcher, Temp(), @"C:\x\app\DotCharter.exe", appExists: false, redirected, desktop, shown.Add);
+
+        Assert.Equal(LaunchCommandLine.MissingAppExitCode, code);
+        Assert.Equal(dialog ? 1 : 0, shown.Count);
+        Assert.True(File.Exists(Path.Combine(launcher, LaunchCommandLine.FailureLogName)), "the failure note was not written");
+    }
+
+    [Fact]
+    public void APresentApp_IsNoFailure()
+    {
+        var shown = new List<string>();
+
+        Assert.Null(LaunchCommandLine.ReportIfAppMissing(
+            Path.Combine(_root, "launcher"), Temp(), "x", appExists: true, false, false, shown.Add));
+        Assert.Empty(shown);
+    }
+
+    /// <summary>
+    ///     #605, the wiring: <c>Program.Main</c> is a native entry point the tests cannot run, so
+    ///     this is the one part pinned on the source. No static dialog flag that starts out true,
+    ///     the missing-app check goes through <see cref="LaunchCommandLine.ReportIfAppMissing" />,
+    ///     and every other failure passes the policy read from STARTUPINFO.
+    /// </summary>
+    [Fact]
+    public void Main_HasNoDialogFlagAFailureCouldReadBeforeTheStartupInfo()
+    {
+        var program = SourceText.StripComments(
+            File.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "DotCharter.Launcher", "Program.cs")));
+
+        Assert.DoesNotContain("_showDialog", program, StringComparison.Ordinal);
+        Assert.Contains("LaunchCommandLine.ReportIfAppMissing(", program, StringComparison.Ordinal);
+        Assert.Equal(
+            Regex.Matches(program, @"return Fail\(").Count,
+            Regex.Matches(program, @"return Fail\([^;]*,\s*showDialog\);").Count);
+    }
+
+    [Theory]
+    [InlineData(1, 200, true)]
+    [InlineData(0, 200, false)]
+    [InlineData(1, 60000, false)]
+    public void IsQuickCrash_NeedsANonzeroExitSoonAfterTheStart(int code, long elapsed, bool expected)
+        => Assert.Equal(expected, LaunchCommandLine.IsQuickCrash(code, elapsed));
 }

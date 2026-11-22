@@ -79,6 +79,10 @@ places at fret 0 and you fix it afterwards.)
   so a run something else has already built on top of (an undo, a pointer edit, a
   paste) can never be reopened and can never undo somebody else's work, and
   seeking between two digits cannot land the extended value on the wrong sound.
+- Target identity includes the string mask, the owning arrangement and collections,
+  and every selected note/chord instance. Changing only the mask or adding another
+  selected sound starts a new run; the first digit's edit remains on the undo path
+  (`ChartPenServiceTests`).
 
 ### Why bare digits toggle strings and `Alt`+digits type frets
 

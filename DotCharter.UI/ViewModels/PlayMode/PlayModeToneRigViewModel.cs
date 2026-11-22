@@ -2,6 +2,9 @@
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Services.Ai.Match;
 using DotCharter.Services.Ai.Match.Model;
+using DotCharter.Services.Editing.Tones;
+using DotCharter.Tone.Audio.Dsp.RsToneConversion;
+using DotCharter.Tone.Audio.Dsp.Tones;
 using DotCharter.Tone.Online.Tone3000;
 using DotCharter.Tone.UI.ViewModels.PlayMode;
 using DotCharter.Tone.UI.ViewModels.Shell;
@@ -252,7 +255,10 @@ public sealed partial class PlayModeToneRigViewModel : ViewModelBase
                 _toneSetMatcher,
                 _toneNarrator,
                 () => _audio?.CurrentTimeMs ?? 0.0,
-                PlaceToneSet);
+                PlaceToneSet,
+                resultOwner: ToneSetOwner,
+                project: () => _projectState.ActiveProject,
+                ownerChanges: _projectState);
         }
 
         return screen;
@@ -284,9 +290,9 @@ public sealed partial class PlayModeToneRigViewModel : ViewModelBase
     ///     ms → position conversion), in the ACTIVE arrangement.
     ///     <para>
     ///         <b>It goes through the undo pipeline.</b>
-    ///         <c>AddToneChangesAction</c> under <c>IHistoryService.Do</c> is the
-    ///         same path the event dialog's tone field takes, so a whole tone set
-    ///         is one Ctrl+Z. A host with no history service still places them:
+    ///         Project tone definitions and <c>AddToneChangesAction</c> share one
+    ///         <c>CompositeAction</c> under <c>IHistoryService.Do</c>, so a playable
+    ///         tone set is one Ctrl+Z. A host with no history still places them:
     ///         the undo stack is the chart editor's, and Play Mode is reachable
     ///         without one.
     ///     </para>
@@ -298,37 +304,59 @@ public sealed partial class PlayModeToneRigViewModel : ViewModelBase
     ///     </para>
     /// </summary>
     /// <param name="entries">Each matched section and the tone it became.</param>
+    /// <remarks>The section list checks <see cref="ToneSetOwner" /> first: a set matched for
+    /// another song or arrangement is dropped, never placed here.</remarks>
     private int? PlaceToneSet(IReadOnlyList<ToneSetEntry> entries)
     {
         var arrangement = _projectState.ActiveArrangement;
-        var beats = _projectState.ActiveProject?.Beats;
-        if (arrangement is null || beats is null || beats.Count == 0)
+        var project = _projectState.ActiveProject;
+        var beats = project?.Beats;
+        if (arrangement is null || project is null || beats is null || beats.Count == 0)
         {
             return null;
         }
 
-        var changes = entries
-            .Select(e => new ToneChange
+        var keys = project.ToneDefinitions.Select(d => d.Key).ToList();
+        var actions = new List<IChartAction>();
+        var changes = new List<ToneChange>();
+        foreach (var entry in entries)
+        {
+            var key = RsToneAuthoring.MakeUniqueKey(RsToneAuthoring.SanitizeKey(entry.Tone.Name), keys);
+            var converted = RigToRsToneConverter.Convert(entry.Tone.Rig, key, entry.Tone.Name);
+            if (converted.Tone is not { } tone) return 0;
+            keys.Add(key);
+            actions.Add(new UpsertToneDefinitionAction(project, null,
+                new ToneDefinition { Key = key, Name = tone.Name, Json = RsToneJsonWriter.Write(tone) }));
+            changes.Add(new ToneChange
             {
-                Position = TimelineMath.PositionFromMs(e.Section.From.TotalMilliseconds, beats),
-                ToneName = e.Tone.Name
-            })
-            .ToList();
+                Position = TimelineMath.PositionFromMs(entry.Section.From.TotalMilliseconds, beats),
+                ToneName = key
+            });
+        }
 
         if (changes.Count == 0)
         {
             return 0;
         }
 
-        var action = new AddToneChangesAction(arrangement.ToneChanges, changes);
+        actions.Add(new AddToneChangesAction(arrangement.ToneChanges, changes));
+        var action = new CompositeAction(actions);
         if (_history is null)
         {
             action.Execute();
+            ToneSetApplied?.Invoke();
             return changes.Count;
         }
 
-        return _history.Do(action) ? changes.Count : 0;
+        if (!_history.Do(action)) return 0;
+        ToneSetApplied?.Invoke();
+        return changes.Count;
     }
+
+    public event Action? ToneSetApplied;
+
+    /// <summary>What a tone-set match belongs to: the open project and arrangement, by reference.</summary>
+    private object? ToneSetOwner() => _projectState.ActiveArrangement;
 
     /// <summary>
     ///     Test seam: supplies the rig instead of building it through the factory.

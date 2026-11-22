@@ -2,6 +2,98 @@
 
 ## Undo: a gesture is one node
 
+- **Clipboard markers retain all authored fields.** Both initial capture and
+  shifted paste copy `Events` and section `Status` alongside position, phrase
+  and section. Each paste owns its marker objects (`ClipboardServiceTests`).
+
+- Project edits made by dialogs use the same history as timeline edits. Rocksmith XML
+  imports append through `ImportRsXmlAction` (including an adopted beat map); bookmark
+  Set here / Clear use `SetBookmarkAction`. Undo and redo keep imported arrangement,
+  vocal track, showlight and bookmark identities. `RsXmlImportViewModelTests` and
+  `BookmarksViewModelTests` cover dirty tracking and restoring those edits.
+  Imported graphs (including prepared beats that
+  remain in the plan) count toward the history byte budget. Arrangement/vocal
+  deletion uses the central retained identities, so undoing the import after
+  undoing deletion removes the original owner exactly once.
+  When an import adopted the beat map, undo restores the known empty pre-import
+  list without matching beat instances: tempo scaling replaces them with clones.
+  Redo reinstalls the recorded imported map. `ImportRsXmlActionInterleavingTests`
+  deep-compares all import kinds across scale, deletion, generation and spacing
+  for three redo/undo cycles.
+- `ProjectSpacingEdit` captures both arrangement snapshots with retained identities
+  and restores through `ChartProjectRestorer`; it charges both retained graphs.
+  Nested bends and removed anchors return as their original instances even after
+  arrangement deletion/restoration (`ArrangementDeletionUndoTests`). Spacing redo
+  prunes detached anchor selections through the normal history notification
+  (`HighwayEditingServiceTests`).
+- Every project/arrangement/level snapshot used by undo, including snapshots
+  captured in a service or view model before constructing an action, must pass
+  `retainIdentities: true` to `ChartProjectCloner`. History memory estimation
+  cannot recover the original owners of a detached copy. This includes add-silence
+  before/after pairs and arrangement-settings saves; both charge their snapshots.
+- `HistorySnapshotIdentityLintTests` checks every production snapshot call,
+  including helper methods, aliases and static imports. Detached snapshots are
+  restricted to the fixed, reasoned non-history exception set, which may only
+  shrink. New unclassified snapshot calls fail even outside an action class.
+  Save/export/analysis copies stay detached and must never become undo inputs.
+
+- Generation history stages new values before updating existing difficulty-slot owners;
+  selecting the hardest is initial-command view state, and later surviving level
+  choices stay live through undo/redo. First materialization binds every new
+  parent's child collections before CopyFrom or another action can capture them.
+- Link-only history snapshots use `ChartProjectCloner.CloneLinkGroups` with retained
+  identities and `ChartProjectRestorer.RestoreLinkGroups`. Group/placement instances
+  survive follow-up undo before beat-scale undo; project restores rebind arrangements
+  after reconciling placements. `LinkFollowUpAction.Capture`/`Restore` are guarded.
+  Link snapshots, including merged follow-ups, count toward the history byte budget.
+  `ChartProjectFootprint.EstimateCopyBytes` also charges each retained propagated copy,
+  including copies absorbed from later gesture ticks. Their cleanup collateral replays
+  in sequence, so the byte estimate includes every retained tick.
+  `OnlyHereAction` shares its filtered `LinkCopyStep` objects with the original
+  `LinkFollowUpAction`, and charges its own retained copy list too. This is a
+  conservative per-holder policy: both nodes charge while both exist; pruning
+  either node leaves the surviving holder's charge intact. `Node` and
+  `CompositeAction` aggregate these action estimates. The reconciler's temporary
+  copy builder and propagation reports are not additional history copy owners.
+  `LinkedMeasuresHistoryTests` prunes the original node and checks the remaining
+  copy budget and subsequent undo/redo.
+
+- BPM actions capture both sides of arrangement enforcement. Redo restores the
+  recorded after-state before callbacks, so generated templates remain the same
+  objects when later fingering actions replay (`NestedUndoIdentityTests`).
+- Model `CopyFrom`, template note projection and collateral rollback preserve
+  nested child identities. Clones carry child tokens, not shared mutable objects;
+  undo reattaches removed bends/chord notes and redo reuses new ones.
+- The highway updater cache is cleared on project replacement and disposal;
+  delegates already owned by history still keep their captured level and grid.
+- History actions capture their owners at construction. `FhpAnchorEdit` keeps
+  the anchor collection it sorts, and highway spacing callbacks keep the edited
+  level and beat grid. Focus changes must not retarget replay.
+- `RemoveElementsAction` deduplicates targets by instance before execution;
+  one removed object must return once on undo. `ChartActionsTests` covers both
+  small and bulk removals.
+- `HighwayEditingService` prunes detached note/chord/hand-shape/anchor selections
+  on history changes, using one bulk notification per changed collection.
+  `HighwayEditingServiceTests` covers undo and redo after drag/paste.
+- `RunAsSingleUndoStep` restores its captured pre-state if the callback throws,
+  then rethrows without adding a history node (`SingleUndoStepTests`). Project
+  snapshots preserve the current audio reference and beat-map lock when the
+  step did not itself change those fields (`ProjectSnapshotExternalState`).
+
+- **Bend positions are absolute.** Nudge, snap and clipboard/phrase paste move
+  onsets through `Editing/SoundTimeMove.MoveTo`, translating every note or
+  chord-string bend by the owner's beat delta before the spacing pass runs.
+  The action owns cloned old/new states, so undo and redo restore the curve too.
+- **Conversion owns its bend points.** `ChordConversionCommands` merges notes
+  and builds a power chord's original string through `SoundConversion.ToChordNote`;
+  splitting clones each bend back into the new note. Removed sounds remain on
+  the undo stack and must never share mutable bends with their replacements.
+  Merge and power-chord conversion replace removed-note selections with the live
+  result chords, preserving other live selections. Conversion verbs also reject
+  detached selection entries after undo or an earlier conversion, so repeating
+  a split cannot add the removed chord's notes again. Regression evidence:
+  `BendConversionTests`, `NudgeInTimeTests`, `ClipboardServiceTests` and
+  `StrandedShapePathTests`.
 - **A bulk collection action goes through `CollectionActionBase.RemoveEach` /
   `.InsertEachSorted`, never a per-item loop (0.60).** `Collection.Remove(item)`
   hides an `IndexOf` scan and `InsertSorted` walks from index 0, so both halves

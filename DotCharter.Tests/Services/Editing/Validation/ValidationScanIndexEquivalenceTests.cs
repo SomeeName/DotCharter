@@ -208,16 +208,17 @@ public sealed class ValidationScanIndexEquivalenceTests(ITestOutputHelper output
     // ------------------------------- the sibling scan on the same load path
 
     /// <summary>
-    ///     The pre-index scan of <c>HasPhraseChangeOnSustain</c>, verbatim.
+    ///     The linear reference for <c>HasPhraseChangeOnSustain</c>, over the
+    ///     shared phrase markers so imported phrases and position precedence agree.
     /// </summary>
     private static bool ScanForPhraseChange(
         Arrangement arrangement, IList<BeatMarker> beats, double startMs, double endMs)
     {
-        foreach (var ep in arrangement.EventPoints)
+        foreach (var phrase in PhraseMarkers.All(arrangement))
         {
-            if (string.IsNullOrEmpty(ep.Phrase)) continue;
-            if (ep.Phrase.StartsWith("mover", StringComparison.OrdinalIgnoreCase)) continue;
-            var t = ep.Position.GetPositionMs(beats);
+            if (string.IsNullOrEmpty(phrase.Name)) continue;
+            if (phrase.Name.StartsWith("mover", StringComparison.OrdinalIgnoreCase)) continue;
+            var t = phrase.Position.GetPositionMs(beats);
             if (t > startMs && t <= endMs) return true;
         }
 

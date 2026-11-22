@@ -10,7 +10,34 @@ rule — the three things that apply whichever surface you came for. Everything
 else is one file per row of the table at the bottom, under
 [`play-mode/`](play-mode/).
 
+Refused starts retain the prepared run settings in Get Ready, as on main. Leaving preparation calls `EndRunSideEffects`, restoring editor speed, scroll speed, pitch, backing mutes and routing; keeping setup on the diagnostic screen must never leak it into the editor.
+
+Tone sections use `ChartProject.ProjectId` and `ProjectState.SongAudioRevision` as song
+identity. Save, Save As, autosave and path normalization preserve that identity; different
+projects cannot share it just because they use the same audio. First attachment keeps
+sections, and committed replacement or detachment clears them, including same-path
+replacement. The rig host passes the
+project through `ConfigureSections` separately from the arrangement. `ToneSectionOwner`
+holds the project ID and weak project/arrangement references (delegate-only hosts use
+project instance identity). `ToneSectionOwnerSubscription` forwards
+the host's project/arrangement and audio notifications immediately and unsubscribes on
+panel disposal or reconfiguration. An owner change clears sections, proposals, candidates,
+selection and the shared result published by sections, cancels work and advances one
+epoch; only the same project's first audio attachment preserves the data. All four awaits
+(proposal, DI load, matching and narration), deferred progress and retained publishing
+callbacks check that epoch. Hear/Save also validate a section result before acting.
+`ToneSectionsViewModelTests` covers these transitions, late completions and project collection.
+
 ## Play Mode (the game shell)
+
+Results listen-back borrows the master's mute as well as its source and playhead.
+The take plays with the master unmuted; `RunListenBackViewModel.StopAsync`
+restores the previous mute while the take still owns the transport, before handing
+its source back, without persisting the temporary unmute (`RunListenBackTests`, #634).
+
+Full-difficulty run start selects `ChartLevels.Hardest` in
+`PlayModeViewModel.Gameplay.cs`, so the highway and judging agree even when
+imported levels are stored out of difficulty order.
 
 - **`PlayModeViewModel` is split into partials (0.41)
   — go to the sibling, not the root.** It was 5,504 lines / 251 KB (69 commands, 199 `[ObservableProperty]`,
@@ -31,6 +58,24 @@ else is one file per row of the table at the bottom, under
   | `PlayModeToneRigViewModel.cs` (its own type, not a partial) | the Amp & FX rig overlay, exposed as `ToneRig`: `IsPedalboardOpen`, `Pedalboard`, the gated `AmpFxRig` screen, `OpenPedalboardCommand`, `EnsureRigScreen`, the AI panel's host half (`ConfigureMatch` / `ConfigureSections` / `PlaceToneSet`) and the test seam that hands it a chain. Constructor-injected; the chain, the per-screen rig parts and the AI lane are `Func<T?>` factories built in `App.ViewModelServices`. Bindings read `ToneRig.…`; Play Mode wires the song context, forwards `OpenSettingsRequested` and ends a song-tone edit on `Closed`. Nothing in Play Mode reads `App.Services` (`UI/PlayModeToneRigInjectionTests`) |
   | `PlayModeSettingsViewModel.cs` (its own type, not a partial; #658) | the settings modal, exposed as `Settings`: `IsGameplaySettingsOpen` and the open/close cycle (load on open, persist + mid-run re-arm on close), the AppConfig-backed values, the section rail, the search (`GameplaySettingsSearchPass`), the input meter (Get Ready's input row binds the same `Settings.GameplayInputLevelDb`; `SampleInputLevel` is the one read), the latency chip, Devices (`AudioDevices`), Keybinds and the per-section reset. A DI singleton (`App.ViewModelServices`); it takes the four services only it uses (`IThemeService`, `IVulkanRenderService`, `AudioSettingsViewModel`, `IKeybindRegistry`), so Play Mode's constructor no longer does. Its `ProjectState` reads are the sixteen graphics/appearance toggles, `Preview3DCameraFill` and the live `Keybinds` table — shared state, not Play Mode's. What it needs from Play Mode (`_runSideEffectsApplied`, the practice speed, the two tone rows, the input tap) goes through `IPlayModeSettingsHost`, which Play Mode implements and hands it with `AttachHost`. `Dispose` drops its one subscription on shared state (the keybind table, held only while open). The seven settings views bind `{Binding Settings.…}`; `PlayModeView` follows `Settings.PropertyChanged` for the meter clock. Tests: `UI/ViewModels/PlayMode/PlayModeSettingsViewModelTests` |
   | `PlaySetlistViewModel.cs` (its own type, not a partial; #646) | Play Mode SETLISTS (solo), exposed as `Setlists`: Song Select's panel (`Views/PlayMode/Screens/SetlistPanelView`, at the foot of `SongSelectDetailRailView` — its height is capped by `SongSelectDetailRailView.SetlistPanelMaxHeight` so the picked song's Play button stays in view), Results' "Next: <song>" + "End setlist", Pause's "Skip song" / "End setlist", and Get Ready's progress line and skipped-song note. It implements the four Presentation setlist contracts (`Contracts/PlayMode/ISetlistParts.cs`: `ISetlistPanel` for Song Select, `IGetReadySetlist`, `IPausedSetlist`, `IResultsSetlist`), and every shipped setlist binding goes through them: `SetlistPanelView` is typed `ISetlistPanel`, and Get Ready / Pause / Results set `DataContext="{Binding Setlists}"` with the part's `x:DataType` (`Presentation/SetlistContractTests` fails a `Setlists.` path or an untyped scope). The same `SetlistPanelView` sits in the redesigned Song Select rail on `FakeSetlistPanel`, so the gallery shows the markup the app ships. The pure run state is `Services/Gameplay/Setlists/SetlistRunner`; lists persist per player profile as `profiles/<id>/setlists.json` through `PlaySetlistStore` (`AtomicFile`; Unreadable/Corrupt reads never write over the file). It drives Play Mode only through `IPlaySetlistHost` (`OpenSongAsync`, the two run exits, the practice speed); Song Select reached any way but a setlist verb ends the setlist. Tests: `UI/ViewModels/PlayMode/PlaySetlistFlowTests`, `Services/Gameplay/SetlistRunnerTests`, `Services/Gameplay/PlaySetlistStoreTests`, `Perf/PlaySetlistUiPerfSmokeTests` |
+
+  Setlist load and refresh completions must match both their read generation
+  and the owning profile before publishing. Saves are refused while a load is
+  pending or the displayed lists belong to another profile.
+
+  Results listen-back owns a cancellable load even before `IsTakePlaying`
+  becomes true. Every exit from Results calls `StopAsync`, including during
+  decode; profile changes and new runs reset it too. A completion checks its
+  request before changing stem mutes or starting playback, and restoration only
+  uses atomic requested-generation ownership, not a path-only check. A newer
+  queued song prevents hand-back, and a newer request during decode prevents the
+  old song's final seek. Both editor bridge commands
+  await this hand-back before seeking the editor to the requested section.
+
+  Playback starts notify `OnGameplayPlaybackStarted`, including Space from Pause and
+  Riff Repeater without selecting a section. It restores the Playing surface and
+  delegates completion arming to `LivePlayCompletion` through the live session.
+  Full restart and Results/failed-section retry start a new session with no old loop.
 
   Home's hero and Jump back in use `IShellDestinations.PlaySongAsync`, carrying
   the song key and arrangement identity through `HomeSnapshot`. The generic

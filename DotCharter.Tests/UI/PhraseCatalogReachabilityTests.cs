@@ -35,7 +35,7 @@ public sealed class PhraseCatalogReachabilityTests
         Assert.Contains("IsRiffLibraryTabSelected", vm);
         // The catalog reads every stored riff off disk, so it must load when the
         // tab is opened rather than on the boot path.
-        Assert.Contains("RiffLibrary?.EnsureLoaded()", vm);
+        Assert.Contains("riffLibrary?.EnsureLoaded()", vm);
 
         var view = Read("DotCharter.UI", "Views", "Editor", "InspectorView.axaml");
         Assert.Contains("IsRiffLibraryTabSelected", view);
@@ -103,7 +103,8 @@ public sealed class PhraseCatalogReachabilityTests
         var palette = Read("DotCharter.UI", "ViewModels", "CommandPalette", "CommandCatalog.cs");
 
         Assert.Contains("Menu_PanelPhraseCatalog", menu);
-        Assert.Contains("IsPhraseCatalogVisible", menu);
+        Assert.Contains("Keybinds.TogglePhraseCatalog", menu);
+        Assert.Contains("TabMenu.ShowRowCommand", menu);
         Assert.Contains("view.togglePhraseCatalog", palette);
         Assert.Contains("tools.phraseCatalogAdd", palette);
         Assert.Contains("tools.phraseCatalogPaste", palette);
@@ -182,6 +183,7 @@ public sealed class PhraseCatalogReachabilityTests
                      PhrasePasteCompatibility.KeyStringOutOfRange,
                      PhrasePasteCompatibility.KeyFretOutOfRange,
                      PhrasePasteCompatibility.KeyFretBelowCapo,
+                     PhrasePasteCompatibility.KeyAnchorOnOrBelowCapo,
                      PhrasePasteCompatibility.KeyTuningDiffers,
                      PhrasePasteCompatibility.KeyCapoDiffers
                  })
@@ -203,13 +205,17 @@ public sealed class PhraseCatalogReachabilityTests
     }
 
     /// <summary>The whole <c>InspectorViewModel</c>, which is a set of topic
-    /// partials — reading only the root would make this guard blind the day the
+    /// partials, plus <c>Inspector/InspectorTabActivation</c>, where opening a tab
+    /// does its work — reading only the root would make this guard blind the day the
     /// tab block moves out of it.</summary>
     private static string InspectorSource()
     {
         var dir = UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "ViewModels", "Editor"));
-        var files = UiSourceTree.GetFiles(dir, "InspectorViewModel*.cs");
+        var files = UiSourceTree.GetFiles(dir, "InspectorViewModel*.cs").ToList();
         Assert.NotEmpty(files);
+        var activation = UiSourceTree.Resolve(Path.Combine(dir, "Inspector", "InspectorTabActivation.cs"));
+        Assert.True(File.Exists(activation), $"{activation} does not exist; repoint this lint.");
+        files.Add(activation);
         return string.Join("\n", files.Select(UiSourceTree.ReadAllText));
     }
 

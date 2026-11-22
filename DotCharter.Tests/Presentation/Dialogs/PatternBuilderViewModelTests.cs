@@ -166,6 +166,50 @@ public sealed class PatternBuilderViewModelTests
         Assert.Contains("Toggle metronome", vm.ConflictSummary, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(0, 2)]
+    [InlineData(1, 2)]
+    public void Sibling_verbs_on_one_pattern_report_a_shared_key_and_clear_when_rebound(int first, int second)
+    {
+        var rig = new Rig();
+        var vm = rig.Open();
+        var row = vm.SelectedPattern!;
+        var setters = new Action<KeyChord>[]
+        {
+            key => row.SelectKey = key, key => row.NextKey = key, key => row.PreviousKey = key
+        };
+        var verbKeys = new[] { "Pattern_Verb_Select", "Pattern_Verb_Next", "Pattern_Verb_Previous" };
+        rig.Keybinds.Owners[Owned] = $"pattern:{row.Id}:select";
+
+        setters[first](Owned);
+        Assert.False(vm.HasConflict);
+        setters[second](Owned);
+
+        Assert.True(vm.HasConflict);
+        Assert.Contains(row.Name, vm.ConflictSummary, StringComparison.Ordinal);
+        Assert.Contains(rig.Chart.Services.Localization[verbKeys[first]], vm.ConflictSummary, StringComparison.Ordinal);
+        Assert.Contains(rig.Chart.Services.Localization[verbKeys[second]], vm.ConflictSummary, StringComparison.Ordinal);
+
+        setters[second](KeyChord.None);
+        Assert.False(vm.HasConflict);
+        Assert.Equal("", vm.ConflictSummary);
+    }
+
+    [Fact]
+    public void A_key_shared_by_different_patterns_is_reported()
+    {
+        var vm = new Rig().Open();
+        var row = vm.SelectedPattern!;
+        var other = vm.Patterns.First(p => !ReferenceEquals(p, row));
+        other.NextKey = Owned;
+
+        row.PreviousKey = Owned;
+
+        Assert.True(vm.HasConflict);
+        Assert.Contains(other.Name, vm.ConflictSummary, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void A_duplicate_keeps_the_facets_and_drops_the_keys()
     {

@@ -4,13 +4,15 @@ using DotCharter.Localization;
 using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Dialogs;
 using DotCharter.Services.Editing.Maintenance;
+using DotCharter.Services.Editing.Tempo;
 using DotCharter.Services.Infrastructure.Configuration;
 using DotCharter.Tone.Infrastructure.Configuration;
 using DotCharter.Tone.Logging;
 
 namespace DotCharter.Presentation.Screens.Dialogs;
 
-/// <summary>The single-number tempo-map operations (silence, extra measures). One instance per open.</summary>
+/// <summary>Tempo map ▸ Start &amp; end: the five edge operations (silence, extra measures) behind one choice;
+/// also Tempo map ▸ Insert measures at playhead, alone. One instance per open.</summary>
 public sealed class TempoMapOperationViewModel : DialogViewModel<bool>, ITempoMapOperationScreen,
     IDialogSetup<TempoMapOperationRequest>, ICancelableDialog
 {
@@ -26,6 +28,11 @@ public sealed class TempoMapOperationViewModel : DialogViewModel<bool>, ITempoMa
     private double _minimum;
     private double _maximum = 9999;
     private string _formatString = "0.###";
+    private string _operationLabel = "";
+    private TempoMapOperationChoice? _selected;
+    private double _beatsPerMeasure = 4;
+    private int _beatUnit = 4;
+    private double _bpm = 120;
 
     public TempoMapOperationViewModel(IChartMaintenanceService maintenance, IConfigurationService config,
         ILocalizationService localization, IAppLogger logger)
@@ -42,6 +49,12 @@ public sealed class TempoMapOperationViewModel : DialogViewModel<bool>, ITempoMa
     {
         get => _title;
         private set => SetProperty(ref _title, value);
+    }
+
+    public string OperationLabel
+    {
+        get => _operationLabel;
+        private set => SetProperty(ref _operationLabel, value);
     }
 
     public string Subtitle
@@ -80,16 +93,73 @@ public sealed class TempoMapOperationViewModel : DialogViewModel<bool>, ITempoMa
         private set => SetProperty(ref _formatString, value);
     }
 
+    public bool ShowsMeasureTempo { get; private set; }
+
+    public double BeatsPerMeasure
+    {
+        get => _beatsPerMeasure;
+        set => SetProperty(ref _beatsPerMeasure, value);
+    }
+
+    public IReadOnlyList<int> BeatUnits { get; private set; } = DefaultBeatUnits;
+
+    public int BeatUnit
+    {
+        get => _beatUnit;
+        set => SetProperty(ref _beatUnit, value);
+    }
+
+    public double Bpm
+    {
+        get => _bpm;
+        set => SetProperty(ref _bpm, value);
+    }
+
     public ICommand ApplyCommand { get; }
 
     public ICommand CancelCommand { get; }
 
+    public IReadOnlyList<TempoMapOperationChoice> Choices { get; private set; } = [];
+
+    public bool ShowsChoices { get; private set; } = true;
+
+    public TempoMapOperationChoice? SelectedChoice
+    {
+        get => _selected;
+        set
+        {
+            if (value is null || ReferenceEquals(value, _selected)) return;
+            _selected = value;
+            OnPropertyChanged();
+            ShowOperation(value.Operation);
+        }
+    }
+
     public void Configure(TempoMapOperationRequest request)
     {
-        _operation = request.Operation;
+        // Insert measures at playhead is not an edge verb: it opens alone, under its own title.
+        var alone = request.Operation == TempoMapOperation.InsertMeasuresAtPlayhead;
+        Title = _localization[alone ? TitleKeys(request.Operation).Title : "Dialog_TempoMap_StartEnd_Title"];
+        OperationLabel = _localization["Dialog_TempoMap_Operation_Label"];
+        Choices = [.. Enum.GetValues<TempoMapOperation>()
+            .Where(operation => alone ? operation == request.Operation : operation != TempoMapOperation.InsertMeasuresAtPlayhead)
+            .Select(operation => new TempoMapOperationChoice(operation, _localization[TitleKeys(operation).Title]))];
+        ShowsChoices = !alone;
+        ShowsMeasureTempo = alone;
+        if (alone) ShowPlayheadBarTempo();
+        OnPropertyChanged(nameof(Choices));
+        OnPropertyChanged(nameof(ShowsChoices));
+        OnPropertyChanged(nameof(ShowsMeasureTempo));
+        SelectedChoice = Choices.First(choice => choice.Operation == request.Operation);
+    }
+
+    /// <summary>Fills the subtitle, label, range and starting value for <paramref name="operation" />.</summary>
+    private void ShowOperation(TempoMapOperation operation)
+    {
+        _operation = operation;
         var config = _config.LoadAppConfig();
-        var (title, subtitle) = TitleKeys(request.Operation);
-        var (label, value, minimum, maximum, format) = request.Operation switch
+        var (_, subtitle) = TitleKeys(operation);
+        var (label, value, minimum, maximum, format) = operation switch
         {
             TempoMapOperation.DefaultStartSilence => (SilenceLabel, Math.Max(0, config.LeadingSilenceSeconds), 0d, 600d, "0.###"),
             TempoMapOperation.AddSilenceAtStart => (SilenceLabel, Math.Max(0.5, config.LeadingSilenceSeconds), 0d, 600d, "0.###"),
@@ -97,7 +167,6 @@ public sealed class TempoMapOperationViewModel : DialogViewModel<bool>, ITempoMa
             _ => ("Dialog_TempoMap_MeasureCount_Label", 1d, 1d, 128d, "0")
         };
 
-        Title = _localization[title];
         Subtitle = _localization[subtitle];
         Label = _localization[label];
         Minimum = minimum;
@@ -107,6 +176,21 @@ public sealed class TempoMapOperationViewModel : DialogViewModel<bool>, ITempoMa
         _logger.Info(AppLogCategory.Events,
             $"Tempo-map operation dialog opened. Mode={_operation}, value={value:0.###}.");
     }
+
+    /// <summary>Starts the time signature and tempo rows on the bar at the playhead.</summary>
+    private void ShowPlayheadBarTempo()
+    {
+        var tempo = _maintenance.PlayheadBarTempo() ?? new MeasureInsertTempo(4, 4, 120);
+        BeatUnits = DefaultBeatUnits.Contains(tempo.NoteDenominator)
+            ? DefaultBeatUnits
+            : [.. DefaultBeatUnits.Append(tempo.NoteDenominator).Order()];
+        OnPropertyChanged(nameof(BeatUnits));
+        BeatsPerMeasure = tempo.BeatsPerMeasure;
+        BeatUnit = tempo.NoteDenominator;
+        Bpm = Math.Round(tempo.Bpm, 3);
+    }
+
+    private static readonly int[] DefaultBeatUnits = [2, 4, 8, 16];
 
     public bool TryCancel()
     {
@@ -127,6 +211,8 @@ public sealed class TempoMapOperationViewModel : DialogViewModel<bool>, ITempoMa
             ("Dialog_TempoMap_AddSilenceAtEnd_Title", "Dialog_TempoMap_AddSilenceAtEnd_Subtitle"),
         TempoMapOperation.AddMeasuresAtStart =>
             ("Dialog_TempoMap_AddMeasuresAtStart_Title", "Dialog_TempoMap_AddMeasuresAtStart_Subtitle"),
+        TempoMapOperation.InsertMeasuresAtPlayhead =>
+            ("Dialog_TempoMap_InsertMeasuresAtPlayhead_Title", "Dialog_TempoMap_InsertMeasuresAtPlayhead_Subtitle"),
         _ => ("Dialog_TempoMap_AddMeasuresAtEnd_Title", "Dialog_TempoMap_AddMeasuresAtEnd_Subtitle")
     };
 
@@ -150,6 +236,10 @@ public sealed class TempoMapOperationViewModel : DialogViewModel<bool>, ITempoMa
                 break;
             case TempoMapOperation.AddMeasuresAtEnd:
                 _maintenance.AddMeasuresAtEnd((int)Math.Round(value));
+                break;
+            case TempoMapOperation.InsertMeasuresAtPlayhead:
+                _maintenance.InsertMeasuresAtPlayhead((int)Math.Round(value),
+                    new MeasureInsertTempo((int)Math.Round(BeatsPerMeasure), BeatUnit, Bpm));
                 break;
         }
 

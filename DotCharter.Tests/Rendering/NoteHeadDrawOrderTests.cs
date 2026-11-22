@@ -61,6 +61,15 @@ public sealed class NoteHeadDrawOrderTests
             FingeringRenderer.Enabled = previous;
         }
 
+        // The stems and floor markers are staged first, under every tail (HeadlessFloorMarkerOcclusionRenderTests);
+        // this walk is about the heads, so count the floor quads and skip them.
+        var floorProbe = new FakeVulkanRenderService();
+        var floorBatcher = new QuadBatcher(floorProbe);
+        var floorContext = Context(floorBatcher, objectTimes);
+        for (var n = floorContext.Snapshot.NoteCount - 1; n >= 0; n--) NoteHeadRenderer.RenderNoteFloor(floorContext, n);
+        floorBatcher.Flush();
+        var floorQuads = floorProbe.QuadBatchVertices.Sum(b => b.Length / QuadFloats);
+
         var objectZ = objectTimes.Select(t => context.GetZDepthForTime(t, NowMs)).ToArray();
         var halfGap = (objectZ[1] - objectZ[0]) / 2f;
         var stagedPerObject = new int[objectZ.Length];
@@ -72,6 +81,7 @@ public sealed class NoteHeadDrawOrderTests
             if (ReferenceEquals(texture, resources.FingeringTexture)) continue;
             for (var q = 0; q < batch.Length; q += QuadFloats, quad++)
             {
+                if (quad < floorQuads) continue;
                 var z = MeanZ(batch.AsSpan(q, QuadFloats));
                 var owner = Array.FindIndex(objectZ, oz => Math.Abs(oz - z) < halfGap);
                 Assert.True(owner >= 0, $"quad #{quad} at z {z} belongs to no object of the scene");

@@ -25,7 +25,12 @@
     `Set*` method and every settable property off the wrapper TYPE and looks for
     a call *or an assignment* on any receiver. `SetDeviceType` is the one member
     excluded, because it BUILDS an engine rather than layering state on one.
-  - Exemptions today: `SetRemoteBridge` (the sandbox re-arm), `SetStretchQuality`
+  - `RearmSandboxAfterEngineSwapLocked` visits every live `VstSandboxSeat`:
+    each re-arms its own bridge and kernel object names on the replacement
+    engine. Preparation is queued for every surviving child; seat 0's
+    instrument MIDI sink is rebound after the swap. If a seat cannot re-arm,
+    its child is killed and its own restart budget drives recovery and replay.
+  - Exemptions today: `SetRemoteBridge` (the per-seat sandbox re-arm), `SetStretchQuality`
     (a function of "are stems loaded"), and `StemGroupTempo` /
     `StemGroupPitchSemitones` — the shared stem-group stretcher only exists once
     a stem has been grouped onto it, so `LoadStemsCore` writes both from
@@ -141,7 +146,10 @@
   subscribes and, when a `namamp` node appears, does ONE best-effort in-place
   48 kHz request per engine (`CloneWithSampleRate` → `ApplyEngineConfig`, a
   rate-only delta → `engine.Reconfigure`; off the UI thread via `Task.Run`,
-  serialized by `_neuralRateGate`, guard `_neuralRateAttempted` reset on every
+  serialized by `_engineConfigGate`, with active configuration read only after
+  taking that gate so an earlier device snapshot cannot undo a settings apply.
+  External-insert rate requests use the same gate and read rule. The guard
+  `_neuralRateAttempted` is reset on every
   engine (re)create). It NEVER tears the engine down and NEVER writes
   `AppConfig.AudioSampleRate` (transient, re-requested when the tone re-adds
   namamp). A device that refuses 48 kHz keeps running; since 0.36 the card shows

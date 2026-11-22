@@ -11,7 +11,15 @@ namespace DotCharter.Analysis.Lyrics;
 ///     <c>LyricEvent.IsPhraseEnd</c>.
 /// </param>
 /// <param name="LineIndex">Zero-based line this syllable came from.</param>
-public readonly record struct LyricSyllable(string Text, bool ContinuesWord, bool EndsLine, int LineIndex);
+public readonly record struct LyricSyllable(string Text, bool ContinuesWord, bool EndsLine, int LineIndex)
+{
+    /// <summary>
+    ///     The syllable was cut from an unhyphenated word by the pattern or mora rules, not typed by
+    ///     the charter. Its start is a typographic guess, so the aligner may move it to the
+    ///     syllable's vowel frame.
+    /// </summary>
+    public bool SplitByRules { get; init; }
+}
 
 /// <summary>A parsed lyric sheet: syllables in order, grouped into lines.</summary>
 /// <param name="Syllables">Every syllable, in singing order.</param>

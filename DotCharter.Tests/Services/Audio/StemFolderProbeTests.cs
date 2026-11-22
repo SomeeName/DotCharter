@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using DotCharter.Services.Audio.StemSeparation;
 using DotCharter.Services.Audio.StemSeparation.GuitarRoles;
 using DotCharter.Tests.UI.ViewModels.Editor;
@@ -18,6 +19,49 @@ public sealed class StemFolderProbeTests : IDisposable
     private string AudioDir => Path.Combine(_root, "audio");
 
     public void Dispose() => BestEffortDelete.Directory(_root);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Ordinary_reopen_recognises_the_legacy_completion_boundary(bool completed)
+    {
+        var path = Write(ProjectDir, "stems", "guitar.wav");
+        var directory = Path.GetDirectoryName(path)!;
+        var token = new string('a', 32);
+        var pending = Path.Combine(directory, ".stemcache-publishing");
+        File.WriteAllText(pending, token);
+        if (completed) File.WriteAllText(Path.Combine(directory, ".stemcache"), token);
+
+        var probe = StemFolderProbe.Probe(ProjectDir, AudioDir, [], false, null);
+
+        Assert.Equal(completed ? 1 : 0, probe.Recovered.Count);
+        Assert.Equal(!completed, File.Exists(pending));
+    }
+
+    [Theory]
+    [InlineData("complete", true)]
+    [InlineData("before-marker", false)]
+    [InlineData("missing-file", false)]
+    [InlineData("altered-file", false)]
+    public void Ordinary_reopen_verifies_every_file_in_a_pending_publication(string boundary, bool completed)
+    {
+        var guitar = Write(ProjectDir, "stems", "guitar.wav");
+        var bass = Write(ProjectDir, "stems", "bass.wav");
+        var directory = Path.GetDirectoryName(guitar)!;
+        var token = new string('b', 32);
+        var proof = string.Join("\n", new[] { token }.Concat(new[] { guitar, bass }.Select(path =>
+            $"{Path.GetFileName(path)}\t{new FileInfo(path).Length}\t{Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)))}")));
+        var pending = Path.Combine(directory, ".stemcache-publishing");
+        File.WriteAllText(pending, proof);
+        if (boundary != "before-marker") File.WriteAllText(Path.Combine(directory, ".stemcache"), token);
+        if (boundary == "missing-file") File.Delete(bass);
+        if (boundary == "altered-file") File.WriteAllText(bass, "y"); // same length, different bytes
+
+        var probe = StemFolderProbe.Probe(ProjectDir, AudioDir, [], false, null);
+
+        Assert.Equal(completed ? 2 : 0, probe.Recovered.Count);
+        Assert.Equal(!completed, File.Exists(pending));
+    }
 
     [Fact]
     public void WithNoDeclaredStems_TheProjectsStemsFolderIsRecovered_InNameOrder_ProjectRelative()

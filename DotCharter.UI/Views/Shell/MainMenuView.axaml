@@ -36,7 +36,6 @@
         <menus:EditMenu />
         <menus:TempoMapMenu />
         <menus:ArrangementsMenu />
-        <menus:VocalsMenu />
         <menus:ToolsMenu />
         <menus:ViewMenu />
         <menus:HelpMenu />

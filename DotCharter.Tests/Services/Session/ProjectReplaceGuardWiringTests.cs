@@ -209,8 +209,8 @@ public sealed class ProjectReplaceGuardWiringTests
         Assert.False(h.Session.IsProjectDirty);
     }
 
-    /// <summary>The happy path still declares exactly once, so the move into the
-    /// finally is not a behaviour change for it.</summary>
+    /// <summary>The happy path still declares the loaded chart clean before audio
+    /// loading, just as the failure path does.</summary>
     [Fact]
     public async Task ProjectOpen_ThatSucceeds_IsStillClean()
     {
@@ -772,7 +772,8 @@ public sealed class ProjectReplaceGuardWiringTests
         public Task<bool> AttachAudioAsync(string sourcePath) => Task.FromResult(true);
         public Task LoadSilentTransportAsync(double projectLengthMs) => Task.CompletedTask;
         public Task OpenProject() => Task.CompletedTask;
-        public Task<bool> SaveProjectAsync() => Task.FromResult(true);
+        public bool HasUnsavedWork() => IsProjectDirty;
+        public Task<bool> SaveProjectAsync(SaveInitiator initiator) => Task.FromResult(true);
         public Task<bool> SaveProjectAsAsync() => Task.FromResult(true);
         public IReadOnlyList<RecentProjectEntry> GetRecentProjects() => [];
         public event Action? RecentProjectsChanged { add { } remove { } }

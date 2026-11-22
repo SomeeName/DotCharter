@@ -32,6 +32,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
             new("fastInput", "Settings_FastChartingInput", "Settings_Tip_FastChartingInput"),
             new("syncHandShape", "Settings_SyncHandShapeToChord", "Settings_Tip_SyncHandShapeToChord"),
             new("syncAnchor", "Settings_SyncAnchorToFingering", "Settings_Tip_SyncAnchorToFingering"),
+            new("inspectorApplyStep", "Settings_InspectorApplyStep", "Settings_Tip_InspectorApplyStep"),
             new("autoNameChords", "Settings_AutoNameNewChords", "Settings_Tip_AutoNameNewChords"),
             new("suppressDoubleStop", "Settings_SuppressDoubleStopNames", "Settings_Tip_SuppressDoubleStopNames"),
             new("keepPowerChords", "Settings_KeepPowerChordNames", "Settings_Tip_KeepPowerChordNames"),
@@ -43,6 +44,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
             new("minNoteDistanceMs", "Settings_Milliseconds", "Settings_Tip_Milliseconds"),
             new("minNoteDistanceDivisor", "Settings_FractionDenominator", "Settings_Tip_FractionDenominator")),
         new("Settings_CopyPaste_Title", "Settings_CopyPaste_Subtitle",
+            new("pasteReplacesExisting", "Settings_PasteReplacesExisting", "Settings_Tip_PasteReplacesExisting"),
             new SettingsRowSpec("paste", "Settings_PasteIncludesLabel")),
         new("Settings_NewProject", "Settings_NewProjectDescription",
             new("charterName", "Settings_DefaultCharterName", "Settings_Tip_DefaultCharterName"),
@@ -55,11 +57,12 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
     private static readonly string[] Tracked =
     [
         nameof(UseFastChartingInput), nameof(SyncHandShapeToChordTemplate), nameof(SyncAnchorToChordFingering),
+        nameof(InspectorApplyStep),
         nameof(AutoNameNewChords), nameof(SuppressDoubleStopChordNames), nameof(KeepPowerChordNames),
         nameof(MusicalChordNames), nameof(TappedHarmonicFretOffset),
         nameof(LyricSpanWordGap),
         nameof(LyricSpanPhraseGap), nameof(MinNoteDistanceModeIndex), nameof(MinNoteDistanceMs),
-        nameof(MinNoteDistanceDivisor), nameof(PasteIncludeNotes), nameof(PasteIncludeChords),
+        nameof(MinNoteDistanceDivisor), nameof(PasteReplacesExisting), nameof(PasteIncludeNotes), nameof(PasteIncludeChords),
         nameof(PasteIncludeHandShapes), nameof(PasteIncludeFretAnchors), nameof(PasteIncludeEvents),
         nameof(PasteIncludeTones), nameof(DefaultCharterName), nameof(PadSilenceOnNewProject),
         nameof(LeadingSilenceSeconds), nameof(TrailingSilenceSeconds), nameof(StringOrderIndex),
@@ -72,11 +75,13 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
     private readonly IChartEditorSurface _editor;
     private readonly IGraphicsDeviceSettings _device;
     private readonly IAppLogger? _logger;
+    private readonly IHistoryService _history;
     private readonly SettingsChangeSet _changes = new();
 
     [ObservableProperty] private bool _useFastChartingInput;
     [ObservableProperty] private bool _syncHandShapeToChordTemplate = true;
     [ObservableProperty] private bool _syncAnchorToChordFingering;
+    [ObservableProperty] private bool _inspectorApplyStep;
     [ObservableProperty] private bool _autoNameNewChords = true;
     [ObservableProperty] private bool _suppressDoubleStopChordNames = true;
     [ObservableProperty] private bool _keepPowerChordNames;
@@ -91,6 +96,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
 
     [ObservableProperty] private double _minNoteDistanceMs = 10.0;
     [ObservableProperty] private int _minNoteDistanceDivisor = 64;
+    [ObservableProperty] private bool _pasteReplacesExisting = true;
     [ObservableProperty] private bool _pasteIncludeNotes = true;
     [ObservableProperty] private bool _pasteIncludeChords = true;
     [ObservableProperty] private bool _pasteIncludeHandShapes = true;
@@ -111,7 +117,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         ProjectState state,
         IChartEditorSurface editor,
         IGraphicsDeviceSettings device,
-        IAppLogger? logger = null)
+        IAppLogger? logger, IHistoryService history)
     {
         _config = config;
         _localization = localization;
@@ -119,6 +125,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         _editor = editor;
         _device = device;
         _logger = logger;
+        _history = history;
         _changes.TrackProperties(this, Rows.Prefix, Tracked, () => OnPropertyChanged(nameof(UnsavedSettings)));
         _changes.Rebaseline();
     }
@@ -144,11 +151,12 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         UseFastChartingInput = config.UseFastChartingInput;
         SyncHandShapeToChordTemplate = config.SyncHandShapeToChordTemplate;
         SyncAnchorToChordFingering = config.SyncAnchorToChordFingering;
+        InspectorApplyStep = config.InspectorApplyStep;
         AutoNameNewChords = config.AutoNameNewChords;
         SuppressDoubleStopChordNames = config.SuppressDoubleStopChordNames;
         KeepPowerChordNames = config.KeepPowerChordNames;
         MusicalChordNames = config.ChordNamingStyle == ChordNamingStyle.Musical;
-        TappedHarmonicFretOffset = Math.Clamp(config.TappedHarmonicFretOffset, 0, 24);
+        TappedHarmonicFretOffset = Math.Clamp(config.TappedHarmonicFretOffset, 0, FretLimits.MaxFret);
         LyricSpanWordGap = config.LyricSpanWordGap;
         LyricSpanPhraseGap = config.LyricSpanPhraseGap;
         MinNoteDistanceModeIndex = config.MinNoteDistanceMode switch
@@ -160,6 +168,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         MinNoteDistanceMs = config.MinNoteDistanceMs;
         MinNoteDistanceDivisor = config.MinNoteDistanceDivisor > 0 ? config.MinNoteDistanceDivisor : 64;
 
+        PasteReplacesExisting = config.PasteReplacesExisting;
         PasteIncludeNotes = config.PasteIncludeNotes;
         PasteIncludeChords = config.PasteIncludeChords;
         PasteIncludeHandShapes = config.PasteIncludeHandShapes;
@@ -184,11 +193,12 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         config.UseFastChartingInput = UseFastChartingInput;
         config.SyncHandShapeToChordTemplate = SyncHandShapeToChordTemplate;
         config.SyncAnchorToChordFingering = SyncAnchorToChordFingering;
+        config.InspectorApplyStep = InspectorApplyStep;
         config.AutoNameNewChords = AutoNameNewChords;
         config.SuppressDoubleStopChordNames = SuppressDoubleStopChordNames;
         config.KeepPowerChordNames = KeepPowerChordNames;
         config.ChordNamingStyle = MusicalChordNames ? ChordNamingStyle.Musical : ChordNamingStyle.Eof;
-        config.TappedHarmonicFretOffset = Math.Clamp(TappedHarmonicFretOffset, 0, 24);
+        config.TappedHarmonicFretOffset = Math.Clamp(TappedHarmonicFretOffset, 0, FretLimits.MaxFret);
         config.LyricSpanWordGap = LyricSpanWordGap;
         config.LyricSpanPhraseGap = LyricSpanPhraseGap;
         config.MinNoteDistanceMode = MinNoteDistanceModeIndex switch
@@ -200,6 +210,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         config.MinNoteDistanceMs = Math.Max(0, MinNoteDistanceMs);
         config.MinNoteDistanceDivisor = Math.Max(1, MinNoteDistanceDivisor);
 
+        config.PasteReplacesExisting = PasteReplacesExisting;
         config.PasteIncludeNotes = PasteIncludeNotes;
         config.PasteIncludeChords = PasteIncludeChords;
         config.PasteIncludeHandShapes = PasteIncludeHandShapes;
@@ -217,7 +228,10 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         config.Timeline2DLaneTint = Timeline2DLaneTint;
 
         _config.SaveAppConfig(config);
-        ChartSpacingEnforcer.EnforceProject(_state.ActiveProject, config);
+        // Live: switching the inspector's Apply step off writes a draft it holds (the inspector listens).
+        _state.InspectorApplyStep = config.InspectorApplyStep;
+        if (_state.ActiveProject is { } project)
+            _history.Do(ProjectSpacingEdit.Plan(project, config, _editor.RepublishActiveArrangement));
         _editor.RequestRedraw();
         _state.SetMessage(_localization["Status_EditorSettingsApplied"]);
         _logger?.Info(AppLogCategory.Settings,

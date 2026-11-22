@@ -61,26 +61,9 @@ internal sealed class RefretPlanner
         _stringCount = Math.Clamp(arrangement.StringCount, 1, StandardOpenStrings.MaxStringCount);
         _capo = Math.Max(0, arrangement.Capo);
 
-        // GetOffsets…, not TryGet…: refret arithmetic needs SOME open-string
-        // vector for every string, and standard is the same default the per-string
-        // `: 0` below already applies. Deliberate, not accidental — see the
-        // remarks on GetOffsetsForTuningType.
-        var fallbackOffsets = arrangement.TuningPitches.Count >= _stringCount
-            ? null
-            : TuningUtilities.GetOffsetsForTuningType(arrangement.TuningType, _stringCount);
-
         _openMidi = new int[_stringCount];
         for (var s = 0; s < _stringCount; s++)
-        {
-            var step = s < arrangement.TuningPitches.Count
-                ? arrangement.TuningPitches[s].Step
-                : fallbackOffsets != null && s < fallbackOffsets.Length
-                    ? fallbackOffsets[s]
-                    : 0;
-            // StandardOpenStrings: a 7-string's string 0 is B1, not E2.
-            _openMidi[s] = StandardOpenStrings.GuitarLowEMidi
-                           + StandardOpenStrings.SemitonesAboveLowE(_stringCount, s) + step;
-        }
+            _openMidi[s] = SoundingPitch.OpenStringMidi(arrangement, s) ?? 0;
     }
 
     public static RefretPlan Plan(
@@ -125,18 +108,6 @@ internal sealed class RefretPlanner
 
     /// <summary>Slide-target frets are always fretted (≥1) and sound at their fret number.</summary>
     private bool IsValidSlideTarget(int fret) => fret >= 1 && fret > _capo && fret <= _opt.MaxFret;
-
-    /// <summary>
-    ///     Templates are conventionally stored with Id == index; fall back to an
-    ///     Id scan for imported charts where the invariant drifted.
-    /// </summary>
-    internal static ChordTemplate? ResolveTemplate(Arrangement arrangement, int templateId)
-    {
-        if (templateId < 0) return null;
-        var list = arrangement.ChordTemplates;
-        if (templateId < list.Count && list[templateId].Id == templateId) return list[templateId];
-        return list.FirstOrDefault(t => t.Id == templateId);
-    }
 
     // ─── Planning ───────────────────────────────────────────────────────────
 
@@ -211,7 +182,7 @@ internal sealed class RefretPlanner
         foreach (var chord in level.Chords)
         {
             if (chord.ChordNotes.Count == 0) continue;
-            var template = ResolveTemplate(arrangement, chord.TemplateId);
+            var template = arrangement.FindChordTemplate(chord.TemplateId);
             var timeMs = chord.Position.GetPositionMs(beats);
             var sound = new RefretSound
             {

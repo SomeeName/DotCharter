@@ -19,6 +19,7 @@ internal sealed partial class InputJackPicker(
     Func<(int Left, int Right)> read,
     Action<int> pick) : ObservableObject
 {
+    private readonly CuttableProbe<(int Count, IReadOnlyList<string> Names)> _probe = new(ui);
     private bool _rebuilding;
     private IReadOnlyList<string> _names = [];
 
@@ -33,8 +34,14 @@ internal sealed partial class InputJackPicker(
     public Task Probe { get; private set; } = Task.CompletedTask;
 
     /// <summary>Rebuilds the rows for a device with that many inputs (0 = unknown, the generic list),
-    /// labelled with the driver's names for them when it has any.</summary>
+    /// labelled with the driver's names for them when it has any; a read still running is dropped.</summary>
     public void Refresh(int deviceJackCount, IReadOnlyList<string>? channelNames = null)
+    {
+        _probe.Drop();
+        Rebuild(deviceJackCount, channelNames);
+    }
+
+    private void Rebuild(int deviceJackCount, IReadOnlyList<string>? channelNames)
     {
         _rebuilding = true;
         try
@@ -59,20 +66,35 @@ internal sealed partial class InputJackPicker(
     public void Sync(int jack)
     {
         if (_rebuilding) return;
-        if (IndexOf(jack) < 0) Refresh(JackCount, _names);
+        if (IndexOf(jack) < 0) Rebuild(JackCount, _names);
         else SelectedIndex = IndexOf(jack);
     }
 
-    /// <summary>Reads the device's channels off the UI thread; a failed read leaves the rows alone.</summary>
-    public void ProbeDevice(string driver, string name) =>
-        Probe = Task.Run(() =>
-        {
-            var (count, names) = ReadChannels(driver, name);
-            if (count > 0) ui.PostNormal(() => Refresh(count, names));
-        });
+    /// <summary>
+    ///     Reads the picked device of <paramref name="driver" /> off the UI thread; a failed read leaves the rows
+    ///     alone, and every read started before this one is dropped, even when no device is picked.
+    /// </summary>
+    public void ProbeDevice(string driver, IReadOnlyList<string> candidates, int index)
+    {
+        _probe.Drop();
+        if (index < 0 || index >= candidates.Count) return;
+        Probe = _probe.Start((devices, driver, name: candidates[index]),
+            static args => ReadChannels(args.devices, args.driver, args.name), Land);
+    }
+
+    /// <summary>Ends the read in flight with its owner: it lands nowhere, and a queued one never runs.</summary>
+    public void Cancel() => _probe.Cancel();
+
+    private void Land((int Count, IReadOnlyList<string> Names) read)
+    {
+        if (read.Count > 0) Rebuild(read.Count, read.Names);
+    }
 
     /// <summary>The device's jack count and the driver's names for them, read together; a failed read is (0, no names).</summary>
-    public (int Count, IReadOnlyList<string> Names) ReadChannels(string driver, string name)
+    public (int Count, IReadOnlyList<string> Names) ReadChannels(string driver, string name) => ReadChannels(devices, driver, name);
+
+    /// <summary>The same read through <paramref name="devices" /> alone, for a worker that must hold no picker.</summary>
+    public static (int Count, IReadOnlyList<string> Names) ReadChannels(IAudioDeviceControl devices, string driver, string name)
     {
         try
         {

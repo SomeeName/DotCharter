@@ -52,6 +52,318 @@ public sealed class ToneSessionServiceTests : IDisposable
     }
 
     [Fact]
+    public void AFailedWriteIsRetriedForAnUnchangedRig()
+    {
+        var chain = NewChain();
+        var config = new FakeConfigurationService();
+        config.Update(c => c.DefaultTonePresetId = "");
+        using var session = Build(chain, config, out _);
+        session.Start();
+        chain.AttachEngine(EngineA);
+        chain.AddNode("overdrive");
+
+        var path = Path.Combine(_dir, ProfileToneRigStore.StoreFileName);
+        Directory.CreateDirectory(path); // Reads succeeded; publishing the save will fail.
+        session.Flush();
+        Directory.Delete(path);
+        session.Flush();
+
+        Assert.Equal("overdrive", Assert.Single(NewStore().GetRig(0)!.Modules).ModuleTypeId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PersistedAThenFailedBThenLiveA_PublishesAAfterRecovery(bool shutdown)
+    {
+        var chain = NewChain();
+        var config = new FakeConfigurationService();
+        config.Update(c => c.DefaultTonePresetId = "");
+        using var session = Build(chain, config, out _);
+        session.Start();
+        chain.AttachEngine(EngineA);
+        var node = chain.AddNode("overdrive")!;
+        chain.SetParam(node.NodeId, "drive", 0.2f);
+        session.Flush();
+        var path = Path.Combine(_dir, ProfileToneRigStore.StoreFileName);
+        File.Delete(path);
+        Directory.CreateDirectory(path);
+        chain.SetParam(node.NodeId, "drive", 0.8f);
+        session.Flush();
+        chain.SetParam(node.NodeId, "drive", 0.2f);
+        Directory.Delete(path);
+
+        if (shutdown) session.Dispose();
+        else session.Flush();
+
+        Assert.Equal(0.2f, Assert.Single(NewStore().GetRig(0)!.Modules).Params["drive"]);
+        var restartedChain = NewChain();
+        using var restarted = Build(restartedChain, config, out _);
+        restarted.Start();
+        restartedChain.AttachEngine(EngineB);
+        Assert.Equal(0.2f, Assert.Single(restartedChain.GetNodes()).Values["drive"]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnExplicitSupportedReplacementAfterPartialRestore_PersistsAndPreservesTheOriginal(bool identical)
+    {
+        var saved = UserTonePresetDto.FromPreset(new DspTonePreset("saved", "Saved", DspToneCategory.Clean, "",
+            new DcRigPreset([new DcRigModule("overdrive", new Dictionary<string, float>()),
+                new DcRigModule("unavailable-module", new Dictionary<string, float>())]), DspToneOrigin.User));
+        Assert.True(NewStore().SetRig(0, saved));
+        var chain = NewChain();
+        var config = new FakeConfigurationService();
+        using var session = Build(chain, config, out var presets);
+        session.Start();
+        chain.AttachEngine(EngineA);
+        var replacement = new DspTonePreset("replacement", "Replacement", DspToneCategory.Clean, "",
+            identical ? DcRigSnapshot.FromChain(chain) : new DcRigPreset([
+                new DcRigModule("delay", new Dictionary<string, float>())]), DspToneOrigin.User);
+
+        var result = presets.Apply(replacement);
+        Assert.Equal(0, result.FailedOps);
+        Assert.Equal(identical, result.NoOp);
+        session.Flush();
+
+        var expected = identical ? "overdrive" : "delay";
+        Assert.Equal(expected, Assert.Single(NewStore().GetRig(0)!.Modules).ModuleTypeId);
+        var recovery = NewStore().GetRecoveryRig(0);
+        Assert.NotNull(recovery);
+        Assert.Contains(recovery.Modules, m => m.ModuleTypeId == "unavailable-module");
+        Assert.Equal(2, recovery.Modules.Count);
+        chain.AttachEngine(EngineB);
+        Assert.Equal(expected, Assert.Single(chain.GetNodes()).ModuleTypeId);
+    }
+
+    [Fact]
+    public void AnExplicitReplacementAndItsFullRecoveryRig_SurviveFailedPublicationTogether()
+    {
+        var original = UserTonePresetDto.FromPreset(new DspTonePreset("saved", "Saved", DspToneCategory.Clean, "",
+            new DcRigPreset([new DcRigModule("overdrive", new Dictionary<string, float>()),
+                new DcRigModule("unavailable-module", new Dictionary<string, float>())]), DspToneOrigin.User));
+        Assert.True(NewStore().SetRig(0, original));
+        var chain = NewChain();
+        using var session = Build(chain, new FakeConfigurationService(), out var presets);
+        session.Start();
+        chain.AttachEngine(EngineA);
+        var result = presets.Apply(new DspTonePreset("replacement", "Replacement", DspToneCategory.Clean, "",
+            new DcRigPreset([new DcRigModule("delay", new Dictionary<string, float>())]), DspToneOrigin.User));
+        Assert.Equal(0, result.FailedOps);
+        var path = Path.Combine(_dir, ProfileToneRigStore.StoreFileName);
+        File.Delete(path);
+        Directory.CreateDirectory(path);
+        session.Flush();
+        session.Dispose();
+
+        var recovered = NewStore();
+        Assert.Equal("delay", Assert.Single(recovered.GetRig(0)!.Modules).ModuleTypeId);
+        Assert.Equal(2, recovered.GetRecoveryRig(0)!.Modules.Count);
+        Directory.Delete(path);
+        recovered.FlushPending();
+        Assert.Equal("delay", Assert.Single(NewStore().GetRig(0)!.Modules).ModuleTypeId);
+        Assert.Equal(2, NewStore().GetRecoveryRig(0)!.Modules.Count);
+    }
+
+    [Fact]
+    public void AFailedReplacementDoesNotAuthorizeTheRemainingPartialChain()
+    {
+        var original = UserTonePresetDto.FromPreset(new DspTonePreset("saved", "Saved", DspToneCategory.Clean, "",
+            new DcRigPreset([new DcRigModule("overdrive", new Dictionary<string, float>()),
+                new DcRigModule("unavailable-module", new Dictionary<string, float>())]), DspToneOrigin.User));
+        Assert.True(NewStore().SetRig(0, original));
+        var chain = NewChain();
+        using var session = Build(chain, new FakeConfigurationService(), out var presets);
+        session.Start();
+        chain.AttachEngine(EngineA);
+        var result = presets.Apply(original.ToPreset());
+        Assert.True(result.FailedOps > 0);
+        session.Flush();
+
+        Assert.Equal(2, NewStore().GetRig(0)!.Modules.Count);
+        Assert.Null(NewStore().GetRecoveryRig(0));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void AnIdenticalPresetSignalsAuthorityOnlyForAnAttachedCurrentSeat(bool attached, bool stale)
+    {
+        var chain = NewChain();
+        if (attached) chain.AttachEngine(EngineA);
+        var presets = new DspTonePresetService(chain, new FakeConfigurationService());
+        var preset = new DspTonePreset("replacement", "Replacement", DspToneCategory.Clean, "",
+            new DcRigPreset([new DcRigModule("overdrive", new Dictionary<string, float>())]), DspToneOrigin.User);
+        presets.Apply(preset);
+        var signals = new List<(int Player, long Generation)>();
+        presets.PresetApplied += (player, generation) => signals.Add((player, generation));
+
+        var result = presets.ApplyToPlayerForProfile(0, preset, stale ? 1 : 0);
+
+        if (stale) Assert.Null(result);
+        else Assert.True(result!.Value.NoOp);
+        Assert.Equal(attached && !stale ? 1 : 0, signals.Count);
+        Assert.All(signals, signal => Assert.Equal((0, 0L), signal));
+        presets.ApplyToPlayer(1, preset);
+        Assert.Equal(attached && !stale ? 1 : 0, signals.Count);
+    }
+
+    [Fact]
+    public void ADisplacedBoardsSuccessfulPresetDoesNotAuthorizeThePartialSavedRig()
+    {
+        var original = UserTonePresetDto.FromPreset(new DspTonePreset("saved", "Saved", DspToneCategory.Clean, "",
+            new DcRigPreset([new DcRigModule("overdrive", new Dictionary<string, float>()),
+                new DcRigModule("unavailable-module", new Dictionary<string, float>())]), DspToneOrigin.User));
+        Assert.True(NewStore().SetRig(0, original));
+        var chain = NewChain();
+        using var session = Build(chain, new FakeConfigurationService(), out var presets);
+        session.Start();
+        chain.AttachEngine(EngineA);
+        session.BoardDisplaced = () => true;
+        presets.Apply(new DspTonePreset("song", "Song", DspToneCategory.Clean, "",
+            new DcRigPreset([new DcRigModule("overdrive", new Dictionary<string, float>())]), DspToneOrigin.User));
+        session.BoardDisplaced = () => false;
+        session.Flush();
+
+        Assert.Equal(2, NewStore().GetRig(0)!.Modules.Count);
+        Assert.Null(NewStore().GetRecoveryRig(0));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FailedPublicationThenRebuild_RetriesTheRestoredUncommittedRig(bool shutdown)
+    {
+        var chain = NewChain();
+        var config = new FakeConfigurationService();
+        config.Update(c => c.DefaultTonePresetId = "");
+        using var session = Build(chain, config, out _);
+        session.Start();
+        chain.AttachEngine(EngineA);
+        chain.AddNode("overdrive");
+        var path = Path.Combine(_dir, ProfileToneRigStore.StoreFileName);
+        Directory.CreateDirectory(path);
+        session.Flush();
+
+        chain.AttachEngine(EngineB);
+        Assert.Equal("overdrive", Assert.Single(chain.GetNodes()).ModuleTypeId);
+        Directory.Delete(path);
+        if (shutdown) session.Dispose();
+        else session.Flush();
+
+        Assert.Equal("overdrive", Assert.Single(NewStore().GetRig(0)!.Modules).ModuleTypeId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EditingAnUnreadableSeatsFallback_CannotReplaceItsSavedRig(bool shutdown)
+    {
+        var saved = UserTonePresetDto.FromPreset(new DspTonePreset("saved", "Saved", DspToneCategory.Clean, "",
+            new DcRigPreset([new DcRigModule("overdrive", new Dictionary<string, float> { ["drive"] = 0.83f })]), DspToneOrigin.User));
+        Assert.True(NewStore().SetRig(0, saved));
+        var chain = NewChain();
+        var config = new FakeConfigurationService();
+        config.Update(c => c.DefaultTonePresetId = "nam-clean-glass");
+        using var session = Build(chain, config, out _);
+        var path = Path.Combine(_dir, ProfileToneRigStore.StoreFileName);
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Write | FileShare.Delete))
+        {
+            session.Start();
+            chain.AttachEngine(EngineA);
+            Assert.Contains(chain.GetNodes(), n => n.ModuleTypeId == "namamp");
+        }
+        chain.AddNode("delay");
+        if (shutdown) session.Dispose();
+        else session.Flush();
+
+        var restored = Assert.Single(NewStore().GetRig(0)!.Modules);
+        Assert.Equal("overdrive", restored.ModuleTypeId);
+        Assert.Equal(0.83f, restored.Params["drive"]);
+        if (!shutdown) Assert.Equal("overdrive", Assert.Single(chain.GetNodes()).ModuleTypeId);
+    }
+
+    [Fact]
+    public void AFailedPublicationAtShutdown_IsRecoveredFromItsJournal()
+    {
+        var chain = NewChain();
+        var config = new FakeConfigurationService();
+        config.Update(c => c.DefaultTonePresetId = "");
+        var session = Build(chain, config, out _);
+        session.Start();
+        chain.AttachEngine(EngineA);
+        chain.AddNode("overdrive");
+        var path = Path.Combine(_dir, ProfileToneRigStore.StoreFileName);
+        Directory.CreateDirectory(path);
+
+        session.Dispose();
+        Directory.Delete(path);
+
+        Assert.Equal("overdrive", Assert.Single(NewStore().GetRig(0)!.Modules).ModuleTypeId);
+    }
+
+    [Fact]
+    public void AnUnavailableJournal_DoesNotPreventSuccessfulPrimaryPublication()
+    {
+        var store = NewStore();
+        var chain = NewChain();
+        var config = new FakeConfigurationService();
+        config.Update(c => c.DefaultTonePresetId = "");
+        using var session = Build(chain, config, out _, store);
+        session.Start();
+        chain.AttachEngine(EngineA);
+        chain.AddNode("overdrive");
+        Directory.CreateDirectory(Path.Combine(_dir, ProfileToneRigStore.StoreFileName + ".pending"));
+
+        session.Flush();
+
+        Assert.Equal("overdrive", Assert.Single(NewStore().GetRig(0)!.Modules).ModuleTypeId);
+    }
+
+    [Fact]
+    public void APartiallyRestoredSavedRig_IsNotReplacedByAnEditedPartialChain()
+    {
+        var saved = UserTonePresetDto.FromPreset(new DspTonePreset("saved", "Saved", DspToneCategory.Clean, "",
+            new DcRigPreset([new DcRigModule("overdrive", new Dictionary<string, float>()),
+                new DcRigModule("unavailable-module", new Dictionary<string, float>())]), DspToneOrigin.User));
+        Assert.True(NewStore().SetRig(0, saved));
+        var chain = NewChain();
+        using var session = Build(chain, new FakeConfigurationService(), out _);
+        session.Start();
+        chain.AttachEngine(EngineA);
+        chain.SetParam(Assert.Single(chain.GetNodes()).NodeId, "drive", 0.2f);
+
+        session.Flush();
+
+        Assert.Equal(2, NewStore().GetRig(0)!.Modules.Count);
+    }
+
+    [Fact]
+    public void ASidechainOnlyEditIsPersistedAndRestored()
+    {
+        var chain = new FakeDspChainService([
+            new DspModuleType("ducker", "Ducker", []) { SupportsSidechain = true }
+        ]);
+        var config = new FakeConfigurationService();
+        config.Update(c => c.DefaultTonePresetId = "");
+        using var session = Build(chain, config, out _);
+        session.Start();
+        chain.AttachEngine(EngineA);
+        var node = chain.AddNode("ducker")!;
+        session.Flush();
+
+        Assert.True(chain.SetNodeSidechain(node.NodeId, JuceSharp.Dsp.JuceDspSidechainSource.SongMix));
+        session.Flush();
+        Assert.Equal((int)JuceSharp.Dsp.JuceDspSidechainSource.SongMix, NewStore().GetRig(0)!.Modules[0].Sidechain);
+
+        chain.AttachEngine(EngineB);
+        Assert.Equal(JuceSharp.Dsp.JuceDspSidechainSource.SongMix, Assert.Single(chain.GetNodes()).Sidechain);
+    }
+
+    [Fact]
     public void AssignmentOnlyEditsPersistAndRestoreOnEngineRebuild_AndClearingPersists()
     {
         var chain = NewChain();

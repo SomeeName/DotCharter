@@ -54,12 +54,26 @@ public sealed class StatusBarLocalizedReadoutTests
         Assert.Equal("StatusBar_Task_MoreFmt(Building preview, 2)", vm.ActiveTaskLabel);
     }
 
+    [Fact]
+    public void AFinishedTask_LeavesNoTooltipAtAll()
+    {
+        using var vm = Create(new FakeAudioPlaybackService(), FakeLocalization.KeysOnly(), out var service);
+        Assert.Null(vm.ActiveTaskTip);
+
+        service.BeginTask("save", "Saving project", indeterminate: true);
+        Assert.Equal("Saving project", vm.ActiveTaskTip);
+
+        service.CompleteTask("save");
+        // an empty string (not null) opens an empty tooltip box on the chip.
+        Assert.Null(vm.ActiveTaskTip);
+    }
+
     private static StatusBarViewModel Create(FakeAudioPlaybackService audio, FakeLocalization localization, out StatusBarService service)
     {
         var dispatcher = new ImmediateDispatcher();
         service = new StatusBarService(dispatcher);
         return new StatusBarViewModel(service, new ProjectState(), audio, dispatcher, new StubProfiles(),
-            new FakeFileStorageService(), localization);
+            new FakeFileStorageService(), localization, new FakeConfigurationService());
     }
 
     private sealed class ImmediateDispatcher : IUiDispatcher

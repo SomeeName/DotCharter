@@ -239,7 +239,7 @@ public sealed class TimelineGutterControl : Control
             : TimelineGutterLayout.For(
                 Bounds.Height, renderer.TopRibbon,
                 Editor?.ActiveArrangement?.Tuning.Length ?? 6,
-                renderer.LeftyFlip ^ renderer.InvertStrings,
+                renderer.InvertStrings,
                 renderer.BottomMargin);
 
         var w = Bounds.Width;
@@ -350,7 +350,10 @@ public sealed class TimelineGutterControl : Control
                         arrangement, TuningCheckCapoMode.TuneOpenThenPlaceCapo, out var targets, transposeSemitones))
                 {
                     for (var i = 0; i < count; i++)
-                        names[i] = i < targets.Length ? StripOctave(targets[i].NoteName) : Unknown;
+                    {
+                        names[i] = i < targets.Length
+                            ? StripOctave(TuningDisplayNames.Pitch(targets[i].Midi, arrangement, i)) : Unknown;
+                    }
                     return names;
                 }
             }

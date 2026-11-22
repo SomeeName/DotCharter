@@ -28,11 +28,6 @@ public static class AnchorFretSuggester
     /// <summary>Fallback when the span contains nothing fretted.</summary>
     public const int DefaultFret = 1;
 
-    /// <summary>The last fret an anchor may open on — the same ceiling
-    /// <c>HighwayEditingService.MaxAnchorFret</c> and
-    /// <c>ChartImprovementService.MaxFret</c> use.</summary>
-    private const int MaxFret = 24;
-
     /// <summary>
     ///     The lowest fret an FHP anchor may open on: <c>capo + 1</c>, clamped
     ///     into the neck.
@@ -54,7 +49,7 @@ public static class AnchorFretSuggester
     ///         <c>ChartImprovementService.MinAnchorFret</c>.
     ///     </para>
     /// </summary>
-    public static int MinFret(int capo) => Math.Clamp(Math.Max(0, capo) + 1, 1, MaxFret);
+    public static int MinFret(int capo) => FretLimits.MinAnchorFret(capo);
 
     /// <summary>
     ///     The fret to open a new anchor at <paramref name="position" /> on.

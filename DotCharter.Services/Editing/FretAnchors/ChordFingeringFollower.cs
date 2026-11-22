@@ -222,8 +222,8 @@ public static class ChordFingeringFollower
 
         if (chords.Count == 0) return FingeringFollowPlan.Empty;
 
-        // A hand shape draws the grip of the chord it was built over: repoint it
-        // with that chord when it named the chord's OLD template.
+        // A hand shape follows the chord it was built over when it names the
+        // chord's old template and has no ghost strings.
         var shapes = new List<(HandShape, int, int)>();
         var repointed = new Dictionary<Chord, (int OldId, int NewId)>(ReferenceEqualityComparer.Instance);
         foreach (var (chord, oldId, newId) in chords) repointed[chord] = (oldId, newId);
@@ -240,8 +240,11 @@ public static class ChordFingeringFollower
             }
 
             if (lo == sortedChords.Count || !shape.Covers(sortedChords[lo].Position)) continue;
-            if (repointed.TryGetValue(sortedChords[lo], out var ids) && shape.TemplateId == ids.OldId)
+            if (repointed.TryGetValue(sortedChords[lo], out var ids) && shape.TemplateId == ids.OldId
+                && shape.GetGhostMask(byId[ids.OldId]) == 0)
+            {
                 shapes.Add((shape, ids.OldId, ids.NewId));
+            }
         }
 
         return new FingeringFollowPlan(minted, chords, shapes);
@@ -292,7 +295,7 @@ public static class ChordFingeringFollower
         foreach (var (stringIndex, finger) in fingers) variant.Fingers[stringIndex] = finger;
 
         var existing = fingering.FindIdenticalTemplate(arrangement, variant)
-                       ?? known.FirstOrDefault(m => m.Equals(variant));
+                       ?? known.FirstOrDefault(m => m.Unnamed == variant.Unnamed && m.Equals(variant));
         if (existing != null) return existing;
 
         variant.Id = nextId++;

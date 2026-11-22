@@ -174,6 +174,8 @@ public sealed partial class JuceAudioPlaybackService : IAudioPlaybackService, Ab
     // Stash the request so ReplaceEngine drains it once the engine exists.
     private string? _pendingInstrumentLoadPath;
 
+    // Newest chain intent until its worker applies it. Kept even with a live
+    // engine so an already-started rebuild cannot lose a request waiting on VST I/O.
     private List<VstChainEntry>? _pendingGuitarChain;
 
     private bool _instrumentLoadInFlight;
@@ -246,12 +248,16 @@ public sealed partial class JuceAudioPlaybackService : IAudioPlaybackService, Ab
     public JuceAudioPlaybackService(ILocalizationService localization, IAppLogger? logger = null, IStatusBarService? statusBar = null,
         Dsp.IDspChainService? dspChain = null, Dsp.IPlayerDspChains? dspChains = null)
     {
+        _sandboxEngine = () => _engine;
+        _latencyCompensator = ApplyLatencyCompensation;
         _localization = localization;
         _logger = logger;
         _statusBar = statusBar;
+        _sandboxSeats = CreateSandboxSeats();
         // The chart synth's request and the re-amp takes: each reads the engine
         // through this getter and replays itself from AttachPerPlayerStateToEngine.
-        _chartSynth = new ChartSynth.ChartSynthEngineDriver(logger, () => _engine, () => CanRouteInstrumentToRig);
+        _chartSynth = new ChartSynth.ChartSynthEngineDriver(logger, () => _engine, () => CanRouteInstrumentToRig,
+            () => _playerRouting.PlayerCount);
         _reampTakes = new Reamp.ReampTakes(logger, () => _engine);
         // ABI v47: the external process insert, replayed from the same per-seat attach.
         _externalInserts = new ExternalInsert.ExternalProcessInserts(logger,
@@ -313,6 +319,8 @@ public sealed partial class JuceAudioPlaybackService : IAudioPlaybackService, Ab
     public double MidiOffsetMs { get; set; }
 
     public bool IsDeviceLost => _deviceLost;
+
+    public long DropoutCount => _health.TotalDropouts;
 
     public AudioDiagnostics Diagnostics { get; } = new();
 
@@ -516,24 +524,25 @@ public sealed partial class JuceAudioPlaybackService : IAudioPlaybackService, Ab
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Guitar chain teardown failed during dispose: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Guitar chain teardown failed during dispose", ex);
         }
         lock (_midiGate)
         {
             try { _midi.Dispose(); } catch { /* ignored */ }
             _midi = new NullMidiOutput();
         }
-        lock (_gate)
-        {
-            FreeAudioLocked();
-            try { AttachDspChainsToEngine(null); } catch { /* ignored */ }
-            try { CloseRigMidiInputLocked(); } catch { /* engine disposal also owns MIDI children */ }
-            try { _engine?.Dispose(); }
-            catch (Exception ex)
+        lock (_mediaOperationGate)
+            lock (_gate)
             {
-                _logger?.Warning(AppLogCategory.Audio, $"Engine dispose threw: {ex.Message}");
+                FreeAudioLocked();
+                try { AttachDspChainsToEngine(null); } catch { /* ignored */ }
+                try { CloseRigMidiInputLocked(); } catch { /* engine disposal also owns MIDI children */ }
+                try { _engine?.Dispose(); }
+                catch (Exception ex)
+                {
+                    _logger?.Warning(AppLogCategory.Audio, "Engine dispose threw", ex);
+                }
+                _engine = null;
             }
-            _engine = null;
-        }
     }
 }

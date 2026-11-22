@@ -30,7 +30,7 @@ public static class TimelineMath
         if (beats.Count == 1)
             return beats[0].Time + (pos.BeatId + pos.Fraction.DoubleValue) * BeatLengthMs(beats[0]);
 
-        if (pos.BeatId >= 0 && pos.BeatId + 1 < beats.Count)
+        if (pos.BeatId >= 0 && pos.BeatId < beats.Count - 1)
         {
             var beat = beats[pos.BeatId];
             var nextBeat = beats[pos.BeatId + 1];

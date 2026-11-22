@@ -2,6 +2,8 @@ using DotCharter.Core.Domain.Vocals;
 using DotCharter.Services.Audio.Lyrics;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.Services.Editing.Tracks;
+using DotCharter.Services.Editing.Lyrics;
+using DotCharter.Services.Import.Lyrics;
 using DotCharter.Services.Parsing.Lrc;
 using DotCharter.Tone.Infrastructure.Storage;
 using DotCharter.UI.ViewModels.Editor;
@@ -81,13 +83,56 @@ public sealed class LyricsInspectorUltraStarImportTests : IDisposable
         Assert.Equal(["Solo", "line"], rig.Track.Phrases.SelectMany(p => p.Lyrics).Select(l => l.Text));
     }
 
+    [Fact]
+    public async Task ImportClosesGapsAndOverlapsInEveryVoiceAndKeepsPhraseFinalEnds()
+    {
+        var rig = Build("""
+            #BPM:120
+            P1
+            : 0 1 0 one
+            : 8 8 0 two
+            : 12 1 0 three
+            - 20
+            : 24 1 0 four
+            P2
+            : 0 1 0 five
+            : 8 1 0 six
+            E
+            """);
+
+        await rig.Inspector.ImportUltraStarCommand.ExecuteAsync(null);
+
+        var vocals = rig.Track.Phrases[0].Lyrics;
+        Assert.Equal([0, 1000, 1500], vocals.Select(l => (int)l.Position.GetPositionMs(rig.Editor.Beats)));
+        Assert.Equal(968.75, vocals[0].EndPosition.GetPositionMs(rig.Editor.Beats), 1.0);
+        Assert.Equal(1468.75, vocals[1].EndPosition.GetPositionMs(rig.Editor.Beats), 1.0);
+        Assert.Equal(1625.0, vocals[2].EndPosition.GetPositionMs(rig.Editor.Beats), 1.0);
+        var duet = Assert.Single(rig.Editor.VocalTracks[1].Phrases);
+        Assert.Equal(968.75, duet.Lyrics[0].EndPosition.GetPositionMs(rig.Editor.Beats), 1.0);
+        rig.History.Undo();
+        Assert.Same(rig.Track, Assert.Single(rig.Editor.VocalTracks));
+        Assert.Equal("hold", Assert.Single(Assert.Single(rig.Track.Phrases).Lyrics).Text);
+    }
+
+    [Fact]
+    public async Task ImportWithWordSpanningOffKeepsMeasuredWordEndsAndSpansInsideWords()
+    {
+        var rig = Build("#BPM:120\n: 0 1 0 a \n: 8 1 0 vo\n: 12 1 0 cal\nE\n", spanWordGaps: false);
+
+        await rig.Inspector.ImportUltraStarCommand.ExecuteAsync(null);
+
+        var lyrics = Assert.Single(rig.Track.Phrases).Lyrics;
+        Assert.Equal(125, lyrics[0].EndPosition.GetPositionMs(rig.Editor.Beats), 1.0);
+        Assert.Equal(1468.75, lyrics[1].EndPosition.GetPositionMs(rig.Editor.Beats), 1.0);
+    }
+
     private sealed record Rig(
         LyricsInspectorViewModel Inspector,
         ChartEditorViewModel Editor,
         HistoryService History,
         VocalTrack Track);
 
-    private Rig Build(string ultraStarText)
+    private Rig Build(string ultraStarText, bool spanWordGaps = true)
     {
         Directory.CreateDirectory(_root);
         var file = Path.Combine(_root, "song.txt");
@@ -125,9 +170,12 @@ public sealed class LyricsInspectorUltraStarImportTests : IDisposable
             ActiveVocalTrack = track
         };
 
+        var config = new FakeConfigurationService();
+        config.AppConfig.LyricSpanWordGap = spanWordGaps;
         var storage = new FakeFileStorageService { NextOpenFile = file };
         var inspector = new LyricsInspectorViewModel(editor, history, state, logger, storage,
-            new LrcLyricsParser(), new NoopAutoSync(), FakeLocalization.English());
+            new LyricsFileService(new ExportTargetWriter(), new LrcLyricsParser()),
+            new LyricAutoSyncRunner(new NoopAutoSync(), null, null, state), FakeLocalization.English(), config);
 
         return new Rig(inspector, editor, history, track);
     }

@@ -16,15 +16,25 @@ namespace DotCharter.UI.Docking;
 /// </summary>
 public class DotCharterDockFactory : Factory
 {
+    /// <summary>Runs on each float window as it is created, before Dock shows it.</summary>
+    public Action<Avalonia.Controls.Window>? HostWindowCreated { get; init; }
+
     public override void InitLayout(IDockable layout)
     {
         DockableLocator = new Dictionary<string, Func<IDockable?>>();
         HostWindowLocator = new Dictionary<string, Func<IHostWindow?>>
         {
-            [nameof(IDockWindow)] = () => new HostWindow()
+            [nameof(IDockWindow)] = CreateHostWindow
         };
 
         base.InitLayout(layout);
+    }
+
+    private HostWindow CreateHostWindow()
+    {
+        var window = new HostWindow();
+        HostWindowCreated?.Invoke(window);
+        return window;
     }
 
     /// <summary>
@@ -154,7 +164,7 @@ public class DotCharterDockFactory : Factory
     /// ActiveDockable pointing at it ("TODO: Handle ActiveDockable state"),
     /// so an IsCollapsable=false ToolDock keeps rendering the pinned pane (a
     /// visual duplicate) and its chrome keeps a stale close target that later
-    /// turns into the CloseDockable(null) crash. Dock 12.1.0.8 routes every pin
+    /// turns into the CloseDockable(null) crash. Dock routes every pin
     /// toggle through this hook (PinDockable after its capability check, and
     /// RemoveDockable for a pinned pane), so the fix covers both.
     /// </summary>

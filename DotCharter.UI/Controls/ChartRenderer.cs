@@ -207,14 +207,11 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
     public double ViewportHeight => Bounds.Height;
 
     /// <summary>
-    /// Top-ribbon layout for the arrangement this renderer is bound to (override
-    /// arrangement on stacked rows, otherwise the active one): its track's lane
-    /// settings through <see cref="RibbonLaneRules" /> — empty lanes give their
-    /// height to the note lanes. The hit tester reads this same property, so rows
-    /// hide/show consistently for drawing and clicking.
+    /// Content-aware ribbon for this viewport. Stacked overrides omit song-wide lyrics;
+    /// the main timeline and hit tester use the active track's lane settings.
     /// </summary>
     public RibbonLayout TopRibbon =>
-        CurrentTrack is { } ctx ? RibbonLaneRules.Compose(ctx.Ribbon, RibbonContentOf(ctx)) : RibbonLayout.Default;
+        CurrentTrack is { } ctx ? RibbonLaneRules.Compose(ctx.Ribbon, RibbonContentOf(ctx), isStacked: OverrideArrangement != null) : RibbonLayout.Default;
 
     private TrackEditorContext? CurrentTrack =>
         (OverrideArrangement ?? Editor?.ActiveArrangement) is { } arr && Editor != null
@@ -239,14 +236,13 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
 
     public double TopMargin => TopRibbon.TotalHeight;
 
-    /// <summary>v0.34 lefty flip (IChartViewport): the string→lane order this
-    /// renderer draws with — hit-testing reads it from here so both always
-    /// agree. Sourced from the profile-fed ProjectState channel.</summary>
+    /// <summary>Profile handedness (IChartViewport). It mirrors only the 3D fret
+    /// axis; all 2D string rows follow InvertStrings independently.</summary>
     public bool LeftyFlip => _projectState?.LeftyFlip ?? false;
 
     /// <summary>Inverted string layout (tab convention, IChartViewport): a
-    /// vertical string flip that composes (XOR) with <see cref="LeftyFlip"/> in
-    /// the 2D lanes. Sourced from the AppConfig-fed ProjectState channel.</summary>
+    /// vertical string flip, independent of <see cref="LeftyFlip"/>.
+    /// Sourced from the AppConfig-fed ProjectState channel.</summary>
     public bool InvertStrings => _projectState?.InvertStrings ?? false;
     public double BottomMargin => UiLayoutConstants.HighwayBottomMargin;
 
@@ -316,6 +312,9 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
     private RibbonVisibility? _subscribedRibbon;
 
     private int _continuousRenderRequests;
+
+    /// <summary>Begin calls not yet balanced by an End: zero when nothing pins the frame loop.</summary>
+    internal int ContinuousRenderRequests => Volatile.Read(ref _continuousRenderRequests);
 
     /// <summary>
     /// Pin the render loop to its continuous-frame cadence (vsync
@@ -487,6 +486,9 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
 
     /// <summary>The timeline's accessibility face; see the peer.</summary>
     protected override AutomationPeer OnCreateAutomationPeer() => new ChartRendererAutomationPeer(this);
+
+    /// <summary>Uses the same atlas as the timeline's drawn labels.</summary>
+    public float? MeasureTimelineLabelWidth(string text) => DrawLabels ? _batcher.MeasureTextWidth(text) : null;
 
     /// <summary>IChartViewport: schedules one redraw (coalesced) on the next
     /// compositor animation tick. Damage-driven — an idle timeline renders
@@ -780,7 +782,7 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
         // this control labels these exact lanes, and a caption one pixel off
         // its lane names the wrong string — so neither side owns a copy.
         var layout = TimelineGutterLayout.For(
-            boundsH, ribbonLayout, stringCount, LeftyFlip ^ InvertStrings, BottomMargin, DrawLabels);
+            boundsH, ribbonLayout, stringCount, InvertStrings, BottomMargin, DrawLabels);
         PublishGutterLayout(layout, arrForLayout);
 
         var topMargin = layout.TopMargin;
@@ -860,11 +862,8 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
         _batcher.FontAtlas = atlas;
         atlas?.SetRenderScale((float)renderScaling);
 
-        // Ensure newly visible characters are injected into the font atlas before drawing.
-        // Cheap content signature filters out the (very common) frame-to-frame
-        // case where the visible set is unchanged, in which case there's no
-        // possible new character to register; a per-char
-        // HashSet probe over hundreds of strings every frame would be wasteful.
+        // Register before drawing. A content signature skips per-character
+        // probes when the snapshot's visible text is unchanged.
         if (atlas != null)
         {
             // Whole-chart pre-registration, latched on the three collections'
@@ -883,6 +882,10 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
                 _textRegistration.Accept(lyricPhrases, lyricPhrases.Count,
                     eventPoints, eventPoints.Count, tones, tones.Count);
             }
+
+            // BackgroundLayer draws these labels after BeginFrame, too late
+            // to add glyphs then. Also covers in-place text edits and resolving.
+            ChartTextPreRegistration.RegisterAnnotations(atlas, Editor.Annotations);
 
             var sig = ComputeRegisterSignature();
             if (sig != _lastRegisterSig)
@@ -1163,6 +1166,7 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
             ? templates
             : Array.Empty<ChordTemplate>();
         _snapshotCtx.ActiveBeats = editor.Beats;
+        _snapshotCtx.BeatsVersion = editor.HistoryRevision;
         _snapshotCtx.ActiveAnchors = sourceLevel?.Anchors ?? editor.Anchors;
         _snapshotCtx.ActiveHandShapes = sourceLevel?.HandShapes ?? editor.HandShapes;
         // The frame-only repeat box is the EXPORT's decision, handed over as data.

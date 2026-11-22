@@ -345,11 +345,10 @@ public sealed partial class PublicSnapshotExportTests
         };
         foreach (var argument in arguments)
             info.ArgumentList.Add(argument);
-        using var git = Process.Start(info) ?? throw new InvalidOperationException("git did not start.");
-        var stderr = git.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
-        var output = git.StandardOutput.ReadToEnd();
-        git.WaitForExit();
-        Assert.True(git.ExitCode == 0, $"git {string.Join(' ', arguments)} failed ({git.ExitCode}): {stderr.Result}");
+        // #608: bounded, both pipes drained concurrently; was ReadToEnd + an uncapped WaitForExit.
+        var git = BoundedProcess.Run(info, TimeSpan.FromMinutes(2), $"git {string.Join(' ', arguments)}");
+        Assert.True(git.ExitCode == 0, $"git {string.Join(' ', arguments)} failed ({git.ExitCode}): {git.StandardError}");
+        var output = git.StandardOutput;
         return output.Trim();
     }
 
@@ -363,50 +362,56 @@ public sealed partial class PublicSnapshotExportTests
 
     internal static string Quote(string text) => "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
 
-    internal static (int ExitCode, string Output) RunPwsh(string scratch, string script)
+    private static string WithoutGitleaks(string path) =>
+        string.Join(Path.PathSeparator, path.Split(Path.PathSeparator).Where(dir => dir.Length > 0 && !HoldsGitleaks(dir)));
+
+    private static bool HoldsGitleaks(string dir)
+    {
+        try
+        {
+            return Directory.Exists(dir) && Directory.EnumerateFiles(dir, "gitleaks*").Any();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    internal static (int ExitCode, string Output) RunPwsh(string scratch, string script) =>
+        RunPowerShell(scratch, script, "pwsh");
+
+    internal static (int ExitCode, string Output) RunPowerShell(string scratch, string script, string host)
     {
         var file = Path.Combine(Directory.CreateTempSubdirectory("dc-public-pwsh-").FullName, "case.ps1");
         File.WriteAllText(file, "$ErrorActionPreference = 'Stop'\n" + script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-        var info = new ProcessStartInfo("pwsh")
+        var info = new ProcessStartInfo(host)
         {
             WorkingDirectory = scratch,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8
         };
-        foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-File", file })
+        foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", file })
             info.ArgumentList.Add(argument);
         // Plain error text: ANSI escapes in a failure message make the TRX invalid XML.
         info.Environment["NO_COLOR"] = "1";
         // Never the owner's %LOCALAPPDATA% release cache: the export records and reads gate
         // runs there. A case that needs the cache across runs sets its own.
         info.Environment["DOTCHARTER_RELEASE_CACHE"] = Path.Combine(Path.GetDirectoryName(file)!, "release-cache");
+        // Never the machine's gitleaks: an executed gitleaks that does not pass fails even a dry
+        // run, and the fixture trees carry no .gitleaks.toml. A case that wants one puts a stub on PATH.
+        info.Environment["PATH"] = WithoutGitleaks(info.Environment["PATH"] ?? "");
 
-        Process? process;
         try
         {
-            process = Process.Start(info);
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-            Assert.Skip("pwsh (PowerShell 7+) is not on PATH, so the public export cannot be executed here.");
-            return default;
-        }
-
-        Assert.NotNull(process);
-        try
-        {
-            using (process)
+            // Export and sync children may keep working under load; only prolonged silence ends them.
+            var result = BoundedProcess.TryRun(info, Timeout.InfiniteTimeSpan, host + " (public export)", idleCap: ProcessIdleGuard.PublicExportTimeout);
+            if (result is null)
             {
-                var stdout = process!.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
-                var stderr = process.StandardError.ReadToEnd();
-                // A deadlock detector for a hung child, never a budget.
-                Assert.True(process.WaitForExit(180_000), "pwsh did not finish within 180 s.");
-                return (process.ExitCode, stdout.GetAwaiter().GetResult() + stderr);
+                Assert.Skip($"{host} is not on PATH, so this PowerShell case cannot be executed here.");
+                return default;
             }
+
+            return (result.ExitCode, result.StandardOutput + result.StandardError);
         }
         finally
         {

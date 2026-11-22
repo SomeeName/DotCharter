@@ -15,6 +15,11 @@ Part of the Amp & FX rig reference. Router: [../pedalboard.md](../pedalboard.md)
 > The live tuner and routing controls are in
 > `Views/PlayMode/AmpFxRigView.axaml`.
 
+Current tuner labels use `TuningDisplayNames`. The picker and string targets
+share the open-string names, so an unchanged low F# on an eight-string guitar
+keeps F# in the picker, chip and readout even when other strings are lowered.
+Chromatic mode uses the neutral pitch names.
+
 - `Controls/Dsp/` — continued from [widgets-and-faces.md](widgets-and-faces.md):
     - **Chain builder (the routing canvas) + selection.** `SignalChainCanvas`
       (replaces the old `SignalFlowStrip`) sits at the board's foot: IN jack →

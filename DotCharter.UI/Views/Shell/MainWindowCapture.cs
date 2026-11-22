@@ -106,18 +106,29 @@ internal sealed class MainWindowCapture(MainWindow window)
         {
             var hwnd = _window.TryGetPlatformHandle()?.Handle ?? 0;
             if (hwnd == 0 || !GetWindowRect(hwnd, out var wr)) return null;
-            var origin = VisualExtensions.PointToScreen(
-                _window.Preview3DSlot, new Point(0, 0));
-            return CaptureWindowRegion(
-                origin.X - wr.Left,
-                origin.Y - wr.Top,
-                (int)Math.Round(_window.Preview3DSlot.Bounds.Width * _window.RenderScaling),
-                (int)Math.Round(_window.Preview3DSlot.Bounds.Height * _window.RenderScaling));
+            var slot = _window.Preview3DSlot;
+            var region = SlotRegion(slot.Bounds.Size, p => VisualExtensions.PointToScreen(slot, p), new PixelPoint(wr.Left, wr.Top));
+            return CaptureWindowRegion(region.X, region.Y, region.Width, region.Height);
         }
         catch
         {
             return null; // a missed capture only costs the screenshot
         }
+    }
+
+    /// <summary>
+    ///     A slot's window-relative pixel rectangle from BOTH of its corners on
+    ///     screen. Every transform between the slot and the screen (the interface
+    ///     scale's <c>RootScaler</c> included) is in that mapping; the slot's own
+    ///     <c>Bounds</c> are in the transform's inner units, so sizing from them
+    ///     cropped the capture at any scale but 100 %.
+    /// </summary>
+    internal static PixelRect SlotRegion(Size localSize, Func<Point, PixelPoint> toScreen, PixelPoint windowOrigin)
+    {
+        var a = toScreen(new Point(0, 0));
+        var b = toScreen(new Point(localSize.Width, localSize.Height));
+        return new PixelRect(Math.Min(a.X, b.X) - windowOrigin.X, Math.Min(a.Y, b.Y) - windowOrigin.Y,
+            Math.Abs(b.X - a.X), Math.Abs(b.Y - a.Y));
     }
 
     /// <summary>PrintWindow self-capture of a sub-rect of this window (physical

@@ -130,4 +130,101 @@ public sealed class IssueFixViewModelTests
 
         Assert.False(vm.HasFix);
     }
+
+    private static (Arrangement Arr, List<BeatMarker> Beats, ArrangementIssue I30) ToneOnNote(FractionalPosition at)
+    {
+        var beats = Enumerable.Range(0, 16).Select(i => new BeatMarker { Time = i * 500, Bpm = 120 }).ToList();
+        var arr = new Arrangement();
+        arr.Levels.Add(new ChartLevel());
+        var note = new GuitarNote { Position = at, Fret = 5 };
+        arr.Levels[0].Notes.Add(note);
+        arr.ToneChanges.Add(new ToneChange { Position = at, ToneName = "lead" });
+        return (arr, beats, new ArrangementIssue(ArrangementIssueType.ToneChangeOnNote, "I30", at.GetPositionMs(beats), Note: note));
+    }
+
+    [Fact]
+    public void AToneChangeOnANote_OffersOneMoveASixteenthEarlier_AsOneUndoStep()
+    {
+        var (arr, beats, i30) = ToneOnNote(new FractionalPosition(2));
+        var history = new HistoryService(new FakeAppLogger());
+        var vm = new IssueFixViewModel(history, FakeLocalization.English());
+
+        vm.Offer(i30, arr, arr.Levels[0], beats);
+
+        var loc = FakeLocalization.English();
+        Assert.True(vm.HasFix);
+        Assert.False(vm.HasAlternative);
+        Assert.False(vm.IsBlocked);
+        Assert.Equal(loc["Inspector_IssueFix_ToneEarlier"], vm.DefaultLabel);
+        Assert.Equal(loc["Inspector_IssueFix_ToneEarlierTip"], vm.DefaultTip);
+
+        vm.ApplyDefaultCommand.Execute(null);
+
+        Assert.Equal(new FractionalPosition(1, new Fraction(3, 4)), arr.ToneChanges[0].Position);
+        Assert.False(vm.HasFix);
+        history.Undo();
+        Assert.False(history.CanUndo);
+        Assert.Equal(new FractionalPosition(2), arr.ToneChanges[0].Position);
+    }
+
+    [Fact]
+    public void ABlockedToneMove_IsShownDisabled_WithItsReason()
+    {
+        var (arr, beats, i30) = ToneOnNote(new FractionalPosition(0, new Fraction(1, 8)));
+        var history = new HistoryService(new FakeAppLogger());
+        var vm = new IssueFixViewModel(history, FakeLocalization.English());
+
+        vm.Offer(i30, arr, arr.Levels[0], beats);
+
+        Assert.True(vm.HasFix);
+        Assert.True(vm.IsBlocked);
+        Assert.Equal(FakeLocalization.English()["Inspector_IssueFix_ToneBlockedChartStart"], vm.BlockedReason);
+        Assert.False(vm.ApplyDefaultCommand.CanExecute(null));
+        vm.ApplyDefaultCommand.Execute(null);
+        Assert.False(history.CanUndo);
+    }
+
+    [Fact]
+    public void AToneFindingWithoutABeatGrid_HasNoFix()
+    {
+        var (arr, _, i30) = ToneOnNote(new FractionalPosition(2));
+        var vm = new IssueFixViewModel(new HistoryService(new FakeAppLogger()), FakeLocalization.English());
+
+        vm.Offer(i30, arr, arr.Levels[0]);
+
+        Assert.False(vm.HasFix);
+    }
+
+    [Fact]
+    public void AToneChangeRestoredAtTheLandingSpotAfterTheOffer_IsNotStacked()
+    {
+        // The offer was computed with the landing spot free; an undo then puts a change there before
+        // the debounced re-validation runs. The press re-checks the live arrangement and refuses.
+        var (arr, beats, i30) = ToneOnNote(new FractionalPosition(2));
+        var history = new HistoryService(new FakeAppLogger());
+        var vm = new IssueFixViewModel(history, FakeLocalization.English());
+        vm.Offer(i30, arr, arr.Levels[0], beats);
+        Assert.True(vm.ApplyDefaultCommand.CanExecute(null));
+
+        arr.ToneChanges.Insert(0, new ToneChange { Position = new FractionalPosition(1, new Fraction(3, 4)), ToneName = "clean" });
+        vm.ApplyDefaultCommand.Execute(null);
+
+        Assert.False(history.CanUndo);
+        Assert.Equal(new FractionalPosition(2), arr.ToneChanges[1].Position);
+        Assert.Equal(FakeLocalization.English()["Inspector_IssueFix_ToneBlockedToneChange"], vm.BlockedReason);
+        Assert.False(vm.ApplyDefaultCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void TwoToneChangesOnTheNote_ShowTheFixDisabled_WithItsReason()
+    {
+        var (arr, beats, i30) = ToneOnNote(new FractionalPosition(2));
+        arr.ToneChanges.Add(new ToneChange { Position = new FractionalPosition(2), ToneName = "clean" });
+        var vm = new IssueFixViewModel(new HistoryService(new FakeAppLogger()), FakeLocalization.English());
+
+        vm.Offer(i30, arr, arr.Levels[0], beats);
+
+        Assert.True(vm.IsBlocked);
+        Assert.Equal(FakeLocalization.English()["Inspector_IssueFix_ToneBlockedSeveralChanges"], vm.BlockedReason);
+    }
 }

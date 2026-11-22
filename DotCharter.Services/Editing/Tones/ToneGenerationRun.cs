@@ -1,5 +1,6 @@
 using DotCharter.Localization;
 using DotCharter.Services.Audio.Dsp.Tones;
+using DotCharter.Services.Audio.StemSeparation;
 using DotCharter.Services.State;
 using DotCharter.Tone.Audio.Dsp.Tones;
 
@@ -35,7 +36,11 @@ public sealed record ToneGenerationInput(
     IReadOnlyList<(string Name, string Path)> StemCandidates,
     string? SongCandidate,
     IReadOnlyCollection<string> ExistingNames,
-    IReadOnlyCollection<string> ExistingKeys);
+    IReadOnlyCollection<string> ExistingKeys)
+{
+    public string? ProjectPath { get; init; }
+    public string ProjectDirectory { get; init; } = "";
+}
 
 /// <summary>One change's analysis: the key and name it would be written under, and what the audio said.</summary>
 public sealed record ToneGenerationCandidate(string Key, string Name, ToneGenerationResult Result);
@@ -78,23 +83,16 @@ public sealed class ToneGenerationRun(IHistoryService history, IExportTargetWrit
         {
             if (string.IsNullOrWhiteSpace(stem.Name) || !ProjectRelativePath.IsReadableMediaReference(stem.Path)) continue;
             if (!ToneAudioSource.IsGuitarish(stem.Name)) continue;
-            stems.Add((stem.Name, Path.IsPathRooted(stem.Path) || string.IsNullOrEmpty(projectDir)
-                ? stem.Path
-                : Path.Combine(projectDir, stem.Path)));
+            stems.Add((stem.Name, stem.Path));
         }
 
-        string? song = null;
-        var name = project.AudioFileName;
-        if (ProjectRelativePath.IsReadableMediaReference(name))
-        {
-            if (Path.IsPathRooted(name)) song = name;
-            else if (!string.IsNullOrEmpty(projectDir)) song = Path.Combine(projectDir, name);
-        }
+        var song = ProjectRelativePath.IsReadableMediaReference(project.AudioFileName) ? project.AudioFileName : null;
 
         return new ToneGenerationInput(
             arrangement.ToneChanges.ToList(), beats, beats.Count > 0 ? beats[^1].Time : 0, stems, song,
             project.ToneDefinitions.Select(t => t.Name).ToList(),
-            project.ToneDefinitions.Select(t => t.Key).ToList());
+            project.ToneDefinitions.Select(t => t.Key).ToList())
+        { ProjectPath = projectPath, ProjectDirectory = projectDir };
     }
 
     /// <summary>Decodes and analyses. Any thread: reads only <paramref name="input" /> and the disk.</summary>
@@ -102,13 +100,15 @@ public sealed class ToneGenerationRun(IHistoryService history, IExportTargetWrit
     {
         ArgumentNullException.ThrowIfNull(input);
         service ??= new ToneGenerationService(logger);
+        var songPath = ProjectAudioLocator.TryResolve(input.ProjectPath, input.SongCandidate, files.FileExists);
+        var legacyDir = Path.GetDirectoryName(songPath ?? "") ?? "";
         var stemPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (stemName, path) in input.StemCandidates)
         {
-            if (files.FileExists(path)) stemPaths[stemName] = path;
+            var resolved = StemFolderProbe.ResolveStemPath(input.ProjectDirectory, legacyDir, path);
+            if (ProjectRelativePath.IsReadableMediaReference(resolved) && files.FileExists(resolved)) stemPaths[stemName] = resolved;
         }
 
-        var songPath = input.SongCandidate is { } song && files.FileExists(song) ? song : null;
         var names = new HashSet<string>(input.ExistingNames, StringComparer.OrdinalIgnoreCase);
         var keys = new List<string>(input.ExistingKeys);
         var candidates = new List<ToneGenerationCandidate>();

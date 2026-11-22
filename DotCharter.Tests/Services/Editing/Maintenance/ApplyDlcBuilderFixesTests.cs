@@ -91,7 +91,8 @@ public sealed class ApplyDlcBuilderFixesTests
     [Fact]
     public void EveryChartFix_HasAFixture()
     {
-        var covered = FixableKeyList.ToHashSet();
+        // The show-light and tone-definition fixes are not snapshot fixes: each has its own entry point and its own test below.
+        var covered = FixableKeyList.Append(ChartExportValidator.KeyNoShowlights).Append(ChartExportValidator.KeyToneNotDefined).ToHashSet();
         var chartFixes = ExportFindingFixes.Fixes.Where(kv => kv.Value != ExportFixKind.OpenToneDesigner).Select(kv => kv.Key);
         Assert.DoesNotContain(chartFixes, k => !covered.Contains(k));
     }
@@ -108,6 +109,42 @@ public sealed class ApplyDlcBuilderFixesTests
 
         Assert.True(changes > 0);
         Assert.DoesNotContain(h.Findings(), f => f.MessageKey == key);
+        h.History.Undo();
+        Assert.False(h.History.CanUndo);
+        Assert.Empty(DeepCompare.Diff("project", before, h.Project, new HashSet<string>()));
+    }
+
+    [Fact]
+    public void TheShowlightsFix_ClearsItsFinding_AsOneUndoStep()
+    {
+        var h = new Harness(FixtureFor(ChartExportValidator.KeyOverlappingNotes));
+        h.Project.Showlights.Clear();
+        h.Project.Arrangements[0].Levels[0].Notes[0].Sustain = FractionalPosition.Zero;
+        Assert.Contains(h.Findings(), f => f.MessageKey == ChartExportValidator.KeyNoShowlights);
+
+        var made = h.Maintenance.GenerateShowlights();
+
+        Assert.True(made > 0);
+        Assert.NotEmpty(h.Project.Showlights);
+        Assert.DoesNotContain(h.Findings(), f => f.MessageKey == ChartExportValidator.KeyNoShowlights);
+        h.History.Undo();
+        Assert.False(h.History.CanUndo);
+        Assert.Empty(h.Project.Showlights);
+    }
+
+    [Fact]
+    public void TheToneDefinitionsFix_ClearsItsFinding_AsOneUndoStep()
+    {
+        var h = new Harness(FixtureFor(ChartExportValidator.KeyOverlappingNotes));
+        h.Arrangement.Levels[0].Notes[0].Sustain = FractionalPosition.Zero;
+        h.Arrangement.ToneChanges.Add(new ToneChange { Position = FractionalPosition.Zero, ToneName = "lead" });
+        Assert.Contains(h.Findings(), f => f.MessageKey == ChartExportValidator.KeyToneNotDefined);
+        var before = ChartProjectCloner.Clone(h.Project);
+
+        var made = h.Maintenance.CreateMissingToneDefinitions(h.Arrangement);
+
+        Assert.True(made > 0);
+        Assert.DoesNotContain(h.Findings(), f => f.MessageKey == ChartExportValidator.KeyToneNotDefined);
         h.History.Undo();
         Assert.False(h.History.CanUndo);
         Assert.Empty(DeepCompare.Diff("project", before, h.Project, new HashSet<string>()));

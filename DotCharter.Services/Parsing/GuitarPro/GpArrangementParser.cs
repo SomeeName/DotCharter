@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.Xml.Linq;
+using DotCharter.Services.Editing.ChordShapes;
 using Arrangement = DotCharter.Core.Domain.Project.Arrangement;
 using ChartLevel = DotCharter.Core.Domain.Project.ChartLevel;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
@@ -16,6 +17,7 @@ namespace DotCharter.Services.Parsing.GuitarPro;
 public sealed class GpArrangementParser
 {
     public GpNoteParser NoteParser { get; } = new();
+    internal HashSet<IGuitarSound> DeadSlideSounds { get; } = [];
 
     /// <summary>
     ///     The AUTHORED left-hand fingering of the track currently being parsed,
@@ -41,12 +43,16 @@ public sealed class GpArrangementParser
     /// <summary>Per parsed arrangement, the slide-in ornaments its import materialized
     /// (<see cref="GpPostProcessor.MaterializeSlideIns"/>).</summary>
     public Dictionary<Arrangement, int> SlideInsMaterialized { get; } = [];
+    public Dictionary<int, Arrangement> ArrangementsByTrackId { get; } = [];
 
     /// <summary>Most notes plus chords one voice of a track may emit; a test lowers it.</summary>
     internal int MaxNotesPerTrack { get; init; } = GpFormatBounds.MaxNotesPerTrack;
 
-    public List<Arrangement> Parse(XDocument doc, List<int> trackIds, GpImportSettings? settings = null)
+    public List<Arrangement> Parse(XDocument doc, List<int> trackIds, GpImportSettings? settings = null,
+        ChartData? sourceChart = null)
     {
+        ArrangementsByTrackId.Clear();
+        DeadSlideSounds.Clear();
         settings ??= GpImportSettings.Default;
         var arrangements = new List<Arrangement>();
         var root = doc.Root;
@@ -85,7 +91,7 @@ public sealed class GpArrangementParser
             // Normalized (whitespace runs collapse, ends trim) — real GP files
             // carry doubled spaces in their bytes ("Lead (6  String Drop D)"),
             // and this name becomes Arrangement.Name, the export dialog row
-            // and the import dialog's name-matching key.
+            // and the import dialog's display label. Source ids identify merges.
             var name = GpTrackNames.Normalize(trackNode.Element("Name")?.Value);
             if (name.Length == 0) name = "Guitar Pro Track";
 
@@ -128,10 +134,12 @@ public sealed class GpArrangementParser
             // hammer-ons) — hand them to Run so AdjustSustains never re-derives a
             // descending one into a pull-off. Right-hand taps stay HopoType.Tap and
             // are deliberately NOT here.
+            var naming = NewChordNames.NamingFor(arr, sourceChart);
             SlideInsMaterialized[arr] = GpPostProcessor.Run(level, arr, settings,
                 tapOriginated: NoteParser.LeftHandTappedNotes,
                 authoredFingers: _authoredFingers, authoredChordNames: _authoredChordNames,
-                graceTargets: _graceTargets);
+                graceTargets: _graceTargets, lastFret: GpPickScrape.LastFret(ReadFretCount(trackNode)),
+                deadSlideSounds: DeadSlideSounds, naming: naming);
             // Sidecar voices get the NOTATION-relevant passes only: tied beats
             // merge (summing their authored NotationDuration) and slide targets
             // resolve. AdjustSustains is deliberately skipped — it is the
@@ -143,6 +151,7 @@ public sealed class GpArrangementParser
                 foreach (var n in voice.Notes) shim.Notes.Add(n);
                 foreach (var c in voice.Chords) shim.Chords.Add(c);
                 GpPostProcessor.MergeTiedNotes(shim, arr.StringCount);
+                GpDeadNoteSlide.Resolve(shim, arr.Capo, GpPickScrape.LastFret(ReadFretCount(trackNode)), DeadSlideSounds);
                 GpPostProcessor.LinkSlides(shim, arr.StringCount);
                 voice.Notes.Clear();
                 foreach (var n in shim.Notes) voice.Notes.Add(n);
@@ -150,8 +159,10 @@ public sealed class GpArrangementParser
                 foreach (var c in shim.Chords) voice.Chords.Add(c);
             }
 
-            GpHandShapeBuilder.BuildLetRingHandShapes(level, arr, tieRollSet, _diagrams, _authoredFingers);
-            GpHandShapeBuilder.BuildLetRingHandShapes(level, arr, letRingSet, _diagrams, _authoredFingers);
+            GpHandShapeBuilder.BuildLetRingHandShapes(level, arr, tieRollSet, _diagrams, _authoredFingers, naming,
+                otherRunPositions: letRingSet);
+            GpHandShapeBuilder.BuildLetRingHandShapes(level, arr, letRingSet, _diagrams, _authoredFingers, naming,
+                otherRunPositions: tieRollSet);
             // Let-ring shapes join the chord shapes after Run — re-clamp so the
             // combined set stays overlap-free.
             GpPostProcessor.ClampHandShapes(level);
@@ -165,6 +176,7 @@ public sealed class GpArrangementParser
 
             arr.Levels.Add(level);
             arrangements.Add(arr);
+            ArrangementsByTrackId[trackId] = arr;
         }
 
         return arrangements;
@@ -443,7 +455,7 @@ public sealed class GpArrangementParser
     /// <c>EofProGuitarTrackParser</c>'s rejection above 8.</summary>
     private const int MaxStringCount = StandardOpenStrings.MaxStringCount;
 
-    private static FractionalPosition ApplyFeelToPosition(FractionalPosition pos, string feel)
+    internal static FractionalPosition ApplyFeelToPosition(FractionalPosition pos, string feel)
     {
         if (string.IsNullOrEmpty(feel) || feel.Equals("None", StringComparison.OrdinalIgnoreCase)) return pos;
 
@@ -516,6 +528,12 @@ public sealed class GpArrangementParser
         /// <summary>Same lifetime, same reason: the rest that articulates a bar's LAST
         /// note falls in the next bar, which is a different ParseVoiceBeats call.</summary>
         public GpBeatCarry.StaccatoCarry StaccatoCarry { get; } = new();
+
+        /// <summary>Raw dead origins and their held members, isolated to this track and voice.</summary>
+        public Dictionary<int, List<IGuitarSound>> DeadTieChains { get; } = [];
+
+        /// <summary>Untied bend releases and ghost tails that continue the sound before them.</summary>
+        public GpBendContinuation BendContinuation { get; } = new();
     }
 
     /// <summary>Where a timed beat sounds (its swung onset) and for how long.</summary>
@@ -659,7 +677,7 @@ public sealed class GpArrangementParser
         {
             if (source.Note(graceIdStr) is not { } graceNode) continue;
             var g = NoteParser.ParseNote(graceNode, entry.Onset, FractionalPosition.Zero,
-                source.StringCount, false);
+                source.StringCount, false, isGrace: true);
             if (!NoteParser.LastStringValid) continue;
             // A grace with a slide (shift or legato) parses onto
             // the grace's SlideTo (-1) / LinkNext — capture it so
@@ -763,11 +781,13 @@ public sealed class GpArrangementParser
         // Keep the AUTHORED rhythm as a notation hint before
         // GpPostProcessor.AdjustSustains discards short
         // sustains — the sheet view renders it verbatim.
+        TrackDeadTie(noteNode, note, slot);
         note.NotationDuration = entry.Rhythm;
         GpBeatCarry.ApplyPendingGrace(note, ref slot.PendingGrace, target.Notes, target.Chords, _graceTargets);
         if (technique is { } tech) GpMarkerImport.ApplyTechnique(note, tech);
         if (trill.HasValue && target.ExpandTrills)
         {
+            slot.BendContinuation.Forget(note.StringIndex);
             ExpandTrill(target.Notes, note, trill.Value.UpperFret, bar.End);
         }
         else
@@ -775,22 +795,62 @@ public sealed class GpArrangementParser
             // Notation-only voices keep the single note; the
             // vibrato flag stands in for the trill glyph.
             if (trill.HasValue) note.Vibrato = true;
+            slot.BendContinuation.ObserveNote(note, GpBendContinuation.ReadGpifBend(noteNode),
+                GpNoteParser.IsTieDestination(noteNode), GpBendContinuation.IsGpifGhost(noteNode));
             target.Notes.Add(note);
         }
+    }
+
+    /// <summary>Preserves a dead tie's slide-out when a continuation omits its Muted property.</summary>
+    private static void TrackDeadTie(XElement noteNode, IGuitarSound note, VoiceSlotState slot)
+    {
+        if (GpPickScrape.IsScrape(note))
+        {
+            slot.DeadTieChains.Remove(note.StringIndex);
+            return;
+        }
+        var properties = noteNode.Element("Properties")?.Elements("Property");
+        var destination = GpNoteParser.IsTieDestination(noteNode);
+        if (!destination)
+        {
+            slot.DeadTieChains.Remove(note.StringIndex);
+            if (properties?.Any(p => p.Attribute("name")?.Value == "Muted") != true) return;
+            slot.DeadTieChains[note.StringIndex] = [];
+        }
+        if (!slot.DeadTieChains.TryGetValue(note.StringIndex, out var chain) || destination && !chain[^1].LinkNext)
+        {
+            slot.DeadTieChains.Remove(note.StringIndex);
+            return;
+        }
+        chain.Add(note);
+        var slide = properties?.FirstOrDefault(p => p.Attribute("name")?.Value == "Slide")?.Element("Flags")?.Value;
+        if (int.TryParse(slide, CultureInfo.InvariantCulture, out var flags) && !GpPickScrape.IsPickScrape(flags))
+            GpDeadNoteSlide.Mark(note, flags);
+        if (!chain.Any(GpDeadNoteSlide.IsPending)) return;
+        foreach (var member in chain) member.Mute = MuteType.Full;
     }
 
     private void EmitChord(string[] notesList, TimedBeat entry, BeatPlacement place, bool hasTremolo,
         GpMarkerImport.BeatTextTechnique? technique, GpifBeatSource source, VoiceTarget target, VoiceSlotState slot)
     {
         var chord = new Chord { Position = place.Position, NotationDuration = entry.Rhythm };
+        var struck = new List<GpBendContinuation.Struck>(notesList.Length);
         foreach (var nStr in notesList)
         {
             if (source.Note(nStr) is not { } noteNode) continue;
             var chordNote = NoteParser.ParseChordNote(noteNode, place.Position, place.Sustain,
                 source.StringCount, hasTremolo);
             RecordAuthoredFinger(target.AuthoredFingers, chordNote, place.Position);
-            if (NoteParser.LastStringValid) chord.ChordNotes.Add(chordNote);
+            if (NoteParser.LastStringValid)
+            {
+                TrackDeadTie(noteNode, chordNote, slot);
+                chord.ChordNotes.Add(chordNote);
+                struck.Add(new GpBendContinuation.Struck(chordNote, GpBendContinuation.ReadGpifBend(noteNode),
+                    GpNoteParser.IsTieDestination(noteNode), GpBendContinuation.IsGpifGhost(noteNode)));
+            }
         }
+
+        GpChordSlideOut.Align(chord.ChordNotes, NoteParser.Capo);
 
         // An accent on any string accents the strum — mirror it on
         // the chord so RS XML / rscp chord-level accent survives.
@@ -809,7 +869,9 @@ public sealed class GpArrangementParser
         // channels are keyed by where the template builder finds it.
         if (target.AuthoredFingers != null)
             _diagrams.Record(entry.Node, chord, _authoredChordNames, target.AuthoredFingers);
-        if (chord.ChordNotes.Count > 0) target.Chords.Add(chord);
+        if (chord.ChordNotes.Count == 0) return;
+        slot.BendContinuation.ObserveChord(chord, struck);
+        target.Chords.Add(chord);
     }
 
     /// <summary>Feeds the beat just emitted to the slot's tie-roll and staccato
@@ -867,7 +929,7 @@ public sealed class GpArrangementParser
 
     /// <summary>The rehearsal-mark name of a MasterBar: the <c>Section</c>'s Text
     /// (preferred) or Letter, or null when the bar carries no section.</summary>
-    private static string? ReadMasterBarSection(XElement masterBarNode)
+    internal static string? ReadMasterBarSection(XElement masterBarNode)
     {
         var section = masterBarNode.Element("Section");
         if (section == null) return null;

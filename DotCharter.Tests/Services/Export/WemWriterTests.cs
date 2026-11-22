@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using DotCharter.Services.Export.Audio;
+using DotCharter.Tone.Infrastructure.Storage;
 
 namespace DotCharter.Tests.Services.Export;
 
@@ -23,6 +24,56 @@ public class WemWriterTests
     private const int OffBitsPerSample = 0x22;
     private const int OffCbSize = 0x24;
     private const int OffChannelConfig = 0x28; // == 40 decimal
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WriteFile_RefusedCodec_PreservesPreviousCacheAndRemovesStage(bool existing)
+    {
+        var directory = Directory.CreateTempSubdirectory("dc-wem-atomic-").FullName;
+        try
+        {
+            var path = Path.Combine(directory, "audio.wem");
+            var previous = WriteWem(WemCodec.Pcm, Tone(frames: 20, channels: 2), channels: 2);
+            if (existing) File.WriteAllBytes(path, previous);
+
+            Assert.Throws<ArgumentException>(() =>
+                WemWriter.WriteFile(path, WemCodec.ImaAdpcm, new short[20], 2, SampleRate));
+
+            if (existing) Assert.Equal(previous, File.ReadAllBytes(path));
+            else Assert.False(File.Exists(path));
+            Assert.Empty(Directory.GetFiles(directory, "*.tmp"));
+        }
+        finally
+        {
+            BestEffortDelete.Directory(directory);
+        }
+    }
+
+    [Fact]
+    public void WriteFile_PublishesCompleteWemWithoutOpeningDestinationForWrite()
+    {
+        var directory = Directory.CreateTempSubdirectory("dc-wem-publish-").FullName;
+        try
+        {
+            var path = Path.Combine(directory, "audio.wem");
+            File.WriteAllText(path, "previous");
+            using var previous = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+
+            var written = WemWriter.WriteFile(path, WemCodec.Pcm, Tone(frames: 20, channels: 2), 2, SampleRate);
+
+            using var reader = new StreamReader(previous);
+            Assert.Equal("previous", reader.ReadToEnd());
+            var bytes = File.ReadAllBytes(path);
+            Assert.Equal(written, bytes.Length);
+            Assert.Equal((uint)(bytes.Length - 8), U32(bytes, 4));
+            Assert.Equal([path], Directory.GetFiles(directory));
+        }
+        finally
+        {
+            BestEffortDelete.Directory(directory);
+        }
+    }
 
     [Fact]
     public void Pcm_wem_has_the_rocksmith_container_layout()

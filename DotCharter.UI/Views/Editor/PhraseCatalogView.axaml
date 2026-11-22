@@ -2,155 +2,194 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DotCharter.UI.ViewModels.Editor"
              xmlns:controls="using:DotCharter.UI.Controls"
+             xmlns:converters="using:DotCharter.UI.Converters"
              xmlns:catalog="clr-namespace:DotCharter.Services.Editing.Catalog;assembly=DotCharter.Services"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              x:Class="DotCharter.UI.Views.Editor.PhraseCatalogView"
-             x:DataType="vm:PhraseCatalogViewModel">
-    <!-- Shares the Inspector's card / field / empty-state vocabulary: it is an Inspector
-         tab, so a second hand-rolled look reads as two different apps in one pane. -->
+             x:DataType="vm:PhraseCatalogViewModel"
+             x:CompileBindings="True">
+    <!--
+        The Riff library tab, laid out as inspector design D: a ColumnFlowPanel of three cards over a pinned
+        status footer.
+        * The LIBRARY card (pinned head and foot, the list between them scrolls): the find / paste-by-name box
+          (EOF's F3 + SHIFT+~ in one control: Enter pastes the typed name), the saved riffs, Paste at playhead.
+        * DETAILS: the selected riff — its preview, what it holds, where it came from, the compatibility verdict
+          against the arrangement a paste lands in (shown BEFORE the paste), where it pastes (the playhead snapped
+          to the beat grid, live), its name typed in place with Rename, and Delete (a two-click latch: a stored
+          riff is the ONLY copy, no undo reaches it). Each library row stamps its length in beats.
+        * CAPTURE: how many sounds the selection holds, the new riff's name and Capture riff (the highway
+          selection; no name = an auto-numbered one).
+        At Small the library keeps the left column and Details / Capture share a pager beside it; at Tiny every
+        card is paged. The footer prints what the last verb did.
+    -->
+    <!-- Shares the Inspector's card / field / empty-state vocabulary: it is an Inspector tab. -->
     <UserControl.Styles>
         <StyleInclude Source="avares://DotCharter/Views/Editor/InspectorStyles.axaml" />
     </UserControl.Styles>
-    <!-- #601: it is an Inspector TAB (since 0.42.4), so it carries no header repeating its name —
-         the tab strip says it — and sits on the pane's own inset with compact verbs. -->
-    <Grid Background="{DynamicResource FireSurfaceChrome}">
-        <Grid ColumnDefinitions="240,6,*" Margin="{StaticResource PaddingRow}">
+    <Grid RowDefinitions="*,Auto" Background="{DynamicResource FireSurfaceChrome}">
+        <controls:ColumnFlowPanel x:Name="RiffCards" Grid.Row="0" Margin="8,6">
+            <!-- ── the library ── -->
+            <Border x:Name="RiffListCard" Theme="{StaticResource ColumnFlowFrame}" Classes="ColumnFlowFrame"
+                    controls:ColumnFlowPanel.Title="{localization:Loc Panel_PhraseCatalog_Title}">
+                <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="{StaticResource FireSpaceXs}">
+                    <TextBlock Grid.Row="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                               Text="{localization:Loc Panel_PhraseCatalog_Title}" />
+                    <TextBox Grid.Row="1" x:Name="SearchBox" Classes="ColumnFlowField"
+                             AutomationProperties.Name="{localization:Loc PhraseCatalog_FindWatermark}"
+                             KeyDown="OnSearchKeyDown"
+                             Text="{Binding SearchText, Mode=TwoWay}"
+                             PlaceholderText="{localization:Loc PhraseCatalog_FindWatermark}"
+                             ToolTip.Tip="{localization:Loc PhraseCatalog_FindTip}" />
+                    <TextBlock Grid.Row="2" x:Name="RiffEmpty" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                               VerticalAlignment="Top" TextWrapping="Wrap" IsVisible="{Binding !HasEntries}"
+                               Text="{localization:Loc PhraseCatalog_EmptyHint}" />
+                    <ListBox Grid.Row="2" x:Name="RiffList"
+                             AutomationProperties.Name="{localization:Loc Panel_PhraseCatalog_Title}"
+                             Background="Transparent" BorderThickness="0" IsVisible="{Binding HasEntries}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ItemsSource="{Binding Entries}"
+                             SelectedItem="{Binding SelectedEntry, Mode=TwoWay}">
+                        <ListBox.Styles>
+                            <Style Selector="ListBoxItem">
+                                <Setter Property="Padding" Value="6,2" />
+                                <Setter Property="MinHeight" Value="28" />
+                            </Style>
+                        </ListBox.Styles>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="catalog:PhraseCatalogEntry">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceXs}">
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="{StaticResource FireSizeXs}"
+                                               VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    <TextBlock Grid.Column="1" x:Name="RiffRowLength" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp"
+                                               VerticalAlignment="Center">
+                                        <TextBlock.Text>
+                                            <MultiBinding Converter="{x:Static converters:RiffLengthConverter.Instance}">
+                                                <Binding Path="LengthInBeats" />
+                                                <Binding Path="$parent[ListBox].((vm:PhraseCatalogViewModel)DataContext).Localization" />
+                                                <Binding Path="$parent[ListBox].((vm:PhraseCatalogViewModel)DataContext).Localization.Culture" />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button Grid.Row="3" x:Name="RiffPaste" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary"
+                            HorizontalAlignment="Left" IsEnabled="{Binding HasSelection}"
+                            AutomationProperties.Name="{localization:Loc PhraseCatalog_PasteAtPlayhead}"
+                            ToolTip.Tip="{localization:Loc PhraseCatalog_PasteAtPlayheadTip}"
+                            Command="{Binding PasteSelectedCommand}">
+                        <TextBlock Text="{localization:Loc PhraseCatalog_PasteAtPlayhead}" TextTrimming="CharacterEllipsis" />
+                    </Button>
+                </Grid>
+            </Border>
 
-            <!-- Left: the find / paste-by-name box (EOF's F3 + SHIFT+~ in one
-                 control) over the library itself. -->
-            <Grid Grid.Column="0" RowDefinitions="Auto,*">
-                <TextBox Grid.Row="0"
-                         AutomationProperties.Name="{localization:Loc PhraseCatalog_FindWatermark}"
-                         x:Name="SearchBox"
-                         KeyDown="OnSearchKeyDown"
-                         Text="{Binding SearchText, Mode=TwoWay}"
-                         PlaceholderText="{localization:Loc PhraseCatalog_FindWatermark}"
-                         ToolTip.Tip="{localization:Loc PhraseCatalog_FindTip}" />
-
-                <ListBox Grid.Row="1"
-                         AutomationProperties.Name="{localization:Loc Panel_PhraseCatalog_Title}"
-                         Margin="{StaticResource GapTopSm}"
-                         ItemsSource="{Binding Entries}"
-                         SelectedItem="{Binding SelectedEntry, Mode=TwoWay}">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="catalog:PhraseCatalogEntry">
-                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </Grid>
-
-            <!-- Right: preview + details + verbs -->
-            <Grid Grid.Column="2" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
-
-                <!-- With nothing selected the preview used to simply VANISH,
-                     leaving a hole above the details. It now keeps its footprint
-                     and says what to do. -->
-                <Panel Grid.Row="0" Height="110">
-                    <Border Classes="InspectorCard"
-                            Padding="0"
-                            ClipToBounds="True"
-                            IsVisible="{Binding HasSelection}">
-                        <controls:PhrasePreviewControl Entry="{Binding SelectedEntry}" />
-                    </Border>
-                    <Border Classes="InspectorCard"
-                            IsVisible="{Binding !HasSelection}">
-                        <StackPanel Classes="InspectorEmpty">
-                            <TextBlock Text="{localization:Loc PhraseCatalog_NoSelection}"
-                                       TextWrapping="Wrap"
-                                       HorizontalAlignment="Center"
-                                       TextAlignment="Center" />
-                        </StackPanel>
-                    </Border>
-                </Panel>
-
-                <Border Grid.Row="1" Grid.RowSpan="2"
-                        Margin="{StaticResource GapTopSm}"
-                        IsVisible="{Binding HasSelection}">
-                    <StackPanel Spacing="2">
-                        <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption"
-                                   TextWrapping="Wrap"
-                                   Text="{Binding SelectedSummary}" />
-                        <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption"
-                                   TextWrapping="Wrap"
-                                   Text="{Binding SelectedSourceSummary}" />
+            <!-- ── the selected riff ── -->
+            <controls:ColumnFlowCard x:Name="RiffDetailsCard" controls:ColumnFlowPanel.Title="{localization:Loc PhraseCatalog_Details}">
+                <Panel>
+                    <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                               VerticalAlignment="Top" IsVisible="{Binding !HasSelection}"
+                               Text="{localization:Loc PhraseCatalog_NoSelection}" />
+                    <StackPanel x:Name="RiffDetails" Spacing="{StaticResource FireSpaceXs}" IsVisible="{Binding HasSelection}">
+                        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" TextWrapping="Wrap"
+                                   Text="{Binding SelectedEntry.Name, FallbackValue=''}" />
+                        <Border Theme="{StaticResource ColumnFlowFrame}" Classes="ColumnFlowFrame" Padding="0" Height="72" ClipToBounds="True">
+                            <controls:PhrasePreviewControl Entry="{Binding SelectedEntry}" />
+                        </Border>
+                        <TextBlock x:Name="RiffSummary" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                   TextWrapping="Wrap" Text="{Binding SelectedSummary}" />
+                        <TextBlock x:Name="RiffSource" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                   TextWrapping="Wrap" Text="{Binding SelectedSourceSummary}" />
+                        <!-- The compatibility verdict, shown BEFORE the paste. Two TextBlocks rather than a
+                             bool→brush converter so the colour stays a plain DynamicResource token. -->
+                        <Panel x:Name="RiffCompatibility">
+                            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                       TextWrapping="Wrap" IsVisible="{Binding !CompatibilityIsProblem}"
+                                       Text="{Binding CompatibilityMessage}" />
+                            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                       TextWrapping="Wrap" Foreground="{DynamicResource FireWarning}"
+                                       IsVisible="{Binding CompatibilityIsProblem}"
+                                       Text="{Binding CompatibilityMessage}" />
+                        </Panel>
+                        <Grid x:Name="RiffPastesAtRow" ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceXs}"
+                              IsVisible="{Binding Readouts, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                       Text="{localization:Loc PhraseCatalog_PastesAt}" />
+                            <TextBlock Grid.Column="1" x:Name="RiffPastesAt" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody"
+                                       TextWrapping="Wrap" Text="{Binding Readouts.PastesAt, FallbackValue=''}" />
+                        </Grid>
+                        <TextBox x:Name="RiffRenameBox" Classes="ColumnFlowField"
+                                 AutomationProperties.Name="{localization:Loc PhraseCatalog_RenameBox}"
+                                 PlaceholderText="{localization:Loc PhraseCatalog_RenameBox}"
+                                 Text="{Binding RenameText, Mode=TwoWay}">
+                            <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Enter" Command="{Binding RenameSelectedCommand}" />
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+                            <Button Grid.Column="0" x:Name="RiffRename" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    HorizontalAlignment="Stretch"
+                                    AutomationProperties.Name="{localization:Loc PhraseCatalog_Rename}"
+                                    ToolTip.Tip="{localization:Loc PhraseCatalog_RenameTip}"
+                                    Command="{Binding RenameSelectedCommand}">
+                                <TextBlock Text="{localization:Loc PhraseCatalog_Rename}" TextTrimming="CharacterEllipsis" />
+                            </Button>
+                            <!-- Two-click confirm latch: the caption swaps to DeleteCaption's confirm text. -->
+                            <Button Grid.Column="1" x:Name="RiffDelete" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    HorizontalAlignment="Stretch"
+                                    AutomationProperties.Name="{localization:Loc PhraseCatalog_Delete}"
+                                    Command="{Binding DeleteSelectedCommand}">
+                                <TextBlock Text="{Binding DeleteCaption}" TextTrimming="CharacterEllipsis" />
+                            </Button>
+                        </Grid>
                     </StackPanel>
-                </Border>
-
-                <!-- The compatibility verdict, shown BEFORE the paste. Two
-                     TextBlocks rather than a bool→brush converter so the colour
-                     stays a plain DynamicResource token. -->
-                <Panel Grid.Row="3" Margin="{StaticResource GapTopXs}">
-                    <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption"
-                               TextWrapping="Wrap"
-                               IsVisible="{Binding !CompatibilityIsProblem}"
-                               Text="{Binding CompatibilityMessage}" />
-                    <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption"
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource FireWarning}"
-                               IsVisible="{Binding CompatibilityIsProblem}"
-                               Text="{Binding CompatibilityMessage}" />
                 </Panel>
+            </controls:ColumnFlowCard>
 
-                <WrapPanel Grid.Row="4"
-                           Orientation="Horizontal"
-                           ItemSpacing="6"
-                           LineSpacing="6"
-                           Margin="{StaticResource GapTopSm}">
-                    <TextBox Width="150"
+            <!-- ── capture the highway selection ── -->
+            <controls:ColumnFlowCard x:Name="RiffCaptureCard" controls:ColumnFlowPanel.Title="{localization:Loc PhraseCatalog_Capture}">
+                <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                    <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                               Text="{localization:Loc PhraseCatalog_CaptureHeading}" />
+                    <TextBlock x:Name="RiffSelectionCount" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                               TextWrapping="Wrap" IsVisible="{Binding Readouts, Converter={x:Static ObjectConverters.IsNotNull}}"
+                               Text="{Binding Readouts.SelectionText, FallbackValue=''}" />
+                    <TextBox x:Name="NewPhraseNameBox" Classes="ColumnFlowField"
                              AutomationProperties.Name="{localization:Loc PhraseCatalog_NameWatermark}"
                              Text="{Binding NewPhraseName, Mode=TwoWay}"
-                             PlaceholderText="{localization:Loc PhraseCatalog_NameWatermark}" />
-                    <Button Theme="{StaticResource PrimaryButton}" Classes="Primary Compact"
-                            Content="{localization:Loc PhraseCatalog_AddSelection}"
+                             PlaceholderText="{localization:Loc PhraseCatalog_NameWatermark}">
+                        <TextBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding CaptureSelectionCommand}" />
+                        </TextBox.KeyBindings>
+                    </TextBox>
+                    <Button x:Name="RiffCapture" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                            HorizontalAlignment="Left"
+                            AutomationProperties.Name="{localization:Loc PhraseCatalog_AddSelection}"
                             ToolTip.Tip="{localization:Loc PhraseCatalog_AddSelectionTip}"
-                            Command="{Binding CaptureSelectionCommand}" />
-                    <Button Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
-                            Content="{localization:Loc PhraseCatalog_PasteAtPlayhead}"
-                            ToolTip.Tip="{localization:Loc PhraseCatalog_PasteAtPlayheadTip}"
-                            IsEnabled="{Binding HasSelection}"
-                            Command="{Binding PasteSelectedCommand}" />
-                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                            Content="{localization:Loc PhraseCatalog_Rename}"
-                            ToolTip.Tip="{localization:Loc PhraseCatalog_RenameTip}"
-                            IsEnabled="{Binding HasSelection}"
-                            Command="{Binding RenameSelectedCommand}" />
-                    <!-- Two-click confirm latch: the caption swaps to
-                         DeleteCaption's confirm text on the first click. A
-                         stored riff is the ONLY copy — it is not in the project
-                         and no undo reaches it. The Danger class is colour, not
-                         a gate (docs/agents/ui/dialogs.md). -->
-                    <Button Theme="{StaticResource DangerButton}" Classes="Danger"
-                            Content="{Binding DeleteCaption}"
-                            AutomationProperties.Name="{localization:Loc PhraseCatalog_Delete}"
-                            IsEnabled="{Binding HasSelection}"
-                            Command="{Binding DeleteSelectedCommand}" />
-                </WrapPanel>
-
-                <StackPanel Grid.Row="5" Margin="{StaticResource GapTopSm}">
-                    <Panel>
-                        <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption"
-                                   TextWrapping="Wrap"
-                                   IsVisible="{Binding !StatusIsProblem}"
-                                   Text="{Binding StatusMessage}" />
-                        <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption"
-                                   TextWrapping="Wrap"
-                                   Foreground="{DynamicResource FireWarning}"
-                                   IsVisible="{Binding StatusIsProblem}"
-                                   Text="{Binding StatusMessage}" />
-                    </Panel>
-                    <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText"
-                               Margin="{StaticResource GapTopXs}"
-                               TextWrapping="Wrap"
-                               IsVisible="{Binding !HasEntries}"
-                               Text="{localization:Loc PhraseCatalog_EmptyHint}" />
-                    <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText"
-                               Margin="{StaticResource GapTopXs}"
-                               TextWrapping="Wrap"
+                            Command="{Binding CaptureSelectionCommand}">
+                        <TextBlock Text="{localization:Loc PhraseCatalog_AddSelection}" TextTrimming="CharacterEllipsis" />
+                    </Button>
+                    <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
                                ToolTip.Tip="{Binding StorageDirectory}"
                                Text="{localization:Loc PhraseCatalog_StorageHint}" />
                 </StackPanel>
-            </Grid>
-        </Grid>
+            </controls:ColumnFlowCard>
+        </controls:ColumnFlowPanel>
+
+        <!-- ── the pinned footer: what the last verb did ── -->
+        <Border Grid.Row="1" x:Name="RiffFooter" MinHeight="28"
+                Background="{DynamicResource FireSurfaceFooter}"
+                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,1,0,0"
+                Padding="{StaticResource FirePadTag}">
+            <Panel VerticalAlignment="Center">
+                <TextBlock x:Name="RiffStatus" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                           TextTrimming="CharacterEllipsis" IsVisible="{Binding !StatusIsProblem}"
+                           Text="{Binding StatusMessage}" ToolTip.Tip="{Binding StatusMessage}" />
+                <TextBlock x:Name="RiffStatusProblem" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                           TextTrimming="CharacterEllipsis" Foreground="{DynamicResource FireWarning}"
+                           IsVisible="{Binding StatusIsProblem}"
+                           Text="{Binding StatusMessage}" ToolTip.Tip="{Binding StatusMessage}" />
+            </Panel>
+        </Border>
     </Grid>
 </UserControl>

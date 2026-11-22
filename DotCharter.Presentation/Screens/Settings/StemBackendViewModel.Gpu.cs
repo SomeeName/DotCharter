@@ -86,7 +86,7 @@ public sealed partial class StemBackendViewModel
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Stem GPU probe failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Stem GPU probe failed", ex);
             (directMl, adapters) = (false, []);
         }
 

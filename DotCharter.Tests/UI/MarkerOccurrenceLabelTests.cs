@@ -11,6 +11,10 @@ public sealed class MarkerOccurrenceLabelTests
     private static string Label(IList<BeatMarker> beats, double ms) =>
         MarkerOccurrenceLabel.Format(FakeLocalization.English(), 2, beats, ms);
 
+    [Fact]
+    public void Occurrences_preserve_elapsed_hours() =>
+        Assert.Equal("#2 · 1:02:03.4", Label([], 3_723_456));
+
     /// <summary>Two bars of 4/4 then 3/4: the bar count follows the measure markers, not a fixed meter.</summary>
     [Fact]
     public void TheBarFollowsAMeterChange()

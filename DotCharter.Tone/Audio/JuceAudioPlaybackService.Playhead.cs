@@ -31,95 +31,19 @@ public sealed partial class JuceAudioPlaybackService
     // click scheduler anchors on — see TryScheduleClick.
     private double _rawPlayheadMs;
 
-    private double ApplyLatencyCompensation(double rawMs)
-    {
-        var comp = EstimatedOutputLatencyMs + AudioDelayMs;
-        var adj = rawMs - comp;
-        return adj < 0.0 ? 0.0 : adj;
-    }
+    private readonly Func<double, double> _latencyCompensator;
 
-    public double CurrentTimeMs
-    {
-        get
-        {
-            var src = _source;
-            if (src == null) return _lastKnownPosition.Ms;
-            try
-            {
-                // Prefer the smooth interpolated clock so that consumers
-                // polling at render rate (e.g. the chart playhead at 60+
-                // FPS) get sub-tick precision instead of being snapped to
-                // the 10 ms timer cadence. At high playback speeds (2x+)
-                // a 10 ms snap would otherwise look visibly jittery.
-                var speed = _playbackSpeed <= 0 ? 1.0 : _playbackSpeed;
-                if (_playhead.TryExtrapolate(System.Diagnostics.Stopwatch.GetTimestamp(), speed, out var extrap,
-                        out var epoch))
-                {
-                    var lat = ApplyLatencyCompensation(extrap);
-                    var len = _lastKnownLengthMs;
-                    if (len > 0 && lat > len) lat = len;
-                    if (lat < 0) lat = 0;
-                    // Monotonic during playback: the timer's low-pass
-                    // already prevents back-correction, but defend
-                    // against the rare case where latency compensation
-                    // shifts (e.g. mirror device opens mid-playback).
-                    // Only within one epoch: a sample from before a seek
-                    // reports the seek's position instead.
-                    return _lastKnownPosition.Clamp(lat, epoch);
-                }
-                // `epoch` was read before the native position below, so a
-                // seek landing in between makes this reading the stale one.
-                var raw = src.AudiblePosition.TotalMilliseconds;
-                var adj = ApplyLatencyCompensation(raw);
-                var len2 = _lastKnownLengthMs;
-                if (len2 > 0 && adj > len2) adj = len2;
-                return _lastKnownPosition.Publish(adj, epoch);
-            }
-            catch (ObjectDisposedException)
-            {
-                // Source was disposed by LoadAudioAsync/FreeAudio while a
-                // UI/render-thread caller was reading CurrentTimeMs. Return
-                // the last known good value; the next tick will pick up the
-                // fresh source.
-                return _lastKnownPosition.Ms;
-            }
-            catch
-            {
-                return _lastKnownPosition.Ms;
-            }
-        }
-    }
+    private double ApplyLatencyCompensation(double rawMs) =>
+        Engine.PlayheadReadback.CompensateLatency(rawMs, EstimatedOutputLatencyMs + AudioDelayMs, _playbackSpeed);
+
+    public double CurrentTimeMs =>
+        Engine.PlayheadReadback.Read(_source, _playhead, _lastKnownPosition, _playbackSpeed,
+            _lastKnownLengthMs, _latencyCompensator, System.Diagnostics.Stopwatch.GetTimestamp());
 
     public double AudioDelayMs { get; set; }
 
-    // Output latency reported by the active device (samples) converted to ms
-    // and combined with any user-tunable AudioDelayMs. Subtracted from the
-    // raw audible position so the on-screen playhead matches what's hitting
-    // the speakers right now (audio in the device buffer hasn't been heard
-    // yet, so the playhead would otherwise lead the audio).
-    //
-    // Read on every 250 Hz position tick and once per frame by both renderers
-    // (through CurrentTimeMs), so the two P/Invokes behind it are cached per
-    // engine instance for OutputLatencyCache.RefreshInterval — a rebuilt engine
-    // misses on its reference, and an in-place Reconfigure invalidates.
-    public double EstimatedOutputLatencyMs
-    {
-        get
-        {
-            var eng = _engine;
-            if (eng == null) return 0.0;
-            var now = System.Diagnostics.Stopwatch.GetTimestamp();
-            if (_latencyCache.TryGet(eng, now, out var cached)) return cached;
-            try
-            {
-                var sr = eng.SampleRate;
-                var ms = sr <= 0 ? 0.0 : eng.OutputLatencySamples * 1000.0 / sr;
-                _latencyCache.Store(eng, now, ms);
-                return ms;
-            }
-            catch { return 0.0; }
-        }
-    }
+    public double EstimatedOutputLatencyMs =>
+        Engine.PlayheadReadback.EstimateOutputLatency(_engine, _latencyCache, System.Diagnostics.Stopwatch.GetTimestamp());
 
     private readonly Engine.OutputLatencyCache _latencyCache = new();
 

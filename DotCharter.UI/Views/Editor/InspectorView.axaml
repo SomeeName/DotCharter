@@ -68,97 +68,93 @@
                  is wired to the corresponding IsXxxTabSelected VM property; the
                  click handler sets SelectedTabIndex.
 
-                 The strip is ALL labelled or ALL icons (#573). When every
-                 caption fits, every tab shows one; otherwise every tab is an
-                 icon and only the active tab keeps its caption, and when even
-                 the icons do not fit the tabs at the end go into the "More"
-                 button (the active tab never does). `OverflowTabStrip` decides
-                 from MEASURED widths (`TabStripLayout.Decide`), so German
-                 switches earlier on its own, and shares the width left over
-                 between the tabs, so the strip never ends in a gap. A
-                 caption-less tab keeps its name for assistive tech
-                 (`AutomationProperties.Name`) and its tooltip; the Issues count
-                 badge is never hidden. The styles are in
-                 InspectorStyles/TabStripAndMixerRow.axaml. -->
+                 Inspector design D: captions only, in D's quiet nav style
+                 (`ColumnFlowNavToggle`, Styles/ColumnFlowCardTheme.axaml); all eight
+                 fit at the 530 px primary size in English. When they do not, the
+                 strip is ALL icons (#573) and only the active tab keeps its caption,
+                 so every tab is still one click away; only when even the icons do
+                 not fit do the tabs at the end go into the "More" button (the
+                 active tab never does), whose rows carry the same badges.
+                 `OverflowTabStrip` decides from MEASURED widths
+                 (`TabStripLayout.Decide`), so German switches earlier on its own;
+                 the tabs pack at the start, as in the design (ShareSlack off). The
+                 glyphs (`PathIcon.TabGlyph`, IsIconsOnlyGlyph) show only in the
+                 icons fallback. The Issues count badge is never hidden. The
+                 styles are in InspectorStyles/TabStripAndMixerRow.axaml. -->
             <Border Grid.Row="0" Classes="TabStrip">
-                <!-- Icon + label per tab. Icons echo each tab's own header
-                     glyph so the strip reads at a glance; their dim → accent
-                     tracking comes from Fire.axaml's own
-                     `:is(ToggleButton).FireSegmentItem PathIcon` rules.
-                     FEHLER keeps its danger count badge. -->
-                <ctl:OverflowTabStrip x:Name="InspectorTabRow" Classes="TabRow" Spacing="2">
+                <!-- A caption per tab (a glyph in the icons fallback); FEHLER keeps its danger count badge. -->
+                <ctl:OverflowTabStrip x:Name="InspectorTabRow" Classes="TabRow" Spacing="3" ShareSlack="False" GroupGap="{StaticResource FireSpaceMd}"
+                                      DividerBrush="{DynamicResource FireBorderSeam}">
                         <!-- SEVEN tabs since 0.36 (eight with the Riff Library):
                              Note and Chord merged into one `Sound` tab whose
                              content is a function of the selection. Two headers
                              pointing at the same thing was the visible half of
                              the duplication the editing rework removes. -->
-                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_Sound}" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem" Tag="0"
+                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_Note}" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav" Tag="0"
                                       IsChecked="{Binding IsSoundTabSelected, Mode=OneWay}"
                                       Click="TabHeader_Click"
                                       ToolTip.Tip="{localization:Loc Inspector_Tab_Sound_Tip}">
                             <StackPanel Classes="TabLabel">
-                                <PathIcon Data="{DynamicResource IconMusicNote}" />
-                                <TextBlock Text="{localization:Loc Inspector_Tab_Sound}" />
+                                <PathIcon Classes="TabGlyph" ctl:OverflowTabStrip.IsIconsOnlyGlyph="True" Data="{DynamicResource IconMusicNote}" />
+                                <TextBlock Text="{localization:Loc Inspector_Tab_Note}" />
                             </StackPanel>
                         </ToggleButton>
-                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_Mixer}" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem" Tag="1"
-                                      IsChecked="{Binding IsMixerTabSelected, Mode=OneWay}"
+                        <!-- Chord shapes: every chord template as a card. A
+                             target-architecture screen (IShapePanelScreen), hidden
+                             like the Riff Library when the shell did not supply it. -->
+                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_ChordShapes}" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav" Tag="7"
+                                      IsVisible="{Binding ChordShapes, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                      IsChecked="{Binding IsChordShapesTabSelected, Mode=OneWay}"
                                       Click="TabHeader_Click"
-                                      ToolTip.Tip="{localization:Loc Inspector_Tab_Mixer_Tip}">
+                                      ToolTip.Tip="{localization:Loc Inspector_Tab_ChordShapes_Tip}">
                             <StackPanel Classes="TabLabel">
-                                <PathIcon Data="{DynamicResource IconTuneVertical}" />
-                                <TextBlock Text="{localization:Loc Inspector_Tab_Mixer}" />
+                                <PathIcon Classes="TabGlyph" ctl:OverflowTabStrip.IsIconsOnlyGlyph="True" Data="{DynamicResource IconGuitar}" />
+                                <TextBlock Text="{localization:Loc Inspector_Tab_ChordShapes}" />
                             </StackPanel>
                         </ToggleButton>
-                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_Song}" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem" Tag="2"
+                        <!-- THE DIVIDER: the two tabs above are about the SELECTION, the
+                             ones below are about the SONG. `OverflowTabStrip.IsGroupStart` on the first song tab
+                             keeps the gap and the strip draws the hairline in it. -->
+                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_Song}" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav" ctl:OverflowTabStrip.IsGroupStart="True" Tag="2"
                                       IsChecked="{Binding IsSongTabSelected, Mode=OneWay}"
                                       Click="TabHeader_Click"
                                       ToolTip.Tip="{localization:Loc Inspector_Tab_Song_Tip}">
                             <StackPanel Classes="TabLabel">
-                                <PathIcon Data="{DynamicResource IconLibraryMusic}" />
+                                <PathIcon Classes="TabGlyph" ctl:OverflowTabStrip.IsIconsOnlyGlyph="True" Data="{DynamicResource IconLibraryMusic}" />
                                 <TextBlock Text="{localization:Loc Inspector_Tab_Song}" />
                             </StackPanel>
                         </ToggleButton>
-                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_Lyrics}" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem" Tag="3"
+                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_Lyrics}" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav" Tag="3"
                                       IsChecked="{Binding IsLyricsTabSelected, Mode=OneWay}"
                                       Click="TabHeader_Click"
                                       ToolTip.Tip="{localization:Loc Inspector_Lyrics_Tip}">
                             <StackPanel Classes="TabLabel">
-                                <PathIcon Data="{DynamicResource IconSheetMusic}" />
+                                <PathIcon Classes="TabGlyph" ctl:OverflowTabStrip.IsIconsOnlyGlyph="True" Data="{DynamicResource IconSheetMusic}" />
                                 <TextBlock Text="{localization:Loc Inspector_Tab_Lyrics}" />
                             </StackPanel>
                         </ToggleButton>
-                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_Issues}" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem" Tag="4"
+                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_Issues}" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav" Tag="4"
                                       IsChecked="{Binding IsIssuesTabSelected, Mode=OneWay}"
                                       Click="TabHeader_Click"
                                       ToolTip.Tip="{localization:Loc Inspector_Tab_Issues_Tip}">
                             <StackPanel Classes="TabLabel">
-                                <PathIcon Data="{DynamicResource IconAlert}" />
+                                <PathIcon Classes="TabGlyph" ctl:OverflowTabStrip.IsIconsOnlyGlyph="True" Data="{DynamicResource IconAlert}" />
                                 <TextBlock Text="{localization:Loc Inspector_Tab_Issues}"
                                            VerticalAlignment="Center" />
                                 <Border Classes="TabCountBadge"
-                                        IsVisible="{Binding Issues.IssueCount}"
+                                        IsVisible="{Binding Issues.HasIssues}"
                                         ToolTip.Tip="{Binding Issues.IssueBadgeTip}">
                                     <TextBlock Text="{Binding Issues.IssueCount}" />
                                 </Border>
                             </StackPanel>
                         </ToggleButton>
-                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_Notes}" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem" Tag="5"
+                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_Notes}" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav" Tag="5"
                                       IsChecked="{Binding IsNotesTabSelected, Mode=OneWay}"
                                       Click="TabHeader_Click"
                                       ToolTip.Tip="{localization:Loc Inspector_Tab_Notes_Tip}">
                             <StackPanel Classes="TabLabel">
-                                <PathIcon Data="{DynamicResource IconPencil}" />
+                                <PathIcon Classes="TabGlyph" ctl:OverflowTabStrip.IsIconsOnlyGlyph="True" Data="{DynamicResource IconPencil}" />
                                 <TextBlock Text="{localization:Loc Inspector_Tab_Notes}" />
-                            </StackPanel>
-                        </ToggleButton>
-                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_Phrases}" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem" Tag="6"
-                                      IsChecked="{Binding IsPhrasesTabSelected, Mode=OneWay}"
-                                      Click="TabHeader_Click"
-                                      ToolTip.Tip="{localization:Loc Inspector_Tab_Phrases_Tip}">
-                            <StackPanel Classes="TabLabel">
-                                <PathIcon Data="{DynamicResource IconTechLinkNext}" />
-                                <TextBlock Text="{localization:Loc Inspector_Tab_Phrases}" />
                             </StackPanel>
                         </ToggleButton>
                         <!-- Riff Library: an inspector TAB since 0.42.4, not a
@@ -167,27 +163,23 @@
                              the Mixer tab outright. Hidden when the shell did not
                              supply the view model (tests build the inspector
                              alone), so the strip never shows a dead header. -->
-                        <ToggleButton AutomationProperties.Name="{localization:Loc Panel_PhraseCatalog_Title}" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem" Tag="7"
+                        <ToggleButton AutomationProperties.Name="{localization:Loc Panel_PhraseCatalog_Title}" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav" Tag="6"
                                       IsVisible="{Binding RiffLibrary, Converter={x:Static ObjectConverters.IsNotNull}}"
                                       IsChecked="{Binding IsRiffLibraryTabSelected, Mode=OneWay}"
                                       Click="TabHeader_Click"
                                       ToolTip.Tip="{localization:Loc Panel_PhraseCatalog_Tip}">
                             <StackPanel Classes="TabLabel">
-                                <PathIcon Data="{DynamicResource IconLibraryMusic}" />
+                                <PathIcon Classes="TabGlyph" ctl:OverflowTabStrip.IsIconsOnlyGlyph="True" Data="{DynamicResource IconLibraryMusic}" />
                                 <TextBlock Text="{localization:Loc Panel_PhraseCatalog_Title}" />
                             </StackPanel>
                         </ToggleButton>
-                        <!-- Chord shapes: every chord template as a card. A
-                             target-architecture screen (IShapePanelScreen), hidden
-                             like the Riff Library when the shell did not supply it. -->
-                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_ChordShapes}" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem" Tag="8"
-                                      IsVisible="{Binding ChordShapes, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                      IsChecked="{Binding IsChordShapesTabSelected, Mode=OneWay}"
+                        <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_Mixer}" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav" Tag="1"
+                                      IsChecked="{Binding IsMixerTabSelected, Mode=OneWay}"
                                       Click="TabHeader_Click"
-                                      ToolTip.Tip="{localization:Loc Inspector_Tab_ChordShapes_Tip}">
+                                      ToolTip.Tip="{localization:Loc Inspector_Tab_Mixer_Tip}">
                             <StackPanel Classes="TabLabel">
-                                <PathIcon Data="{DynamicResource IconGuitar}" />
-                                <TextBlock Text="{localization:Loc Inspector_Tab_ChordShapes}" />
+                                <PathIcon Classes="TabGlyph" ctl:OverflowTabStrip.IsIconsOnlyGlyph="True" Data="{DynamicResource IconTuneVertical}" />
+                                <TextBlock Text="{localization:Loc Inspector_Tab_Mixer}" />
                             </StackPanel>
                         </ToggleButton>
                         <!-- "More ▾" (#573): the tabs that do not fit. Its menu holds
@@ -195,14 +187,11 @@
                              opening it shows the rows of the tabs that overflow.
                              Arranged only while something overflows. -->
                         <ToggleButton x:Name="InspectorTabMore" ctl:OverflowTabStrip.IsOverflowButton="True"
-                                      AutomationProperties.Name="{localization:Loc Inspector_Tab_More}" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                      AutomationProperties.Name="{localization:Loc Inspector_Tab_More}" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
                                       ToolTip.Tip="{localization:Loc Inspector_Tab_More_Tip}">
                             <ToggleButton.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedRight" />
                             </ToggleButton.Flyout>
-                            <!-- Not `StackPanel.TabLabel`: the strip's `:icons` rule hides
-                                 the caption of every unchecked TabLabel, and this one is
-                                 the strip's only word while it is icons. -->
                             <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}" VerticalAlignment="Center">
                                 <TextBlock Text="{localization:Loc Inspector_Tab_More}" />
                                 <PathIcon Data="{DynamicResource IconChevronDown}" Width="10" Height="10" />
@@ -222,7 +211,7 @@
                  user could not scroll any tab. Binding IsVisible directly
                  makes the active panel the sole hit-test target. -->
             <!-- x:Name is load-bearing: InspectorView.HiddenSurfaces() sweeps
-                 this Grid's hidden children so the seven inactive tabs are
+                 this Grid's hidden children so the six inactive tabs are
                  realized off the first-switch path. A rename here is a silent
                  no-op (the lookup is by name) — HiddenSubtreePrewarmerTests
                  cross-checks it against this markup. -->
@@ -237,9 +226,6 @@
                     DataContext="{Binding Lyrics}" />
                 <inspector:IssuesInspectorView IsVisible="{Binding IsIssuesTabSelected}" />
                 <inspector:NotesInspectorView IsVisible="{Binding IsNotesTabSelected}" />
-                <inspector:PhrasesInspectorView
-                    IsVisible="{Binding #InspectorRoot.((viewModels:InspectorViewModel)DataContext).IsPhrasesTabSelected}"
-                    DataContext="{Binding Phrases}" />
                 <editor:PhraseCatalogView
                     IsVisible="{Binding #InspectorRoot.((viewModels:InspectorViewModel)DataContext).IsRiffLibraryTabSelected}"
                     DataContext="{Binding RiffLibrary}" />

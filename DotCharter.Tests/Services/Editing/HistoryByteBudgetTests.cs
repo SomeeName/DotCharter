@@ -35,6 +35,165 @@ public sealed class HistoryByteBudgetTests
         return steps;
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void ImportedGraphs_AreChargedAndPrunedByTheByteBudget(int kind)
+    {
+        var project = new ChartProject();
+        var arrangement = new Arrangement();
+        var level = new ChartLevel();
+        arrangement.Levels.Add(level);
+        var vocals = new VocalTrack();
+        var phrase = new LyricPhrase();
+        vocals.Phrases.Add(phrase);
+        var beats = new List<BeatMarker>();
+        var lights = new List<Showlight>();
+        for (var i = 0; i < 100; i++)
+        {
+            level.Notes.Add(new GuitarNote { Position = new FractionalPosition(i) });
+            phrase.Lyrics.Add(new LyricEvent { Text = "word", Position = new FractionalPosition(i) });
+            beats.Add(new BeatMarker { Time = i * 500 });
+            lights.Add(new Showlight { Position = new FractionalPosition(i) });
+        }
+
+        var plan = new DotCharter.Services.Parsing.Xml.RsXmlImportPlan
+        {
+            Kind = kind == 0 ? DotCharter.Services.Parsing.Xml.RsXmlImportKind.Song :
+                kind == 1 ? DotCharter.Services.Parsing.Xml.RsXmlImportKind.Vocals : DotCharter.Services.Parsing.Xml.RsXmlImportKind.Showlights,
+            Arrangement = kind == 0 ? arrangement : null,
+            VocalTrack = kind == 1 ? vocals : null,
+            Beats = beats,
+            Showlights = kind == 2 ? lights : []
+        };
+        var action = (IChartAction)new DotCharter.Services.Parsing.Xml.ImportRsXmlAction(project, plan, () => { });
+        var charge = action.EstimatedBytes;
+        Assert.True(charge > 10_000);
+        var history = History(charge - 1);
+        history.Do(action);
+        Assert.Equal(charge, history.RetainedBytes);
+        // The current step stays undoable; the next edit makes the import eligible for pruning.
+        history.Do(new SizedAction("following edit", 0, []));
+        Assert.Equal(1, UndoAll(history));
+        Assert.Equal(0, history.RetainedBytes);
+        Assert.True(kind == 0 ? project.Arrangements.Count == 1 :
+            kind == 1 ? project.VocalTracks.Count == 1 : project.Showlights.Count == 100);
+    }
+
+    [Fact]
+    public void NotationVoicesAndTheirOwnedSoundsIncreaseTheFootprintByTheirExpectedBytes()
+    {
+        var arrangement = new Arrangement();
+        var before = ChartProjectFootprint.EstimateBytes(arrangement);
+        var voice = new NotationVoice();
+        voice.Notes.Add(new GuitarNote());
+        var chord = new Chord();
+        chord.ChordNotes.Add(new ChordNote());
+        voice.Chords.Add(chord);
+        arrangement.NotationVoices.Add(voice);
+
+        Assert.Equal(1500 + 300 + 270 + 270, ChartProjectFootprint.EstimateBytes(arrangement) - before);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SettingsChargeGrowsForBothBeforeAndAfterSnapshots(bool growBefore)
+    {
+        var before = new Arrangement();
+        var after = new Arrangement();
+        var baseline = SettingsCharge(before, after);
+        var changed = growBefore ? before : after;
+        changed.NotationVoices.Add(new NotationVoice());
+        // A sealed snapshot also owns its collection/family table (512) and
+        // identity entry (192), with the estimator's two-graph reserve.
+        Assert.Equal(2 * (1500 + 512 + 192), SettingsCharge(before, after) - baseline);
+    }
+
+    private static long SettingsCharge(Arrangement before, Arrangement after) =>
+        new DotCharter.Services.Editing.Arrangements.MutateArrangementSettingsAction(
+            new Arrangement(), before, after, null).EstimatedBytes;
+
+    [Fact]
+    public void ArrangementSettingsSnapshots_ChargeTheirRetainedGraphs()
+    {
+        var live = new ChartPowerToolsTests.Harness().State.ActiveArrangement!;
+        var before = ChartProjectCloner.CloneArrangement(live, retainIdentities: true);
+        var after = ChartProjectCloner.CloneArrangement(live, retainIdentities: true);
+        after.Capo = 3;
+        var action = (IChartAction)new DotCharter.Services.Editing.Arrangements.MutateArrangementSettingsAction(
+            live, before, after, null);
+
+        Assert.Equal(ChartProjectFootprint.EstimateHistoryBytes(before) + ChartProjectFootprint.EstimateHistoryBytes(after),
+            action.EstimatedBytes);
+    }
+
+    [Fact]
+    public void EmptyBendCollections_DoNotAddPerNoteIdentityTablesToTheHistoryCharge()
+    {
+        var arrangement = new Arrangement();
+        var level = new ChartLevel();
+        arrangement.Levels.Add(level);
+        for (var i = 0; i < 5000; i++) level.Notes.Add(new GuitarNote { Position = new FractionalPosition(i) });
+        var plain = ChartProjectCloner.CloneArrangement(arrangement);
+        var snapshot = ChartProjectCloner.CloneArrangement(arrangement, retainIdentities: true);
+
+        // Includes the conservative original-graph reserve, but excludes thousands of empty CWTs.
+        Assert.True(ChartProjectFootprint.EstimateHistoryBytes(snapshot) < 4 * ChartProjectFootprint.EstimateBytes(plain));
+    }
+
+    [Fact]
+    public void IdentityMetadata_IsIncludedInTheFootprint()
+    {
+        var project = new ChartPowerToolsTests.Harness().State.ActiveProject!;
+        var ordinary = ChartProjectCloner.Clone(project);
+        var snapshot = ChartProjectCloner.Clone(project, retainIdentities: true);
+
+        Assert.True(ChartProjectFootprint.EstimateBytes(snapshot) > ChartProjectFootprint.EstimateBytes(ordinary));
+    }
+
+    [Fact]
+    public void DetachedOriginalLevels_AreStillChargedWhileUndoRetainsThem()
+    {
+        var arrangement = new ChartPowerToolsTests.Harness().State.ActiveArrangement!;
+        var snapshot = ChartProjectCloner.CloneArrangement(arrangement, retainIdentities: true);
+        var populated = ChartProjectFootprint.EstimateBytes(arrangement);
+        arrangement.Levels.Clear();
+
+        Assert.True(ChartProjectFootprint.EstimateBytes(arrangement) >= populated);
+        GC.KeepAlive(snapshot);
+    }
+
+    [Fact]
+    public void WorkingSnapshots_ReleaseMappingsForRemovedLevels()
+    {
+        var arrangement = new ChartPowerToolsTests.Harness().State.ActiveArrangement!;
+        var before = ChartProjectCloner.CloneArrangement(arrangement, retainIdentities: true);
+        var working = ChartProjectCloner.CloneArrangement(arrangement, retainIdentities: true);
+        working.Levels.Clear();
+        _ = ChartProjectFootprint.EstimateBytes(working);
+        var identities = typeof(ChartProjectCloner).Assembly.GetType("DotCharter.Core.Utilities.ChartSnapshotIdentities")!;
+        var tables = identities.GetField("Collections", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .GetValue(null)!;
+        var args = new object?[] { working.Levels, null };
+        Assert.True((bool)tables.GetType().GetMethod("TryGetValue")!.Invoke(tables, args)!);
+        var instances = (System.Collections.IEnumerable)args[1]!.GetType().GetProperty("Instances")!.GetValue(args[1])!;
+
+        Assert.Empty(instances.Cast<object>());
+        GC.KeepAlive(before);
+    }
+
+    [Fact]
+    public void SnapshotSteps_ChargeTheOriginalGraphAsWellAsTheTwoCopies()
+    {
+        var h = new ChartPowerToolsTests.Harness();
+        var bare = ChartProjectFootprint.EstimateBytes(ChartProjectCloner.Clone(h.State.ActiveProject!));
+        h.Maintenance.RunAsSingleUndoStep(() => h.State.ActiveArrangement!.Name = "Edited");
+
+        Assert.True(h.History.RetainedBytes > 3 * bare);
+    }
+
     [Fact]
     public void OverTheBudget_TheOldestHeavyStepsCollapse_AndTheNewestStayUndoable()
     {
@@ -103,18 +262,20 @@ public sealed class HistoryByteBudgetTests
         Assert.Equal(7 * MiB, composite.EstimatedBytes);
     }
 
-    /// <summary>A real whole-project tool's undo step reports BOTH of its project clones (a tempo
+    /// <summary>A real whole-project tool's undo step reports its snapshots and their retained identities (a tempo
     /// tool moves the shared beat grid, so it snapshots the whole project).</summary>
     [Fact]
     public void AWholeProjectToolStep_ReportsItsTwoProjectClones()
     {
         var h = new ChartPowerToolsTests.Harness();
-        var before = ChartProjectFootprint.EstimateBytes(h.State.ActiveProject!);
+        var before = ChartProjectFootprint.EstimateHistoryBytes(
+            ChartProjectCloner.Clone(h.State.ActiveProject!, retainIdentities: true));
 
         h.Maintenance.AddMeasuresAtEnd(2);
         Assert.True(h.History.CanUndo);
 
-        var after = ChartProjectFootprint.EstimateBytes(h.State.ActiveProject!);
+        var after = ChartProjectFootprint.EstimateHistoryBytes(
+            ChartProjectCloner.Clone(h.State.ActiveProject!, retainIdentities: true));
         Assert.Equal(before + after, h.History.RetainedBytes);
     }
 

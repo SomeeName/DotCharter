@@ -88,7 +88,7 @@ public sealed partial class FretAnchorGenerationService
             }
         }
 
-        var shapeHint = new AnchorHint(Math.Clamp(shapeRoot, MinAnchorFret, MaxFret),
+        var shapeHint = new AnchorHint(ClampRoot(shapeRoot, BaseAnchorWidth),
             ComputeHandShapeWidth(shape, shapeRoot));
 
         // A held shape keeps the anchor in force for its whole length.
@@ -126,7 +126,7 @@ public sealed partial class FretAnchorGenerationService
     /// <summary>P2: Slide destination.</summary>
     private void StepSlideDestination(AnchorWalk walk, FractionalPosition position, int forcedRoot)
     {
-        var destRoot = Math.Clamp(forcedRoot, MinAnchorFret, MaxFret);
+        var destRoot = ClampRoot(forcedRoot, BaseAnchorWidth);
         var destHint = new AnchorHint(destRoot, ComputeBaseWidth(destRoot, position));
         if (walk.Current != destHint)
         {

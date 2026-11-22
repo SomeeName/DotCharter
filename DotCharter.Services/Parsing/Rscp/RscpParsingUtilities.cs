@@ -5,10 +5,26 @@ namespace DotCharter.Services.Parsing.Rscp;
 /// </summary>
 public static class RscpParsingUtilities
 {
+    // The same order of headroom as TimelineMath's imported-ms extrapolation.
+    // Keep hostile file positions away from integer-index arithmetic downstream.
+    internal const int MaxImportedBeatId = 1_000_000;
+
     public static FractionalPosition ParseFraction(string? pVal)
     {
-        if (FractionalPosition.TryParse(pVal, out var result)) return result;
+        if (TryParseFraction(pVal, out var result)) return result;
         return FractionalPosition.Zero;
+    }
+
+    internal static bool TryParseFraction(string? value, out FractionalPosition result)
+    {
+        if (FractionalPosition.TryParse(value, out result) &&
+            result.DoubleValue is >= -MaxImportedBeatId and <= MaxImportedBeatId)
+        {
+            return true;
+        }
+
+        result = FractionalPosition.Zero;
+        return false;
     }
 
     /// <summary>Tolerant parse of the v0.29 section-status attribute (`ss`,

@@ -20,7 +20,7 @@
         },
         {
           "title": "Columns",
-          "text": "Paths, tuning, your best result and length. The funnels filter.",
+          "text": "Shows paths, tuning, your best result and length. The funnels filter.",
           "name": "SongSelectListHeader"
         },
         {
@@ -40,7 +40,7 @@
         },
         {
           "title": "Setlist",
-          "text": "Queue several songs and play them in a row.",
+          "text": "Queues several songs and plays them in a row.",
           "name": "SongSelectSetlistPanel"
         }
       ]
@@ -54,12 +54,12 @@
       "callouts": [
         {
           "title": "Your tuning",
-          "text": "Play in your own tuning instead of the song's.",
+          "text": "Lets you play in your own tuning instead of the song's.",
           "name": "GetReadyPathPanel"
         },
         {
           "title": "How it plays",
-          "text": "How strict the timing and chord judging is, the playback speed and how fast the notes scroll.",
+          "text": "Sets how strict the timing and chord judging is, the playback speed and how fast the notes scroll.",
           "name": "GetReadyFeelPanel"
         },
         {
@@ -74,7 +74,7 @@
         },
         {
           "title": "Backing track",
-          "text": "Separate the song into stems to mute the part you play.",
+          "text": "Separates the song into stems, so you can mute the part you play.",
           "name": "GetReadyBackingPanel"
         },
         {
@@ -89,7 +89,7 @@
         },
         {
           "title": "Input",
-          "text": "Whether your guitar signal arrives.",
+          "text": "Shows whether your guitar signal arrives.",
           "name": "GetReadyInputChip"
         }
       ]
@@ -105,7 +105,7 @@
       "callouts": [
         {
           "title": "Highway",
-          "text": "Notes come towards you on their string. Play them as they reach the fretboard.",
+          "text": "Notes come toward you on their string. Play them as they reach the fretboard.",
           "name": "Preview3DPane"
         }
       ]
@@ -119,7 +119,7 @@
       "callouts": [
         {
           "title": "Resume",
-          "text": "Back to the song (Esc).",
+          "text": "Goes back to the song (Esc).",
           "name": "PauseResume"
         },
         {
@@ -139,17 +139,17 @@
         },
         {
           "title": "Rig",
-          "text": "Your pedals, amp and cabinet.",
+          "text": "Opens your pedals, amp and cabinet.",
           "loc": "PlayMode_Pause_Pedalboard_Caption"
         },
         {
           "title": "Settings",
-          "text": "Audio, gameplay and graphics, applied live.",
+          "text": "Opens audio, gameplay and graphics settings, applied live.",
           "loc": "PlayMode_Pause_Settings_Caption"
         },
         {
           "title": "End run",
-          "text": "Stops and shows the results.",
+          "text": "Stops the run and shows the results.",
           "name": "PauseEndRun"
         }
       ]
@@ -163,17 +163,17 @@
       "callouts": [
         {
           "title": "Score",
-          "text": "Score, accuracy, longest streak, and hits against misses.",
+          "text": "Shows your score, accuracy, longest streak, and hits against misses.",
           "name": "ResultsTileBoard"
         },
         {
           "title": "Next",
-          "text": "Play again, pick another song, or open the song in the editor to fix it.",
+          "text": "Lets you play again, pick another song, or open the song in the editor to fix it.",
           "name": "ResultsActions"
         },
         {
           "title": "Sections",
-          "text": "How each section went, coloured by accuracy.",
+          "text": "Shows how each section went, colored by accuracy.",
           "name": "ResultsSectionPanel"
         },
         {

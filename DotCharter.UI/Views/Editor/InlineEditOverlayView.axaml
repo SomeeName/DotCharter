@@ -1,0 +1,90 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dialogs="using:DotCharter.Presentation.Screens.Dialogs"
+             x:Class="DotCharter.UI.Views.Editor.InlineEditOverlayView"
+             x:DataType="dialogs:InlineEditViewModel"
+             x:CompileBindings="True">
+    <!-- THE IN-PLACE EDITORS. Small cards over the timeline, each hung at a song time
+         through InlineEditPlacement (the one view anchor), so a panned or zoomed view keeps them on
+         their row:
+           FhpEditorCard     on the fret-hand position row: Fret box (pre-filled, selected), Tab to Width.
+           SectionEditorCard under the Sections row: a name box, the known section names as suggestions,
+                             and "More..." for the full event dialog.
+           LyricEditorCard   over the lyric pill: Enter saves, Tab walks syllables, Esc cancels.
+         All are hidden until a tool opens one, so the shell prewarms them (IPrewarmableSurfaces).
+         The Canvas has no background: only the cards take the pointer. -->
+    <UserControl.Styles>
+        <Style Selector="Border.InlineCard">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceMenu}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="8,6" />
+        </Style>
+        <Style Selector="Border.InlineCard.Invalid">
+            <Setter Property="BorderBrush" Value="{DynamicResource FireDanger}" />
+        </Style>
+        <Style Selector="TextBlock.InlineLabel">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Styles>
+    <Canvas x:Name="InlineCanvas">
+        <Border x:Name="LyricEditorCard" Classes="InlineCard"
+                IsVisible="{Binding Lyric.IsOpen}"
+                AutomationProperties.Name="{localization:Loc InlineLyric_Name}">
+            <TextBox x:Name="LyricTextBox" Width="220" MinHeight="28"
+                     Text="{Binding Lyric.Text}"
+                     PlaceholderText="{localization:Loc InlineLyric_Name}"
+                     ToolTip.Tip="{localization:Loc InlineLyric_Hint}"
+                     AutomationProperties.Name="{localization:Loc InlineLyric_Name}" />
+        </Border>
+        <Border x:Name="FhpEditorCard" Classes="InlineCard"
+                Classes.Invalid="{Binding Fhp.HasInvalidInput}"
+                IsVisible="{Binding Fhp.IsOpen}"
+                AutomationProperties.Name="{localization:Loc InlineFhp_FretName}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Classes="InlineLabel" Text="{localization:Loc InlineFhp_Fret}" />
+                <TextBox x:Name="FhpFretBox" Width="52" MinWidth="0" MinHeight="28" MaxLength="2"
+                         Text="{Binding Fhp.FretText}"
+                         ToolTip.Tip="{localization:Loc InlineFhp_Hint}"
+                         AutomationProperties.Name="{localization:Loc InlineFhp_FretName}" />
+                <TextBlock Classes="InlineLabel" Text="{localization:Loc InlineFhp_Width}" />
+                <TextBox x:Name="FhpWidthBox" Width="52" MinWidth="0" MinHeight="28" MaxLength="2"
+                         Text="{Binding Fhp.WidthText}"
+                         ToolTip.Tip="{localization:Loc InlineFhp_Hint}"
+                         AutomationProperties.Name="{localization:Loc InlineFhp_WidthName}" />
+            </StackPanel>
+        </Border>
+        <Border x:Name="SectionEditorCard" Classes="InlineCard"
+                IsVisible="{Binding Section.IsOpen}"
+                AutomationProperties.Name="{localization:Loc InlineSection_Name}">
+            <StackPanel Spacing="6" Width="220">
+                <TextBox x:Name="SectionNameBox" MinHeight="28"
+                         PlaceholderText="{localization:Loc InlineSection_Watermark}"
+                         Text="{Binding Section.Name}"
+                         AutomationProperties.Name="{localization:Loc InlineSection_Name}" />
+                <ListBox x:Name="SectionSuggestionList" MaxHeight="156"
+                         ItemsSource="{Binding Section.Suggestions}"
+                         AutomationProperties.Name="{localization:Loc InlineSection_Suggestions}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="dialogs:SectionSuggestion">
+                            <TextBlock Text="{Binding Display}" Foreground="{DynamicResource FireTextBody}"
+                                       FontFamily="{StaticResource FireFontUi}" FontSize="{StaticResource FireSizeXs}" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Classes="InlineLabel" Text="{localization:Loc InlineSection_Hint}" />
+                    <Button x:Name="SectionMoreButton" Grid.Column="1" Theme="{StaticResource SubtleButton}"
+                            Classes="Subtle" Content="{localization:Loc InlineSection_More}"
+                            Click="SectionMore_Click"
+                            AutomationProperties.Name="{localization:Loc InlineSection_More}" />
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Canvas>
+</UserControl>

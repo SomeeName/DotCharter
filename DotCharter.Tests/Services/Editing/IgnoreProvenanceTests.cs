@@ -113,6 +113,53 @@ public sealed class IgnoreProvenanceTests : IDisposable
     }
 
     [Fact]
+    public void AnAuthoredIgnoreOnAnUnplayableNoteRemainsAuthoredWhenTheFretIsLowered()
+    {
+        var (arrangement, level) = NewChart();
+        var note = new GuitarNote { Fret = 24, StringIndex = 0, Ignore = true };
+        level.Notes.Add(note);
+        var beats = Beats();
+
+        ChartSpacingEnforcer.EnforceArrangement(arrangement, beats, Config());
+
+        Assert.True(note.Ignore);
+        Assert.False(note.IgnoreDerived);
+        note.Fret = 5;
+        ChartSpacingEnforcer.EnforceArrangement(arrangement, beats, Config());
+
+        Assert.True(note.Ignore);
+        Assert.False(note.IgnoreDerived);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnAuthoredIgnoreOnAnUnplayableChordRemainsAuthoredWhenTheFretIsLowered(bool templateOnly)
+    {
+        var (arrangement, level) = NewChart();
+        var template = new ChordTemplate { Id = 0 };
+        template.Frets[0] = 24;
+        template.Frets[1] = 5;
+        arrangement.ChordTemplates.Add(template);
+        var chord = new Chord { TemplateId = 0, Ignore = true };
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 0, Fret = templateOnly ? 5 : 24 });
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 5 });
+        level.Chords.Add(chord);
+        var beats = Beats();
+
+        ChartSpacingEnforcer.EnforceArrangement(arrangement, beats, Config());
+
+        Assert.True(chord.Ignore);
+        Assert.False(chord.IgnoreDerived);
+        template.Frets[0] = 5;
+        chord.ChordNotes[0].Fret = 5;
+        ChartSpacingEnforcer.EnforceArrangement(arrangement, beats, Config());
+
+        Assert.True(chord.Ignore);
+        Assert.False(chord.IgnoreDerived);
+    }
+
+    [Fact]
     public void ProvenanceSurvivesAnRscpRoundTrip()
     {
         // Without this the first reload makes a DERIVED flag look authored, and

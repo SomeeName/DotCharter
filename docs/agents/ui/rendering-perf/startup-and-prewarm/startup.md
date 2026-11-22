@@ -46,6 +46,54 @@ Part of the rendering/perf reference. Router: [../rendering-perf-detail.md](../.
   count the probes) plus a source lint that the shell really opens it.
   Profile the graph with `StartupProfileUiPerfSmokeTests` before adding work here.
 
+- **The tone-rig catalogue is read on a worker during the DI build (#793,
+  `Tone/Audio/NativeEnginePrefetch`).** Attributed per step on the R2R release
+  build (hidden desktop, temporary stopwatch marks between the resolutions of
+  `App.OnFrameworkInitializationCompleted`), the `services` phase was ~30 ms warm:
+  the `TransportViewModel` graph 16 (of it `IPlayerDspChains` 7, the FIRST
+  P/Invoke, so it also loads the ~14 MB `juce_sharp.dll`, and
+  `JuceAudioPlaybackService`'s ctor 5), `IVulkanRenderService` 5-7, theme and UI
+  scale ~5, the rest under 1 ms each; on a cold first launch the catalogue step
+  alone read 73-188 ms. Everything else in the phase is state the first frame
+  reads, so it stays. `NativeEnginePrefetch.Start()` runs before
+  `new ServiceCollection()` and reads the catalogue (static native data, no
+  engine, no JUCE message thread) on a pool thread; the `IPlayerDspChains`
+  factory hands `TakeCatalogueSource()` to `PlayerDspChains.CreateNative`, which
+  WAITS for the worker and adopts its catalogue (same log line), or reads it
+  itself when the prefetch failed or never ran (RigLab, tests). Median of 5
+  release launches: `services` 76 → 68 (phase 31 → 24, cold first launch 221 →
+  36, though a cold `di` then pays part of the shared disk read), `interactive`
+  542 → 533. Pinned by `UI/StartupWorkDeferralTests` (started before the
+  container, adopted by the factory) and `Audio/NativeEnginePrefetchTests`.
+
+- **`opened` → `interactive` is the compositor's first frame, not app work
+  (#799, nothing moved).** Attributed on the R2R release payload (hidden
+  desktop, isolated data root, temporary stopwatch marks plus a worker that
+  timed a `Send` round-trip to the UI thread, and `dotnet-stack report` taken
+  while it stalled). Play Mode boot, warm, default window: the `Opened` handler
+  and every `Loaded` handler together under 1 ms (window-state restore of a
+  saved maximized window ~10 ms); then the UI thread sits ~100-115 ms in
+  `MediaContext.SyncCommit` inside `WindowImpl.AppWndProc`, waiting for the
+  render thread, whose stack is `SKCanvas.Flush` under
+  `ServerCompositionTarget.Render` — the GPU flush of the first full-window
+  frame (all three captures identical); then one ~10 ms layout/render pass of
+  what `Loaded` invalidated (focus, auto scale), then `interactive`. The gap
+  grows with the surface: ~135 ms of flush maximized, total gap 142 → ~172.
+  **The startup project reload is NOT in the gap**: `QueueStartupProjectReload`'s
+  `Background` post was queued before the window, so it runs just ahead of the
+  `interactive` post, but it only starts the existence probe and yields (<1 ms);
+  every continuation (probe result, audio wait, deserialize, `ApplyProject`)
+  is posted behind `interactive`. The Background prewarm chain also starts
+  after it (`PrewarmTopLevelViews` posts from `Loaded`, which runs after
+  `Opened` queued the `interactive` post). Medians of 5 launches: reload off
+  `opened` 331 / `interactive` 470 / gap 142, reload on (a 67 MB Charter
+  project) 319 / 457 / 140. The owner's larger gaps (126-545 ms) fit the same
+  shape on a bigger, restored window. The remaining levers are the first
+  frame's content (what the Play Mode start screen draws) and the window-state
+  restore in `Loaded` (`MainWindowLayoutController.RestoreOnLoad` resizes AFTER
+  the first frame, so a saved maximized window pays a second full-size frame);
+  neither is work the first interaction does not need.
+
 - **GC is held off the boot path (0.49.6, `Diagnostics/StartupGcHold`).**
   A 12 s `dotnet-trace` sample of the R2R v0.49.4 release build put
   `Thread.PollGC` — the UI thread suspended for collections — at 209 ms of

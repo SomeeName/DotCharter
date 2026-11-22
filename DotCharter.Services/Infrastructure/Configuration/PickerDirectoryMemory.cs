@@ -10,6 +10,23 @@ namespace DotCharter.Services.Infrastructure.Configuration;
 public static class PickerDirectoryMemory
 {
     /// <summary>
+    ///     The folder <paramref name="get" /> reads from the config, or null (the dialog's own
+    ///     default) when none is stored, it is missing on disk, or the config cannot be read. Never throws.
+    /// </summary>
+    public static string? StartDirectory(this IConfigurationService config, Func<AppConfig, string?> get)
+    {
+        try
+        {
+            var dir = get(config.LoadAppConfig());
+            return !string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir) ? dir : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     ///     Persists the directory of <paramref name="filePath" /> into
     ///     <see cref="AppConfig" /> via <paramref name="assign" /> (e.g.
     ///     <c>(c, d) =&gt; c.LastGpDir = d</c>), atomically under the config lock

@@ -45,20 +45,21 @@ public sealed class GeneralSplitInventoryTests
         "LyricSpanPhraseGap", "LyricSpanWordGap", "MinNoteDistanceDivisor", "MinNoteDistanceModeIndex",
         "MinNoteDistanceMs", "MinimumLogLevelIndex", "MusicalChordNames", "OnlineLatinNameLookup", "PadSilenceOnNewProject",
         "PasteIncludeChords", "PasteIncludeEvents", "PasteIncludeFretAnchors", "PasteIncludeHandShapes",
-        "PasteIncludeNotes", "PasteIncludeTones", "LibraryAudioCacheDetail", "LibraryAudioCacheHasEntries",
+        "PasteIncludeNotes", "PasteIncludeTones", "PasteReplacesExisting", "LibraryAudioCacheDetail", "LibraryAudioCacheHasEntries",
         "LibraryAudioCacheUsage", "PsarcOpenHardestLevelOnly", "RefreshLibraryAudioCacheCommand", "RotateLogFiles", "RunSetupAgainCommand",
         "SaveCompanionEof",
         "SaveCompanionEofAudio", "SaveCompanionPsarc", "SaveCompanionPsarcCodecIndex", "SaveCompanionRs2Dlc", "RsXmlSixStringProjection", "RsXmlMoverPhrases",
-        "ExportGenerateDynamicDifficulty", "ExportDdUseMlModel", "ExportApplyDlcBuilderFixes",
+        "ExportGenerateDynamicDifficulty", "ExportDdUseMlModel", "ExportApplyDlcBuilderFixes", "ExportAutoVolumeTargetLufs",
+        "ExportTestDefaultFolder", "BrowseTestExportDefaultFolderCommand", "ClearTestExportDefaultFolderCommand",
         "SelectedLanguageIndex", "SelectedStartupScreenIndex", "SuppressDoubleStopChordNames",
-        "StringOrderIndex", "SyncAnchorToChordFingering", "Timeline2DLaneTint", "Timeline2DPolish", "SyncHandShapeToChordTemplate", "TappedHarmonicFretOffset", "TrailingSilenceSeconds",
+        "StringOrderIndex", "SyncAnchorToChordFingering", "InspectorApplyStep", "Timeline2DLaneTint", "Timeline2DPolish", "SyncHandShapeToChordTemplate", "TappedHarmonicFretOffset", "TrailingSilenceSeconds",
         "UseFastChartingInput"
     ];
 
     /// <summary>The old tab's sections, now spread over four views, and the groups added since. A regroup may move them; dropping one is red.</summary>
     private static readonly string[] ExpectedGroupTitleKeys =
     [
-        "Settings_LanguageRegion_Title", "Settings_Diagnostics", "Settings_Logging",
+        "Settings_LanguageRegion_Title", "Settings_Diagnostics", "Settings_Logging", "Settings_RocksmithExport_Title",
         "Settings_ChartEditing", "Settings_CopyPaste_Title", "Settings_NewProject", "Settings_Import_Title",
         "Settings_Gameplay",
         "Settings_SaveCompanions", "Settings_AutoBackups", "Settings_PsarcAudioCache_Title", "Settings_PsarcOpen_Title",
@@ -73,12 +74,13 @@ public sealed class GeneralSplitInventoryTests
     ///     row makes 62, Editor's "Name new chords automatically" makes 63, and
     ///     the String order rows on Editor and Play make 65; the 2D timeline's two
     ///     rows, moved over from Graphics, make 67. Guitar Pro import moved from
-    ///     Editor to Files without changing the total.
+    ///     Editor to Files without changing the total. The Rocksmith export defaults add two rows. Editor's
+    ///     "Inspector edits wait for Apply" (#805) makes Editor 23.
     /// </summary>
     private static readonly Dictionary<string, int> ExpectedRows = new(StringComparer.Ordinal)
     {
-        ["GeneralSettingsView.axaml"] = 17,
-        ["EditorSettingsView.axaml"] = 21,
+        ["GeneralSettingsView.axaml"] = 19,
+        ["EditorSettingsView.axaml"] = 23,
         ["PlaySettingsView.axaml"] = 5,
         ["FilesSettingsView.axaml"] = 25
     };

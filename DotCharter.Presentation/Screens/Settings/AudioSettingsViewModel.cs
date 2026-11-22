@@ -20,7 +20,7 @@ namespace DotCharter.Presentation.Screens.Settings;
 ///     persists, pushes the live trims, and rebuilds the engine only when routing
 ///     moved.
 /// </summary>
-public partial class AudioSettingsViewModel : ObservableObject, IAudioSettingsScreen
+public partial class AudioSettingsViewModel : ObservableObject, IAudioSettingsScreen, IDisposable
 {
     private readonly IAudioDeviceControl _devices;
     private readonly ILiveInputCapture _capture;
@@ -32,6 +32,7 @@ public partial class AudioSettingsViewModel : ObservableObject, IAudioSettingsSc
     private readonly ILocalizationService _localization;
     private readonly InputJackPicker _jacks;
     private readonly OutputPairPicker _pairs;
+    private readonly AudioDeviceProbe _deviceProbe;
 
     /// <summary>The winmm id behind each MIDI row, from the SAME enumeration that built the names.</summary>
     private readonly List<int> _midiOutputDeviceIds = [];
@@ -83,12 +84,7 @@ public partial class AudioSettingsViewModel : ObservableObject, IAudioSettingsSc
     {
         _devices = devices;
         _localization = localization;
-        DropTunerEngineOptions =
-        [
-            localization["DropTuner_QualityTight"],
-            localization["DropTuner_QualityBalanced"],
-            localization["DropTuner_QualitySmooth"]
-        ];
+        DropTunerEngineOptions = DropTunerCaptions.Follow(localization, this);
         _capture = capture;
         _configService = configService;
         _projectState = projectState;
@@ -99,8 +95,18 @@ public partial class AudioSettingsViewModel : ObservableObject, IAudioSettingsSc
         _jacks = new InputJackPicker(devices, ui, localization, () => (AsioInputChannelLeft, AsioInputChannelRight), PickInputJack);
         _pairs = new OutputPairPicker(devices, ui, localization, () => (AsioOutputChannelLeft, AsioOutputChannelRight),
             (left, right) => (AsioOutputChannelLeft, AsioOutputChannelRight) = (left, right));
+        _deviceProbe = new AudioDeviceProbe(devices, ui);
         _jacks.PropertyChanged += OnPickerChanged;
         _pairs.PropertyChanged += OnPickerChanged;
+    }
+
+    /// <summary>The app is done with the shared instance: its device probe and the engine's buffer reports stop reaching it.</summary>
+    public void Dispose()
+    {
+        _deviceProbe.Cancel();
+        _jacks.Cancel();
+        _pairs.Cancel();
+        _devices.DeviceBufferFramesChanged -= OnDeviceBufferFramesChanged;
     }
 
     /// <summary>The probe <see cref="Open" /> started; never faults, <see cref="Task.CompletedTask" /> before the first Open.</summary>
@@ -178,75 +184,35 @@ public partial class AudioSettingsViewModel : ObservableObject, IAudioSettingsSc
         IsOpen = true;
         OnPropertyChanged(nameof(ActualBufferDescription));
         Rebaseline();
-        DeviceProbe = Task.Run(() => ProbeDevices(config));
+        DeviceProbe = _deviceProbe.Start(config, found => LandDevices(found, config));
     }
 
-    /// <summary>A USB driver enumeration can take 200+ ms, so it runs here and posts the rows back.</summary>
-    private void ProbeDevices(AppConfig config)
+    /// <summary>The rows <see cref="AudioDeviceProbe" /> read off the UI thread (a USB enumeration can take 200+ ms).</summary>
+    private void LandDevices(AudioDeviceList found, AppConfig config)
     {
-        try
-        {
-            _devices.EnsureWasapiDevicesProbed(config);
-            _devices.EnsureAsioDevicesProbed(config);
-            var wasapiOuts = _devices.GetWasapiOutputDevices();
-            var asioOuts = _devices.GetAsioDevices();
-            var wasapiIns = _devices.GetWasapiInputDevices();
-            var asioIns = _devices.GetAsioInputDevices();
-            var midi = _devices.GetMidiOutputDevices();
-            // The SELECTED input driver's jack count: asking a driver the session will never open is a wasted round trip.
-            var inputIsAsio = string.Equals(config.InputDriver, "ASIO", StringComparison.OrdinalIgnoreCase);
-            var (jacks, jackNames) = _jacks.ReadChannels(
-                inputIsAsio ? "ASIO" : "WASAPI", inputIsAsio ? config.AsioInputDeviceName : config.WasapiInputDeviceName);
+        // To -1 first: re-selecting the row it already held raises nothing and leaves a blank header.
+        SelectedWasapiOutputIndex = SelectedAsioOutputIndex = -1;
+        SelectedWasapiInputIndex = SelectedAsioInputIndex = -1;
+        SelectedStreamingMirrorIndex = SelectedMidiOutputIndex = -1;
 
-            _ui.PostNormal(() =>
-            {
-                // To -1 first: re-selecting the row it already held raises nothing and leaves a blank header.
-                SelectedWasapiOutputIndex = SelectedAsioOutputIndex = -1;
-                SelectedWasapiInputIndex = SelectedAsioInputIndex = -1;
-                SelectedStreamingMirrorIndex = SelectedMidiOutputIndex = -1;
+        Refill(WasapiDevices, found.WasapiOutputs);
+        Refill(AsioDevices, found.AsioOutputs);
+        Refill(WasapiInputDevicesList, found.WasapiInputs);
+        Refill(AsioInputDevicesList, found.AsioInputs);
+        Refill(StreamingMirrorDevices, found.WasapiOutputs);
 
-                Refill(WasapiDevices, wasapiOuts);
-                Refill(AsioDevices, asioOuts);
-                Refill(WasapiInputDevicesList, wasapiIns);
-                Refill(AsioInputDevicesList, asioIns);
-                Refill(StreamingMirrorDevices, wasapiOuts);
+        SelectedWasapiOutputIndex = ResolveIndex(WasapiDevices, config.WasapiOutputDeviceName, config.WasapiOutputDevice);
+        SelectedAsioOutputIndex = ResolveIndex(AsioDevices, config.AsioOutputDeviceName, config.AsioOutputDevice);
+        SelectedWasapiInputIndex = ResolveIndex(WasapiInputDevicesList, config.WasapiInputDeviceName, config.WasapiInputDevice);
+        SelectedAsioInputIndex = ResolveIndex(AsioInputDevicesList, config.AsioInputDeviceName, config.AsioInputDevice);
+        SelectedStreamingMirrorIndex = ResolveIndex(
+            StreamingMirrorDevices, config.StreamingMirrorDeviceName, config.StreamingMirrorDevice);
+        RefreshInputJackOptions(found.Jacks, found.JackNames);
+        ProbePairCount();
+        DeviceListsLoaded = true;
 
-                SelectedWasapiOutputIndex = ResolveIndex(WasapiDevices, config.WasapiOutputDeviceName, config.WasapiOutputDevice);
-                SelectedAsioOutputIndex = ResolveIndex(AsioDevices, config.AsioOutputDeviceName, config.AsioOutputDevice);
-                SelectedWasapiInputIndex = ResolveIndex(WasapiInputDevicesList, config.WasapiInputDeviceName, config.WasapiInputDevice);
-                SelectedAsioInputIndex = ResolveIndex(AsioInputDevicesList, config.AsioInputDeviceName, config.AsioInputDevice);
-                SelectedStreamingMirrorIndex = ResolveIndex(
-                    StreamingMirrorDevices, config.StreamingMirrorDeviceName, config.StreamingMirrorDevice);
-                RefreshInputJackOptions(jacks, jackNames);
-                ProbePairCount();
-                DeviceListsLoaded = true;
-
-                MidiOutputDevices.Clear();
-                _midiOutputDeviceIds.Clear();
-                foreach (var d in midi)
-                {
-                    MidiOutputDevices.Add(d.Name);
-                    _midiOutputDeviceIds.Add(d.Index);
-                }
-
-                var row = 0;
-                for (var i = 0; i < midi.Count; i++)
-                {
-                    if (midi[i].Index == config.MidiOutputDevice || (config.MidiOutputDeviceName.Length > 0 &&
-                            string.Equals(midi[i].Name, config.MidiOutputDeviceName, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        row = i;
-                        break;
-                    }
-                }
-
-                SelectedMidiOutputIndex = row;
-            });
-        }
-        catch
-        {
-            // A failed probe leaves the rows empty; the dialog must still open.
-        }
+        SelectedMidiOutputIndex = MidiOutputRows.Fill(MidiOutputDevices, _midiOutputDeviceIds, found.Midi, config);
+        RebaselineDevices();
     }
 
     private static void Refill(ObservableCollection<string> target, IEnumerable<string> rows)
@@ -319,19 +285,8 @@ public partial class AudioSettingsViewModel : ObservableObject, IAudioSettingsSc
         _projectState.MainDisplayMessage = _localization["Status_AudioConfigApplied"];
     }
 
-    /// <summary>
-    ///     Resolves the row against the list <see cref="Open" /> BUILT, never a
-    ///     fresh enumeration. An empty list means the probe has not landed, and
-    ///     the stored device is left exactly as it was.
-    /// </summary>
-    private void SaveMidiOutput(AppConfig config)
-    {
-        if (_midiOutputDeviceIds.Count == 0) return;
-        var row = SelectedMidiOutputIndex;
-        var valid = row >= 0 && row < _midiOutputDeviceIds.Count;
-        config.MidiOutputDevice = valid ? _midiOutputDeviceIds[row] : -1;
-        config.MidiOutputDeviceName = valid ? MidiOutputDevices[row] : string.Empty;
-    }
+    private void SaveMidiOutput(AppConfig config) =>
+        MidiOutputRows.WriteTo(config, _midiOutputDeviceIds, MidiOutputDevices, SelectedMidiOutputIndex);
 
     [RelayCommand]
     private void Cancel() => IsOpen = false;

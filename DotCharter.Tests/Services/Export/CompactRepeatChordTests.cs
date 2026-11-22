@@ -90,6 +90,44 @@ public sealed class CompactRepeatChordTests
             .Element("levels")!.Element("level")!
             .Element("chords")!.Elements("chord").ToList();
 
+    [Theory]
+    [InlineData(false, 6, ArrangementType.Lead, 0b000111)]
+    [InlineData(true, 6, ArrangementType.Lead, 0b000111)]
+    [InlineData(false, 7, ArrangementType.Lead, 0b1000011)]
+    [InlineData(true, 7, ArrangementType.Lead, 0b1000011)]
+    [InlineData(false, 8, ArrangementType.Lead, 0b11000001)]
+    [InlineData(true, 8, ArrangementType.Lead, 0b11000001)]
+    [InlineData(false, 5, ArrangementType.Bass, 0b010011)]
+    [InlineData(true, 5, ArrangementType.Bass, 0b010011)]
+    public void ASectionContainingOnlyCompactChordsStillDeclaresItsPlayedStrings(bool forceNoNotes,
+        int stringCount, ArrangementType type, int expectedMask)
+    {
+        var project = RepeatedRun();
+        var arrangement = project.Arrangements[0];
+        arrangement.ArrangementType = type;
+        arrangement.StringCount = stringCount;
+        arrangement.TuningPitches.Clear();
+        for (var s = 0; s < stringCount; s++) arrangement.TuningPitches.Add(new TuningOffset(0));
+        arrangement.EventPoints.Add(new EventPoint { Position = FractionalPosition.Zero, Section = "intro" });
+        arrangement.EventPoints.Add(new EventPoint { Position = new FractionalPosition(1), Section = "riff" });
+        if (forceNoNotes)
+        {
+            foreach (var chord in arrangement.Levels[0].Chords.Skip(1))
+            {
+                chord.ForceNoNotes = true;
+                chord.ChordNotes.Clear();
+            }
+        }
+
+        var xmlChords = WrittenChords(project);
+        var sng = SngFromDomainMapper.BuildInstrumental(arrangement, project.Beats, 8000).Sng;
+
+        Assert.All(xmlChords.Skip(1), c => Assert.Empty(c.Elements("chordNote")));
+        Assert.All(sng.Levels[0].Notes.Skip(1), n => Assert.Equal(0u, n.Mask & RsNoteMask.ChordPanel));
+        var section = Assert.Single(sng.Sections, s => s.Name == "riff");
+        Assert.Equal(expectedMask, section.StringMask[0] & 0xFF);
+    }
+
     // ── the export ──────────────────────────────────────────────────────
 
     [Fact]

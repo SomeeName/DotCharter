@@ -3,35 +3,34 @@
         xmlns:ctl="using:DotCharter.UI.Controls">
 
     <!-- Part of the inspector grammar — see `Views/Editor/InspectorStyles.axaml`,
-         which merges this file and its siblings IN ORDER. The nine-header tab strip, and the mixer row shared by every channel. -->
+         which merges this file and its siblings IN ORDER. The inspector's tab strip, and the mixer row shared by every channel. -->
 
     <!-- ═══════════════════════════════════════════════════════════════════
-         THE TAB STRIP (0.50). The nine headers are the shared Fire segmented
-         control — `Border.FireSegment` around `ToggleButton.FireSegmentItem`s,
-         declared once in `Styles/Fire.axaml` and worn by the editor's nav
-         switcher, the Progress hub and the Network screen. What is left here
-         is the strip's own frame and the two marks a segment cannot carry: the
-         label lockup and the FEHLER count.
+         THE TAB STRIP (inspector design D). The headers are captions only,
+         in D's quiet nav style (`ColumnFlowNavToggle` + `ColumnFlowNav`,
+         `Styles/ColumnFlowCardTheme.axaml`): the lit tab is accent text over a 2 px accent
+         underline. What is left here is the strip's own frame and the two marks
+         a nav entry cannot carry: the caption lockup and the FEHLER count.
 
          The strip is ALL labelled or ALL icons, never a mix (#573):
          `ctl:OverflowTabStrip` decides from MEASURED widths
          (`TabStripLayout.Decide`) and raises `:icons` when every caption does
-         not fit; the rule at the end of this block then hides the caption of
-         every unchecked tab. The active tab keeps its caption, and tabs that do
-         not fit even as icons go into the strip's "More" button. Only the
-         caption hides: the glyph, the tooltip, the accessible name and the
-         Issues count badge (a TextBlock inside a Border, not a direct child of
-         the label) all stay.
+         not fit (all eight fit at the 530 px primary size in English). Then
+         the rules at the end of this block show the glyph and hide the caption
+         of every unchecked tab, so every tab stays one click away; the active
+         tab keeps its caption and no glyph. Tabs that do not fit even as icons
+         go into the strip's "More" button, whose rows carry the tab's glyph
+         and badges (`InspectorTabMoreMenu`). The glyph, the tooltip, the
+         accessible name and the Issues count badge (a TextBlock inside a
+         Border, not the caption) never hide.
          ═══════════════════════════════════════════════════════════════════ -->
     <Style Selector="Border.TabStrip">
-        <Setter Property="Background" Value="{DynamicResource FireSurfaceBar}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChrome}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
         <Setter Property="BorderThickness" Value="0,0,0,1" />
-        <Setter Property="Padding" Value="{StaticResource FirePadSegment}" />
+        <Setter Property="Padding" Value="8,2" />
     </Style>
-    <!-- Icon + caption inside one segment. The PathIcon's colour is driven by
-         `Fire.axaml`'s own `:is(ToggleButton).FireSegmentItem PathIcon`
-         selectors, so it tracks the segment dim → accent for free. -->
+    <!-- The caption, and the Issues count beside it. -->
     <Style Selector="StackPanel.TabLabel">
         <Setter Property="Orientation" Value="Horizontal" />
         <Setter Property="Spacing" Value="{StaticResource FireSpaceXs}" />
@@ -54,14 +53,17 @@
         <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
         <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
     </Style>
-    <!-- One inset for every tab in every mode. The strip's width decision
-         subtracts a hidden caption from a MEASURED tab, which only holds while
-         the padding does not change with the mode; the strip shares its slack
-         between the tabs anyway, so a wide pane still spaces them out. -->
-    <Style Selector="ctl|OverflowTabStrip.TabRow > ToggleButton.FireSegmentItem">
-        <Setter Property="Padding" Value="{StaticResource FirePadSegmentItemDense}" />
+    <!-- The icons fallback. A glyph has a FIXED width: the strip counts a hidden
+         glyph into a tab's icon width from it (`OverflowTabStrip.TabWidths`). -->
+    <Style Selector="ctl|OverflowTabStrip.TabRow PathIcon.TabGlyph">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="IsVisible" Value="False" />
     </Style>
-    <Style Selector="ctl|OverflowTabStrip.TabRow:icons ToggleButton.FireSegmentItem:not(:checked) StackPanel.TabLabel > TextBlock">
+    <Style Selector="ctl|OverflowTabStrip.TabRow:icons ToggleButton:not(:checked) PathIcon.TabGlyph">
+        <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="ctl|OverflowTabStrip.TabRow:icons ToggleButton:not(:checked) StackPanel.TabLabel > TextBlock">
         <Setter Property="IsVisible" Value="False" />
     </Style>
 
@@ -132,52 +134,6 @@
         <Setter Property="TextElement.Foreground" Value="{DynamicResource FireWarning}" />
     </Style>
 
-    <Style Selector="Grid.SliderRow">
-        <Setter Property="Margin" Value="0,4" />
-    </Style>
-
-    <!-- The reserved square where a row has no mute or no solo. Transparent and
-         hit-test-free — its whole job is to hold the column open. -->
-    <Style Selector="Border.MixerVerbSlot">
-        <Setter Property="Width" Value="18" />
-        <Setter Property="Height" Value="18" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="IsHitTestVisible" Value="False" />
-    </Style>
-
-    <!-- The label rail and the value rail, as WIDTHS on the cells rather than
-         on the ColumnDefinitions — a `GridLength` is not a double, so a shared
-         number has to live on something that takes one, and a cell is the only
-         such thing here. Every mixer row in the tab wears both, which is the
-         only reason the faders start and end on one line. -->
-    <Style Selector="TextBlock.MixerLabel">
-        <Setter Property="Width" Value="78" />
-        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
-        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
-        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-    </Style>
-    <!-- Indented variant: an EQ filter's Q sits under its own frequency row. -->
-    <Style Selector="TextBlock.MixerLabel.Sub">
-        <Setter Property="Width" Value="62" />
-        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
-    </Style>
-    <!-- The readout. Mono, right-aligned, and it prints the channel's OWN unit
-         (a gain ratio, a dB, "1.00x", "0 st", "1200 Hz") — one column, several
-         vocabularies, which is exactly why it is fixed-width. -->
-    <!-- NO letter-spacing: the layer tracks its mono CAPTIONS, never its
-         figures. "-12.5 dB" at 10.5 px is already 50 of the rail's 54 px, and
-         a tracked one overflows and clips its own unit. -->
-    <Style Selector="TextBlock.MixerValue">
-        <Setter Property="Width" Value="54" />
-        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
-        <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
-        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
-        <Setter Property="TextAlignment" Value="Right" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-
     <!-- The fader. It is NOT `Slider.FireSlider`: that class hard-wires the
          accent gradient into its decrease-track template, and this tab's whole
          point is that the FILL carries the channel's identity (violet for the
@@ -225,23 +181,6 @@
     </Style>
     <Style Selector="Slider.MixerSlider:disabled">
         <Setter Property="Opacity" Value="0.45" />
-    </Style>
-
-    <Style Selector="Grid.EqSubRow">
-        <Setter Property="Margin" Value="16,0,0,4" />
-        <Setter Property="Opacity" Value="0.75" />
-    </Style>
-    <Style Selector="Grid.EqSubRow:pointerover">
-        <Setter Property="Opacity" Value="1.0" />
-    </Style>
-
-    <Style Selector="Border.FilterBadge">
-        <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
-        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
-        <Setter Property="Margin" Value="{StaticResource FireGapTopSm}" />
     </Style>
 
 </Styles>

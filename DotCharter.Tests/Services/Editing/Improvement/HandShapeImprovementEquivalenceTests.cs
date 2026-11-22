@@ -65,7 +65,7 @@ public sealed class HandShapeImprovementEquivalenceTests
         (int)typeof(ChartImprovementService)
             .GetMethod("ImproveHandShapeLengths",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-            .Invoke(null, [level, beats])!;
+            .Invoke(null, [level, beats, DotCharter.Core.Linking.SpacingGap.AppDefault])!;
 
     // ---- the OLD bodies, verbatim ------------------------------------------
 
@@ -95,6 +95,8 @@ public sealed class HandShapeImprovementEquivalenceTests
 
         var changes = 0;
         var orderedHandShapes = level.HandShapes.OrderBy(h => h.Position).ToList();
+        // #758 added this step to the pass on purpose; the reference takes it too.
+        var gaps = DotCharter.Services.Editing.HandShapes.HandShapeGap.For(level, beats, DotCharter.Core.Linking.SpacingGap.AppDefault);
         for (var i = 0; i < orderedHandShapes.Count; i++)
         {
             var handShape = orderedHandShapes[i];
@@ -122,6 +124,8 @@ public sealed class HandShapeImprovementEquivalenceTests
                 if (latestEnd > handShape.Position && handShape.EndPosition > latestEnd)
                     handShape.EndPosition = latestEnd;
             }
+
+            gaps.TrimToGap(handShape);
 
             if (handShape.EndPosition < handShape.Position)
                 handShape.EndPosition = handShape.Position;

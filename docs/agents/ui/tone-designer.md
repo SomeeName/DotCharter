@@ -71,6 +71,17 @@ the THREE owners of that chain lives.
     (`OnEditorDropDownClosed`). Knob enum pickers stay `ComboBox`es. Pinned by
     `Perf/ToneDesignerGearSearchUiPerfSmokeTests`; the "exactly one gear picker is visible"
     case above looks for the `DeferredChoiceBox`.
+  - **The list is a Fire card (#329):** `Views/Dialogs/DialogStyles/GearPicker.axaml`
+    (class `GearPicker`, included from `DialogStyles.axaml`) styles the popup; `GearPickerParts.cs`
+    pins it under the field at the field's width, heads each group (`IGroupedChoice`, implemented by
+    `ToneGearOption`), marks the picked gear, highlights the typed text in the rows and shows a
+    `GearPicker_NoMatch` row (`GearNoMatchChoice`) when nothing matches. Pinned by the two
+    #329 facts in `Perf/ToneDesignerGearSearchUiPerfSmokeTests`.
+  - **Delete removes ONLY the definition (#447, like DLC Builder):** no prompt. `DeleteToneCommand` (button, or the Delete key on
+    the `ProjectToneList`) is one `UpsertToneDefinitionAction`; slots, starting tone, declared names and tone changes keep the key
+    (export validation / `ToneKeyRepair` report the undefined key). The dialog binds Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z itself
+    (`ToneDesignerDialogView.axaml.cs`, `UndoCommand`/`RedoCommand`: the main window chord is blocked behind a dialog).
+    Pinned by `Perf/ToneDesignerDeleteKeysUiPerfSmokeTests` and `ToneDesignerViewModelTests`.
   - It speaks the shared dialog grammar (`Views/Dialogs/DialogStyles.axaml`) and
     added three marks to it that the vocabulary lacked: `ListBox.DlgList` (a
     list whose rows are PICKED — container chrome neutralized so the row's own
@@ -128,12 +139,12 @@ the THREE owners of that chain lives.
   row wasn't edited (imported ToneNames orderings survive). All actions in
   `DotCharter.Services/Editing/Tones/ToneDefinitionActions.cs`; undo works and the dirty
   tracker picks the edits up like any other chart action.
-- **A KEY edit is a rename, and Delete is a delete, of the tone EVERYWHERE (#181).**
+- **A KEY edit is a rename of the tone EVERYWHERE (#181).**
   `CommitPendingEdit` hands a changed key to `ToneKeyEdits.PlanRename` with the
   buffered body as the replacement, so the definition, every arrangement's slots,
   starting tone and declared names, and every tone change move as ONE undo step;
-  `DeleteTone` uses `ToneKeyEdits.BuildDelete`. Both then `RetargetSlotRows` the
-  open slot cards to the new key (or ""), or `CommitSlotAssignments` would read
+  The rename then `RetargetSlotRows` the
+  open slot cards to the new key, or `CommitSlotAssignments` would read
   the stale row text as an edit and write the old key back on close. Rules and
   the collision policy: [../services/editing-invariants/undo.md](../services/editing-invariants/undo.md).
   `ToneDesignerViewModelTests.A_key_edit_renames_the_tone_everywhere_as_one_undo_step`.
@@ -274,7 +285,7 @@ covers the footer every variant is graded on); `RigToneImportReviewUiPerfSmokeTe
 `DotCharter.Services/Editing/Tones/ToneGenerationRun.cs` — the third button beside
 Add / Import. It measures on this computer with no AI and never overwrites a tone.
 
-**It is not Tools ▸ Tone & sound ▸ "Generate tones with AI…"** (`Services/Ai/Generate/AiToneGenerationRun`,
+**It is not Tools ▸ Tones ▸ "Generate tones with AI…"** (`Services/Ai/Generate/AiToneGenerationRun`,
 [../services/ai-tone-generate.md](../services/ai-tone-generate.md)), which asks the AI
 provider and REPLACES the arrangement's slots. Both stay (#216); each tooltip names the
 other by its exact label, linted by `UI/ToneGenerationReachabilityTests`.
@@ -289,6 +300,10 @@ inline, which froze the window. The command is an `AsyncRelayCommand`, so the bu
 is disabled while it runs, and `ImportStatus` says `Dialog_Tones_GenerateRunning`.
 Pinned by `UI/ToneGenerationReachabilityTests` (the async shape) and
 `Services/Editing/Tones/ToneGenerationRunTests` (one decode for N changes).
+`Capture` keeps declared stem paths as stored. On the worker, `Analyse` resolves them
+through `StemFolderProbe.ResolveStemPath`, using the chart directory first and the
+resolved song audio's directory as the legacy fallback. Audio in a parent folder is
+resolved by `ProjectAudioLocator`; only after these probes may the run use the full mix (#572).
 
 **The owner's rule, and it is load-bearing: the tone PLACEMENT is not generated.**
 The charter drops the tone changes; the command reads them and builds a tone from

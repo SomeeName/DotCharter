@@ -23,6 +23,9 @@ public interface ITone3000AuthService
     /// <summary>Display name of the signed-in user (empty when signed out).</summary>
     string UserName { get; }
 
+    /// <summary>Identity epoch; token refreshes within the same account do not change it.</summary>
+    long SessionGeneration => 0;
+
     event Action? AuthStateChanged;
 
     /// <summary>Runs the OAuth 2.0 + PKCE flow: opens the system browser to the
@@ -49,6 +52,14 @@ public interface ITone3000AuthService
     ///     failing requests raises one state change rather than twenty.</para>
     /// </summary>
     void InvalidateSession(string reason);
+
+    /// <summary>Invalidates only the session that sent the failed request.</summary>
+    bool InvalidateSession(string reason, long expectedGeneration)
+    {
+        if (SessionGeneration != expectedGeneration) return false;
+        InvalidateSession(reason);
+        return true;
+    }
 
     /// <summary>A currently valid access token (refreshing when expired), or
     /// null when signed out / refresh failed. Never throws.</summary>
@@ -79,6 +90,12 @@ public interface IOAuthCallbackListener
 /// </summary>
 public sealed class HttpListenerOAuthCallbackListener : IOAuthCallbackListener
 {
+    private readonly TimeProvider _time;
+
+    public HttpListenerOAuthCallbackListener() : this(TimeProvider.System) { }
+
+    internal HttpListenerOAuthCallbackListener(TimeProvider time) => _time = time;
+
     public async Task<string?> WaitForCallbackAsync(
         string prefix, Func<string, bool> accept, TimeSpan timeout, CancellationToken ct)
     {
@@ -87,8 +104,8 @@ public sealed class HttpListenerOAuthCallbackListener : IOAuthCallbackListener
         listener.Start();
         try
         {
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeoutCts.CancelAfter(timeout);
+            using var timeoutCts = new CancellationTokenSource(timeout, _time);
+            await using var linked = ct.Register(static state => ((CancellationTokenSource)state!).Cancel(), timeoutCts).ConfigureAwait(false);
 
             // Only the request the sign-in is waiting for ends the wait: the
             // callback path, carrying the caller's state. Anything else that
@@ -176,6 +193,7 @@ public sealed class Tone3000AuthService : ITone3000AuthService, IDisposable
     private readonly object _sessionLock = new();
     private Tone3000SessionData? _session;
     private bool _sessionLoaded;
+    private long _sessionGeneration;
 
     public Tone3000AuthService(
         Func<RigConfig> configProvider,
@@ -292,18 +310,22 @@ public sealed class Tone3000AuthService : ITone3000AuthService, IDisposable
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Application,
-                $"TONE3000 sign-in failed: {ex.GetType().Name}: {ex.Message}");
+                "TONE3000 sign-in failed", ex);
             return OnlineResult<Tone3000User>.Fail(OnlineError.Network, ex.Message);
         }
     }
 
-    public void SignOut()
+    public void SignOut() => SignOut(expectedGeneration: null);
+
+    private void SignOut(long? expectedGeneration)
     {
         lock (_sessionLock)
         {
+            if (expectedGeneration is { } expected && _sessionGeneration != expected) return;
             _store.Clear();
             _session = null;
             _sessionLoaded = true;
+            _sessionGeneration++;
         }
 
         _logger?.Info(AppLogCategory.Application, "TONE3000 sign-out — stored session removed.");
@@ -311,21 +333,30 @@ public sealed class Tone3000AuthService : ITone3000AuthService, IDisposable
     }
 
     /// <inheritdoc />
-    public void InvalidateSession(string reason)
+    public long SessionGeneration { get { lock (_sessionLock) return _sessionGeneration; } }
+
+    public void InvalidateSession(string reason) => TryInvalidateSession(reason, expectedGeneration: null);
+
+    public bool InvalidateSession(string reason, long expectedGeneration) => TryInvalidateSession(reason, expectedGeneration);
+
+    private bool TryInvalidateSession(string reason, long? expectedGeneration)
     {
         lock (_sessionLock)
         {
+            if (expectedGeneration is { } expected && _sessionGeneration != expected) return false;
             // Already gone: say nothing. A page of failing requests must not
             // raise twenty state changes, and it must not log twenty lines.
-            if (_session == null && _sessionLoaded) return;
+            if (_session == null && _sessionLoaded) return false;
             _store.Clear();
             _session = null;
             _sessionLoaded = true;
+            _sessionGeneration++;
         }
 
         _logger?.Warning(AppLogCategory.Application,
             $"TONE3000 session invalidated by the server ({reason}) — stored session removed.");
         AuthStateChanged?.Invoke();
+        return true;
     }
 
     public async Task<string?> GetAccessTokenAsync(CancellationToken ct = default)
@@ -339,14 +370,19 @@ public sealed class Tone3000AuthService : ITone3000AuthService, IDisposable
         await _refreshGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            session = Session;
+            long generation;
+            lock (_sessionLock)
+            {
+                session = Session;
+                generation = _sessionGeneration;
+            }
             if (session == null) return null;
             if (_nowUtc() + ExpirySlack < session.AccessTokenExpiresUtc)
                 return session.AccessToken; // another caller already refreshed
 
             if (string.IsNullOrEmpty(session.RefreshToken))
             {
-                SignOut();
+                SignOut(generation);
                 return null;
             }
 
@@ -371,7 +407,7 @@ public sealed class Tone3000AuthService : ITone3000AuthService, IDisposable
                 {
                     _logger?.Warning(AppLogCategory.Application,
                         "TONE3000 rejected the refresh token — signing out.");
-                    SignOut();
+                    SignOut(generation);
                 }
                 else
                 {
@@ -392,8 +428,9 @@ public sealed class Tone3000AuthService : ITone3000AuthService, IDisposable
                     : tokens.Value.RefreshToken,
                 AccessTokenExpiresUtc = _nowUtc() + TimeSpan.FromSeconds(tokens.Value.ExpiresInSeconds)
             };
-            SetSession(refreshed, raiseEvent: false);
-            return refreshed.AccessToken;
+            return SetSession(refreshed, raiseEvent: false, expectedGeneration: generation)
+                ? refreshed.AccessToken
+                : null;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -402,7 +439,7 @@ public sealed class Tone3000AuthService : ITone3000AuthService, IDisposable
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Application,
-                $"TONE3000 token refresh failed: {ex.GetType().Name}: {ex.Message}");
+                "TONE3000 token refresh failed", ex);
             return null;
         }
         finally
@@ -430,16 +467,21 @@ public sealed class Tone3000AuthService : ITone3000AuthService, IDisposable
         }
     }
 
-    private void SetSession(Tone3000SessionData session, bool raiseEvent = true)
+    private bool SetSession(Tone3000SessionData session, bool raiseEvent = true, long? expectedGeneration = null)
     {
         lock (_sessionLock)
         {
+            // The exchange ran unlocked. Sign-out, invalidation or another
+            // account's sign-in makes its response obsolete, including on disk.
+            if (expectedGeneration is { } expected && _sessionGeneration != expected) return false;
             _store.Save(session);
             _session = session;
             _sessionLoaded = true;
+            if (raiseEvent) _sessionGeneration++;
         }
 
         if (raiseEvent) AuthStateChanged?.Invoke();
+        return true;
     }
 
     private string GetClientId()
@@ -539,7 +581,7 @@ public sealed class Tone3000AuthService : ITone3000AuthService, IDisposable
     {
         try
         {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            using var _ = Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
             return true;
         }
         catch

@@ -94,9 +94,9 @@ public sealed class GpRepeatUnfoldTests
     }
 
     private static (Arrangement Arrangement, GpImportMetadata Metadata) ImportLegacy(
-        string version, IReadOnlyList<FxMeasure> measures)
+        string version, IReadOnlyList<FxMeasure> measures, IReadOnlyDictionary<int, int>? directions = null)
     {
-        var path = LegacyGpFixtureBuilder.WriteFile(version, measures);
+        var path = LegacyGpFixtureBuilder.WriteFile(version, measures, directions: directions);
         try
         {
             var importer = new GpImporter();
@@ -182,6 +182,82 @@ public sealed class GpRepeatUnfoldTests
 
         Assert.Equal(6, gpif.Bars.Count);
         Assert.Equal(legacy.Metadata.Bars.Count, gpif.Bars.Count);
+    }
+
+    [Fact]
+    public void DaSegnoAlCoda_TakesTheCodaOnlyOnTheReturnPass()
+    {
+        var score = MasterBars(7, i => i switch
+        {
+            1 => "<Directions><Target>Segno</Target></Directions>",
+            2 => "<Directions><Jump>DaCoda</Jump></Directions>",
+            4 => "<Directions><Jump>DaSegnoAlCoda</Jump></Directions>",
+            5 => "<Directions><Target>Coda</Target></Directions>",
+            _ => null
+        });
+
+        Assert.Equal([0, 1, 2, 3, 4, 1, 2, 5, 6], GpMasterBarSequence.Unfold(score).Select(b => b.OriginalIndex));
+    }
+
+    [Fact]
+    public void Gp5DirectionTable_PlaysTheSameDaSegnoAlCodaRoute()
+    {
+        var measures = Enumerable.Range(1, 7).Select(fret => WholeNote(fret)).ToArray();
+        var directions = new Dictionary<int, int> { [0] = 6, [2] = 2, [10] = 5, [17] = 3 };
+
+        var (_, metadata) = ImportLegacy("5.10", measures, directions);
+
+        Assert.Equal([0, 1, 2, 3, 4, 1, 2, 5, 6], metadata.Bars.Select(b => b.SourceBarIndex));
+    }
+
+    [Fact]
+    public void Gp5DaCapoAlFine_PlaysOnlyTheLastEndingOnReturn()
+    {
+        FxMeasure[] measures = [.. AlternateEndingMeasures(), WholeNote(5), WholeNote(6), WholeNote(7)];
+        var directions = new Dictionary<int, int> { [4] = 5, [8] = 6 };
+
+        var (arrangement, metadata) = ImportLegacy("5.10", measures, directions);
+
+        Assert.Equal([0, 1, 2, 0, 1, 3, 4, 5, 0, 1, 3, 4], metadata.Bars.Select(b => b.SourceBarIndex));
+        var playbackNotes = arrangement.Levels.Single().Notes.OrderBy(n => n.Position);
+        Assert.Equal([1, 2, 3, 1, 2, 4, 5, 6, 1, 2, 4, 5], playbackNotes.Select(n => n.Fret));
+    }
+
+    [Theory]
+    [InlineData("Segno", "DaSegnoAlCoda")]
+    [InlineData("SegnoSegno", "DaSegnoSegnoAlCoda")]
+    public void GpifDaSegnoAlCoda_PlaysOnlyTheLastEndingOnReturn(string target, string jump)
+    {
+        var score = MasterBars(9, i => i switch
+        {
+            1 => $"<Directions><Target>{target}</Target></Directions>" + """<Repeat start="true"/>""",
+            2 => """<AlternateEndings>1</AlternateEndings><Repeat end="true" count="2"/>""",
+            3 => "<AlternateEndings>2</AlternateEndings>",
+            4 => "<Directions><Jump>DaCoda</Jump></Directions>",
+            6 => $"<Directions><Jump>{jump}</Jump></Directions>",
+            7 => "<Directions><Target>Coda</Target></Directions>",
+            _ => null
+        });
+
+        Assert.Equal([0, 1, 2, 1, 3, 4, 5, 6, 1, 3, 4, 7, 8],
+            GpMasterBarSequence.Unfold(score).Select(b => b.OriginalIndex));
+    }
+
+    [Fact]
+    public void ASecondEndingAfterTheRepeatCloseStillBelongsToTheSecondPass()
+    {
+        var score = MasterBars(5, i => i switch
+        {
+            0 => """<Repeat start="true"/>""",
+            2 => """<AlternateEndings>1</AlternateEndings><Repeat end="true" count="2"/>""",
+            3 => "<AlternateEndings>2</AlternateEndings>",
+            _ => null
+        });
+
+        var unfolded = GpMasterBarSequence.Unfold(score);
+
+        Assert.Equal([0, 1, 2, 0, 1, 3, 4], unfolded.Select(b => b.OriginalIndex));
+        Assert.Equal(2, unfolded[5].RepeatPass);
     }
 
     private static string RepeatScore() =>

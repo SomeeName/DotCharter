@@ -30,27 +30,27 @@ public class MarqueeHitTesterTests
 
     private static double LaneY(int stringIndex) => ChartHitTester.GetLaneY(Height, TopMargin, BottomMargin, StringCount, stringIndex, leftyFlip: false);
 
-    /// <summary>v0.34 lefty flip: forward and inverse lane mapping must agree
+    /// <summary>Inverted strings: forward and inverse lane mapping must agree
     /// in BOTH orientations, and the flip must actually mirror the order —
     /// this is the hit-test parity the renderer's LaneTopFor relies on.</summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void LaneMapping_RoundTrips_ForBothOrientations(bool leftyFlip)
+    public void LaneMapping_RoundTrips_ForBothOrientations(bool invertStrings)
     {
         for (var s = 0; s < StringCount; s++)
         {
-            var y = ChartHitTester.GetLaneY(Height, TopMargin, BottomMargin, StringCount, s, leftyFlip);
-            Assert.Equal(s, ChartHitTester.GetLaneIndexAtY(y, Height, TopMargin, BottomMargin, StringCount, leftyFlip));
+            var y = ChartHitTester.GetLaneY(Height, TopMargin, BottomMargin, StringCount, s, invertStrings);
+            Assert.Equal(s, ChartHitTester.GetLaneIndexAtY(y, Height, TopMargin, BottomMargin, StringCount, invertStrings));
         }
     }
 
     [Fact]
-    public void LeftyFlip_MirrorsTheVerticalStringOrder()
+    public void InvertStrings_MirrorsTheVerticalStringOrder()
     {
         var normalTop = ChartHitTester.GetLaneY(Height, TopMargin, BottomMargin, StringCount, StringCount - 1, false);
-        var leftyTop = ChartHitTester.GetLaneY(Height, TopMargin, BottomMargin, StringCount, 0, true);
-        Assert.Equal(normalTop, leftyTop, 6);
+        var invertedTop = ChartHitTester.GetLaneY(Height, TopMargin, BottomMargin, StringCount, 0, true);
+        Assert.Equal(normalTop, invertedTop, 6);
 
         // A click on the lane that holds string 0 in normal orientation must
         // resolve to the HIGHEST string when flipped.

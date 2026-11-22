@@ -52,7 +52,6 @@ internal sealed class ProjectSaver
 {
     private readonly IConfigurationService _configService;
     private readonly IProjectDocumentService _documentService;
-    private readonly ISaveCompanionService _saveCompanions;
     private readonly ICrashRecoveryService _crashRecovery;
     private readonly IFileStorageService _storageService;
     private readonly ProjectState _projectState;
@@ -74,7 +73,6 @@ internal sealed class ProjectSaver
     public ProjectSaver(
         IConfigurationService configService,
         IProjectDocumentService documentService,
-        ISaveCompanionService saveCompanions,
         ICrashRecoveryService crashRecovery,
         IFileStorageService storageService,
         ProjectState projectState,
@@ -94,7 +92,6 @@ internal sealed class ProjectSaver
     {
         _configService = configService;
         _documentService = documentService;
-        _saveCompanions = saveCompanions;
         _crashRecovery = crashRecovery;
         _storageService = storageService;
         _projectState = projectState;
@@ -119,44 +116,97 @@ internal sealed class ProjectSaver
 
     /// <summary>The Ctrl+S / Save As entry: hops to the UI thread, holds the
     /// <c>_saveInProgress</c> guard across the picker and the write, and routes a
-    /// path-less session through the picker.</summary>
-    public async Task<bool> SaveWithGuardAsync(bool saveAs)
+    /// path-less session through the picker. Only a save the user started commits a pending editor draft; the
+    /// close or replace prompt's (<see cref="SaveInitiator.Prompt" />) applies the staged drafts too.</summary>
+    public async Task<bool> SaveWithGuardAsync(bool saveAs, SaveInitiator initiator)
     {
         // Assemble reads (and the enforcer mutates) the live project, so the
         // preparation phase must run on the UI thread no matter who calls us.
         if (!_uiDispatcher.CheckAccess())
-            return await _uiDispatcher.InvokeAsync(() => SaveWithGuardAsync(saveAs));
+            return await _uiDispatcher.InvokeAsync(() => SaveWithGuardAsync(saveAs, initiator));
+
+        // Ctrl+S leaves a focused text box focused: its draft is applied before the save reads.
+        // An unattended save leaves it alone: the user may still be typing it.
+        if (initiator != SaveInitiator.Unattended) _chartEditor.CommitPendingEdits();
+        // The prompt counted a staged draft as unsaved work: Save writes it rather than dropping it.
+        if (initiator == SaveInitiator.Prompt) _chartEditor.ApplyPendingDrafts();
 
         // The guard covers the picker phase too so a double Ctrl+S / repeated
         // Save As can't stack two pickers or two concurrent writes.
-        if (_saveInProgress) return false;
+        if (_saveInProgress)
+        {
+            // Save As cannot stack a second picker; a plain Save during a write is
+            // QUEUED (one follow-up, shared) instead of dropped, so the user can
+            // re-save what they edited meanwhile and the close prompt's Save waits.
+            if (saveAs) return false;
+            _followUpByUser |= initiator != SaveInitiator.Unattended;
+            _followUp ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            return await _followUp.Task;
+        }
+
         _saveInProgress = true;
+        var firstSaved = false;
         try
         {
-            var projectPath = _projectState.CurrentProjectPath;
-            if (saveAs || string.IsNullOrEmpty(projectPath))
-            {
-                // Real Save As / first save: the user picks a location — no
-                // more silently writing a RELATIVE "project.dcproj" into
-                // whatever the process working directory happens to be.
-                var picked = await PickSaveAsPathAsync();
-                if (string.IsNullOrEmpty(picked))
-                {
-                    _logger.Info(AppLogCategory.Project, "Save As canceled by user.");
-                    return false;
-                }
-
-                return await SaveToPickedPathAsync(picked);
-            }
-
-            if (CharterRscp.IsCharterProject(projectPath)) return await SaveFromRscpAsync(projectPath);
-
-            return await SaveProjectCoreAsync(projectPath);
+            firstSaved = await SaveGuardedCoreAsync(saveAs);
+            return firstSaved;
         }
         finally
         {
             _saveInProgress = false;
+            var followUp = _followUp;
+            var followUpInitiator = _followUpByUser ? SaveInitiator.User : SaveInitiator.Unattended;
+            _followUp = null;
+            _followUpByUser = false;
+            if (followUp != null) await RunFollowUpAsync(followUp, firstSaved, followUpInitiator);
         }
+    }
+
+    /// <summary>The save queued behind the running one, shared by every caller
+    /// that asked for it meanwhile.</summary>
+    private TaskCompletionSource<bool>? _followUp;
+
+    /// <summary>True when a user-started save is among the callers queued behind the running one:
+    /// the follow-up then commits a draft typed meanwhile.</summary>
+    private bool _followUpByUser;
+
+    private async Task RunFollowUpAsync(TaskCompletionSource<bool> followUp, bool firstSaved, SaveInitiator initiator)
+    {
+        try
+        {
+            // A failed or cancelled first save has nothing to follow up; a project that
+            // is clean again (undone back to the saved node) needs no second write.
+            followUp.SetResult(firstSaved && (!_dirtyTracker.IsDirty || await SaveWithGuardAsync(false, initiator)));
+        }
+        catch (Exception ex)
+        {
+            followUp.SetException(ex);
+        }
+    }
+
+    private async Task<bool> SaveGuardedCoreAsync(bool saveAs)
+    {
+        var openProject = _projectState.ActiveProject;
+        var projectPath = _projectState.CurrentProjectPath;
+        if (saveAs || string.IsNullOrEmpty(projectPath))
+        {
+            // Real Save As / first save: the user picks a location — no
+            // more silently writing a RELATIVE "project.dcproj" into
+            // whatever the process working directory happens to be.
+            var picked = await PickSaveAsPathAsync();
+            if (!ReferenceEquals(openProject, _projectState.ActiveProject)) return false;
+            if (string.IsNullOrEmpty(picked))
+            {
+                _logger.Info(AppLogCategory.Project, "Save As canceled by user.");
+                return false;
+            }
+
+            return await SaveToPickedPathAsync(picked);
+        }
+
+        if (CharterRscp.IsCharterProject(projectPath)) return await SaveFromRscpAsync(projectPath);
+
+        return await SaveProjectCoreAsync(projectPath);
     }
 
     /// <summary>
@@ -170,13 +220,17 @@ internal sealed class ProjectSaver
     /// </summary>
     internal async Task<bool> SaveFromRscpAsync(string rscpPath)
     {
+        var openProject = _projectState.ActiveProject;
         var target = ProjectFiles.Beside(rscpPath);
         var origin = new RscpOrigin(rscpPath, await Task.Run(() => CharterRscp.IsWrittenByDotCharter(rscpPath)));
-        if (await Task.Run(() => File.Exists(target)))
+        var targetExists = await Task.Run(() => File.Exists(target));
+        if (!ReferenceEquals(openProject, _projectState.ActiveProject)) return false;
+        if (targetExists)
         {
             _logger.Info(AppLogCategory.Project,
                 $"Saving a project opened from '{rscpPath}': '{target}' already exists, so the user picks the name.");
             var picked = await PickSaveAsPathAsync();
+            if (!ReferenceEquals(openProject, _projectState.ActiveProject)) return false;
             if (string.IsNullOrEmpty(picked)) return false;
             target = picked;
         }
@@ -203,19 +257,22 @@ internal sealed class ProjectSaver
     /// </summary>
     internal async Task<bool> SaveToPickedPathAsync(string picked, RscpOrigin? origin = null)
     {
-        // BEFORE the write: the audio reference is resolved relative to the
-        // project FOLDER, and Save As is the one operation that changes it.
-        RebaseAudioReferenceForSaveAs(picked);
+        var openProject = _projectState.ActiveProject;
+        var mediaFrom = _projectState.CurrentProjectPath;
         var checkpointsFrom = CheckpointIdentity.For(_projectState.CurrentProjectPath, _projectState.CurrentSongIdentity);
         var chatsFrom = string.IsNullOrEmpty(_projectState.CurrentProjectPath) ? null : Path.GetDirectoryName(_projectState.CurrentProjectPath);
 
-        if (!await SaveProjectCoreAsync(picked, origin)) return false;
+        if (!await SaveProjectCoreAsync(picked, origin, mediaFrom)) return false;
+        if (!ReferenceEquals(openProject, _projectState.ActiveProject)) return false;
 
         _projectState.CurrentProjectPath = picked;
         // Right after the write, before the slower carries: the stats follow the file as soon as it exists.
         await RekeyMigratedProjectAsync(origin, picked);
+        if (!ReferenceEquals(openProject, _projectState.ActiveProject)) return false;
         await CarryCheckpointsAsync(checkpointsFrom, picked);
+        if (!ReferenceEquals(openProject, _projectState.ActiveProject)) return false;
         await CarryAiChatsAsync(chatsFrom, picked);
+        if (!ReferenceEquals(openProject, _projectState.ActiveProject)) return false;
         var dir = Path.GetDirectoryName(picked);
         // …through the host's config update, because a bare assignment to the
         // CACHED AppConfig instance arms no write. File ▸ Open persists its own
@@ -245,7 +302,7 @@ internal sealed class ProjectSaver
         }
         catch (Exception ex)
         {
-            _logger.Warning(AppLogCategory.Project, $"The migrated project's stats were not re-keyed: {ex.Message}");
+            _logger.Warning(AppLogCategory.Project, "The migrated project's stats were not re-keyed", ex);
         }
     }
 
@@ -265,7 +322,7 @@ internal sealed class ProjectSaver
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger.Warning(AppLogCategory.Project, $"Save As could not carry the checkpoints over: {ex.Message}");
+            _logger.Warning(AppLogCategory.Project, "Save As could not carry the checkpoints over", ex);
         }
     }
 
@@ -291,49 +348,8 @@ internal sealed class ProjectSaver
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            _logger.Warning(AppLogCategory.Project, $"Save As could not carry the AI chats over: {ex.Message}");
+            _logger.Warning(AppLogCategory.Project, "Save As could not carry the AI chats over", ex);
         }
-    }
-
-    /// <summary>
-    ///     Save As into a DIFFERENT folder: promote a relative audio reference
-    ///     to the absolute file it currently resolves to, so the copy that lands
-    ///     in the new folder still knows where its song is.
-    ///     <para>
-    ///         <c>musicFileName</c> is a bare file name for every normal project
-    ///         and is resolved against the project's own folder (and its
-    ///         parents) by <see cref="ProjectAudioLocator" />. Save As wrote the
-    ///         new project file carrying that same bare name — and the audio was
-    ///         still back in the OLD folder, which the new one is not under. The
-    ///         result opened with no audio at all: no waveform, no playback, no
-    ///         stems, no message naming the cause. The chart survived; everything
-    ///         that makes it playable did not.
-    ///     </para>
-    ///     <para>
-    ///         Only when it would otherwise BREAK. Saving next to the audio (the
-    ///         common "Save As a variant name" case) resolves from the new path
-    ///         too, and keeps its portable relative name. An audio reference we
-    ///         cannot find from the OLD path either is left exactly as it is —
-    ///         there is nothing to promote it to, and inventing a path would only
-    ///         bake in a lie.
-    ///     </para>
-    /// </summary>
-    internal void RebaseAudioReferenceForSaveAs(string picked)
-    {
-        var audio = _projectState.CurrentAudioFileName;
-        if (string.IsNullOrWhiteSpace(audio) || Path.IsPathRooted(audio)) return;
-
-        var current = _projectState.CurrentProjectPath;
-        if (string.IsNullOrEmpty(current)) return; // first save: nothing to rebase FROM
-
-        var resolved = ProjectAudioLocator.TryResolve(current, audio);
-        if (resolved == null) return; // already unresolvable; do not invent one
-        if (ProjectAudioLocator.TryResolve(picked, audio) != null) return; // still reachable from the new home
-
-        _projectState.CurrentAudioFileName = resolved;
-        _logger.Info(AppLogCategory.Project,
-            "Save As moved the project out of its audio's folder; the audio reference was made absolute " +
-            "so the saved project can still find it.");
     }
 
     private async Task<string?> PickSaveAsPathAsync()
@@ -351,9 +367,19 @@ internal sealed class ProjectSaver
             new[] { new FilePickerFilter(L("Picker_ProjectFiles"), new[] { ProjectFiles.Pattern }) },
             startDir);
         if (string.IsNullOrEmpty(path)) return null;
-        // A typed ".rscp" names Charter's format, which this XML is not: it becomes the .dcproj.
-        if (CharterRscp.IsCharterProject(path)) return ProjectFiles.Beside(path);
-        if (!ProjectFiles.IsProject(path)) path += ProjectFiles.Extension;
+        var picked = path;
+        // Confirmation belongs to the path we actually write, after normalizing the extension.
+        if (CharterRscp.IsCharterProject(path)) path = ProjectFiles.Beside(path);
+        else if (!ProjectFiles.IsProject(path)) path += ProjectFiles.Extension;
+        if (!ProjectStoreKeys.SamePath(picked, path) && await Task.Run(() => File.Exists(path)))
+        {
+            if (_messageDialog == null || !await _messageDialog.ShowAsync(
+                    L("Dialog_OverwriteProject_Title"), L("Dialog_OverwriteProject_Message", path),
+                    MessageDialogKind.Question, confirmation: true))
+            {
+                return null;
+            }
+        }
         return path;
     }
 
@@ -372,6 +398,21 @@ internal sealed class ProjectSaver
     /// <inheritdoc cref="ProjectSaveTiming" />
     internal event Action<ProjectSaveTiming>? SaveTimed;
 
+    private void SettleSavedState(ProjectDirtyTracker.SaveMark saveMark, string projectPath)
+    {
+        if (_dirtyTracker.MarkCleanAt(saveMark))
+        {
+            // The saved file contains everything the crash snapshot did —
+            // clear it so a later hard kill isn't misread as lost work.
+            _crashRecovery.NotifyProjectSaved(projectPath);
+            return;
+        }
+
+        // Edits landed during the write: the file lacks them, so the snapshot
+        // that holds them stays and the scheduler is re-armed for them.
+        _crashRecovery.NotifyProjectChanged();
+    }
+
     /// <summary>
     ///     The save itself, minus the picker and the <c>_saveInProgress</c> guard.
     ///     <c>internal</c> only so tests can drive it: the public entry point
@@ -380,8 +421,13 @@ internal sealed class ProjectSaver
     /// </summary>
     /// <param name="projectPath">The <c>.dcproj</c> to write.</param>
     /// <param name="origin">The <c>.rscp</c> the session was opened from, when this save moves it to a <c>.dcproj</c>.</param>
-    internal async Task<bool> SaveProjectCoreAsync(string projectPath, RscpOrigin? origin = null)
+    /// <param name="mediaFrom">The source project path for Save As media references; null for an ordinary save.</param>
+    internal async Task<bool> SaveProjectCoreAsync(string projectPath, RscpOrigin? origin = null, string? mediaFrom = null)
     {
+        // A replacement installs a different chart instance. The write owns its
+        // snapshot, but its continuation must never settle a newer session.
+        var openProject = _projectState.ActiveProject;
+        using var media = mediaFrom == null ? null : new SaveAsMediaReferences(mediaFrom, projectPath);
         // Ctrl+S has a UI-thread stall — the assemble and the deep clone run
         // here, before the hand-off to the worker (the enforcer is on the worker, see below). The pill is begun BEFORE that
         // stall so it describes the whole of it.
@@ -392,10 +438,14 @@ internal sealed class ProjectSaver
 
             // …and this is what makes the pill VISIBLE for it. See the method.
             await DrainToFirstPaintAsync();
+            if (!ReferenceEquals(openProject, _projectState.ActiveProject)) return false;
 
             var uiStopwatch = Stopwatch.StartNew();
             var snapshotThreadId = Environment.CurrentManagedThreadId;
             var config = _configService.LoadAppConfig();
+            // The state the file will hold, stamped on the UI thread with the clone:
+            // an edit made while the worker writes must stay dirty.
+            var saveMark = _dirtyTracker.CaptureSaveMark();
             var project = _documentService.AssembleProject(_projectState.ActiveProject, _transport.Bpm,
                 _projectState.CurrentAudioFileName, _chartEditor.LyricPhrases);
             _documentService.RefreshArrangementFileManifest(project);
@@ -422,13 +472,8 @@ internal sealed class ProjectSaver
                 _projectState.CurrentProjectPath, projectPath, snapshot);
             var uiMs = uiStopwatch.Elapsed.TotalMilliseconds;
 
-            // Read on the UI thread with the snapshot, for the same reason the
-            // snapshot exists: ProjectState is UI-thread state and the worker
-            // below must not observe it mid-change. ChartProject carries no
-            // duration, so this is the only place the save path can learn it —
-            // the exported songLength is min(chart, audio) - 1 ms, and a chart
-            // longer than its audio must clamp to the audio or it never reaches
-            // an end in-game. 0 means "no audio decoded yet" => chart length.
+            // Capture duration with the snapshot: export clamps to decoded audio
+            // length; 0 means no decoded audio and uses the chart's length.
             var audioLengthMs = _projectState.TotalAudioLengthMs > 0
                 ? _projectState.TotalAudioLengthMs
                 : (double?)null;
@@ -437,6 +482,8 @@ internal sealed class ProjectSaver
             var enforceThreadId = -1;
             var toneEditsFollowed = false;
             string? legacyBackup = null;
+            // Captured with the snapshot: the live project is UI-thread state.
+            var newerWriterVersion = _projectState.ActiveProject?.NewerWriterVersion;
             await Task.Run(() =>
             {
                 // Over the SNAPSHOT, on the worker — see the note above the clone.
@@ -446,20 +493,20 @@ internal sealed class ProjectSaver
                 enforceMs = workerStopwatch.Elapsed.TotalMilliseconds;
 
                 workerStopwatch.Restart();
+                media?.Rebase(snapshot);
+                NewerWriterBackup.EnsureBackup(projectPath, newerWriterVersion, _logger);
                 WriteProjectFileAtomically(projectPath, snapshot, audioLengthMs);
+                media?.Commit();
                 writeMs = workerStopwatch.Elapsed.TotalMilliseconds;
 
                 // AFTER the .dcproj is safely on disk, so the older file is only ever
                 // renamed once its replacement exists.
                 if (origin is { WrittenByDotCharter: true }) legacyBackup = RetireLegacyRscp(origin.RscpPath);
 
-                // Everything below is DERIVED and the .dcproj is already safely on
-                // disk, so a failure here must NOT be reported as "the project
-                // failed to save" — that is what the outer catch would otherwise
-                // do, and it would also leave the project dirty and skip
-                // NotifyProjectSaved for a save that actually succeeded.
-                WriteDerivedArtifacts(projectPath, snapshot, audioLengthMs);
-
+                // The companions (.rscp, DTRS XML bundle, .rs2dlc, .eof, .psarc) are
+                // DERIVED and are written LATER by the companion queue (scheduled
+                // below, after the save is marked done): the save is done once the
+                // .dcproj is atomically replaced.
                 try
                 {
                     // AFTER the .dcproj swap: the store follows the keys the file now HAS.
@@ -472,15 +519,14 @@ internal sealed class ProjectSaver
                 }
             });
 
+            if (!ReferenceEquals(openProject, _projectState.ActiveProject)) return false;
+            if (openProject != null) media?.Settle(_projectState, openProject);
             if (toneEditsFollowed) toneEditFollow.Settle();
 
             // A save(-as) is the moment a NEW project gains a path: the session
             // records it as the last project, feeds the MRU exactly like an open
             // does and restarts the auto-backup interval, in that order.
             _host.RecordSavedPath(projectPath, snapshot.Chart?.SongName);
-            // The saved file now contains everything the crash snapshot did —
-            // clear it so a later hard kill isn't misread as lost work.
-            _crashRecovery.NotifyProjectSaved(projectPath);
             var xmlDirectory = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(projectPath))
                                             ?? Directory.GetCurrentDirectory(), "DTRS XML");
             _logger.Info(AppLogCategory.Project,
@@ -488,17 +534,18 @@ internal sealed class ProjectSaver
                 $"uiThreadMs={uiMs:0.#} (assemble+clone), workerEnforceMs={enforceMs:0.#}, workerWriteMs={writeMs:0.#}.");
             SaveTimed?.Invoke(new ProjectSaveTiming(snapshotThreadId, enforceThreadId, uiMs, enforceMs, writeMs));
             _projectState.SetMessage(SavedMessage(projectPath, origin, legacyBackup), StatusSeverity.Success);
-            _dirtyTracker.MarkClean();
+            SettleSavedState(saveMark, projectPath);
 
-            // Detached on purpose: building a psarc converts every arrangement to
-            // SNG and copies the whole audio track. Awaiting it here would put
-            // seconds of latency on Ctrl+S.
+            // Detached on purpose: the XML bundle, .eof and the psarc (SNG
+            // conversion + copying the audio) take seconds. The queue coalesces
+            // back-to-back saves and reports its own failures.
             _detachedCompanions.Schedule(projectPath, snapshot, audioLengthMs);
             return true;
         }
         catch (Exception ex)
         {
             _logger.Error(AppLogCategory.Project, $"Project save failed for '{projectPath}'.", ex);
+            if (!ReferenceEquals(openProject, _projectState.ActiveProject)) return false;
             // Save As .xml of play-only content reads as the guard's own message.
             _projectState.SetMessage(L("Status_SaveError",
                 ex is PlayOnlyContentException ? L(PlayOnlyExportGuard.MessageKey) : ex.Message), StatusSeverity.Error);
@@ -524,15 +571,16 @@ internal sealed class ProjectSaver
     }
 
     /// <summary>
-    ///     Writes the project file to <c>&lt;path&gt;.saving</c> and swaps it in atomically. A
+    ///     Writes the project file to a randomly named sibling stage and swaps it in atomically. A
     ///     failure here is the one a save reports as failed; the existing file is untouched.
     /// </summary>
     private void WriteProjectFileAtomically(string projectPath, ChartProject snapshot, double? audioLengthMs)
     {
-        var tempPath = projectPath + ".saving";
+        var write = _documentService.PrepareSave(projectPath, snapshot, audioLengthMs);
+        var tempPath = Path.ChangeExtension(projectPath, $".{Guid.NewGuid():N}{Path.GetExtension(projectPath)}.saving");
         try
         {
-            _documentService.SaveChart(tempPath, snapshot, audioLengthMs);
+            write(tempPath);
             // The bounded retry matters most HERE: a transient AV/indexer
             // hold on the user's own project file otherwise reports "save
             // failed" and orphans the .saving file beside it.
@@ -555,73 +603,6 @@ internal sealed class ProjectSaver
             }
 
             throw;
-        }
-    }
-
-    /// <summary>
-    ///     Everything a save derives once the project file is on disk, in order: the legacy
-    ///     sibling XML cleanup, the Charter <c>.rscp</c>, the DTRS XML bundle, the <c>.rs2dlc</c>
-    ///     that names the bundle's files, and the <c>.eof</c>. Each step catches its own failure.
-    /// </summary>
-    private void WriteDerivedArtifacts(string projectPath, ChartProject snapshot, double? audioLengthMs)
-    {
-        try
-        {
-            // This sat ABOVE the comment above, unguarded: a read-only,
-            // locked or AV-held sibling .xml made File.Delete throw into
-            // the outer catch, so a fully successful save reported
-            // Status_SaveError, stayed dirty, never cleared the crash
-            // snapshot and never scheduled the psarc. It is cleanup of a
-            // legacy artifact, not part of the save.
-            DeleteLegacyProjectXmlIfPresent(projectPath);
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(AppLogCategory.Project,
-                $"Could not delete the legacy sibling XML export beside '{projectPath}' " +
-                "(the project itself saved fine).", ex);
-        }
-
-        try
-        {
-            _saveCompanions.WriteCharterProject(projectPath, snapshot);
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(AppLogCategory.Project,
-                $"Charter .rscp companion failed for '{projectPath}' (the project itself saved fine).", ex);
-        }
-
-        try
-        {
-            _documentService.SaveDlcBuilderXmlBundle(projectPath, snapshot, audioLengthMs);
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(AppLogCategory.Project,
-                $"DTRS XML bundle failed for '{projectPath}' (the project itself saved fine).", ex);
-        }
-
-        try
-        {
-            // AFTER the bundle above: it writes INTO the folder that call
-            // swaps into place, and it names the files that call wrote.
-            _saveCompanions.WriteDlcBuilderProject(projectPath, snapshot, audioLengthMs);
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(AppLogCategory.Project,
-                $".rs2dlc companion failed for '{projectPath}' (the project itself saved fine).", ex);
-        }
-
-        try
-        {
-            _saveCompanions.WriteEof(projectPath, snapshot);
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(AppLogCategory.Project,
-                $"EOF companion failed for '{projectPath}' (the project itself saved fine).", ex);
         }
     }
 
@@ -696,18 +677,8 @@ internal sealed class ProjectSaver
         }
     }
 
-    private void DeleteLegacyProjectXmlIfPresent(string projectPath)
-    {
-        if (!ProjectFiles.IsOpenable(projectPath)) return;
-
-        var legacyXmlPath = Path.ChangeExtension(projectPath, ".xml");
-        if (string.Equals(legacyXmlPath, projectPath, StringComparison.OrdinalIgnoreCase) || !File.Exists(legacyXmlPath))
-            return;
-
-        File.Delete(legacyXmlPath);
-        _logger.Info(AppLogCategory.Project,
-            $"Deleted legacy sibling XML export '{legacyXmlPath}' after moving exports to DTRS XML.");
-    }
+    /// <summary>Completes once the companions queued by earlier saves are on disk (tests; see <see cref="DetachedCompanionBuilder.FlushAsync" />).</summary>
+    internal Task FlushCompanionsAsync() => _detachedCompanions.FlushAsync();
 
     private string L(string key) => _localization[key];
 

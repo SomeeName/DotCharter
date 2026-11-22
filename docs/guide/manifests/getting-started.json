@@ -17,7 +17,7 @@
         },
         {
           "title": "Playing as",
-          "text": "The profile your scores and settings are saved under. Switch or add profiles here, or play as a guest.",
+          "text": "Your scores and settings are saved under this profile. You can switch or add profiles here, or play as a guest.",
           "name": "LaunchWhoPanel"
         },
         {
@@ -27,12 +27,12 @@
         },
         {
           "title": "Guitar input",
-          "text": "Whether an instrument input is set up and its latency is known. Play Mode needs it to score you.",
+          "text": "Shows whether an instrument input is set up and its latency is known. Play Mode needs this to score you.",
           "name": "LaunchInputChip"
         },
         {
           "title": "About",
-          "text": "Version, licence and credits.",
+          "text": "Version, license and credits.",
           "name": "LaunchAboutButton"
         },
         {
@@ -48,18 +48,18 @@
       "callouts": [
         {
           "title": "Navigation rail",
-          "text": "The app's destinations: Home (recent projects and what to do next), Library (your songs), Chart (the editor), Rig (your tone) and Settings.",
+          "text": "The app's destinations are Home (recent projects and what to do next), Library (your songs), Chart (the editor), Rig (your tone) and Settings.",
           "side": "inside",
           "name": "ActivityRail"
         },
         {
           "title": "Menu bar",
-          "text": "All editor commands, grouped by menu. Each menu is shown in Charting a song.",
+          "text": "All editor commands, grouped by menu. Charting a song shows each menu.",
           "name": "EditorMenuBar"
         },
         {
           "title": "Go to anything",
-          "text": "A command palette: type part of a command, setting or song and press Enter.",
+          "text": "A command palette. Type part of a command, setting or song and press Enter.",
           "name": "TitleGoToAnything"
         },
         {
@@ -91,13 +91,13 @@
         },
         {
           "title": "Columns",
-          "text": "Click a column to sort by it; the funnel icons filter by paths, tuning, year, difficulty and length.",
+          "text": "Click a column to sort by it. The funnel icons filter by paths, tuning, year, difficulty and length.",
           "side": "left",
           "name": "LibraryColumnHeader"
         },
         {
           "title": "Songs",
-          "text": "Grouped by artist. The letters L, R and B show which paths (lead, rhythm, bass) a song has.",
+          "text": "Songs are grouped by artist. The letters L, R and B show which paths a song has: lead, rhythm or bass.",
           "name": "LibraryRows"
         },
         {

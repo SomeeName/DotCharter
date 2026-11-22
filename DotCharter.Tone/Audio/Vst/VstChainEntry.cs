@@ -12,6 +12,9 @@ public sealed class VstChainEntry
     public string PluginPath { get; set; } = string.Empty;
     public bool Bypass { get; set; }
 
+    /// <summary>Transient rebuild state; never persisted in the user's chain configuration.</summary>
+    internal byte[]? State { get; set; }
+
     /// <summary>
     ///     Which SEAT's input chain this slot belongs to (ABI v28). The
     ///     native engine hosts one VST3 input chain per player, so a slot has to

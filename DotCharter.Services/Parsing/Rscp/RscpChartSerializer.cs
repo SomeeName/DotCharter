@@ -49,6 +49,7 @@ public class RscpChartSerializer : IChartSerializer
                 $"RSCP '{filePath}' declares chartFormatVersion {project.Chart.ChartFormatVersion} " +
                 $"(this build supports {RscpMigrations.CurrentVersion}). " +
                 "Data this build cannot re-attach will be dropped if the project is saved.");
+            project.NewerWriterVersion = $"format-{project.Chart.ChartFormatVersion}";
         }
 
         // The forward-compatibility half (docs/DCPROJ-FORMAT-GUARANTEES.md): keep
@@ -71,6 +72,7 @@ public class RscpChartSerializer : IChartSerializer
                 $"{RscpFormatContract.CurrentWriterVersion}. Its top-level extension nodes " +
                 $"({project.UnknownRscpNodes.Count} unknown) are preserved across a save, but anything it " +
                 "added to a note, chord or arrangement cannot be re-attached and will be lost on save.");
+            project.NewerWriterVersion = writerVersion;
         }
         else if (project.UnknownRscpNodes.Count > 0)
         {
@@ -88,6 +90,7 @@ public class RscpChartSerializer : IChartSerializer
         // next save would then overwrite the original with that emptiness. Upgrade after
         // the normal parse, so migration only touches what the parse could not find.
         _migrations.Upgrade(doc, filePath, project);
+        RscpGpSource.Read(doc, project);
 
         // Linked measures name their arrangements by index, so they are read last — and
         // checked: a copy that does not match its group (an older build edited it) is
@@ -146,20 +149,7 @@ public class RscpChartSerializer : IChartSerializer
         var doc = new XDocument();
         _writer.WriteDocument(doc, project);
 
-        using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Read))
-        {
-            WriteDocument(stream, doc);
-
-            // Durability, not just atomicity: this file is the staging half of a
-            // temp-write → File.Move swap (ProjectSessionService writes
-            // "<path>.saving" and renames over the real project; the recovery
-            // snapshot store does the same). Without an fsync the rename can
-            // become durable BEFORE the data, so a power cut swaps a truncated
-            // file over the previous good save — losing both (AtomicFile
-            // documents this exact trap). Flush(true) forces the
-            // bytes to the platter before the caller's rename can retire.
-            stream.Flush(flushToDisk: true);
-        }
+        AtomicFile.Write(filePath, stream => WriteDocument(stream, doc));
     }
 
     /// <summary>

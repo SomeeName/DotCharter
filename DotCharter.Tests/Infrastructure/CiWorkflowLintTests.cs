@@ -229,7 +229,8 @@ public sealed class CiWorkflowLintTests
         Assert.Contains("Get-HeadlessRaceRerunDecision @(Read-HeadlessTrxFailures $Trx) $Absent", gate);
         Assert.Contains("Invoke-HeadlessRaceReruns $Label $trx $absent", gate);
         // …and the train gets it by running the headless suite through Invoke-Gate.
-        Assert.Matches(@"& powershell -NoProfile -File \$gate [^\n]*-Headless [^\n]*-RaceReruns \$RaceReruns", train);
+        Assert.Matches(@"\$laneArgs = [^\n]*'-Headless'", train);
+        Assert.Matches(@"& powershell -NoProfile -File \$gate [^\n]*@laneArgs [^\n]*-RaceReruns \$RaceReruns", train);
 
         // The script runs the suite with the FILTER, as its own process, and
         // records the two numbers CI exists to measure.
@@ -312,7 +313,7 @@ public sealed class CiWorkflowLintTests
 
     /// <summary>
     ///     There is no SDK pin in global.json, so <c>setup-dotnet</c> installs the
-    ///     newest 10.0.x. The release floor (SDK 10.0.402 / runtime 10.0.13) is
+    ///     newest 10.0.x. The release floor (SDK 10.0.403 / runtime 10.0.15) is
     ///     therefore a step in every job that sets .NET up, not an assumption.
     /// </summary>
     [Fact]
@@ -330,8 +331,8 @@ public sealed class CiWorkflowLintTests
         }
 
         var script = File.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "tools", "ci", "Assert-DotnetSdk.ps1"));
-        Assert.Contains("[version]$MinimumSdk = '10.0.402'", script);
-        Assert.Contains("[version]$MinimumRuntime = '10.0.13'", script);
+        Assert.Contains("[version]$MinimumSdk = '10.0.403'", script);
+        Assert.Contains("[version]$MinimumRuntime = '10.0.15'", script);
     }
 
     /// <summary>

@@ -12,6 +12,7 @@ internal sealed record FakeShapeIssue(string Text, string Fix);
 /// <summary>One fake Shapes row: the name box and the No name switch really edit, the merge verbs ask the panel.</summary>
 public sealed class FakeShapePanelRow : ObservableObject, IShapePanelRow
 {
+    private bool _isCurrent;
     private bool _canMerge;
     private bool _canMergeHere;
     private bool _isMergeSource;
@@ -37,6 +38,8 @@ public sealed class FakeShapePanelRow : ObservableObject, IShapePanelRow
         IssueText = issue?.Text ?? "";
         FixLabel = issue?.Fix ?? "";
         CommitNameCommand = new RelayCommand(() => { });
+        UseSuggestionCommand = new RelayCommand(() => { });
+        SuggestionLabel = "";
         FixCommand = new RelayCommand(() => { });
         EditCommand = new RelayCommand(() => { });
         PlaceCommand = new RelayCommand(() => { });
@@ -81,6 +84,12 @@ public sealed class FakeShapePanelRow : ObservableObject, IShapePanelRow
     public string NamePlaceholder { get; }
 
     public ICommand CommitNameCommand { get; }
+
+    public ICommand UseSuggestionCommand { get; }
+
+    public bool HasSuggestion => SuggestionLabel.Length > 0;
+
+    public string SuggestionLabel { get; }
 
     public bool CanTick => true;
 
@@ -132,6 +141,12 @@ public sealed class FakeShapePanelRow : ObservableObject, IShapePanelRow
     {
         get => _isMergeSource;
         internal set => SetProperty(ref _isMergeSource, value);
+    }
+
+    public bool IsCurrent
+    {
+        get => _isCurrent;
+        internal set => SetProperty(ref _isCurrent, value);
     }
 
     public bool IsMergeTarget

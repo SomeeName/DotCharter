@@ -11,7 +11,13 @@
   used to sit in front of it, over the LIVE project, and it was the larger half
   of the stall on a big chart; it now runs on the save worker over the
   snapshot (the file is what needs it — the live project is enforced on load
-  and after every committed edit). `ProjectSessionSaveThreadingTests` pins the
+  and after every committed edit). No save waits for a volume decode.
+  `AttachmentVolumeMeasurement`, export prefill and the detached companion keep
+  their measuring points. A companion measures its own main/clip snapshot and
+  adopts completed automatic fields only onto unchanged live inputs; the next
+  write persists them. Derived adoption adds no dirty mark or undo node. Closing
+  before another write may require measuring again later, an accepted derived
+  metadata cost. Manual overrides and edits during writing are preserved. `ProjectSessionSaveThreadingTests` pins the
   shape, the `Project saved.` log line prints `uiThreadMs / workerEnforceMs /
   workerWriteMs`, and `docs/agents/MAP.md` has the order. What the remaining
   stall lacked was any sign it was happening:
@@ -50,6 +56,13 @@
   any file write, and **close the owning dialog first** — the prompt is another
   overlay in the same `DialogHost` panel, where z-order follows materialization
   order, so a dialog left open can cover it and the awaited answer never arrives.
+  **Staged drafts follow ONE rule (#751 P4/P7b):** a draft only its own Apply writes (the
+  inspector's staged pages, the Song tab's unapplied song details) registers through
+  `IChartEditorSurface.AddPendingDraft` and counts in `HasPendingDrafts`, so `HasUnsavedWork` is
+  true and the one unsaved-changes prompt asks. That prompt's Save is `SaveInitiator.Prompt`,
+  which runs `ApplyPendingDrafts` (one undo step per editor) before writing; Discard drops them,
+  Cancel keeps them staged. A plain Ctrl+S (`SaveInitiator.User`) leaves every draft staged.
+  There is no second, draft-specific dialog (`ProjectSaveEditDuringWriteTests`).
   The prompt itself is a delegate `ProjectMenuViewModel` assigns on construction
   (`ConfirmDiscardOpenProjectAsync`; pinned by `ProjectMenuViewModelTests`) rather than an injected
   dialog service: `IAppDialogService` is built from thirty view models that reach
@@ -74,23 +87,15 @@
   callbacks, the settings write-back) run over the LIVE
   `ProjectState.ActiveProject` and MUST stay on the UI thread — moving one of
   those off would race the renderer's snapshot.
-- **…and every replace path must DECLARE its dirty state on EVERY exit, not at
-  the end of the `try`.** `IsDirty` is `CurrentNodeId != _baselineNodeId` over ids
-  that only increase, so once `ApplyProject(resetHistory: true)` has minted a new
-  root the baseline can NEVER match again — a path that returns without saying
-  `MarkProjectClean`/`MarkProjectDirty` leaves the session dirty forever. The
-  chart is applied first and the AUDIO is loaded after it, so both declarations
-  used to sit behind fallible I/O: open a project (or, through
-  `SongBrowserViewModel.LoadSongItem`, load a library song — the method Play
-  Mode's song select calls directly, where `preferMemoryPlayback` reads the whole
-  song into a `NativeFileBuffer` first) whose audio will not decode and the chart
-  rendered correctly while the title wore a `*` no undo could clear, closing
-  raised "unsaved changes", and `CrashRecoveryService` — same flag — started
-  snapshotting it, so the restore prompt returned on every launch. Both are in a
-  `finally` now, gated on a `sessionReplaced` flag set immediately after
-  `ApplyProject`: **a failure BEFORE the swap must declare nothing**, because the
-  previous project is still open and its dirty state is still the truth.
-  **The crash-recovery dialog is the third case and the opposite sign**:
+- **Declare a loaded chart's clean baseline before awaiting audio.**
+  `ProjectSessionService.LoadFileAsync` calls `MarkClean` after applying the chart
+  and its project-scoped state, before `LoadAudioAndRestoreViewAsync`. Audio
+  failure does not make the loaded chart dirty, but an edit while audio loads
+  must stay dirty and retain its recovery snapshot. A failure before the swap
+  leaves the previous project's baseline alone. `ProjectSaveEditDuringWriteTests`
+  covers edits during both successful and failed audio loads; the existing
+  `ProjectReplaceGuardWiringTests` cases cover untouched loads and failures.
+  **Crash recovery deliberately declares the opposite sign**:
   `RecoveryViewModel.RecoverAsync` loads the SNAPSHOT (whose `LoadFile` ends
   clean, correctly) and then re-points `CurrentProjectPath` at the original
   project file, which does not contain the recovered work — so it must
@@ -113,22 +118,36 @@
   completes from a plain xunit thread), pinned in both directions by
   `ProjectSessionSaveOutcomeTests.SaveAs_ThatFailsToWrite_LeavesTheSessionOnTheProjectItHadOpen`
   and `.SaveAs_ThatSucceeds_MovesTheSessionOntoTheNewPath`.
+- **A save continuation belongs to the chart instance it started with.**
+  `ProjectSaver` checks that instance after the picker, first-paint yield and
+  background write, and between the Save As carries. A replaced session gets
+  no old path, last-project/MRU update, clean baseline or recovery notification.
+  The old snapshot may finish writing its own file; it cannot settle the new
+  chart. `ProjectSessionService.SaveProjectAsync` additionally returns false
+  while newer edits remain dirty, so close and replace callers keep the session
+  open. Both races are covered by `ProjectSaveEditDuringWriteTests`.
 - **…and Save As out of the audio's FOLDER rebases the audio reference
   (2026-09-04).** `musicFileName` is a bare name resolved against the project's
   own folder by `ProjectAudioLocator`, and Save As is the one operation that
   changes that folder — so the new project file named an audio file that had stayed
   behind, and the copy opened with no waveform, no playback, no stems and no
-  message. `ProjectSaver.RebaseAudioReferenceForSaveAs` runs BEFORE the
-  write (the reference is read by `AssembleProject` inside
-  `SaveProjectCoreAsync`) and promotes the name to the absolute file it resolves
-  to — but only when it would otherwise break: saving next to the audio keeps
-  its PORTABLE relative name, and a reference that resolves from neither path is
+  message. `Session/SaveAsMediaReferences` prepares the SAVE SNAPSHOT before the
+  write, and promotes the name to the absolute file it resolves
+  to — only when the destination would resolve differently: a relative name
+  stays PORTABLE only when both paths resolve to the same file. An unrelated
+  same-named file at the destination must not substitute for the source audio.
+  A reference that resolves from neither path is
   left alone rather than given an invented one. The promotion is not a one-way
   door, because `ProjectAudioLocator.TryResolve` now falls back to a stale
   ROOTED path's bare name beside the project (which also fixes a moved
-  PSARC-derived session). Three cases in `ProjectSessionSaveOutcomeTests`, plus
+  PSARC-derived session). Save As cases in `ProjectSessionSaveOutcomeTests`, plus
   `ProjectAudioLocatorTests.AStaleRootedReference_FallsBackToTheNameBesideTheProject`
   and `.ARootedReferenceThatExists_BeatsASameNamedFileBesideTheProject`.
+  Stems follow the same rule. Cover art is copied to a fresh relative name beside
+  the destination project because its readers require a safe relative path; existing
+  destination art is never replaced. The live references settle only after the project
+  swap succeeds, and a failed write removes its copied cover. Save As normalizes a typed
+  `.rscp` or missing extension before confirming an existing redirected `.dcproj`.
 - **`MarkDirty` now ARMS a crash-recovery snapshot (0.61).**
   `CrashRecoveryService` listened to `HistoryChanged` alone, so every
   `MarkProjectDirty` caller above — attach/replace audio, the checkpoint restore,
@@ -202,20 +221,47 @@
   audio-less chart that declares NO audio is a legitimate state and is
   deliberately NOT warned about — `ProjectSessionLoadFileStateTests` pins both
   arms plus the pill's two ends.
-- **Audio: ATTACH ≠ audition.** `IProjectSessionService.LoadAudioFile` only pushes a
-  file through the engine — it does NOT write `ChartProject.AudioFileName`, so a save
-  emits the `song.wav` fallback and the reopened project finds nothing.
-  `AttachAudioAsync` is the one that makes audio stick: it frees the current source
-  (or the silent transport), copies the file into the project folder via
-  `ImportAudioPreparer` (0 s silence — an attach must never shift a chart that
-  already has beats), sets BOTH `project.AudioFileName` and
-  `ProjectState.CurrentAudioFileName`, and marks the session dirty
-  (`ProjectDirtyTracker.MarkDirty`, for state the undo history can't represent). A
-  session with no project path stores the ABSOLUTE source path — both resolvers
-  (`ProjectSessionService.ResolveProjectAudioPath`,
-  `ChartMaintenanceService.ResolveCurrentAudioPath`) accept a rooted name. Reachable
-  as File → Attach audio (`MainWindowViewModel.AttachAudio`), the palette
-  (`file.attachAudio`) and any audio drag-drop.
+- **Audio attachment is a transaction; audition changes no reference.**
+  `IProjectSessionService.LoadAudioFile` auditions through the engine.
+  `AttachAudioAsync` asks before replacing audio and reserves a generation only
+  after an accepted, still-current confirmation. `Session/AudioAttachment` checks
+  an independent nonempty waveform and a positive finite engine duration for ALL
+  sources: external copies, project-local files and unsaved absolute references.
+  External audio is staged beside its destination, with its format extension kept.
+  `AudioAttachmentPublication` keeps a durable prior file until reference commit;
+  large path-based decodes reopen after publication and can still roll back.
+  Rollback copies from the backup instead of consuming the only original, and a
+  failed rollback retains the backup and logs its path.
+  `AudioLoadQueue` serializes engine mutation using short task reservations: no
+  monitor or semaphore is held across an await on the UI thread. Accepted loads
+  check project identity, request generation and the captured destination before
+  commit. Save As or a replacement/close that wins during decode abandons the old
+  transaction and restores CURRENT declared playback (or clears it after free).
+  Compensation compares the resolved media path, so Save As rebasing the same
+  file to an absolute reference cannot invalidate an in-flight restore.
+  A declined prompt invalidates nothing. The file, both audio references and the
+  dirty declaration commit before volume measurement. Once committed, attachment
+  returns success even after save/open/close/another attach: callers such as
+  `YoutubeAudioLauncher` may delete an unaccepted download on false.
+  `AttachmentVolumeMeasurement` awaits a worker over a detached copy and applies
+  only to the current unchanged attachment. Manual overrides and preview/volume
+  edits win. Measurement cannot change the committed attachment's success result;
+  adopting its derived fields adds no extra dirty/history change. Attach adds no silence or time shift.
+  Ordinary project media opens clear prior engine, waveform and duration before
+  their I/O/decode; failure must not leave another project's song playing.
+  `Session/AudioSessionNotifications` keeps clear notifications scoped to the project
+  and waveform notifications scoped to its current master request.
+  Actual all-source clears (including attachment decode failures) notify the stem mixer
+  separately from master waveform publication. An empty audio-less fallback frees
+  only the master, preserving the current project's loaded stems and the
+  declared reference for repair. The approved graph keeps its clean/dirty baseline.
+  Checkpoint restore rechecks its source project/path/audio after prompts and
+  snapshot read, then reloads playback before reporting success. Obsolete open,
+  recovery, checkpoint and silent-load continuations cannot publish into a newer
+  session. Project opens also validate their source context and request after
+  parsing, before replacing the graph; discarded older parses never enter MRU.
+  Regression coverage: `ProjectSessionAttachAudioTests`, `CheckpointsViewModelTests`
+  and `RecoveryViewModelTests` (signal-driven interleavings, no timing assertions).
 - **Open Recent (0.58): the MRU list is `AppConfig.RecentProjects`, written by
   exactly ONE funnel.** `ProjectSessionService.RecordRecentProject` is the only
   writer, called from the two success points — `LoadFile` after the session swap

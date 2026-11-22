@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 
 namespace DotCharter.Tone.Audio.Tonelab;
@@ -36,6 +37,9 @@ public interface ITonelabFileSystem
 
     void WriteAllBytes(string path, byte[] bytes);
 
+    /// <summary>Publishes complete durable bytes; a failed write leaves the destination intact.</summary>
+    void WriteAllBytesAtomically(string path, byte[] bytes);
+
     void Delete(string path);
 }
 
@@ -46,9 +50,11 @@ public sealed class PhysicalTonelabFileSystem : ITonelabFileSystem
 
     public bool Exists(string path) => File.Exists(path);
 
-    public byte[] ReadAllBytes(string path) => File.ReadAllBytes(path);
+    public byte[] ReadAllBytes(string path) => AtomicFile.ReadAllBytes(path);
 
     public void WriteAllBytes(string path, byte[] bytes) => File.WriteAllBytes(path, bytes);
+
+    public void WriteAllBytesAtomically(string path, byte[] bytes) => AtomicFile.WriteAllBytes(path, bytes);
 
     public void Delete(string path) => File.Delete(path);
 }
@@ -123,7 +129,11 @@ public sealed class RsAsioIniGuard
             if (!_files.Exists(ini)) return RsAsioIniOutcome.NoIni;
             try
             {
-                _files.WriteAllBytes(backup, _files.ReadAllBytes(ini));
+                var original = _files.ReadAllBytes(ini);
+                // Publish the receipt first: a crash before the backup publish
+                // leaves only an unused receipt, never an unverified backup.
+                _files.WriteAllBytesAtomically(backup + ".sha256", SHA256.HashData(original));
+                _files.WriteAllBytesAtomically(backup, original);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -132,7 +142,7 @@ public sealed class RsAsioIniGuard
 
             try
             {
-                _files.WriteAllBytes(ini, DriverlessIni);
+                _files.WriteAllBytesAtomically(ini, DriverlessIni);
                 return RsAsioIniOutcome.Applied;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -159,8 +169,29 @@ public sealed class RsAsioIniGuard
     {
         try
         {
-            _files.WriteAllBytes(ini, _files.ReadAllBytes(backup));
+            var original = _files.ReadAllBytes(backup);
+            var receipt = backup + ".sha256";
+            if (_files.Exists(receipt))
+            {
+                if (!_files.ReadAllBytes(receipt).AsSpan().SequenceEqual(SHA256.HashData(original)))
+                    return RsAsioIniOutcome.Failed;
+            }
+            else
+            {
+                if (!LooksLikeIni(original)) return RsAsioIniOutcome.Failed;
+                // Backups from tonelab's launcher have no receipt. Accept those
+                // when replacing its driverless file, or an identical original;
+                // never use an unverified legacy backup to overwrite an intact INI.
+                if (_files.Exists(ini))
+                {
+                    var current = _files.ReadAllBytes(ini);
+                    if (!IsDriverless(current) && !current.AsSpan().SequenceEqual(original))
+                        return RsAsioIniOutcome.Failed;
+                }
+            }
+            _files.WriteAllBytesAtomically(ini, original);
             // The backup goes only after the copy succeeded.
+            if (_files.Exists(receipt)) _files.Delete(receipt);
             _files.Delete(backup);
             return RsAsioIniOutcome.Restored;
         }
@@ -168,5 +199,29 @@ public sealed class RsAsioIniGuard
         {
             return RsAsioIniOutcome.Failed;
         }
+    }
+
+    private static bool LooksLikeIni(byte[] bytes)
+    {
+        if (bytes.AsSpan().SequenceEqual(DriverlessIni)) return false;
+        var lines = Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF').Split('\n');
+        return lines.Any(line => line.Trim().Equals("[Config]", StringComparison.OrdinalIgnoreCase)) &&
+               lines.Any(line =>
+               {
+                   var pair = line.Split('=', 2);
+                   return pair.Length == 2 && pair[0].Trim().Equals("EnableAsio", StringComparison.OrdinalIgnoreCase) &&
+                          pair[1].Trim() is "0" or "1";
+               });
+    }
+
+    private static bool IsDriverless(byte[] bytes)
+    {
+        var lines = Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF').Split('\n')
+            .Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith(';')).ToArray();
+        return lines.Contains("EnableAsio=0", StringComparer.OrdinalIgnoreCase) &&
+               lines.Contains("EnableWasapiOutputs=0", StringComparer.OrdinalIgnoreCase) &&
+               lines.Contains("EnableWasapiInputs=0", StringComparer.OrdinalIgnoreCase) &&
+               lines.Where(line => line.StartsWith("Driver=", StringComparison.OrdinalIgnoreCase))
+                   .SequenceEqual(Enumerable.Repeat("Driver=", 4), StringComparer.OrdinalIgnoreCase);
     }
 }

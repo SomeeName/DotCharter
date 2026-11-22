@@ -1,7 +1,8 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using DotCharter.Tone.Infrastructure.Json;
 using DotCharter.Localization;
 using DotCharter.Tone.Audio.Dsp;
 
@@ -19,7 +20,7 @@ public interface IPlayerProfileService : IToneRigProfileScope
 
     // There is deliberately no `ActiveDataDirectory` convenience here: every caller in the
     // app resolves a directory for a SPECIFIC profile id (the practice store, the
-    // goals store, the plan store, the leaderboard's cross-profile read), so it
+    // setlists, the leaderboard's cross-profile read), so it
     // would be driven by nothing. `GetDataDirectory(ActiveProfile.Id)`
     // is the one-liner.
 
@@ -104,16 +105,16 @@ public sealed class PlayerProfileService : IPlayerProfileService
         "#4F8EF7", "#E5484D", "#46A758", "#F5A524", "#8E4EC6", "#0FB5BA"
     ];
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = TolerantJson.Apply(new JsonSerializerOptions
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault
-    };
+    });
 
     /// <summary>
     ///     Id of the stand-in profile served while the registry file could not be
     ///     READ (see <see cref="LoadLocked" />). It is a CONSTANT on purpose: the
-    ///     practice store, the goals store and the practice plan all resolve their
+    ///     practice store and the setlists all resolve their
     ///     file from <see cref="ActiveProfile" />'s data directory, so a fresh
     ///     random id every call would scatter one degraded session's writes across
     ///     a new folder each time. With a fixed id the whole session lands in one
@@ -329,7 +330,7 @@ public sealed class PlayerProfileService : IPlayerProfileService
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Application,
-                $"Profile data directory not fully deleted ({dataDir}): {ex.Message}");
+                $"Profile data directory not fully deleted ({dataDir})", ex);
         }
 
         if (newActive != null) ActiveProfileChanged?.Invoke(newActive);
@@ -346,7 +347,7 @@ public sealed class PlayerProfileService : IPlayerProfileService
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Application, $"Profile data directory not creatable ({dir}): {ex.Message}");
+            _logger?.Warning(AppLogCategory.Application, $"Profile data directory not creatable ({dir})", ex);
         }
 
         return dir;
@@ -373,7 +374,7 @@ public sealed class PlayerProfileService : IPlayerProfileService
             catch (Exception ex)
             {
                 _logger?.Warning(AppLogCategory.Application,
-                    $"Avatar not copied ({sourceImagePath}): {ex.Message}");
+                    $"Avatar not copied ({sourceImagePath})", ex);
                 return false;
             }
 
@@ -419,38 +420,32 @@ public sealed class PlayerProfileService : IPlayerProfileService
 
             try
             {
-                var parent = Path.GetDirectoryName(Path.GetFullPath(zipPath));
-                if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
-                if (File.Exists(zipPath)) File.Delete(zipPath);
-
-                using var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create);
-                using (var writer = new StreamWriter(zip.CreateEntry("profile.json").Open()))
-                    writer.Write(JsonSerializer.Serialize(profile, JsonOptions));
-
                 var dataDir = DataDirectoryLocked(id);
-                if (Directory.Exists(dataDir))
+                // Capture inputs before opening the stage: the chosen destination
+                // can be inside the profile's data directory.
+                var files = Directory.Exists(dataDir)
+                    ? Directory.GetFiles(dataDir, "*", SearchOption.AllDirectories)
+                        .Where(file => !string.Equals(Path.GetFullPath(file), Path.GetFullPath(zipPath),
+                            StringComparison.OrdinalIgnoreCase)).ToArray()
+                    : [];
+                AtomicFile.Write(zipPath, stream =>
                 {
-                    foreach (var file in Directory.EnumerateFiles(dataDir, "*", SearchOption.AllDirectories))
+                    using var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
+                    using (var writer = new StreamWriter(zip.CreateEntry("profile.json").Open()))
+                        writer.Write(JsonSerializer.Serialize(profile, JsonOptions));
+
+                    foreach (var file in files)
                     {
                         zip.CreateEntryFromFile(file,
                             "data/" + Path.GetRelativePath(dataDir, file).Replace('\\', '/'));
                     }
-                }
+                });
 
                 return true;
             }
             catch (Exception ex)
             {
-                _logger?.Warning(AppLogCategory.Application, $"Profile export failed ({zipPath}): {ex.Message}");
-                try
-                {
-                    if (File.Exists(zipPath)) File.Delete(zipPath);
-                }
-                catch
-                {
-                    // best effort cleanup of the partial archive
-                }
-
+                _logger?.Warning(AppLogCategory.Application, $"Profile export failed ({zipPath})", ex);
                 return false;
             }
         }
@@ -464,6 +459,9 @@ public sealed class PlayerProfileService : IPlayerProfileService
     ///     the COMPRESSED bytes is precisely the ratio a zip bomb exploits.
     /// </summary>
     public const long MaxImportExpansionBytes = 16L * 1024 * 1024;
+
+    /// <summary>Actual inflated bytes allowed in profile.json, before JSON parsing.</summary>
+    internal const int MaxImportManifestBytes = 1024 * 1024;
 
     public PlayerProfile? ImportProfile(string zipPath)
     {
@@ -496,9 +494,9 @@ public sealed class PlayerProfileService : IPlayerProfileService
                 var profileEntry = zip.GetEntry("profile.json");
                 if (profileEntry == null) return null;
 
-                PlayerProfile? imported;
-                using (var reader = new StreamReader(profileEntry.Open()))
-                    imported = JsonSerializer.Deserialize<PlayerProfile>(reader.ReadToEnd(), JsonOptions);
+                var manifest = BoundedZipExtractor.ReadEntryText(profileEntry, MaxImportManifestBytes);
+                if (manifest == null) return null;
+                var imported = JsonSerializer.Deserialize<PlayerProfile>(manifest, JsonOptions);
                 if (imported == null) return null;
                 Named(imported);
 
@@ -546,7 +544,7 @@ public sealed class PlayerProfileService : IPlayerProfileService
             }
             catch (Exception ex)
             {
-                _logger?.Warning(AppLogCategory.Application, $"Profile import failed ({zipPath}): {ex.Message}");
+                _logger?.Warning(AppLogCategory.Application, $"Profile import failed ({zipPath})", ex);
                 return null;
             }
         }
@@ -617,7 +615,7 @@ public sealed class PlayerProfileService : IPlayerProfileService
     ///         deleted, but everything would be orphaned: per-profile data lives in
     ///         <c>profiles/&lt;id&gt;/</c>, and the registry is the only map from
     ///         those ids to a name — so every profile's scores, best runs, session
-    ///         history, goals and practice plan would go invisible at once, and the
+    ///         history and setlists would go invisible at once, and the
     ///         file that could have identified the folders would be gone.
     ///     </para>
     /// </summary>
@@ -630,7 +628,11 @@ public sealed class PlayerProfileService : IPlayerProfileService
         try
         {
             if (File.Exists(_filePath))
+            {
                 loaded = JsonSerializer.Deserialize<Store>(AtomicFile.ReadAllText(_filePath), JsonOptions);
+                foreach (var skipped in TolerantJson.TakeWarnings())
+                    _logger?.Warning(AppLogCategory.Application, $"Profile registry: {skipped}");
+            }
         }
         catch (JsonException ex)
         {
@@ -719,7 +721,7 @@ public sealed class PlayerProfileService : IPlayerProfileService
 
         try
         {
-            File.Move(_filePath, quarantine, true);
+            AtomicFile.MoveAside(_filePath, quarantine);
             _logger?.Warning(AppLogCategory.Application,
                 $"Profile registry was unparseable ({cause.Message}); moved to " +
                 $"'{Path.GetFileName(quarantine)}' and starting fresh.");
@@ -754,7 +756,7 @@ public sealed class PlayerProfileService : IPlayerProfileService
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Application, $"Profile registry not writable: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Application, "Profile registry not writable", ex);
         }
     }
 

@@ -3,6 +3,8 @@ using DotCharter.Services.Audio.Lyrics;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.Services.Editing.Tracks;
 using DotCharter.Services.Infrastructure;
+using DotCharter.Services.Editing.Lyrics;
+using DotCharter.Services.Import.Lyrics;
 using DotCharter.Services.Parsing.Lrc;
 using DotCharter.UI.ViewModels.Editor;
 
@@ -82,7 +84,8 @@ public sealed class LyricsInspectorImportSizeCapTests
         var files = new OversizedFileWriter(reportedLength);
         var storage = new FakeFileStorageService { NextOpenFile = Path.Combine(Path.GetTempPath(), LargeOnDisk) };
         var inspector = new LyricsInspectorViewModel(editor, history, state, logger, storage,
-            new LrcLyricsParser(), new NoopAutoSync(), FakeLocalization.English(), files: files);
+            new LyricsFileService(files, new LrcLyricsParser()),
+            new LyricAutoSyncRunner(new NoopAutoSync(), null, null, state), FakeLocalization.English());
         return (inspector, state, files);
     }
 

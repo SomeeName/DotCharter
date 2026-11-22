@@ -73,7 +73,11 @@ internal sealed class EditChordStringCommand : IHighwayEditCommand
     private IChartAction? BuildCollapseAction(ChordNote existingNote)
     {
         var remaining = _chord.ChordNotes.FirstOrDefault(n => n != existingNote);
-        if (remaining == null) return null;
+        if (remaining == null)
+        {
+            Outcome = EditChordStringOutcome.RemovedChordNote;
+            return new RemoveChordsAction(_placedChords, new[] { _chord }, _onPostExecute);
+        }
 
         CollapsedNote = new GuitarNote
         {

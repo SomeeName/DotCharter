@@ -4,6 +4,16 @@ namespace DotCharter.Services.State;
 
 public sealed class EditorUiState
 {
+    private volatile bool _isShowlightsEditorOpen;
+
+    /// <summary>True while the Showlights editor is open. The 3D preview's show-light chip reads it from the
+    /// render thread: it shows with nothing active only while the editor is open.</summary>
+    public bool IsShowlightsEditorOpen
+    {
+        get => _isShowlightsEditorOpen;
+        set => _isShowlightsEditorOpen = value;
+    }
+
     /// <summary>
     /// The persistent per-string edit mask (v0.35, Stage 1 of the editing
     /// rework) — EOF's <c>eof_pro_guitar_fret_bitmask</c> promoted out of the

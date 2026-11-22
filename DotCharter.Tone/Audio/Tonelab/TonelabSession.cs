@@ -46,9 +46,9 @@ public interface ITonelabSession
 
     /// <summary>
     ///     Takes the game's audio exchange for an OFFLINE render (the AI tone check, <see cref="TonelabOfflineRenderer" />):
-    ///     null while any owner routes the live input, because the game has one tone and one exchange. While the lease
+    ///     null while a preview is applying or holds a tone, because the game has one tone and one exchange. While the lease
     ///     is held a route claim is recorded, the insert stays closed until the lease ends, and the lease reads
-    ///     <see cref="ITonelabAudioLease.Interrupted" />. One lease at a time.
+    ///     <see cref="ITonelabAudioLease.Interrupted" />. Pending previews wait until the lease's final restore and disposal. One lease at a time.
     /// </summary>
     ITonelabAudioLease? TryLeaseAudio();
 
@@ -72,6 +72,12 @@ public interface ITonelabSession
 
     /// <summary>Why the last <see cref="LaunchAsync" /> failed (e.g. Steam is not running), for the reason the UI prints; None otherwise.</summary>
     GameToneLaunchFailure LastLaunchFailure { get; }
+
+    /// <summary>Which launch attempt is running (1 = the first); a boot that hangs is quit and launched again, up to <see cref="TonelabSession.MaxLaunchAttempts" />.</summary>
+    int LaunchAttempt => 1;
+
+    /// <summary>How many attempts a launch gets in all.</summary>
+    int MaxLaunchAttempts => 1;
 
     Task<TonelabSessionState> AttachAsync(int processId, CancellationToken ct = default);
 
@@ -119,26 +125,35 @@ public sealed class TonelabSession : ITonelabSession, IDisposable
     private readonly IExternalProcessInsert? _insert;
     private readonly IAppLogger? _logger;
     private readonly TonelabTimeouts _timeouts;
+    private readonly TimeProvider _time;
     private readonly object _sync = new();
     private TonelabPipeClient? _client;
     private TonelabSessionState _state;
     private CancellationTokenSource? _readyPoll;
+    private CancellationTokenSource? _exitWatch;
     private IGameToneLaunch? _launch;
     private readonly HashSet<object> _routeOwners = new(ReferenceEqualityComparer.Instance);
     private AudioLease? _lease;
+    private bool _startGaveUp;
+    private int? _bootPid;
 
     /// <summary>The app's session, over the native audio insert when the build has one.</summary>
     public TonelabSession(IAppLogger logger, IEnumerable<IGameToneLauncher> launchers, IExternalProcessInsert? insert)
-        : this(DiscoverRunningGames, insert, logger, null, ProcessStartTime) => Launcher = launchers.FirstOrDefault();
+        : this(DiscoverRunningGames, insert, logger, null, ProcessStartTime)
+    {
+        Launcher = launchers.FirstOrDefault();
+        WaitForExit = WaitForProcessExitAsync;
+    }
 
     internal TonelabSession(Func<IReadOnlyList<int>> discover, IExternalProcessInsert? insert, IAppLogger? logger, TonelabTimeouts? timeouts,
-        Func<int, DateTime?>? startTime = null)
+        Func<int, DateTime?>? startTime = null, TimeProvider? time = null)
     {
         _discover = discover;
         _startTime = startTime ?? (_ => null);
         _insert = insert;
         _logger = logger;
         _timeouts = timeouts ?? TonelabTimeouts.Default;
+        _time = time ?? TimeProvider.System;
     }
 
     /// <summary>
@@ -161,6 +176,13 @@ public sealed class TonelabSession : ITonelabSession, IDisposable
 
     public GameToneLaunchFailure LastLaunchFailure { get; private set; }
 
+    /// <summary>One try plus two retries when the game's boot hangs.</summary>
+    public const int MaxAttempts = 3;
+
+    public int LaunchAttempt { get; private set; } = 1;
+
+    public int MaxLaunchAttempts => MaxAttempts;
+
     public event EventHandler? StateChanged;
 
     public bool CanLaunch => Launcher is not null;
@@ -171,6 +193,21 @@ public sealed class TonelabSession : ITonelabSession, IDisposable
 
     /// <summary>The wait between ready polls; a test hands in one that does not sleep.</summary>
     internal Func<TimeSpan, CancellationToken, Task> Delay { get; init; } = Task.Delay;
+
+    /// <summary>Reads tonelab's log for the boot gate; a test hands in a fake file.</summary>
+    internal Func<string, string?> ReadLog { get; init; } = TonelabBootGate.ReadShared;
+
+    /// <summary>The clock the boot gate's timeout runs on; a test hands in one its delay advances.</summary>
+    internal Func<DateTime> Clock { get; init; } = () => DateTime.UtcNow;
+
+    /// <summary>
+    ///     Completes when the attached game process exits; null watches nothing (the internal
+    ///     constructor's mock pids are not real processes). A test hands in one it completes.
+    /// </summary>
+    internal Func<int, CancellationToken, Task>? WaitForExit { get; init; }
+
+    /// <summary>The running exit watch, for a test to await.</summary>
+    internal Task ExitWatch { get; private set; } = Task.CompletedTask;
 
     /// <summary>The running ready poll, for a test to await.</summary>
     internal Task ReadyPoll { get; private set; } = Task.CompletedTask;
@@ -197,13 +234,21 @@ public sealed class TonelabSession : ITonelabSession, IDisposable
     public Task<TonelabSessionState> ReconnectAsync(CancellationToken ct = default)
     {
         Forget();
+        _startGaveUp = false;
         LastLaunchFailure = GameToneLaunchFailure.None;
         return ProbeAsync(ct);
     }
 
-    public async Task<TonelabSessionState> LaunchAsync(CancellationToken ct = default)
+    public Task<TonelabSessionState> LaunchAsync(CancellationToken ct = default)
+    {
+        LaunchAttempt = 1;
+        return LaunchAttemptAsync(ct);
+    }
+
+    private async Task<TonelabSessionState> LaunchAttemptAsync(CancellationToken ct)
     {
         if (Launcher is not { } launcher) return SetState(TonelabSessionState.Disconnected);
+        _startGaveUp = false;
         var launch = await launcher.LaunchAsync(ct).ConfigureAwait(false);
         LastLaunchFailure = launch is null ? launcher.LastFailure : GameToneLaunchFailure.None;
         if (launch is null)
@@ -212,8 +257,21 @@ public sealed class TonelabSession : ITonelabSession, IDisposable
             return SetState(TonelabSessionState.Disconnected, announce: true);
         }
 
-        Use(launch.ProcessId);
-        _launch = launch;
+        lock (_sync)
+        {
+            Use(launch.ProcessId);
+            _launch = launch;
+            if (launch is { StartedByApp: true, BootLogPath: not null })
+            {
+                // Publish the launch and boot state before its exit watcher can clear them.
+                _bootPid = launch.ProcessId;
+                _logger?.Info(AppLogCategory.Audio, $"tonelab: launch attempt {LaunchAttempt} of {MaxAttempts}: pid {launch.ProcessId}; no pipe use until its log says ready.");
+                SetState(TonelabSessionState.Starting);
+                StartReadyPoll();
+                return TonelabSessionState.Starting;
+            }
+        }
+
         return await RefreshStatusAsync(ct).ConfigureAwait(false);
     }
 
@@ -247,8 +305,12 @@ public sealed class TonelabSession : ITonelabSession, IDisposable
             return new TonelabResult(TonelabOutcome.Ok, "detached");
         }
 
+        _bootPid = null;
+
+        // Stop asking a game that is about to quit: no ready-poll status and no post-command refresh follows the quit.
+        lock (_sync) _readyPoll?.Cancel();
         var quit = TonelabResult.NotConnected("quit not sent");
-        await launch.EndAsync(async token => (quit = await RunAsync(c => c.QuitAsync(token)).ConfigureAwait(false)).IsOk, ct)
+        await launch.EndAsync(async token => (quit = await RunAsync(c => c.QuitAsync(token), refreshAfter: false).ConfigureAwait(false)).IsOk, ct)
             .ConfigureAwait(false);
         Forget();
         return quit;
@@ -298,11 +360,82 @@ public sealed class TonelabSession : ITonelabSession, IDisposable
         lock (_sync)
         {
             if (ProcessId == processId && _client is not null) return;
+            _startGaveUp = false;
+            if (_bootPid is { } booting && booting != processId) _bootPid = null;
             if (_launch is { } launch && launch.ProcessId != processId) _launch = null;
             CloseInsert();
             _client?.Dispose();
-            _client = new TonelabPipeClient(TonelabProtocol.PipeNameFor(processId), _timeouts);
+            _client = new TonelabPipeClient(TonelabProtocol.PipeNameFor(processId), _timeouts, _time);
             ProcessId = processId;
+            WatchExit(processId);
+        }
+    }
+
+    /// <summary>
+    ///     Watches the attached game for the whole session, not only until it is ready: a game closed
+    ///     while Ready lets go of the state, the insert and every route claim at once instead of at the
+    ///     next command that finds the pipe gone. Called under <c>_sync</c>.
+    /// </summary>
+    private void WatchExit(int processId)
+    {
+        _exitWatch?.Cancel();
+        _exitWatch = null;
+        if (WaitForExit is not { } wait) return;
+        var cts = _exitWatch = new CancellationTokenSource();
+        ExitWatch = Task.Run(async () =>
+        {
+            try
+            {
+                await wait(processId, cts.Token).ConfigureAwait(false);
+                lock (_sync)
+                {
+                    if (cts.IsCancellationRequested || ProcessId != processId) return;
+                    _routeOwners.Clear();
+                    if (_launch?.ProcessId == processId) _launch = null;
+                    if (_bootPid == processId) _bootPid = null;
+                    Forget();
+                }
+
+                _logger?.Info(AppLogCategory.Audio, $"tonelab: pid {processId} exited; the session lets go of it.");
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                _logger?.Warning(AppLogCategory.Audio, $"tonelab: pid {processId} cannot be watched for its exit.", ex);
+                return;
+            }
+
+            finally
+            {
+                lock (_sync)
+                {
+                    if (ReferenceEquals(_exitWatch, cts)) _exitWatch = null;
+                }
+
+                cts.Dispose();
+            }
+        });
+    }
+
+    private static async Task WaitForProcessExitAsync(int processId, CancellationToken ct)
+    {
+        using var process = TryOpenProcess(processId);
+        if (process is null) return;   // already gone
+        await process.WaitForExitAsync(ct).ConfigureAwait(false);
+    }
+
+    private static Process? TryOpenProcess(int processId)
+    {
+        try
+        {
+            return Process.GetProcessById(processId);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return null;
         }
     }
 
@@ -310,33 +443,46 @@ public sealed class TonelabSession : ITonelabSession, IDisposable
     {
         var client = _client;
         if (client is null) return SetState(TonelabSessionState.Disconnected);
-        var status = await client.StatusAsync(ct).ConfigureAwait(false);
-        LastStatus = status;
-        if (!status.Result.IsOk)
+        if (_bootPid is { } booting && booting == ProcessId)
         {
-            _logger?.Info(AppLogCategory.Audio, $"tonelab: status failed ({status.Result.Outcome} {status.Result.Detail}).");
-            if (status.Result.Outcome is TonelabOutcome.NotConnected or TonelabOutcome.Timeout or TonelabOutcome.UnsupportedVersion) Forget();
-            return SetState(TonelabSessionState.Disconnected, announce: true);
-        }
-
-        if (status.State != TonelabGameState.Ready)
-        {
+            _logger?.Info(AppLogCategory.Audio, $"tonelab: pid {booting} is still booting; status is not asked until its log says ready.");
             SetState(TonelabSessionState.Starting);
             StartReadyPoll();
             return TonelabSessionState.Starting;
         }
 
-        if (RoutingWanted) OpenInsert(status);
-        return SetState(TonelabSessionState.Ready);
+        var status = await client.StatusAsync(ct).ConfigureAwait(false);
+        lock (_sync)
+        {
+            if (!ReferenceEquals(_client, client)) return _state;
+            LastStatus = status;
+            if (!status.Result.IsOk)
+            {
+                _logger?.Info(AppLogCategory.Audio, $"tonelab: status failed ({status.Result.Outcome} {status.Result.Detail}).");
+                if (status.Result.Outcome is TonelabOutcome.NotConnected or TonelabOutcome.Timeout or TonelabOutcome.UnsupportedVersion) Forget();
+                return SetState(TonelabSessionState.Disconnected, announce: true);
+            }
+
+            if (status.State != TonelabGameState.Ready && _startGaveUp) return SetState(TonelabSessionState.Disconnected, announce: true);
+            if (status.State != TonelabGameState.Ready)
+            {
+                SetState(TonelabSessionState.Starting);
+                StartReadyPoll();
+                return TonelabSessionState.Starting;
+            }
+
+            if (RoutingWanted) OpenInsert(status);
+            return SetState(TonelabSessionState.Ready);
+        }
     }
 
-    private async Task<TonelabResult> RunAsync(Func<TonelabPipeClient, Task<TonelabResult>> command)
+    private async Task<TonelabResult> RunAsync(Func<TonelabPipeClient, Task<TonelabResult>> command, bool refreshAfter = true)
     {
         var client = _client;
         if (client is null) return TonelabResult.NotConnected("no tonelab session");
         var result = await command(client).ConfigureAwait(false);
-        if (result.Outcome == TonelabOutcome.NotConnected) Forget();
-        else if (_state != TonelabSessionState.Ready && result.IsOk) await RefreshStatusAsync(CancellationToken.None).ConfigureAwait(false);
+        if (result.Outcome == TonelabOutcome.NotConnected) ForgetIfCurrent(client);
+        else if (refreshAfter && _state != TonelabSessionState.Ready && result.IsOk) await RefreshStatusAsync(CancellationToken.None).ConfigureAwait(false);
         return result;
     }
 
@@ -362,8 +508,7 @@ public sealed class TonelabSession : ITonelabSession, IDisposable
         lock (_sync)
         {
             if (_routeOwners.Count > 0 || _lease is not null) return null;
-            _lease = new AudioLease(this);
-            return _lease;
+            return TonelabPreviewOwnership.TryLease(this, release => _lease = new AudioLease(this, release));
         }
     }
 
@@ -413,29 +558,59 @@ public sealed class TonelabSession : ITonelabSession, IDisposable
 
         ReadyPoll = Task.Run(async () =>
         {
+            var retry = false;
             try
             {
-                foreach (var wait in _launch is { StartedByApp: true } ? LaunchReadyPoll : ReadyBackoff)
+                var bootTimedOut = false;
+                if (_bootPid is { } bootPid && _launch?.BootLogPath is { } logPath)
+                {
+                    bootTimedOut = !await TonelabBootGate.WaitForReadyAsync(bootPid, logPath, ReadLog, Delay, Clock, TonelabBootGate.Timeout, _logger, cts.Token)
+                        .ConfigureAwait(false);
+                    if (bootTimedOut)
+                        _logger?.Warning(AppLogCategory.Audio, $"tonelab: the boot log of pid {bootPid} never said ready within {TonelabBootGate.Timeout.TotalSeconds:0} s.");
+                    else _logger?.Info(AppLogCategory.Audio, $"tonelab: pid {bootPid} is past its boot; asking status now.");
+
+                    if (_bootPid == bootPid) _bootPid = null;
+                }
+
+                foreach (var wait in bootTimedOut ? [] : _launch is { StartedByApp: true } ? LaunchReadyPoll : ReadyBackoff)
                 {
                     await Delay(wait, cts.Token).ConfigureAwait(false);
+                    cts.Token.ThrowIfCancellationRequested();
                     var client = _client;
                     if (client is null) return;
                     var status = await client.StatusAsync(cts.Token).ConfigureAwait(false);
-                    LastStatus = status;
-                    if (!status.Result.IsOk)
+                    lock (_sync)
                     {
-                        if (status.Result.Outcome is TonelabOutcome.NotConnected or TonelabOutcome.UnsupportedVersion) Forget();
-                        SetState(TonelabSessionState.Disconnected, announce: true);
+                        if (cts.IsCancellationRequested || !ReferenceEquals(_client, client)) return;
+                        LastStatus = status;
+                        if (!status.Result.IsOk)
+                        {
+                            if (status.Result.Outcome is TonelabOutcome.NotConnected or TonelabOutcome.UnsupportedVersion) Forget();
+                            SetState(TonelabSessionState.Disconnected, announce: true);
+                            return;
+                        }
+
+                        if (status.State != TonelabGameState.Ready) continue;
+                        if (RoutingWanted) OpenInsert(status);
+                        SetState(TonelabSessionState.Ready);
                         return;
                     }
-
-                    if (status.State != TonelabGameState.Ready) continue;
-                    if (RoutingWanted) OpenInsert(status);
-                    SetState(TonelabSessionState.Ready);
-                    return;
                 }
 
-                _logger?.Info(AppLogCategory.Audio, "tonelab: the game is still starting; Reconnect asks again.");
+                if (bootTimedOut && _launch is { StartedByApp: true } && LaunchAttempt < MaxAttempts)
+                {
+                    // The game's boot hung (intermittent, in tonelab's boot path); the finally below frees the poll slot, then it is quit and launched again.
+                    retry = true;
+                }
+                else
+                {
+                    // The bounded wait is over: say why instead of spinning on "starting"; Reconnect or Start begins a new wait.
+                    _logger?.Warning(AppLogCategory.Audio, "tonelab: the game did not become ready within the wait; giving up until Reconnect.");
+                    _startGaveUp = true;
+                    LastLaunchFailure = GameToneLaunchFailure.StartTimedOut;
+                    SetState(TonelabSessionState.Disconnected, announce: true);
+                }
             }
             catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
             {
@@ -450,7 +625,32 @@ public sealed class TonelabSession : ITonelabSession, IDisposable
 
                 cts.Dispose();
             }
+
+            if (retry) await RetryLaunchAsync().ConfigureAwait(false);
         });
+    }
+
+    /// <summary>The game's boot hung: quit it and launch again as the next attempt. Nothing is remembered: the start was not the problem.</summary>
+    private async Task RetryLaunchAsync()
+    {
+        if (_launch is null) return;
+        _logger?.Warning(AppLogCategory.Audio,
+            $"tonelab: attempt {LaunchAttempt} of {MaxAttempts} hung before its ready line; quitting the game and launching attempt {LaunchAttempt + 1}.");
+        await QuitAsync().ConfigureAwait(false);
+        LaunchAttempt++;
+        await LaunchAttemptAsync(CancellationToken.None).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Forgets the game only while <paramref name="client" /> is still the session's: a command on a client
+    ///     that Reconnect or an attach already replaced must not tear down the replacement and its insert.
+    /// </summary>
+    private void ForgetIfCurrent(TonelabPipeClient client)
+    {
+        lock (_sync)
+        {
+            if (ReferenceEquals(_client, client)) Forget();
+        }
     }
 
     private void Forget()
@@ -458,6 +658,8 @@ public sealed class TonelabSession : ITonelabSession, IDisposable
         lock (_sync)
         {
             _readyPoll?.Cancel();
+            _exitWatch?.Cancel();
+            _exitWatch = null;
             CloseInsert();
             _client?.Dispose();
             _client = null;
@@ -477,18 +679,37 @@ public sealed class TonelabSession : ITonelabSession, IDisposable
     }
 
     /// <summary>The offline render's hold on the game's exchange; a route claim while it is held marks it interrupted.</summary>
-    private sealed class AudioLease(TonelabSession owner) : ITonelabAudioLease
+    private sealed class AudioLease : ITonelabAudioLease
     {
+        private readonly TonelabSession _owner;
+        private readonly Action _release;
+        private readonly long _previewRevision;
+
+        public AudioLease(TonelabSession owner, Action release)
+        {
+            _owner = owner;
+            _release = release;
+            _previewRevision = TonelabPreviewOwnership.RevisionFor(owner);
+        }
         private int _interrupted;
         private int _ended;
 
-        public bool Interrupted => Volatile.Read(ref _interrupted) != 0;
+        public bool Interrupted => Volatile.Read(ref _interrupted) != 0 ||
+            _previewRevision != TonelabPreviewOwnership.RevisionFor(_owner);
 
         public void Interrupt() => Volatile.Write(ref _interrupted, 1);
 
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref _ended, 1) == 0) owner.EndLease(this);
+            if (Interlocked.Exchange(ref _ended, 1) != 0) return;
+            try
+            {
+                _owner.EndLease(this);
+            }
+            finally
+            {
+                _release();
+            }
         }
     }
 }

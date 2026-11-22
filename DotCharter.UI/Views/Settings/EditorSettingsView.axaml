@@ -101,6 +101,16 @@
                                       IsChecked="{Binding SyncAnchorToChordFingering, Mode=TwoWay}" />
                     </Grid>
 
+                    <Grid x:Name="EditorInspectorApplyStepRow" Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.inspectorApplyStep}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_InspectorApplyStep}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_InspectorApplyStep}" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="EditorInspectorApplyStepToggle" VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_InspectorApplyStep}"
+                                      IsChecked="{Binding InspectorApplyStep, Mode=TwoWay}" />
+                    </Grid>
+
                     <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.autoNameChords}"
                           Classes="FormRow" ColumnDefinitions="*,300">
                         <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
@@ -221,6 +231,18 @@
                         <StackPanel Grid.Column="1">
                             <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_CopyPaste_Title}" />
                             <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_CopyPaste_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*"
+                          IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.pasteReplacesExisting}">
+                        <StackPanel Margin="0,8,0,0">
+                            <CheckBox x:Name="PasteReplacesExisting" Content="{localization:Loc Settings_PasteReplacesExisting}"
+                                      AutomationProperties.Name="{localization:Loc Settings_PasteReplacesExisting}"
+                                      ToolTip.Tip="{localization:Loc Settings_Tip_PasteReplacesExisting}"
+                                      IsChecked="{Binding PasteReplacesExisting, Mode=TwoWay}" />
+                            <TextBlock x:Name="PasteReplacesExistingHint" Theme="{StaticResource SettingDescText}" Classes="SettingDesc"
+                                       Text="{localization:Loc Settings_Tip_PasteReplacesExisting}" />
                         </StackPanel>
                     </Grid>
 

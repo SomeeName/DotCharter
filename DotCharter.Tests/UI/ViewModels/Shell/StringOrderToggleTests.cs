@@ -70,7 +70,7 @@ public sealed class StringOrderToggleTests
     public void TheHighway_ReadsPlayModesOrder_OnlyDuringARun()
     {
         var state = new ProjectState();
-        state.ApplyStringOrders(new AppConfig { InvertStrings = true, PlayModeInvertStrings = false });
+        state.ApplyEditorPreferences(new AppConfig { InvertStrings = true, PlayModeInvertStrings = false });
 
         Assert.True(state.UserSettings.HighwayInvertStrings);
 

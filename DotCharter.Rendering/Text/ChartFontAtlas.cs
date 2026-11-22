@@ -30,7 +30,7 @@ public abstract class ChartFontAtlas : IDisposable
     /// it is project-scoped and <see cref="ResetToSeedCharacters" /> takes it back
     /// off on a project switch.</summary>
     private const string SeedCharacters =
-        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz #b-.,:;()[]{}%=\\|/ノ½?";
+        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz #b-.,:;()[]{}%=\\|/↗↘½?";
 
     /// <summary>How many distinct characters a freshly reset atlas holds.</summary>
     public static int SeedCharacterCount { get; } = new HashSet<char>(SeedCharacters).Count;
@@ -231,6 +231,9 @@ public abstract class ChartFontAtlas : IDisposable
 
             var advance = charFont.MeasureText(text, out var charBounds);
             if (c == ' ') advance = charFont.MeasureText("a") * 0.4f;
+            var arrow = BendArrowGlyph.IsArrow(c);
+            var arrowCap = arrow ? BendArrowGlyph.CapHeightOf(defaultFont) : 0f;
+            if (arrow) advance = BendArrowGlyph.Advance(arrowCap);
 
             // WHOLE TEXELS, all three. The sheet is sampled 1:1 by the
             // batcher, so a glyph box that starts or ends on a fractional texel
@@ -261,7 +264,8 @@ public abstract class ChartFontAtlas : IDisposable
                 continue;
             }
 
-            if (c != ' ') canvas.DrawText(text, x + margin, y + baselineOffset, SKTextAlign.Left, charFont, paint);
+            if (arrow) BendArrowGlyph.Draw(canvas, c, x + margin, y + baselineOffset, arrowCap);
+            else if (c != ' ') canvas.DrawText(text, x + margin, y + baselineOffset, SKTextAlign.Left, charFont, paint);
 
             GlyphMap[c] = new GlyphInfo
             {

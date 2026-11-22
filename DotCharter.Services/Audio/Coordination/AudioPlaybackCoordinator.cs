@@ -17,8 +17,13 @@ public class AudioPlaybackCoordinator
     private readonly IUiDispatcher _ui;
     private readonly ChartSynthFeeder _chartSynthFeeder = new();
 
-    // Click-scan cursors. Timer-thread state, touched ONLY from
-    // OnAudioPositionChanged / ScheduleClicks.
+    // Click-scan cursors, touched ONLY from OnAudioPositionChanged / ScheduleClicks
+    // and only under _clickGate. Mostly timer-thread state, but SeekTo raises
+    // PositionChanged synchronously on the CALLER's thread, so a seek from the UI
+    // runs this handler beside a timer tick; without the gate a discontinuity reset
+    // landed in the middle of a scan and clicks were doubled or skipped.
+    // Re-entrant (the loop wrap's seek re-enters on the same thread).
+    private readonly Lock _clickGate = new();
     private int _beatScanIndex;
     private int _chordClapScanIndex;
     private int _clapScanIndex;
@@ -147,51 +152,7 @@ public class AudioPlaybackCoordinator
 
     public void OnAudioPositionChanged(object? sender, double newTime)
     {
-        var discontinuity = newTime < _lastPlayheadMs || newTime > _lastPlayheadMs + 2000;
-        if (discontinuity)
-        {
-            // Only the click cursors — they are timer-thread state. The
-            // section/phrase/lyric cursors belong to UpdatePlaybackContext on the
-            // UI thread and are deliberately NOT touched here: resetting them from
-            // this thread was a cross-thread write for no benefit, since every one
-            // of those scans clamps its index and walks in BOTH directions, so it
-            // self-corrects from any starting point after a seek (second half of the
-            // review finding).
-            _beatScanIndex = 0;
-            _clapScanIndex = 0;
-            _chordClapScanIndex = 0;
-            // Re-anchor the click cursor at the new position and drop anything
-            // already queued in the engine: those frames belong to the position
-            // we just left. (The service clears on seek/stop too; this covers a
-            // discontinuity we observe without having caused it.)
-            _clickScanToMs = double.NegativeInfinity;
-            _lastClapMs = double.NegativeInfinity;
-            _audioService.ClearScheduledClicks();
-        }
-
-        // Everything below indexes chart collections that the UI thread owns and
-        // mutates (ObservableCollection). We are on the audio service's timer
-        // thread: an edit landing mid-scan can invalidate a Count/indexer pair,
-        // and System.Timers.Timer SWALLOWS the resulting exception — which would
-        // abort the whole tick, so the click was dropped AND _lastPlayheadMs never
-        // advanced. Contain the damage to the scan that
-        // hit the edit: the playhead bookkeeping and the UI publish below still run.
-        try
-        {
-            ScheduleClicks(_audioService.RawPlayheadMs);
-        }
-        catch (ArgumentOutOfRangeException) { /* chart edited mid-scan; next tick re-reads */ }
-        catch (IndexOutOfRangeException) { }
-        catch (InvalidOperationException) { }
-
-        // Written BEFORE anything below can re-enter this method. ApplyLoopStep's
-        // seek does exactly that, and the inner frame — which is the one that
-        // saw the real discontinuity and re-scheduled from the loop start —
-        // records the new playhead here. Assigning at the END of the outer frame
-        // put the PRE-wrap value straight back, so the next ordinary tick read as
-        // a two-second jump backwards: the engine's queue was dropped a second
-        // time and the loop start's own downbeat, just scheduled, went with it.
-        _lastPlayheadMs = newTime;
+        lock (_clickGate) ScanClicks(newTime);
 
         // The editor's A/B loop and the one-shot selection audition. RAW again,
         // and for the same reason as ScheduleClicks: the loop END is a point of
@@ -264,6 +225,55 @@ public class AudioPlaybackCoordinator
             if (Interlocked.Exchange(ref _uiUpdateQueued, 1) == 0)
                 _ui.PostNormal(_publishUiTime);
         }
+    }
+
+    private void ScanClicks(double newTime)
+    {
+        var discontinuity = newTime < _lastPlayheadMs || newTime > _lastPlayheadMs + 2000;
+        if (discontinuity)
+        {
+            // Only the click cursors — they are _clickGate's state. The
+            // section/phrase/lyric cursors belong to UpdatePlaybackContext on the
+            // UI thread and are deliberately NOT touched here: resetting them from
+            // this thread was a cross-thread write for no benefit, since every one
+            // of those scans clamps its index and walks in BOTH directions, so it
+            // self-corrects from any starting point after a seek (second half of the
+            // review finding).
+            _beatScanIndex = 0;
+            _clapScanIndex = 0;
+            _chordClapScanIndex = 0;
+            // Re-anchor the click cursor at the new position and drop anything
+            // already queued in the engine: those frames belong to the position
+            // we just left. (The service clears on seek/stop too; this covers a
+            // discontinuity we observe without having caused it.)
+            _clickScanToMs = double.NegativeInfinity;
+            _lastClapMs = double.NegativeInfinity;
+            _audioService.ClearScheduledClicks();
+        }
+
+        // Everything below indexes chart collections that the UI thread owns and
+        // mutates (ObservableCollection). We are on the audio service's timer
+        // thread: an edit landing mid-scan can invalidate a Count/indexer pair,
+        // and System.Timers.Timer SWALLOWS the resulting exception — which would
+        // abort the whole tick, so the click was dropped AND _lastPlayheadMs never
+        // advanced. Contain the damage to the scan that
+        // hit the edit: the playhead bookkeeping and the UI publish below still run.
+        try
+        {
+            ScheduleClicks(_audioService.RawPlayheadMs);
+        }
+        catch (ArgumentOutOfRangeException) { /* chart edited mid-scan; next tick re-reads */ }
+        catch (IndexOutOfRangeException) { }
+        catch (InvalidOperationException) { }
+
+        // Written BEFORE anything below can re-enter this method. ApplyLoopStep's
+        // seek does exactly that, and the inner frame — which is the one that
+        // saw the real discontinuity and re-scheduled from the loop start —
+        // records the new playhead here. Assigning at the END of the outer frame
+        // put the PRE-wrap value straight back, so the next ordinary tick read as
+        // a two-second jump backwards: the engine's queue was dropped a second
+        // time and the loop start's own downbeat, just scheduled, went with it.
+        _lastPlayheadMs = newTime;
     }
 
     /// <summary>

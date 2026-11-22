@@ -11,6 +11,14 @@ public class HandShape : ITimedElement
     public FractionalPosition Position { get; set; } = FractionalPosition.Zero;
     public int TemplateId { get; set; } = -1;
 
+    /// <summary>An authored opening ghost mask for this use of a grip, including an explicit zero.</summary>
+    public int? GhostMask { get; set; }
+
+    public int GetGhostMask(ChordTemplate template) => GhostMask ?? template.GhostMask;
+
+    public bool IsGhost(ChordTemplate template, int stringIndex) =>
+        (GetGhostMask(template) & ChordTemplate.GhostBit(stringIndex)) != 0 && template.Frets.ContainsKey(stringIndex);
+
     public double GetTimeMs(IList<BeatMarker> beats) => Position.GetPositionMs(beats);
 
     /// <summary>
@@ -45,6 +53,7 @@ public class HandShape : ITimedElement
         Position = other.Position;
         EndPosition = other.EndPosition;
         TemplateId = other.TemplateId;
+        GhostMask = other.GhostMask;
         Name = other.Name;
     }
 }

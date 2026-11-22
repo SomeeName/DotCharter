@@ -2,8 +2,82 @@
 
 ## Save companions (`SaveCompanionService`)
 
-Every save writes derived artifacts beside the `.dcproj`: a Charter-compatible
-`.rscp`, the RS2014 XML bundle, a DLC Builder `.rs2dlc` beside it, an Editor on
+`Infrastructure/Storage/ProjectFolderLayout` owns the layout (#725):
+
+- `export/`: `<project>.rscp`, `<project>.eof`, `<project>.rs2dlc`, `DTRS XML/`,
+  and the artist/title/version-named package. Export dialogs default here for saved projects,
+  even when another project exported elsewhere. A per-project dialog draft wins;
+  `LastExportDir` is only an unsaved default and the Browse picker's start folder.
+  `Export/Rocksmith/RocksmithPackageName.For` supplies the filename to the companion,
+  dialog, version rename and test export. Releases use `<Artist>_<Title>_v<Version>_p.psarc`;
+  extended PC packages insert `_rsxr` immediately before `_p.psarc`. Mac uses `_m.psarc`
+  and never carries `_rsxr`. Sanitization and authored artist-sort preference stay shared
+  with `RocksmithReleaseName`. A version edit follows the derived name; a chosen path stays.
+  After successful publication, unchanged owned older release versions and the other
+  range variant are recycled, including packages written by a previous service instance.
+  A foreign or edited destination is never replaced by the automatic companion.
+- `export/song.ogg`, `song_preview.ogg` and `cover.png` are portable references.
+  `ExportCompanionMedia` materializes them; the preview starts at the project's
+  preview position. `ExportAssetLink` copies direct user `.ogg`/`.png` sources;
+  only DotCharter-rendered cache files use the existing Windows hard-link helper,
+  with a copy fallback and atomic publication. Editing export media cannot alter
+  the user's source. Cached transcodes live under the
+  metadata folder, so removing `export/` loses no source data. Charter companions
+  carry their chart internally, without external XML or stem references.
+- `.dotcharter/` has the Windows Hidden attribute. It holds `companions.json`,
+  `ai-chats/`, `test-packages/` and `cache/`. `ManagedAudioCache` gives each source one WEM slot;
+  codec detection and content/decode-policy receipts decide reuse. Every preview
+  WAV is here too. `backups/` and `stems/` remain visible and unchanged.
+- `Session/ProjectFolderTidy` runs on open, without a prompt. It imports legacy
+  ownership, moves hash-matching companions and XML referenced by a stamped
+  `.rs2dlc`, validates old chat identities, and recycles exact legacy
+  cache/removed-feature names. Known automatic-name and valid authored-project-key PC/Mac/extended packages
+  move into `export/` under the new release filename, without recycling or overwriting.
+  These exact legacy-key packages are stamped after the move so the next save replaces them.
+  Original `.rscp.bak` / `.rscp.N.bak` bytes move to unique `backups/` names.
+  Preservation uses the non-replacing `AtomicFile.MoveAside` mode, so a destination
+  created after name selection also wins without losing either file.
+  Generic `<stem>.wem`, `<stem>.preview.wem` and `<stem>.preview.wav` require
+  ownership stamps too: another tool can produce those names. Unverifiable
+  files stay. `ProjectTidyNotices` persists one notice per candidate in
+  `.dotcharter/tidy-notices.json`; locks are still retried on the next open.
+  A pending XML move retains its legacy
+  `.rs2dlc` reference for that retry. A successful
+  tidy schedules detached regeneration of the portable companions. All removals
+  use `Infrastructure/Storage/RecycleBin`. Its native probe requires a plain local
+  fixed NTFS path, explicit enabled/quota settings, current bin usage and room for
+  the complete candidate. Missing settings, policy vetoes, cloud/reparse paths,
+  uncertain sizes and oversized items are left and logged once; there is no UI.
+  Explorer's per-volume registry schema is an implementation detail, so unknown
+  schemas/defaults never qualify. `OwnedDlcBuilderBundle` verifies removal before
+  reusing a staging directory. Unsupported/skipped chat deletion returns a refusal.
+  `RocksmithBuildOptions.ProjectDirectory` fixes cache ownership to the project,
+  including external package destinations; raw callers without it use the source root.
+- `ProjectExportAudio.ForSnapshot` is the single working-audio seam for #726.
+  The dialog defaults through this seam too; a missing working file never
+  selects a sibling WEM/WAV by its name. This change does not pad audio or alter playback.
+
+Test filenames use `<Artist>_<Title>_test_p.psarc` with the game closed and
+`<Artist>_<Title>_test_v<N>_p.psarc` while it runs; range/platform suffixes follow
+the release rule. The key, title suffix ` vN` and internal version `test` keep their
+existing behavior. `RocksmithTestExport` recognizes both new names and old lower-case
+key names for numbering and identifying cleanup candidates. Cleanup requires a matching
+project receipt in the selected test folder.
+`RocksmithTestPackageOwnership` keeps exact paths and hashes in the saved project's
+`.dotcharter/test-packages/<projectId>.json`, even for an external game folder.
+Every final platform is checked immediately before the staged package set commits.
+Only successfully approved/published paths are stamped. Cleanup follows a durable publication
+receipt, rechecks the bytes of candidates with receipts, excludes current outputs and uses the
+guarded Recycle Bin. Failed recycling retains the candidate for retry. Unsaved projects have only
+same-instance transient receipts and never clean earlier packages. The legacy build helper
+without an ownership context retains its superseded arguments.
+
+`SaveCompanionServiceTests`, `ProjectFolderTidyTests` and `ExportAssetLinkTests`
+cover the layout, ownership, locks, links/copies and a complete save/export/chat
+folder listing.
+
+Every save writes derived artifacts in the chart folder's `export/`: a Charter-compatible
+`.rscp`, the RS2014 XML bundle, a project-named DLC Builder `.rs2dlc`, an Editor on
 Fire `.eof`, a Rocksmith `.psarc`. (The CustomsForge upload plan and its browser fill script
 were removed in #866: the site's form changes too often to keep a filler in step.)
 
@@ -12,8 +86,39 @@ atomically *before* any of them runs, so a companion exception must be caught �
 otherwise `SaveProjectCoreAsync`'s outer catch reports "project save failed" for a
 project that saved perfectly.
 
+Measurement stays at the existing points: attachment (`AttachmentVolumeMeasurement`),
+new-project creation, export-dialog prefill, and the companion's own detached
+`SaveCompanionService.VolumesForAsync` after the project write. The psarc measures
+the actual main source and its own generated clip, so a gain from an explicit
+dialog preview cannot be reused for different audio. Current signatures are
+checked before decoding; failures have no settled-input memo and may retry once
+on the next save. Alternate encodes use `SaveCompanionService.ResolveAudio`.
+
+`Export/Audio/ProjectVolumeAdoption` captures only one queued work item's guard.
+After detached work, including an encoder failure after successful measurement,
+it checks source identity on the worker and unchanged live inputs on the UI thread.
+Automatic fields land without a dirty mark or undo action; the next actual
+save/Save As/backup/recovery write persists them. The first project/cheap companion
+write may carry old metadata; the psarc uses its freshly measured own-source gains.
+No writer waits for measurement and no late result mutates a serialized snapshot.
+With the psarc companion disabled, saves add no new measuring point; attach and
+export remain the existing opportunities. Manual overrides always win.
+
+The export command joins a pending prefill for its current audio/preview/start
+inputs before capturing build options, under the existing building state and
+cancel token. Changed inputs start fresh work. Completed or failed tasks are not
+treated as settled inputs; measurement consults current file signatures again.
+
+Both exit paths drain the queue through `ProjectSessionService.DrainSaveCompanions`
+or session disposal. Hard termination calls the drain before killing the process,
+without disposing in-process VST instances. `DetachedCompanionBuilder.Stop` cancels
+the psarc and waits within its existing bound for queued cheap companions. Status
+dispatch waits also cancel, so a worker cannot depend on the closing UI thread to
+finish draining. Covered by `DetachedCompanionBuilderTests` and
+`RecoveryCleanShutdownWiringTests.Hard_shutdown_drains_companions_before_killing_the_process`.
+
 - **The Charter `.rscp`** (`SaveCompanionService.WriteCharterProject`) — the
-  first companion, written right after the `.dcproj` swap as `<name>.rscp`. It is
+  first companion, written right after the `.dcproj` swap as `export/<project>.rscp`. It is
   the same `RscpWriter` document cut down by `Export/Charter/CharterRscpProjection`
   to `CharterProjectSchema`: a tree of every element and attribute Charter's
   XStream model reads, transcribed from Charter V0.22.44 (`ChartProject.java`,
@@ -29,7 +134,8 @@ project that saved perfectly.
   name. Pinned by `CharterRscpCompanionTests` (allow-list, re-import,
   ownership, log-once); whether Charter opens it is a manual check.
 - **The DTRS XML bundle** (`ProjectDocumentService.SaveDlcBuilderXmlBundle`) — written
-  to a `DTRS XML.saving` staging folder, then swapped in by **renaming** the old
+  to a `DTRS XML.saving` staging folder (each output is stamped as produced),
+  then swapped in by **renaming** the old
   bundle to `DTRS XML.old` and renaming staging into place (`SwapInBundle`). Never
   `Directory.Delete(export, recursive)` first: a recursive delete is not atomic, so
   one locked file half-deletes the bundle and the cleanup then removes staging too —
@@ -41,14 +147,23 @@ project that saved perfectly.
   `RsXmlSongWriter { SixStringProjection = config.RsXmlSixStringProjection }`; each projected
   arrangement that dropped something logs one warning (counts of notes and chords). The
   `.rs2dlc` follows the same setting: off, a 7-/8-string guitar's tuning lists every string in
-  package order (the XML's `string0`..`stringN`); on, its six slots are the six STOCK strings
+  positional order (the XML's `string0`..`stringN`); on, its six slots are the six STOCK strings
   in package order (`Rs2DlcProjectBuilder.TuningVector` through `Rs7StringLayout.ToDomain`),
-  not the chart's first six. Six-string guitars and basses always have six slots.
-- **`.eof`** — a plain binary write (a few ms), so it runs inside the existing save
-  worker on every save. **EOF resolves its audio relative to the folder the `.eof`
+  not the chart's first six. An extended bass uses positional offsets, padded to six slots for a five-string part. Refused arrangements have neither bundle XML nor a `.rs2dlc` entry.
+- **`.eof`** — a plain binary write (a few ms), queued with the other companions
+  after every save. **EOF resolves its audio relative to the folder the `.eof`
   lives in**, and `EofExporter` names it `<audiostem>.ogg`. So the companion also
-  transcodes the song to a sibling `.ogg` (once, mtime-cached, via ffmpeg) —
-  without it EOF opens the project and prompts for missing audio.
+  prepares `export/song.ogg` through the shared media writer (content-cached,
+  via ffmpeg when conversion is needed). Without it EOF prompts for missing
+  audio. The encode writes a unique `.writing.ogg` in `.dotcharter/cache/`, then
+  atomically replaces the cached Ogg only
+  after success, and recycles failed staging files. A timeout, failure or exception
+  preserves the previous audio and its timestamp, so the next save can repair it.
+  Audio resolution validates the reference with `ProjectRelativePath` before any
+  probe and uses `ProjectAudioLocator` for the declared reference only. A missing
+  working file never selects a same-stem alternate encode, including on automatic saves.
+  Refused UNC, device, drive-relative and network-drive references are never probed.
+  Pinned by `SaveCompanionServiceTests`.
 - **`.psarc`** — converts every arrangement to SNG and copies the whole audio
   track. It runs **detached, after** the save returns, so it never puts seconds of
   latency on Ctrl+S. Builds **coalesce**: a save landing while one is in flight
@@ -56,16 +171,18 @@ project that saved perfectly.
   does not build a backlog. It **stages to a temp file and swaps**, so a build
   cancelled by a newer save (or by shutdown) leaves the previous psarc intact
   rather than truncated.
+  A successful release from the Rocksmith export dialog to the exact companion
+  path records the same ownership stamp, so subsequent saves can refresh it.
 
 - **`.rs2dlc`** (`Export/DlcBuilder/`) — the DLC Builder PROJECT file, written
-  to the **project root** beside the `.dcproj` and the audio, naming the bundle's
+  to **`export/`**, named after the project file and naming the bundle's
   arrangements through `DTRS XML/`. It is what makes the folder open directly in
   DLC Builder and what gets dropped onto CustomsForge Ignition4's own "Import
   rs2dlc" control (which autofills the metadata it carries, with no code of ours
   running in a browser).
   **It must NOT be written inside `DTRS XML/`**: that folder is swapped in by
   renaming the old one to `DTRS XML.old` and renaming staging into place, so
-  anything written inside it is moved aside on the next save and deleted on the
+  anything written inside it is moved aside on the next save and recycled on the
   one after. It still runs **after** `SaveDlcBuilderXmlBundle` and refuses when
   the bundle is absent, because a project file naming XML that does not exist
   reads in DLC Builder as an EMPTY project rather than as a missing file.
@@ -148,13 +265,13 @@ left alone and the refusal is logged (`"Leaving the .rs2dlc alone: …"`).
   the charter deletes the `.rs2dlc`. That is the trade the owner asked for; a
   field-level merge was NOT built, because any field we forgot would go on being
   lost silently, which is the bug itself.
-- The stamps live in one **`.dotcharter-companions.json`** beside the project,
-  keyed by file name. **Not hidden on
-  purpose**: it is the only visible answer to "why has my `.rs2dlc` stopped
-  updating". It is a cache, never a source of truth.
-- **The `DTRS XML` bundle and the `.psarc` stay unconditional** — pure derived
-  output, nobody hand-edits them, and the bundle is swapped in wholesale by
-  rename. Do not "make them consistent". **Atomicity is a different guarantee
+- The stamps live in **`.dotcharter/companions.json`**, keyed by chart-relative
+  path. The metadata directory is hidden on Windows. A legacy top-level record is
+  imported before moving owned files. It is a cache, never a source of truth.
+- **The `DTRS XML` bundle and the `.psarc` are derived output.** The companion
+  package also checks the last published hash before replacing an existing file. The bundle
+  is swapped in wholesale by rename. `OwnedDlcBuilderBundle` records generated XML
+  and refuses to move/recycle a bundle containing foreign bytes. **Atomicity is a different guarantee
   and that one DOES apply to them** — see below.
 
 - **Ownership is a different guarantee from ATOMICITY, and until 2026-08-28 only
@@ -173,15 +290,15 @@ left alone and the refusal is logged (`"Leaving the .rs2dlc alone: …"`).
 
   **More writers joined them in 0.61**, all bare truncating writes over a
   file the charter may well be replacing from a previous export:
-  `GpExporter.Export` (`File.WriteAllBytes`) and the two lyric exports in
-  `LyricsInspectorViewModel` (`.lrc` / UltraStar `.txt`). `CompanionWritesAreAtomicTests`
+  `GpExporter.Export` (`File.WriteAllBytes`) and the two lyric exports
+  (`LyricsFileService.WriteAsync`: `.lrc` / UltraStar `.txt`). `CompanionWritesAreAtomicTests`
   covers the first directly.
 
   **Anything under `Export/` that opens the destination for WRITE is a bug**;
   the whole list goes through `AtomicFile`.
 
-Guarded by `Services/Export/CompanionOwnershipTests` (12 cases; the guard, the
-two call sites and the upgrade case each fail independently).
+Guarded by `Services/Export/CompanionOwnershipTests` (the ownership guard, native companion call sites
+and upgrade case each fail independently).
 
 Config (all default on): `SaveCompanionEof`, `SaveCompanionEofAudio`,
 `SaveCompanionPsarc`, `SaveCompanionPsarcCodec`, `SaveCompanionRs2Dlc`.

@@ -73,6 +73,19 @@ public sealed partial class GuitarRolesViewModel : ObservableObject
     /// <summary>The last verdict, for tests and diagnostics.</summary>
     internal GuitarRoleAssessment? Assessment => _assessment;
 
+    /// <summary>The last background check or split, through its dispatch: lets a test
+    /// see the whole continuation finish.</summary>
+    internal Task Background { get; private set; } = Task.CompletedTask;
+
+    internal event Action<ChartProject>? ProjectChanged;
+
+    private void SetProjectSplit(ChartProject project, bool value)
+    {
+        if (project.GuitarRolesSplit == value) return;
+        project.GuitarRolesSplit = value;
+        ProjectChanged?.Invoke(project);
+    }
+
     /// <summary>
     ///     Called by the mixer on the UI thread at the end of every rebuild.
     /// </summary>
@@ -127,7 +140,7 @@ public sealed partial class GuitarRolesViewModel : ObservableObject
             {
                 _logger?.Warning(AppLogCategory.Audio,
                     "Guitar roles: the derived stems are still missing after a fresh split; turning the split off.");
-                project.GuitarRolesSplit = false;
+                SetProjectSplit(project, false);
                 Disable(_localization["Mixer_GuitarRoles_Unreadable"]);
                 return;
             }
@@ -156,7 +169,7 @@ public sealed partial class GuitarRolesViewModel : ObservableObject
         }
         else
         {
-            _project.GuitarRolesSplit = false;
+            SetProjectSplit(_project, false);
             if (_assessment is { } known) ApplyVerdict(known);
             _rebuildMixer();
         }
@@ -173,7 +186,7 @@ public sealed partial class GuitarRolesViewModel : ObservableObject
             CanToggle = false;
             Status = _localization["Mixer_GuitarRoles_Checking"];
         }
-        _ = Task.Run(() =>
+        Background = Task.Run(() =>
         {
             GuitarRoleAssessment assessment;
             try
@@ -182,7 +195,7 @@ public sealed partial class GuitarRolesViewModel : ObservableObject
             }
             catch (Exception ex)
             {
-                _logger?.Warning(AppLogCategory.Audio, $"Guitar roles: the stereo check failed: {ex.Message}");
+                _logger?.Warning(AppLogCategory.Audio, "Guitar roles: the stereo check failed", ex);
                 assessment = new GuitarRoleAssessment(GuitarRoleVerdict.Unreadable, default, null);
             }
 
@@ -213,7 +226,7 @@ public sealed partial class GuitarRolesViewModel : ObservableObject
         SetOn(true);
         Status = _localization.Format("Mixer_GuitarRoles_SplittingFmt", PercentText.Format(0, 0));
         var progress = new CoalescedProgress(this, generation);
-        _ = Task.Run(() =>
+        Background = Task.Run(() =>
         {
             GuitarRoleDerivation result;
             try
@@ -233,14 +246,14 @@ public sealed partial class GuitarRolesViewModel : ObservableObject
                 _assessment = result.Assessment;
                 if (result.Pair != null)
                 {
-                    project.GuitarRolesSplit = true;
+                    SetProjectSplit(project, true);
                     CanToggle = true;
                     Status = ResultText(result.Assessment);
                     _rebuildMixer();
                 }
                 else
                 {
-                    project.GuitarRolesSplit = false;
+                    SetProjectSplit(project, false);
                     SetOn(false);
                     ApplyVerdict(result.Assessment);
                 }

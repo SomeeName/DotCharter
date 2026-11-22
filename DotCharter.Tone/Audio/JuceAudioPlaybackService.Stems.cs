@@ -1,5 +1,6 @@
 ﻿// Partial: stem mixer — see JuceAudioPlaybackService.cs for the shared state and locking rules.
 using JuceSharp;
+using JuceSharp.AudioIo;
 
 namespace DotCharter.Tone.Audio;
 
@@ -10,6 +11,7 @@ public sealed partial class JuceAudioPlaybackService
         // ReSharper disable UnusedAutoPropertyAccessor.Local -- used in object initializers + diagnostics.
         public required string Name { get; init; }
         public required string Path { get; init; }
+        public double OffsetMs { get; init; }
         // ReSharper restore UnusedAutoPropertyAccessor.Local
         public JuceAudioSource? Source;
         public double UserVolume = 1.0;
@@ -23,16 +25,23 @@ public sealed partial class JuceAudioPlaybackService
     /// they had un-muted the original mix.
     /// </summary>
     internal sealed record StemMixerSnapshot(
-        IReadOnlyList<(string Name, string Path, double Volume, bool Muted, bool Soloed)> Stems,
+        IReadOnlyList<(string Name, string Path, double Volume, bool Muted, bool Soloed, double OffsetMs)> Stems,
         bool MasterMixMuted);
+
+    private static StemMixerSnapshot MergeStemMixerSnapshots(StemMixerSnapshot retained, StemMixerSnapshot current)
+    {
+        var stems = retained.Stems.ToDictionary(s => s.Name, StringComparer.OrdinalIgnoreCase);
+        foreach (var stem in current.Stems) stems[stem.Name] = stem;
+        return new StemMixerSnapshot(stems.Values.ToArray(), current.MasterMixMuted);
+    }
 
     /// <summary>Call under <c>_gate</c>. Null when no stems are loaded.</summary>
     internal StemMixerSnapshot? SnapshotStemMixerLocked()
     {
         if (_stems.Count == 0) return null;
-        var entries = new List<(string, string, double, bool, bool)>(_stems.Count);
+        var entries = new List<(string, string, double, bool, bool, double)>(_stems.Count);
         foreach (var s in _stems.Values)
-            entries.Add((s.Name, s.Path, s.UserVolume, s.UserMuted, s.UserSoloed));
+            entries.Add((s.Name, s.Path, s.UserVolume, s.UserMuted, s.UserSoloed, s.OffsetMs));
         return new StemMixerSnapshot(entries, _masterMixMuted);
     }
 
@@ -55,9 +64,9 @@ public sealed partial class JuceAudioPlaybackService
     /// <c>_vstGate</c> our caller is still holding.
     /// </para>
     /// </summary>
-    internal void RestoreStemsAfterEngineRebuild(StemMixerSnapshot? snapshot)
+    internal void RestoreStemsAfterEngineRebuild(StemMixerSnapshot? snapshot, long? clearGeneration = null)
     {
-        if (snapshot == null || snapshot.Stems.Count == 0) return;
+        if (snapshot == null || snapshot.Stems.Count == 0 || IsStemClearNewer(clearGeneration)) return;
         if (_engine == null)
         {
             _logger?.Warning(AppLogCategory.Audio,
@@ -66,14 +75,16 @@ public sealed partial class JuceAudioPlaybackService
         }
 
         var requests = new List<StemLoadRequest>(snapshot.Stems.Count);
-        foreach (var (name, path, _, _, _) in snapshot.Stems)
-            requests.Add(new StemLoadRequest(name, path));
+        foreach (var (name, path, _, _, _, offsetMs) in snapshot.Stems)
+            requests.Add(new StemLoadRequest(name, path, offsetMs));
 
-        LoadStemsCore(requests);
+        LoadStemsCore(requests, clearGeneration);
 
         lock (_gate)
         {
-            foreach (var (name, _, volume, muted, soloed) in snapshot.Stems)
+            // A clear during the reload wins: no master mute without the stems.
+            if (IsStemClearNewerLocked(clearGeneration)) return;
+            foreach (var (name, _, volume, muted, soloed, _) in snapshot.Stems)
             {
                 if (!_stems.TryGetValue(name, out var entry)) continue;
                 entry.UserVolume = volume;
@@ -108,6 +119,29 @@ public sealed partial class JuceAudioPlaybackService
             try { s.Source?.Dispose(); } catch { /* ignored */ }
             s.Source = null;
         }
+    }
+
+    // Test observers: a stem set opened, not yet published; a rebuild's engine started, media not replayed.
+    internal Action? StemSetOpenedHook { get; set; }
+    internal Action? RebuildReplayHook { get; set; }
+
+    internal bool HasPendingMediaRebuild { get { lock (_gate) return _mediaRebuildRecovery.HasPending; } }
+
+    // Explicit ClearStems calls: a rebuild restores no stems once it moved past its snapshot's.
+    private long _stemClearGeneration;
+
+    private bool IsStemClearNewer(long? clearGeneration)
+    {
+        lock (_gate) return IsStemClearNewerLocked(clearGeneration);
+    }
+
+    private bool IsStemClearNewerLocked(long? clearGeneration) =>
+        clearGeneration is { } generation && generation != _stemClearGeneration;
+
+    /// <summary>No clear since the snapshot, and the same song or the song under a handed-back take.</summary>
+    private bool KeepsRebuildStems(bool sameSong, long clearGeneration, long lineage)
+    {
+        lock (_gate) return !IsStemClearNewerLocked(clearGeneration) && (sameSong || lineage == _mediaLineage);
     }
 
     private void ClearStemsLocked()
@@ -150,7 +184,19 @@ public sealed partial class JuceAudioPlaybackService
     /// nor a silent swallow — the inner handler logs at Error.)
     /// </summary>
     public Task LoadStemsAsync(IReadOnlyList<StemLoadRequest> stems)
-        => Task.Run(() => LoadStemsCore(stems));
+    {
+        lock (_gate)
+        {
+            var clearGeneration = _stemClearGeneration;
+            return Task.Run(() => LoadStemsCore(stems, clearGeneration));
+        }
+    }
+
+    // Test seams: bring up a given (null-device) engine and read the engine the stems
+    // publish into (StemSetOpenedHook above runs code between the decode and the publication).
+    internal void ReplaceEngineForTesting(JuceEngineConfig cfg) => ReplaceEngine(cfg);
+
+    internal JuceAudioEngine? EngineForTesting => _engine;
 
     /// <summary>
     /// Opens a stem set and publishes it as the mixer's sources.
@@ -189,7 +235,7 @@ public sealed partial class JuceAudioPlaybackService
     /// <c>Services/Audio/StemSetOpenerTests</c>.
     /// </para>
     /// </summary>
-    private void LoadStemsCore(IReadOnlyList<StemLoadRequest> stems)
+    private void LoadStemsCore(IReadOnlyList<StemLoadRequest> stems, long? clearGeneration = null)
     {
         if (stems.Count == 0) { ClearStems(); return; }
 
@@ -211,14 +257,10 @@ public sealed partial class JuceAudioPlaybackService
         {
             gateHeldAt = total.Elapsed;
             JuceAudioEngine? engine;
-            float panV, pitchV, tempoV;
             StemEntry[] outgoing = [];
             lock (_gate)
             {
                 engine = _engine;
-                panV = (float)Math.Clamp(_pan, -1.0, 1.0);
-                pitchV = (float)Math.Clamp(_pitchShift, -24.0, 24.0);
-                tempoV = (float)(_playbackSpeed <= 0 ? 1.0 : _playbackSpeed);
 
                 // Detach the OUTGOING stem set here — it is disposed below, BEFORE the
                 // decode, not after it. See the phase-order remarks on the method.
@@ -249,11 +291,13 @@ public sealed partial class JuceAudioPlaybackService
             // run one after another and the native decodes overlap them; see
             // StemSetOpener for why it is neither sequential nor plain-parallel.
             outcomes = StemSetOpener.OpenAll(
-                candidates.Select(r => r.Path).ToArray(),
-                StemSetOpener.PrefetchIntoFileCache,
-                path => engine.OpenFile(path),
+                candidates,
+                request => StemSetOpener.PrefetchIntoFileCache(request.Path),
+                request => StemPlaybackOffset.Open(request, path => engine.OpenFile(path),
+                    JuceAudioDecoder.Decode, bytes => engine.OpenMemory(bytes, "wav")),
                 StemSetOpener.DefaultMaxOpensInFlight);
             openedAt = total.Elapsed;
+            StemSetOpenedHook?.Invoke();
 
             // Request order, whatever order the opens finished in: it is the mixer's
             // channel order.
@@ -262,7 +306,7 @@ public sealed partial class JuceAudioPlaybackService
             {
                 var req = candidates[i];
                 if (outcomes[i].Source is { } src)
-                    opened.Add(new StemEntry { Name = req.Name, Path = req.Path, Source = src });
+                    opened.Add(new StemEntry { Name = req.Name, Path = req.Path, OffsetMs = req.OffsetMs, Source = src });
                 else
                     _logger?.Error(AppLogCategory.Audio, $"Failed to open stem '{req.Name}' from '{req.Path}'.", outcomes[i].Error);
             }
@@ -287,12 +331,28 @@ public sealed partial class JuceAudioPlaybackService
                     return;
                 }
 
+                if (IsStemClearNewerLocked(clearGeneration))
+                {
+                    _logger?.Info(AppLogCategory.Audio, "Stems cleared while opening; discarding the stale set.");
+                    DisposeStemEntries(opened);
+                    return;
+                }
+
                 // Normally a no-op — the outgoing set was released before the decode.
                 // Kept because _stems is only guaranteed empty on the path THIS call
                 // took: FreeAudioLocked / ClearStems can run against a different
                 // engine while we are unlocked, and publishing over a non-empty
                 // dictionary would drop those sources without un-grouping them.
                 ClearStemsLocked();
+
+                // Read at PUBLICATION, not before the decode: the setters skip
+                // the stem group while _stems is empty, so a speed, pitch or pan change
+                // made during the decode would otherwise be overwritten with the old
+                // value. They write the field before taking _gate, so a change racing
+                // this block is either read here or applied by its setter afterwards.
+                var panV = (float)Math.Clamp(_pan, -1.0, 1.0);
+                var pitchV = (float)Math.Clamp(_pitchShift, -24.0, 24.0);
+                var tempoV = (float)(_playbackSpeed <= 0 ? 1.0 : _playbackSpeed);
 
                 foreach (var entry in opened)
                 {
@@ -392,6 +452,8 @@ public sealed partial class JuceAudioPlaybackService
     {
         lock (_gate)
         {
+            _stemClearGeneration++;
+            _mediaRebuildRecovery.ClearStems();
             if (_stems.Count == 0 && !_masterMixMuted) return;
             ClearStemsLocked(); // also un-mutes the master — see its remarks
             ApplyGain();

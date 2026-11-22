@@ -5,7 +5,7 @@ using DotCharter.Services.Editing.Linking;
 
 namespace DotCharter.Presentation.Contracts.Dialogs;
 
-/// <summary>Opens the manager with suggestions to review (after an import's Review).</summary>
+/// <summary>Opens the manager with suggestions to review. An empty list starts detection.</summary>
 public sealed record LinkGroupsRequest(IReadOnlyList<LinkSuggestion> Suggestions)
     : IDialogRequest<LinkGroupsRequest, ILinkGroupsScreen, bool>;
 
@@ -36,6 +36,13 @@ public interface ILinkGroupsScreen : IDialogScreen<bool>
 
     /// <summary>Links the ticked suggestions as one undo step.</summary>
     ICommand LinkSelectedCommand { get; }
+
+    bool IsDetecting { get; }
+
+    string DetectionStatus { get; }
+    bool ShowDetectionRetry { get; }
+    ICommand DetectCommand { get; }
+    ICommand CancelDetectionCommand { get; }
 
     ICommand CloseCommand { get; }
 }

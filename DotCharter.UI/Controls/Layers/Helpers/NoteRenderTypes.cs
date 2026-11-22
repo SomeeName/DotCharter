@@ -37,9 +37,12 @@ public readonly ref struct NoteDrawData
     /// <see cref="RepeatChordInk.Dim" />, its technique glyphs at full alpha.</summary>
     public readonly bool Dimmed;
 
+    /// <summary>The bend pitch a tie carried into this note (half steps; 0 when struck or carried flat).</summary>
+    public readonly float BendCarry;
+
     public NoteDrawData(double time, double sustain, int stringIndex, int fret, byte mute, byte hopo, byte harmonic,
         byte slideTo, NoteFlags flags, bool isPreview, int bendOffset, int bendCount, byte bassPicking = 0,
-        bool dimmed = false)
+        bool dimmed = false, float bendCarry = 0f)
     {
         Time = time;
         Sustain = sustain;
@@ -55,5 +58,6 @@ public readonly ref struct NoteDrawData
         BendOffset = bendOffset;
         BendCount = bendCount;
         Dimmed = dimmed;
+        BendCarry = bendCarry;
     }
 }

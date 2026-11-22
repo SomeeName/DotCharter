@@ -58,6 +58,35 @@ public sealed class RigMicPlacementTests
         => Assert.Equal(zone, MicPlacementMath.Zone(position));
 
     [Fact]
+    public void ChainSubscription_UpdatesAcrossGc_AndDoesNotKeepTheDockAlive()
+    {
+        var chain = new FakeDspChainService([CabType, MicType]);
+        using var rig = TestRigBuilders.Pedalboard(chain, new FakeDspTonePresetService(), FakeLocalization.English());
+        var cab = rig.AddGear(CabType)!;
+        var weak = ExerciseCollectableDock(cab, rig);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        Assert.False(weak.TryGetTarget(out _));
+        rig.AddGear(MicType);
+        GC.KeepAlive(rig);
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static WeakReference<RigDockUnit> ExerciseCollectableDock(PedalNodeViewModel cab, PedalboardViewModel rig)
+    {
+        var dock = new RigDockUnit(cab, rig: rig);
+        Assert.False(dock.HasCabMic);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        rig.AddGear(MicType);
+        Assert.True(dock.HasCabMic);
+        dock.Release();
+        return new WeakReference<RigDockUnit>(dock);
+    }
+
+    [Fact]
     public void Distance_MapsTheRuler_AndFarAwayDrawsSmaller()
     {
         Assert.Equal(15, MicPlacementMath.DistanceForFraction(0.5), 6);
@@ -151,6 +180,31 @@ public sealed class RigMicPlacementTests
 
         unit.OpenCabMicCommand.Execute(null);
         Assert.Same(rig.Nodes[1], rig.SelectedNode);
+        unit.Release();
+    }
+
+    [Fact]
+    public void RemovingTheCabsMic_WhileTheCabIsOpen_DropsItAndOffersTheAddAgain()
+    {
+        var chain = new FakeDspChainService(new[] { CabType, MicType, DelayType });
+        using var rig = TestRigBuilders.Pedalboard(chain, new FakeDspTonePresetService(), FakeLocalization.English());
+        var cab = rig.AddGear(CabType)!;
+        rig.SelectNodeAt(0);
+        var unit = new RigDockUnit(cab, rig: rig);
+        unit.AddCabMicCommand.Execute(null);
+        Assert.True(unit.HasCabMic);
+        var changed = new List<string?>();
+        unit.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        // what an undo of the add does to the chain: the mic unit goes away
+        rig.RemoveCommand.Execute(rig.Nodes[1]);
+
+        Assert.Equal(["cab"], rig.Nodes.Select(n => n.ModuleTypeId));
+        Assert.Contains(nameof(RigDockUnit.CabMic), changed);
+        Assert.Contains(nameof(RigDockUnit.CanAddCabMic), changed);
+        Assert.Null(unit.CabMic);
+        Assert.False(unit.HasCabMic);
+        Assert.True(unit.CanAddCabMic);
         unit.Release();
     }
 

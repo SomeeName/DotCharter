@@ -9,6 +9,23 @@ public class NoteEndComputationTests
     private const double Pad = 8.0;
     private const double Stac = 90.0;
 
+    [Theory]
+    [InlineData(6)]
+    [InlineData(7)]
+    [InlineData(8)]
+    public void Extended_string_release_ignores_attacks_on_a_stock_string(int stringIndex)
+    {
+        var beats = BuildBeats(8);
+        var index = NoteLegatoIndex.Build([NoteAt(stringIndex - 6, 1), NoteAt(stringIndex, 2)], [], beats);
+
+        var end = JuceAudioPlaybackService.ComputeNoteEnd(
+            startMs: 0, baseEndMs: 2000, stringIndex: stringIndex, accent: false,
+            handShapes: null, beats: beats, legato: index,
+            eighthMs: Eighth, padMs: Pad, staccatoMs: Stac);
+
+        Assert.Equal(1000.0 - Pad, end);
+    }
+
     private static List<BeatMarker> BuildBeats(int count)
     {
         var beats = new List<BeatMarker>();

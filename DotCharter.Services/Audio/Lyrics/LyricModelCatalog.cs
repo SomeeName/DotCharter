@@ -172,13 +172,21 @@ public static class LyricModelCatalog
         Resolve(EnglishId, -0.010, roots);
 
     /// <summary>
-    ///     Onset bias for the ENSEMBLE. Both are different from the solo values and
-    ///     the English one even changes SIGN: blending pulls the English median to
-    ///     −14 ms, so the correction that moves lyrics earlier for other models has to
-    ///     move them later. Keeping one bias per model would therefore have been
-    ///     wrong in both directions at once.
+    ///     Onset bias for the ENSEMBLE. Both are different from the solo values,
+    ///     so keeping one bias per model would be wrong for the blend.
+    ///     <para>
+    ///         <b>English is −35 ms, measured against word onsets on a
+    ///         vocal stem.</b> The earlier +10 ms was fitted to Rocksmith charts, whose
+    ///         hand-synced onsets sit ~25 ms after the acoustic onset, so it moved
+    ///         lyrics away from the voice. On JamendoLyrics (79 songs) the
+    ///         English-primary blend ran a median +52 ms late, and the same German
+    ///         annotations put it +47 ms later than the multilingual-primary blend:
+    ///         the lateness belongs to this combination, not to the language or
+    ///         the reference. With −35 ms plus the vowel-initial shift below,
+    ///         English within 100 ms rose from 74.0% to 84.8%.
+    ///     </para>
     /// </summary>
-    private const double EnsembleEnglishBias = 0.010;
+    private const double EnsembleEnglishBias = -0.035;
 
     private const double EnsembleRomajiBias = 0.0;
 
@@ -188,22 +196,18 @@ public static class LyricModelCatalog
     ///     median +62 ms from the reference (61% later than 50 ms) against −11 ms
     ///     for the chart as a whole; shifting them by −50 ms moved their median to
     ///     +12 ms and the chart's within-50 ms from 77.3% to 82.1%. Measured for the
-    ///     multilingual head only — the English head's vowel-initial error is not.
+    ///     multilingual head; the English-primary blend has its own value.
     /// </summary>
     public const double MultilingualVowelInitialBias = -0.050;
 
     /// <summary>
-    ///     Picks the model for a sheet: the English head only when the text is
-    ///     clearly English AND that model is installed, otherwise the multilingual
-    ///     one.
-    ///     <para>
-    ///         <b>Falling back on "not installed" is deliberate.</b> The English
-    ///         model is an optional download, so an install that does not have it
-    ///         must still align English — a little less well — rather than refuse.
-    ///     </para>
+    ///     Vowel-initial shift for the English-primary ENSEMBLE. On
+    ///     JamendoLyrics its vowel-initial words sat +71 ms late against +44 ms
+    ///     for consonant-initial ones; −30 ms on top of
+    ///     <see cref="EnsembleEnglishBias" /> was the best of the offline sweep.
+    ///     The English head running alone is unmeasured and keeps zero.
     /// </summary>
-    public static LyricModel ForSheet(LyricSheet sheet, IReadOnlyList<string>? roots = null)
-        => SelectForSheet(sheet, roots).Primary;
+    public const double EnglishEnsembleVowelInitialBias = -0.030;
 
     /// <summary>
     ///     What to actually run for a sheet: one head, or BOTH blended.
@@ -244,7 +248,7 @@ public static class LyricModelCatalog
         if (wantsEnglish && english.IsInstalled)
         {
             return multilingual.IsInstalled && allowEnsemble
-                ? new LyricModelSelection(english, multilingual, EnglishBlendWeight, EnsembleEnglishBias)
+                ? new LyricModelSelection(english, multilingual, EnglishBlendWeight, EnsembleEnglishBias, EnglishEnsembleVowelInitialBias)
                 : new LyricModelSelection(english, null, 1.0, english.OnsetBiasSeconds);
         }
 

@@ -95,9 +95,8 @@ public static class TuningUtilities
         var names = new string[stringCount];
         for (var i = 0; i < stringCount; i++)
         {
-            var pitch = (i < stdPitches.Length ? stdPitches[i] % 12 : 4) + (i < offsets.Length ? offsets[i] : 0);
-            while (pitch < 0) pitch += 12;
-            names[i] = standardNotes[pitch % 12];
+            var pitch = (i < stdPitches.Length ? stdPitches[i] % 12 : 4) + (long)(i < offsets.Length ? offsets[i] : 0);
+            names[i] = standardNotes[(int)((pitch % 12 + 12) % 12)];
         }
 
         return names;
@@ -117,10 +116,9 @@ public static class TuningUtilities
     ///         misses the table easily and every string then reads as standard.
     ///     </para>
     ///     <para>
-    ///         Two callers DO want the default and say so at the call site:
-    ///         <c>RefretPlanner</c> and the MIDI import dialog both need some
-    ///         open-string vector to do fret arithmetic against, and standard is the
-    ///         same default their own per-string fallback already used.
+    ///         Arrangement consumers use <see cref="TuningOffsetResolution" /> and
+    ///         <see cref="SoundingPitch" /> so authored offsets and note letters take
+    ///         precedence over this named-tuning table.
     ///     </para>
     /// </summary>
     public static int[] GetOffsetsForTuningType(string tuningType, int stringCount)

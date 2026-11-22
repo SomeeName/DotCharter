@@ -103,7 +103,7 @@ public sealed class PlaySetlistStore : IPlaySetlistStore
             catch (Exception ex)
             {
                 _logger?.Warning(AppLogCategory.Application,
-                    $"Setlists: no data directory for the profile ({ex.GetType().Name}: {ex.Message}).");
+                    "Setlists: no data directory for the profile.", ex);
                 return new PlaySetlistRead(PlaySetlistReadOutcome.Unreadable, []);
             }
 
@@ -131,7 +131,7 @@ public sealed class PlaySetlistStore : IPlaySetlistStore
             {
                 // UNREADABLE: presumed intact. Not authoritative, so no save follows.
                 _logger?.Warning(AppLogCategory.Application,
-                    $"Setlists could not be read ({ex.GetType().Name}: {ex.Message}); not writing over them.");
+                    "Setlists could not be read; not writing over them.", ex);
                 return new PlaySetlistRead(PlaySetlistReadOutcome.Unreadable, []);
             }
         }
@@ -151,7 +151,7 @@ public sealed class PlaySetlistStore : IPlaySetlistStore
             catch (Exception ex)
             {
                 _logger?.Warning(AppLogCategory.Application,
-                    $"Setlists could not be saved ({ex.GetType().Name}: {ex.Message}).");
+                    "Setlists could not be saved.", ex);
                 return false;
             }
         }
@@ -185,9 +185,9 @@ public sealed class PlaySetlistStore : IPlaySetlistStore
             $"{Path.GetFileNameWithoutExtension(path)}.corrupt-{DateTime.UtcNow:yyyyMMdd-HHmmssfff}{Path.GetExtension(path)}");
         try
         {
-            File.Move(path, aside, true);
+            AtomicFile.MoveAside(path, aside);
             _logger?.Warning(AppLogCategory.Application,
-                $"Setlists were unparseable ({cause.Message}); moved to '{Path.GetFileName(aside)}' and starting fresh.");
+                $"Setlists were unparseable; moved to '{Path.GetFileName(aside)}' and starting fresh.", cause);
             return true;
         }
         catch (Exception ex)

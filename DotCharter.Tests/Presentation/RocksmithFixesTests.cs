@@ -42,7 +42,7 @@ public sealed class RocksmithFixesTests
     public async Task AToneFinding_OpensTheToneDesignerOnItsArrangement_AndEditsNothing()
     {
         var rig = new Rig("Lead", "Rhythm");
-        var finding = Finding("Rhythm", ChartExportValidator.KeyToneNotDefined);
+        var finding = Finding("Rhythm", ChartExportValidator.KeyMissingBaseTone);
 
         Assert.True(rig.Fixes.CanFix(finding));
         await rig.Fixes.FixAsync(finding);
@@ -51,6 +51,33 @@ public sealed class RocksmithFixesTests
         Assert.Same(rig.State.ActiveProject!.Arrangements[1], switched.Args[0]);
         Assert.Contains(rig.Dialogs.Calls, c => c.StartsWith(nameof(IDialogs.ShowAsync), StringComparison.Ordinal));
         Assert.Empty(rig.Maintenance.Calls);
+    }
+
+    [Fact]
+    public async Task AnUndefinedTone_CreatesTheMissingDefinitions_OnItsArrangement_WithoutTheDesigner()
+    {
+        var rig = new Rig("Lead", "Rhythm");
+        var finding = Finding("Rhythm", ChartExportValidator.KeyToneNotDefined);
+
+        Assert.True(rig.Fixes.CanFix(finding));
+        await rig.Fixes.FixAsync(finding);
+
+        var call = Assert.Single(rig.Maintenance.Invocations);
+        Assert.Equal(nameof(IChartMaintenanceService.CreateMissingToneDefinitions), call.Method);
+        Assert.Same(rig.State.ActiveProject!.Arrangements[1], call.Args[0]);
+        Assert.Empty(rig.Dialogs.Calls);
+    }
+
+    [Fact]
+    public async Task ANoShowlightsFinding_NeedsNoArrangement_AndRunsTheShowlightsVerb()
+    {
+        var rig = new Rig("Lead");
+        var finding = Finding("", ChartExportValidator.KeyNoShowlights);
+
+        Assert.True(rig.Fixes.CanFix(finding));
+        await rig.Fixes.FixAsync(finding);
+
+        Assert.Equal(nameof(IChartMaintenanceService.GenerateShowlights), Assert.Single(rig.Maintenance.Invocations).Method);
     }
 
     /// <summary>#195: one undefined key next to one defined tone nothing plays — the Fix is that

@@ -2,6 +2,7 @@
 using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Services.Export.Sng.Model;
 using DotCharter.Services.Parsing.Xml.Song;
+using DotCharter.Services.Parsing.Xml.Vocals;
 
 namespace DotCharter.Services.Export.Sng;
 
@@ -31,7 +32,7 @@ internal static class SngFromDomainMapper
 
     /// <param name="arrangement">The arrangement to convert.</param>
     /// <param name="beats">The project's beat grid.</param>
-    /// <param name="songLengthMs">Song length, resolved against the chart and the audio.</param>
+    /// <param name="songLengthMs">Audio length, or zero when unknown; resolved with the XML's chart-extent policy.</param>
     /// <param name="conversionTime">Stamped into the SNG metadata; defaults to now.</param>
     /// <param name="chordNameOptions">
     ///     Whether a two-string shape may ship with a chord name. Defaults to
@@ -51,26 +52,23 @@ internal static class SngFromDomainMapper
     ///     <see cref="RsToneSlots.Resolve" />, which is the same answer when no override
     ///     exists.
     /// </param>
-    /// <param name="rs7ChordMode">How a 7-string guitar's chord on the 7th string ships;
-    /// ignored for six strings or fewer.</param>
     public static SngBuildResult BuildInstrumental(
         Arrangement arrangement,
         IList<BeatMarker> beats,
         double songLengthMs,
         DateTime? conversionTime = null,
         DoubleStopNameOptions? chordNameOptions = null,
-        IReadOnlyList<string>? toneSlots = null,
-        Rs7ChordMode rs7ChordMode = Rs7ChordMode.Projection)
+        IReadOnlyList<string>? toneSlots = null)
     {
         if (beats.Count == 0)
             throw new InvalidDataException("Cannot export an arrangement without a beat map.");
 
         if (SngFormatLimits.ExportRefusal(arrangement) is { } refusal) throw new InvalidDataException(refusal);
 
-        // A 7-string guitar maps through the rs7string layout first; the
-        // strings past the sixth go to the RS7X block.
-        arrangement = Rs7Projection.TryCreate(arrangement, rs7ChordMode)?.Arrangement ?? arrangement;
-        var context = new BuildContext(arrangement, beats, ResolveSongLengthMs(arrangement, beats, songLengthMs))
+        // Build the shared slot-order model first. Extra guitar columns and techniques
+        // stay in Extension until the RS Extended Range writer combines the fields.
+        arrangement = Rs7Projection.TryCreateForSng(arrangement)?.Arrangement ?? arrangement;
+        var context = new BuildContext(arrangement, beats, RsSongLength.ResolveMs(arrangement, beats, songLengthMs))
         {
             ChordNameOptions = chordNameOptions ?? DoubleStopNameOptions.Default,
             ToneSlots = toneSlots,
@@ -98,39 +96,28 @@ internal static class SngFromDomainMapper
     {
         var sng = new RocksmithSng();
 
+        // Which syllables are written, which one ends the line and how a marker is appended is
+        // the vocals XML's rule too (RsVocalLyricEncoding.EncodeLine), so both files carry the same
+        // tokens and the export check that follows that rule covers both. A blank syllable is not
+        // written, and the line end falls on the last WRITTEN one: in Rocksmith the `+` IS the
+        // line break, so a phrase whose last syllable is blank would otherwise merge into the next.
+        var vocals = new List<RsVocal>();
         foreach (var phrase in track.Phrases.OrderBy(p => p.Position))
         {
-            // A blank syllable is not exportable, so it is filtered out BEFORE the
-            // index that decides the phrase terminator. Skipping it with a
-            // `continue` inside the loop while `i == lyrics.Count - 1` still counts
-            // it would leave a phrase whose LAST syllable has blank text (and no earlier
-            // `IsPhraseEnd`) with no `+` on any vocal — and in Rocksmith the `+` IS the
-            // line break, so that phrase would merge into the next one in-game with nothing
-            // wrong anywhere in the editor.
-            var lyrics = phrase.Lyrics
-                .OrderBy(l => l.Position)
-                .Where(l => !string.IsNullOrEmpty(l.Text.TrimEnd(' ')))
-                .ToList();
-            for (var i = 0; i < lyrics.Count; i++)
+            foreach (var token in RsVocalLyricEncoding.EncodeLine(phrase))
             {
-                var lyric = lyrics[i];
-                var text = lyric.Text.TrimEnd(' ');
-
-                if (lyric.IsWordPart && !text.EndsWith('-')) text += "-";
-                var isPhraseEnd = lyric.IsPhraseEnd || i == lyrics.Count - 1;
-                if (isPhraseEnd && !text.EndsWith('+')) text += "+";
-
+                var lyric = token.Syllable;
                 var startMs = lyric.Position.GetPositionMs(beats);
                 var endMs = lyric.EndPosition.GetPositionMs(beats);
-                sng.Vocals.Add(new RsVocal(
+                vocals.Add(new RsVocal(
                     MsToSec(startMs),
                     lyric.Note is > 0 and < 255 ? lyric.Note : 254,
                     MsToSec(Math.Max(0.0, endMs - startMs)),
-                    text));
+                    token.Lyric));
             }
         }
 
-        sng.Vocals.Sort((a, b) => a.Time.CompareTo(b.Time));
+        sng.Vocals.AddRange(RsVocalLyricEncoding.InPackageOrder(vocals, v => v.Time));
 
         // Default font: two headers (IDs 0 and 1), the standard texture and
         // the embedded default glyph set. Reference: ConvertVocals.fs.
@@ -163,13 +150,14 @@ internal static class SngFromDomainMapper
             Beats = beats;
             SongLengthMs = (int)Math.Round(songLengthMs);
 
-            // The FILE shape of the ladder (RsLevelLadder): a level above a
-            // phrase's max leaves that phrase out, as the game expects and as the
-            // RS-XML writer does from the same call.
-            Ladder = RsLevelLadder.ForExport(arrangement);
+            // ONE resolved iteration table (RsPhraseExportData), shared with the
+            // RS-XML writer: its times, its ownership and its maxima. The ladder
+            // is the FILE shape cut along it: a level above a phrase's max
+            // leaves that phrase out, as the game expects.
+            PhraseData = RsPhraseExportData.ForExport(arrangement, beats, SongLengthMs);
+            var (iterations, phraseNames) = ExtractIterations(arrangement, beats, SongLengthMs, PhraseData);
+            Ladder = PhraseData.Ladder;
             OrderedLevels = Ladder.Levels.OrderBy(l => l.DifficultyIndex).ToList();
-
-            var (iterations, phraseNames) = ExtractIterations(arrangement, beats, SongLengthMs);
             Iterations = iterations;
             PhraseNames = phraseNames;
             PiTimes = new int[Iterations.Count + 1];
@@ -193,7 +181,7 @@ internal static class SngFromDomainMapper
         /// supplies one. See the <c>toneSlots</c> parameter.</summary>
         public IReadOnlyList<string>? ToneSlots { get; init; }
 
-        /// <summary>The RS7X block of a 7-string guitar; null when the SNG stays stock.</summary>
+        /// <summary>Extra per-string fields of the internal model; null for stock content.</summary>
         public Rs7BlockBuilder? Rs7Block { get; init; }
 
         public Arrangement Arrangement { get; }
@@ -201,6 +189,7 @@ internal static class SngFromDomainMapper
         public int SongLengthMs { get; }
         public List<ChartLevel> OrderedLevels { get; }
         public RsLevelLadderExport Ladder { get; }
+        public RsPhraseExportData PhraseData { get; }
         public List<string> PhraseNames { get; }
         public List<IterationInfo> Iterations { get; }
         public int[] PiTimes { get; }
@@ -220,6 +209,7 @@ internal static class SngFromDomainMapper
         /// keyed by reference like the overrides above.</summary>
         public HashSet<Chord> CompactRepeats { get; } = [];
         public List<RsChordTemplate> Templates { get; } = [];
+        public IReadOnlyList<ChordTemplate> SourceTemplates { get; set; } = [];
         public Dictionary<string, int> ChordNotesIds { get; } = new(ChordNotesComparer.Instance);
         public int NoteCountEasy;
         public int NoteCountMedium;
@@ -236,64 +226,42 @@ internal static class SngFromDomainMapper
         }
     }
 
-    private sealed record IterationInfo(int PhraseId, int StartMs, int EndMs, int Easy, int Medium, int Hard);
+    /// <summary>Start/End are written (clipped into the song); Owner* decide which sounds it owns.</summary>
+    private sealed record IterationInfo(int PhraseId, int StartMs, int EndMs, int OwnerStartMs, int OwnerEndMs,
+        int Easy, int Medium, int Hard);
 
     private sealed record SectionInfo(string Name, int Number, int StartMs, int EndMs);
 
     // ---- phrases / iterations ---------------------------------------------
 
     private static (List<IterationInfo> Iterations, List<string> PhraseNames) ExtractIterations(
-        Arrangement arrangement, IList<BeatMarker> beats, int songLengthMs)
+        Arrangement arrangement, IList<BeatMarker> beats, int songLengthMs, RsPhraseExportData effective)
     {
-        // Both stores, read the way the XML writer reads them: a marker's name does not have
-        // to be in Phrases (nothing in the editor adds it there), and a marker beside explicit
-        // iterations joins them.
-        var effective = PhraseMarkers.Iterations(arrangement,
-            () => EndNoGuitarSection.BeatAfterContent(arrangement, beats) ?? new FractionalPosition(beats.Count - 1));
+        // Both authored phrase stores follow the shared XML/SNG policy.
         var phraseNames = effective.Phrases.ToList();
-        var raw = effective.Iterations
-            .Select(iteration => (timeMs: MsInt(iteration.Position.GetPositionMs(beats)), phraseId: iteration.PhraseId))
-            .ToList();
-
-        raw = raw
-            .Where(it => it.phraseId >= 0 && it.phraseId < phraseNames.Count)
-            .OrderBy(it => it.timeMs)
-            .ToList();
-
-        if (raw.Count == 0)
+        if (effective.Resolved.Count == 0)
         {
             // No phrase structure in the chart: synthesize COUNT/content/END
             // so the SNG is structurally valid.
             phraseNames = ["COUNT", "p0", "END"];
-            var firstBeatMs = MsInt(beats[0].Time);
+            var firstBeatMs = Math.Clamp(MsInt(beats[0].Time), 0, songLengthMs);
             var contentMs = Math.Min(songLengthMs, firstBeatMs + 1);
-            var endMs = Math.Max(contentMs + 1, MsInt(beats[^1].Time));
+            var endMs = Math.Min(songLengthMs, Math.Max(contentMs + 1, MsInt(beats[^1].Time)));
             // The END iteration must start after the last content ends
             // (sustains and handshapes included), or trailing notes land
             // inside the END phrase.
             if (LastContentEndMs(arrangement, beats) is { } lastContentEnd && lastContentEnd >= endMs)
                 endMs = Math.Min(songLengthMs, lastContentEnd + 1);
-            raw =
-            [
-                (firstBeatMs, 0),
-                (contentMs, 1),
-                (endMs, 2)
-            ];
+            effective.Resolve(phraseNames, [(0, firstBeatMs), (1, contentMs), (2, endMs)], arrangement, beats, songLengthMs);
         }
 
-        var result = new List<IterationInfo>(raw.Count);
-        for (var i = 0; i < raw.Count; i++)
-        {
-            var endMs = i + 1 < raw.Count ? raw[i + 1].timeMs : songLengthMs;
-            result.Add(new IterationInfo(raw[i].phraseId, raw[i].timeMs, endMs, 0, 0, 0));
-        }
-
-        return (result, phraseNames);
+        var rows = effective.Resolved;
+        return ([.. rows.Select((row, i) => new IterationInfo(row.PhraseId, row.StartMs, row.EndMs, row.OwnerStartMs,
+            i + 1 < rows.Count ? rows[i + 1].OwnerStartMs : songLengthMs, 0, 0, 0))], phraseNames);
     }
 
     private static void BuildPhrasesAndIterations(BuildContext context, RocksmithSng sng)
     {
-        var arrangement = context.Arrangement;
         var maxDiff = context.MaxDifficulty;
         // The SNG (and the manifest, which copies these names) gets a legal,
         // unique spelling; PhraseInfos stay keyed by the AUTHORED name.
@@ -306,14 +274,11 @@ internal static class SngFromDomainMapper
 
             var phraseMaxDiff = maxDiff;
             var solo = (sbyte)0;
-            if (arrangement.PhraseInfos.TryGetValue(name, out var info))
+            if (context.PhraseData.PhraseInfos.TryGetValue(name, out var info))
             {
-                // Raised where a charter edited a phrase above its authored max;
-                // otherwise the authored value.
-                var shipped = context.Ladder.ShippedMaxDifficulty.TryGetValue(name, out var raised)
-                    ? raised
-                    : info.MaxDifficulty;
-                phraseMaxDiff = Math.Clamp(shipped, 0, maxDiff);
+                // The table's maximum: authored, raised where a charter edited a
+                // phrase above it, never below the content its iterations own.
+                phraseMaxDiff = Math.Clamp(info.MaxDifficulty, 0, maxDiff);
                 solo = (sbyte)(info.Solo ? 1 : 0);
             }
 
@@ -358,6 +323,7 @@ internal static class SngFromDomainMapper
         // which shape an index names. The domain model is left untouched.
         var export = RsChordTemplateExport.Build(context.Arrangement.ChordTemplates,
             context.OrderedLevels.Select(l => l.Chords), context.OrderedLevels.SelectMany(l => l.HandShapes));
+        context.SourceTemplates = export.Templates;
         foreach (var template in export.Templates) AddTemplate(context, template);
         foreach (var (id, index) in export.IndexById) context.TemplateIndexById[id] = index;
         foreach (var (chord, index) in export.ChordIndexOverrides) context.ChordIdOverrides[chord] = index;
@@ -426,6 +392,8 @@ internal static class SngFromDomainMapper
     {
         int[] standardTuningMidiNotes = [40, 45, 50, 55, 59, 64];
         var isBass = arrangement.ArrangementType == ArrangementType.Bass;
+        // An extended bass is already in package order (low B at 4, high C at 5, offsets from those).
+        var extendedBass = Rs7StringLayout.IsExtendedBass(arrangement);
         var capo = (sbyte)Math.Max(0, arrangement.Capo);
 
         var notes = new int[6];
@@ -439,7 +407,9 @@ internal static class SngFromDomainMapper
 
             var fret = capo > 0 && frets[stringIndex] == 0 ? capo : frets[stringIndex];
             var tuningOffset = TuningOffsetResolution.For(arrangement, stringIndex);
-            notes[stringIndex] = standardTuningMidiNotes[stringIndex] + tuningOffset + fret + (isBass ? -12 : 0);
+            notes[stringIndex] = extendedBass
+                ? Rs7StringLayout.BassOpenMidi(stringIndex) + tuningOffset + fret
+                : standardTuningMidiNotes[stringIndex] + tuningOffset + fret + (isBass ? -12 : 0);
         }
 
         return notes;
@@ -634,6 +604,7 @@ internal static class SngFromDomainMapper
         if (EndNoGuitarSection.StartMs(arrangement, beats) is { } noGuitarMs)
             raw = [.. raw.Append((name: EndNoGuitarSection.Name, timeMs: MsInt(noGuitarMs))).OrderBy(r => r.timeMs)];
 
+        raw = raw.Select(r => (r.name, timeMs: Math.Clamp(r.timeMs, 0, songLengthMs))).ToList();
         var numberByName = new Dictionary<string, int>(StringComparer.Ordinal);
         var result = new List<SectionInfo>(raw.Count);
         for (var i = 0; i < raw.Count; i++)
@@ -914,14 +885,14 @@ internal static class SngFromDomainMapper
         var timeMs = entity.TimeMs;
         var timeSec = MsToSec(timeMs);
 
-        var piId = FindPhraseIterationId(context, timeMs);
+        var piId = FindOwningIterationId(context, timeMs);
         var iteration = context.Iterations[piId];
         var sectionId = FindSectionId(context, timeMs);
         var (anchorFret, anchorWidth) = FindAnchor(anchors, anchorTimes, timeMs);
 
         var thisId = (short)index;
-        var previous = index == 0 || noteTimes[index - 1] < iteration.StartMs ? (short)-1 : (short)(thisId - 1);
-        var next = index == noteTimes.Length - 1 || noteTimes[index + 1] >= context.PiTimes[piId + 1]
+        var previous = index == 0 || noteTimes[index - 1] < iteration.OwnerStartMs ? (short)-1 : (short)(thisId - 1);
+        var next = index == noteTimes.Length - 1 || noteTimes[index + 1] >= iteration.OwnerEndMs
             ? (short)-1
             : (short)(thisId + 1);
 
@@ -941,7 +912,7 @@ internal static class SngFromDomainMapper
             var (parentEndMs, parentId) = pendingLinkNexts[stringIndex];
             pendingLinkNexts[stringIndex] = (int.MinValue, -1);
             // A child note must start at the end of its parent's sustain.
-            if (parentId != -1 && timeMs - parentEndMs <= 2)
+            if (parentId != -1 && Math.Abs((long)timeMs - parentEndMs) <= 2)
                 parentPrev = parentId;
 
             var sustainMs = entity.SustainMs;
@@ -951,7 +922,7 @@ internal static class SngFromDomainMapper
             var bendValues = note.BendValues
                 .OrderBy(b => b.Position)
                 .Take(32) // more than 32 bend values will crash the game
-                .Select(b => new RsBendValue(MsToSec(MsInt(b.Position.GetPositionMs(context.Beats))), (float)b.Step))
+                .Select(b => new RsBendValue(MsToSec(MsInt(b.Position.GetPositionMs(context.Beats))), (float)RsBendStrength.Normalize(b.Step)))
                 .ToList();
 
             var (slideTo, slideUnpitchTo) = ResolveSlides(note.SlideTo, note.UnpitchedSlide);
@@ -1003,20 +974,11 @@ internal static class SngFromDomainMapper
             // from our XML now agree.
             var hasChordNotes = chord.ChordNotes.Count > 0 && !chord.ForceNoNotes &&
                                 !context.CompactRepeats.Contains(chord);
+            UpdateChordStringMask(context, sectionId, difficulty, chord, chordId, hasChordNotes);
 
-            var chordNotesId = -1;
-            if (hasChordNotes)
-            {
-                // See the note-path comment: out-of-range strings are refused by
-                // the export validator, never silently shipped.
-                foreach (var chordNote in chord.ChordNotes)
-                {
-                    UpdateStringMask(context, sectionId, difficulty,
-                        Math.Clamp(chordNote.StringIndex, 0, SngStringLimits.MaxNoteStringIndex(context.Arrangement)));
-                }
-
-                chordNotesId = CreateChordNotes(context, sng, chord, thisId, timeMs, pendingLinkNexts);
-            }
+            var chordNotesId = hasChordNotes
+                ? CreateChordNotes(context, sng, chord, thisId, timeMs, pendingLinkNexts)
+                : -1;
 
             // A chord's SNG sustain comes from its chord notes and from nothing
             // else — XmlToSngNote.fs reads `chord.ChordNotes[0].Sustain` inside
@@ -1167,7 +1129,7 @@ internal static class SngFromDomainMapper
         return mask;
     }
 
-    /// <summary>SNG note mask for a chord note (no Single/Ignore/Child bits).
+    /// <summary>SNG note mask for a chord note (no Single/Child bits).
     /// Reference: XmlToSngNote.fs createMaskForChordNote.</summary>
     private static uint CreateMaskForChordNote(ChordNote note, int sustainMs)
     {
@@ -1181,6 +1143,7 @@ internal static class SngFromDomainMapper
         if (note.Hopo == HopoType.Tap) mask |= RsNoteMask.Tap;
 
         if (note.LinkNext) mask |= RsNoteMask.Parent;
+        if (note.Ignore) mask |= RsNoteMask.Ignore;
         // Accent IS modeled per chord note (ChordNote : IGuitarSound) — the rscp
         // and XML writers both emit it, so dropping it here made an accent
         // survive a save but vanish from the exported psarc.
@@ -1218,7 +1181,7 @@ internal static class SngFromDomainMapper
         foreach (var note in chord.ChordNotes)
         {
             // See the note-path comment: out-of-range strings are refused by the export
-            // validator, never silently shipped. Strings past the sixth go to RS7X.
+            // validator, never silently shipped. Strings past the sixth go to the internal extension model.
             var stringIndex = Math.Clamp(note.StringIndex, 0, SngStringLimits.MaxNoteStringIndex(context.Arrangement));
             var sustainMs = SustainMsFromDelta(chordTimeMs, note.Sustain, chord.Position, context.Beats);
 
@@ -1226,7 +1189,7 @@ internal static class SngFromDomainMapper
             var (slideTo, slideUnpitchTo) = ResolveSlides(note.SlideTo, note.UnpitchedSlide);
             var vibrato = (short)(note.Vibrato ? Math.Max(note.VibratoStrength, 80) : 0);
             var bends = note.BendValues.OrderBy(b => b.Position).Take(32).Select(bend =>
-                new RsBendValue(MsToSec(MsInt(bend.Position.GetPositionMs(context.Beats))), (float)bend.Step)).ToList();
+                new RsBendValue(MsToSec(MsInt(bend.Position.GetPositionMs(context.Beats))), (float)RsBendStrength.Normalize(bend.Step))).ToList();
             if (stringIndex > SngStringLimits.MaxStringIndex)
             {
                 anyMask |= context.Rs7Block!.Set(extended!, stringIndex, mask, slideTo, slideUnpitchTo, vibrato, bends);
@@ -1345,7 +1308,7 @@ internal static class SngFromDomainMapper
             MsToSec(endMs),
             firstNoteTime,
             lastNoteTime,
-            FindPhraseIterationId(context, startMs));
+            FindOwningIterationId(context, startMs));
     }
 
     // ---- metadata ----------------------------------------------------------
@@ -1368,7 +1331,7 @@ internal static class SngFromDomainMapper
             ? MsToSec(MsInt(beats[1].Time) - MsInt(beats[0].Time))
             : 0.5f;
 
-        var tuning = new short[SngStringLimits.MaxNoteStringIndex(context.Arrangement) + 1];
+        var tuning = new short[Math.Max(SngStringLimits.MaxStringIndex, SngStringLimits.MaxNoteStringIndex(context.Arrangement)) + 1];
         var tuningOffsets = TuningOffsetResolution.Resolve(context.Arrangement);
         for (var i = 0; i < Math.Min(tuning.Length, tuningOffsets.Count); i++)
             tuning[i] = (short)tuningOffsets[i];
@@ -1394,22 +1357,6 @@ internal static class SngFromDomainMapper
     }
 
     // ---- shared helpers ----------------------------------------------------
-
-    private static double ResolveSongLengthMs(Arrangement arrangement, IList<BeatMarker> beats, double songLengthMs)
-    {
-        if (songLengthMs > 0) return songLengthMs;
-
-        var last = beats.Count > 0 ? beats[^1].Time : 0.0;
-        foreach (var level in arrangement.Levels)
-        {
-            foreach (var note in level.Notes)
-                last = Math.Max(last, note.EndPosition.GetPositionMs(beats));
-            foreach (var chord in level.Chords)
-                last = Math.Max(last, chord.EndPosition.GetPositionMs(beats));
-        }
-
-        return last;
-    }
 
     private static void AddNoteToCounts(
         BuildContext context, int piId, int difficulty, IterationInfo iteration, bool ignored)
@@ -1488,6 +1435,21 @@ internal static class SngFromDomainMapper
         context.StringMasks[sectionId][difficulty] |= (sbyte)(1 << stringIndex);
     }
 
+    private static void UpdateChordStringMask(BuildContext context, int sectionId, int difficulty,
+        Chord chord, int chordId, bool hasChordNotes)
+    {
+        // Without children the emitted template is the only record of the played strings,
+        // including extended strings and templates synthesized for unresolved domain ids.
+        var strings = hasChordNotes
+            ? chord.ChordNotes.Select(n => n.StringIndex)
+            : context.SourceTemplates[chordId].Frets.Where(f => f.Value >= 0).Select(f => f.Key);
+        foreach (var stringIndex in strings)
+        {
+            UpdateStringMask(context, sectionId, difficulty,
+                Math.Clamp(stringIndex, 0, SngStringLimits.MaxNoteStringIndex(context.Arrangement)));
+        }
+    }
+
     /// <summary>Last iteration with StartTime &lt;= time (inclusive).
     /// Reference: Utils.fs findPhraseIterationId.</summary>
     private static int FindPhraseIterationId(BuildContext context, int timeMs)
@@ -1495,6 +1457,16 @@ internal static class SngFromDomainMapper
         var iterations = context.Iterations;
         var id = iterations.Count - 1;
         while (id > 0 && iterations[id].StartMs > timeMs) id--;
+        return id;
+    }
+
+    /// <summary>The last iteration the XML writes at or before <paramref name="timeMs" />, so
+    /// both files give a sound past a clipped iteration start to one phrase.</summary>
+    private static int FindOwningIterationId(BuildContext context, int timeMs)
+    {
+        var iterations = context.Iterations;
+        var id = iterations.Count - 1;
+        while (id > 0 && iterations[id].OwnerStartMs > timeMs) id--;
         return id;
     }
 

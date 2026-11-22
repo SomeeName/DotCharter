@@ -88,12 +88,19 @@ public class GuitarNote : IGuitarSound, ITimedElement
 
     public GuitarNote Clone()
     {
+        using var identities = ChartSnapshotIdentities.BeginCapture();
         var clone = new GuitarNote();
-        clone.CopyFrom(this);
+        ChartProjectRestorer.RestoreNote(clone, this);
         return clone;
     }
 
     public void CopyFrom(GuitarNote other)
+    {
+        using var identities = ChartSnapshotIdentities.BeginCapture(snapshotDestinations: false);
+        ChartProjectRestorer.RestoreNote(this, other);
+    }
+
+    internal void CopyFieldsFrom(GuitarNote other)
     {
         Position = other.Position;
         Sustain = other.Sustain;
@@ -118,8 +125,5 @@ public class GuitarNote : IGuitarSound, ITimedElement
         Ignore = other.Ignore;
         IgnoreDerived = other.IgnoreDerived;
         PassOtherNotes = other.PassOtherNotes;
-
-        BendValues.Clear();
-        foreach (var b in other.BendValues) BendValues.Add(b.Clone());
     }
 }

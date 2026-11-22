@@ -68,19 +68,19 @@ public static class ChartAudioLintAnalyzer
     // decides the range, and BinForMidi is (midi - MinMidi) * Step.
     private const int BinsPerSemitone = 2;
 
-    /// <summary>Lowest sounding MIDI the CQT can address (E1).</summary>
+    /// <summary>Lowest sounding MIDI the CQT can address (A0).</summary>
     public const int MinVerifiableMidi = MinMidi;
 
     /// <summary>
     ///     Highest sounding MIDI the CQT can address — <see cref="MinVerifiableMidi" />
-    ///     plus the semitones <c>BinCount</c> quarter-tone bins span (E7).
+    ///     plus the semitones <c>BinCount</c> quarter-tone bins span (D#7).
     ///     <para>
     ///     A pitch outside <c>[MinVerifiableMidi, MaxVerifiableMidi]</c> has no
     ///     bin at all, so <c>JuceChartVerifier.Verify</c> returns a flat no-hit
     ///     for it and <see cref="ProbeObserved" /> — which only looks NEARBY —
     ///     finds nothing to name either. Reporting that as a finding says "the
     ///     audio is silent here" about a pitch this analyzer never listened to:
-    ///     a 5-string bass's low B (23) and a 4-string bass dropped to D (26)
+    ///     a bass tuned below A0 (a 5-string dropped past low A, MIDI 20 and under)
     ///     each produced one bogus finding PER NOTE on a chart that was right.
     ///     Unknowable is not wrong, so those pitches are skipped exactly like
     ///     mutes and harmonics.
@@ -93,8 +93,10 @@ public static class ChartAudioLintAnalyzer
     public static bool IsVerifiable(int midi) => midi is >= MinVerifiableMidi and <= MaxVerifiableMidi;
 
     public static ChartAudioLintResult Analyze(ReadOnlySpan<float> monoPcm, int sampleRate,
-        IReadOnlyList<LintExpectedSound> sounds, ChartAudioLintOptions? options = null)
+        IReadOnlyList<LintExpectedSound> sounds, ChartAudioLintOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         options ??= ChartAudioLintOptions.Default;
         if (sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(sampleRate));
 
@@ -102,6 +104,7 @@ public static class ChartAudioLintAnalyzer
             hop: Hop, fMinMidi: MinMidi, binCount: BinCount, maxKernelSamples: MaxKernelSamples,
             subOctaveBins: SubOctaveBins);
         cqt.AnalyzeWhole(monoPcm);
+        cancellationToken.ThrowIfCancellationRequested();
         var verifier = new JuceChartVerifier(cqt)
         {
             NoiseMargin = NoiseMargin,
@@ -122,6 +125,7 @@ public static class ChartAudioLintAnalyzer
 
         foreach (var sound in sounds)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!sound.IsPitched || sound.SoundingMidis.Count == 0) continue;
 
             distinct.Clear();
@@ -158,6 +162,7 @@ public static class ChartAudioLintAnalyzer
             if (allVerified) verifiedCount++;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return new ChartAudioLintResult(checkedCount, verifiedCount, findings);
     }
 

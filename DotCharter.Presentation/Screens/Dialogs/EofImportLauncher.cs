@@ -18,14 +18,17 @@ namespace DotCharter.Presentation.Screens.Dialogs;
 ///     the dialog is not on screen yet, so the pill is its busy state — then the
 ///     dialog, then the project creation once it closes.
 /// </summary>
+/// <summary>The picker and the remembered-directory store the EOF import reads and writes.</summary>
+public sealed record EofImportFiles(IFileStorageService Storage, IConfigurationService Config);
+
 public sealed class EofImportLauncher(
     IDialogs dialogs,
-    IFileStorageService storage,
-    IConfigurationService config,
+    EofImportFiles files,
     IStatusBarService statusBar,
     ProjectState state,
     DialogBasics basics,
-    EofProjectCreator creator)
+    EofProjectCreator creator,
+    ReferencePitchOffer referencePitchOffer)
 {
     private readonly ILocalizationService _localization = basics.Localization;
     private readonly IAppLogger _logger = basics.Logger;
@@ -35,15 +38,15 @@ public sealed class EofImportLauncher(
     /// <summary>True when a track selection was imported.</summary>
     public async Task<bool> PickAsync()
     {
-        var filePath = await storage.OpenFilePickerAsync(_localization["Picker_SelectEofFile"], null,
-            config.LoadAppConfig().LastEofDir);
+        var filePath = await files.Storage.OpenFilePickerAsync(_localization["Picker_SelectEofFile"], null,
+            files.Config.LoadAppConfig().LastEofDir);
         if (string.IsNullOrEmpty(filePath))
         {
             _logger.Info(AppLogCategory.Import, "Editor on Fire import file picker canceled.");
             return false;
         }
 
-        config.RememberDirectory(filePath, (c, d) => c.LastEofDir = d);
+        files.Config.RememberDirectory(filePath, (c, d) => c.LastEofDir = d);
         return await OpenAsync(filePath);
     }
 
@@ -72,6 +75,9 @@ public sealed class EofImportLauncher(
 
         var before = state.ActiveProject;
         await creator.CreateAsync(selection);
-        return !ReferenceEquals(before, state.ActiveProject);
+        if (ReferenceEquals(before, state.ActiveProject)) return false;
+        // The companion audio arrived with the project: the same A440 offer as File > Attach audio.
+        await referencePitchOffer.OfferAsync();
+        return true;
     }
 }

@@ -1,9 +1,11 @@
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
+using DotCharter.Core.Domain.Project;
 using DotCharter.Localization;
 using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Dialogs;
 using DotCharter.Services.Editing;
+using DotCharter.Services.Infrastructure.Configuration;
 using DotCharter.Tone.Infrastructure.Configuration;
 using DotCharter.Tone.Logging;
 using DotCharter.Services.Parsing.Xml;
@@ -22,19 +24,22 @@ public sealed class RsXmlImportViewModel : DialogViewModel<bool>, IRsXmlImportSc
     private readonly IChartEditorSurface _editor;
     private readonly ILocalizationService _localization;
     private readonly IAppLogger _logger;
-    private readonly RsXmlImporter _importer = new();
+    private readonly IHistoryService _history;
+    private readonly IConfigurationService? _config;
     private CancellationTokenSource? _cts;
     private string _fileName = "";
     private bool _isBusy;
     private string _errorMessage = "";
 
     public RsXmlImportViewModel(ProjectState state, IChartEditorSurface editor, ILocalizationService localization,
-        IAppLogger logger)
+        IAppLogger logger, IHistoryService history, IConfigurationService? config = null)
     {
         _state = state;
         _editor = editor;
         _localization = localization;
         _logger = logger;
+        _history = history;
+        _config = config;
         CloseCommand = new RelayCommand(() => TryCancel());
     }
 
@@ -94,10 +99,18 @@ public sealed class RsXmlImportViewModel : DialogViewModel<bool>, IRsXmlImportSc
         try
         {
             var hostBeats = project.Beats.ToList();
-            var plan = await Task.Run(() => RsXmlImporter.Prepare(filePath, hostBeats), cts.Token);
+            var config = _config?.LoadAppConfig();
+            var plan = await Task.Run(() => RsXmlImporter.Prepare(filePath, hostBeats, config), cts.Token);
             cts.Token.ThrowIfCancellationRequested();
-            Report(_importer.Apply(project, plan), filePath);
-            _editor.RequestRedraw();
+            if (!ReferenceEquals(_state.ActiveProject, project))
+            {
+                Close(false);
+                return;
+            }
+
+            var action = new ImportRsXmlAction(project, plan, () => RefreshProject(project));
+            _history.Do(action);
+            Report(action.Result, filePath);
             Close(true);
         }
         catch (OperationCanceledException)
@@ -116,6 +129,16 @@ public sealed class RsXmlImportViewModel : DialogViewModel<bool>, IRsXmlImportSc
             IsBusy = false;
             _cts = null;
         }
+    }
+
+    private void RefreshProject(ChartProject project)
+    {
+        if (!ReferenceEquals(_state.ActiveProject, project)) return;
+        if (_state.ActiveArrangement == null || !project.Arrangements.Contains(_state.ActiveArrangement))
+            _editor.SetActiveArrangement(project.Arrangements.FirstOrDefault());
+        if (_editor.ActiveVocalTrack != null && !project.VocalTracks.Contains(_editor.ActiveVocalTrack))
+            _editor.ActiveVocalTrack = project.VocalTracks.FirstOrDefault();
+        _editor.RequestRedraw();
     }
 
     private void Report(RsXmlImportResult result, string filePath)

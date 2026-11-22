@@ -13,6 +13,8 @@ namespace DotCharter.Tests.Services.Audio.VstSandbox;
 [SupportedOSPlatform("windows")]
 public class VstSandboxHostProcessTests
 {
+    private static readonly TimeSpan DeadlockCap = TimeSpan.FromSeconds(60);
+
     private static string RequireExe()
     {
         Assert.SkipWhen(!OperatingSystem.IsWindows(), "VST sandbox is Windows-only.");
@@ -87,24 +89,31 @@ public class VstSandboxHostProcessTests
 
         // The child's audio worker answers every sequence bump. With an
         // empty chain it reports chainActive=false (parent keeps its dry
-        // buffer — passthrough semantics).
+        // buffer — passthrough semantics). The worker may still be starting: ask until it
+        // answers. The one-minute deadline is a deadlock detector, not a budget.
+        var deadline = Stopwatch.StartNew();
         var responded = false;
-        for (var attempt = 0; attempt < 50 && !responded; attempt++)
-            responded = shm.ProcessBlock(left, right, frames, null, 0, out _, out _, timeoutMs: 200);
-        Assert.True(responded, "child never answered a shared-memory block request");
+        while (!responded && deadline.Elapsed < DeadlockCap)
+            responded = shm.ProcessBlock(left, right, frames, null, 0, out _, out _, timeoutMs: 1000);
+        Assert.True(responded, "child never answered a shared-memory block request (or the box was starved for a minute)");
+        Assert.True(host.IsRunning);
 
+        // The worker is known to be up, so this block's timeout only has to catch a hang.
         var ok = shm.ProcessBlock(left, right, frames, null, 0,
-                                  out var chainActive, out var instrumentActive, timeoutMs: 500);
+                                  out var chainActive, out var instrumentActive, timeoutMs: (int)DeadlockCap.TotalMilliseconds);
         Assert.True(ok);
         Assert.False(chainActive);
         Assert.False(instrumentActive);
         Assert.Equal(leftCopy, left);
         Assert.Equal(rightCopy, right);
 
-        // Heartbeat must advance while the worker is alive.
+        // Heartbeat must advance while the worker is alive: watch for the next beat.
         var hb1 = shm.Heartbeat;
-        await Task.Delay(400, TestContext.Current.CancellationToken);
-        Assert.NotEqual(hb1, shm.Heartbeat);
+        deadline.Restart();
+        while (shm.Heartbeat == hb1 && deadline.Elapsed < DeadlockCap)
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        Assert.True(shm.Heartbeat != hb1, "the heartbeat never moved (or the box was starved for a minute)");
+        Assert.True(host.IsRunning);
 
         await host.StopAsync();
     }

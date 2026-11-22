@@ -1,6 +1,9 @@
 ﻿using DotCharter.Tone.Audio.Dsp;
 using DotCharter.Tone.Audio.Dsp.Presets;
 using DotCharter.Tone.Audio.Dsp.RsToneConversion;
+using DotCharter.Tone.Diagnostics;
+using DotCharter.Tone.UI.ViewModels.PlayMode;
+using System.Threading.Channels;
 
 namespace DotCharter.Tests.Services.Audio.Dsp;
 
@@ -24,6 +27,223 @@ namespace DotCharter.Tests.Services.Audio.Dsp;
 /// </summary>
 public sealed class ToneApplyQueueTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SupersededFailedCompletion_DoesNotMoveANewerPresetToItsOldScene(bool throws)
+    {
+        var chain = new FakeDspChainService([new DspModuleType("amp", "amp", [])]);
+        PedalboardViewModel? board = null;
+        var failed = false;
+        var presets = new RecordingPresetService(preset =>
+        {
+            failed = preset.Id == "failed";
+            if (failed)
+            {
+                board!.SelectSceneAt(1);
+                if (throws) throw new InvalidOperationException("failed before changing the chain");
+                return;
+            }
+            new DcRigApplier(chain).Apply(preset.Rig);
+        }, resultFactory: () => new DcRigApplyResult(0, 0, 0, 0, 0, NoOp: false, FailedOps: failed ? 1 : 0));
+        var dispatcher = new CompletionDispatcher();
+        using var owned = board = TestRigBuilders.Pedalboard(chain, presets, FakeLocalization.English(), dispatcher: dispatcher);
+        board.AddGear(chain.Catalog[0]);
+        board.Browser.ApplyPreset(Preset("failed"));
+        var failure = await dispatcher.Completions.Reader.ReadAsync(TestContext.Current.CancellationToken)
+            .AsTask().WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+
+        var next = new DspTonePreset("next", "next", DspToneCategory.Clean, string.Empty,
+            new DcRigPreset([new("amp", new Dictionary<string, float>())]), DspToneOrigin.User);
+        board.Browser.ApplyPreset(next);
+        var success = await dispatcher.Completions.Reader.ReadAsync(TestContext.Current.CancellationToken)
+            .AsTask().WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        failure();
+        success();
+
+        Assert.Equal(0, board.ActiveSceneIndex);
+        Assert.Null(chain.Scenes);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void FailedBrowserApply_DoesNotPassItsDeferredSceneToTheNextPreset(bool throws)
+    {
+        var chain = new FakeDspChainService([new DspModuleType("amp", "amp", [])]);
+        PedalboardViewModel? board = null;
+        var failed = false;
+        var presets = new RecordingPresetService(preset =>
+        {
+            failed = preset.Id == "failed";
+            if (failed)
+            {
+                Assert.True(board!.Browser.IsApplying);
+                board.SelectSceneAt(1);
+                if (throws) throw new InvalidOperationException("failed before changing the chain");
+                return;
+            }
+            new DcRigApplier(chain).Apply(preset.Rig);
+        }, resultFactory: () => new DcRigApplyResult(0, 0, 0, 0, 0, NoOp: false, FailedOps: failed ? 1 : 0));
+        using var owned = board = TestRigBuilders.Pedalboard(chain, presets, FakeLocalization.English());
+        board.AddGear(chain.Catalog[0]);
+
+        board.Browser.ApplyPreset(Preset("failed"));
+        Assert.Equal(0, board.ActiveSceneIndex);
+        var next = new DspTonePreset("next", "next", DspToneCategory.Clean, string.Empty,
+            new DcRigPreset([new("amp", new Dictionary<string, float>())]), DspToneOrigin.User);
+        board.Browser.ApplyPreset(next);
+
+        Assert.Equal(0, board.ActiveSceneIndex);
+        Assert.Null(chain.Scenes);
+        Assert.Equal("next", board.Browser.ActivePreset!.Id);
+    }
+
+    [Fact]
+    public void SuccessfulBrowserApply_DoesNotSeedCompareWithTheFailedChainsOldTrim()
+    {
+        var chain = new FakeDspChainService([
+            new DspModuleType("gain", "gain", [new("gainDb", "Gain", -24, 24, 0)])
+        ]);
+        var failed = false;
+        var presets = new RecordingPresetService(preset =>
+        {
+            failed = preset.Id == "failed";
+            if (!failed) new DcRigApplier(chain).Apply(preset.Rig);
+        }, resultFactory: () => new DcRigApplyResult(0, 0, 0, 0, 0, NoOp: false, FailedOps: failed ? 1 : 0));
+        using var board = TestRigBuilders.Pedalboard(chain, presets, FakeLocalization.English());
+        board.AddGear(chain.Catalog[0]);
+        Assert.True(board.CompareLevel.SetLiveTrim(6));
+
+        board.Browser.ApplyPreset(Preset("failed"));
+        Assert.True(board.CompareLevel.HasTrim);
+        var next = new DspTonePreset("next", "next", DspToneCategory.Clean, string.Empty,
+            new DcRigPreset([new("gain", new Dictionary<string, float> { ["gainDb"] = 2 })]), DspToneOrigin.User);
+        board.Browser.ApplyPreset(next);
+        board.CompareLevel.IsMatched = false;
+        board.SelectCompareSlotCommand.Execute("B");
+
+        Assert.False(board.CompareLevel.HasTrim);
+        Assert.Equal(2f, chain.GetNodes().Single().Values["gainDb"], 3);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void FailedBrowserApply_PreservesTheBypassPatternWhenMasterBypassIsReleased(bool throws)
+    {
+        var chain = new FakeDspChainService([
+            new DspModuleType("amp", "amp", []), new DspModuleType("cab", "cab", [])
+        ]);
+        var presets = new RecordingPresetService(_ =>
+        {
+            if (throws) throw new InvalidOperationException("failed before changing the chain");
+        }, resultFactory: () => new DcRigApplyResult(0, 0, 0, 0, 0, NoOp: false, FailedOps: 1));
+        using var board = TestRigBuilders.Pedalboard(chain, presets, FakeLocalization.English());
+        board.AddGear(chain.Catalog[0]);
+        board.AddGear(chain.Catalog[1]);
+        board.Nodes[1].Bypassed = true;
+        var intended = chain.GetNodes().Select(node => node.Bypassed).ToArray();
+        var ids = chain.GetNodes().Select(node => node.NodeId).ToArray();
+        board.ToggleMasterBypassCommand.Execute(null);
+
+        board.Browser.ApplyPreset(Preset("bad"));
+
+        Assert.True(board.IsMasterBypassed);
+        Assert.All(chain.GetNodes(), node => Assert.True(node.Bypassed));
+        Assert.Equal(ids, chain.GetNodes().Select(node => node.NodeId));
+        board.ToggleMasterBypassCommand.Execute(null);
+        Assert.Equal(intended, chain.GetNodes().Select(node => node.Bypassed));
+    }
+
+    [Fact]
+    public void AFailedApplyAfterAHeldSuccessPublishesTheFinalChainSettlement()
+    {
+        var chain = new FakeDspChainService([
+            new DspModuleType("amp", "amp", []), new DspModuleType("cab", "cab", []),
+            new DspModuleType("reverb", "reverb", [])
+        ]);
+        var good = new DspTonePreset("good", "good", DspToneCategory.Clean, string.Empty, new DcRigPreset([
+            new("amp", new Dictionary<string, float>(), false), new("reverb", new Dictionary<string, float>(), false)
+        ]), DspToneOrigin.User);
+        var presets = new RecordingPresetService(preset =>
+        {
+            if (preset.Id == "bad") throw new InvalidOperationException("failed apply");
+            new DcRigApplier(chain).Apply(preset.Rig);
+        });
+        using var board = TestRigBuilders.Pedalboard(chain, presets, FakeLocalization.English());
+        board.AddGear(chain.Catalog[0]);
+        board.AddGear(chain.Catalog[1]);
+        board.ToggleMasterBypassCommand.Execute(null);
+        var workers = new Queue<Action>();
+        var posted = new List<Action>();
+        var settled = new List<DcRigApplyResult>();
+        var queue = new ToneApplyQueue(presets, applied: (_, result) =>
+        {
+            settled.Add(result);
+            board.Sync();
+        }, runOnWorker: workers.Enqueue, postBack: posted.Add);
+
+        queue.ApplyToPlayer(0, good);
+        workers.Dequeue()();
+        queue.ApplyToPlayer(0, Preset("bad"));
+        workers.Dequeue()();
+        foreach (var completion in posted) completion();
+
+        Assert.True(Assert.Single(settled).FailedOps > 0);
+        Assert.All(chain.GetNodes(), node => Assert.True(node.Bypassed));
+        Assert.Equal(chain.GetNodes().Select(node => node.ModuleTypeId), board.Nodes.Select(node => node.ModuleTypeId));
+    }
+
+    [Fact]
+    public async Task DelayedCompletions_PreserveTheLatestPresetsAuthoredBypassPattern()
+    {
+        var chain = new FakeDspChainService([
+            new DspModuleType("amp", "amp", []), new DspModuleType("cab", "cab", [])
+        ]);
+        var first = new DspTonePreset("a", "a", DspToneCategory.Clean, string.Empty, new DcRigPreset([
+            new("amp", new Dictionary<string, float>(), false), new("cab", new Dictionary<string, float>(), true)
+        ]), DspToneOrigin.User);
+        var last = new DspTonePreset("b", "b", DspToneCategory.Clean, string.Empty, new DcRigPreset([
+            new("amp", new Dictionary<string, float>(), true), new("cab", new Dictionary<string, float>(), false)
+        ]), DspToneOrigin.User);
+        PedalboardViewModel? board = null;
+        var presets = new RecordingPresetService(preset =>
+        {
+            new DcRigApplier(chain).Apply(preset.Rig);
+            if (preset.Id == "a") board!.Browser.ApplyPreset(last);
+        });
+        var dispatcher = new CompletionDispatcher();
+        using var owned = board = TestRigBuilders.Pedalboard(chain, presets, FakeLocalization.English(), dispatcher: dispatcher);
+        board.AddGear(chain.Catalog[0]);
+        board.AddGear(chain.Catalog[1]);
+        board.ToggleMasterBypassCommand.Execute(null);
+
+        board.Browser.ApplyPreset(first);
+        var firstCompletion = await dispatcher.Completions.Reader.ReadAsync(TestContext.Current.CancellationToken)
+            .AsTask().WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        var lastCompletion = await dispatcher.Completions.Reader.ReadAsync(TestContext.Current.CancellationToken)
+            .AsTask().WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        Assert.Equal(new[] { "a", "b" }, presets.Completed);
+        firstCompletion();
+        lastCompletion();
+        Assert.All(chain.GetNodes(), node => Assert.True(node.Bypassed));
+        board.ToggleMasterBypassCommand.Execute(null);
+
+        Assert.Equal(new[] { true, false }, chain.GetNodes().Select(node => node.Bypassed));
+    }
+
+    private sealed class CompletionDispatcher : IUiDispatcher
+    {
+        public Channel<Action> Completions { get; } = Channel.CreateUnbounded<Action>();
+        public bool CheckAccess() => true;
+        public void Post(Action action) => action();
+        public void PostNormal(Action action) => Completions.Writer.TryWrite(action);
+        public Task InvokeAsync(Action action) { action(); return Task.CompletedTask; }
+        public Task<T> InvokeAsync<T>(Func<T> func) => Task.FromResult(func());
+        public Task<T> InvokeAsync<T>(Func<Task<T>> func) => func();
+    }
+
     [Fact]
     public void AGestureReturnsBeforeTheApplyRuns_AndTheApplyIsOffTheGesturesThread()
     {
@@ -89,6 +309,57 @@ public sealed class ToneApplyQueueTests
 
     /// <summary>Seats are independent: player 2's tone must not wait behind
     /// player 1's crossfade.</summary>
+    [Fact]
+    public void AQueuedPresetFromAnotherProfileIsDiscardedBeforeApply()
+    {
+        var workers = new Queue<Action>();
+        var completions = 0;
+        var service = new RecordingPresetService(_ => { });
+        var queue = new ToneApplyQueue(service, (_, _) => completions++, runOnWorker: workers.Enqueue);
+        queue.ApplyToPlayer(0, Preset("profile-a"));
+
+        service.ProfileGeneration++;
+        workers.Dequeue()();
+
+        Assert.Empty(service.Completed);
+        Assert.Equal(0, completions);
+        Assert.False(queue.IsBusy(0));
+        queue.ApplyToPlayer(0, Preset("profile-b"));
+        workers.Dequeue()();
+        Assert.Equal(["profile-b"], service.Completed);
+    }
+
+    [Fact]
+    public void SwitchingAwayAndBackStillDiscardsOldWork_AndNewWorkReplacesIt()
+    {
+        var workers = new Queue<Action>();
+        var service = new RecordingPresetService(_ => { });
+        var queue = new ToneApplyQueue(service, runOnWorker: workers.Enqueue);
+        queue.ApplyToPlayer(0, Preset("old-a"));
+        service.ProfileGeneration += 2;
+        workers.Dequeue()();
+        Assert.Empty(service.Completed);
+
+        queue.ApplyToPlayer(0, Preset("a"));
+        service.ProfileGeneration++;
+        queue.ApplyToPlayer(0, Preset("b"));
+        workers.Dequeue()();
+        Assert.Equal(["b"], service.Completed);
+    }
+
+    [Fact]
+    public void ACompletionPostedByThePreviousProfileIsDiscarded()
+    {
+        var posted = new Queue<Action>();
+        var completions = 0;
+        var service = new RecordingPresetService(_ => { });
+        var queue = new ToneApplyQueue(service, (_, _) => completions++, postBack: posted.Enqueue);
+        queue.ApplyToPlayer(0, Preset("a"));
+        service.ProfileGeneration++;
+        posted.Dequeue()();
+        Assert.Equal(0, completions);
+    }
+
     [Fact]
     public void SeatsQueueIndependently()
     {
@@ -216,6 +487,56 @@ public sealed class ToneApplyQueueTests
         Assert.Contains("_applyQueue.ApplyToPlayer(", src, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void FailedSettlementFromThePreviousProfileIsDiscarded(bool throws)
+    {
+        var posted = new Queue<Action>();
+        var settled = new List<DcRigApplyResult>();
+        var service = new RecordingPresetService(_ =>
+        {
+            if (throws) throw new InvalidOperationException("partial apply failed");
+        }, resultFactory: () => new DcRigApplyResult(0, 0, 0, 0, 0, NoOp: false, FailedOps: 1));
+        var queue = new ToneApplyQueue(service, (_, result) => settled.Add(result), postBack: posted.Enqueue);
+        queue.ApplyToPlayer(0, Preset("profile-a"));
+        Assert.Single(posted);
+
+        service.ProfileGeneration++;
+        posted.Dequeue()();
+
+        Assert.Empty(settled);
+    }
+
+    [Fact]
+    public void ObsoleteQueuedWorkDoesNotApply_AndTheCurrentProfilesFailureStillSettles()
+    {
+        var workers = new Queue<Action>();
+        var posted = new Queue<Action>();
+        var attempts = new List<string>();
+        var settled = new List<DcRigApplyResult>();
+        var service = new RecordingPresetService(preset =>
+        {
+            attempts.Add(preset.Id);
+            throw new InvalidOperationException("partial apply failed");
+        });
+        var queue = new ToneApplyQueue(service, (_, result) => settled.Add(result),
+            runOnWorker: workers.Enqueue, postBack: posted.Enqueue);
+        queue.ApplyToPlayer(0, Preset("profile-a"));
+        service.ProfileGeneration++;
+        workers.Dequeue()();
+        Assert.Empty(attempts);
+        Assert.Empty(posted);
+
+        queue.ApplyToPlayer(0, Preset("profile-b"));
+        workers.Dequeue()();
+        posted.Dequeue()();
+
+        Assert.Equal(["profile-b"], attempts);
+        Assert.True(Assert.Single(settled).FailedOps > 0);
+        Assert.False(queue.IsBusy(0));
+    }
+
     // ----- helpers -----------------------------------------------------------
 
     private static DspTonePreset Preset(string id) =>
@@ -234,8 +555,10 @@ public sealed class ToneApplyQueueTests
         return condition();
     }
 
-    private sealed class RecordingPresetService(Action<DspTonePreset> onApply) : IDspTonePresetService
+    private sealed class RecordingPresetService(Action<DspTonePreset> onApply,
+        Func<DcRigApplyResult>? resultFactory = null) : IDspTonePresetService
     {
+        public long ProfileGeneration { get; set; }
         private readonly object _gate = new();
         private readonly List<string> _completed = [];
         private readonly List<int> _players = [];
@@ -265,7 +588,7 @@ public sealed class ToneApplyQueueTests
                 _threads.Add(Environment.CurrentManagedThreadId);
             }
 
-            return new DcRigApplyResult(0, 0, 0, 0, 0, NoOp: false);
+            return resultFactory?.Invoke() ?? new DcRigApplyResult(0, 0, 0, 0, 0, NoOp: false);
         }
 
         public DcRigApplyResult? ApplyToPlayerById(int player, string id) => null;

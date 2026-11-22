@@ -7,7 +7,7 @@ namespace DotCharter.Presentation.Contracts.Settings;
 ///     Settings ▸ General: the display language and the screen the app opens
 ///     on, the first-run wizard, the local crash report, and — behind the
 ///     Advanced disclosure — the log's outputs, detail, rotation and
-///     categories. Every value is saved by the footer; the language takes
+///     categories and the Rocksmith export defaults. Every value is saved by the footer; the language takes
 ///     effect when it is.
 ///     <para>
 ///         Search hides rows through <see cref="HiddenKeys" />, one set of row
@@ -81,6 +81,14 @@ public interface IGeneralSettingsScreen : INotifyPropertyChanged
     bool LogErrors { get; set; }
 
     bool LogExternal { get; set; }
+
+    int ExportAutoVolumeTargetLufs { get; set; }
+
+    string ExportTestDefaultFolder { get; set; }
+
+    ICommand BrowseTestExportDefaultFolderCommand { get; }
+
+    ICommand ClearTestExportDefaultFolderCommand { get; }
 
     // ── search ───────────────────────────────────────────────────────────
 

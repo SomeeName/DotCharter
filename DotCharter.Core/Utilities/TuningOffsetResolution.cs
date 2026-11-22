@@ -24,15 +24,11 @@ namespace DotCharter.Core.Utilities;
 ///         back to deriving from the letters.
 ///     </para>
 ///     <para>
-///         <b>And that derivation is restricted to 4- and 6-string instruments on
-///         purpose.</b> A 5-string bass offset has no agreed meaning — GP measures
-///         it against B-E-A-D-G and the RS SNG path against E-A-D-G-B, which is the
-///         same ambiguity <see cref="TuningUtilities.GetTuningNames" /> documents and
-///         refuses to resolve. Guessing there would write a WRONG tuning into a
-///         shipped package, which is strictly worse than the zeros it replaces. For
-///         every other string count this returns the zeros the callers already used,
-///         so nothing regresses; the honest answer is that such a chart has to
-///         author its offsets.
+///         A known tuning name supplies its octave and extended-string offsets
+///         when its pitch classes agree with the letters, or when letters are
+///         absent. Conflicting letters take precedence. Without a coherent name,
+///         letter-only derivation is restricted to four and six strings and uses
+///         the nearest signed offset; pitch classes alone cannot specify an octave.
 ///     </para>
 /// </remarks>
 public static class TuningOffsetResolution
@@ -43,8 +39,9 @@ public static class TuningOffsetResolution
     private static readonly int[] Bass4Std = [4, 9, 2, 7];          // E A D G
 
     /// <summary>
-    ///     Per-string offsets, low → high. Never null; may be empty when the
-    ///     arrangement says nothing at all.
+    ///     Per-string offsets, low → high. Authored offsets win, then a known name
+    ///     coherent with the letters, then readable letters. Never null;
+    ///     empty when no source can be resolved.
     /// </summary>
     public static IReadOnlyList<int> Resolve(Arrangement arrangement)
     {
@@ -57,7 +54,25 @@ public static class TuningOffsetResolution
             return authored;
         }
 
+        var stringCount = arrangement.StringCount > 0
+            ? arrangement.StringCount
+            : arrangement.ArrangementType == ArrangementType.Bass ? 4 : 6;
+        if (TuningUtilities.TryGetOffsetsForTuningType(arrangement.TuningType, stringCount, out var named) &&
+            (arrangement.Tuning.Length == 0 || SamePitchClasses(arrangement.Tuning, stringCount, named)))
+        {
+            return named;
+        }
+
         return DeriveFromNoteNames(arrangement.Tuning) ?? [];
+    }
+
+    private static bool SamePitchClasses(IReadOnlyList<string> letters, int stringCount, int[] offsets)
+    {
+        if (letters.Count != stringCount) return false;
+        var named = TuningUtilities.GetTuningNames(stringCount, offsets);
+        for (var i = 0; i < stringCount; i++)
+            if (NoteToPitchClass(letters[i]) != NoteToPitchClass(named[i])) return false;
+        return true;
     }
 
     /// <summary>The offset for one string, or <c>0</c> when the arrangement does not
@@ -104,31 +119,5 @@ public static class TuningOffsetResolution
         return offsets;
     }
 
-    /// <summary>One note letter (any case, sharps or flats) to a pitch class 0-11,
-    /// or -1. Matches <see cref="TuningNameResolver" />'s parsing exactly — the two
-    /// must agree or a derived vector would name differently from its letters.</summary>
-    private static int NoteToPitchClass(string? note)
-    {
-        if (string.IsNullOrWhiteSpace(note)) return -1;
-        var trimmed = note.Trim();
-        var normalized = char.ToUpperInvariant(trimmed[0]) +
-                         (trimmed.Length > 1 ? trimmed[1..].ToLowerInvariant() : "");
-
-        return normalized switch
-        {
-            "C" or "B#" => 0,
-            "C#" or "Db" => 1,
-            "D" => 2,
-            "D#" or "Eb" => 3,
-            "E" or "Fb" => 4,
-            "F" or "E#" => 5,
-            "F#" or "Gb" => 6,
-            "G" => 7,
-            "G#" or "Ab" => 8,
-            "A" => 9,
-            "A#" or "Bb" => 10,
-            "B" or "Cb" => 11,
-            _ => -1
-        };
-    }
+    private static int NoteToPitchClass(string? note) => TuningNameResolver.NoteToPitchClass(note);
 }

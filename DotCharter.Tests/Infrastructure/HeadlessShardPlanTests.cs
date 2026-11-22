@@ -140,10 +140,13 @@ public sealed class HeadlessShardPlanTests : IDisposable
         foreach (var (name, text) in new[] { ("Invoke-Gate.ps1", gate), ("Invoke-HeadlessUiCi.ps1", ci), ("New-Release.ps1", release) })
         {
             Assert.True(text.Contains("HeadlessShards.psm1", StringComparison.Ordinal), $"{name} no longer imports HeadlessShards.psm1");
-            Assert.True(text.Contains("Invoke-HeadlessShards ", StringComparison.Ordinal), $"{name} no longer runs the shards");
+            // Invoke-HeadlessShards, or its two halves (the release starts its culture sweeps together, then waits once).
+            var runs = text.Contains("Invoke-HeadlessShards ", StringComparison.Ordinal)
+                       || (text.Contains("Start-TestShards ", StringComparison.Ordinal) && text.Contains("Wait-TestShards ", StringComparison.Ordinal));
+            Assert.True(runs, $"{name} no longer runs the shards");
             Assert.True(text.Contains("Merge-HeadlessTrx ", StringComparison.Ordinal), $"{name} no longer merges the shards' results");
         }
-        Assert.Contains("if ($Headless) { $exit = Invoke-HeadlessShardedRun ", gate);
+        Assert.Contains("if ($lanes -contains 'headless') { $exit = Invoke-HeadlessShardedRun ", gate);
         Assert.Contains("-Label 'run1' -Culture 'en-US' -Shards $HeadlessShards", release);
         Assert.Contains("$run = Invoke-HeadlessUiShardedRun -RunFilter $Filter -Label 'run1'", ci);
     }

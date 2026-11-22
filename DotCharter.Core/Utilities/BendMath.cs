@@ -1,3 +1,4 @@
+using System.Numerics;
 using DotCharter.Core.Domain.Guitar;
 using DotCharter.Core.Domain.Primitives;
 
@@ -12,6 +13,10 @@ namespace DotCharter.Core.Utilities;
 /// </summary>
 public static class BendMath
 {
+    // The fallback grid is a multiple of the onset denominator, so subsequent
+    // relative-position subtraction and integer-beat dragging remain representable.
+    private const int PositionGrid = 1000000;
+
     /// <summary>
     ///     Rescales <paramref name="bends" /> so each point keeps the same
     ///     PROPORTION of the sustain it had before, anchored at
@@ -33,31 +38,65 @@ public static class BendMath
     {
         if (bends.Count == 0 || oldSustain == newSustain) return;
 
-        var newEnd = notePosition + newSustain;
-
-        // No prior length to scale from ⇒ clamp into the new span.
-        if (oldSustain.CompareTo(FractionalPosition.Zero) <= 0)
-        {
-            foreach (var b in bends) b.Position = Clamp(b.Position, notePosition, newEnd);
-            return;
-        }
-
-        var ratio = AsFraction(newSustain) / AsFraction(oldSustain);
-        foreach (var b in bends)
-        {
-            var scaled = notePosition + (b.Position - notePosition) * ratio;
-            b.Position = Clamp(scaled, notePosition, newEnd);
-        }
+        foreach (var bend in bends) bend.Position = ScalePosition(bend.Position, notePosition, oldSustain, newSustain);
     }
 
-    private static FractionalPosition Clamp(FractionalPosition value, FractionalPosition lo, FractionalPosition hi)
+    private static FractionalPosition ScalePosition(FractionalPosition point, FractionalPosition start,
+        FractionalPosition oldSustain, FractionalPosition newSustain)
     {
-        if (value.CompareTo(lo) < 0) return lo;
-        if (value.CompareTo(hi) > 0) return hi;
-        return value;
+        var startDenominator = start.Fraction.Denominator;
+        var denominator = (BigInteger)point.Fraction.Denominator * startDenominator;
+        var numerator = ((BigInteger)point.BeatId - start.BeatId) * denominator +
+                        (BigInteger)point.Fraction.Numerator * startDenominator -
+                        (BigInteger)start.Fraction.Numerator * point.Fraction.Denominator;
+        var newNumerator = NumeratorOf(newSustain);
+        var newDenominator = newSustain.Fraction.Denominator;
+        if (oldSustain > FractionalPosition.Zero)
+        {
+            numerator *= newNumerator * oldSustain.Fraction.Denominator;
+            denominator *= newDenominator * NumeratorOf(oldSustain);
+        }
+
+        if (numerator <= 0 || newNumerator <= 0) return start;
+        if (numerator * newDenominator > newNumerator * denominator)
+        {
+            numerator = newNumerator;
+            denominator = newDenominator;
+        }
+
+        var absoluteNumerator = NumeratorOf(start) * denominator + numerator * startDenominator;
+        if (TryPosition(absoluteNumerator, startDenominator * denominator, out var exact) &&
+            TryPosition(numerator, denominator, out _))
+        {
+            return exact;
+        }
+
+        var grid = Math.Max(1, PositionGrid / startDenominator) * startDenominator;
+        var ticks = BigInteger.DivRem(numerator * grid, denominator, out var remainder);
+        if (remainder * 2 > denominator || (remainder * 2 == denominator && !ticks.IsEven)) ticks++;
+        ticks = BigInteger.Min(ticks, newNumerator * grid / newDenominator);
+        var startTicks = NumeratorOf(start) * (grid / startDenominator);
+        return TryPosition(startTicks + ticks, grid, out var sampled) ? sampled : start;
     }
 
-    /// <summary>A <see cref="FractionalPosition" /> as a single reduced
-    /// <see cref="Fraction" /> in quarter-note units (whole beats folded in).</summary>
-    private static Fraction AsFraction(FractionalPosition p) => new Fraction(p.BeatId, 1) + p.Fraction;
+    private static BigInteger NumeratorOf(FractionalPosition position) =>
+        (BigInteger)position.BeatId * position.Fraction.Denominator + position.Fraction.Numerator;
+
+    private static bool TryPosition(BigInteger numerator, BigInteger denominator, out FractionalPosition position)
+    {
+        position = FractionalPosition.Zero;
+        var beat = BigInteger.DivRem(numerator, denominator, out var remainder);
+        if (remainder < 0)
+        {
+            beat--;
+            remainder += denominator;
+        }
+
+        var gcd = BigInteger.GreatestCommonDivisor(remainder, denominator);
+        remainder /= gcd;
+        denominator /= gcd;
+        if (beat < int.MinValue || beat > int.MaxValue || denominator > int.MaxValue) return false;
+        position = new FractionalPosition((int)beat, new Fraction((int)remainder, (int)denominator));
+        return true;
+    }
 }

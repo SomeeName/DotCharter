@@ -122,8 +122,26 @@ public static class WemWriter
         var directory = Path.GetDirectoryName(Path.GetFullPath(path));
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
-        using var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
-        return Write(file, codec, interleaved, channels, sampleRate);
+        // The span cannot be captured by AtomicFile.Write's delegate. Stage here
+        // and use the same durable publication after the encoder closes the file.
+        var stage = path + "." + Guid.NewGuid().ToString("N") + AtomicFile.TempSuffix;
+        var created = false;
+        try
+        {
+            long written;
+            using (var file = new FileStream(stage, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                created = true;
+                written = Write(file, codec, interleaved, channels, sampleRate);
+            }
+
+            AtomicFile.Publish(stage, path);
+            return written;
+        }
+        finally
+        {
+            if (created) BestEffortDelete.File(stage);
+        }
     }
 
     private static uint ChannelConfig(int channels) => channels switch

@@ -56,6 +56,7 @@ public sealed class MeasureContentIndex
     private readonly IList<BeatMarker> _beats;
     private readonly MeasureContentOptions _options;
     private readonly bool _integrity;
+    private readonly bool _verifyLink;
     private readonly List<SoundRef> _sounds;
     private readonly FractionalPosition[] _onsets;
     private readonly List<(double Ms, FretAnchor Anchor)> _anchorsByTime;
@@ -65,7 +66,12 @@ public sealed class MeasureContentIndex
     private readonly Dictionary<int, ChordTemplate> _templates = [];
 
     public MeasureContentIndex(Arrangement arrangement, ChartLevel level, IList<BeatMarker> beats,
-        MeasureContentOptions? options = null)
+        MeasureContentOptions? options = null) : this(arrangement, level, beats, options, verifyLink: false)
+    {
+    }
+
+    private MeasureContentIndex(Arrangement arrangement, ChartLevel level, IList<BeatMarker> beats,
+        MeasureContentOptions? options, bool verifyLink)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         ArgumentNullException.ThrowIfNull(level);
@@ -75,6 +81,7 @@ public sealed class MeasureContentIndex
         _beats = beats;
         _options = options ?? MeasureContentOptions.Detection;
         _integrity = _options.Kind == MeasureContentKind.Integrity;
+        _verifyLink = verifyLink;
         Measures = MeasureGrid.Build(beats);
 
         foreach (var template in arrangement.ChordTemplates)
@@ -121,6 +128,11 @@ public sealed class MeasureContentIndex
         var level = arrangement.Levels.MaxBy(l => l.DifficultyIndex) ?? new ChartLevel();
         return new MeasureContentIndex(arrangement, level, beats, options);
     }
+
+    /// <summary>Exact auto-link comparison with the fret anchor in effect at the run start.</summary>
+    public static MeasureContentIndex ForAutoLinkVerification(Arrangement arrangement, IList<BeatMarker> beats) =>
+        new(arrangement, arrangement.Levels.MaxBy(l => l.DifficultyIndex) ?? new ChartLevel(),
+            beats, MeasureContentOptions.Integrity, verifyLink: true);
 
     /// <summary>The content key of <paramref name="count" /> measures from
     /// <paramref name="firstMeasure" /> (indexes into <see cref="Measures" />).</summary>
@@ -295,7 +307,8 @@ public sealed class MeasureContentIndex
             if (keepBendsBefore is { } keep && at >= keep) break;
             if (!_integrity && previous == at) continue;
             previous = at;
-            sb.Append(",b").Append(Rel(at, onset)).Append(CultureInfo.InvariantCulture, $"={bend.Step:0.###}");
+            sb.Append(",b").Append(Rel(at, onset)).Append('=')
+                .Append(bend.Step.ToString(_verifyLink ? "R" : "0.###", CultureInfo.InvariantCulture));
         }
     }
 
@@ -327,7 +340,8 @@ public sealed class MeasureContentIndex
         if (template.ForceArpeggioInRs) sb.Append("/farp");
         if (template.NopInRs) sb.Append("/nop");
         if (!_integrity) return;
-        sb.Append("/n:").Append(template.Name);
+        sb.Append("/n:");
+        AppendName(sb, template.Name);
         if (template.Pinned) sb.Append("/pin");
         if (template.FollowedFingering) sb.Append("/fol");
         if (template.Fingerless) sb.Append("/nof");
@@ -364,8 +378,13 @@ public sealed class MeasureContentIndex
 
     private void AppendStoredAnchors(StringBuilder sb, FractionalPosition start, FractionalPosition end)
     {
+        if (_verifyLink && AnchorInEffect(TimelineMath.CalculateTimeMs(start, _beats)) is { } inherited)
+            sb.Append("|A0:").Append(CultureInfo.InvariantCulture, $"{inherited.Fret}/{inherited.Width}");
         foreach (var anchor in _anchors.Where(a => a.Position >= start && a.Position < end))
+        {
+            if (_verifyLink && anchor.Position == start) continue;
             sb.Append("|A").Append(Rel(anchor.Position, start)).Append(CultureInfo.InvariantCulture, $":{anchor.Fret}/{anchor.Width}");
+        }
     }
 
     private void AppendStoredHandShapes(StringBuilder sb, FractionalPosition start, FractionalPosition end)
@@ -373,9 +392,18 @@ public sealed class MeasureContentIndex
         foreach (var shape in _shapes.Where(h => h.Position >= start && h.Position < end))
         {
             sb.Append("|H").Append(Rel(shape.Position, start)).Append('-').Append(Rel(shape.EndPosition, start))
-                .Append(":n:").Append(shape.Name).Append(':');
+                .Append(":n:");
+            AppendName(sb, shape.Name);
+            sb.Append(':');
             AppendTemplate(sb, shape.TemplateId);
+            AppendHandShapeGhostMask(sb, shape);
         }
+    }
+
+    private void AppendName(StringBuilder sb, string name)
+    {
+        if (_verifyLink) sb.Append(CultureInfo.InvariantCulture, $"{name.Length}:");
+        sb.Append(name);
     }
 
     private void AppendHandShapes(StringBuilder sb, FractionalPosition start, FractionalPosition end)
@@ -393,14 +421,17 @@ public sealed class MeasureContentIndex
 
             sb.Append("|H").Append(Rel(FractionalPosition.Max(shape.Position, start), start)).Append('-').Append(endToken).Append(':');
             AppendTemplate(sb, shape.TemplateId);
+            AppendHandShapeGhostMask(sb, shape);
         }
+    }
+
+    private static void AppendHandShapeGhostMask(StringBuilder sb, HandShape shape)
+    {
+        if (shape.GhostMask is { } mask) sb.Append(CultureInfo.InvariantCulture, $"/hgh{mask}");
     }
 
     /// <summary>The spacing gap (in beats) for a sound or hand shape starting at <paramref name="position" />.</summary>
     public FractionalPosition GapAt(FractionalPosition position) => _options.Spacing.At(position, _beats);
-
-    /// <summary>The next onset of the level's own sounds strictly after <paramref name="position" /> (any string).</summary>
-    public FractionalPosition? NextOnset(FractionalPosition position) => NextOnsetAfter(position);
 
     /// <summary>
     ///     Where detection's "held to the next sound" starts for a sound at <paramref name="onset" />

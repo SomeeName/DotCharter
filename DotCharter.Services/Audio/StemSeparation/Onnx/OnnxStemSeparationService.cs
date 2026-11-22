@@ -46,6 +46,17 @@ public sealed class OnnxStemSeparationService : IStemSeparationService
     // status line until a run honours its request again.
     private volatile string? _lastFallback;
 
+    // A GPU run failed and the CPU took over: the CPU keeps the model until the app exits.
+    private volatile bool _cpuOnlyThisSession;
+    private OnnxExecutionProvider _lastRunProvider;
+    private readonly OnnxStemRunFactory _openSeparator = OnnxStemRun.Open;
+
+    /// <summary>Test seam: opens the separator through <paramref name="openSeparator" />.</summary>
+    internal OnnxStemSeparationService(StemModelManager? manager, IAppLogger? logger, IStemGpuEnvironment? gpu,
+        OnnxStemRunFactory openSeparator)
+        : this(manager, logger, null, gpu)
+        => _openSeparator = openSeparator;
+
     // configuredFfmpegPath reads AppConfig.FfmpegPath. The resolution must not
     // hard-code `configuredPath: null`, or this service would share the stem
     // encoder's defect: a user who pointed Settings at a specific ffmpeg would still
@@ -187,7 +198,7 @@ public sealed class OnnxStemSeparationService : IStemSeparationService
                     .ConfigureAwait(false);
 
                 if (modelPath == null || !IsOnnxKind(kind))
-                    return StemSeparationResult.Failure("ONNX backend not engaged — no ONNX stem-separation model is currently active.");
+                    return StemSeparationResult.Failure("ONNX backend not engaged — no ONNX stem-separation model is currently active.", StemFailureKind.OnnxNotEngaged);
 
                 // ONNX inference reads a WAV via the managed WavIo reader. Any other
                 // container (.flac/.mp3/.ogg/.m4a…) is transcoded to a temp stereo
@@ -203,7 +214,8 @@ public sealed class OnnxStemSeparationService : IStemSeparationService
                         return StemSeparationResult.Failure(
                             $"ONNX backend could not read '{Path.GetFileName(inputAudioPath)}': the native decoder " +
                             "could not decode it and ffmpeg was not found to transcode it. Install ffmpeg " +
-                            "(Settings → Components) or supply the audio as WAV.");
+                            "(Settings → Components) or supply the audio as WAV.",
+                            StemFailureKind.OnnxCannotDecode, Path.GetFileName(inputAudioPath));
                     }
 
                     wavInput = scratchWav;
@@ -231,41 +243,14 @@ public sealed class OnnxStemSeparationService : IStemSeparationService
 
                 var audio = WavIo.Read(wavInput);
                 if (audio.Channels != 2)
-                    return StemSeparationResult.Failure($"ONNX backend requires stereo input, got {audio.Channels} channel(s).");
+                {
+                    return StemSeparationResult.Failure($"ONNX backend requires stereo input, got {audio.Channels} channel(s).",
+                        StemFailureKind.OnnxNeedsStereo, audio.Channels.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
                 progress?.Report(0.10);
 
-                // Cap the CPU intra-op thread pool so separation never saturates
-                // every core and starves the UI / audio thread. GPU EPs ignore
-                // this; the CPU EP honours it.
-                var threadCap = StemSeparationResourcePolicy.RecommendedWorkerThreads();
-                using var separator = new OnnxStemSeparator(
-                    modelPath, MapKind(kind), plan.Provider, _logBridge, threadCap, plan.DeviceId);
-                _logger?.Info(AppLogCategory.Audio,
-                    $"ONNX session bound to {separator.BackendDescription} (intraOpThreads={threadCap}). " +
-                    $"Separating {audio.FrameCount} frames @ {audio.SampleRate} Hz.");
-                // A GPU request that became a CPU run must never look like a GPU run:
-                // the reason goes to the log as a warning and onto the status line.
-                _lastFallback = StemExecutionDecision.CpuFallbackReason(
-                    plan.Provider, separator.ActiveExecutionProvider, separator.FallbackReason);
-                if (_lastFallback != null)
-                {
-                    _logger?.Warning(AppLogCategory.Audio,
-                        $"ONNX stem separation asked for {plan.Provider} and runs on the CPU: {_lastFallback}");
-                }
-
-                // Synchronous on the inference thread, one report per finished chunk: the
-                // toast gets "chunk i of N" and the log every chunk's time.
-                var clock = System.Diagnostics.Stopwatch.StartNew();
-                var chunkProgress = new StemChunkProgressReporter(
-                    () => clock.Elapsed,
-                    p => progress?.Report(0.10 + 0.80 * p),
-                    progress as IStemChunkProgress,
-                    msg => _logger?.Info(AppLogCategory.Audio, msg));
-                var stems = await separator.SeparateAsync(
-                    audio.Interleaved,
-                    audio.SampleRate,
-                    chunkProgress,
-                    ct).ConfigureAwait(false);
+                var (stems, gpuRunFellBack) = await RunWithCpuRetryAsync(
+                    modelPath, MapKind(kind), plan, audio, progress, ct).ConfigureAwait(false);
                 progress?.Report(0.92);
 
                 var tracks = new List<StemTrack>(stems.Count);
@@ -284,6 +269,7 @@ public sealed class OnnxStemSeparationService : IStemSeparationService
                     Success = true,
                     OutputDirectory = outputDirectory,
                     Stems = tracks,
+                    GpuRunFellBackToCpu = gpuRunFellBack,
                 };
             }
             catch (OperationCanceledException)
@@ -308,6 +294,68 @@ public sealed class OnnxStemSeparationService : IStemSeparationService
                 }
             }
         }, ct);
+    }
+
+    /// <summary>
+    ///     Runs the separator on the planned provider; when a GPU session opened but fails
+    ///     while running, repeats the run once on the CPU and keeps the CPU for the session.
+    /// </summary>
+    private async Task<(IReadOnlyList<OnnxStemBuffer> Stems, bool FellBackToCpu)> RunWithCpuRetryAsync(
+        string modelPath, OnnxStemModelKind kind, StemExecutionPlan plan, AudioBuffer audio,
+        IProgress<double>? progress, CancellationToken ct)
+    {
+        // Cap the CPU intra-op thread pool so separation never saturates
+        // every core and starves the UI / audio thread. GPU EPs ignore
+        // this; the CPU EP honours it.
+        var threadCap = StemSeparationResourcePolicy.RecommendedWorkerThreads();
+
+        // After a GPU run failed, the CPU keeps the model for the rest of the session.
+        var requested = _cpuOnlyThisSession ? OnnxExecutionProvider.Cpu : plan.Provider;
+        try
+        {
+            return (await RunOnceAsync(requested).ConfigureAwait(false), false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException && !ct.IsCancellationRequested
+            && _lastRunProvider != OnnxExecutionProvider.Cpu)
+        {
+            // The session opened but the GPU failed while running (the open-time
+            // ladder cannot see that). Re-run this separation once on the CPU.
+            _logger?.Warning(AppLogCategory.Audio,
+                $"ONNX stem separation failed on {_lastRunProvider} ({ex.Message.Split('\n')[0].Trim()}); " +
+                "re-running it on the CPU, which it keeps for the rest of this session.", ex);
+            _cpuOnlyThisSession = true;
+            progress?.Report(0.10);
+            return (await RunOnceAsync(OnnxExecutionProvider.Cpu).ConfigureAwait(false), true);
+        }
+
+        async Task<IReadOnlyList<OnnxStemBuffer>> RunOnceAsync(OnnxExecutionProvider provider)
+        {
+            using var separator = _openSeparator(modelPath, kind, provider, _logBridge, threadCap, plan.DeviceId);
+            _lastRunProvider = separator.ActiveExecutionProvider;
+            _logger?.Info(AppLogCategory.Audio,
+                $"ONNX session bound to {separator.BackendDescription} (intraOpThreads={threadCap}). " +
+                $"Separating {audio.FrameCount} frames @ {audio.SampleRate} Hz.");
+            // A GPU request that became a CPU run must never look like a GPU run:
+            // the reason goes to the log as a warning and onto the status line.
+            _lastFallback = StemExecutionDecision.CpuFallbackReason(
+                provider, separator.ActiveExecutionProvider, separator.FallbackReason);
+            if (_lastFallback != null)
+            {
+                _logger?.Warning(AppLogCategory.Audio,
+                    $"ONNX stem separation asked for {provider} and runs on the CPU: {_lastFallback}");
+            }
+
+            // Synchronous on the inference thread, one report per finished chunk: the
+            // toast gets "chunk i of N" and the log every chunk's time.
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var chunkProgress = new StemChunkProgressReporter(
+                () => clock.Elapsed,
+                p => progress?.Report(0.10 + 0.80 * p),
+                progress as IStemChunkProgress,
+                msg => _logger?.Info(AppLogCategory.Audio, msg));
+            return await separator.SeparateAsync(
+                audio.Interleaved, audio.SampleRate, chunkProgress, ct).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -471,8 +519,6 @@ public sealed class OnnxStemSeparationService : IStemSeparationService
         fs.Write(System.Runtime.InteropServices.MemoryMarshal.AsBytes(interleavedStereo.AsSpan()));
     }
 
-    public IReadOnlyList<string> AvailableExecutionProviders() => OnnxStemSeparator_AvailableProviders();
-
     private static IReadOnlyList<string> OnnxStemSeparator_AvailableProviders()
     {
         try { return Microsoft.ML.OnnxRuntime.OrtEnv.Instance().GetAvailableProviders(); }
@@ -489,13 +535,13 @@ public sealed class OnnxStemSeparationService : IStemSeparationService
         if (StemDefaultModel.IsOnDefault(active))
             return await ResolveDefaultAsync(ct).ConfigureAwait(false);
 
-        var desc = StemModelCatalog.FindById(active);
+        var desc = _manager.Catalog.FirstOrDefault(d => string.Equals(d.Id, active, StringComparison.OrdinalIgnoreCase));
         if (desc == null) return (null, default, false);
 
         if (IsOnnxKind(desc.Kind))
         {
-            var path = _manager.ResolveActiveModelPath();
-            return (path != null && File.Exists(path) ? path : null, desc.Kind, false);
+            var installed = _manager.ResolveInstalledModel();
+            return installed is { } model ? (model.Path, model.Descriptor.Kind, false) : (null, desc.Kind, false);
         }
 
         var ep = OnnxExecutionProviderParser.Parse(_manager.ExecutionProvider);

@@ -60,6 +60,7 @@ public sealed partial class AiSettingsViewModel : ObservableObject, IDisposable
     private readonly ILocalizationService _loc;
     private CancellationTokenSource? _signIn;
     private bool _loading;
+    private int _statusGeneration;
 
     /// <summary>Creates the tab over RigLab's own services.</summary>
     /// <param name="config">riglab.json.</param>
@@ -268,6 +269,7 @@ public sealed partial class AiSettingsViewModel : ObservableObject, IDisposable
     /// <summary>Re-reads riglab.json and the key's PRESENCE, never its value.</summary>
     public void Load()
     {
+        _statusGeneration++;
         _loading = true;
         try
         {
@@ -374,7 +376,12 @@ public sealed partial class AiSettingsViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanSaveKey))]
     private void SaveKey()
     {
-        _secrets.Write(ProviderKind, ApiKeyEntry.Trim());
+        if (!_secrets.Write(ProviderKind, ApiKeyEntry.Trim()))
+        {
+            SetStatus(_loc["Ai_KeySaveFailed"], isError: true);
+            return;
+        }
+
         ApiKeyEntry = "";
         RaiseKeyState();
         _design.NotifyConfigurationChanged();
@@ -387,7 +394,12 @@ public sealed partial class AiSettingsViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanClearKey))]
     private void ClearKey()
     {
-        _secrets.Write(ProviderKind, null);
+        if (!_secrets.Write(ProviderKind, null))
+        {
+            SetStatus(_loc["Ai_KeyClearFailed"], isError: true);
+            return;
+        }
+
         ApiKeyEntry = "";
         RaiseKeyState();
         SetStatus(_loc["Ai_KeyCleared"], isError: false);
@@ -401,14 +413,22 @@ public sealed partial class AiSettingsViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanTestConnection))]
     private async Task TestConnectionAsync()
     {
+        if (ApiKeyEntry.Trim().Length > 0)
+        {
+            SaveKey();
+            if (ApiKeyEntry.Trim().Length > 0) return;
+        }
+
         IsBusy = true;
         SetStatus(_loc["Ai_Testing"], isError: false);
+        var statusGeneration = _statusGeneration;
         try
         {
             var model = _factory.Create(CurrentSettings);
             try
             {
                 var probe = await model.ProbeAsync(CancellationToken.None).ConfigureAwait(true);
+                if (statusGeneration != _statusGeneration) return;
                 SetStatus(probe.Ok
                     ? _loc.Format("Ai_TestOk", probe.ModelId ?? probe.Message)
                     : _loc.Format("Ai_TestFailed", probe.Message), isError: !probe.Ok);
@@ -420,12 +440,14 @@ public sealed partial class AiSettingsViewModel : ObservableObject, IDisposable
         }
         catch (ToneDesignException ex)
         {
-            SetStatus(_loc.Format("Ai_TestFailed", ex.Message), isError: true);
+            if (statusGeneration == _statusGeneration)
+                SetStatus(_loc.Format("Ai_TestFailed", ex.Message), isError: true);
             _logger?.Warning(AppLogCategory.Settings, $"AI probe failed: {ex.Fault} — {ex.Detail}");
         }
         catch (Exception ex)
         {
-            SetStatus(_loc.Format("Ai_TestFailed", ex.Message), isError: true);
+            if (statusGeneration == _statusGeneration)
+                SetStatus(_loc.Format("Ai_TestFailed", ex.Message), isError: true);
         }
         finally
         {
@@ -495,6 +517,7 @@ public sealed partial class AiSettingsViewModel : ObservableObject, IDisposable
 
     private void SetStatus(string text, bool isError)
     {
+        _statusGeneration++;
         StatusText = text;
         IsStatusError = isError;
     }
@@ -508,6 +531,7 @@ public sealed partial class AiSettingsViewModel : ObservableObject, IDisposable
     /// <summary>Unhooks the account and cancels a sign-in in flight.</summary>
     public void Dispose()
     {
+        _statusGeneration++;
         _tone3000.AuthStateChanged -= OnAuthStateChanged;
         CancelSignIn();
     }

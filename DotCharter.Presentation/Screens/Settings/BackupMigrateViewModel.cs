@@ -83,8 +83,10 @@ public sealed class BackupMigrateViewModel : ObservableObject, IBackupMigratePar
     {
         var path = await _files.SaveFilePickerAsync(
             _localization["Settings_BackupMigrate_ExportTitle"],
-            $"DotCharter-backup-{DateTime.Now:yyyy-MM-dd}.zip", ZipFilter).ConfigureAwait(true);
+            $"DotCharter-backup-{DateTime.Now:yyyy-MM-dd}.zip", ZipFilter,
+            _config.StartDirectory(c => c.LastBackupDir)).ConfigureAwait(true);
         if (path == null) return;
+        _config.RememberDirectory(path, (c, d) => c.LastBackupDir = d);
 
         IsBusy = true;
         try
@@ -110,8 +112,10 @@ public sealed class BackupMigrateViewModel : ObservableObject, IBackupMigratePar
     public async Task ImportAsync()
     {
         var path = await _files.OpenFilePickerAsync(
-            _localization["Settings_BackupMigrate_ImportTitle"], ZipFilter).ConfigureAwait(true);
+            _localization["Settings_BackupMigrate_ImportTitle"], ZipFilter,
+            _config.StartDirectory(c => c.LastBackupDir)).ConfigureAwait(true);
         if (path == null) return;
+        _config.RememberDirectory(path, (c, d) => c.LastBackupDir = d);
 
         IsBusy = true;
         try

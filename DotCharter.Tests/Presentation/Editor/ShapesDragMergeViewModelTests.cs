@@ -73,8 +73,8 @@ public sealed class ShapesDragMergeViewModelTests
         Assert.False(_vm.IsChoosingMergeTarget);
         Assert.False(_vm.IsPendingDestructive);
         Assert.Equal("Merge", _vm.PendingConfirmLabel);
-        Assert.Equal("Merge “Am (2)” into “Am”. Moved onto “Am”: 3 chords · 1 hand shape. “Am (2)” is removed, " +
-                     "and “Am” keeps its own fingers and name. One undo step.", _vm.PendingText);
+        Assert.Equal("Merge “Am (2)” into “Am”: 3 chords · 1 hand shape will use “Am” instead. “Am (2)” is deleted; " +
+                     "“Am” keeps its own name and fingering. Undo reverts it in one step.", _vm.PendingText);
         Assert.True(copy.IsMergeSource);
         Assert.True(Row(_f.Am).IsMergeTarget);
         Assert.Equal(6, _f.Arrangement.ChordTemplates.Count);
@@ -172,7 +172,7 @@ public sealed class ShapesDragMergeViewModelTests
         Assert.Equal("Choose the shape “Am (2)” should become. Only shapes with the same frets are offered.", _vm.MergeHintText);
 
         Row(_f.Am).MergeHereCommand.Execute(null);
-        Assert.StartsWith("Merge “Am (2)” into “Am”.", _vm.PendingText, StringComparison.Ordinal);
+        Assert.StartsWith("Merge “Am (2)” into “Am”:", _vm.PendingText, StringComparison.Ordinal);
     }
 
     [Fact]

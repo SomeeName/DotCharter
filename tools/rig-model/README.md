@@ -14,7 +14,7 @@ The C# half is `DotCharter.Services/Ai/Match/Model/RigEstimatorOnnx.cs`.
 |---|---|
 | `env.ps1` | Creates/activates the venv, pins the 3080, prints versions |
 | `vocab.py` | Loads `rig_label_vocab.json`; the `[0,1]` normalisation, twinned with `RigLabelVocabulary` |
-| `rig_label_vocab.json` | **Build product** of `RigLabelVocabularyTests` — 101 modules, 13 families, 595 knobs (573 until the 2026-10 amp / bass-head params; 583 until `rsamp`). Never hand-edit |
+| `rig_label_vocab.json` | **Build product** of `RigLabelVocabularyTests` (compared by the gate; regenerate with `DOTCHARTER_REGEN_RIG_VOCAB=1`) — 101 modules, 13 families, 595 knobs (573 until the 2026-10 amp / bass-head params; 583 until `rsamp`). Never hand-edit |
 | `data.py` | Manifest loader, DI-source split, fp16 PCM memmap cache |
 | `model.py` | `LogMel`, `ModulationBranch`, `MelCnn` (control), `HfTower` (CLAP/AST), the **v1** heads and loss |
 | `model_v2.py` | The **v2** head: `ChainDecoder`, greedy + beam, the sequence loss, `ExportWrapperV2` |

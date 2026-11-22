@@ -2,7 +2,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DotCharter.Tone.Ai;
 using DotCharter.Services.Ai.Match;
 using DotCharter.Services.Ai.Match.Search;
 using DotCharter.Services.Ai.Match.Model;
@@ -399,7 +398,12 @@ public sealed partial class ToneDesignViewModel
     partial void OnSelectedMatchCandidateChanged(ToneMatchCandidateViewModel? value)
     {
         if (value is null) return;
-        Result = new ToneDesignResultViewModel(value.AsDesignResult, value.ChainSummary, Loc);
+        if (!value.ValidityCheck())
+        {
+            SelectedMatchCandidate = null;
+            return;
+        }
+        Result = new ToneDesignResultViewModel(value.AsDesignResult, value.ChainSummary, Loc, value.ValidityCheck);
     }
 
     /// <summary>
@@ -444,6 +448,9 @@ public sealed partial class ToneDesignViewModel
     [RelayCommand(CanExecute = nameof(CanMatch))]
     private async Task MatchAsync()
     {
+        var designed = Result;
+        var isCurrent = ResultValidity(fresh: false);
+        if (!isCurrent()) return;
         var matcher = _matcher();
         var isolator = _isolator();
         if (matcher is null || isolator is null)
@@ -465,6 +472,7 @@ public sealed partial class ToneDesignViewModel
         try
         {
             var di = await EnsureReferenceDiAsync(cts.Token).ConfigureAwait(true);
+            if (!isCurrent()) return;
             if (di is null)
             {
                 FailMatch("ToneMatch_Fault_NoReferenceDi");
@@ -478,12 +486,16 @@ public sealed partial class ToneDesignViewModel
             // could land AFTER the cancel branch wrote "Cancelled" — which is exactly
             // how CancelDuringTheSearch_ReportsCancelled failed on a loaded box. Same
             // rule as the design flow above.
-            var progress = new InlineProgress(line => Post(() => MatchStatus = line));
+            var progress = new InlineProgress(line => Post(() =>
+            {
+                if (isCurrent()) MatchStatus = line;
+            }));
 
             var target = await isolator
                 .IsolateGuitarAsync(source.AudioPath!, from, to, progress, cts.Token)
                 .ConfigureAwait(true);
 
+            if (!isCurrent()) return;
             // An isolator that answers with nothing is not an exception — the
             // stem cache can legitimately hold silence for a span with no guitar
             // in it — but it is the end of the flow and the player has to be told
@@ -504,15 +516,18 @@ public sealed partial class ToneDesignViewModel
             }
 
             MatchStatus = Loc["ToneMatch_Searching"];
-            var prior = await BuildPriorAsync(target, cts.Token).ConfigureAwait(true);
+            var prior = await BuildPriorAsync(target, designed, cts.Token).ConfigureAwait(true);
+            if (!isCurrent()) return;
             var result = await matcher
                 .MatchAsync(new ToneMatchRequest(target, di, prior), progress, cts.Token)
                 .ConfigureAwait(true);
 
-            Publish(result);
+            if (!isCurrent()) return;
+            Publish(result, designed, isCurrent);
         }
         catch (OperationCanceledException)
         {
+            if (!isCurrent()) return;
             // The contract promises a cancel is a cancel, not a fault: the status
             // line says so and no error banner opens.
             MatchStatus = Loc["ToneMatch_Cancelled"];
@@ -520,6 +535,7 @@ public sealed partial class ToneDesignViewModel
         }
         catch (Exception ex)
         {
+            if (!isCurrent()) return;
             FailMatch("ToneMatch_Fault_Failed", ex);
         }
         finally
@@ -547,9 +563,10 @@ public sealed partial class ToneDesignViewModel
     ///     want has told us more than a model guessing from a stem, and the
     ///     contract carries exactly ONE prior.
     /// </summary>
-    private async Task<ToneMatchPrior?> BuildPriorAsync(MonoAudio target, CancellationToken ct)
+    private async Task<ToneMatchPrior?> BuildPriorAsync(
+        MonoAudio target, ToneDesignResultViewModel? designed, CancellationToken ct)
     {
-        if (Result is { } designed) return new ToneMatchPrior(designed.Tone.Rig, "design");
+        if (designed is not null) return new ToneMatchPrior(designed.Tone.Rig, "design");
 
         var estimator = _estimator();
         if (estimator is not { IsAvailable: true }) return null;
@@ -574,8 +591,9 @@ public sealed partial class ToneDesignViewModel
         }
     }
 
-    private void Publish(ToneMatchResult result)
+    private void Publish(ToneMatchResult result, ToneDesignResultViewModel? designed, Func<bool> isCurrent)
     {
+        if (!isCurrent()) return;
         MatchCandidates.Clear();
 
         // RANKING distance, not the measured one: the matcher marks an implausible
@@ -584,16 +602,20 @@ public sealed partial class ToneDesignViewModel
         var ranked = result.Candidates.OrderBy(c => c.RankingDistance).ToList();
         for (var i = 0; i < ranked.Count; i++)
         {
+            if (!isCurrent()) return;
             MatchCandidates.Add(new ToneMatchCandidateViewModel(
                 ranked[i],
                 i,
                 ChainSummary(ranked[i].Rig),
-                Result?.Tone.Category ?? UnknownMatchCategory,
+                designed?.Tone.Category ?? UnknownMatchCategory,
                 result.Notes,
-                Loc));
+                Loc,
+                isCurrent));
         }
 
+        if (!isCurrent()) return;
         OnPropertyChanged(nameof(HasMatchCandidates));
+        if (!isCurrent()) return;
 
         if (MatchCandidates.Count == 0)
         {
@@ -604,6 +626,7 @@ public sealed partial class ToneDesignViewModel
         // Best first, and SELECTED — publishing a ranked list and making the
         // player click the top row is a step that only ever has one answer.
         SelectedMatchCandidate = MatchCandidates[0];
+        if (!isCurrent()) return;
         MatchStatus = Loc.Format("ToneMatch_Found", MatchCandidates.Count);
     }
 
@@ -929,196 +952,6 @@ public sealed partial class ToneDesignViewModel
     /// matcher, so the headless smoke tests can lay the results block out. A block
     /// nothing ever shows is never laid out, and that is where a silent resource
     /// fault hides.</summary>
-    internal void SetMatchCandidatesForTests(ToneMatchResult result) => Publish(result);
-}
-
-/// <summary>
-///     One candidate row. Everything on it is derived ONCE — a template that
-///     recomputed a chain summary or a percentage per binding pass would do it on
-///     the UI thread, once per row, on every pass.
-///     <para>
-///         <b>No headline number without the breakdown behind it (W5b).</b>
-///         <see cref="MatchPercent" /> is nullable and <see cref="IsRated" /> is the
-///         state a template switches on: a percentage, or UNRATED with a reason.
-///         Zero is a measurement ("no better than a plain amp and cab"); unrated is
-///         not a number at all, and the two must not render the same.
-///         <see cref="Breakdown" /> carries the per-feature-block rows the panel
-///         binds under the pill, and <see cref="ScaleText" /> says what the two ends
-///         of the scale mean.
-///     </para>
-/// </summary>
-public sealed class ToneMatchCandidateViewModel
-{
-    public ToneMatchCandidateViewModel(
-        ToneMatchCandidate candidate,
-        int rank,
-        string chainSummary,
-        DspToneCategory category,
-        IReadOnlyList<string> notes,
-        ILocalizationService loc)
-    {
-        ArgumentNullException.ThrowIfNull(candidate);
-        ArgumentNullException.ThrowIfNull(loc);
-
-        Rank = rank;
-        Distance = candidate.Distance;
-        Score = candidate.Score;
-        MatchPercent = candidate.Score?.Percent;
-        IsRated = MatchPercent is not null;
-        UnratedReason = candidate.Score?.UnratedReason;
-        UnratedText = IsRated
-            ? string.Empty
-            : ToneDesignViewModel.UnratedReasonText(UnratedReason, loc);
-        ChainSummary = chainSummary;
-        Origin = candidate.Origin;
-        Title = loc.Format("ToneMatch_CandidateTitle", rank + 1);
-        MatchText = ToneDesignViewModel.MatchText(candidate.Score, loc);
-        ScaleText = loc["ToneMatch_ScaleExplains"];
-
-        // The caveat, not the score: a candidate at or inside the passage's own
-        // variation is as close as this metric can SAY, and the remaining percent is
-        // not reachable by searching harder.
-        SelfDistancePercent = candidate.Score?.SelfDistancePercent;
-        WithinTargetNoise = candidate.Score?.WithinTargetNoise ?? false;
-        NoiseCaveatText = WithinTargetNoise && SelfDistancePercent is { } floor
-            ? loc.Format("ToneMatch_WithinNoise", floor)
-            : string.Empty;
-
-        Breakdown = candidate.Score is null
-            ? []
-            : candidate.Score.WorstBlocks(4)
-                .Select(b => new ToneMatchBlockViewModel(
-                    b.Name,
-                    (int)Math.Round(Math.Clamp(b.Share, 0, 1) * 100),
-                    !double.IsNaN(b.ReferenceContribution) && b.Contribution > b.ReferenceContribution,
-                    loc))
-                .ToList();
-
-        BreakdownText = Breakdown.Count == 0
-            ? string.Empty
-            : string.Join(", ", Breakdown.Select(b => b.Text));
-
-        // The tone a matched candidate becomes if the player keeps it. USER
-        // origin, like every other tone this panel produces: the factory apply
-        // path loudness-normalizes, and a matched tone re-levelled on its way to
-        // the chain is not the tone that was matched.
-        Tone = new DspTonePreset(
-            $"match-{rank + 1}",
-            Title,
-            category,
-            Rationale(candidate, loc, BreakdownText),
-            candidate.Rig,
-            DspToneOrigin.User);
-
-        // Shaped as a design result so the existing result block, and the four
-        // actions under it, take it without knowing where it came from. The
-        // confidence pill shows the match % — the same number as the row — and 0
-        // for an UNRATED one, which the pill's own text then explains rather than
-        // implying a measured zero.
-        AsDesignResult = new ToneDesignResult(
-            Tone,
-            Tone.Description,
-            (MatchPercent ?? 0) / 100.0,
-            notes,
-            string.Empty,
-            new AiUsage(candidate.Origin, 0, 0));
-    }
-
-    /// <summary>The rationale line the row and the saved tone both carry: the
-    /// percentage (or the unrated reason), where it came from, and WHICH feature
-    /// blocks it lost on — so the number is never shown alone.</summary>
-    private static string Rationale(ToneMatchCandidate candidate, ILocalizationService loc, string breakdown)
-    {
-        var body = candidate.Score?.Percent is { } percent
-            ? loc.Format("ToneMatch_Rationale", percent, candidate.Origin)
-            : loc.Format("ToneMatch_RationaleUnrated",
-                ToneDesignViewModel.UnratedReasonText(candidate.Score?.UnratedReason, loc), candidate.Origin);
-        return breakdown.Length == 0 ? body : body + " " + loc.Format("ToneMatch_RationaleBlocks", breakdown);
-    }
-
-    public int Rank { get; }
-    public string Title { get; }
-    public string ChainSummary { get; }
-    public double Distance { get; }
-
-    /// <summary>The matcher's whole score object, for a consumer that wants the raw
-    /// anchors. Null when the run produced no score.</summary>
-    public MatchScore? Score { get; }
-
-    /// <summary>0–100, or NULL for unrated. Never conflate null with 0.</summary>
-    public int? MatchPercent { get; }
-
-    /// <summary>True when <see cref="MatchPercent" /> is a number.</summary>
-    public bool IsRated { get; }
-
-    /// <summary>The <see cref="MatchUnrated" /> code, or null when rated.</summary>
-    public string? UnratedReason { get; }
-
-    /// <summary>The unrated reason in the app's language; empty when rated.</summary>
-    public string UnratedText { get; }
-
-    /// <summary>The pill text: "46 % match", or "Unrated — …".</summary>
-    public string MatchText { get; }
-
-    /// <summary>One line saying what 0 % and 100 % mean on this scale.</summary>
-    public string ScaleText { get; }
-
-    /// <summary>Where the passage's own variation lands on the scale, or null.</summary>
-    public int? SelfDistancePercent { get; }
-
-    /// <summary>True when this candidate is at or inside that variation.</summary>
-    public bool WithinTargetNoise { get; }
-
-    /// <summary>The caveat line for that case; empty otherwise.</summary>
-    public string NoiseCaveatText { get; }
-
-    /// <summary>The per-feature-block rows behind the headline, worst first.</summary>
-    public IReadOnlyList<ToneMatchBlockViewModel> Breakdown { get; }
-
-    /// <summary>The same breakdown as one line, for a row that has no room for a
-    /// list.</summary>
-    public string BreakdownText { get; }
-
-    public string Origin { get; }
-    public DspTonePreset Tone { get; }
-    public ToneDesignResult AsDesignResult { get; }
-}
-
-/// <summary>
-///     One feature block under a candidate's headline: what it is called, how much
-///     of the remaining distance it is, and whether the candidate is still WORSE
-///     there than an information-free amp-and-cab.
-/// </summary>
-public sealed class ToneMatchBlockViewModel
-{
-    public ToneMatchBlockViewModel(string block, int sharePercent, bool worseThanReference, ILocalizationService loc)
-    {
-        ArgumentNullException.ThrowIfNull(loc);
-        Block = block;
-        SharePercent = sharePercent;
-        WorseThanReference = worseThanReference;
-        // A missing key resolves to the KEY itself (LocalizationService.GetString),
-        // so a block the resx has not named yet shows its raw id rather than
-        // `ToneMatch_Block_foo` — a new feature block is a doc change, not a crash.
-        var key = $"ToneMatch_Block_{block}";
-        var named = loc[key];
-        Label = string.Equals(named, key, StringComparison.Ordinal) ? block : named;
-        Text = loc.Format("ToneMatch_BlockShare", Label, sharePercent);
-    }
-
-    /// <summary>The block's id, as <c>ToneFeatureLayout</c> names it.</summary>
-    public string Block { get; }
-
-    /// <summary>A player-facing name for it.</summary>
-    public string Label { get; }
-
-    /// <summary>How much of this candidate's remaining distance sits in this block.</summary>
-    public int SharePercent { get; }
-
-    /// <summary>True when the reference rig does BETTER here — the honest "the
-    /// search did not get this part".</summary>
-    public bool WorseThanReference { get; }
-
-    /// <summary>The bound line: "Dynamics 41 %".</summary>
-    public string Text { get; }
+    internal void SetMatchCandidatesForTests(ToneMatchResult result) =>
+        Publish(result, Result, ResultValidity(fresh: false));
 }

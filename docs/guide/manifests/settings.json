@@ -30,7 +30,7 @@
         },
         {
           "title": "Diagnostics",
-          "text": "Local crash reports. Nothing leaves your computer.",
+          "text": "Shows local crash reports. Nothing leaves your computer.",
           "loc": "Settings_Diagnostics"
         },
         {
@@ -54,7 +54,7 @@
       "callouts": [
         {
           "title": "Chart editing",
-          "text": "Keyboard note entry, how hand shapes and positions follow edits, chord naming.",
+          "text": "Keyboard note entry, how hand shapes and positions follow edits, and chord naming.",
           "loc": "Settings_ChartEditing"
         }
       ]
@@ -92,17 +92,17 @@
       "callouts": [
         {
           "title": "Interface",
-          "text": "String colours and the size of the whole interface.",
+          "text": "String colors and the size of the whole interface.",
           "loc": "Settings_Appearance_InterfaceTitle"
         },
         {
           "title": "String colors",
-          "text": "Colour-blind-safe palettes for the strings, in the timeline and on the highway.",
+          "text": "Color-blind-safe palettes for the strings, in the timeline and on the highway.",
           "loc": "Settings_Appearance_StringColorsTitle"
         },
         {
           "title": "Customize colors",
-          "text": "Change any colour of the theme.",
+          "text": "Change any color of the theme.",
           "name": "AppearanceColorGroups"
         }
       ]
@@ -160,7 +160,7 @@
         },
         {
           "title": "Instrument input",
-          "text": "Turn on live input and choose the device and channels your guitar is on.",
+          "text": "Turn on live input, and choose the device and channels your guitar is on.",
           "loc": "Settings_InstrumentInput"
         }
       ]
@@ -179,7 +179,7 @@
       "callouts": [
         {
           "title": "Save companions",
-          "text": "Extra files written next to the project on every save.",
+          "text": "Extra files that DotCharter writes next to the project on every save.",
           "loc": "Settings_SaveCompanions"
         },
         {
@@ -227,7 +227,7 @@
       "callouts": [
         {
           "title": "Models",
-          "text": "The stem-separation models; pick the active one.",
+          "text": "The stem-separation models. Pick the active one.",
           "name": "StemCatalogGroup"
         }
       ]
@@ -265,7 +265,7 @@
       "callouts": [
         {
           "title": "Provider",
-          "text": "Which AI answers tone, chart and chat requests, and its model.",
+          "text": "Which AI answers tone, chart and chat requests, and which model it uses.",
           "name": "AiProviderGroup"
         },
         {
@@ -289,7 +289,7 @@
       "callouts": [
         {
           "title": "Application updates",
-          "text": "Your version, and checking for a newer one.",
+          "text": "Your version, and the check for a newer one.",
           "loc": "Update_GroupTitle"
         }
       ]

@@ -115,7 +115,7 @@ public sealed class ProfileToneRigCoordinator : IDisposable
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Tone rig did not follow the profile switch. {ex.GetType().Name}: {ex.Message}");
+                "Tone rig did not follow the profile switch", ex);
         }
     }
 }

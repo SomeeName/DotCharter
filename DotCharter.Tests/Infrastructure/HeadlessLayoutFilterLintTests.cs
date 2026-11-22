@@ -50,12 +50,12 @@ public sealed class HeadlessLayoutFilterLintTests
         // A size floor that is only the PRECONDITION of what the class measures
         // (allocations, latency, a prewarm, a drag, a scroll, a capture): "the
         // thing under test laid out at all". Longer text can only grow it.
+        ["LayoutResetRestoreUiPerfSmokeTests"] =
+            "compares restored window sizes and splitter column widths with the saved values and the splits' own " +
+            "bounds; those are pixel and star lengths from the app config, which no string sets",
         ["GameplaySplitterUiPerfSmokeTests"] =
             "compares the editor's row geometry during a run (the band, the splitter, the run's top and bottom) with " +
             "itself; the rows are pixel and star lengths no string sets, and the notation band's height is a policy value",
-        ["BendEditorSustainCurveUiPerfSmokeTests"] =
-            "checks where the bend curve starts and ends against the plot's own edges; its one size check (> 1 x 1) " +
-            "only says the editor laid out, and the graph's tick labels are fixed glyphs, not localized text",
         ["ShapesDragMergeUiPerfSmokeTests"] =
             "drives a drag over the Shapes list; its one size check is that the fixture list overflows a 330-px window " +
             "(six cards in a few hundred pixels), which only precedes the scroll it measures, and text can only add height",

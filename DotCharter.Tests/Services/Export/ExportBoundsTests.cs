@@ -100,11 +100,56 @@ public sealed class ExportBoundsTests
             dnas.Add(new RsDna(i * 2f + 1f, 0));
         }
 
-        var started = DateTime.UtcNow;
         var total = RsManifestGenerator.GetDnaTime(DnaSng(dnas, 200_000f), 2);
 
         Assert.Equal(50_000.0, total, 0);
-        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(20), "one forward walk, not a rescan per region");
+    }
+
+    [Fact]
+    public void DnaTime_reads_each_event_a_bounded_number_of_times()
+    {
+        var dnas = new List<RsDna>();
+        for (var i = 0; i < 1000; i++)
+        {
+            dnas.Add(new RsDna(i * 2f, 2));
+            dnas.Add(new RsDna(i * 2f + 1f, 0));
+        }
+
+        var counted = new CountingList(dnas);
+        var total = RsManifestGenerator.GetDnaTime(counted, 200_000f, 2);
+        Assert.Equal(1000.0, total, 0);
+        Assert.Equal(total, RsManifestGenerator.GetDnaTime(DnaSng(dnas, 200_000f), 2));
+        // One forward walk: every event is read a bounded number of times. A rescan per region
+        // reads on the order of n * n / 4 here, which no machine speed can hide.
+        Assert.True(counted.Reads <= 3 * dnas.Count, $"{counted.Reads} reads for {dnas.Count} events: not one forward walk");
+    }
+
+    /// <summary>A list that counts its element reads, so the walk's bound is asserted as STRUCTURE.</summary>
+    private sealed class CountingList(List<RsDna> items) : IReadOnlyList<RsDna>
+    {
+        public int Reads { get; private set; }
+
+        public int Count => items.Count;
+
+        public RsDna this[int index]
+        {
+            get
+            {
+                Reads++;
+                return items[index];
+            }
+        }
+
+        public IEnumerator<RsDna> GetEnumerator()
+        {
+            foreach (var item in items)
+            {
+                Reads++;
+                yield return item;
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     // ---- SNG mapper -------------------------------------------------------------

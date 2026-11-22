@@ -4,7 +4,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Localization;
 using DotCharter.Presentation.Contracts.Editor;
-using DotCharter.Core.Utilities;
 using DotCharter.Tone.Ai;
 using DotCharter.Services.Ai.Chart;
 using DotCharter.Services.Ai.Chat;
@@ -12,6 +11,7 @@ using DotCharter.Services.Editing.Selection;
 using DotCharter.Services.Infrastructure.Configuration;
 using DotCharter.Services.State;
 using DotCharter.Tone.Diagnostics;
+using DotCharter.Tone.Logging;
 using Arrangement = DotCharter.Core.Domain.Project.Arrangement;
 using IAiChatHistoryStore = DotCharter.Services.Ai.Chat.IAiChatHistory;
 
@@ -34,6 +34,7 @@ public sealed partial class AiChatViewModel : ObservableObject, IAiChatScreen, I
     private readonly IAiChatHistoryStore _store;
     private readonly IAiChatChartActions _actions;
     private readonly IUiDispatcher _ui;
+    private readonly IAppLogger _logger;
     private readonly ILocalizationService _localization;
     private readonly TimeProvider _time;
     private readonly AsyncRelayCommand _send;
@@ -43,8 +44,10 @@ public sealed partial class AiChatViewModel : ObservableObject, IAiChatScreen, I
     private AiChatConversation? _conversation;
     private CancellationTokenSource? _saving;
     private string? _chartId;
+    private int _openGeneration;
     private readonly AiChatToneScope _toneScope;
     private readonly AiChatTaskDefaults _defaults;
+    private bool _syncingChoices;
     private bool _applyingDefaultJob;
     private (AiChatTurn Turn, AiChatInstructionRequest Request)? _unanswered;
     private (AiChatTurn Turn, AiChatInstructionRequest Request)? _followUp;
@@ -79,11 +82,15 @@ public sealed partial class AiChatViewModel : ObservableObject, IAiChatScreen, I
         _store = services.History;
         _actions = services.Actions;
         _ui = ui;
+        _logger = services.Logger;
         _localization = localization;
         _toneScope = new AiChatToneScope(state, localization);
         _time = services.Time;
         _history = new AiChatHistoryViewModel(_store, localization, ui, _time, this);
         _defaults = new AiChatTaskDefaults(config, localization);
+        ArrangementPicker = new AiChatArrangementPicker(state, selection, localization, Job, Scope);
+        ArrangementPicker.Changed += RefreshScopeSummary;
+        ArrangementPicker.FirstChosen += OnFirstChosen;
         _send = new AsyncRelayCommand(SendAsync, CanSend);
         _retry = new AsyncRelayCommand(RetryAsync, () => !IsBusy && _unanswered is not null);
         _cancel = new RelayCommand(() => _saving?.Cancel(), () => IsBusy);
@@ -93,15 +100,11 @@ public sealed partial class AiChatViewModel : ObservableObject, IAiChatScreen, I
         OpenAiSettingsCommand = new RelayCommand(() => OpenSettingsRequested?.Invoke());
         Jobs = AiChatJobText.Options(localization);
         _selectedJob = Jobs[0];
-        Scopes =
-        [
-            new AiChatOptionItem(localization["AiChat_Scope_Selection"], "", AiChatScopeKind.Selection),
-            new AiChatOptionItem(localization["AiChat_Scope_Section"], "", AiChatScopeKind.Section),
-            new AiChatOptionItem(localization["AiChat_Scope_Arrangement"], "", AiChatScopeKind.Arrangement)
-        ];
+        Scopes = AiChatJobText.ScopeOptions(localization);
         _selectedScope = Scopes[1];
         _title = localization["AiChat_NewChat"];
         _state.PropertyChanged += OnStateChanged;
+        WeakLanguageSubscription.Subscribe(localization, this, static vm => vm.OnLanguageChanged());
         _selection.SelectionChanged += (_, _) => RefreshScopeSummary();
         RefreshProvider();
         OnChartChanged();
@@ -114,6 +117,10 @@ public sealed partial class AiChatViewModel : ObservableObject, IAiChatScreen, I
     public ICommand OpenAiSettingsCommand { get; }
 
     public IReadOnlyList<IAiChatOption> Jobs { get; }
+
+    public AiChatArrangementPicker ArrangementPicker { get; }
+
+    IAiChatArrangementPicker IAiChatScreen.ArrangementPicker => ArrangementPicker;
 
     public IReadOnlyList<IAiChatOption> Scopes { get; }
 
@@ -150,6 +157,7 @@ public sealed partial class AiChatViewModel : ObservableObject, IAiChatScreen, I
 
     async Task IAiChatHistoryOwner.OpenAsync(string conversationId)
     {
+        var (opened, chartId) = (++_openGeneration, _chartId);
         var result = await _store.LoadAsync(conversationId).ConfigureAwait(false);
         // a row whose file is gone goes too, or every click on it fails the same way.
         if (result.Status == AiChatStatus.NotFound)
@@ -160,6 +168,8 @@ public sealed partial class AiChatViewModel : ObservableObject, IAiChatScreen, I
 
         await _ui.InvokeAsync(() =>
         {
+            // A New Chat, a later open or another chart since the click: the load answers nothing now.
+            if (opened != _openGeneration || chartId != _chartId) return;
             if (result.Status != AiChatStatus.Ok || result.Conversation is null)
             {
                 _history.Notice(AiChatText.Status(_localization, result.Status));
@@ -200,27 +210,41 @@ public sealed partial class AiChatViewModel : ObservableObject, IAiChatScreen, I
 
     partial void OnSelectedScopeChanged(IAiChatOption? value) => RefreshScopeSummary();
 
+    /// <summary>A fix task sends with an empty box, as the Tools rows it replaces ran with no words.</summary>
     private bool CanSend() =>
-        HasProvider && !IsBusy && _chartId is not null && !string.IsNullOrWhiteSpace(InputText);
+        HasProvider && !IsBusy && _chartId is not null &&
+        (!string.IsNullOrWhiteSpace(InputText) || AiChatJobText.DefaultInstructionKey(Job()) is not null);
 
     private async Task SendAsync()
     {
         var text = InputText.Trim();
+        if (text.Length == 0 && AiChatJobText.DefaultInstructionKey(Job()) is { } line) text = _localization[line];
+        await SendCoreAsync(text);
+    }
+
+    private async Task<bool> SendCoreAsync(string text, AiChatScopeKind? scopeOverride = null)
+    {
         var conversation = _conversation ?? _store.StartNew(ModelId());
-        if (conversation is null || text.Length == 0) return;
+        if (conversation is null || text.Length == 0) return false;
         ErrorText = "";
-        var scope = ChatScope();
-        if (scope is null)
+        var scopes = _scopeOverride.Collect(scopeOverride, ChatScopes);
+
+        if (scopes.Count == 0)
         {
             // Never silently the whole arrangement: the scope summary already says what is missing.
             ErrorText = ScopeSummary;
-            return;
+            return false;
         }
 
         conversation = conversation.Append(new AiChatTurn(AiChatRole.User, text, _time.GetUtcNow()));
         Show(conversation);
         InputText = "";
-        await RunAsync(conversation, new AiChatInstructionRequest(text, scope, conversation, ModelId(), Job()));
+        await RunAsync(conversation, new AiChatInstructionRequest(text, scopes[0], conversation, ModelId(), Job())
+        {
+            MoreScopes = [.. scopes.Skip(1)],
+            Style = Style()
+        });
+        return true;
     }
 
     /// <summary>A reply with no answer, sent again: the SAME request, in that reply's place.</summary>
@@ -290,32 +314,6 @@ public sealed partial class AiChatViewModel : ObservableObject, IAiChatScreen, I
         ErrorText = _localization.Format("AiChat_NotSaved", AiChatText.Status(_localization, result.Status));
     }
 
-    /// <summary>The scope the pass runs on, or null when the chosen one covers nothing right now.</summary>
-    private AiChatScope? ChatScope()
-    {
-        var arrangement = SelectedArrangement is AiChatOptionItem { Key: Arrangement a } ? a : _state.ActiveArrangement;
-        if (arrangement is null) return null;
-        if (Job() == AiChartJob.Tones)
-            return AiChatScope.Tones(Scope(), arrangement, _selection.SelectedTones, _state.CurrentTimeMs, _state.Beats);
-        switch (Scope())
-        {
-            case AiChatScopeKind.Selection:
-                return AiChatScope.Selection(AiChartPassRun.RangeOf(_selection.SelectedNotes, _selection.SelectedChords),
-                    arrangement);
-            case AiChatScopeKind.Section:
-            {
-                var level = ReferenceEquals(arrangement, _state.ActiveArrangement) && _state.ActiveLevel is { } active
-                    ? active
-                    : arrangement.Levels.MaxBy(l => l.DifficultyIndex);
-                return level is null
-                    ? null
-                    : AiChatScope.SectionAt(arrangement, level, TimelineMath.PositionFromMs(_state.CurrentTimeMs, _state.Beats));
-            }
-            default:
-                return AiChatScope.WholeArrangement(arrangement);
-        }
-    }
-
     private void Show(AiChatConversation conversation)
     {
         _conversation = conversation;
@@ -333,6 +331,7 @@ public sealed partial class AiChatViewModel : ObservableObject, IAiChatScreen, I
 
     private void NewChat()
     {
+        _openGeneration++;
         _saving?.Cancel();
         _conversation = null;
         _unanswered = null;
@@ -379,16 +378,23 @@ public sealed partial class AiChatViewModel : ObservableObject, IAiChatScreen, I
         Arrangements = project is null
             ? []
             : [.. project.Arrangements.Select(a => new AiChatOptionItem(a.Name, "", a))];
+        if (project is null) ArrangementPicker.Clear();
+        else ArrangementPicker.Rebuild([.. project.Arrangements]);
         SelectActiveArrangement();
         RefreshScopeSummary();
         _send.NotifyCanExecuteChanged();
     }
 
-    private void SelectActiveArrangement() =>
+    private void SelectActiveArrangement()
+    {
         SelectedArrangement = Arrangements.FirstOrDefault(a => ReferenceEquals(((AiChatOptionItem)a).Key, _state.ActiveArrangement))
                               ?? Arrangements.FirstOrDefault();
+        ArrangementPicker.SelectOnly(ChosenArrangement());
+    }
 
     private Arrangement? ChosenArrangement() => SelectedArrangement is AiChatOptionItem { Key: Arrangement a } ? a : null;
 
-    private AiChatScopeKind Scope() => SelectedScope is AiChatOptionItem { Key: AiChatScopeKind scope } ? scope : AiChatScopeKind.Section;
+    private readonly AiChatScopeOverride _scopeOverride = new();
+
+    private AiChatScopeKind Scope() => _scopeOverride.Kind ?? (SelectedScope is AiChatOptionItem { Key: AiChatScopeKind scope } ? scope : AiChatScopeKind.Section);
 }

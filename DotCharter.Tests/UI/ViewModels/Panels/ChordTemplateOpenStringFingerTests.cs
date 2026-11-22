@@ -27,7 +27,7 @@ public sealed class ChordTemplateOpenStringFingerTests
         var h = new Harness();
         var (vm, template) = h.BoundShape(fretted: (4, 2), finger: 2);
 
-        vm.ToggleNoteCommand.Execute((0, 0));
+        vm.ToggleNote((0, 0));
 
         Assert.Equal(0, template.Frets[0]);
         Assert.False(template.Fingers.ContainsKey(0));
@@ -44,13 +44,13 @@ public sealed class ChordTemplateOpenStringFingerTests
         h.Editor.ActiveArrangement!.Capo = 3;
         var (vm, template) = h.BoundShape(fretted: (4, 5), finger: 1);
 
-        vm.ToggleNoteCommand.Execute((1, 3));
+        vm.ToggleNote((1, 3));
 
         Assert.Equal(3, template.Frets[1]);
         Assert.False(template.Fingers.ContainsKey(1));
 
         // …and a genuinely fretted string still gets one.
-        vm.ToggleNoteCommand.Execute((2, 7));
+        vm.ToggleNote((2, 7));
         Assert.Equal(7, template.Frets[2]);
         Assert.Equal(1, template.Fingers[2]);
     }
@@ -64,7 +64,7 @@ public sealed class ChordTemplateOpenStringFingerTests
         var h = new Harness();
         var (vm, template) = h.BoundShape(fretted: (5, 3), finger: 3);
 
-        vm.SetHoveredFretCommand.Execute(new DotCharter.UI.Controls.ChordBoxFretEdit(5, 0, false));
+        vm.SetHoveredFret(new DotCharter.UI.Controls.ChordBoxFretEdit(5, 0, false));
 
         Assert.Equal(0, template.Frets[5]);
         Assert.False(template.Fingers.ContainsKey(5));

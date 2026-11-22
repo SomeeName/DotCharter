@@ -121,4 +121,57 @@ public static class LaunchCommandLine
     public static string FailureLine(DateTime now, string appExePath, string reason)
         => $"{now:yyyy-MM-dd HH:mm:ss} DotCharter launcher: could not start '{appExePath}': {reason}. " +
            "The install is incomplete or damaged - extract the release zip again (the app lives in its app folder).";
+
+    /// <summary>A nonzero exit within this many milliseconds of the start counts as a startup crash.</summary>
+    public const int QuickExitMilliseconds = 5000;
+
+    /// <summary>
+    ///     The text of the one message box a failed start shows: the reason, the exit code
+    ///     and where the log is (<paramref name="logPath" /> null when nothing took the note).
+    /// </summary>
+    public static string FailureMessage(string reason, int exitCode, string? logPath)
+        => $"DotCharter could not start.{Environment.NewLine}{Environment.NewLine}" +
+           $"Reason: {reason}{Environment.NewLine}Exit code: 0x{exitCode:X8}{Environment.NewLine}" +
+           (logPath is null ? "No log file could be written." : $"Log: {logPath}");
+
+    /// <summary>The message for an app that exited with a nonzero code right after it started.</summary>
+    public static string QuickExitMessage(int exitCode)
+        => $"DotCharter closed right after starting (exit code 0x{unchecked((uint)exitCode):X8}).{Environment.NewLine}{Environment.NewLine}" +
+           "Its log folder (logs beside DotCharter.exe, or %APPDATA%\\DotCharter\\logs) says why.";
+
+    /// <summary>A dialog is only for a person at a desktop: never when the caller redirected the standard handles or chose a desktop (scripted and hidden-desktop launches).</summary>
+    public static bool ShouldShowDialog(bool standardHandlesRedirected, bool desktopChosen)
+        => !standardHandlesRedirected && !desktopChosen;
+
+    /// <summary>A nonzero exit this soon after the start is a startup crash worth telling the user about.</summary>
+    public static bool IsQuickCrash(int exitCode, long elapsedMilliseconds)
+        => exitCode != 0 && elapsedMilliseconds < QuickExitMilliseconds;
+
+    /// <summary>
+    ///     Writes the failure note, then shows the message through <paramref name="show" />
+    ///     when <paramref name="showDialog" /> is true. The reporter is a seam so the tests
+    ///     never open a real dialog. Returns <paramref name="exitCode" />.
+    /// </summary>
+    public static int ReportFailure(
+        string launcherDirectory, string tempDirectory, string appExePath, string reason, int exitCode,
+        bool showDialog, Action<string> show, DateTime? now = null)
+    {
+        var line = FailureLine(now ?? DateTime.Now, appExePath, reason) + Environment.NewLine;
+        var logPath = TryWriteFailureLog(launcherDirectory, tempDirectory, line);
+        if (showDialog) show(FailureMessage(reason, exitCode, logPath));
+        return exitCode;
+    }
+
+    /// <summary>
+    ///     The missing-app failure path. It takes the caller's STARTUPINFO flags, not a
+    ///     decided policy, so it cannot run before they were read: a redirected or
+    ///     hidden-desktop launch writes the note and shows nothing. Null when the app is there.
+    /// </summary>
+    public static int? ReportIfAppMissing(
+        string launcherDirectory, string tempDirectory, string appExePath, bool appExists,
+        bool standardHandlesRedirected, bool desktopChosen, Action<string> show, DateTime? now = null)
+        => appExists
+            ? null
+            : ReportFailure(launcherDirectory, tempDirectory, appExePath, "the file does not exist", MissingAppExitCode,
+                ShouldShowDialog(standardHandlesRedirected, desktopChosen), show, now);
 }

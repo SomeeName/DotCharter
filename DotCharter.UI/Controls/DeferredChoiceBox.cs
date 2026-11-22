@@ -27,6 +27,13 @@ namespace DotCharter.UI.Controls;
 ///         (a templated <see cref="TextBox" /> and a popup, ~10 ms in Debug), so an open
 ///         of the designer, which rebuilds every gear row, builds none.
 ///     </para>
+///     <para>
+///         The list is a Fire card as wide as the field and aligned to it
+///         (<see cref="GearPickerParts" />): choices of one <see cref="IGroupedChoice" /> group sit
+///         together under one heading, the typed text is highlighted, the picked choice is marked
+///         and scrolled into view, and a search nothing matches says so. The picked name stays
+///         as the placeholder while the field is cleared to type.
+///     </para>
 /// </summary>
 public sealed class DeferredChoiceBox : DeferredFieldBase
 {
@@ -38,10 +45,12 @@ public sealed class DeferredChoiceBox : DeferredFieldBase
     public static readonly StyledProperty<IToneChoice?> SelectedItemProperty =
         AvaloniaProperty.Register<DeferredChoiceBox, IToneChoice?>(nameof(SelectedItem), defaultBindingMode: BindingMode.TwoWay);
 
-    private static readonly IDataTemplate ItemTemplate =
-        new FuncDataTemplate<IToneChoice>((choice, _) => new TextBlock { Text = choice?.DisplayName });
+    private static readonly GearNoMatchChoice NoMatch = new();
 
     private AutoCompleteBox? _editor;
+    private List<IToneChoice> _grouped = [];
+    private string? _anyMatchFor;
+    private bool _anyMatch;
     private bool _syncing;
 
     public DeferredChoiceBox() => AddHandler(KeyDownEvent, OnEditorKeyDown, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
@@ -87,20 +96,23 @@ public sealed class DeferredChoiceBox : DeferredFieldBase
         {
             MinimumPrefixLength = 0,
             IsTextCompletionEnabled = false,
-            ItemsSource = ItemsSource,
-            ItemTemplate = ItemTemplate,
-            ItemFilter = (search, item) => item is IToneChoice choice && Matches(choice, search, SelectedItem),
+            ItemsSource = Rows(),
+            ItemTemplate = new FuncDataTemplate<IToneChoice>((choice, _) => BuildRow(choice)),
+            ItemFilter = (search, item) => item is IToneChoice choice && Passes(choice, search),
+            PlaceholderText = SelectedItem?.DisplayName,
             ItemSelector = (_, item) => (item as IToneChoice)?.DisplayName ?? "",
             Text = SelectedItem?.DisplayName
         };
         box.Bind(AutoCompleteBox.FontFamilyProperty, this.GetObservable(FontFamilyProperty));
         AutomationProperties.SetName(box, AutomationProperties.GetName(this));
         box.DropDownClosed += OnEditorDropDownClosed;
+        box.DropDownOpened += OnEditorDropDownOpened;
         box.LostFocus += OnEditorLostFocus;
         _editor = box;
 
         ShowEditor(box);
         box.ApplyTemplate();
+        GearPickerParts.StylePopup(box, this);
         // Set after the template so the box's own change handling has a TextBox to talk to.
         _syncing = true;
         try
@@ -140,7 +152,7 @@ public sealed class DeferredChoiceBox : DeferredFieldBase
         }
         else if (change.Property == ItemsSourceProperty && _editor is not null)
         {
-            _editor.ItemsSource = change.GetNewValue<IEnumerable?>();
+            _editor.ItemsSource = Rows();
         }
     }
 
@@ -154,6 +166,7 @@ public sealed class DeferredChoiceBox : DeferredFieldBase
         try
         {
             var name = SelectedItem?.DisplayName ?? "";
+            box.PlaceholderText = name;
             if (!ReferenceEquals(box.SelectedItem, SelectedItem)) box.SelectedItem = SelectedItem;
             if (box.Text != name) box.Text = name;
         }
@@ -176,7 +189,52 @@ public sealed class DeferredChoiceBox : DeferredFieldBase
     private void OnEditorDropDownClosed(object? sender, EventArgs e)
     {
         if (_syncing || _editor is not { IsKeyboardFocusWithin: true } box) return;
-        if (box.SelectedItem is IToneChoice choice && box.Text == choice.DisplayName) Commit(choice);
+        if (box.SelectedItem is GearNoMatchChoice) Cancel(box);
+        else if (box.SelectedItem is IToneChoice choice && box.Text == choice.DisplayName) Commit(choice);
+    }
+
+    /// <summary>Shows the picked choice: the card as wide as the field, the list scrolled to the pick.</summary>
+    private void OnEditorDropDownOpened(object? sender, EventArgs e)
+    {
+        if (_editor is not { } box) return;
+        if (box.GetTemplateDescendants().OfType<Avalonia.Controls.Primitives.Popup>().FirstOrDefault()?.Child is Border card)
+            GearPickerParts.Match(card, this);
+        if (SelectedItem is null) return;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (box.GetTemplateDescendants().OfType<ListBox>().FirstOrDefault() is { } list) list.ScrollIntoView(SelectedItem);
+        }, Avalonia.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>The choices in group order, then the "no match" row.</summary>
+    private List<IToneChoice> Rows()
+    {
+        _grouped = [.. Items().GroupBy(c => (c as IGroupedChoice)?.GroupName ?? "").SelectMany(g => g)];
+        return [.. _grouped, NoMatch];
+    }
+
+    /// <summary>A real choice passes when it matches; the "no match" row only while nothing does.</summary>
+    private bool Passes(IToneChoice choice, string? search)
+    {
+        if (choice is not GearNoMatchChoice) return Matches(choice, search, SelectedItem);
+        if (_anyMatchFor != search || _grouped.Count == 0)
+        {
+            _anyMatchFor = search;
+            _anyMatch = _grouped.Any(c => Matches(c, search, SelectedItem));
+        }
+
+        return !_anyMatch;
+    }
+
+    private Control BuildRow(IToneChoice? choice)
+    {
+        if (choice is null) return new TextBlock();
+        var search = _editor?.Text;
+        if (string.Equals(search, SelectedItem?.DisplayName, StringComparison.Ordinal)) search = null;
+        var group = (choice as IGroupedChoice)?.GroupName;
+        var previous = _grouped.TakeWhile(c => !ReferenceEquals(c, choice)).LastOrDefault(c => Matches(c, _editor?.Text, SelectedItem));
+        var heading = !string.IsNullOrEmpty(group) && (previous as IGroupedChoice)?.GroupName != group ? group : null;
+        return GearPickerParts.Row(choice, search, Equals(choice, SelectedItem), heading);
     }
 
     private void OnEditorLostFocus(object? sender, RoutedEventArgs e)

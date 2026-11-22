@@ -120,7 +120,10 @@ public sealed class NamCaptureNativeLoadTests
         return Directory.Exists(bundle) ? bundle : null;
     }
 
-    /// <summary>A live 48 kHz engine + attached chain, or null when native can't load.</summary>
+    /// <summary>A live 48 kHz engine + attached chain, or null when no engine can exist
+    /// here (the native library is missing, or no audio device opened). A catalogue
+    /// load or an attach that throws fails the test: it used to be caught with
+    /// everything else and turned into a skip (#608).</summary>
     private sealed class NativeChainEnv : IDisposable
     {
         public required JuceAudioEngine Engine { get; init; }
@@ -128,10 +131,11 @@ public sealed class NamCaptureNativeLoadTests
 
         public static NativeChainEnv? TryCreate48k()
         {
-            JuceAudioEngine? engine = null;
+            var engine = NativeEngineSetup.TryOpen(
+                () => new JuceAudioEngine(new JuceEngineConfig { SampleRate = 48000, EnableConsoleLog = false }), out _);
+            if (engine is null) return null;
             try
             {
-                engine = new JuceAudioEngine(new JuceEngineConfig { SampleRate = 48000, EnableConsoleLog = false });
                 var chain = new JuceDspChainService();
                 chain.LoadCatalog();
                 chain.AttachEngine(engine);
@@ -139,8 +143,8 @@ public sealed class NamCaptureNativeLoadTests
             }
             catch
             {
-                engine?.Dispose();
-                return null;
+                engine.Dispose();
+                throw;
             }
         }
 

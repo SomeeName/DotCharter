@@ -30,7 +30,7 @@ namespace DotCharter.UI.Controls.Timeline2D;
 ///         Lifetime: initialized on viewport attach (async — the compositor
 ///         interop is awaited), fully torn down on detach; pop-out /
 ///         re-attach rebuilds it against the new TopLevel's compositor. ANY
-///         initialization failure funnels into <see cref="Fail" />: on a real
+///         initialization or frame failure funnels into <see cref="Fail" />: on a real
 ///         compositor the owner shows a visible, localized error surface
 ///         (never a silent blank timeline); under the Avalonia.Headless test
 ///         platform — where no GPU compositor exists by design — the control
@@ -41,6 +41,8 @@ internal sealed class VulkanTimelineBackend
 {
     private readonly ChartRenderer _owner;
     private readonly Action<TimeSpan> _onAnimationFrame;
+    private readonly Action<string> _onFailure;
+    private readonly Action _renderFrame;
 
     private CompositionSurfaceVisual? _visual;
     private CompositionDrawingSurface? _surface;
@@ -50,6 +52,7 @@ internal sealed class VulkanTimelineBackend
     private bool _ready;
     private bool _detached;
     private bool _framePending;
+    private bool _frameFailed;
     private float _lastLogicalWidth;
     private float _lastLogicalHeight;
     private double _lastVisualWidth = -1;
@@ -74,6 +77,8 @@ internal sealed class VulkanTimelineBackend
     {
         _owner = owner;
         _onAnimationFrame = OnAnimationFrame;
+        _onFailure = Fail;
+        _renderFrame = () => _owner.RenderTimelineFrame(this);
     }
 
     public ChartFontAtlas? FontAtlas => _renderer?.FontAtlas;
@@ -99,13 +104,65 @@ internal sealed class VulkanTimelineBackend
     {
         _framePending = false;
         if (!_ready || _detached) return;
-        _owner.RenderTimelineFrame(this);
+        ExecuteFrame(_renderFrame, _onFailure);
+    }
+
+    internal bool HasFailed => _frameFailed;
+
+    internal void ExecuteFrame(Action frame, Action<string> fail)
+    {
+        if (_frameFailed || _detached) return;
+        try
+        {
+            frame();
+        }
+        catch (Exception ex)
+        {
+            ReportFrameFailure($"The 2D timeline frame failed: {ex}", fail);
+        }
+    }
+
+    internal void ReportFrameFailure(string message, Action<string> fail)
+    {
+        if (_frameFailed || _detached) return;
+        _frameFailed = true;
+        _ready = false;
+        try
+        {
+            fail(message);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Timeline2DVulkan] Failure teardown/notification failed: {ex}");
+        }
+    }
+
+    private void OnPresentFailure(Exception error) =>
+        ReportFrameFailure($"The 2D timeline present failed: {error}", _onFailure);
+
+    internal static void ReleaseFrameResources(params Action[] releases)
+    {
+        List<Exception>? failures = null;
+        foreach (var release in releases)
+        {
+            try
+            {
+                release();
+            }
+            catch (Exception ex)
+            {
+                (failures ??= []).Add(ex);
+            }
+        }
+
+        if (failures is not null) throw new AggregateException(failures);
     }
 
     public bool BeginFrame(double logicalWidth, double logicalHeight, double renderScaling)
     {
         var renderer = _renderer;
         if (renderer == null || !_ready) return false;
+        if (renderer.IsDeviceLost) return AcceptFrameStart(false, true, _onFailure);
 
         // Size the swapchain and the visual TOGETHER, off one pixel count, so
         // the compositor's destination rectangle is exactly as many pixels as
@@ -125,7 +182,48 @@ internal sealed class VulkanTimelineBackend
         // uploaded before any text quad is batched.
         renderer.FontAtlas.RebuildIfNeeded();
 
-        return renderer.TryBeginFrame();
+        return AcceptFrameStart(renderer.TryBeginFrame(), renderer.IsDeviceLost, _onFailure);
+    }
+
+    internal bool AcceptFrameStart(bool begun, bool deviceLost, Action<string> fail)
+    {
+        if (_frameFailed) return false;
+        switch (ClassifyFrameStart(begun, deviceLost))
+        {
+            case FrameStart.Begun:
+                return true;
+            case FrameStart.DeviceLost:
+                // Terminal: the shared device is dead, so every later attempt
+                // declines too. Retrying would request frames forever behind a
+                // frozen timeline; tear the viewport down and show the error
+                // surface instead.
+                ReportFrameFailure("The 2D timeline's Vulkan device was lost.", fail);
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>What a declined or accepted frame start means for the caller.</summary>
+    internal enum FrameStart
+    {
+        /// <summary>A pool image was acquired; record and end the frame.</summary>
+        Begun,
+
+        /// <summary>Temporary back-pressure (no free image, GPU behind, zero
+        /// size): skip this tick and retry on the next.</summary>
+        BackPressure,
+
+        /// <summary>The device is lost: no later frame can succeed.</summary>
+        DeviceLost
+    }
+
+    /// <summary>Pure split of <see cref="Timeline2DComposedRenderer.TryBeginFrame" />'s
+    /// single false into retryable back-pressure and terminal device loss.</summary>
+    internal static FrameStart ClassifyFrameStart(bool begun, bool deviceLost)
+    {
+        if (deviceLost) return FrameStart.DeviceLost;
+        return begun ? FrameStart.Begun : FrameStart.BackPressure;
     }
 
     public void EndFrame(TimelineBatcher batcher)
@@ -142,20 +240,19 @@ internal sealed class VulkanTimelineBackend
     {
         _detached = true;
         _ready = false;
-        // The pump keeps completing in-flight presents even after shutdown
-        // (a dropped completion would wedge a pool slot forever); it only
-        // stops accepting NEW frames.
-        _pump?.Shutdown();
+        var pump = _pump;
+        var renderer = _renderer;
+        var surface = _surface;
         _pump = null;
-        // Device-idles internally; pending compositor reads of the dead pool
-        // survive via COM refcounts, late completions are generation-checked.
-        _renderer?.Dispose();
         _renderer = null;
-
-        ElementComposition.SetElementChildVisual(_owner, null);
-        _visual = null;
-        _surface?.Dispose();
         _surface = null;
+        _visual = null;
+        // Clear ownership before teardown; late callbacks see a detached viewport.
+        ReleaseFrameResources(
+            () => pump?.Shutdown(),
+            () => renderer?.Dispose(),
+            () => ElementComposition.SetElementChildVisual(_owner, null),
+            () => surface?.Dispose());
     }
 
     /// <summary>
@@ -173,14 +270,14 @@ internal sealed class VulkanTimelineBackend
             // be exercised on a healthy machine without breaking a driver.
             if (Environment.GetEnvironmentVariable("DOTCHARTER_TIMELINE2D_FORCE_FAIL") == "1")
             {
-                Fail("Composed 2D init failure forced by DOTCHARTER_TIMELINE2D_FORCE_FAIL.");
+                ReportFrameFailure("Composed 2D init failure forced by DOTCHARTER_TIMELINE2D_FORCE_FAIL.", _onFailure);
                 return;
             }
 
             var selfVisual = ElementComposition.GetElementVisual(_owner);
             if (selfVisual == null)
             {
-                Fail("No compositor visual — composed 2D output cannot start.");
+                ReportFrameFailure("No compositor visual — composed 2D output cannot start.", _onFailure);
                 return;
             }
 
@@ -197,7 +294,7 @@ internal sealed class VulkanTimelineBackend
                 !interop.SupportedImageHandleTypes.Contains(
                     KnownPlatformGraphicsExternalImageHandleTypes.D3D11TextureNtHandle))
             {
-                Fail("Compositor GPU interop unavailable or no D3D11 NT-handle support.");
+                ReportFrameFailure("Compositor GPU interop unavailable or no D3D11 NT-handle support.", _onFailure);
                 return;
             }
 
@@ -207,7 +304,7 @@ internal sealed class VulkanTimelineBackend
             // exists — cached in Timeline2DVulkanDevice so later viewports
             // fail fast into the same error state.
             _renderer = Timeline2DComposedRenderer.Create(_cachedAdapterLuid);
-            _pump = new ComposedPresentPump(_renderer, interop, _surface, publishPreview3DDiagnostics: false);
+            _pump = new ComposedPresentPump(_renderer, interop, _surface, publishPreview3DDiagnostics: false, onFailure: OnPresentFailure);
 
             if (!_loggedActive)
             {
@@ -224,31 +321,33 @@ internal sealed class VulkanTimelineBackend
         }
         catch (Exception ex)
         {
-            Fail($"Composed 2D output failed to initialize: {ex.Message}");
+            ReportFrameFailure($"Composed 2D output failed to initialize: {ex}", _onFailure);
         }
     }
 
     private void Fail(string message)
     {
-        // Headless test platform: expected — no GPU compositor exists, the
-        // control degrades to a no-op render. Real compositor: an ERROR the
-        // user must see (the owner shows the localized error surface).
         var headless = IsHeadlessTestPlatform.Value;
-        var logger = App.Services?.GetService<IAppLogger>();
-        if (headless)
+        try
         {
-            logger?.Info(AppLogCategory.Rendering,
-                $"{message} Headless platform — 2D timeline rendering disabled.");
+            var logger = App.Services?.GetService<IAppLogger>();
+            if (headless)
+                logger?.Info(AppLogCategory.Rendering, $"{message} Headless platform — 2D timeline rendering disabled.");
+            else
+                logger?.Error(AppLogCategory.Rendering, $"{message} The 2D timeline cannot render; showing the error surface.");
+            Debug.WriteLine($"[Timeline2DVulkan] {message}");
         }
-        else
+        finally
         {
-            logger?.Error(AppLogCategory.Rendering,
-                $"{message} The 2D timeline cannot render; showing the error surface.");
+            try
+            {
+                Detach();
+            }
+            finally
+            {
+                _owner.OnComposedBackendFailed(this, showErrorSurface: !headless);
+            }
         }
-
-        Debug.WriteLine($"[Timeline2DVulkan] {message}");
-        Detach();
-        _owner.OnComposedBackendFailed(this, showErrorSurface: !headless);
     }
 
     /// <summary>Visual size in DIPs; render size in PIXELS (BeginFrame).

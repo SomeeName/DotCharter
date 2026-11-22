@@ -20,7 +20,7 @@
     <UserControl.Styles>
         <StyleInclude Source="avares://DotCharter/Views/Shell/ShellStyles.axaml" />
 
-        <!-- Compact micro-toggle for the per-row T/S/P/L ribbon visibility flags. -->
+        <!-- Compact micro-toggle for the per-row T/S/P ribbon visibility flags. -->
         <Style Selector="ToggleButton.RibbonChip">
             <Setter Property="MinWidth" Value="22" />
             <Setter Property="MinHeight" Value="20" />
@@ -90,6 +90,14 @@
     <Border Background="{DynamicResource AppBackground}"
             BorderBrush="{DynamicResource BorderDefault}"
             BorderThickness="0,1,0,0">
+        <!-- SCROLLS once the rows no longer fit. The UniformGrid below still
+             splits the pane evenly while every row gets at least its header's
+             own height (the scroll presenter arranges it at least as tall as
+             the viewport); past that, more stacked tracks scroll instead of
+             squeezing each header until its buttons are cut off. -->
+        <ScrollViewer x:Name="StackedTracksScroll"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
         <ItemsControl x:Name="StackedItemsHost">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -103,8 +111,12 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="editor:MultiTrackEntry">
+                    <!-- MinHeight: the floor a row keeps for its timeline when
+                         many tracks are stacked; the header's own height is the
+                         other floor (see the ScrollViewer above). -->
                     <Border BorderBrush="{DynamicResource BorderSubtle}"
-                            BorderThickness="0,1,0,0">
+                            BorderThickness="0,1,0,0"
+                            MinHeight="120">
                         <Grid ColumnDefinitions="118,*" ClipToBounds="True">
                             <!-- Per-row header. Same width as the main timeline's
                                  header column so the renderer (column 1) aligns
@@ -143,9 +155,8 @@
                                         <Button Classes="TrackAction"
                                                 Command="{Binding SendSelectionHereCommand}"
                                                 Content="{localization:Loc StackedTracks_SendSelectionHere}" />
-                                        <!-- Per-row visibility toggles. Each row can be hidden
-                                             independently; the renderer reflows the ribbon height
-                                             around the visible rows so hiding reclaims space. -->
+                                        <!-- Track-specific T/S/P row toggles. Song-wide lyrics
+                                             occupy only the active timeline's ribbon. -->
                                         <StackPanel Orientation="Horizontal"
                                                     Spacing="{StaticResource SpaceXs}"
                                                     Margin="{StaticResource GapTopXs}">
@@ -164,11 +175,6 @@
                                                           Content="P"
                                                           AutomationProperties.Name="{localization:Loc Ribbon_Phrases}"
                                                           ToolTip.Tip="{localization:Loc Ribbon_Phrases}" />
-                                            <ToggleButton Theme="{StaticResource RibbonChipToggle}" Classes="RibbonChip"
-                                                          IsChecked="{Binding Ribbon.ShowLyrics}"
-                                                          Content="L"
-                                                          AutomationProperties.Name="{localization:Loc Ribbon_Lyrics}"
-                                                          ToolTip.Tip="{localization:Loc Ribbon_Lyrics}" />
                                         </StackPanel>
                                     </StackPanel>
                                 </Grid>
@@ -195,5 +201,6 @@
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
+        </ScrollViewer>
     </Border>
 </UserControl>

@@ -27,9 +27,46 @@ public interface IPlaybackTransport
 
     Task LoadAudioAsync(string filePath);
 
+    /// <summary>A temporary load whose owner can leave before decoding finishes.
+    /// Implementations should retain the previous source until an uncancelled publish.</summary>
+    async Task LoadAudioAsync(string filePath, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await LoadAudioAsync(filePath);
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    /// <summary>The generation of the source actually published on the transport.</summary>
+    long CurrentMediaGeneration => 0;
+
+    bool OwnsMedia(string path, long generation) => generation == CurrentMediaGeneration &&
+        string.Equals(path, CurrentAudioPath, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Runs a synchronous transport or mix operation only while this media owns the
+    /// transport. Worker-backed implementations serialize the check and action with publication,
+    /// holding only their operation lock across the action, never the playback state gate.
+    /// Callbacks must not load media or rebuild the engine.</summary>
+    bool RunIfOwned(string path, long generation, Action act)
+    {
+        if (!OwnsMedia(path, generation)) return false;
+        act();
+        return true;
+    }
+
+    /// <summary>Returns ownership before its worker starts, including cancellation/publication races.</summary>
+    Task LoadTemporaryAudioAsync(string path, CancellationToken cancellationToken, out long generation)
+    {
+        var pending = LoadAudioAsync(path, cancellationToken);
+        generation = CurrentMediaGeneration;
+        return pending;
+    }
+
+    /// <summary>Only transports with atomic requested-generation arbitration support hand-back.</summary>
+    Task<bool> TryRestoreAudioAsync(string? path, string ownedPath, long generation, double position) => Task.FromResult(false);
+
     /// <summary>
     /// The file the master transport currently has open — the path passed to
-    /// <see cref="LoadAudioAsync"/>, or the <c>displayPath</c> of
+    /// <see cref="LoadAudioAsync(string)"/>, or the <c>displayPath</c> of
     /// <see cref="LoadAudioFromMemoryAsync"/> (which the PSARC pipeline sets to
     /// the cached WAV it read the bytes from, so it is a real file either way).
     /// Empty when nothing is loaded.
@@ -55,6 +92,10 @@ public interface IPlaybackTransport
     Task LoadAudioFromMemoryAsync(ReadOnlyMemory<byte> bytes, string formatHint, string? displayPath = null);
     double GetTotalAudioLengthMs();
     void FreeAudio();
+
+    /// <summary>Release only the master source, preserving independently loaded stems.
+    /// Single-source implementations may use their full reset.</summary>
+    void FreeMasterAudio() => FreeAudio();
 
     /// <summary>
     ///     Monotonic counter bumped by every deliberate <see cref="SeekTo"/>.

@@ -60,9 +60,14 @@ internal sealed class ChordTemplateEditPlanner
     internal ChordApplyScope? ResolveReach(ChordTemplate loaded, ChordApplySounds thisSounds, ChordApplySounds selected)
     {
         var arr = _editor.ActiveArrangement;
-        return arr == null
-            ? null
-            : ChordApplyScope.Prepare(arr, loaded, thisSounds, selected, _editor.PlacedChords.ToList());
+        if (arr == null) return null;
+        // The bars over the strums join a fingering edit unless the owner turned the
+        // hand-shape sync off; a bar they selected themselves always counts.
+        var syncs = _configService?.LoadAppConfig().SyncHandShapeToChordTemplate != false;
+        var bars = syncs
+            ? _editor.HandShapes.ToList()
+            : _editor.HandShapes.Where(_editor.Selection.SelectedHandShapes.Contains).ToList();
+        return ChordApplyScope.Prepare(arr, loaded, thisSounds, selected, _editor.PlacedChords.ToList(), bars);
     }
 
     /// <summary>
@@ -327,7 +332,9 @@ internal sealed class ChordTemplateEditPlanner
         // highway and in the export. A reused template keeps its own.
         if (isNew && !shapeUnchanged)
         {
-            target.Name = NewChordNames.For(arr, target.Frets);
+            var naming = ChordNamingOptions.For(_configService?.LoadAppConfig().ChordNamingStyle ?? ChordNamingStyle.Eof,
+                arr, _editor.ActiveProject?.Chart);
+            target.Name = NewChordNames.For(arr, target.Frets, naming);
             target.Unnamed = false;
         }
 
@@ -496,7 +503,7 @@ internal sealed class ChordTemplateEditPlanner
             // Arpeggio is part of the find-or-create key everywhere else
             // (`ChordMask.Arpeggio` is load-bearing on export), so a bulk edit
             // must not fold an arpeggio chord into a plain chord's template.
-            var current = arr.ChordTemplates.FirstOrDefault(t => t.Id == c.TemplateId);
+            var current = arr.FindChordTemplate(c.TemplateId);
             if ((current?.IsArpeggio ?? false) != displayed.IsArpeggio) continue;
             result.Add(c);
         }
@@ -516,7 +523,7 @@ internal sealed class ChordTemplateEditPlanner
         var result = new List<HandShape>();
         foreach (var hs in selectedHandShapes)
         {
-            var template = arr.ChordTemplates.FirstOrDefault(t => t.Id == hs.TemplateId);
+            var template = arr.FindChordTemplate(hs.TemplateId);
             if (template != null && template.IsArpeggio == displayed.IsArpeggio &&
                 FingersDictHelper.Equal(template.Frets, displayed.Frets))
             {

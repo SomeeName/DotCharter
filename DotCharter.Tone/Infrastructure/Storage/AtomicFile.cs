@@ -69,39 +69,164 @@ public static class AtomicFile
     /// <paramref name="contents"/>. Creates the directory if needed.</summary>
     public static void WriteAllText(string path, string contents)
     {
-        var dir = Path.GetDirectoryName(path);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-
-        var temp = NewTempPath(path);
-
-        // Written through a FileStream rather than File.WriteAllText purely so the
-        // contents can be forced durable BEFORE the rename makes them visible.
-        using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-        using (var writer = new StreamWriter(stream))
+        Write(path, stream =>
         {
+            using var writer = new StreamWriter(stream, leaveOpen: true);
             writer.Write(contents);
             writer.Flush();
-            stream.Flush(true); // to the platter, not just the page cache
-        }
-
-        ReplaceWithRetry(temp, path);
+        });
     }
 
     /// <summary>Same contract for bytes.</summary>
     public static void WriteAllBytes(string path, byte[] contents)
+        => Write(path, stream => stream.Write(contents, 0, contents.Length));
+
+    /// <summary>Asynchronous UTF-8 text export with the same staging and durability
+    /// contract as <see cref="WriteAllText" />. Cancellation before publication
+    /// leaves an existing destination untouched and removes the stage.</summary>
+    public static Task WriteAllTextAsync(string path, string contents, CancellationToken cancellationToken = default) =>
+        WriteAllTextCoreAsync(path, contents, cancellationToken, WaitForReplacement);
+
+    internal static async Task WriteAllTextCoreAsync(string path, string contents, CancellationToken cancellationToken,
+        Action<int, CancellationToken> wait)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
         var temp = NewTempPath(path);
-
-        using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        var created = false;
+        try
         {
-            stream.Write(contents, 0, contents.Length);
-            stream.Flush(true);
+            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                       bufferSize: 4096, useAsync: true))
+            {
+                created = true;
+                using var writer = new StreamWriter(stream, leaveOpen: true);
+                await writer.WriteAsync(contents.AsMemory(), cancellationToken).ConfigureAwait(false);
+                await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+                stream.Flush(true);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            ReplaceWithRetryCore(temp, path, cancellationToken, wait);
+        }
+        finally
+        {
+            if (created) BestEffortDelete.File(temp);
+        }
+    }
+
+    /// <summary>
+    ///     Atomically replaces <paramref name="path"/> with whatever
+    ///     <paramref name="write"/> streams into a randomly named sibling temp file.
+    ///     The stream is flushed to disk before the swap and the swap retries, exactly
+    ///     like <see cref="WriteAllBytes"/>; use this for serializers, encoders and
+    ///     <c>BinaryWriter</c>s that own the stream. The stream is left open for
+    ///     <paramref name="write"/>'s caller to flush: do not dispose it inside the
+    ///     callback. A throw from <paramref name="write"/> removes the temp file and
+    ///     leaves the destination untouched.
+    /// </summary>
+    public static void Write(string path, Action<Stream> write) => WriteCore(path, write, CancellationToken.None);
+
+    internal static void WriteCore(string path, Action<Stream> write, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+        var temp = NewTempPath(path);
+        var created = false;
+        try
+        {
+            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                created = true;
+                write(stream);
+                stream.Flush(true);
+            }
+        }
+        catch
+        {
+            if (created) BestEffortDelete.File(temp);
+            throw;
         }
 
-        ReplaceWithRetry(temp, path);
+        ReplaceWithRetryCore(temp, path, cancellationToken, WaitForReplacement);
+    }
+
+    /// <summary>
+    ///     Publishes a staged file that something else wrote (an encoder, a child
+    ///     process, a download): flush it to disk, then <see cref="ReplaceWithRetry"/>.
+    ///     Replaces an existing destination.
+    /// </summary>
+    public static void Publish(string staged, string path)
+    {
+        FlushFile(staged);
+        ReplaceWithRetry(staged, path);
+    }
+
+    /// <summary>Flushes and publishes a stage only if the destination is missing.
+    /// An existing destination wins, including a concurrent publisher. The owned
+    /// stage is swept when publication is refused or fails.</summary>
+    public static bool PublishNew(string staged, string path)
+    {
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (string.Equals(Path.GetFullPath(staged), Path.GetFullPath(path), comparison))
+            throw new ArgumentException("The stage must differ from its destination.", nameof(staged));
+
+        try
+        {
+            if (File.Exists(path)) return false;
+            FlushFile(staged);
+            try
+            {
+                File.Move(staged, path);
+                return true;
+            }
+            catch (IOException) when (File.Exists(path))
+            {
+                return false;
+            }
+        }
+        finally
+        {
+            BestEffortDelete.File(staged);
+        }
+    }
+
+    /// <summary>
+    ///     Moves existing bytes with explicit replacement policy. Without replacement,
+    ///     a destination collision fails atomically; the source is never swept, even on failure.
+    ///     Replacement delegates to the quarantine overload with its existing retry contract.
+    /// </summary>
+    public static void MoveAside(string path, string aside, bool overwrite)
+    {
+        if (!overwrite)
+        {
+            File.Move(path, aside);
+            return;
+        }
+        MoveAside(path, aside);
+    }
+
+    /// <summary>Quarantines a corrupt store, replacing the aside while preserving the source if the move fails.</summary>
+    public static void MoveAside(string path, string aside)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                if (WindowsPosixRename.TryReplace(path, aside)) return;
+                File.Move(path, aside, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when (attempt < MoveAttempts &&
+                                       ex is UnauthorizedAccessException or IOException)
+            {
+                Thread.Sleep(Math.Min(MoveBackoffBaseMs << ((attempt - 1) / 2), MoveBackoffCapMs));
+            }
+        }
     }
 
     /// <summary>
@@ -128,10 +253,24 @@ public static class AtomicFile
     /// </summary>
     public static string ReadAllText(string path)
     {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
-            FileShare.ReadWrite | FileShare.Delete);
+        using var stream = OpenRead(path);
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    /// <summary>The read handle <see cref="ReadAllText" /> takes, for a reader that
+    /// parses straight from the stream: shares read/write/DELETE, so a writer's
+    /// swap proceeds while this handle keeps reading the whole old file.</summary>
+    public static FileStream OpenRead(string path) =>
+        new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+    /// <summary>Asynchronous text read with the same share-delete contract.</summary>
+    public static async Task<string> ReadAllTextAsync(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete, bufferSize: 4096, useAsync: true);
+        using var reader = new StreamReader(stream);
+        return await reader.ReadToEndAsync().ConfigureAwait(false);
     }
 
     /// <summary>Same contract for bytes.</summary>
@@ -192,12 +331,22 @@ public static class AtomicFile
     ///         and never masks the original failure.
     ///     </para>
     /// </summary>
-    public static void ReplaceWithRetry(string temp, string path)
+    public static void ReplaceWithRetry(string temp, string path) =>
+        ReplaceWithRetryCore(temp, path, CancellationToken.None, WaitForReplacement);
+
+    private static void WaitForReplacement(int milliseconds, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.WaitHandle.WaitOne(milliseconds)) cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    internal static void ReplaceWithRetryCore(string temp, string path, CancellationToken cancellationToken,
+        Action<int, CancellationToken> wait)
     {
         for (var attempt = 1; ; attempt++)
         {
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 // POSIX-semantics rename FIRST (Windows 10 1607+, NTFS): it
                 // replaces a destination that another handle holds open with
                 // FILE_SHARE_DELETE — our own AtomicFile.ReadAllText readers —
@@ -221,7 +370,15 @@ public static class AtomicFile
             {
                 // 2,2,4,4,8,8,… capped at 48 ms — ~430 ms total across 16 attempts.
                 var backoff = Math.Min(MoveBackoffBaseMs << ((attempt - 1) / 2), MoveBackoffCapMs);
-                Thread.Sleep(backoff);
+                try
+                {
+                    wait(backoff, cancellationToken);
+                }
+                catch
+                {
+                    BestEffortDelete.File(temp);
+                    throw;
+                }
             }
             catch
             {

@@ -90,6 +90,25 @@
                                            AutomationProperties.Name="{localization:Loc Dialog_CentOffset}"
                                            Minimum="-1200" Maximum="1200" />
                         </Grid>
+                        <!-- The A440 check: measured beside authored; Use only fills the field above, Save writes it. -->
+                        <Grid x:Name="ReferencePitchRow" Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
+                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_ReferencePitch}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc Dialog_ReferencePitch_Desc}" />
+                                <TextBlock x:Name="ReferencePitchStatus" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                           TextWrapping="Wrap" Text="{Binding ReferencePitch.StatusText}" />
+                            </StackPanel>
+                            <StackPanel VerticalAlignment="Center" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="ReferencePitchMeasure" Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle"
+                                        Content="{localization:Loc Dialog_ReferencePitch_Measure}"
+                                        Command="{Binding ReferencePitch.MeasureCommand}" />
+                                <Button x:Name="ReferencePitchApply" Theme="{DynamicResource PrimaryButton}" Classes="DlgAction Primary"
+                                        Content="{Binding ReferencePitch.ApplyLabel}"
+                                        IsVisible="{Binding ReferencePitch.HasSuggestion}"
+                                        AutomationProperties.Name="{Binding ReferencePitch.ApplyLabel}"
+                                        Command="{Binding ReferencePitch.ApplyCommand}" />
+                            </StackPanel>
+                        </Grid>
                         <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
                             <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
                                        Text="{localization:Loc Dialog_StringCount}" />

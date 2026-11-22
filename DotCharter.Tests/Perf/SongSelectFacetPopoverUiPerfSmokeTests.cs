@@ -14,7 +14,7 @@ namespace DotCharter.Tests.Perf;
 ///     #723: Play Mode Song Select's facet popover (<c>Views/Panels/SongFacetTemplates.axaml</c>,
 ///     the <c>FacetPopoverTemplate</c> each single-facet caption funnel opens) trims a label too
 ///     wide for the popover with an ellipsis — and the trimmed label must carry the FULL label as
-///     its tooltip, or a long tuning name ("Drop C# (C# G# C# F# A# D#)") cannot be read at all.
+///     its tooltip so a long tuning name and its note letters can be read in full.
 ///     The Library's equivalent is <see cref="LibraryTuningPopoverUiPerfSmokeTests" />.
 ///     <para>
 ///         Asserted on what is drawn: the template, from the shipped resource dictionary, opened

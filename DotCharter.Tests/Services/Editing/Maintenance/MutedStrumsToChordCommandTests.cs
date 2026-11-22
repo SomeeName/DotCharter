@@ -38,6 +38,25 @@ public sealed class MutedStrumsToChordCommandTests
     private bool IsChordAt(int beat) => Level.Chords.Any(c => c.Position == new FractionalPosition(beat));
 
     [Fact]
+    public void EditorOnlyPhrasesLimitConversionToThePlayheadSpan()
+    {
+        Arrangement.PhraseIterations.Clear();
+        Arrangement.EventPoints.Add(new EventPoint { Position = FractionalPosition.Zero, Phrase = "verse" });
+        Arrangement.EventPoints.Add(new EventPoint { Position = new FractionalPosition(8), Phrase = "chorus" });
+        _h.State.CurrentTimeMs = 500;
+
+        _h.Maintenance.ConvertMutedStrumsToChords();
+
+        Assert.True(IsChordAt(1));
+        Assert.True(IsChordAt(2));
+        Assert.False(IsChordAt(9));
+        Assert.False(IsChordAt(10));
+        Assert.Single(_h.History.GetUndoSteps());
+        _h.History.Undo();
+        Assert.Equal(4, Level.Notes.Count);
+    }
+
+    [Fact]
     public void NothingSelected_ConvertsThePhraseUnderThePlayheadOnly_InOneUndoNode()
     {
         _h.State.CurrentTimeMs = 500; // beat 1, inside the first phrase

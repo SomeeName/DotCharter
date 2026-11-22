@@ -1,5 +1,6 @@
 using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Services.Parsing.Xml.Song;
+using DotCharter.Services.Editing.ChordShapes;
 
 namespace DotCharter.Services.Export.DynamicDifficulty;
 
@@ -14,9 +15,15 @@ public sealed record DlcBuilderSteps(bool ApplyFixes, bool GenerateDynamicDiffic
 
     public bool Any => ApplyFixes || GenerateDynamicDifficulty;
 
+    /// <summary>The export policy applied before DLC Builder rewrites the XML.</summary>
+    public DoubleStopNameOptions ChordNameOptions { get; init; } = DoubleStopNameOptions.Default;
+
     /// <summary>The steps the app's settings ask every Rocksmith export for.</summary>
     public static DlcBuilderSteps FromConfig(AppConfig config) => new(config.ExportApplyDlcBuilderFixes,
-        config.ExportGenerateDynamicDifficulty, ParseMode(config.ExportDdLevelCountMode));
+        config.ExportGenerateDynamicDifficulty, ParseMode(config.ExportDdLevelCountMode))
+    {
+        ChordNameOptions = NewChordNames.OptionsFor(config)
+    };
 
     public static DdLevelCountMode ParseMode(string? mode) =>
         string.Equals(mode, nameof(DdLevelCountMode.MLModel), StringComparison.OrdinalIgnoreCase)
@@ -43,11 +50,10 @@ public sealed record DlcBuilderSteps(bool ApplyFixes, bool GenerateDynamicDiffic
 ///         millisecond the plain export writes.
 ///     </para>
 ///     <para>
-///         <b>Seven and eight strings.</b> The XML spells a 7-/8-string guitar in the package
-///         order (E..e, then the extra strings); the steps are given the chart's order (lowest
-///         first) and templates as wide as the guitar, and the result goes back in package
-///         order. The SNG mapper then builds the RS7X block from the copy as for any chart, so
-///         its template and ChordNotes rows match the generated levels by construction.
+///         <b>Extended strings.</b> XML and the difficulty steps use positional order
+///         throughout. Templates are as wide as the guitar. The mapper builds the
+///         internal model from the generated chart, keeping template and technique
+///         rows aligned with the generated levels.
 ///     </para>
 /// </summary>
 public static class DlcBuilderBuildSteps
@@ -85,7 +91,8 @@ public static class DlcBuilderBuildSteps
             Beats = project.Beats,
             Arrangements = [arrangement],
         };
-        var document = new RsXmlSongWriter().Write(single, songLengthMs is > 0 ? songLengthMs : null);
+        var document = new RsXmlSongWriter { ChordNameOptions = steps.ChordNameOptions }
+            .Write(single, songLengthMs is > 0 ? songLengthMs : null);
         var song = document.Root!;
 
         var extended = Rs7StringLayout.IsExtendedGuitar(arrangement);
@@ -94,11 +101,9 @@ public static class DlcBuilderBuildSteps
         if (dd.Levels.Count == 0 || dd.PhraseIterations.Count == 0) return null;
         if (dd.Levels.All(l => l.Notes.Count + l.Chords.Count == 0)) return null;
 
-        if (extended) Renumber(dd, s => Rs7StringLayout.ToDomain(s, stringCount));
         if (steps.ApplyFixes) DdImprover.ApplyAll(dd);
         // DLC Builder decides on the level count AFTER its improvements, as here.
         if (generate && dd.Levels.Count == 1) DdGenerator.GenerateForArrangement(DdGeneratorConfig.For(steps.LevelCountMode), dd);
-        if (extended) Renumber(dd, s => Rs7StringLayout.ToSng(s, stringCount));
         DdXml.Write(song, dd);
 
         var readBack = new RsXmlSongReader().ReadDocument(document, "dlc-builder-steps.xml");
@@ -145,32 +150,8 @@ public static class DlcBuilderBuildSteps
             warnings?.Add($"Arrangement '{arrangement.Name}': DLC Builder's fixes and dynamic difficulty could not be applied " +
                           $"({ex.Message}); it ships as charted.");
             logger.Warning(AppLogCategory.Project,
-                $"DLC Builder steps failed. Arrangement='{arrangement.Name}', message='{ex.Message}'.");
+                $"DLC Builder steps failed. Arrangement='{arrangement.Name}'.", ex);
             return arrangement;
-        }
-    }
-
-    /// <summary>Renumbers every string index — notes, chord notes and template columns.</summary>
-    private static void Renumber(DdArrangement dd, Func<int, int> map)
-    {
-        foreach (var level in dd.Levels)
-        {
-            foreach (var note in level.Notes) note.String = map(note.String);
-            foreach (var chord in level.Chords)
-            {
-                foreach (var chordNote in chord.ChordNotes ?? []) chordNote.String = map(chordNote.String);
-            }
-        }
-
-        foreach (var template in dd.ChordTemplates)
-        {
-            var frets = (int[])template.Frets.Clone();
-            var fingers = (int[])template.Fingers.Clone();
-            for (var s = 0; s < frets.Length; s++)
-            {
-                template.Frets[map(s)] = frets[s];
-                template.Fingers[map(s)] = fingers[s];
-            }
         }
     }
 

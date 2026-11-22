@@ -11,7 +11,7 @@ namespace DotCharter.Tests.Perf;
 
 /// <summary>
 ///     #712: the Library's Tuning filter popover over a large library. Since #651 every option
-///     reads "Name (letters)" ("Drop C# (C# G# C# F# A# D#)"), one per distinct tuning, and the
+///     reads "Name (letters)", one per distinct tuning, and the
 ///     popover shares its list with the capo options, so a real library offers ~40 rows.
 ///     <para>
 ///         Asserted on what is drawn, in the shipped strings (the column title, the unknown

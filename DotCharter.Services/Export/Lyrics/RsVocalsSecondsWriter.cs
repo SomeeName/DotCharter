@@ -46,7 +46,13 @@ public static class RsVocalsSecondsWriter
     /// </summary>
     public const int PitchlessNote = 254;
 
-    /// <summary>Renders the document. Pure — the caller owns the file.</summary>
+    /// <summary>
+    ///     Renders the document. Pure — the caller owns the file. A syllable flagged
+    ///     for review gets an XML comment line before its entry; Editor on Fire's
+    ///     line reader skips any line holding <c>&lt;!</c> (it writes its own version
+    ///     comment there), and XML parsers ignore comments, so <c>count</c> stays the
+    ///     number of <c>&lt;vocal/&gt;</c> entries.
+    /// </summary>
     /// <param name="syllables">The alignment, in singing order.</param>
     /// <param name="note">Pitch for every syllable; see <see cref="PitchlessNote" />.</param>
     public static XDocument Write(IReadOnlyList<LyricSyncSyllable> syllables, int note = PitchlessNote)
@@ -72,20 +78,34 @@ public static class RsVocalsSecondsWriter
                 new XAttribute("lyric", RsVocalLyricEncoding.Encode(s.Text, s.ContinuesWord, s.EndsLine))));
         }
 
-        return new XDocument(
-            new XDeclaration("1.0", "UTF-8", "yes"),
-            Fmt.CountedList("vocals", elements));
+        var vocals = Fmt.CountedList("vocals", elements);
+        for (var i = 0; i < syllables.Count; i++)
+        {
+            if (syllables[i].ReviewReasons != LyricReviewReason.None)
+                elements[i].AddBeforeSelf(new XComment($" review: {syllables[i].ReviewReasons} "));
+        }
+
+        return new XDocument(new XDeclaration("1.0", "UTF-8", "yes"), vocals);
     }
 
     /// <summary>Renders to a UTF-8 file, indented one entry per line.</summary>
     public static void WriteTo(
-        string filePath, IReadOnlyList<LyricSyncSyllable> syllables, int note = PitchlessNote)
+        string filePath, IReadOnlyList<LyricSyncSyllable> syllables, int note = PitchlessNote) =>
+        WriteTo(filePath, syllables, note, CancellationToken.None);
+
+    /// <summary>Renders and publishes only while the caller still owns the operation.</summary>
+    public static void WriteTo(string filePath, IReadOnlyList<LyricSyncSyllable> syllables, int note,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var document = Write(syllables, note);
-        using var writer = XmlWriter.Create(filePath, Fmt.GetWriterSettings());
-        document.WriteTo(writer);
+        AtomicFile.WriteCore(filePath, stream =>
+        {
+            using var writer = XmlWriter.Create(stream, Fmt.GetWriterSettings());
+            document.WriteTo(writer);
+        }, cancellationToken);
     }
 
     /// <summary>

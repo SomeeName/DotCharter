@@ -408,22 +408,15 @@ public sealed class ToneEvalCompareScriptTests : IDisposable
 
         var info = new ProcessStartInfo("pwsh")
         {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
             StandardOutputEncoding = new UTF8Encoding(false),
-            StandardErrorEncoding = new UTF8Encoding(false),
-            UseShellExecute = false,
-            CreateNoWindow = true
+            StandardErrorEncoding = new UTF8Encoding(false)
         };
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-File", file })
             info.ArgumentList.Add(argument);
 
-        Process? process;
-        try
-        {
-            process = Process.Start(info);
-        }
-        catch (System.ComponentModel.Win32Exception)
+        // #608: both pipes drain concurrently under one cap (a deadlock detector for a hung child, never a budget).
+        var result = BoundedProcess.TryRun(info, TimeSpan.FromMinutes(2), "pwsh (tone eval compare)");
+        if (result is null)
         {
             Assert.Skip("pwsh (PowerShell 7+) is not on PATH, so the comparison harness " +
                         "cannot be executed here. It is a script; running it is the only " +
@@ -431,12 +424,9 @@ public sealed class ToneEvalCompareScriptTests : IDisposable
             return "";
         }
 
-        Assert.NotNull(process);
-        var stdout = process!.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        Assert.True(process.WaitForExit(120_000), "pwsh did not finish within 120 s.");
-        Assert.True(process.ExitCode == 0,
-            $"pwsh exited {process.ExitCode}.{Environment.NewLine}{stderr}{Environment.NewLine}{stdout}");
+        var stdout = result.StandardOutput;
+        Assert.True(result.ExitCode == 0,
+            $"pwsh exited {result.ExitCode}.{Environment.NewLine}{result.StandardError}{Environment.NewLine}{stdout}");
 
         return stdout;
     }
@@ -451,66 +441,50 @@ public sealed class ToneEvalPriceEnvironmentTests
     [Fact]
     public void ThePricePair_ReachesTheReport_AndHalfAPairDoesNot()
     {
-        var names = new[]
+        var env = new FakeEnvironment();
+        env.Set(ToneEvalEnvironment.EnableVariable, "1");
+        env.Set(ToneEvalEnvironment.ProviderVariable, "openai");
+        env.Set(ToneEvalEnvironment.ModelVariable, "deepseek/deepseek-v4-flash");
+        env.Set(
+            ToneEvalEnvironment.BaseUrlVariable, "https://openrouter.ai/api");
+
+        // Nothing set: the honest Opus default, which the report prints.
+        Assert.True(ToneEvalEnvironment.TryResolve(env.Read, out var plain, out _));
+        Assert.Null(plain!.InputUsdPerMTok);
+        Assert.Equal(ToneEvalOptions.OpusInputUsdPerMTok, plain.ToOptions().InputUsdPerMTok);
+
+        // Both halves: the model's real price, invariant-culture parsed.
+        env.Set(ToneEvalEnvironment.PriceInVariable, "0.0657");
+        env.Set(ToneEvalEnvironment.PriceOutVariable, "0.1313");
+        Assert.True(ToneEvalEnvironment.TryResolve(env.Read, out var priced, out _));
+        var options = priced!.ToOptions();
+        Assert.Equal(0.0657, options.InputUsdPerMTok, 6);
+        Assert.Equal(0.1313, options.OutputUsdPerMTok, 6);
+
+        // Half a pair would price one side at DeepSeek and the other at Opus —
+        // a number nothing could interpret. Both or neither.
+        env.Set(ToneEvalEnvironment.PriceOutVariable, null);
+        Assert.True(ToneEvalEnvironment.TryResolve(env.Read, out var half, out _));
+        Assert.Equal(ToneEvalOptions.OpusInputUsdPerMTok, half!.ToOptions().InputUsdPerMTok);
+
+        // Garbage, a negative and a zero are all "unset", never a throw: a
+        // research harness must not refuse to start over a cosmetic column.
+        foreach (var bad in new[] { "not-a-price", "-1", "0" })
         {
-            ToneEvalEnvironment.EnableVariable, ToneEvalEnvironment.ProviderVariable,
-            ToneEvalEnvironment.ModelVariable, ToneEvalEnvironment.BaseUrlVariable,
-            ToneEvalEnvironment.KeyVariable, ToneEvalEnvironment.AnthropicKeyVariable,
-            ToneEvalEnvironment.PriceInVariable, ToneEvalEnvironment.PriceOutVariable
-        };
-        var saved = names.ToDictionary(n => n, Environment.GetEnvironmentVariable);
-
-        try
-        {
-            foreach (var name in names) Environment.SetEnvironmentVariable(name, null);
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.EnableVariable, "1");
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.ProviderVariable, "openai");
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.ModelVariable, "deepseek/deepseek-v4-flash");
-            Environment.SetEnvironmentVariable(
-                ToneEvalEnvironment.BaseUrlVariable, "https://openrouter.ai/api");
-
-            // Nothing set: the honest Opus default, which the report prints.
-            Assert.True(ToneEvalEnvironment.TryResolve(out var plain, out _));
-            Assert.Null(plain!.InputUsdPerMTok);
-            Assert.Equal(ToneEvalOptions.OpusInputUsdPerMTok, plain.ToOptions().InputUsdPerMTok);
-
-            // Both halves: the model's real price, invariant-culture parsed.
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.PriceInVariable, "0.0657");
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.PriceOutVariable, "0.1313");
-            Assert.True(ToneEvalEnvironment.TryResolve(out var priced, out _));
-            var options = priced!.ToOptions();
-            Assert.Equal(0.0657, options.InputUsdPerMTok, 6);
-            Assert.Equal(0.1313, options.OutputUsdPerMTok, 6);
-
-            // Half a pair would price one side at DeepSeek and the other at Opus —
-            // a number nothing could interpret. Both or neither.
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.PriceOutVariable, null);
-            Assert.True(ToneEvalEnvironment.TryResolve(out var half, out _));
-            Assert.Equal(ToneEvalOptions.OpusInputUsdPerMTok, half!.ToOptions().InputUsdPerMTok);
-
-            // Garbage, a negative and a zero are all "unset", never a throw: a
-            // research harness must not refuse to start over a cosmetic column.
-            foreach (var bad in new[] { "not-a-price", "-1", "0" })
-            {
-                Environment.SetEnvironmentVariable(ToneEvalEnvironment.PriceInVariable, bad);
-                Environment.SetEnvironmentVariable(ToneEvalEnvironment.PriceOutVariable, bad);
-                Assert.True(ToneEvalEnvironment.TryResolve(out var broken, out _));
-                Assert.Null(broken!.InputUsdPerMTok);
-                Assert.Equal(ToneEvalOptions.OpusOutputUsdPerMTok,
-                    broken.ToOptions().OutputUsdPerMTok);
-            }
-
-            // …and the decimal point is the INVARIANT one on a German box.
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.PriceInVariable, "2.5");
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.PriceOutVariable, "10");
-            Assert.True(ToneEvalEnvironment.TryResolve(out var invariant, out _));
-            Assert.Equal(2.5, invariant!.InputUsdPerMTok!.Value, 6);
-            Assert.Equal(10.0, invariant.OutputUsdPerMTok!.Value, 6);
-            Assert.Equal("2.5", 2.5.ToString(CultureInfo.InvariantCulture));
+            env.Set(ToneEvalEnvironment.PriceInVariable, bad);
+            env.Set(ToneEvalEnvironment.PriceOutVariable, bad);
+            Assert.True(ToneEvalEnvironment.TryResolve(env.Read, out var broken, out _));
+            Assert.Null(broken!.InputUsdPerMTok);
+            Assert.Equal(ToneEvalOptions.OpusOutputUsdPerMTok,
+                broken.ToOptions().OutputUsdPerMTok);
         }
-        finally
-        {
-            foreach (var (name, value) in saved) Environment.SetEnvironmentVariable(name, value);
-        }
+
+        // …and the decimal point is the INVARIANT one on a German box.
+        env.Set(ToneEvalEnvironment.PriceInVariable, "2.5");
+        env.Set(ToneEvalEnvironment.PriceOutVariable, "10");
+        Assert.True(ToneEvalEnvironment.TryResolve(env.Read, out var invariant, out _));
+        Assert.Equal(2.5, invariant!.InputUsdPerMTok!.Value, 6);
+        Assert.Equal(10.0, invariant.OutputUsdPerMTok!.Value, 6);
+        Assert.Equal("2.5", 2.5.ToString(CultureInfo.InvariantCulture));
     }
 }

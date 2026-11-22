@@ -1,5 +1,4 @@
 using System.Globalization;
-using Avalonia.Controls;
 using Avalonia.Media;
 
 namespace DotCharter.Tone.UI.Controls.Dsp;
@@ -12,15 +11,14 @@ namespace DotCharter.Tone.UI.Controls.Dsp;
 /// </summary>
 internal static class DspControlText
 {
-    internal static double ResolveFontSize(Control control, string key, double fallback)
-        => control.TryFindResource(key, out var v) && v is double d ? d : fallback;
-
+    /// <summary>A knob's readout for a person, so in the Windows region's number format ("0,25" in
+    /// de-DE); a value written to a file or the engine never goes through here.</summary>
     internal static string FormatValue(double v)
     {
         var a = Math.Abs(v);
-        return a >= 100 ? v.ToString("0", CultureInfo.InvariantCulture)
-            : a >= 10 ? v.ToString("0.#", CultureInfo.InvariantCulture)
-            : v.ToString("0.##", CultureInfo.InvariantCulture);
+        return a >= 100 ? v.ToString("0", CultureInfo.CurrentCulture)
+            : a >= 10 ? v.ToString("0.#", CultureInfo.CurrentCulture)
+            : v.ToString("0.##", CultureInfo.CurrentCulture);
     }
 
     /// <summary>The units a native parameter name may carry in a trailing

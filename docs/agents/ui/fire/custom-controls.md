@@ -24,6 +24,11 @@ in the DEFAULT gate: `FireKnobGeometry`, `FireLevelScale`,
 `FireChipStripGeometry` (token parity + wiring: `FireChipStripTests`). The
 controls are the Avalonia shell over them.
 
+Captured edits in `FireKnob`, `RigMicStage` and `RigMicSideView` end on
+`PointerCaptureLost` and detach as well as release (#531). Losing a capture
+must clear the drag flag before a later pointer move can edit the value.
+`Perf/EditorUiFaultsUiPerfSmokeTests` covers all three controls on both paths.
+
 **An UNLIT meter bar goes through `FireLevelScale.UnlitColor`, never
 `FireUnitState.At`.** `At` REPLACES the alpha channel, and running the
 10 %-white `FireSurfaceTrack` token through it at `UnlitAlpha = 1.0` painted

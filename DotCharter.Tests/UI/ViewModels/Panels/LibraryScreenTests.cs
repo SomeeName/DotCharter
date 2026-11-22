@@ -1,3 +1,4 @@
+using System.Globalization;
 using DotCharter.Presentation.Contracts.Library;
 using DotCharter.UI.ViewModels.Panels;
 using Harness = DotCharter.Tests.UI.ViewModels.Panels.SongBrowserFilterChipsTests.Harness;
@@ -53,6 +54,61 @@ public sealed class LibraryScreenTests
         var unusual = rows.Single(r => r.Item.Song.SongKey == "drop");
         Assert.True(unusual.TuningNeedsAttention);
         Assert.Equal("Drop D", unusual.TuningLabel);
+    }
+
+    /// <summary>The Library is built once per window: a language switch re-reads the column titles, the
+    /// filter rows with their prefixes, the lessons row and the capo words a row prints, and keeps the
+    /// ticked filter ticked.</summary>
+    [Fact]
+    public async Task ALanguageSwitch_RelabelsTheHeaders_TheFilterRows_AndTheCapoCells()
+    {
+        var loc = FakeLocalization.English();
+        var h = await Harness.Scanned(loc);
+        var screen = new LibraryScreen(h.Vm);
+        var capoRow = screen.Rows.Cast<LibraryRow>().First(r => r.Item.HasCapo);
+        var ticked = h.Vm.CapoFacet.Options[0];
+        ticked.IsChecked = true;
+        h.Drain();
+        Assert.Equal("Tuning", screen.TuningColumn.Title);
+        Assert.Contains("Capo 2", capoRow.Item.TuningCellLabel);
+
+        loc.SwitchTo("de-DE");
+        h.Drain();
+
+        Assert.Equal("Stimmung", screen.TuningColumn.Title);
+        Assert.Contains("Kapo 2", capoRow.Item.TuningCellLabel);
+        Assert.Contains("Kapo 2", capoRow.TuningLabel);
+        Assert.Contains(screen.TuningColumn.FilterOptions, o => o.Label.StartsWith("Kapo · ", StringComparison.Ordinal));
+        Assert.Contains(screen.StatusColumn.FilterOptions, o => o.Label == "Übungen anzeigen");
+        Assert.Contains(h.Vm.CapoFacet.Options, o => o.IsChecked && o.Value == ticked.Value);
+    }
+
+    /// <summary>The header count is formatted from a resx string, so a language switch re-reads it with the
+    /// same two numbers and tells the screen.</summary>
+    [Fact]
+    public async Task ALanguageSwitch_RereadsTheHeaderCount_WithTheSameNumbers()
+    {
+        var loc = FakeLocalization.English();
+        var h = await Harness.Scanned(loc);
+        var screen = new LibraryScreen(h.Vm);
+        h.Vm.SearchText = "Track 1";
+        h.Drain();
+        var shown = h.Vm.Songs.Count;
+        var total = Harness.DistinctSongs;
+        Assert.True(shown < total, "the search narrowed nothing — the fixture proves nothing");
+        Assert.Equal(string.Format(CultureInfo.CurrentCulture, loc["Dialog_SongBrowser_Count"], shown, total), screen.CountText);
+        var englishCount = screen.CountText;
+        var raised = new List<string?>();
+        screen.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        loc.SwitchTo("de-DE");
+        h.Drain();
+
+        var german = string.Format(CultureInfo.CurrentCulture, loc["Dialog_SongBrowser_Count"], shown, total);
+        Assert.NotEqual(englishCount, german);
+        Assert.Equal(german, h.Vm.ResultCountText);
+        Assert.Equal(german, screen.CountText);
+        Assert.Contains(nameof(LibraryScreen.CountText), raised);
     }
 
     private static DotCharter.Services.Library.LibrarySongEntry Song(string key, string tuning, string? file = null) => new()

@@ -7,9 +7,9 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using DotCharter.Tone.UI.Controls;
 using DotCharter.UI.Constants;
-using DotCharter.UI.Controls.Layers.Helpers;
 using DotCharter.UI.Controls.Themes;
 using DotCharter.UI.Input;
+using DotCharter.UI.Theming;
 using DotCharter.UI.ViewModels.Editor;
 using Microsoft.Extensions.DependencyInjection;
 using ProjectState = DotCharter.Services.State.ProjectState;
@@ -121,8 +121,6 @@ public class MinimapOverviewControl : Control
     // this one did not, with no exception and no log line.
     private static readonly IBrush[] StringBrushes = [.. ChartTheme.StringBrushes];
 
-    private static readonly IBrush PhraseBrush = ChartTheme.GoldBrush;
-    private static readonly IBrush SectionBrush = ChartTheme.SkyBlueBrush;
     private static readonly IPen PlayheadPen = new Pen(ChartTheme.WhiteSmokeBrush);
 
     // Section names in the band: 9 px semibold. At 8 px regular the
@@ -252,11 +250,10 @@ public class MinimapOverviewControl : Control
     // AudioPlaybackCoordinator). Repaints stay throttled to ~33 ms.
     private void OnProjectStateChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // A string-order flip (lefty / inverted strings) re-orients the cached
+        // A string-order flip re-orients the cached
         // note layer — rebuild it and repaint at once (a rare event, so it skips
         // the playhead throttle).
-        if (e.PropertyName is (nameof(ProjectState.InvertStrings)) or
-            (nameof(ProjectState.LeftyFlip)))
+        if (e.PropertyName is nameof(ProjectState.InvertStrings))
         {
             _staticLayerDirty = true;
             RequestRepaint();
@@ -680,12 +677,12 @@ public class MinimapOverviewControl : Control
         // only this one call site knows the band exists.
         DrawSectionBand(bitmapContext, editor, scale, totalTimeMs);
 
-        var bodyHeight = Math.Max(1, height - SectionBandHeight);
-        using (bitmapContext.PushTransform(Matrix.CreateTranslation(0, SectionBandHeight)))
+        var body = NoteBody(height);
+        using (bitmapContext.PushTransform(Matrix.CreateTranslation(0, body.Top)))
         {
-            DrawWaveform(bitmapContext, width, bodyHeight);
-            DrawEvents(bitmapContext, editor, scale, bodyHeight, totalTimeMs);
-            DrawNotes(bitmapContext, editor, scale, bodyHeight, MinimapFlipStrings);
+            DrawWaveform(bitmapContext, width, body.Height);
+            DrawEvents(bitmapContext, editor, scale, body.Height, totalTimeMs);
+            DrawNotes(bitmapContext, editor, scale, body.Height, MinimapFlipStrings);
         }
 
         _cachedEditor = editor;
@@ -785,13 +782,13 @@ public class MinimapOverviewControl : Control
             {
                 context.DrawRectangle(
                     eventPoint.Status == SectionStatus.None
-                        ? SectionBrush
+                        ? SongMapPalette.FillFor(eventPoint.Section)
                         : StatusBrush(eventPoint.Status),
                     null, new Rect(x, 0, 1, height));
             }
             else if (!string.IsNullOrEmpty(eventPoint.Phrase))
             {
-                context.DrawRectangle(PhraseBrush, null, new Rect(x, 0, 1, height));
+                context.DrawRectangle(SongMapPalette.FillFor(eventPoint.Phrase), null, new Rect(x, 0, 1, height));
             }
         }
     }
@@ -809,9 +806,8 @@ public class MinimapOverviewControl : Control
     ///     </para>
     ///
     ///     <para>
-    ///         Colour is keyed off the section NAME, so every "chorus" in a song
-    ///         is the same colour and two different names never collide by
-    ///         accident of ordering. The label is drawn only where the bar is
+    ///         The palette assigns colours by name, so every "chorus" shares a colour.
+    ///         The label is drawn only where the bar is
     ///         wide enough to hold it — a clipped word is worse than none.
     ///     </para>
     /// </summary>
@@ -840,7 +836,7 @@ public class MinimapOverviewControl : Control
         var w = (endMs - startMs) * scale;
         if (w < 2) return;
 
-        context.DrawRectangle(SectionBandBrush(name), null,
+        context.DrawRectangle(SongMapPalette.FillFor(name), null,
             new Rect(x, 0, w, SectionBandHeight), 2, 2);
 
         // Only when the bar can hold the word. Cached per name: FormattedText
@@ -849,7 +845,7 @@ public class MinimapOverviewControl : Control
         if (!_sectionTextCache.TryGetValue(name, out var text))
         {
             text = new FormattedText(name.ToUpperInvariant(), CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight, SectionTypeface, SectionFontSize, Brushes.Black);
+                FlowDirection.LeftToRight, SectionTypeface, SectionFontSize, SongMapPalette.LabelBrush);
             _sectionTextCache[name] = text;
         }
 
@@ -861,18 +857,6 @@ public class MinimapOverviewControl : Control
                 MinimapViewportMath.SnapToPixel((SectionBandHeight - text.Height) / 2, _layerScaling)));
         }
     }
-
-    /// <summary>Stable per-NAME colour from the chart palette, so the same
-    /// section name is always the same colour across the song — and the same
-    /// colour as its chip on the timeline (<see cref="SectionColors" />).</summary>
-    private static IBrush SectionBandBrush(string name) => SectionBandPalette[SectionColors.IndexFor(name)];
-
-    // In SectionColors.Base's order.
-    private static readonly IBrush[] SectionBandPalette =
-    [
-        ChartTheme.SkyBlueBrush, ChartTheme.MagentaBrush, ChartTheme.GoldBrush,
-        ChartTheme.SpringGreenBrush, ChartTheme.CyanBrush
-    ];
 
     private readonly Dictionary<string, FormattedText> _sectionTextCache = new(StringComparer.Ordinal);
 
@@ -892,13 +876,28 @@ public class MinimapOverviewControl : Control
     private double _layerScaling = 1.0;
 
     // The minimap shares the 2D timeline's string→lane order (low E on top by
-    // default, flipping with lefty/invert via ChartRenderContext.LaneTopFor), so
+    // default, flipping only with InvertStrings via ChartRenderContext.LaneTopFor), so
     // the overview never reads upside-down relative to the timeline above it.
     private bool MinimapFlipStrings =>
-        (_projectState?.LeftyFlip ?? false) ^ (_projectState?.InvertStrings ?? false);
+        _projectState?.InvertStrings ?? false;
 
     private static int MinimapLane(int stringIndex, int stringCount, bool flipStrings)
         => flipStrings ? stringCount - 1 - stringIndex : stringIndex;
+
+    /// <summary>The note lanes of a map <paramref name="mapHeight" /> tall: below the section
+    /// band, in control coordinates. The static layer's notes and the live selection markers
+    /// both draw in it, so a selected note's halo sits on the note's own lane.</summary>
+    internal static (double Top, double Height) NoteBody(double mapHeight) =>
+        (SectionBandHeight, Math.Max(1, mapHeight - SectionBandHeight));
+
+    /// <summary>Top of a mark <paramref name="markHeight" /> tall, centred in its string's lane,
+    /// in note-body coordinates (see <see cref="NoteBody" />).</summary>
+    internal static double MarkTop(int stringIndex, int stringCount, double bodyHeight, double markHeight,
+        bool flipStrings)
+    {
+        var laneHeight = bodyHeight / stringCount;
+        return MinimapLane(stringIndex, stringCount, flipStrings) * laneHeight + (laneHeight - markHeight) / 2;
+    }
 
     private static void DrawNotes(DrawingContext context, ChartEditorViewModel editor, double scale, double height,
         bool flipStrings)
@@ -942,12 +941,16 @@ public class MinimapOverviewControl : Control
     {
         if (editor.SelectedNotes.Count == 0 && editor.SelectedChords.Count == 0) return;
 
+        // The same lanes the static layer's notes use: below the section band.
+        var body = NoteBody(height);
+        using var bodyOffset = context.PushTransform(Matrix.CreateTranslation(0, body.Top));
+
         // The ACTIVE arrangement's lane count, never a project-level one: the
         // overview must draw the same lanes the timeline above it does, and a
         // 4-string bass in a project with a 6-string lead is the case that made
         // the project-level copy (now removed) wrong. See the note on ChartData.
         var stringCount = StringDigitTargeting.StringCountOf(editor.ActiveArrangement);
-        var laneHeight = height / stringCount;
+        var laneHeight = body.Height / stringCount;
         var markHeight = Math.Max(3, laneHeight * 0.55);
         var halo = SelectionHaloBrush;
         var stringBrushes = StringBrushes;
@@ -977,7 +980,7 @@ public class MinimapOverviewControl : Control
     private static void DrawSelectedMarker(DrawingContext context, IBrush halo, IBrush[] stringBrushes,
         int stringIndex, double x, double w, int stringCount, double laneHeight, double markHeight, bool flipStrings)
     {
-        var y = MinimapLane(stringIndex, stringCount, flipStrings) * laneHeight + (laneHeight - markHeight) / 2;
+        var y = MarkTop(stringIndex, stringCount, laneHeight * stringCount, markHeight, flipStrings);
         // White halo + opaque coloured core makes the selection unmistakable
         // even at minimap scale.
         context.DrawRectangle(halo, null, new Rect(x - 1.5, y - 1.5, w + 3, markHeight + 3));

@@ -1,4 +1,4 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
              xmlns:views="using:DotCharter.Tone.UI.Views.PlayMode"
@@ -8,7 +8,7 @@
              x:DataType="vm:RigDockUnit">
     <UserControl.Resources>
         <DataTemplate x:Key="CompactRigKnobTemplate" x:DataType="vm:PedalParamViewModel">
-            <fire:FireKnob Height="112" IsCompact="True" HardwareStyle="True"
+            <fire:FireKnob Height="112" Margin="4,0" IsCompact="True" HardwareStyle="True"
                            Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
                            DefaultValue="{Binding Default}" Step="{Binding Step}" Label="{Binding DisplayName}" ValueText="{Binding DisplayText}" />
         </DataTemplate>
@@ -135,7 +135,7 @@
                         </ItemsControl>
                         <!-- the blend is also the slider the reachability lint pins; it
                              reads the same param the voicing knob writes -->
-                        <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding HasBlend}" IsEnabled="{Binding SecondaryIr.HasValue}" ToolTip.Tip="{localization:Loc Rig_IrBlendHint}">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceLg}" IsVisible="{Binding HasBlend}" IsEnabled="{Binding SecondaryIr.HasValue}" ToolTip.Tip="{localization:Loc Rig_IrBlendHint}">
                             <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{localization:Loc Rig_IrBlend}" VerticalAlignment="Center" />
                             <Slider Grid.Column="1" Classes="FireSlider" Minimum="0" Maximum="1" Value="{Binding Blend.Value, Mode=TwoWay}" AutomationProperties.Name="{localization:Loc Rig_IrBlend}" />
                             <TextBlock Grid.Column="2" Theme="{StaticResource FireMonoText}" Classes="FireMono" Text="{Binding Blend.Value, StringFormat={}{0:P0}}" VerticalAlignment="Center" />

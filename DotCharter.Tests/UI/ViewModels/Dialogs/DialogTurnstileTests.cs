@@ -9,38 +9,26 @@ namespace DotCharter.Tests.UI.ViewModels.Dialogs;
 ///     renders — wedged every later message in the process, silently. The
 ///     turnstile is the pure part: a bounded wait, a displacement of the stuck
 ///     holder, and token-identified turns so the displaced holder cannot free
-///     the turn it lost. The 20 ms timeout here is the DELAY that lets the
-///     displacement path run; the assertions are on what happened, not when.
+///     the turn it lost. The stuck timeout runs on a <see cref="StepTimeProvider" />:
+///     it expires exactly when a case advances the clock past it, never because the
+///     box was slow between two lines.
 /// </summary>
 public sealed class DialogTurnstileTests
 {
-    /// <summary>
-    ///     The displacement DELAY, and it is waited out rather than raced: the
-    ///     test <c>await</c>s the displacing <c>EnterAsync</c>, so a longer value
-    ///     only costs wall time and can never change the outcome.
-    ///     <para>
-    ///         It was 20 ms, which the case below then raced against a fixed
-    ///         <c>Task.Delay(5)</c> — a 15 ms margin, on a platform whose timer
-    ///         granularity is ~15 ms on its own. Under load that delay overran
-    ///         the timeout, the third caller displaced the THIEF, and the test
-    ///         failed on its `Assert.Fail("the thief is live, not stuck")` —
-    ///         a displacement the product was right to make.
-    ///     </para>
-    /// </summary>
     private static readonly TimeSpan Stuck = TimeSpan.FromMilliseconds(500);
 
     [Fact]
     public async Task ASecondCaller_WaitsForAHolderThatFinishes()
     {
-        var turnstile = new DialogTurnstile(TimeSpan.FromSeconds(60));
-        var (first, displacedA) = await turnstile.EnterAsync(() => Assert.Fail("nothing to displace"), TestContext.Current.CancellationToken);
+        var turnstile = new DialogTurnstile(Stuck, new StepTimeProvider());
+        var (first, displacedA) = await BoundedWait.ForAsync(turnstile.EnterAsync(() => Assert.Fail("nothing to displace"), TestContext.Current.CancellationToken), "the first dialog turn", TestContext.Current.CancellationToken);
         Assert.False(displacedA);
 
         var second = turnstile.EnterAsync(() => Assert.Fail("the holder is not stuck"), TestContext.Current.CancellationToken);
         Assert.False(second.IsCompleted);
 
         turnstile.Exit(first);
-        var (_, displacedB) = await second;
+        var (_, displacedB) = await BoundedWait.ForAsync(second, "the second dialog after holder exit", TestContext.Current.CancellationToken);
         Assert.False(displacedB);
         Assert.Equal(0, turnstile.Displacements);
     }
@@ -48,14 +36,19 @@ public sealed class DialogTurnstileTests
     [Fact]
     public async Task AStuckHolder_IsDisplaced_AndCannotFreeTheTurnItLost()
     {
-        var turnstile = new DialogTurnstile(Stuck);
-        var (stuck, _) = await turnstile.EnterAsync(() => { }, TestContext.Current.CancellationToken);
+        var clock = new StepTimeProvider();
+        var turnstile = new DialogTurnstile(Stuck, clock);
+        var (stuck, _) = await BoundedWait.ForAsync(turnstile.EnterAsync(() => { }, TestContext.Current.CancellationToken), "the initial dialog turn", TestContext.Current.CancellationToken);
 
-        // The holder never exits. The next caller must not wait forever: it
-        // displaces the holder (the callback is the dialog's cancel) and takes
-        // the turn.
+        // The holder never exits. The next caller must not wait forever: once its
+        // wait has run the stuck timeout out, it displaces the holder (the callback
+        // is the dialog's cancel) and takes the turn.
         var displaced = 0;
-        var (thief, wasDisplaced) = await turnstile.EnterAsync(() => displaced++, TestContext.Current.CancellationToken);
+        var entering = turnstile.EnterAsync(() => displaced++, TestContext.Current.CancellationToken);
+        Assert.False(entering.IsCompleted, "the second caller took a turn that was held");
+        Assert.Equal(1, clock.PendingTimers);
+        clock.Advance(Stuck);
+        var (thief, wasDisplaced) = await BoundedWait.ForAsync(entering, "the stuck dialog displacement", TestContext.Current.CancellationToken);
         Assert.True(wasDisplaced);
         Assert.Equal(1, displaced);
         Assert.Equal(1, turnstile.Displacements);
@@ -77,7 +70,7 @@ public sealed class DialogTurnstileTests
 
         // The thief's own exit is what frees it.
         turnstile.Exit(thief);
-        var (_, thirdDisplaced) = await third;
+        var (_, thirdDisplaced) = await BoundedWait.ForAsync(third, "the third dialog after thief exit", TestContext.Current.CancellationToken);
         Assert.False(thirdDisplaced);
     }
 
@@ -87,21 +80,4 @@ public sealed class DialogTurnstileTests
         // displaced; short enough that a wedged process recovers on its own.
         Assert.InRange(DialogTurnstile.DefaultStuckTimeout, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10));
 
-    /// <summary>The view model routes through the turnstile, and a displaced
-    /// dialog's task answers FALSE — a cancel, the safe answer for every
-    /// confirmation in the app. Source-level, because ShowAsync hops
-    /// <c>Dispatcher.UIThread</c>, which never completes on a plain test thread.</summary>
-    [Fact]
-    public void TheViewModel_EntersTheTurnstile_AndCancelsWhatItDisplaces()
-    {
-        var source = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "ViewModels", "Dialogs",
-            "MessageDialogViewModel.cs")));
-        Assert.DoesNotContain("SemaphoreSlim", source);
-        var enter = source.IndexOf("_queue.EnterAsync(", StringComparison.Ordinal);
-        var cancel = source.IndexOf("TrySetResult(false)", StringComparison.Ordinal);
-        var invoke = source.IndexOf("Dispatcher.UIThread.InvokeAsync(", StringComparison.Ordinal);
-        var exit = source.IndexOf("_queue.Exit(turn)", StringComparison.Ordinal);
-        Assert.True(enter >= 0 && cancel > enter && invoke > cancel && exit > invoke,
-            "ShowAsync must enter the turnstile (cancelling what it displaces) before it shows, and exit in finally");
-    }
 }

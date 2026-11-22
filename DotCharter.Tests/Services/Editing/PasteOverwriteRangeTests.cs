@@ -116,8 +116,9 @@ public sealed class PasteOverwriteRangeTests
         List<EventPoint> events, List<ToneChange> tones) Collect(TrackEditorContext track, ClipboardPayload payload)
     {
         var (start, end) = EditingClipboardCoordinator.ComputePayloadRange(payload);
-        return EditingClipboardCoordinator.CollectOverwriteTargets(
+        var targets = EditingClipboardCoordinator.CollectOverwriteTargets(
             track, payload, PasteSpecialMode.OverwriteAll, start, end);
+        return (targets.notes, targets.chords, targets.hs, targets.anchors, targets.events, targets.tones);
     }
 
     private static TrackEditorContext NewTrack()

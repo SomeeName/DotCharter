@@ -82,9 +82,10 @@ public sealed class EditorRocksmithTonePreview : ObservableObject, IDisposable
     /// <summary>Why Rocksmith cannot be chosen, as a resx key; empty while it can.</summary>
     public string UnavailableReasonKey =>
         IsAvailable ? ""
-        : _session.State == TonelabSessionState.Starting ? "Dialog_Tones_InGameStarting"
+        : _session.State == TonelabSessionState.Starting ? (_session.LaunchAttempt > 1 ? "Dialog_Tones_InGameStartingRetry" : "Dialog_Tones_InGameStarting")
         : _session.LastStatus?.Result is { Outcome: TonelabOutcome.UnsupportedVersion } ? "Dialog_Tones_InGameVersion"
         : _session.LastLaunchFailure == GameToneLaunchFailure.SteamNotRunning ? "Dialog_Tones_InGameSteamNotRunning"
+        : _session.LastLaunchFailure == GameToneLaunchFailure.StartTimedOut ? "Dialog_Tones_InGameStartTimedOut"
         : _session.LastLaunchFailure != GameToneLaunchFailure.None ? "Dialog_Tones_InGameLaunchFailed"
         : CanStart ? "Toolbar_TonePreviewRocksmith_Start"
         : "Toolbar_TonePreviewRocksmith_NotConnected";
@@ -103,6 +104,8 @@ public sealed class EditorRocksmithTonePreview : ObservableObject, IDisposable
                 "" => _loc["Toolbar_TonePreviewRocksmith_Tip"],
                 "Dialog_Tones_InGameVersion" => string.Format(CultureInfo.CurrentCulture, _loc[reason],
                     _session.LastStatus?.Result.Detail, "v" + TonelabProtocol.Version),
+                "Dialog_Tones_InGameStartingRetry" => string.Format(CultureInfo.CurrentCulture, _loc[reason], _session.LaunchAttempt,
+                    _session.MaxLaunchAttempts),
                 _ => _loc[reason]
             };
             return Notice.Length == 0 ? text : Notice + Environment.NewLine + text;

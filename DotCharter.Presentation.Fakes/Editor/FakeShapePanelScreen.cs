@@ -22,6 +22,8 @@ public sealed class FakeShapePanelScreen : ObservableObject, IShapePanelScreen
     private string _pendingText = "";
     private string _pendingConfirmLabel = "";
     private bool _isPendingDestructive;
+    private FakeShapePanelRow? _current;
+    private IReadOnlyList<IShapeUseRow> _uses = [];
 
     private FakeShapePanelScreen(Func<FakeShapePanelScreen, List<FakeShapePanelRow>> rows, string emptyText, int cleanUps)
     {
@@ -52,6 +54,8 @@ public sealed class FakeShapePanelScreen : ObservableObject, IShapePanelScreen
         {
             foreach (var row in _all) row.IsSelected = false;
         });
+        SplitUsesCommand = new RelayCommand(() => { });
+        CurrentRow = _rows.FirstOrDefault();
         ConfirmPendingCommand = new RelayCommand(ClearPending);
         CancelPendingCommand = new RelayCommand(ClearPending);
     }
@@ -68,7 +72,8 @@ public sealed class FakeShapePanelScreen : ObservableObject, IShapePanelScreen
         new("Search", Search),
         new("NeedsAttention", NeedsAttention),
         new("MultiSelect", MultiSelect),
-        new("ConfirmMergeSelected", ConfirmMergeSelected)
+        new("ConfirmMergeSelected", ConfirmMergeSelected),
+        new("ExtendedRange", ExtendedRange)
     ];
 
     /// <summary>An old chart after an import: nineteen shapes, ten needing attention.</summary>
@@ -78,6 +83,10 @@ public sealed class FakeShapePanelScreen : ObservableObject, IShapePanelScreen
     public static FakeShapePanelScreen Empty() => new(_ => [], "Open a chart to see its chord shapes.", 0);
 
     public static FakeShapePanelScreen LongText() => new(FakeShapePanelData.LongNames, "Keine Form passt zur Suche.", 12);
+
+    /// <summary>A seven- and eight-string chart: the widest fret patterns beside long names.</summary>
+    public static FakeShapePanelScreen ExtendedRange() =>
+        new(FakeShapePanelData.ExtendedRange, "No shape matches the search.", 3);
 
     /// <summary>A long imported arrangement: ninety shapes, a third of them duplicates.</summary>
     public static FakeShapePanelScreen Full() => new(p => FakeShapePanelData.Many(p, 90), "No shape matches the search.", 41);
@@ -166,11 +175,47 @@ public sealed class FakeShapePanelScreen : ObservableObject, IShapePanelScreen
         }
     }
 
-    private void ApplyFilter() =>
+    private void ApplyFilter()
+    {
         Rows = _all.Where(r => (!_showAttentionOnly || r.HasIssue)
                                && (_searchText.Length == 0
                                    || r.Title.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
                                    || r.FretsText.Contains(_searchText, StringComparison.Ordinal))).ToList();
+        CurrentRow = _current;
+    }
+
+    /// <summary>The picked card, else the first listed; its uses are one fake chord per use, the first one ticked.</summary>
+    public IShapePanelRow? CurrentRow
+    {
+        get => _current;
+        set
+        {
+            var row = value as FakeShapePanelRow is { } picked && _rows.Contains(picked) ? picked : _rows.OfType<FakeShapePanelRow>().FirstOrDefault();
+            if (ReferenceEquals(row, _current) && _uses.Count == (row?.Chords ?? 0)) return;
+            _current?.IsCurrent = false;
+            _current = row;
+            row?.IsCurrent = true;
+            _uses = [.. Enumerable.Range(0, row?.Chords ?? 0).Select(i => new FakeShapeUseRow($"0:{12 + (i * 9):00}.0", $"Chord {i + 1}", i == 0))];
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasCurrentRow));
+            OnPropertyChanged(nameof(Uses));
+            OnPropertyChanged(nameof(HasUses));
+            OnPropertyChanged(nameof(UsesSummary));
+            OnPropertyChanged(nameof(CanSplitUses));
+        }
+    }
+
+    public bool HasCurrentRow => _current is not null;
+
+    public IReadOnlyList<IShapeUseRow> Uses => _uses;
+
+    public bool HasUses => _uses.Count > 0;
+
+    public string UsesSummary => $"{_uses.Count(u => u.IsChecked)} of {_uses.Count} selected";
+
+    public bool CanSplitUses => _uses.Count > 1;
+
+    public ICommand SplitUsesCommand { get; }
 
     public IReadOnlyList<IShapePanelRow> Rows
     {
@@ -315,4 +360,22 @@ public sealed class FakeShapePanelScreen : ObservableObject, IShapePanelScreen
                                && row.FretsText == _source.FretsText;
         }
     }
+}
+
+/// <summary>One fake use: ticking it only flips the tick.</summary>
+public sealed class FakeShapeUseRow(string timeText, string label, bool isChecked) : ObservableObject, IShapeUseRow
+{
+    private bool _isChecked = isChecked;
+
+    public string TimeText { get; } = timeText;
+
+    public string Label { get; } = label;
+
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set => SetProperty(ref _isChecked, value);
+    }
+
+    public ICommand JumpCommand { get; } = new RelayCommand(() => { });
 }

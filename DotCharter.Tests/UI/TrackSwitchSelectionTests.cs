@@ -20,6 +20,64 @@ namespace DotCharter.Tests.UI;
 public sealed class TrackSwitchSelectionTests
 {
     [Fact]
+    public void FocusingAStackedTrack_ClearsForeignSelectionBeforePublishingFocus()
+    {
+        var (state, selection, registry, project) = Open();
+        using var _ = registry;
+        var lead = project.Arrangements[0];
+        var bass = project.Arrangements[1];
+        selection.SelectedNotes.Add(lead.Levels[1].Notes[0]);
+        selection.SelectedChords.Add(lead.Levels[1].Chords[0]);
+        selection.HoveredNote = lead.Levels[1].Notes[0];
+        selection.PreviewNotes.Add(lead.Levels[1].Notes[0].Clone());
+        var published = false;
+        registry.FocusedTrackChanged += () =>
+        {
+            published = true;
+            Assert.Empty(selection.SelectedNotes);
+            Assert.Empty(selection.SelectedChords);
+            Assert.Empty(selection.PreviewNotes);
+            Assert.Null(selection.HoveredNote);
+        };
+
+        registry.Focus(bass);
+
+        Assert.True(published);
+        Assert.Same(lead, state.ActiveArrangement);
+        Assert.Same(bass, registry.FocusedTrack!.Arrangement);
+    }
+
+    [Fact]
+    public void RefocusingTheSameStackedTrack_PreservesItsSelection()
+    {
+        var (_, selection, registry, project) = Open();
+        using var _ = registry;
+        var bass = project.Arrangements[1];
+        registry.Focus(bass);
+        var note = bass.Levels[1].Notes[0];
+        selection.SelectedNotes.Add(note);
+
+        registry.Focus(bass);
+
+        Assert.Same(note, Assert.Single(selection.SelectedNotes));
+    }
+
+    [Fact]
+    public void FocusingAFourStringTrack_NarrowsTheSharedMask()
+    {
+        var (state, _, registry, project) = Open();
+        using var _ = registry;
+        var bass = project.Arrangements[1];
+        bass.Tuning = ["E", "A", "D", "G"];
+        state.ToggleStringEditMask(1);
+        state.ToggleStringEditMask(5);
+
+        registry.Focus(bass);
+
+        Assert.Equal(1 << 1, state.StringEditMask.Bits);
+    }
+
+    [Fact]
     public void SwitchingArrangement_DropsTheSelectionItOrphaned()
     {
         var (state, selection, registry, project) = Open();

@@ -77,6 +77,9 @@ public partial class LivePlayViewModel : ObservableObject
     /// short. NEVER call <see cref="LivePlayDetectionPump.Stop"/> (a join)
     /// while holding it — teardown paths stop the pump outside the gate.</summary>
     private readonly object _sessionGate = new();
+    private readonly LivePlayCompletion _completion = new();
+    internal TimeProvider CompletionClock { get => _completion.Clock; set => _completion.Clock = value; }
+    private double _songEndMs;
 
     /// <summary>Worker → UI marshaling: one coalesced snapshot per tick max.</summary>
     private readonly CoalescedUiChannel<TickUiState> _uiChannel;
@@ -138,6 +141,7 @@ public partial class LivePlayViewModel : ObservableObject
     /// <summary>This run's take tee (see <see cref="LivePlayRunArchive.TryStartTake" />):
     /// written by the worker, detached by <c>StopCore</c>, both under the gate.</summary>
     private LiveTakeRecorder? _takeRecorder;
+    private PracticeRunIdentity _runIdentity;
     private double? _pendingLoopStartMs;
 
     /// <summary>Post-run timing analysis (rushing/dragging). Fed from the single
@@ -153,7 +157,19 @@ public partial class LivePlayViewModel : ObservableObject
     private string _profileSongKey = string.Empty;
     private string _profileArrangement = string.Empty;
 
-    [ObservableProperty] private bool _isActive;
+    private bool _isActive;
+    public bool IsActive
+    {
+        get => _isActive;
+        set
+        {
+            if (_isActive == value) return;
+            OnPropertyChanging(nameof(IsActive));
+            _isActive = value;
+            OnIsActiveChanged(value);
+            OnPropertyChanged(nameof(IsActive));
+        }
+    }
     [ObservableProperty] private long _score;
     [ObservableProperty] private int _streak;
     [ObservableProperty] private int _bestStreak;
@@ -304,7 +320,7 @@ public partial class LivePlayViewModel : ObservableObject
         _isSpeedLadderEnabled = config.LivePlaySpeedLadderEnabled;
         _isDynamicDifficultyEnabled = config.LivePlayDynamicDifficulty;
         _hitWindowIndex = (int)LiveHitWindows.Parse(config.LivePlayHitWindow);
-        _chordStrictnessIndex = (int)ParseChordStrictness(config.LivePlayChordStrictness);
+        _chordStrictnessIndex = (int)LivePlaySessionOptions.ParseChordStrictness(config.LivePlayChordStrictness);
         _useCqtVerifier = config.LivePlayUseCqtVerifier;
         _judgeBends = config.LivePlayJudgeBends;
         _judgeSlides = config.LivePlayJudgeSlides;
@@ -327,7 +343,7 @@ public partial class LivePlayViewModel : ObservableObject
             MergeTickUiState);
     }
 
-    partial void OnIsActiveChanged(bool value)
+    private void OnIsActiveChanged(bool value)
     {
         if (value) Start();
         else Stop();

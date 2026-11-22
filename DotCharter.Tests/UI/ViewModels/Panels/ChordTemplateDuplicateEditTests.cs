@@ -61,29 +61,6 @@ public sealed class ChordTemplateDuplicateEditTests
     }
 
     [Fact]
-    public void TheLadder_StatesWhatTheNextShapeEditDoes_BeforeItIsMade()
-    {
-        var h = new Harness();
-        h.AddTemplate(0, "A5", [(0, 5), (1, 7), (2, 7)], [(0, 1), (1, 3), (2, 4)]);
-        var chords = h.AddChords(0, 3, (0, 5), (1, 7), (2, 7));
-        var vm = h.CreateChordEditor();
-        h.Selection.SelectedChords.Add(chords[0]);
-
-        vm.ApplyRung = ChordApplyRung.ThisChord;
-        Assert.Equal("A new shape is made for this chord; the other 2 keep “A5”.", vm.Ladder.ResultText);
-
-        vm.ApplyRung = ChordApplyRung.EveryUse;
-        Assert.Equal("“A5” itself changes, so every use plays the new grip.", vm.Ladder.ResultText);
-
-        // "Selected" no longer silently means either: it says which, from the selection it has.
-        vm.ApplyRung = ChordApplyRung.Selected;
-        Assert.Equal("A new shape is made for this chord; the other 2 keep “A5”.", vm.Ladder.ResultText);
-        h.Selection.SelectedChords.Add(chords[1]);
-        h.Selection.SelectedChords.Add(chords[2]);
-        Assert.Equal("“A5” itself changes, so every use plays the new grip.", vm.Ladder.ResultText);
-    }
-
-    [Fact]
     public void AHoverRun_WhoseFirstDigitMatchesAnExistingShape_StillEndsOnTheTypedFret()
     {
         var h = new Harness();
@@ -94,9 +71,9 @@ public sealed class ChordTemplateDuplicateEditTests
         h.Selection.SelectedChords.Add(chords[0]);
         vm.ApplyRung = ChordApplyRung.ThisChord;
 
-        vm.SetHoveredFretCommand.Execute(new ChordBoxFretEdit(2, 1, ContinuesRun: false));
+        vm.SetHoveredFret(new ChordBoxFretEdit(2, 1, ContinuesRun: false));
         Assert.Equal(1, chords[0].TemplateId);
-        vm.SetHoveredFretCommand.Execute(new ChordBoxFretEdit(2, 12, ContinuesRun: true));
+        vm.SetHoveredFret(new ChordBoxFretEdit(2, 12, ContinuesRun: true));
 
         Assert.False(vm.Ladder.ShowsReshapeHint, "the second digit must not be refused");
         Assert.Equal(12, chords[0].ChordNotes.Single(n => n.StringIndex == 2).Fret);
@@ -120,8 +97,8 @@ public sealed class ChordTemplateDuplicateEditTests
         h.Selection.SelectedChords.Add(chords[0]);
         vm.ApplyRung = ChordApplyRung.ThisChord;
 
-        vm.SetHoveredFretCommand.Execute(new ChordBoxFretEdit(2, 1, ContinuesRun: false));
-        vm.SetHoveredFretCommand.Execute(new ChordBoxFretEdit(2, 12, ContinuesRun: true));
+        vm.SetHoveredFret(new ChordBoxFretEdit(2, 1, ContinuesRun: false));
+        vm.SetHoveredFret(new ChordBoxFretEdit(2, 12, ContinuesRun: true));
         h.History.Undo();
 
         Assert.False(h.History.CanUndo);
@@ -140,8 +117,8 @@ public sealed class ChordTemplateDuplicateEditTests
         h.Selection.SelectedChords.Add(chords[0]);
         vm.ApplyRung = ChordApplyRung.ThisChord;
 
-        vm.SetHoveredFretCommand.Execute(new ChordBoxFretEdit(2, 1, ContinuesRun: false));
-        vm.SetHoveredFretCommand.Execute(new ChordBoxFretEdit(2, 12, ContinuesRun: true));
+        vm.SetHoveredFret(new ChordBoxFretEdit(2, 1, ContinuesRun: false));
+        vm.SetHoveredFret(new ChordBoxFretEdit(2, 12, ContinuesRun: true));
 
         Assert.Equal(12, chords[0].ChordNotes.Single(n => n.StringIndex == 2).Fret);
         Assert.Equal(2, h.Arrangement.ChordTemplates.Count);

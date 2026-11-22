@@ -2,7 +2,7 @@ using Avalonia.Controls;
 
 namespace DotCharter.UI.Views.Editor.Inspector;
 
-/// <summary>The Sound tab's Task section with nothing selected: the next thing that needs work.</summary>
+/// <summary>The Task page's "Fix the next sound" card: the next task, the triage rows, Fix next.</summary>
 public partial class SoundTaskView : UserControl
 {
     public SoundTaskView() => InitializeComponent();

@@ -223,32 +223,6 @@ public sealed class RsToneFidelityHarnessTests : IClassFixture<RsToneFidelityHar
     }
 
     [Fact]
-    public void AmpVoicingTrims_MatchTheRig()
-    {
-        // RsToneConverter.AmpVoicingTrimDb is a MEASUREMENT of the native amp
-        // roster; this re-takes it the same way so a change to dcdsp_amp.h that
-        // moves a voicing's level fails here instead of silently unlevelling
-        // every converted tone on that voicing.
-        RequireNative();
-        var drift = new List<string>();
-        var measuredAll = new List<string>();
-        for (var v = 0; v < RsToneConverter.AmpVoicingTrimDb.Length; v++)
-        {
-            var measured = MeasureVoicingTrimDb(v);
-            measuredAll.Add(measured.ToString("F1", CultureInfo.InvariantCulture));
-            if (Math.Abs(measured - RsToneConverter.AmpVoicingTrimDb[v]) > 1.5)
-            {
-                drift.Add(string.Create(CultureInfo.InvariantCulture,
-                    $"voicing {v}: committed {RsToneConverter.AmpVoicingTrimDb[v]:F1} dB, measured {measured:F1} dB"));
-            }
-        }
-
-        Assert.True(drift.Count == 0,
-            "re-measure RsToneConverter.AmpVoicingTrimDb:\n" + string.Join("\n", drift) +
-            "\nmeasured now: " + string.Join(", ", measuredAll));
-    }
-
-    [Fact]
     public void JazzSolid120_SitsWithTheCleanRoster_AtEqualKnobs()
     {
         // #71: voicing 5 (Jazz Solid 120, what Amp_CS90/100/120 convert to) used to
@@ -301,7 +275,7 @@ public sealed class RsToneFidelityHarnessTests : IClassFixture<RsToneFidelityHar
     ///     <paramref name="voicing" /> and the plain walker's trailing gain; the trim
     ///     is -12 dBFS minus the mean rendered peak over the DI's playing part.
     /// </summary>
-    private double MeasureVoicingTrimDb(int voicing)
+    private static double MeasureVoicingTrimDb(Fixture fx, int voicing)
     {
         var peaks = new List<double>();
         foreach (var cab in new[] { "Cab_TW112C_57_Cone", "Cab_GB412CMKIII_57_Cone" })
@@ -313,7 +287,7 @@ public sealed class RsToneFidelityHarnessTests : IClassFixture<RsToneFidelityHar
                 {
                     ["gainDb"] = DcRigLoudnessNormalizer.ComputeTrailingGainDb(body)
                 }));
-                peaks.Add(_fx.Harness.RenderPlayingPeakDbfs(new DcRigPreset(body)));
+                peaks.Add(fx.Harness.RenderPlayingPeakDbfs(new DcRigPreset(body)));
             }
         }
 
@@ -600,8 +574,49 @@ public sealed class RsToneFidelityHarnessTests : IClassFixture<RsToneFidelityHar
         foreach (var s in samples) w.Write((short)Math.Round(Math.Clamp(s, -1f, 1f) * 32767));
     }
 
-    private void RequireNative()
-        => Assert.SkipWhen(!_fx.Harness.Available, "native DSP ABI (juce_sharp.dll) / audio engine not loadable in this test environment");
+    private void RequireNative() => RequireNative(_fx);
+
+    private static void RequireNative(Fixture fx)
+        => Assert.SkipWhen(!fx.Harness.Available, "native DSP ABI (juce_sharp.dll) / audio engine not loadable in this test environment");
+
+    /// <summary>
+    ///     The voicing-trim re-measurement, ~100 s of renders on its own: a class of its
+    ///     own (#325), so the release lane runs it in another shard than the targets
+    ///     instead of after them in one serial chain.
+    /// </summary>
+    [Collection("NativeEngine")]
+    public sealed class AmpVoicing : IClassFixture<Fixture>
+    {
+        private readonly Fixture _fx;
+
+        public AmpVoicing(Fixture fx) => _fx = fx;
+
+        [Fact]
+        public void AmpVoicingTrims_MatchTheRig()
+        {
+            // RsToneConverter.AmpVoicingTrimDb is a MEASUREMENT of the native amp
+            // roster; this re-takes it the same way so a change to dcdsp_amp.h that
+            // moves a voicing's level fails here instead of silently unlevelling
+            // every converted tone on that voicing.
+            RequireNative(_fx);
+            var drift = new List<string>();
+            var measuredAll = new List<string>();
+            for (var v = 0; v < RsToneConverter.AmpVoicingTrimDb.Length; v++)
+            {
+                var measured = MeasureVoicingTrimDb(_fx, v);
+                measuredAll.Add(measured.ToString("F1", CultureInfo.InvariantCulture));
+                if (Math.Abs(measured - RsToneConverter.AmpVoicingTrimDb[v]) > 1.5)
+                {
+                    drift.Add(string.Create(CultureInfo.InvariantCulture,
+                        $"voicing {v}: committed {RsToneConverter.AmpVoicingTrimDb[v]:F1} dB, measured {measured:F1} dB"));
+                }
+            }
+
+            Assert.True(drift.Count == 0,
+                "re-measure RsToneConverter.AmpVoicingTrimDb:\n" + string.Join("\n", drift) +
+                "\nmeasured now: " + string.Join(", ", measuredAll));
+        }
+    }
 
     /// <summary>One harness and one render cache for the class: several targets
     /// share a render (the 57/Cone tone is in three of them).</summary>

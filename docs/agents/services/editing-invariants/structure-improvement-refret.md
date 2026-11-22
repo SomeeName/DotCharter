@@ -2,6 +2,22 @@
 
 ## `Editing/Structure/` — what may be derived, and what may not
 
+- Generation counts only fields it actually fills: an occupied beat-0 phrase
+  blocks COUNT without reporting a change or creating an empty undo step.
+  END is the first whole beat after the latest sound's end, including sustains
+  beyond the stored beat grid (`StructureGenerationServiceUndoTests`,
+  `StructureGeneratorTests`). Phrase existence checks positioned imported
+  iterations and editor markers independently, without position de-duplication:
+  an editor phrase cannot hide an imported COUNT/END, and an unused name-table
+  entry cannot block repair (`CopyStructureToArrangementsTests`).
+- Structure copying delegates to `StructureMarkerMerge`, which reads `PhraseMarkers.All`, including imported iterations.
+  Copied phrases update target iterations at the same positions as well as the
+  editor markers. Solo-only changes count as changed markers and commit through
+  the same project snapshot (`CopyStructureToArrangementsTests`).
+- Playhead propagation and muted-strum conversion resolve spans through
+  `PhraseMarkers.Iterations`, so editor-only, imported and mixed charts use the
+  same boundaries (`ChartPowerToolsTests`, `MutedStrumsToChordCommandTests`).
+
 - `Editing/Structure/` — `StructureGenerator` (pure) + `StructureGenerationService`.
   Derives only the parts of a chart's structure that are **not a judgement
   call**: the COUNT and END phrases (89 of 89 corpus arrangements carry exactly
@@ -42,6 +58,19 @@
 
 ## `Editing/Improvement/` — dynamic difficulty (generate ⇄ squash)
 
+`ChartImprovementService` also owns Polish. Its song-end cleanup trims content
+on the original grid, then removes trailing beats only beyond the first beat
+at/after the audio end, preserving at least one original interval (#558).
+Never replace or append a beat at the audio end: that changes the interpolation
+or extrapolation of retained content. Locked grids are left intact.
+(`ChartImprovementServiceTests`)
+
+Both spacing/compatibility passes are counted by `ImprovementSpacing`, using
+arrangement copies and the existing element comparers. Counts include changed,
+added, removed and reordered elements, plus chord-template metadata changes.
+A spacing-only Polish therefore appears in the preview and is committed as one
+undo step; a normalized chart remains a no-op (`FixChartTests`).
+
 `LevelGenerationService.TryGenerate` and `LevelSquashService.TrySquash` are
 inverses, and **there is no other writer of `Arrangement.Levels`** in the app —
 no add-level, remove-level or copy-level command exists, and both verbs go
@@ -51,6 +80,17 @@ so a regeneration is a single Ctrl+Z
 node drops the chord templates the operation left with no user, composed with
 the snapshot by `ChartMaintenanceService.LevelOperationAction` (#520; the rule is
 in [chord-templates.md](chord-templates.md)).
+
+The source is `ChartLevels.Hardest`: greatest `DifficultyIndex`, first on a tie,
+regardless of import storage order. After the initial Generate levels apply,
+`ChartMaintenanceService` explicitly selects the generated hardest level: the
+snapshot reconcile can keep the original active instance alive as level 0.
+That selection is outside the history action; undo/redo still preserve the
+current arrangement and any surviving level choice. `ChartPowerToolsTests`
+covers both synchronous and asynchronous generation and the later view choice.
+Async generation discards its result if the project, active arrangement or
+owning arrangement slot changed before the worker completed; it records no
+history node and leaves both charts untouched (`ChartPowerToolsTests`).
 
 - **How close the generator is to a stock ladder — measured, #295.**
   The plugin's owner-only ladder score (it reads stock ladders through the
@@ -142,8 +182,10 @@ in [chord-templates.md](chord-templates.md)).
     crossing; cost weights documented on `RefretOptions`. Technique-pinned
     sounds (harmonics, bends, taps, full mutes, mixed hand shapes) stay fixed;
     link-next chains and hammer/pull runs move as one string decision. Chord
-    templates are find-or-create — NEVER mutated in place — and hand shapes +
-    FHP anchors are recomputed with the move. UI entry:
+    templates are find-or-create — NEVER mutated in place — and FHP anchors are
+    recomputed with the move. A hand shape follows only when every chord it
+    covers ends on the new template; a range refret keeps the original span and
+    grip while it still covers unchanged chords outside the selection. UI entry:
     `ChartMaintenanceService.Refret()` (selection range, else the whole active
     arrangement; one undo snapshot).
 

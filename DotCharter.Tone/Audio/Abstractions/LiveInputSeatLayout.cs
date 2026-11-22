@@ -112,7 +112,10 @@ public sealed class LiveInputSeatLayout
     ///         that setting raises the seat count.
     ///     </para>
     /// </summary>
-    public static LiveInputSeatLayout FromInputConfig(RigConfig config)
+    public static LiveInputSeatLayout FromInputConfig(RigConfig config) => FromInputConfig(config, 0);
+
+    /// <summary>Maps seats into the validated device input set; zero means the device count is unknown.</summary>
+    public static LiveInputSeatLayout FromInputConfig(RigConfig config, int deviceInputCount)
     {
         ArgumentNullException.ThrowIfNull(config);
 
@@ -129,15 +132,11 @@ public sealed class LiveInputSeatLayout
         // Two guitars, one per channel: each seat is mono from its own jack and
         // centred through its own rig.
         //
-        // The channel INDEXES are ASIO-only, because the input channel MASK is:
-        // ApplyAudioConfigurationCore builds one only when the engine driver
-        // (RigConfig.AudioDriver — ASIO is single-driver-exclusive, so it is the
-        // input driver too) is ASIO. Without a mask the device opens channels
-        // 0..N-1 in order, so seat p reads p. With one, JUCE compacts the
-        // enabled bits ascending — which swaps the seats when the user typed the
-        // HIGHER jack in the "left" box.
-        var asio = string.Equals(config.AudioDriver, "ASIO", StringComparison.OrdinalIgnoreCase);
-        var firstSeatChannel = asio && config.AsioInputChannelLeft > config.AsioInputChannelRight ? 1 : 0;
+        // Both ASIO and WASAPI take the input mask. JUCE compacts enabled bits
+        // in hardware order, so a higher first jack reverses the seat indexes.
+        var mask = GuitarInputChannels.InputChannelMask(config, deviceInputCount);
+        if (deviceInputCount == 1 || (mask != 0 && System.Numerics.BitOperations.PopCount(mask) < 2)) return Single;
+        var firstSeatChannel = mask != 0 && config.AsioInputChannelLeft > config.AsioInputChannelRight ? 1 : 0;
         return new LiveInputSeatLayout(2, [firstSeatChannel, 1 - firstSeatChannel]);
     }
 }

@@ -4,6 +4,22 @@ namespace DotCharter.Tests.Services.Parsing.Eof;
 
 public class AllegroLzssDecoderTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Decode_UncompressedPayload_ObeysTheDecodedCeiling(bool nopack)
+    {
+        byte[] header = nopack ? [0x73, 0x6C, 0x68, 0x2E] : [];
+        var input = header.Concat(new byte[9]).ToArray();
+
+        Assert.Throws<InvalidDataException>(() => AllegroLzssDecoder.Decode(input, maxDecodedBytes: 8));
+        Assert.Equal(new byte[9], AllegroLzssDecoder.Decode(input, maxDecodedBytes: 9));
+    }
+
+    [Fact]
+    public void Decode_ShortUncompressedPayload_StillObeysTheCeiling()
+        => Assert.Throws<InvalidDataException>(() => AllegroLzssDecoder.Decode([1, 2, 3], maxDecodedBytes: 2));
+
     [Fact]
     public void Decode_NoMagic_ReturnsInputVerbatim()
     {

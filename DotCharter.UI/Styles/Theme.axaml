@@ -19,6 +19,7 @@
     <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Icons.axaml" />
     <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/ControlThemes.axaml" />
     <StyleInclude Source="avares://DotCharter/Styles/KeybindControlTheme.axaml" />
+    <StyleInclude Source="avares://DotCharter/Styles/ColumnFlowCardTheme.axaml" />
     <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Typography.axaml" />
     <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Buttons.axaml" />
     <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Inputs.axaml" />

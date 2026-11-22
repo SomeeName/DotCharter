@@ -20,6 +20,7 @@ public sealed class BeatDragGesture : IEventGesture
     private readonly GestureDragThreshold _threshold = new();
 
     private List<BeatMarker> _originalBeats = [];
+    private BeatMarker[] _beatTargets = [];
     private double _startMouseMs;
     private int _beatIndex = -1;
 
@@ -40,6 +41,7 @@ public sealed class BeatDragGesture : IEventGesture
         _beatIndex = beatIndex;
         _startMouseMs = startMouseMs;
         _originalBeats = TempoMapRecalculator.Snapshot(track.Beats);
+        _beatTargets = track.Beats.ToArray();
         IsActive = true;
         _threshold.Arm(pressOrigin);
         _logger.Info(AppLogCategory.Events,
@@ -49,7 +51,7 @@ public sealed class BeatDragGesture : IEventGesture
 
     public void OnMoved(ToolContext context)
     {
-        if (!IsActive || Track == null) return;
+        if (!IsActive || Track == null || !HasOriginalBeatOrder()) { Reset(); return; }
         // A CLICK is not a drag — see GestureDragThreshold. Selecting a beat
         // must not retime it and recalculate the segment's BPM.
         if (!_threshold.Observe(context.Position)) return;
@@ -64,7 +66,7 @@ public sealed class BeatDragGesture : IEventGesture
 
     public void Commit(ToolContext context)
     {
-        if (!IsActive || Track == null) { Reset(); return; }
+        if (!IsActive || Track == null || !HasOriginalBeatOrder()) { Reset(); return; }
 
         var vm = context.ViewModel;
         var beats = Track.Beats;
@@ -100,7 +102,7 @@ public sealed class BeatDragGesture : IEventGesture
 
     public void Cancel(ToolContext context)
     {
-        if (!IsActive || Track == null) { Reset(); return; }
+        if (!IsActive || Track == null || !HasOriginalBeatOrder()) { Reset(); return; }
         for (var i = 0; i < Track.Beats.Count && i < _originalBeats.Count; i++)
         {
             Track.Beats[i].Time = _originalBeats[i].Time;
@@ -113,11 +115,17 @@ public sealed class BeatDragGesture : IEventGesture
     private void Reset()
     {
         _originalBeats = [];
+        _beatTargets = [];
         _beatIndex = -1;
         Track = null;
         IsActive = false;
         _threshold.Reset();
     }
+
+    // A structural edit owns the new grid, including any live preview it captured.
+    // Never restore or index the old snapshot against that edit's new beat order.
+    private bool HasOriginalBeatOrder() =>
+        Track != null && Track.Beats.SequenceEqual(_beatTargets, ReferenceEqualityComparer.Instance);
 
     public TrackEditorContext? Track { get; private set; }
 }

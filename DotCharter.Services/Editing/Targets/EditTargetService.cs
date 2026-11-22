@@ -20,7 +20,9 @@ public sealed class EditTargetService : IEditTargetService
 
     public void SetPenPositionProvider(Func<FractionalPosition?> provider) => _penPosition = provider;
 
-    public EditTarget Resolve() => ResolveCore(_penPosition?.Invoke());
+    public FractionalPosition? PenPosition => _penPosition?.Invoke();
+
+    public EditTarget Resolve() => ResolveCore(PenPosition);
 
     public EditTarget ResolveAndPromote() => Promote(ResolveCore(_penPosition?.Invoke()));
 

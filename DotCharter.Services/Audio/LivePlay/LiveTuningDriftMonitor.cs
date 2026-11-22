@@ -151,7 +151,9 @@ public sealed class LiveTuningDriftMonitor
             return null;
         }
 
-        var cents = SignedCentsFromNearestSemitone(reading.FrequencyHz) - _driftCentOffset;
+        // Fold the relative offset, not the two pitches separately: +52 played against
+        // +49 authored is +3 cents, even though the played pitch's nearest note changed.
+        var cents = NearestSemitoneResidual(SignedCentsFromNearestSemitone(reading.FrequencyHz) - _driftCentOffset);
         var before = _drift.Verdict;
         var verdict = _drift.AddEvidence(cents, _checkNowMs, reading.Clarity);
         if (verdict == before)

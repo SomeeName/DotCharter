@@ -103,6 +103,70 @@ public sealed class LinkedMeasuresHistoryTests
     }
 
     /// <summary>
+    ///     Every tick of a gesture propagates a fresh copy onto each other placement, and the merged
+    ///     node keeps them all (undo replays them newest first). The history's byte budget must see
+    ///     them: a node whose count stayed at its first tick's let a long wheel gesture over linked
+    ///     measures retain far more than the budget it was charged against.
+    /// </summary>
+    [Fact]
+    public void A_merged_gestures_retained_copies_are_counted_by_the_history()
+    {
+        var h = LinkHarness.WithRhythm();
+        h.Link((h.Lead, 1), (h.Lead, 4), (h.Lead, 7));
+        var note = LinkHarness.NoteAt(h.Lead, Bent(4), 1);
+
+        Assert.True(h.Edit(h.Lead, note, n => n.Fret++, MergeVerbs.Fret));
+        Assert.True(h.Edit(h.Lead, note, n => n.Fret++, MergeVerbs.Fret));
+        var afterTwoTicks = h.History.RetainedBytes;
+        Assert.True(h.Edit(h.Lead, note, n => n.Fret++, MergeVerbs.Fret));
+        Assert.True(h.Edit(h.Lead, note, n => n.Fret++, MergeVerbs.Fret));
+
+        // Two more ticks, two other placements, each copy holding at least the bent note it
+        // removed and the one it added.
+        const long perNoteFloor = 300;
+        Assert.True(h.History.RetainedBytes - afterTwoTicks >= 2 * 2 * 2 * perNoteFloor,
+            $"two more ticks grew the history by {h.History.RetainedBytes - afterTwoTicks} bytes; " +
+            "the merged node's propagated copies are not counted.");
+        Assert.All(new[] { 1, 4, 7 }, m => Assert.Equal(11, LinkHarness.NoteAt(h.Lead, Bent(m), 1).Fret));
+    }
+
+    [Fact]
+    public void OnlyHereKeepsItsCopyChargeAfterThePropagationNodeIsPruned()
+    {
+        var original = LinkHarness.WithRhythm();
+        foreach (var measure in new[] { 1, 4, 7 })
+        {
+            var bent = LinkHarness.NoteAt(original.Lead, Bent(measure), 1);
+            bent.BendValues.Clear();
+            for (var i = 1; i <= 200; i++)
+                bent.BendValues.Add(new BendValue(Bent(measure) + new FractionalPosition(0, new Fraction(i, 400)), 1));
+        }
+        var h = new LinkHarness(original.Project, original.Config, maxNodes: 2);
+        h.Link((h.Lead, 1), (h.Lead, 4), (h.Lead, 7));
+        LinkPropagationReport? report = null;
+        h.History.LinksPropagated += reports => report = reports[0];
+        Assert.True(h.Edit(h.Lead, LinkHarness.NoteAt(h.Lead, Bent(4), 1), n => n.Fret = 8));
+        h.History.EndGesture();
+        Assert.True(h.History.OnlyHere(report!));
+        var onlyHereState = h.Snapshot();
+        var outside = LinkHarness.NoteAt(h.Lead, At(3, 1.5), 4);
+        Assert.True(h.Edit(h.Lead, outside, n => n.Fret = 9));
+        h.History.EndGesture();
+
+        Assert.Equal(2, h.History.GetUndoSteps().Count);
+        // The original propagation step has become the root sentinel. OnlyHere
+        // is still undoable and retains two removed+added bent-note pairs.
+        Assert.True(h.History.RetainedBytes >= 2 * 2 * 200 * 150,
+            $"OnlyHere retains propagated copies after pruning, but the history charges {h.History.RetainedBytes} bytes");
+        h.History.Undo();
+        Assert.Equal(onlyHereState, h.Snapshot());
+        h.History.Undo();
+        Assert.All(new[] { 1, 4, 7 }, m => Assert.Equal(8, LinkHarness.NoteAt(h.Lead, Bent(m), 1).Fret));
+        h.History.Redo();
+        Assert.Equal(onlyHereState, h.Snapshot());
+    }
+
+    /// <summary>
     ///     Across arrangements a chord template is resolved by GRIP in the target and minted there when
     ///     it has none — never by id, and never by changing the target's own templates; undo takes the
     ///     minted template back with the edit.
@@ -215,5 +279,30 @@ public sealed class LinkedMeasuresHistoryTests
         h.Edit(h.Lead, LinkHarness.NoteAt(h.Lead, At(4, 3), 2), n => n.Sustain = Beats(8));
 
         LinkHarness.AssertLinkedAndEqual(h, group, 4);
+    }
+
+    [Fact]
+    public void Undo_of_creating_a_group_removes_it_after_later_steps_restored_the_groups_and_redo_adds_one()
+    {
+        var h = LinkHarness.WithRhythm();
+        LinkPropagationReport? report = null;
+        h.History.LinksPropagated += reports => report = reports[0];
+        var group = h.Link((h.Lead, 1), (h.Lead, 4));
+        var id = group.Id;
+        h.History.EndGesture();
+        h.Edit(h.Lead, LinkHarness.NoteAt(h.Lead, Bent(1), 1), n => n.Fret = 8);
+        // Only here dissolves the two-placement group; undoing it restores the groups from a snapshot.
+        Assert.True(h.History.OnlyHere(report!));
+        Assert.Empty(h.Project.LinkGroups);
+
+        h.History.Undo();
+        h.History.Undo();
+        Assert.Single(h.Project.LinkGroups, g => g.Id == id);
+        h.History.Undo();
+        Assert.Empty(h.Project.LinkGroups);
+
+        h.History.Redo();
+        Assert.Single(h.Project.LinkGroups, g => g.Id == id);
+        Assert.Single(h.Project.LinkGroups);
     }
 }

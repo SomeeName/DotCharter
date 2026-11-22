@@ -257,6 +257,16 @@ public partial class KeybindConfig : ObservableObject
 
     [ObservableProperty] private KeyChord _fretUpOctave = new(Key.Up, KeyModifiers.Shift | KeyModifiers.Alt);
     [ObservableProperty] private KeyChord _fretDownOctave = new(Key.Down, KeyModifiers.Shift | KeyModifiers.Alt);
+
+    // Nudge the selection earlier / later in time. Left/Right is time everywhere in the
+    // editor; the modifier says how far: Alt+Shift = one grid step, Ctrl+Shift = 10 ms,
+    // Ctrl+Alt = 1 ms. None of the combinations is taken by the seek keys.
+    [ObservableProperty] private KeyChord _nudgeEarlier = new(Key.Left, KeyModifiers.Shift | KeyModifiers.Alt);
+    [ObservableProperty] private KeyChord _nudgeLater = new(Key.Right, KeyModifiers.Shift | KeyModifiers.Alt);
+    [ObservableProperty] private KeyChord _nudgeEarlier10Ms = new(Key.Left, KeyModifiers.Control | KeyModifiers.Shift);
+    [ObservableProperty] private KeyChord _nudgeLater10Ms = new(Key.Right, KeyModifiers.Control | KeyModifiers.Shift);
+    [ObservableProperty] private KeyChord _nudgeEarlier1Ms = new(Key.Left, KeyModifiers.Control | KeyModifiers.Alt);
+    [ObservableProperty] private KeyChord _nudgeLater1Ms = new(Key.Right, KeyModifiers.Control | KeyModifiers.Alt);
     [ObservableProperty] private KeyChord _toggleHopo = new(Key.H);
     [ObservableProperty] private KeyChord _toggleHarmonic = new(Key.H, KeyModifiers.Shift);
     /// <summary>EOF's <c>Shift+X</c> "Toggle string mute".</summary>
@@ -264,6 +274,7 @@ public partial class KeybindConfig : ObservableObject
     [ObservableProperty] private KeyChord _toggleLinkNext = new(Key.N, KeyModifiers.Shift);
     [ObservableProperty] private KeyChord _toggleVibrato = new(Key.V, KeyModifiers.Shift);
     [ObservableProperty] private KeyChord _toggleTremolo = new(Key.O, KeyModifiers.Control | KeyModifiers.Shift);
+    [ObservableProperty] private KeyChord _pickSlide = new(Key.L, KeyModifiers.Control | KeyModifiers.Shift);
     [ObservableProperty] private KeyChord _togglePicking = new(Key.P);
     [ObservableProperty] private KeyChord _toggleAccent = new(Key.A, KeyModifiers.Shift);
     /// <summary>
@@ -425,6 +436,7 @@ public partial class KeybindConfig : ObservableObject
 
     [ObservableProperty] private KeyChord _halfTime = new(Key.X, KeyModifiers.Control | KeyModifiers.Shift);
     [ObservableProperty] private KeyChord _toggle3DFingering = new(Key.F8);
+    [ObservableProperty] private KeyChord _saveAndNextFingering = new(Key.F8, KeyModifiers.Shift);
     [ObservableProperty] private KeyChord _toggleInspector = new(Key.F9);
 
     /// <summary>v0.35: moved off <c>Ctrl+3</c> so the whole <c>Ctrl+0..9</c> row
@@ -450,6 +462,20 @@ public partial class KeybindConfig : ObservableObject
     private KeyChord _applyHandShapeTemplateToChords =
         new(Key.T, KeyModifiers.Control | KeyModifiers.Shift);
 
+    // The frequent Tools verbs that had no chord. Fret hand positions sit beside Shift+F (edit FHP);
+    // Merge and split are the two chord verbs, Ctrl+J and Alt+Shift+J; fix chart opens the Fix chart dialog.
+    [ObservableProperty]
+    private KeyChord _generateFhp = new(Key.F, KeyModifiers.Shift | KeyModifiers.Alt);
+
+    [ObservableProperty]
+    private KeyChord _mergeNotesIntoChord = new(Key.J, KeyModifiers.Control);
+
+    [ObservableProperty]
+    private KeyChord _splitChordsIntoNotes = new(Key.J, KeyModifiers.Shift | KeyModifiers.Alt);
+
+    [ObservableProperty]
+    private KeyChord _fixChart = new(Key.Q, KeyModifiers.Control | KeyModifiers.Shift);
+
     /// <summary>
     ///     EOF's Beat menu spells these <c>Ctrl+Ins</c> and <c>Ctrl+Del</c>
     ///     (<c>EOF_SRC/menu/beat.c:144-145</c>, <c>{"&amp;Add	" CTRL_NAME "+Ins"}</c>
@@ -462,6 +488,11 @@ public partial class KeybindConfig : ObservableObject
     [ObservableProperty] private KeyChord _insertBeatAtPlayhead = new(Key.Insert, KeyModifiers.Control);
 
     [ObservableProperty] private KeyChord _removeBeatAtPlayhead = new(Key.Delete, KeyModifiers.Control);
+
+    /// <summary>Opens Tempo map ▸ Insert measures at playhead: the whole-bar sibling of
+    /// <see cref="InsertBeatAtPlayhead" />, one Shift further.</summary>
+    [ObservableProperty]
+    private KeyChord _insertMeasuresAtPlayhead = new(Key.Insert, KeyModifiers.Control | KeyModifiers.Shift);
 
     /// <summary>
     ///     Not on <c>Ctrl+Shift+I</c>, which EOF spells for the

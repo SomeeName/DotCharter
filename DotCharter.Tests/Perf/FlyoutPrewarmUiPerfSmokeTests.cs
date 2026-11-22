@@ -70,7 +70,7 @@ public sealed class FlyoutPrewarmUiPerfSmokeTests
             // read 6 from 0.43 until c111a6c8 added the overflow `>>` popover
             // (2026-08-11) and nobody saw the red, because this suite is not in
             // the default gate. Re-count the markup when you change it.
-            Assert.Equal(7, popovers.Count);
+            Assert.Equal(9, popovers.Count);
 
             foreach (var p in popovers)
             {

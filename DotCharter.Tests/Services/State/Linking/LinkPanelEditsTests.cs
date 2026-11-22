@@ -116,6 +116,30 @@ public sealed class LinkPanelEditsTests
     }
 
     [Fact]
+    public void Only_here_from_an_undone_step_does_not_take_back_the_earlier_step_of_the_same_group()
+    {
+        var h = LinkHarness.WithRhythm();
+        h.Link((h.Lead, 1), (h.Lead, 4));
+        LinkPropagationReport? report = null;
+        h.History.LinksPropagated += reports => report = reports[0];
+        h.Edit(h.Lead, LinkHarness.NoteAt(h.Lead, Bent(1), 1), n => n.Fret = 8);
+        var first = report;
+        h.History.EndGesture();
+        h.Edit(h.Lead, LinkHarness.NoteAt(h.Lead, Bent(1), 1), n => n.Fret = 9);
+        Assert.NotSame(first, report);
+        h.History.Undo();
+        Assert.Equal(8, Fret(h.Lead, 4));
+
+        // The second step's toast: its step is gone, so it applies nothing, not the first step's.
+        Assert.False(h.History.OnlyHere(report!));
+        Assert.Equal(8, Fret(h.Lead, 4));
+        Assert.Equal(2, h.Project.LinkGroups.Single().Placements.Count);
+        // The first step's own report still works.
+        Assert.True(h.History.OnlyHere(first!));
+        Assert.Equal(7, Fret(h.Lead, 4));
+    }
+
+    [Fact]
     public void Unlink_selected_takes_placements_out_and_undo_puts_them_back()
     {
         var h = LinkHarness.WithRhythm();

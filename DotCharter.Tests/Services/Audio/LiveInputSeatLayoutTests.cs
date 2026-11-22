@@ -8,7 +8,7 @@ namespace DotCharter.Tests.Services.Audio;
 ///     had the right behaviour since ABI v28 — at more than one live seat every
 ///     seat is MONO from its own channel and duplicated L/R, i.e. centred — but
 ///     nothing outside an armed co-op run ever asked it for more than one seat.
-///     <see cref="LiveInputSeatLayout.FromInputConfig" /> is the answer to "how
+///     <see cref="LiveInputSeatLayout.FromInputConfig(RigConfig)" /> is the answer to "how
 ///     many seats does this INPUT CONFIGURATION want", and it is the only
 ///     producer of the resting layout.
 ///     <para>
@@ -105,18 +105,18 @@ public sealed class LiveInputSeatLayoutTests
         Assert.Equal(expectedSeat1, layout.Channels[1]);
     }
 
-    /// <summary>WASAPI has no mask — the device simply opens channels 0..N-1 — so
-    /// the numbers in the ASIO channel boxes must NOT reorder the seats there.
-    /// They are a control that does nothing on that driver, which is why the
-    /// settings row hides them.</summary>
-    [Fact]
-    public void OnWasapi_TheAsioChannelNumbersDoNotReorderTheSeats()
+    /// <summary>Both drivers compact enabled input-mask bits in hardware order.</summary>
+    [Theory]
+    [InlineData("WASAPI", 1, 0, 1, 0)]
+    [InlineData("WASAPI", 0, 1, 0, 1)]
+    [InlineData("ASIO", 3, 2, 1, 0)]
+    public void ChannelMaskOrdering_IsIndependentOfDriver(string driver, int left, int right, int seat0, int seat1)
     {
         var layout = LiveInputSeatLayout.FromInputConfig(
-            TwoChannels(separateGuitars: true, driver: "WASAPI", left: 3, right: 2));
+            TwoChannels(separateGuitars: true, driver: driver, left: left, right: right));
 
-        Assert.Equal(0, layout.Channels[0]);
-        Assert.Equal(1, layout.Channels[1]);
+        Assert.Equal(seat0, layout.Channels[0]);
+        Assert.Equal(seat1, layout.Channels[1]);
     }
 
     // ------------------------------------------------------------- the value type

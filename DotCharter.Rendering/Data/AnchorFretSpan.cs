@@ -29,7 +29,7 @@ namespace DotCharter.Rendering.Data;
 public static class AnchorFretSpan
 {
     /// <summary>Highest fret the highway draws.</summary>
-    public const int MaxFret = 24;
+    public const int MaxFret = FretLimits.MaxFret;
 
     /// <summary>Width an anchor is treated as having when it declares none.</summary>
     public const int DefaultWidth = 4;

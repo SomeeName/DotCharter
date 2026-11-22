@@ -37,11 +37,25 @@ only covers the surface.
   `DeleteCaption`, the idiom in [dialogs.md](dialogs.md)). A stored riff is the
   ONLY copy of itself: it is in the per-user library, not in the project, so
   neither undo nor reopening the `.rscp` reaches it — and the button sits in the
-  same strip as Paste and Rename, one click from either. Arming reports what the
+  details card beside Rename, one click from it. Arming reports what the
   second click will remove; picking another riff or a list refresh disarms; a
   `Remove` that returns FALSE now says so instead of leaving the row on screen
   with no word (it was silent in both directions). Pinned by
   `DotCharter.Tests/UI/ViewModels/Editor/PhraseCatalogDeleteConfirmTests.cs`.
+- **Layout: inspector design D (#751).** `PhraseCatalogView` is a `ColumnFlowPanel` (`RiffCards`) of
+  three cards over a pinned status footer (`RiffFooter`): LIBRARY (the find / paste-by-name box, the
+  list, each row's name wrapped beside its length in beats (`RiffLengthConverter`), Paste at playhead —
+  head and foot pinned), DETAILS (preview, contents, source, the compatibility verdict, "Pastes at": the
+  playhead snapped to the beat grid exactly as the paste snaps it, the name box + Rename, Delete) and
+  CAPTURE (how many notes and chords the selection holds, the new riff's name, Capture). The two live
+  readouts are `RiffPasteReadouts` (`PhraseCatalogViewModel.Readouts`): a playhead burst asks for ONE
+  posted read (`UI/ViewModels/Editor/RiffPasteReadoutsTests`).
+  Rename takes the name typed in place (`PhraseCatalogViewModel.RenameText`, refilled with the
+  selected riff's name; an unchanged name renames nothing — `PhraseCatalogSearchFilterTests`).
+  `Perf/NarrowEditorPanesUiPerfSmokeTests` pages to each card in a narrow pane;
+  `Perf/InspectorProjectTabsUiPerfSmokeTests` checks every card at 530x370 / 480x370 in en / de / ja,
+  and with long en / de / ja riff names, a picked riff and a selection, also in the 1280x720 editor
+  window (no ellipsized line, nothing cut at a card's bottom).
 - **It is its own surface, deliberately.** The inspector VMs are under a change
   freeze (`misc-surfaces.md`) and a browsable library is not a property sheet for
   the current selection. Nothing here touches `InspectorViewModel` or

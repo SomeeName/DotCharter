@@ -133,33 +133,29 @@ public static class StructureGenerator
     {
         if (HasPhrase(arrangement, "END")) return null;
 
-        var lastContentMs = beats[0].Time;
+        var lastContentEnd = FractionalPosition.Zero;
         var hasContent = false;
 
         foreach (var level in arrangement.Levels)
         {
             foreach (var note in level.Notes)
             {
-                lastContentMs = Math.Max(lastContentMs, note.EndPosition.GetPositionMs(beats));
+                lastContentEnd = FractionalPosition.Max(lastContentEnd, note.EndPosition);
                 hasContent = true;
             }
 
             foreach (var chord in level.Chords)
             {
-                lastContentMs = Math.Max(lastContentMs, chord.EndPosition.GetPositionMs(beats));
+                lastContentEnd = FractionalPosition.Max(lastContentEnd, chord.EndPosition);
                 hasContent = true;
             }
         }
 
         if (!hasContent) return new FractionalPosition(Math.Max(0, beats.Count - 1));
 
-        for (var i = 0; i < beats.Count; i++)
-        {
-            if (beats[i].Time > lastContentMs)
-                return new FractionalPosition(i);
-        }
-
-        return new FractionalPosition(beats.Count - 1);
+        // Beat space also covers sustains beyond the stored grid. TimelineMath
+        // extrapolates those using the last interval (or the sole beat's BPM).
+        return new FractionalPosition(lastContentEnd.BeatId + 1);
     }
 
     /// <summary>
@@ -245,7 +241,9 @@ public static class StructureGenerator
     }
 
     private static bool HasPhrase(Arrangement arrangement, string name) =>
-        arrangement.EventPoints.Any(ep =>
-            string.Equals(ep.Phrase, name, StringComparison.OrdinalIgnoreCase)) ||
-        arrangement.Phrases.Any(p => string.Equals(p, name, StringComparison.OrdinalIgnoreCase));
+        arrangement.EventPoints.Any(marker =>
+            string.Equals(marker.Phrase?.Trim(), name, StringComparison.OrdinalIgnoreCase)) ||
+        arrangement.PhraseIterations.Any(iteration =>
+            iteration.PhraseId >= 0 && iteration.PhraseId < arrangement.Phrases.Count &&
+            string.Equals(arrangement.Phrases[iteration.PhraseId], name, StringComparison.OrdinalIgnoreCase));
 }

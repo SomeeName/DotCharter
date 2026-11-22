@@ -39,6 +39,13 @@ namespace DotCharter.UI.Views.Shell;
 ///         The subscriptions are on the surface's OWN controls, so they share its
 ///         lifetime: nothing here reaches a singleton.
 ///     </para>
+///     <para>
+///         A surface outside a visual tree schedules nothing. Its lists still move
+///         after it is detached (a view model that outlives it, a language change
+///         reaching a released app's view model through a weak subscription), and
+///         a queued step would realize nothing, yet it would hold the surface, its
+///         window and every view model they reach on the dispatcher until it ran.
+///     </para>
 /// </remarks>
 public sealed class HiddenSurfaceRewarmer
 {
@@ -68,12 +75,14 @@ public sealed class HiddenSurfaceRewarmer
     /// </summary>
     public void Request()
     {
-        if (_pending || (_surface.IsVisible && _sections().All(s => s.IsVisible))) return;
+        if (_pending || TopLevel.GetTopLevel(_surface) is null || (_surface.IsVisible && _sections().All(s => s.IsVisible))) return;
         _pending = true;
         PrewarmPacer.Post(Rewarm);
     }
 
-    private void Rewarm()
+    private void Rewarm() => SurfaceShowTiming.Measure($"Hidden {_surface.GetType().Name}", RewarmCore);
+
+    private void RewarmCore()
     {
         _pending = false;
         if (TopLevel.GetTopLevel(_surface) is not { } top) return;

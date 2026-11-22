@@ -43,6 +43,63 @@ public class AlphaTexNotationEdgeCaseTests
         return importer.ReadScore();
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void UnpitchedSlideWithATarget_UsesTheUnpitchedMarker(bool chord, bool tied)
+    {
+        var (project, arr, level, beats) = Fixture(1);
+        if (tied)
+        {
+            level.Notes.Add(new GuitarNote
+            {
+                Position = new FractionalPosition(0), StringIndex = 0, Fret = 5, LinkNext = true,
+                Sustain = new FractionalPosition(1)
+            });
+        }
+        if (chord)
+        {
+            var sound = new DomainChord { Position = new FractionalPosition(tied ? 1 : 0) };
+            sound.ChordNotes.Add(new ChordNote { StringIndex = 0, Fret = 5, SlideTo = 9, UnpitchedSlide = true });
+            level.Chords.Add(sound);
+        }
+        else
+        {
+            level.Notes.Add(new GuitarNote
+            {
+                Position = new FractionalPosition(tied ? 1 : 0), StringIndex = 0, Fret = 5,
+                SlideTo = 9, UnpitchedSlide = true
+            });
+        }
+
+        var tex = AlphaTexExporter.Export(project, arr, level, beats).AlphaTex;
+
+        Assert.Contains("{sou}", tex);
+        Assert.DoesNotContain("{ss}", tex);
+        Assert.NotEmpty(Parse(tex).Tracks);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void ChordAccents_IncludeBothTheChordAndItsIndividualNotes(bool chordAccent, bool noteAccent)
+    {
+        var (project, arr, level, beats) = Fixture(1);
+        var chord = new DomainChord { Position = new FractionalPosition(0), Accent = chordAccent };
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 0, Fret = 5, Accent = noteAccent });
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 7 });
+        level.Chords.Add(chord);
+
+        var tex = AlphaTexExporter.Export(project, arr, level, beats).AlphaTex;
+        var played = Parse(tex).Tracks[0].Staves[0].Bars[0].Voices[0].Beats.First(b => !b.IsRest).Notes;
+
+        Assert.Contains("5.6{ac}", tex);
+        Assert.Equal(chordAccent, tex.Contains("7.5{ac}", StringComparison.Ordinal));
+        Assert.Equal(2, played.Count);
+    }
+
     private static bool AnyTieDestination(Score score)
     {
         foreach (var track in score.Tracks)
@@ -333,7 +390,7 @@ public class AlphaTexNotationEdgeCaseTests
         Assert.Equal(38, (int)staff.Tuning[5]); // drop D low string = D2
         Assert.Equal(64, (int)staff.Tuning[0]); // high E untouched
         Assert.Equal(2.0, staff.Capo);
-        Assert.Equal(KeySignature.D, staff.Bars[0].MasterBar.KeySignature);
+        Assert.Equal(KeySignature.D, staff.Bars[0].KeySignature);
     }
 
     [Fact]

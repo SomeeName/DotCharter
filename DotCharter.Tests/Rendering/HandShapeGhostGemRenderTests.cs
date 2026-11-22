@@ -22,6 +22,44 @@ public sealed class HandShapeGhostGemRenderTests
         [.. Enumerable.Range(0, count).Select(i => new BeatMarker { Time = i * 500.0, Bpm = 120 })];
 
     [Fact]
+    public void BarsSharingATemplateCanShowDifferentGhostGems()
+    {
+        var chart = new Services.Editing.HandShapes.HeldNoteGripsTests.Fixture();
+        chart.Arrangement.ChordTemplates.Add(new ChordTemplate { Id = 0, Frets = { [1] = 5, [2] = 7 } });
+        var first = chart.Shape(1, 2);
+        var second = chart.Shape(2, 3);
+        first.TemplateId = second.TemplateId = 0;
+        first.GhostMask = 1 << 1;
+        second.GhostMask = 1 << 2;
+
+        var snapshot = Snapshot(chart.Arrangement);
+
+        Assert.Equal(1 << 1, snapshot.HandShapes[0].GhostMask);
+        Assert.Equal(5, snapshot.HandShapes[0].GhostFret(1));
+        Assert.Equal(1 << 2, snapshot.HandShapes[1].GhostMask);
+        Assert.Equal(7, snapshot.HandShapes[1].GhostFret(2));
+    }
+
+    [Fact]
+    public void AnOpeningStrumShowsTheLaterPickedStringsAsGhostsAtTheStart()
+    {
+        var chart = new Services.Editing.HandShapes.HeldNoteGripsTests.Fixture();
+        var run = chart.AddRun(1);
+        chart.Apply(run);
+
+        var bar = Snapshot(chart.Arrangement).HandShapes[0];
+        Assert.Equal(0b11000, bar.GhostMask);
+        Assert.Equal(0, bar.GhostNudgeMask);
+        var (batcher, rc) = Render(bar);
+        foreach (var guitarString in new[] { 3, 4 })
+        {
+            var laneY = rc.LaneTopFor(guitarString) + LaneHeight / 2f;
+            Assert.Equal(5, bar.GhostFret(guitarString));
+            Assert.NotEmpty(VerticesNear(batcher, 500, laneY));
+        }
+    }
+
+    [Fact]
     public void TheSnapshot_CarriesTheGhostFrets_AndWhichOfThemAPlayedGemShares()
     {
         var arrangement = new Arrangement { StringCount = 6 };

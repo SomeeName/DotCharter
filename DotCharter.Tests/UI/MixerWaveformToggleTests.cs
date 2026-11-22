@@ -49,70 +49,63 @@ public sealed class MixerWaveformToggleTests
 
         var stems = markup.IndexOf("x:Name=\"MixerStemsBody\"", StringComparison.Ordinal);
         var toggle = markup.IndexOf("StemMixer.WaveformFollowsMix", StringComparison.Ordinal);
-        var tracks = markup.IndexOf("StemMixer.Tracks", StringComparison.Ordinal);
+        var routing = markup.IndexOf("x:Name=\"StemRoutingCard\"", StringComparison.Ordinal);
+        var nextSection = markup.IndexOf("x:Name=\"MixerEqBody\"", StringComparison.Ordinal);
 
         Assert.True(stems >= 0 && toggle > stems,
             "the toggle must sit inside the stems section, which is hidden when there are no stems");
-        Assert.True(toggle < tracks, "the toggle belongs above the strips — it governs all of them");
+        // Design D: it governs every strip, so it is on the section's Routing card, not on one strip.
+        Assert.True(routing > stems && toggle > routing && toggle < nextSection, "the toggle belongs on the Stems section's Routing card");
     }
 
     /// <summary>
-    ///     <c>StemMixerView</c> is NOT hosted, and this records it so the next
-    ///     agent does not put a second feature there.
-    ///     <para>
-    ///         Reachability here is by NAMING CONVENTION, not by a reference:
-    ///         <c>StemMixerViewModel</c> derives from <c>ViewModelBase</c> with a
-    ///         comment saying it does so "the app ViewLocator can resolve
-    ///         StemMixerView when this VM is a dock pane Context" — but nothing
-    ///         gives it to a dock pane, so the locator is never asked. The VM is
-    ///         reached only as <c>InspectorViewModel.StemMixer</c>, whose view is
-    ///         the OTHER mixer. That is why a grep for the type finds nothing and
-    ///         the view still cannot be opened.
-    ///     </para>
-    ///     <para>
-    ///         If someone wires it into a window or a docked pane, this test goes
-    ///         red — and that is the moment to decide whether the two mixers
-    ///         should still both exist, rather than discovering it from a user
-    ///         who cannot find a checkbox.
-    ///     </para>
+    ///     The unhosted duplicate <c>StemMixerView</c> was deleted (#497): the one
+    ///     mixer is the Inspector's Mixer tab. This keeps it that way. The view
+    ///     files and its three strings stay gone, nothing in the app names the view
+    ///     type again, and the View &gt; Stem mixer row still lands on the Mixer tab.
     /// </summary>
     [Fact]
-    public void StemMixerView_IsStillHostedByNothingInTheApp()
+    public void TheDuplicateStemMixerView_StaysDeleted_AndTheMenuRowReachesTheMixerTab()
     {
+        Assert.False(File.Exists(RepoPath(OrphanView)), "the duplicate StemMixerView.axaml is back");
+        Assert.False(File.Exists(RepoPath(OrphanView + ".cs")), "the duplicate StemMixerView code-behind is back");
+
         var ui = Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI");
         var hosts = new List<string>();
-
         foreach (var file in UiSourceTree.EnumerateFiles(ui, "*.*", SearchOption.AllDirectories))
         {
-            var ext = Path.GetExtension(file);
-            if (ext is not (".cs" or ".axaml")) continue;
-            if (file.EndsWith("StemMixerView.axaml", StringComparison.Ordinal)) continue;
-            if (file.EndsWith("StemMixerView.axaml.cs", StringComparison.Ordinal)) continue;
+            if (Path.GetExtension(file) is not (".cs" or ".axaml")) continue;
             if (file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") ||
                 file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
             {
                 continue;
             }
 
-            // The TYPE, not the view-model that merely shares its prefix — and
-            // not PROSE. Comments come out first: three of the four hits this
-            // found on its first run were sentences ABOUT the orphan (including
-            // one written in the same change), and AGENTS.md records the same
-            // rule for the co-op reachability lints — "a see cref is exactly as
-            // inert".
             if (ViewTypeReference.IsMatch(StripComments(UiSourceTree.ReadAllText(file))))
                 hosts.Add(Path.GetRelativePath(TestPaths.RepoRoot(), file));
         }
 
-        Assert.True(hosts.Count == 0,
-            "StemMixerView is now referenced by production code: " + string.Join(", ", hosts) +
-            ". It used to be hosted by nothing, which is how the waveform toggle shipped invisible. " +
-            "If it is genuinely a screen now, give it the toggle too — or delete the duplicate mixer.");
+        Assert.True(hosts.Count == 0, "StemMixerView is referenced again: " + string.Join(", ", hosts));
 
-        Assert.True(File.Exists(RepoPath(OrphanView)), "the orphan view is gone — retire this test with it");
+        foreach (var culture in new[] { "", ".de-DE", ".ja-JP" })
+        {
+            var resx = File.ReadAllText(RepoPath($"DotCharter.Localization/Resources{culture}.resx"));
+            foreach (var key in RetiredKeys)
+                Assert.DoesNotContain($"name=\"{key}\"", resx, StringComparison.Ordinal);
+        }
+
+        // The window answers IsStemMixerVisible with the mixer tab; the Inspector tab menu row opens the same tab.
+        var window = UiSourceTree.ReadAllText(RepoPath("DotCharter.UI/Views/MainWindow.axaml.cs"));
+        Assert.Matches(@"IsStemMixerVisible\)\s*vm\.ShowInspectorTab\(InspectorViewModel\.MixerTabIndex\)", window);
+        var menu = UiSourceTree.ReadAllText(RepoPath("DotCharter.UI/Views/Shell/Menus/ViewMenu.axaml"));
+        Assert.Contains("Inspector_Tab_Mixer", menu, StringComparison.Ordinal);
+        Assert.Contains("TabMenu.ShowRowCommand", menu, StringComparison.Ordinal);
     }
 
-    /// <summary>Drops C# and XML comments, so prose about the orphan does not
+    private static readonly string[] RetiredKeys =
+        ["Empty_StemMixer_Hint", "Panel_StemMixer_Title", "Panel_StemMixer_Volume"];
+
+    /// <summary>Drops C# and XML comments, so prose about the old view does not
     /// read as a use of it.</summary>
     private static string StripComments(string text)
     {

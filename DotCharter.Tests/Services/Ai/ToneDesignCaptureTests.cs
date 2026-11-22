@@ -191,6 +191,46 @@ public sealed class ToneDesignCaptureTests
             Catalog(Bundled("jcm2000-crunch.nam", "JCM2000 Crunch"))));
     }
 
+    [Fact]
+    public void ThePromptCache_KeepsOnlyTheRecentLibraries()
+    {
+        var cache = new ToneDesignPromptCache();
+        var first = Catalog(Bundled("bound-first.nam", "First"));
+        var old = cache.GetOrAdd(first, false, false, () => new string('a', 10));
+        var empty = cache.GetOrAdd(NamCaptureCatalog.Empty, false, false, () => new string('e', 10));
+        for (var i = 0; i < ToneDesignPromptCache.MaxCachedCaptureLibraries * 5; i++)
+        {
+            var library = Catalog(Bundled($"bound-{i}.nam", $"Bound {i}"));
+            foreach (var anchored in new[] { false, true })
+            {
+                foreach (var search in new[] { false, true })
+                    cache.GetOrAdd(library, anchored, search, () => new string('b', 10));
+            }
+        }
+
+        Assert.Equal(ToneDesignPromptCache.MaxCachedCaptureLibraries * 4 + 1, cache.Count);
+        Assert.Same(empty, cache.GetOrAdd(NamCaptureCatalog.Empty, false, false, () => "rebuilt"));
+        Assert.NotSame(old, cache.GetOrAdd(first, false, false, () => new string('a', 10)));
+        var last = Catalog(Bundled("bound-last.nam", "Bound last"));
+        var recent = cache.GetOrAdd(last, false, false, () => new string('c', 10));
+        Assert.Same(recent, cache.GetOrAdd(last, false, false, () => "rebuilt"));
+    }
+
+    [Fact]
+    public void ACacheHitRefreshesTheLibraryBeforeEviction()
+    {
+        var cache = new ToneDesignPromptCache();
+        var first = Catalog(Bundled("lru-first.nam", "First"));
+        var prompt = cache.GetOrAdd(first, false, false, () => new string('a', 10));
+        for (var i = 0; i < ToneDesignPromptCache.MaxCachedCaptureLibraries - 1; i++)
+            cache.GetOrAdd(Catalog(Bundled($"lru-{i}.nam", $"Other {i}")), false, false, () => "other");
+
+        Assert.Same(prompt, cache.GetOrAdd(first, false, false, () => "rebuilt"));
+        cache.GetOrAdd(Catalog(Bundled("lru-new.nam", "New")), false, false, () => "new");
+        Assert.Same(prompt, cache.GetOrAdd(first, false, false, () => "rebuilt"));
+        Assert.Equal(ToneDesignPromptCache.MaxCachedCaptureLibraries, cache.Count);
+    }
+
     /// <summary>Rule 12 and the namamp gear note both flip on the presence of
     /// captures. With none, the module is off the table and the prompt says only
     /// that; with some, it is a real choice that must name one.</summary>
@@ -246,6 +286,24 @@ public sealed class ToneDesignCaptureTests
 
         Assert.Contains("\"capture\": \"900-my-own-capture-standard\"", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("5150-blockletter-boosted", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARefine_HandsTheModelTheCurrentNeuralAmpWithItsCapture()
+    {
+        var catalog = Catalog(
+            Bundled("5150-blockletter-boosted.nam", "5150 Block Letter (Boosted)"),
+            Bundled("voxac15-jangle.nam", "AC15 Jangle"));
+        var current = DspTonePresetLibrary.All
+            .Single(p => p.Id == ToneDesignPromptBuilder.CaptureFewShotPresetId);
+        Assert.Equal("5150-blockletter-boosted", ToneDesignPromptBuilder.ToDraft(current, catalog).Modules
+            .Single(m => m.Type == "namamp").Capture);
+
+        var prompt = ToneDesignPromptBuilder.Build(
+            new ToneDesignRequest("only less delay", [], current), null, catalog);
+
+        var turn = prompt.Messages[^1].Text;
+        Assert.Contains("\"capture\": \"5150-blockletter-boosted\"", turn, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -401,7 +459,7 @@ public sealed class ToneDesignCaptureTests
     [InlineData("900-my-own-capture-standard", "900-my-own-capture-standard.nam")]
     public void APreparedCapture_IsAnAbsolutePathUnderTheCaptureDirectory(string id, string fileName)
     {
-        var directory = Path.Combine(Path.GetTempPath(), "dotcharter-capture-prep");
+        var directory = Path.Combine(Path.GetTempPath(), "dotcharter-capture-prep-" + Guid.NewGuid().ToString("N"));
         var catalog = Catalog(
             Bundled("5150-blockletter.nam", "5150 Block Letter"),
             Entry("900-my-own-capture-standard.nam", "My Own Capture", 900));
@@ -423,7 +481,7 @@ public sealed class ToneDesignCaptureTests
     [Fact]
     public async Task ADesign_OffersTheCaptures_AndComesBackWithAResolvedPath()
     {
-        var directory = Path.Combine(Path.GetTempPath(), "dotcharter-capture-e2e");
+        var directory = Path.Combine(Path.GetTempPath(), "dotcharter-capture-e2e-" + Guid.NewGuid().ToString("N"));
         var catalog = Catalog(Bundled("5150-blockletter-boosted.nam", "5150 Block Letter (Boosted)"));
         var model = new CapturingModel(Reply("namamp", "5150-blockletter-boosted"));
 

@@ -258,12 +258,12 @@ public sealed class PhrasesInspectorViewModelTests
         var arrangement = MarkersOnly();
         var (vm, history) = BuildEditable(arrangement);
         var verse = vm.Phrases[0];
-        Assert.Equal("Delete “verse”: removes all 2 of its iterations. Ctrl+Z undoes it.", verse.DeleteTip);
+        Assert.Equal("Delete “verse”: removes all 2 of its places. Ctrl+Z undoes it.", verse.DeleteTip);
 
         vm.DeletePhraseCommand.Execute(verse);
 
         Assert.Equal(["chorus"], vm.Phrases.Select(p => p.Name));
-        Assert.Equal("Deleted “verse” (2 iterations). Ctrl+Z brings them back.", vm.StatusLine);
+        Assert.Equal("Deleted “verse” (2 places). Ctrl+Z brings them back.", vm.StatusLine);
 
         history.Undo();
 

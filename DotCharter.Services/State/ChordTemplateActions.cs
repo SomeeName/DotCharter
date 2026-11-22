@@ -87,10 +87,7 @@ public sealed class EditTemplateGlobalAction : IMergeableAction, ILinkPolicyActi
         _template.Frets = new Dictionary<int, int>(_newTemplate.Frets);
         _template.Fingers = new Dictionary<int, int>(_newTemplate.Fingers);
         for (var i = 0; i < _targetChords.Count; i++)
-        {
-            _targetChords[i].ChordNotes =
-                new ObservableCollection<ChordNote>(_newChords[i].ChordNotes.Select(n => n.Clone()));
-        }
+            _targetChords[i].CopyChordNotesFrom(_newChords[i]);
 
         _editor.RequestRedraw();
     }
@@ -109,10 +106,7 @@ public sealed class EditTemplateGlobalAction : IMergeableAction, ILinkPolicyActi
         _template.Frets = new Dictionary<int, int>(_oldTemplate.Frets);
         _template.Fingers = new Dictionary<int, int>(_oldTemplate.Fingers);
         for (var i = 0; i < _targetChords.Count; i++)
-        {
-            _targetChords[i].ChordNotes =
-                new ObservableCollection<ChordNote>(_oldChords[i].ChordNotes.Select(n => n.Clone()));
-        }
+            _targetChords[i].CopyChordNotesFrom(_oldChords[i]);
 
         _editor.RequestRedraw();
     }
@@ -161,8 +155,7 @@ public sealed class SwitchTemplateAction : IChartAction, ILinkPolicyAction, ITem
         for (var i = 0; i < _targetChords.Count; i++)
         {
             _targetChords[i].TemplateId = _newChords[i].TemplateId;
-            _targetChords[i].ChordNotes =
-                new ObservableCollection<ChordNote>(_newChords[i].ChordNotes.Select(n => n.Clone()));
+            _targetChords[i].CopyChordNotesFrom(_newChords[i]);
         }
 
         for (var i = 0; i < _targetHandShapes.Count; i++)
@@ -175,8 +168,7 @@ public sealed class SwitchTemplateAction : IChartAction, ILinkPolicyAction, ITem
         for (var i = 0; i < _targetChords.Count; i++)
         {
             _targetChords[i].TemplateId = _oldChords[i].TemplateId;
-            _targetChords[i].ChordNotes =
-                new ObservableCollection<ChordNote>(_oldChords[i].ChordNotes.Select(n => n.Clone()));
+            _targetChords[i].CopyChordNotesFrom(_oldChords[i]);
         }
 
         for (var i = 0; i < _targetHandShapes.Count; i++)
@@ -264,8 +256,7 @@ public sealed class CreateAndSwitchTemplateAction : IChartAction, ILinkPolicyAct
         for (var i = 0; i < _targetChords.Count; i++)
         {
             _targetChords[i].TemplateId = _newChords[i].TemplateId;
-            _targetChords[i].ChordNotes =
-                new ObservableCollection<ChordNote>(_newChords[i].ChordNotes.Select(n => n.Clone()));
+            _targetChords[i].CopyChordNotesFrom(_newChords[i]);
         }
 
         for (var i = 0; i < _targetHandShapes.Count; i++)
@@ -284,8 +275,7 @@ public sealed class CreateAndSwitchTemplateAction : IChartAction, ILinkPolicyAct
         for (var i = 0; i < _targetChords.Count; i++)
         {
             _targetChords[i].TemplateId = _oldChords[i].TemplateId;
-            _targetChords[i].ChordNotes =
-                new ObservableCollection<ChordNote>(_oldChords[i].ChordNotes.Select(n => n.Clone()));
+            _targetChords[i].CopyChordNotesFrom(_oldChords[i]);
         }
 
         for (var i = 0; i < _targetHandShapes.Count; i++)

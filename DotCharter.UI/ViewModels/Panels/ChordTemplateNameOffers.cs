@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using DotCharter.Services.Editing.ChordShapes;
 using DotCharter.UI.ViewModels.Editor;
 
 namespace DotCharter.UI.ViewModels.Panels;
@@ -85,8 +86,11 @@ public sealed class ChordTemplateNameOffers(ChartEditorViewModel editor, IConfig
 
         if (editor.ActiveArrangement is { } arrangement)
         {
-            foreach (var name in ChordNameSuggester.SuggestChordNames(arrangement, template.Frets, ChordNaming(arrangement)).Distinct())
+            var naming = ChordNaming(arrangement);
+            foreach (var name in NewChordNames.Offers(arrangement, template.Frets, naming))
+            {
                 SuggestedChordNames.Add(name);
+            }
             foreach (var candidate in ChordShapeSuperset.FindContaining(arrangement, template))
                 ContainingShapes.Add(ShapeSuggestion.For(candidate, template));
         }

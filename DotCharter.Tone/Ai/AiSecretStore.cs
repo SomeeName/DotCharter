@@ -71,28 +71,28 @@ public sealed class DpapiAiSecretStore : IAiSecretStore
     }
 
     /// <summary>Stores (or, with a null/blank <paramref name="secret" />, removes)
-    /// the key for <paramref name="kind" />. Never throws.</summary>
-    public void Write(AiProviderKind kind, string? secret)
+    /// the key for <paramref name="kind" />. Returns false on failure; never throws.</summary>
+    public bool Write(AiProviderKind kind, string? secret)
     {
         if (!OperatingSystem.IsWindows())
         {
             _logger?.Debug(AppLogCategory.Application,
                 "AI provider key not persisted: DPAPI is unavailable on this platform.");
-            return;
+            return false;
         }
 
         lock (_gate)
         {
-            var all = LoadAllLocked() ?? new Dictionary<string, string>(StringComparer.Ordinal);
+            using var lease = TryAcquireWriterLease();
+            if (lease is null) return false;
+            var loaded = LoadAllLocked(out var writable);
+            if (!writable) return false;
+            var all = loaded ?? new Dictionary<string, string>(StringComparer.Ordinal);
             var key = KeyOf(kind);
             if (string.IsNullOrWhiteSpace(secret)) all.Remove(key);
             else all[key] = secret;
 
-            if (all.Count == 0)
-            {
-                DeleteLocked();
-                return;
-            }
+            if (all.Count == 0) return DeleteLocked();
 
             try
             {
@@ -100,6 +100,7 @@ public sealed class DpapiAiSecretStore : IAiSecretStore
                 var cipher = ProtectedData.Protect(plain, Entropy, DataProtectionScope.CurrentUser);
                 Array.Clear(plain);
                 AtomicFile.WriteAllBytes(_path, cipher);
+                return true;
             }
             catch (Exception ex)
             {
@@ -107,7 +108,25 @@ public sealed class DpapiAiSecretStore : IAiSecretStore
                 // type: a serialization failure can quote the value it choked on.
                 _logger?.Warning(AppLogCategory.Application,
                     $"AI provider key could not be persisted: {ex.GetType().Name}.");
+                return false;
             }
+        }
+    }
+
+    private FileStream? TryAcquireWriterLease()
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(_path);
+            if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+            // Keep the empty file: deleting it on release can split writers across file identities.
+            return new FileStream(_path + ".writer.lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        }
+        catch (Exception ex)
+        {
+            _logger?.Warning(AppLogCategory.Application,
+                $"AI provider key could not acquire its writer lease: {ex.GetType().Name}.");
+            return null;
         }
     }
 
@@ -117,32 +136,44 @@ public sealed class DpapiAiSecretStore : IAiSecretStore
     {
         lock (_gate)
         {
-            return LoadAllLocked();
+            return LoadAllLocked(out _);
         }
     }
 
-    private Dictionary<string, string>? LoadAllLocked()
+    private Dictionary<string, string>? LoadAllLocked(out bool writable)
     {
+        writable = true;
         if (!OperatingSystem.IsWindows()) return null;
 
         try
         {
-            if (!File.Exists(_path)) return null;
             var cipher = AtomicFile.ReadAllBytes(_path);
-            if (cipher.Length == 0) return null;
+            if (cipher.Length == 0) throw new CryptographicException("Empty secret store.");
 
             var plain = ProtectedData.Unprotect(cipher, Entropy, DataProtectionScope.CurrentUser);
             try
             {
-                return JsonSerializer.Deserialize<Dictionary<string, string>>(plain, Json);
+                return JsonSerializer.Deserialize<Dictionary<string, string>>(plain, Json)
+                       ?? throw new JsonException("Missing secret map.");
             }
             finally
             {
                 Array.Clear(plain);
             }
         }
+        catch (FileNotFoundException)
+        {
+            return null;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return null;
+        }
         catch (Exception ex)
         {
+            // Decryption failures may mean another Windows identity, not corrupt
+            // bytes. Preserve the blob, including when the caller removes a key.
+            writable = false;
             // Wrong user, wrong machine, truncated, tampered — every one of them
             // means "there is no usable key here", which is a state the settings
             // page already renders. The TYPE is logged and the content never is.
@@ -152,16 +183,18 @@ public sealed class DpapiAiSecretStore : IAiSecretStore
         }
     }
 
-    private void DeleteLocked()
+    private bool DeleteLocked()
     {
         try
         {
-            if (File.Exists(_path)) File.Delete(_path);
+            File.Delete(_path);
+            return true;
         }
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Application,
                 $"Stored AI provider keys could not be deleted: {ex.GetType().Name}.");
+            return false;
         }
     }
 }
@@ -178,9 +211,10 @@ public sealed class InMemoryAiSecretStore : IAiSecretStore
     public string? Read(AiProviderKind kind) => _secrets.TryGetValue(kind, out var s) ? s : null;
 
     /// <inheritdoc />
-    public void Write(AiProviderKind kind, string? secret)
+    public bool Write(AiProviderKind kind, string? secret)
     {
         if (string.IsNullOrWhiteSpace(secret)) _secrets.Remove(kind);
         else _secrets[kind] = secret;
+        return true;
     }
 }

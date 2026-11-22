@@ -122,23 +122,42 @@ public sealed unsafe class Timeline2DComposedRenderer : IComposedFrameSource, ID
         _targetsDirty = true;
     }
 
+    /// <summary>True once a frame-loop call returned VK_ERROR_DEVICE_LOST: the shared device is
+    /// dead, so no frame is attempted and the pool is not rebuilt.</summary>
+    public bool IsDeviceLost { get; private set; }
+
+    private void LatchDeviceLost(Result result)
+    {
+        if (IsDeviceLost) return;
+        IsDeviceLost = true;
+        Console.Error.WriteLine($"[VULKAN] 2D timeline device lost ({result}); rendering has stopped.");
+    }
+
     /// <summary>Applies any deferred pool rebuild, paces on the frame-slot
     /// fence and acquires a free pool image. False = skip this frame (no free
     /// image / GPU behind / zero-sized) — retry on the next tick.</summary>
     public bool TryBeginFrame()
     {
-        if (_disposed) return false;
+        if (_disposed || IsDeviceLost) return false;
 
         if (_targetsDirty || _pool.HasBroken) RecreateTargets();
         if (_pool.Count == 0) return false;
 
         var api = _context.Api;
         var wait = api.WaitForFences(_context.Device, 1, in _frames.Fences[_frameSlot], true, FenceWaitNanos);
-        if (wait == Result.Timeout)
+        if (FrameResultPolicy.IsTerminal(wait))
+        {
+            LatchDeviceLost(wait);
+            return false;
+        }
+
+        if (wait is Result.Timeout or Result.NotReady)
         {
             FenceTimeoutSkips++;
             return false;
         }
+
+        VulkanCheck.Ok(wait, "Timeline2DComposedRenderer.WaitForFences");
 
         // Nothing free = the compositor owns every image — natural
         // back-pressure to its rate (uncapped since Avalonia 12.1).
@@ -148,7 +167,7 @@ public sealed unsafe class Timeline2DComposedRenderer : IComposedFrameSource, ID
             return false;
         }
 
-        api.ResetFences(_context.Device, 1, in _frames.Fences[_frameSlot]);
+        VulkanCheck.Ok(api.ResetFences(_context.Device, 1, in _frames.Fences[_frameSlot]), "Timeline2DComposedRenderer.ResetFences");
         return true;
     }
 
@@ -172,7 +191,7 @@ public sealed unsafe class Timeline2DComposedRenderer : IComposedFrameSource, ID
         var cmd = _frames.CommandBuffers[_frameSlot];
         var begin = new CommandBufferBeginInfo
         { SType = StructureType.CommandBufferBeginInfo, Flags = CommandBufferUsageFlags.OneTimeSubmitBit };
-        api.BeginCommandBuffer(cmd, in begin);
+        VulkanCheck.Ok(api.BeginCommandBuffer(cmd, in begin), "Timeline2DComposedRenderer.BeginCommandBuffer");
 
         var clear = new ClearValue
         {
@@ -201,7 +220,7 @@ public sealed unsafe class Timeline2DComposedRenderer : IComposedFrameSource, ID
             FontAtlas.DescriptorSet);
 
         api.CmdEndRenderPass(cmd);
-        api.EndCommandBuffer(cmd);
+        VulkanCheck.Ok(api.EndCommandBuffer(cmd), "Timeline2DComposedRenderer.EndCommandBuffer");
 
         // Keyed mutex is the only cross-API sync: acquire key 0 before any
         // command runs, release key 1 when the submit completes. NO
@@ -230,6 +249,7 @@ public sealed unsafe class Timeline2DComposedRenderer : IComposedFrameSource, ID
             CommandBufferCount = 1,
             PCommandBuffers = &cmd
         };
+        var failedSlot = _frameSlot;
         var submitResult = api.QueueSubmit(_context.GraphicsQueue, 1, in submit, _frames.Fences[_frameSlot]);
         _frameSlot = (_frameSlot + 1) % Timeline2DFrameResources.MaxFramesInFlight;
 
@@ -241,7 +261,11 @@ public sealed unsafe class Timeline2DComposedRenderer : IComposedFrameSource, ID
             // and never gets its matching CompleteComposedPresent. Poison it;
             // TryBeginFrame's HasBroken path rebuilds the pool.
             SubmitFailures++;
+            if (FrameResultPolicy.IsTerminal(submitResult)) LatchDeviceLost(submitResult);
+            if (FrameFencePolicy.NeedsRecreateSignaled(submitResult))
+                FrameFencePolicy.RecreateSignaled(api, _context.Device, ref _frames.Fences[failedSlot]);
             _pool.MarkBroken(_imageIndex);
+            VulkanCheck.Ok(submitResult, "Timeline2DComposedRenderer.QueueSubmit");
             return;
         }
 
@@ -266,7 +290,7 @@ public sealed unsafe class Timeline2DComposedRenderer : IComposedFrameSource, ID
     private void RecreateTargets()
     {
         var api = _context.Api;
-        api.DeviceWaitIdle(_context.Device);
+        VulkanCheck.Ok(api.DeviceWaitIdle(_context.Device), "Timeline2DComposedRenderer.RecreateTargets.DeviceWaitIdle");
         // Invariant: old views/framebuffers die BEFORE the pool recreates the
         // images under them.
         DestroyTargets();

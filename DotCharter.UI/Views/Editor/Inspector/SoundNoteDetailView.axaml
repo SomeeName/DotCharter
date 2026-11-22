@@ -1,0 +1,104 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundNoteDetailView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Technique page of a note, its DETAIL card (#751 P4, design D's "Note detail"): vibrato, the unpitched
+         slide and the pitched slide's target, link next, pass other, ignore, the finger and the pick direction —
+         STAGED (Staged.NoteTechnique) like the techniques card. The finger's index is the finger + 1. -->
+    <StackPanel Spacing="{StaticResource SpaceXs}">
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                   Text="{localization:Loc Inspector_Staged_NoteDetail}" />
+        <UniformGrid Columns="2" ColumnSpacing="{StaticResource SpaceXs}" RowSpacing="{StaticResource SpaceXs}">
+            <ToggleButton x:Name="NoteVibratoToggle" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                          HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_Vibrato}"
+                          IsChecked="{Binding Staged.NoteTechnique.Vibrato}"
+                          AutomationProperties.Name="{localization:Loc Inspector_Vibrato}"
+                          ToolTip.Tip="{localization:Loc Inspector_VibratoTip}" />
+            <ToggleButton x:Name="NoteSlideToggle" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                          HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_Slide}"
+                          IsChecked="{Binding Staged.NoteTechnique.UnpitchedSlide}"
+                          AutomationProperties.Name="{localization:Loc Inspector_Slide}"
+                          ToolTip.Tip="{localization:Loc Inspector_SlideTip}" />
+            <ToggleButton x:Name="NoteLinkNextToggle" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                          HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_LinkNext}"
+                          IsChecked="{Binding Staged.NoteTechnique.LinkNext}"
+                          AutomationProperties.Name="{localization:Loc Inspector_LinkNext}"
+                          ToolTip.Tip="{localization:Loc Inspector_LinkNextTip}" />
+            <ToggleButton x:Name="NotePassOtherToggle" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                          HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_PassOther}"
+                          IsChecked="{Binding Staged.NoteTechnique.PassOtherNotes}"
+                          AutomationProperties.Name="{localization:Loc Inspector_PassOther}"
+                          ToolTip.Tip="{localization:Loc Inspector_PassOtherTip}" />
+            <ToggleButton x:Name="NoteIgnoreToggle" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                          HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_Ignore}"
+                          IsChecked="{Binding Staged.NoteTechnique.Ignore}"
+                          AutomationProperties.Name="{localization:Loc Inspector_Ignore}"
+                          ToolTip.Tip="{localization:Loc Inspector_IgnoreTip}" />
+        </UniformGrid>
+        <Grid x:Name="NoteDetailRows" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto"
+              ColumnSpacing="{StaticResource SpaceSm}" RowSpacing="{StaticResource SpaceXs}">
+            <TextBlock Grid.Row="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel"
+                       Text="{localization:Loc Inspector_SlideTo}" ToolTip.Tip="{localization:Loc Inspector_SlideToTip}" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NoteTechniqueSlideField" Classes="InspectorNumber"
+                           Value="{Binding Staged.NoteTechnique.SlideTo}" Minimum="0" Maximum="24"
+                           AutomationProperties.Name="{localization:Loc Inspector_SlideTo}"
+                           ToolTip.Tip="{localization:Loc Inspector_SlideToFretTip}" />
+            <TextBlock Grid.Row="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel" VerticalAlignment="Center"
+                       Text="{localization:Loc Inspector_Finger}" ToolTip.Tip="{localization:Loc Inspector_FingerTip}" />
+            <WrapPanel Grid.Row="1" Grid.Column="1" x:Name="NoteFingerRow" Orientation="Horizontal" LineSpacing="{StaticResource SpaceXxs}">
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                              AutomationProperties.Name="{localization:Loc Inspector_None}"
+                              ToolTip.Tip="{localization:Loc Inspector_None}"
+                              IsChecked="{Binding Staged.NoteTechnique.FingerIndex, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0, Mode=OneWay}"
+                              Command="{Binding Staged.NoteTechnique.SetFingerCommand}" CommandParameter="0" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="T"
+                              AutomationProperties.Name="{localization:Loc Inspector_Thumb}"
+                              ToolTip.Tip="{localization:Loc Inspector_Thumb}"
+                              IsChecked="{Binding Staged.NoteTechnique.FingerIndex, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1, Mode=OneWay}"
+                              Command="{Binding Staged.NoteTechnique.SetFingerCommand}" CommandParameter="1" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="1"
+                              AutomationProperties.Name="{localization:Loc Inspector_Finger}"
+                              ToolTip.Tip="{localization:Loc Inspector_Finger}"
+                              IsChecked="{Binding Staged.NoteTechnique.FingerIndex, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2, Mode=OneWay}"
+                              Command="{Binding Staged.NoteTechnique.SetFingerCommand}" CommandParameter="2" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="2"
+                              AutomationProperties.Name="{localization:Loc Inspector_Finger}"
+                              ToolTip.Tip="{localization:Loc Inspector_Finger}"
+                              IsChecked="{Binding Staged.NoteTechnique.FingerIndex, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=3, Mode=OneWay}"
+                              Command="{Binding Staged.NoteTechnique.SetFingerCommand}" CommandParameter="3" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="3"
+                              AutomationProperties.Name="{localization:Loc Inspector_Finger}"
+                              ToolTip.Tip="{localization:Loc Inspector_Finger}"
+                              IsChecked="{Binding Staged.NoteTechnique.FingerIndex, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=4, Mode=OneWay}"
+                              Command="{Binding Staged.NoteTechnique.SetFingerCommand}" CommandParameter="4" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="4"
+                              AutomationProperties.Name="{localization:Loc Inspector_Finger}"
+                              ToolTip.Tip="{localization:Loc Inspector_Finger}"
+                              IsChecked="{Binding Staged.NoteTechnique.FingerIndex, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=5, Mode=OneWay}"
+                              Command="{Binding Staged.NoteTechnique.SetFingerCommand}" CommandParameter="5" />
+            </WrapPanel>
+            <TextBlock Grid.Row="2" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel" VerticalAlignment="Center"
+                       Text="{localization:Loc Inspector_PickDirection}" />
+            <WrapPanel Grid.Row="2" Grid.Column="1" x:Name="NotePickDirectionRow" Orientation="Horizontal" LineSpacing="{StaticResource SpaceXxs}">
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                              AutomationProperties.Name="{localization:Loc Inspector_None}"
+                              ToolTip.Tip="{localization:Loc Inspector_None}"
+                              IsChecked="{Binding Staged.NoteTechnique.PickDirection, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0, Mode=OneWay}"
+                              Command="{Binding Staged.NoteTechnique.SetPickDirectionCommand}" CommandParameter="0" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="↓"
+                              AutomationProperties.Name="{localization:Loc Inspector_PickDown}"
+                              ToolTip.Tip="{localization:Loc Inspector_PickDown}"
+                              IsChecked="{Binding Staged.NoteTechnique.PickDirection, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1, Mode=OneWay}"
+                              Command="{Binding Staged.NoteTechnique.SetPickDirectionCommand}" CommandParameter="1" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="↑"
+                              AutomationProperties.Name="{localization:Loc Inspector_PickUp}"
+                              ToolTip.Tip="{localization:Loc Inspector_PickUp}"
+                              IsChecked="{Binding Staged.NoteTechnique.PickDirection, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2, Mode=OneWay}"
+                              Command="{Binding Staged.NoteTechnique.SetPickDirectionCommand}" CommandParameter="2" />
+            </WrapPanel>
+        </Grid>
+    </StackPanel>
+</UserControl>

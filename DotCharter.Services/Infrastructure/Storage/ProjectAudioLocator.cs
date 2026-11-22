@@ -40,7 +40,11 @@ public static class ProjectAudioLocator
     ///         differently.
     ///     </para>
     /// </summary>
-    public static string? TryResolve(string? projectPath, string? audioFileName)
+    public static string? TryResolve(string? projectPath, string? audioFileName) =>
+        TryResolve(projectPath, audioFileName, File.Exists);
+
+    /// <summary>Resolves with the caller's file-access service; every probe is checked before invoking it.</summary>
+    internal static string? TryResolve(string? projectPath, string? audioFileName, Func<string, bool> fileExists)
     {
         if (string.IsNullOrWhiteSpace(audioFileName)) return null;
 
@@ -48,11 +52,11 @@ public static class ProjectAudioLocator
         {
             // The name came out of a file: a UNC, device or network-drive path is
             // never probed (the probe alone hands NTLM credentials to the host).
-            if (ProjectRelativePath.IsLocalAbsolute(audioFileName) && File.Exists(audioFileName)) return audioFileName;
+            if (ProjectRelativePath.IsLocalAbsolute(audioFileName) && fileExists(audioFileName)) return audioFileName;
 
             // The stale-absolute case: keep looking under the project, by name.
             var bareName = BareNameOf(audioFileName);
-            return bareName == null ? null : TryResolve(projectPath, bareName);
+            return bareName == null ? null : TryResolve(projectPath, bareName, fileExists);
         }
 
         if (!ProjectRelativePath.IsReadableMediaReference(audioFileName)) return null;
@@ -61,7 +65,8 @@ public static class ProjectAudioLocator
         if (projectDirectory == null) return null;
 
         var directPath = Path.Combine(projectDirectory, audioFileName);
-        if (File.Exists(directPath)) return directPath;
+        if (!ProjectRelativePath.IsReadableMediaReference(directPath)) return null;
+        if (fileExists(directPath)) return directPath;
 
         // The chart may sit in a per-arrangement subfolder while the audio
         // lives once at the song root — walk up rather than give up. A bare
@@ -71,7 +76,7 @@ public static class ProjectAudioLocator
         while (directory != null)
         {
             var candidate = Path.Combine(directory.FullName, audioFileName);
-            if (File.Exists(candidate)) return candidate;
+            if (ProjectRelativePath.IsReadableMediaReference(candidate) && fileExists(candidate)) return candidate;
             directory = directory.Parent;
         }
 
@@ -79,7 +84,7 @@ public static class ProjectAudioLocator
     }
 
     /// <summary>
-    ///     Like <see cref="TryResolve" />, but falls back to the path the audio
+    ///     Like <see cref="TryResolve(string, string)" />, but falls back to the path the audio
     ///     WOULD occupy next to the project. For callers that must report a
     ///     concrete location when the file is missing (the loader logs it).
     ///     The fallback is always under the project folder: a refused or rooted

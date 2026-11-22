@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Avalonia.Threading;
+using DotCharter.Services.Diagnostics;
 
 namespace DotCharter.UI.Views.Shell;
 
@@ -19,15 +20,28 @@ public static class SurfaceShowTiming
     /// <summary>Receives (surface name, milliseconds) per completed show.</summary>
     public static Action<string, double>? Sink { get; set; }
 
+    /// <summary>Debug detail for work that a surface queues after the gesture.</summary>
+    public static Action<string, double>? DetailSink
+    {
+        get => UiWorkTiming.Sink;
+        set => UiWorkTiming.Sink = value;
+    }
+
+    public static void Measure(string name, Action action) => UiWorkTiming.Measure(name, action);
+
     /// <summary>Starts timing a show that begins now.</summary>
     public static void Begin(string name) => BeginAt(name, Stopwatch.GetTimestamp());
 
+    public static void Begin(string name, DispatcherPriority priority) => BeginAtPriority(name, Stopwatch.GetTimestamp(), priority);
+
     /// <summary>Starts timing a show that began at <paramref name="startTicks" />
     /// (a <see cref="Stopwatch.GetTimestamp" /> reading).</summary>
-    public static void BeginAt(string name, long startTicks)
+    public static void BeginAt(string name, long startTicks) => BeginAtPriority(name, startTicks, DispatcherPriority.Background);
+
+    private static void BeginAtPriority(string name, long startTicks, DispatcherPriority priority)
     {
         if (Sink is null) return;
-        Dispatcher.UIThread.Post(() => Record(name, PopoverOpenTiming.MsSince(startTicks)), DispatcherPriority.Background);
+        Dispatcher.UIThread.Post(() => Record(name, PopoverOpenTiming.MsSince(startTicks)), priority);
     }
 
     public static void Record(string name, double milliseconds)

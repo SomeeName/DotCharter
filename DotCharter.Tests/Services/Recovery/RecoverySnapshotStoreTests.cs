@@ -9,6 +9,89 @@ public sealed class RecoverySnapshotStoreTests : IDisposable
     private readonly string _originalsDir;
     private readonly RecoverySnapshotStore _store;
 
+    [Fact]
+    public void Unreadability_after_enumeration_never_authorizes_recovery_deletion()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Uses Windows share modes.");
+        var original = Path.Combine(_originalsDir, "song.dcproj");
+        _store.WriteSnapshot(BuildProject(), Metadata(original));
+        var session = Assert.Single(_store.ListSessions());
+        var locked = new LockedEnumerationStore(_store, session);
+        using var recovery = new CrashRecoveryService(locked, null!, null!, null!, new ProjectState(),
+            null!, null!, new FakeAppLogger(), new TestUiDispatcher());
+        using (var held = new FileStream(session.SnapshotPath, FileMode.Open, FileAccess.Write, FileShare.Delete))
+        {
+            Assert.Empty(recovery.FindRecoverableSessions());
+            Assert.True(File.Exists(session.SnapshotPath));
+            Assert.True(File.Exists(session.SidecarPath));
+        }
+
+        Assert.Single(recovery.FindRecoverableSessions());
+    }
+
+    private sealed class LockedEnumerationStore(IRecoverySnapshotStore inner, RecoverableSession session) : IRecoverySnapshotStore
+    {
+        public string RootDirectory => inner.RootDirectory;
+        public string GetSnapshotPath(string? path) => inner.GetSnapshotPath(path);
+        public void WriteSnapshot(ChartProject project, RecoverySnapshotMetadata metadata) => inner.WriteSnapshot(project, metadata);
+        public IReadOnlyList<RecoverableSession> ListSessions() => [session];
+        public bool IsRecoverable(RecoverableSession candidate) => inner.IsRecoverable(candidate);
+        public bool DeleteIfSuperseded(RecoverableSession candidate) => inner.DeleteIfSuperseded(candidate);
+        public void DeleteSnapshot(string? path) => inner.DeleteSnapshot(path);
+        public void DeleteSession(RecoverableSession candidate) => inner.DeleteSession(candidate);
+        public ChartProject LoadSnapshot(string path) => inner.LoadSnapshot(path);
+    }
+
+    [Fact]
+    public void A_different_generation_is_not_proof_that_the_original_supersedes_it()
+    {
+        var original = Path.Combine(_originalsDir, "song.dcproj");
+        _store.WriteSnapshot(BuildProject(), Metadata(original));
+        var session = Assert.Single(_store.ListSessions());
+        File.WriteAllText(session.SnapshotPath, "different generation");
+        File.WriteAllText(original, "newer original");
+        File.SetLastWriteTimeUtc(original, DateTime.UtcNow.AddDays(1));
+
+        Assert.False(_store.DeleteIfSuperseded(session));
+        Assert.True(File.Exists(session.SnapshotPath));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Supersession_requires_a_known_matching_generation(bool legacy)
+    {
+        var original = Path.Combine(_originalsDir, "song.dcproj");
+        var project = BuildProject();
+        _store.WriteSnapshot(project, Metadata(original));
+        var session = Assert.Single(_store.ListSessions());
+        new DotCharter.Services.Parsing.Rscp.RscpChartSerializer().Save(original, project);
+        File.SetLastWriteTimeUtc(session.SnapshotPath, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        File.SetLastWriteTimeUtc(original, new DateTime(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        if (legacy) session.Metadata.SnapshotSha256 = "";
+
+        Assert.Equal(!legacy, _store.DeleteIfSuperseded(session));
+        Assert.Equal(legacy, File.Exists(session.SnapshotPath));
+        Assert.Equal(legacy, File.Exists(session.SidecarPath));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_corrupt_or_foreign_newer_original_does_not_authorize_deletion(bool foreign)
+    {
+        var original = Path.Combine(_originalsDir, "song.dcproj");
+        _store.WriteSnapshot(BuildProject(), Metadata(original));
+        var session = Assert.Single(_store.ListSessions());
+        if (foreign) new DotCharter.Services.Parsing.Rscp.RscpChartSerializer().Save(original, BuildProject());
+        else File.WriteAllText(original, "corrupt project");
+        File.SetLastWriteTimeUtc(original, DateTime.UtcNow.AddDays(1));
+
+        Assert.False(_store.DeleteIfSuperseded(session));
+        Assert.True(File.Exists(session.SnapshotPath));
+        Assert.True(File.Exists(session.SidecarPath));
+    }
+
     public RecoverySnapshotStoreTests()
     {
         _root = Path.Combine(Path.GetTempPath(), $"dc_recovery_{Guid.NewGuid():N}");
@@ -18,6 +101,21 @@ public sealed class RecoverySnapshotStoreTests : IDisposable
     }
 
     public void Dispose() => BestEffortDelete.Directory(_root);
+
+    [Fact]
+    public void Snapshotting_DoesNotReuseOrTruncateAPredictableStage()
+    {
+        var original = Path.Combine(_originalsDir, "song.dcproj");
+        Directory.CreateDirectory(_store.RootDirectory);
+        var planted = _store.GetSnapshotPath(original) + ".tmp";
+        File.WriteAllText(planted, "unrelated file");
+        using var held = new FileStream(planted, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        _store.WriteSnapshot(BuildProject(), Metadata(original));
+
+        Assert.Equal("unrelated file", File.ReadAllText(planted));
+        Assert.Single(_store.ListSessions());
+    }
 
     private static ChartProject BuildProject()
     {
@@ -85,6 +183,47 @@ public sealed class RecoverySnapshotStoreTests : IDisposable
         Assert.Equal(project.Chart.SongName, reloaded.Chart.SongName);
         Assert.Equal(project.Bpm, reloaded.Bpm, 3);
         Assert.Equal(project.AudioFileName, reloaded.AudioFileName);
+    }
+
+    [Fact]
+    public void An_interrupted_snapshot_swap_keeps_the_previous_generations_metadata()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Relies on Windows file locking.");
+        var original = Path.Combine(_originalsDir, "song.dcproj");
+        var previous = BuildProject();
+        previous.AudioFileName = "A.wav";
+        var previousMetadata = Metadata(original);
+        previousMetadata.OriginalAudioFileName = "A.wav";
+        _store.WriteSnapshot(previous, previousMetadata);
+        var next = BuildProject();
+        next.AudioFileName = "B.wav";
+        var nextMetadata = Metadata(original);
+        nextMetadata.OriginalAudioFileName = "B.wav";
+
+        using (new FileStream(_store.GetSnapshotPath(original), FileMode.Open, FileAccess.Read, FileShare.Read))
+            Assert.ThrowsAny<Exception>(() => _store.WriteSnapshot(next, nextMetadata));
+
+        var restarted = new RecoverySnapshotStore(_store.RootDirectory);
+        var recovered = Assert.Single(restarted.ListSessions());
+        Assert.Equal("A.wav", restarted.LoadSnapshot(recovered.SnapshotPath).AudioFileName);
+        Assert.Equal("A.wav", recovered.Metadata.OriginalAudioFileName);
+        Assert.Equal(original, recovered.Metadata.OriginalProjectPath);
+        restarted.WriteSnapshot(next, nextMetadata);
+        recovered = Assert.Single(restarted.ListSessions());
+        Assert.Equal("B.wav", restarted.LoadSnapshot(recovered.SnapshotPath).AudioFileName);
+        Assert.Equal("B.wav", recovered.Metadata.OriginalAudioFileName);
+    }
+
+    [Fact]
+    public void Metadata_for_different_snapshot_bytes_is_never_adopted()
+    {
+        var original = Path.Combine(_originalsDir, "song.dcproj");
+        _store.WriteSnapshot(BuildProject(), Metadata(original));
+        var other = BuildProject();
+        other.AudioFileName = "unrelated.wav";
+        new DotCharter.Services.Parsing.Rscp.RscpChartSerializer().Save(_store.GetSnapshotPath(original), other);
+
+        Assert.Empty(_store.ListSessions());
     }
 
     [Fact]
@@ -197,53 +336,57 @@ public sealed class RecoverySnapshotStoreTests : IDisposable
     ///     <para>
     ///         The autosave timer and the startup enumeration genuinely overlap
     ///         (a snapshot lands every 10 s of quiet), so this is the production
-    ///         shape, not a synthetic one. Bounded by ITERATIONS, never by a
-    ///         clock.
+    ///         shape, not a synthetic one.
+    ///     </para>
+    ///     <para>
+    ///         #607: this used to be a reader thread hammering <c>ListSessions</c>
+    ///         against 40 writes on the SAME store, whose <c>_sync</c> lock
+    ///         serializes the two: no read could ever overlap a write, and the test
+    ///         passed with a delete-denying read. Now a second store (the startup
+    ///         enumeration's) is parked with the sidecar handle OPEN, and the
+    ///         autosave's store publishes a snapshot at exactly that moment; a read
+    ///         that denies delete refuses the sidecar's rename and the write fails.
     ///     </para>
     /// </summary>
     [Fact]
-    public void ListSessions_DuringConcurrentWrites_NeverLosesTheOriginalProjectPath()
+    public async Task ListSessions_DuringConcurrentWrites_NeverLosesTheOriginalProjectPath()
     {
+        var ct = TestContext.Current.CancellationToken;
         var original = Path.Combine(_originalsDir, "song.rscp");
         // Seed one complete snapshot: before the first write there is legitimately
-        // no sidecar, and "untitled" is the correct answer for that.
-        _store.WriteSnapshot(BuildProject(), Metadata(original));
+        // no sidecar, and "untitled" is the correct answer for that. The same
+        // project again later serializes to the same bytes, so the parked read's
+        // OLD sidecar still describes the snapshot it then hashes.
+        var project = BuildProject();
+        _store.WriteSnapshot(project, Metadata(original));
 
-        Exception? writeFailure = null;
-        var degraded = 0;
-        var done = false;
-
-        var reader = new Thread(() =>
+        var enumeration = new RecoverySnapshotStore(_store.RootDirectory);
+        var open = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        var reads = 0;
+        enumeration.SidecarOpenForTesting = () =>
         {
-            while (!Volatile.Read(ref done))
-            {
-                foreach (var session in _store.ListSessions())
-                {
-                    if (session.IsUntitled)
-                        Interlocked.Increment(ref degraded);
-                }
-            }
-        })
-        { IsBackground = true };
-        reader.Start();
+            if (Interlocked.Increment(ref reads) != 1) return;
+            open.SetResult();
+            BoundedWait.For(release, "the test to release the parked sidecar read");
+        };
+        var listing = Task.Run(enumeration.ListSessions, ct);
 
         try
         {
-            var project = BuildProject();
-            for (var i = 0; i < 40; i++) _store.WriteSnapshot(project, Metadata(original));
-        }
-        catch (Exception ex)
-        {
-            writeFailure = ex;
+            await BoundedWait.ForAsync(Task.WhenAny(open.Task, listing), "the enumeration to open the sidecar", ct);
+            Assert.False(listing.IsCompleted, "ListSessions returned without ever holding a sidecar open.");
+            _store.WriteSnapshot(project, Metadata(original));
         }
         finally
         {
-            Volatile.Write(ref done, true);
-            reader.Join();
+            release.Set();
         }
 
-        Assert.Null(writeFailure);
-        Assert.Equal(0, Volatile.Read(ref degraded));
+        var listed = Assert.Single(await BoundedWait.ForAsync(listing, "the parked enumeration to finish", ct));
+        Assert.False(listed.IsUntitled, "the enumeration degraded a titled session to an untitled one");
+        Assert.Equal(original, listed.Metadata.OriginalProjectPath);
+        Assert.Equal(original, Assert.Single(_store.ListSessions()).Metadata.OriginalProjectPath);
     }
 
     /// <summary>
@@ -321,7 +464,7 @@ public sealed class RecoverySnapshotStoreTests : IDisposable
 
         Assert.False(File.Exists(snapshotPath), "the snapshot must not be visible without its sidecar");
         Assert.Empty(_store.ListSessions());
-        Assert.False(File.Exists(snapshotPath + ".tmp"), "the staged snapshot is swept, not orphaned");
+        Assert.Empty(Directory.GetFiles(_store.RootDirectory, "*.tmp"));
     }
 
     /// <summary>…and the ordinary write still produces both, with the sidecar

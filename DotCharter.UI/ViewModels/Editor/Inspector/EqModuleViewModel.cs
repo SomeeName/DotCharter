@@ -40,23 +40,32 @@ public sealed partial class EqBandChipViewModel : ViewModelBase
 
     public bool IsEnabled => Band.Enabled;
 
+    /// <summary>The chip's own text, "2 LS": the band's number keeps the chip row apart from the type buttons.</summary>
+    public string ChipLabel => $"{Number} {TypeLabel}";
+
     public bool IsSelected => _owner.SelectedIndex == Index;
 
-    /// <summary>Selecting a chip is the "one band at a time" gesture the whole
-    /// module is built around.</summary>
-    [RelayCommand]
-    private void Select() => _owner.SelectedIndex = Index;
+    /// <summary>"Band 3 · Bell": the band picker's entry (design D's Band card).</summary>
+    public string PickerLabel => _owner.PickerLabel(Index, TypeLabel);
 
-    /// <summary>The chip's DOT toggles the band. Separate from selecting it, and
-    /// deliberately so: the mockup's "click a band card to select, click its dot
-    /// to bypass".</summary>
+    /// <summary>The Band card's Enable: switches the band on or off; the picker selects it (design D).</summary>
+    /// <summary>The chip's on/off dot names its band ("Turn Band 2 · Bell on or off").</summary>
+    public string ToggleLabel => _owner.TextFormat("Inspector_EqBandToggle", PickerLabel);
+
     [RelayCommand]
     private void ToggleEnabled() => _owner.SetBandEnabled(Index, !IsEnabled);
+
+    /// <summary>The chip row's one-click selection (the picker is the other door).</summary>
+    [RelayCommand]
+    private void Select() => _owner.SelectedIndex = Index;
 
     /// <summary>Called by the owner after anything changed the section.</summary>
     internal void Refresh()
     {
         OnPropertyChanged(nameof(TypeLabel));
+        OnPropertyChanged(nameof(PickerLabel));
+        OnPropertyChanged(nameof(ToggleLabel));
+        OnPropertyChanged(nameof(ChipLabel));
         OnPropertyChanged(nameof(IsEnabled));
         OnPropertyChanged(nameof(IsSelected));
     }
@@ -130,6 +139,7 @@ public sealed partial class EqModuleViewModel : ViewModelBase
         for (var i = 0; i < Section.Bands.Count; i++) Bands.Add(new EqBandChipViewModel(this, i));
         foreach (var type in Enum.GetValues<EqBandType>()) Types.Add(new EqTypeOptionViewModel(this, type));
         foreach (var key in EqPresets.Keys) Presets.Add(key);
+        Edits = new EqBandEdits(Section, () => _selectedIndex, Commit, localization);
 
         // The engine boots with every band off and this section starts the same
         // way, so nothing is pushed until the user touches something — but the
@@ -146,6 +156,9 @@ public sealed partial class EqModuleViewModel : ViewModelBase
     /// directly — it needs the whole band list to hit-test handles, and handing
     /// it a projection would put a second copy of the bands on screen.</summary>
     public EqSection Section { get; } = new();
+
+    /// <summary>Design D's typed fields and "Reset gain + Q" on the Band card.</summary>
+    public EqBandEdits Edits { get; }
 
     public ObservableCollection<EqBandChipViewModel> Bands { get; } = [];
 
@@ -204,6 +217,9 @@ public sealed partial class EqModuleViewModel : ViewModelBase
     }
 
     private EqBand Selected => Section.Bands[_selectedIndex];
+
+    /// <summary>The selected band's entry: what the Band card's Enable toggles.</summary>
+    public EqBandChipViewModel SelectedBand => Bands[_selectedIndex];
 
     /// <summary>"Band 3 · Bell" — the band editor's header.</summary>
     public string SelectedTitle => TextFormat(
@@ -322,6 +338,13 @@ public sealed partial class EqModuleViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Design D's Bypass: the master power, inverted (on = the EQ is not applied).</summary>
+    public bool IsBypassed
+    {
+        get => !IsSectionEnabled;
+        set => IsSectionEnabled = !value;
+    }
+
     /// <summary>"4/6" — or "SOLO 3" while a band is soloed, because with a solo
     /// standing the count is always 1 and saying so would be useless.</summary>
     public string ActiveBadge
@@ -385,6 +408,7 @@ public sealed partial class EqModuleViewModel : ViewModelBase
         {
             if (value is null || value == Section.PresetKey) return;
             Section.LoadPreset(value);
+            Edits.BasePresetKey = Section.PresetKey;
             _selectedIndex = Math.Min(_selectedIndex, Section.Bands.Count - 1);
             Commit();
         }
@@ -397,7 +421,9 @@ public sealed partial class EqModuleViewModel : ViewModelBase
 
     internal string Text(string key) => _localization[key];
 
-    private string TextFormat(string key, params object[] args) => _localization.Format(key, args);
+    internal string TextFormat(string key, params object[] args) => _localization.Format(key, args);
+
+    internal string PickerLabel(int index, string typeLabel) => TextFormat("Inspector_EqBandTitle", index + 1, typeLabel);
 
     // ── commands ─────────────────────────────────────────────────────────
 
@@ -410,13 +436,6 @@ public sealed partial class EqModuleViewModel : ViewModelBase
     private void ToggleSolo()
     {
         Section.ToggleSolo(_selectedIndex);
-        Commit();
-    }
-
-    [RelayCommand]
-    private void ResetSelected()
-    {
-        Section.ResetBand(_selectedIndex);
         Commit();
     }
 
@@ -542,12 +561,15 @@ public sealed partial class EqModuleViewModel : ViewModelBase
         OnPropertyChanged(nameof(SelectedQNormalized));
         OnPropertyChanged(nameof(SelectedQText));
         OnPropertyChanged(nameof(IsSelectedSoloed));
+        OnPropertyChanged(nameof(SelectedBand));
+        Edits.Load();
     }
 
     private void RefreshAll()
     {
         RefreshSelection();
         OnPropertyChanged(nameof(IsSectionEnabled));
+        OnPropertyChanged(nameof(IsBypassed));
         OnPropertyChanged(nameof(ActiveBadge));
         OnPropertyChanged(nameof(Route));
         OnPropertyChanged(nameof(IsRouteSong));

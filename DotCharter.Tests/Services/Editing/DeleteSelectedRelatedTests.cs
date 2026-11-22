@@ -230,6 +230,91 @@ public sealed class DeleteSelectedRelatedTests
         Assert.False(h.History.CanUndo);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SendToArrangement_ResolvesTheGripAndUndoesIdsAndCreationTogether(bool reuse)
+    {
+        var h = new Harness();
+        var source = h.Arrangement.ChordTemplates[0];
+        source.Fingers[0] = 2;
+        source.Fingers[1] = 4;
+        source.Pinned = true;
+        var target = new Arrangement { Name = "Rhythm" };
+        target.Levels.Add(new ChartLevel());
+        target.ChordTemplates.Add(new ChordTemplate
+        {
+            Id = 0, Name = "Other", Frets = new Dictionary<int, int> { { 0, 8 }, { 1, 10 } }
+        });
+        if (reuse)
+        {
+            var same = source.Clone();
+            same.Id = 7;
+            target.ChordTemplates.Add(same);
+        }
+        h.State.ActiveProject!.Arrangements.Add(target);
+        var chord = Chord(2);
+        var shape = Shape(2, 4);
+        h.Level.Chords.Add(chord);
+        h.Level.HandShapes.Add(shape);
+        h.Selection.SelectedChords.Add(chord);
+        h.Selection.SelectedHandShapes.Add(shape);
+
+        h.Coordinator.SendSelectionToArrangement(target);
+
+        Assert.Empty(h.Level.Chords);
+        Assert.Empty(h.Level.HandShapes);
+        Assert.Same(chord, Assert.Single(target.Levels[0].Chords));
+        Assert.Same(shape, Assert.Single(target.Levels[0].HandShapes));
+        var resolved = target.ChordTemplates.Single(t => t.Id == chord.TemplateId);
+        Assert.NotEqual(0, resolved.Id);
+        Assert.Equal(source, resolved);
+        Assert.Equal(resolved.Id, shape.TemplateId);
+        Assert.Equal(2, target.ChordTemplates.Count);
+        h.History.Undo();
+        Assert.Same(chord, Assert.Single(h.Level.Chords));
+        Assert.Same(shape, Assert.Single(h.Level.HandShapes));
+        Assert.Equal(0, chord.TemplateId);
+        Assert.Equal(0, shape.TemplateId);
+        Assert.Empty(target.Levels[0].Chords);
+        Assert.Empty(target.Levels[0].HandShapes);
+        Assert.Equal(reuse ? 2 : 1, target.ChordTemplates.Count);
+        Assert.False(h.History.CanUndo);
+        h.History.Redo();
+        Assert.Equal(resolved.Id, chord.TemplateId);
+        Assert.Equal(resolved.Id, shape.TemplateId);
+        Assert.Equal(2, target.ChordTemplates.Count);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SendingOnlyAHandShape_UsesItsSourceGripOrTheUntemplatedSentinel(bool hasSourceGrip)
+    {
+        var h = new Harness();
+        var shape = Shape(2, 4);
+        shape.TemplateId = 41;
+        h.Level.HandShapes.Add(shape);
+        h.Selection.SelectedHandShapes.Add(shape);
+        if (hasSourceGrip) h.Arrangement.ChordTemplates[0].Id = 41;
+        var target = new Arrangement { Name = "Rhythm" };
+        target.Levels.Add(new ChartLevel());
+        target.ChordTemplates.Add(new ChordTemplate { Id = 41, Name = "Other" });
+        h.State.ActiveProject!.Arrangements.Add(target);
+
+        h.Coordinator.SendSelectionToArrangement(target);
+
+        Assert.Same(shape, Assert.Single(target.Levels[0].HandShapes));
+        Assert.Equal(hasSourceGrip ? 42 : -1, shape.TemplateId);
+        if (hasSourceGrip)
+            Assert.Equal(h.Arrangement.ChordTemplates[0], target.FindChordTemplate(shape.TemplateId));
+        h.History.Undo();
+        Assert.Equal(41, shape.TemplateId);
+        Assert.Same(shape, Assert.Single(h.Level.HandShapes));
+        Assert.Single(target.ChordTemplates);
+        Assert.False(h.History.CanUndo);
+    }
+
     private static HandShape Shape(int startBeat, int endBeat) => new()
     {
         TemplateId = 0,

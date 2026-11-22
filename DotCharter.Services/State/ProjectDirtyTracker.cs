@@ -36,9 +36,8 @@ public sealed class ProjectDirtyTracker : IDisposable
     /// <summary>
     ///     A stamp of the project's CURRENT content state, not of its
     ///     dirtiness: equal stamps mean nothing has changed in between, and a
-    ///     different stamp means something has. It is the undo history's node
-    ///     id — the id IS the change stamp, which is what makes
-    ///     <see cref="IsDirty" /> a plain comparison above — folded with a
+    ///     different stamp means something has. It is the undo history's content
+    ///     identity, renewed even when a gesture tick merges into the same node, folded with a
     ///     counter for the out-of-band changes <see cref="MarkDirty" /> records,
     ///     because those move no node.
     ///     <para>
@@ -49,12 +48,12 @@ public sealed class ProjectDirtyTracker : IDisposable
     ///         more identical zip every interval for a dirty-but-idle project.
     ///     </para>
     ///     <para>
-    ///         Comparable only WITHIN one project session: node ids restart per
+    ///         Comparable only WITHIN one project session: content ids restart per
     ///         history, so a holder must forget its stamp when the project is
     ///         replaced.
     ///     </para>
     /// </summary>
-    public long ChangeStamp => ((long)_outOfBandChanges << 32) | (uint)_history.CurrentNodeId;
+    public long ChangeStamp => ((long)_outOfBandChanges << 32) | (uint)_history.CurrentContentId;
 
     /// <summary>Raised when <see cref="IsDirty" /> flips (edge-triggered).</summary>
     public event Action? IsDirtyChanged;
@@ -82,6 +81,49 @@ public sealed class ProjectDirtyTracker : IDisposable
         _baselineNodeId = _history.CurrentNodeId;
         CleanMarked?.Invoke();
         RaiseIfChanged();
+    }
+
+    /// <summary>
+    ///     Where the project stood when a save took its snapshot. Taken on the UI
+    ///     thread WITH the clone (<see cref="CaptureSaveMark" />) and handed back to
+    ///     <see cref="MarkCleanAt" /> after the write: the file holds THAT state, not
+    ///     whatever the live project became while the background write ran.
+    /// </summary>
+    public readonly record struct SaveMark(int NodeId, int OutOfBandChanges);
+
+    /// <summary>
+    ///     Closes the open gesture (a save is a gesture boundary, see
+    ///     <see cref="MarkClean" />) and records the state about to be cloned. Call it
+    ///     on the thread that owns the project, immediately before the snapshot.
+    /// </summary>
+    public SaveMark CaptureSaveMark()
+    {
+        _history.EndGesture();
+        return new SaveMark(_history.CurrentNodeId, _outOfBandChanges);
+    }
+
+    /// <summary>
+    ///     The file now holds the state <paramref name="mark" /> captured. When the
+    ///     project has not moved since, this is exactly <see cref="MarkClean" />.
+    ///     When an edit landed during the write the baseline moves to the SAVED node
+    ///     only, so the project stays dirty (and undoing back to the saved node reads
+    ///     clean); <see cref="CleanMarked" /> is NOT raised, because it tells crash
+    ///     recovery to delete the snapshot that holds those edits.
+    /// </summary>
+    /// <returns>True when the project is clean afterwards.</returns>
+    public bool MarkCleanAt(SaveMark mark)
+    {
+        if (mark.NodeId == _history.CurrentNodeId && mark.OutOfBandChanges == _outOfBandChanges)
+        {
+            MarkClean();
+            return true;
+        }
+
+        // An out-of-band change (audio attach) has no node to baseline to, so it
+        // keeps the sentinel; an ordinary edit leaves the saved node as the baseline.
+        _baselineNodeId = mark.OutOfBandChanges == _outOfBandChanges ? mark.NodeId : NeverAssignedNodeId;
+        RaiseIfChanged();
+        return false;
     }
 
     /// <summary>

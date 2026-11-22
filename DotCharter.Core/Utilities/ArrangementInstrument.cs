@@ -77,7 +77,8 @@ public static class ArrangementInstrument
     ///     The whole octave a tuning reference moves every note, in semitones:
     ///     −12 at A220, 0 otherwise. <see cref="SoundingPitch.MidiFor" /> does NOT
     ///     include it (it is the chart's pitch at its own reference); anything that
-    ///     NAMES a sounding note, or compares one with real audio, adds it — and
+    ///     NAMES a sounding note, or compares one with real audio, uses
+    ///     <see cref="SoundingPitch.SoundingMidiFor" />, which adds it — and
     ///     then measures cents against <see cref="ResidualCents" />, never against
     ///     the raw offset, or the octave is applied twice.
     /// </summary>

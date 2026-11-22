@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspector="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
+             xmlns:panels="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundFindingsReviewView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Findings page's REVIEW card (#751 P5, design D): the selected sounds one at a time, in time order;
+         Previous / Next sound moves the playhead to each and names it. The selection itself stays. -->
+    <StackPanel x:Name="SoundFindingsReview" Spacing="{StaticResource SpaceXs}">
+        <WrapPanel ItemSpacing="{StaticResource SpaceXs}" LineSpacing="{StaticResource SpaceXs}">
+            <Button Grid.Column="0" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc Inspector_Findings_PreviousSound}" AutomationProperties.Name="{localization:Loc Inspector_Findings_PreviousSound}"
+                    Command="{Binding Findings.PreviousSoundCommand}" IsEnabled="{Binding Findings.CanReview}" />
+            <Button Grid.Column="1" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc Inspector_Findings_NextSound}" AutomationProperties.Name="{localization:Loc Inspector_Findings_NextSound}"
+                    Command="{Binding Findings.NextSoundCommand}" IsEnabled="{Binding Findings.CanReview}" />
+        </WrapPanel>
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp" Text="{Binding Findings.ReviewLabel}" TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>

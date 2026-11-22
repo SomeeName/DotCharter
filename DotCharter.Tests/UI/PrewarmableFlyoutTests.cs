@@ -65,7 +65,7 @@ public sealed class PrewarmableFlyoutTests
     /// </summary>
     [Theory]
     // Mix · Tempo · Tools · Tracks · Undo · Redo · Overflow (0.59, P2-16)
-    [InlineData("ToolbarView.axaml", 7)]
+    [InlineData("ToolbarView.axaml", 9)]
     // Session log · profile (0.59: the ⚠/⛔ chips became lint-count buttons
     // that jump to the Issues tab — the recent-messages flyout moved to the
     // one neutral session-log chip)
@@ -134,10 +134,13 @@ public sealed class PrewarmableFlyoutTests
             ["PlayMode/Screens/SongSelectView.axaml"] =
                 "Five more of the same facet funnels on Song Select; the case above.",
             ["Editor/Preview3DView.axaml"] =
-                "The 3D HUD's effects toggles and its missed-notes list. The 3D preview panel is " +
+                "The 3D HUD's effects toggles. The 3D preview panel is " +
                 "DELIBERATELY not prewarmed at all — realizing it builds the Vulkan surface, which must " +
                 "stay an explicit decision (see rendering-perf/startup-and-prewarm.md) — so no mechanism " +
                 "can reach a flyout inside it either.",
+            ["Editor/Preview3DPracticeStripView.axaml"] =
+                "The 3D preview's missed-notes list, moved out of Preview3DView with the practice strip " +
+                "(#591) and still hosted only inside it; the same reason as Preview3DView's.",
             ["../../DotCharter.Tone.UI/Views/PlayMode/AmpFxRigView.axaml"] =
                 "The rig header's DI · re-amp popover (RigReampPanel, ABI v37). PrewarmableFlyout lives in " +
                 "DotCharter.UI's shell and the rig assembly (shared with RigLab) cannot name it; the panel is " +

@@ -43,8 +43,8 @@ public enum FretRule
     /// <summary>
     ///     The same SHAPE anywhere on the neck: frets are compared after
     ///     subtracting the lowest FRETTED fret of the element (or of the whole
-    ///     run). An open string is never transposed — fret 0 only ever matches
-    ///     fret 0, because a capo-less open string cannot move with the hand.
+    ///     run). An open string is never transposed: frets at or below the
+    ///     destination arrangement's capo match only other open strings.
     /// </summary>
     Transposable
 }
@@ -270,8 +270,9 @@ public sealed class MatchPattern
     public PatternRange Range { get; set; } = PatternRange.Anywhere;
 
     /// <summary>
-    ///     Refuse a match whose lowest fret is more than this many frets from the
-    ///     seed's. <c>0</c> is off. Pairs with
+    ///     Refuse a match whose lowest fretted fret (or anchor fret) is more than
+    ///     this many frets from the seed's. All-open shapes have no neck position
+    ///     to compare. <c>0</c> is off. Pairs with
     ///     <see cref="FretRule.Transposable" />, which otherwise reaches the whole
     ///     neck: "the same grip, but only around here".
     /// </summary>
@@ -357,7 +358,7 @@ public sealed class MatchPattern
         if (string.IsNullOrWhiteSpace(copy.Id)) copy.Id = Guid.NewGuid().ToString("N");
         copy.Name = string.IsNullOrWhiteSpace(copy.Name) ? "Pattern" : copy.Name.Trim();
         if (copy.Scope == PatternScope.None) copy.Scope = PatternScope.Sounds;
-        copy.MaxFretDistance = Math.Clamp(copy.MaxFretDistance, 0, 24);
+        copy.MaxFretDistance = Math.Clamp(copy.MaxFretDistance, 0, FretLimits.MaxFret);
         return copy;
     }
 }

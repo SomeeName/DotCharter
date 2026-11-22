@@ -1,6 +1,9 @@
+using System.Windows.Input;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using DotCharter.UI.ViewModels.Editor.Inspector;
+using DotCharter.Tone.UI.Controls;
 
 namespace DotCharter.UI.Views.Editor.Inspector;
 
@@ -24,26 +27,39 @@ public partial class EqModuleView : UserControl
     /// </summary>
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(66);
 
-    /// <summary>Started on attach, STOPPED on detach. That second half is the
+    /// <summary>Started while effectively visible, STOPPED on hide and detach. The detach half is the
     /// rule this pane's siblings are held to (<c>ViewSubscriptionLeakGuardTests</c>):
     /// inspector views are re-created on every float/redock, so a timer that
     /// outlives its view polls the audio engine forever, once per redock.</summary>
     private readonly DispatcherTimer _spectrumTimer;
 
+    private bool _visible;
+
     public EqModuleView()
     {
         InitializeComponent();
 
-        _spectrumTimer = new DispatcherTimer(PollInterval, DispatcherPriority.Background, OnSpectrumTick);
+        _spectrumTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = PollInterval };
+        _spectrumTimer.Tick += OnSpectrumTick;
+        _ = new EffectiveVisibilityWatcher(this, visible =>
+        {
+            _visible = visible;
+            SyncSpectrumTimer();
+        });
+        // the pager arranges a put-away card off stage, still "visible": the Response card's plot is only read on screen
+        EqCards.ShownCardsChanged += SyncSpectrumTimer;
 
         Plot.BandChanged += OnPlotBandChanged;
         Plot.BandSelected += OnPlotBandSelected;
     }
 
-    protected override void OnAttachedToVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    /// <summary>The analyser is polled: the module is on screen AND its Response card is not paged away.</summary>
+    internal bool IsPollingSpectrum => _spectrumTimer.IsEnabled;
+
+    private void SyncSpectrumTimer()
     {
-        base.OnAttachedToVisualTree(e);
-        _spectrumTimer.Start();
+        if (_visible && EqCards.ShownCards.Contains(EqResponseCard)) _spectrumTimer.Start();
+        else _spectrumTimer.Stop();
     }
 
     protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
@@ -62,6 +78,12 @@ public partial class EqModuleView : UserControl
     private void OnPlotBandChanged(object? sender, int index)
     {
         if (DataContext is EqModuleViewModel vm) vm.OnBandEditedFromPlot(index);
+    }
+
+    /// <summary>A typed EQ field commits when it loses focus as on Enter (its Tag carries the same command).</summary>
+    private void CommitField(object? sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox { Tag: ICommand command } && command.CanExecute(null)) command.Execute(null);
     }
 
     private void OnPlotBandSelected(object? sender, int index)

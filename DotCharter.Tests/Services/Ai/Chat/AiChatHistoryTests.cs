@@ -29,7 +29,7 @@ public sealed class AiChatHistoryTests : IDisposable
     public async Task ASavedConversation_ListsAndLoadsWithEveryField()
     {
         var chart = new FakeChart(ProjectIdentity.NewId(), Folder("song"));
-        var history = new AiChatHistory(chart);
+        var history = History(chart);
 
         var conversation = Conversation(chart.ChartId, "Use 1·3 octaves in the verse\nplease")
             .Append(new AiChatTurn(AiChatRole.Assistant, "Proposed 12 changes.", T0.AddMinutes(2),
@@ -64,13 +64,13 @@ public sealed class AiChatHistoryTests : IDisposable
     {
         var path = SaveProject("first", "Song A");
         var state = Open(path);
-        var history = new AiChatHistory(new ProjectStateAiChatChartSource(state));
+        var history = History(new ProjectStateAiChatChartSource(state));
 
         var conversation = history.StartNew("claude-test")!.Append(UserTurn("Mark the sections"));
         Assert.Equal(AiChatStatus.Ok, (await history.SaveAsync(conversation, Ct)).Status);
 
         // Reopen: a fresh state over the same .rscp.
-        var reopened = new AiChatHistory(new ProjectStateAiChatChartSource(Open(path)));
+        var reopened = History(new ProjectStateAiChatChartSource(Open(path)));
         var summary = Assert.Single((await reopened.ListAsync(Ct)).Conversations);
         Assert.Equal(conversation.Id, summary.Id);
         Assert.Equal(AiChatStatus.Ok, (await reopened.LoadAsync(conversation.Id, Ct)).Status);
@@ -84,18 +84,18 @@ public sealed class AiChatHistoryTests : IDisposable
         var start = text.IndexOf("  <dcProjectId>", StringComparison.Ordinal);
         File.WriteAllText(path, text.Remove(start, text.IndexOf('\n', start) - start + 1), new UTF8Encoding(false));
 
-        var history = new AiChatHistory(new ProjectStateAiChatChartSource(Open(path)));
+        var history = History(new ProjectStateAiChatChartSource(Open(path)));
         var conversation = history.StartNew("m")!.Append(UserTurn("hello"));
         Assert.Equal(AiChatStatus.Ok, (await history.SaveAsync(conversation, Ct)).Status);
 
         // Closed without saving, reopened: the same derived id finds the chat.
         var reopenedState = Open(path);
-        var reopened = new AiChatHistory(new ProjectStateAiChatChartSource(reopenedState));
+        var reopened = History(new ProjectStateAiChatChartSource(reopenedState));
         Assert.Single((await reopened.ListAsync(Ct)).Conversations);
 
         // The first save writes that id; the chat is still there after it.
         new RscpChartSerializer().Save(path, reopenedState.ActiveProject!);
-        var afterSave = new AiChatHistory(new ProjectStateAiChatChartSource(Open(path)));
+        var afterSave = History(new ProjectStateAiChatChartSource(Open(path)));
         Assert.Single((await afterSave.ListAsync(Ct)).Conversations);
     }
 
@@ -103,13 +103,13 @@ public sealed class AiChatHistoryTests : IDisposable
     public async Task CopyingTheProjectFolder_CopiesItsChats()
     {
         var path = SaveProject("original", "Song");
-        var history = new AiChatHistory(new ProjectStateAiChatChartSource(Open(path)));
+        var history = History(new ProjectStateAiChatChartSource(Open(path)));
         var conversation = history.StartNew("m")!.Append(UserTurn("keep the hand in 5th position"));
         await history.SaveAsync(conversation, Ct);
 
         var copy = Folder("copy");
         CopyDirectory(Path.GetDirectoryName(path)!, copy);
-        var copied = new AiChatHistory(new ProjectStateAiChatChartSource(Open(Path.Combine(copy, "project.rscp"))));
+        var copied = History(new ProjectStateAiChatChartSource(Open(Path.Combine(copy, "project.rscp"))));
 
         Assert.Equal(conversation.Id, Assert.Single((await copied.ListAsync(Ct)).Conversations).Id);
     }
@@ -123,9 +123,9 @@ public sealed class AiChatHistoryTests : IDisposable
         var a = new FakeChart(ProjectIdentity.NewId(), shared);
         var b = new FakeChart(ProjectIdentity.NewId(), shared);
         var c = new FakeChart(ProjectIdentity.NewId(), Folder("elsewhere"));
-        var historyA = new AiChatHistory(a);
-        var historyB = new AiChatHistory(b);
-        var historyC = new AiChatHistory(c);
+        var historyA = History(a);
+        var historyB = History(b);
+        var historyC = History(c);
 
         var chatA = Conversation(a.ChartId, "A's question");
         var chatB = Conversation(b.ChartId, "B's question");
@@ -143,7 +143,7 @@ public sealed class AiChatHistoryTests : IDisposable
     {
         var folder = Folder("switch");
         var chart = new FakeChart(ProjectIdentity.NewId(), folder);
-        var history = new AiChatHistory(chart);
+        var history = History(chart);
         var first = Conversation(chart.ChartId, "first chart");
         await history.SaveAsync(first, Ct);
 
@@ -164,12 +164,12 @@ public sealed class AiChatHistoryTests : IDisposable
         var a = new FakeChart(ProjectIdentity.NewId(), Folder("a"));
         var b = new FakeChart(ProjectIdentity.NewId(), Folder("b"));
         var chatA = Conversation(a.ChartId, "A's private chat");
-        await new AiChatHistory(a).SaveAsync(chatA, Ct);
+        await History(a).SaveAsync(chatA, Ct);
 
         var stolen = Path.Combine(ChatFolder(b), chatA.Id + ".json");
         Directory.CreateDirectory(ChatFolder(b));
         File.Copy(Path.Combine(ChatFolder(a), chatA.Id + ".json"), stolen);
-        var historyB = new AiChatHistory(b);
+        var historyB = History(b);
 
         var listing = await historyB.ListAsync(Ct);
         Assert.Empty(listing.Conversations);
@@ -190,7 +190,7 @@ public sealed class AiChatHistoryTests : IDisposable
     public async Task ATamperedChartId_IsRefused()
     {
         var chart = new FakeChart(ProjectIdentity.NewId(), Folder("tamper"));
-        var history = new AiChatHistory(chart);
+        var history = History(chart);
         var chat = Conversation(chart.ChartId, "question");
         await history.SaveAsync(chat, Ct);
 
@@ -203,7 +203,7 @@ public sealed class AiChatHistoryTests : IDisposable
     public async Task SavingAnotherChartsConversation_IsRefused_AndWritesNothing()
     {
         var chart = new FakeChart(ProjectIdentity.NewId(), Folder("open"));
-        var history = new AiChatHistory(chart);
+        var history = History(chart);
         var foreign = Conversation(ProjectIdentity.NewId(), "from the chart that was open before");
 
         var result = await history.SaveAsync(foreign, Ct);
@@ -219,23 +219,23 @@ public sealed class AiChatHistoryTests : IDisposable
     [InlineData("")]
     public async Task AnIdThatIsNotIdShaped_IsRefused(string id)
     {
-        var history = new AiChatHistory(new FakeChart(ProjectIdentity.NewId(), Folder("ids")));
+        var history = History(new FakeChart(ProjectIdentity.NewId(), Folder("ids")));
         Assert.Equal(AiChatStatus.InvalidId, (await history.LoadAsync(id, Ct)).Status);
         Assert.Equal(AiChatStatus.InvalidId, (await history.DeleteAsync(id, Ct)).Status);
 
-        var badChart = new AiChatHistory(new FakeChart(id, Folder("ids")));
+        var badChart = History(new FakeChart(id, Folder("ids")));
         Assert.Equal(AiChatStatus.InvalidId, (await badChart.ListAsync(Ct)).Status);
     }
 
     [Fact]
     public async Task NoChart_AndAChartWithoutAFolder_AreRefusals()
     {
-        var none = new AiChatHistory(new FakeChart(ProjectIdentity.NewId(), Folder("none")) { IsOpen = false });
+        var none = History(new FakeChart(ProjectIdentity.NewId(), Folder("none")) { IsOpen = false });
         Assert.Null(none.OpenChartId);
         Assert.Null(none.StartNew("m"));
         Assert.Equal(AiChatStatus.NoChart, (await none.ListAsync(Ct)).Status);
 
-        var unsaved = new AiChatHistory(new FakeChart(ProjectIdentity.NewId(), null));
+        var unsaved = History(new FakeChart(ProjectIdentity.NewId(), null));
         Assert.Equal(AiChatStatus.ChartNotSaved, (await unsaved.ListAsync(Ct)).Status);
         Assert.Equal(AiChatStatus.ChartNotSaved,
             (await unsaved.SaveAsync(unsaved.StartNew("m")!.Append(UserTurn("hi")), Ct)).Status);
@@ -250,7 +250,7 @@ public sealed class AiChatHistoryTests : IDisposable
     public async Task Rename_Persists_AndABlankTitleGoesBackToTheFirstMessage()
     {
         var chart = new FakeChart(ProjectIdentity.NewId(), Folder("rename"));
-        var history = new AiChatHistory(chart);
+        var history = History(chart);
         var chat = Conversation(chart.ChartId, "Fix the solo fingering");
         await history.SaveAsync(chat, Ct);
 
@@ -271,7 +271,7 @@ public sealed class AiChatHistoryTests : IDisposable
     public async Task Delete_RemovesTheConversation()
     {
         var chart = new FakeChart(ProjectIdentity.NewId(), Folder("delete"));
-        var history = new AiChatHistory(chart);
+        var history = History(chart);
         var keep = Conversation(chart.ChartId, "keep");
         var drop = Conversation(chart.ChartId, "drop");
         await history.SaveAsync(keep, Ct);
@@ -288,7 +288,7 @@ public sealed class AiChatHistoryTests : IDisposable
     public async Task TheList_IsNewestFirst()
     {
         var chart = new FakeChart(ProjectIdentity.NewId(), Folder("order"));
-        var history = new AiChatHistory(chart);
+        var history = History(chart);
         var older = Conversation(chart.ChartId, "older", T0);
         var newer = Conversation(chart.ChartId, "newer", T0.AddHours(1));
         await history.SaveAsync(older, Ct);
@@ -304,7 +304,7 @@ public sealed class AiChatHistoryTests : IDisposable
     public async Task ACorruptFile_IsRefused_AndASaveOverItKeepsItsBytesAside()
     {
         var chart = new FakeChart(ProjectIdentity.NewId(), Folder("corrupt"));
-        var history = new AiChatHistory(chart);
+        var history = History(chart);
         var chat = Conversation(chart.ChartId, "q");
         await history.SaveAsync(chat, Ct);
         var file = Path.Combine(ChatFolder(chart), chat.Id + ".json");
@@ -327,7 +327,7 @@ public sealed class AiChatHistoryTests : IDisposable
     public async Task AFileThatIsNotThisBuildsConversation_IsRefused(string field, string value, AiChatStatus expected)
     {
         var chart = new FakeChart(ProjectIdentity.NewId(), Folder("fields"));
-        var history = new AiChatHistory(chart);
+        var history = History(chart);
         var chat = Conversation(chart.ChartId, "q");
         await history.SaveAsync(chat, Ct);
 
@@ -342,7 +342,7 @@ public sealed class AiChatHistoryTests : IDisposable
     public async Task AnUnknownRole_MakesTheFileCorrupt()
     {
         var chart = new FakeChart(ProjectIdentity.NewId(), Folder("role"));
-        var history = new AiChatHistory(chart);
+        var history = History(chart);
         var chat = Conversation(chart.ChartId, "q");
         await history.SaveAsync(chat, Ct);
 
@@ -356,7 +356,7 @@ public sealed class AiChatHistoryTests : IDisposable
     public async Task AnUnreadableFile_IsNeverWrittenOver()
     {
         var chart = new FakeChart(ProjectIdentity.NewId(), Folder("locked"));
-        var history = new AiChatHistory(chart);
+        var history = History(chart);
         var chat = Conversation(chart.ChartId, "q");
         await history.SaveAsync(chat, Ct);
         var file = Path.Combine(ChatFolder(chart), chat.Id + ".json");
@@ -376,7 +376,7 @@ public sealed class AiChatHistoryTests : IDisposable
     public async Task AConversationOverTheSizeBound_IsNotWritten_AndAnOversizeFileIsNotRead()
     {
         var chart = new FakeChart(ProjectIdentity.NewId(), Folder("size"));
-        var history = new AiChatHistory(chart);
+        var history = History(chart);
         var huge = Conversation(chart.ChartId, new string('x', AiChatLimits.MaxConversationBytes));
 
         Assert.Equal(AiChatStatus.TooLarge, (await history.SaveAsync(huge, Ct)).Status);
@@ -395,7 +395,7 @@ public sealed class AiChatHistoryTests : IDisposable
     public async Task ANewConversationPastTheCountBound_IsRefused_ButAnExistingOneStillSaves()
     {
         var chart = new FakeChart(ProjectIdentity.NewId(), Folder("count"));
-        var history = new AiChatHistory(chart);
+        var history = History(chart);
         var first = Conversation(chart.ChartId, "first");
         await history.SaveAsync(first, Ct);
 
@@ -445,6 +445,15 @@ public sealed class AiChatHistoryTests : IDisposable
 
     // ---- helpers ----------------------------------------------------------------
 
+    private AiChatHistory History(IAiChatChartSource chart) => new(chart, null, null, RecycleConversation);
+
+    private void RecycleConversation(string path)
+    {
+        var archive = Directory.CreateDirectory(Path.Combine(_root, ".recycled"));
+        if (OperatingSystem.IsWindows()) archive.Attributes |= FileAttributes.Hidden;
+        File.Move(path, Path.Combine(archive.FullName, Guid.NewGuid().ToString("N") + ".json"));
+    }
+
     private string Folder(string name)
     {
         var path = Path.Combine(_root, name);
@@ -452,7 +461,7 @@ public sealed class AiChatHistoryTests : IDisposable
         return path;
     }
 
-    private static string ChatFolder(FakeChart chart) => Path.Combine(chart.ProjectFolder!, "ai-chats", chart.ChartId);
+    private static string ChatFolder(FakeChart chart) => Path.Combine(chart.ProjectFolder!, ".dotcharter", "ai-chats", chart.ChartId);
 
     private static AiChatTurn UserTurn(string text) => new(AiChatRole.User, text, T0.AddMinutes(1));
 

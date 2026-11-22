@@ -110,7 +110,7 @@ public sealed class IsolatedAppTeardownTests : IDisposable
         var code = SourceText.StripComments(File.ReadAllText(
             Path.Combine(TestPaths.RepoRoot(), "DotCharter.Tests", "Perf", "HeadlessAppFixture.cs")));
 
-        var dispatches = Regex.Matches(code, @"Get\(\)\.Dispatch\(").Count;
+        var dispatches = Regex.Matches(code, @"(?:Get\(\)|GetForDispatch\([^)]*\))\.Dispatch\(").Count;
         var released = Regex.Matches(code,
             @"finally\s*\{\s*DrainAppBackgroundWork\(\);\s*ReleaseIsolatedApp\(\);\s*\}").Count;
 

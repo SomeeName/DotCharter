@@ -80,7 +80,33 @@ function Read-HeadlessTestListing([string]$LogPath) {
 #>
 function Get-HeadlessDiscovery([string[]]$DotnetTestArgs, [string[]]$Filter, [string]$LogPath) {
     & dotnet @($DotnetTestArgs + @('--list-tests') + $Filter) *> $LogPath
+    $code = $LASTEXITCODE
+    # A listing that failed part-way still prints the classes it reached (#611):
+    # accepting it would shrink both the run plan and the coverage check.
+    if ($code -ne 0) {
+        $tail = @(Get-Content -LiteralPath $LogPath -ErrorAction SilentlyContinue | Select-Object -Last 15) -join "`n"
+        throw "Test discovery exited $code, so its class list may be partial and is not used. Log kept: $LogPath`n$tail"
+    }
     return Read-HeadlessTestListing $LogPath
+}
+
+<#
+    The process start info for one `dotnet` child of a headless run (the CI
+    script's retry and isolated runs): no shell, no console window of its own
+    (#611; a local run must not pop one), both streams redirected. The
+    arguments are one command line (ConvertTo-CommandLineArgument), which
+    Windows PowerShell 5.1's .NET Framework needs: it has no ArgumentList.
+#>
+function New-HeadlessProcessStartInfo([string]$FileName, [string[]]$Arguments, [string]$WorkingDirectory) {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $FileName
+    $psi.Arguments = (@($Arguments) | ForEach-Object { ConvertTo-CommandLineArgument $_ }) -join ' '
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    if ($WorkingDirectory) { $psi.WorkingDirectory = $WorkingDirectory }
+    return $psi
 }
 
 # class -> seconds, from the committed weights file. Missing file = no weights.
@@ -494,6 +520,137 @@ function Get-HeadlessRaceRerunDecision([object[]]$Failures, [string[]]$Absent) {
 }
 
 <#
+    GRADING WHAT A PROCESS LEFT BEHIND (#611), shared by tools/ci/Invoke-HeadlessUiCi.ps1
+    and tools/release/New-Release.ps1 (Invoke-HeadlessUiPass) so the two cannot drift;
+    pinned by Infrastructure/HeadlessGradingTests.
+
+    A testhost can exit non-zero after writing a TRX that holds only passes (it
+    crashed after its last result, or the session aborted); the TRX alone then reads
+    green. Test-HeadlessExitAccepted says whether an exit code is EXPLAINED by the
+    results the process wrote, with Microsoft.Testing.Platform's codes: 0 (every test
+    passed) yes; 2 (a test failed) only when the results hold a failure, which is
+    graded; 8 (zero tests ran) only when results were written and none failed (all
+    skipped). Anything else (3 aborted, 7 the host crashed, 124 our deadlock
+    detector, no exit code) means the results are incomplete.
+#>
+function Test-HeadlessExitAccepted($ExitCode, [int]$Total, [int]$Failed) {
+    if ($null -eq $ExitCode -or "$ExitCode" -eq '') { return $false }
+    $code = [int]$ExitCode
+    if ($code -eq 0) { return $true }
+    if ($code -eq 2) { return $Failed -gt 0 }
+    if ($code -eq 8) { return $Total -gt 0 -and $Failed -eq 0 }
+    return $false
+}
+
+# Total and Failed of a TRX's counters; 0 and 0 for a missing file.
+function Read-HeadlessTrxCounts([string]$TrxPath) {
+    if (-not $TrxPath -or -not (Test-Path -LiteralPath $TrxPath)) { return [pscustomobject]@{ Total = 0; Failed = 0 } }
+    $ns = @{ t = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010' }
+    [xml]$doc = Get-Content -LiteralPath $TrxPath -Raw
+    $counters = (Select-Xml -Xml $doc -XPath '//t:ResultSummary/t:Counters' -Namespace $ns | Select-Object -First 1)
+    if (-not $counters) { return [pscustomobject]@{ Total = 0; Failed = 0 } }
+    return [pscustomobject]@{ Total = [int]$counters.Node.total; Failed = [int]$counters.Node.failed }
+}
+
+<#
+    The classes of a first run whose process did not end cleanly: every class of
+    a shard (Start-TestShards / Wait-TestShards: Classes, ExitCode, TrxPath) whose
+    exit its own TRX does not explain. They are re-run in the fresh retry process
+    like an absent class, and each must report there. A run with no Shards (one
+    process) names all of $Discovered when its ExitCode is not explained.
+#>
+function Get-HeadlessIncompleteClasses($Run, [string[]]$Discovered) {
+    $classes = @()
+    if ($Run.PSObject.Properties['Shards'] -and $null -ne $Run.Shards) {
+        foreach ($shard in @($Run.Shards | Where-Object { $_ })) {
+            $counts = Read-HeadlessTrxCounts ([string]$shard.TrxPath)
+            if (-not (Test-HeadlessExitAccepted $shard.ExitCode $counts.Total $counts.Failed)) { $classes += @($shard.Classes) }
+        }
+    }
+    elseif ($Run.PSObject.Properties['ExitCode']) {
+        if (-not (Test-HeadlessExitAccepted $Run.ExitCode $Run.Total $Run.Failed)) { $classes += @($Discovered) }
+    }
+    return [string[]]@($classes | Where-Object { $_ } | Sort-Object -Unique)
+}
+
+# One blocking entry in the shape of a failure that the isolated re-run leaves alone (Name = Class, no Frame).
+function New-HeadlessBlockingEntry([string]$Name, [string]$Message) {
+    return [pscustomobject]@{ Name = $Name; Class = $Name; Message = $Message; Frame = ''; IsHarness = $false }
+}
+
+<#
+    The retry's grade. $Retry: the retry run (Failures, RanClasses, ExitCode, Total,
+    Failed). $Harness: the first run's harness-fault failures. $MustReport: the
+    classes that reported nothing usable in the first run (absent, or from a process
+    that did not end cleanly). Returns:
+      Product    - the retry's failures without a needle, one entry per MustReport
+                   class still silent, and one when the retry's own exit is not
+                   explained by its results;
+      Unverified - the names of cases that hit a harness fault again, and of first-run
+                   harness cases that produced neither a pass nor a failure in the retry.
+#>
+function Resolve-HeadlessRetry($Retry, [object[]]$Harness, [string[]]$MustReport) {
+    $ran = [string[]]@($Retry.RanClasses)
+    $product = @($Retry.Failures | Where-Object { $_ -and -not $_.IsHarness })
+    $unverified = @($Retry.Failures | Where-Object { $_ -and $_.IsHarness } | ForEach-Object { [string]$_.Name })
+    $passed = [string[]]@($Retry.PassedTests)
+    $failed = [string[]]@($Retry.Failures | Where-Object { $_ } | ForEach-Object { [string]$_.Name })
+    # Another case reporting in the same class says nothing about the original case.
+    $unverified += @($Harness | Where-Object { $_ -and $passed -notcontains [string]$_.Name -and $failed -notcontains [string]$_.Name } |
+        ForEach-Object { [string]$_.Name })
+    foreach ($class in @($MustReport | Where-Object { $_ -and $ran -notcontains $_ } | Sort-Object -Unique)) {
+        $product += New-HeadlessBlockingEntry $class ('DISCOVERED but never graded: nothing usable from the full run, and no result in its own retry process. ' +
+            'Nothing in this class was graded.')
+    }
+    if (-not (Test-HeadlessExitAccepted $Retry.ExitCode $Retry.Total $Retry.Failed)) {
+        $product += New-HeadlessBlockingEntry "retry process (exit $($Retry.ExitCode))" ('The retry process exited ' +
+            "$($Retry.ExitCode), which its results do not explain: they may be incomplete.")
+    }
+    return [pscustomobject]@{ Product = @($product); Unverified = [string[]]@($unverified | Sort-Object -Unique) }
+}
+
+# The blocking failures that go to the isolated re-run: those with a frame in our code
+# or a case name (not the class-level entries New-HeadlessBlockingEntry makes).
+function Get-HeadlessIsolationCandidates([object[]]$Product) {
+    return @($Product | Where-Object { $_ -and ($_.Frame -ne '' -or $_.Class -ne $_.Name) })
+}
+
+<#
+    The isolated re-run's grade. $Product: the blocking failures so far; $Isolated:
+    the isolated run (Failures, PassedTests, RanClasses, ExitCode, Total, Failed).
+    A candidate is ORDER-DEPENDENT (dropped from the blocking set, reported) only
+    when the isolated process ended cleanly AND that very case passed in it. Every
+    OTHER case that fails in isolation joins the blocking set, even one that passed
+    in the full run (it depends on state an earlier class left), and one that hit a
+    harness fault there is unverified. An exit the isolated results do not explain
+    clears nothing and blocks. Returns Product, OrderDependent and Unverified.
+#>
+function Resolve-HeadlessIsolatedRun([object[]]$Product, $Isolated) {
+    $product = @($Product | Where-Object { $_ })
+    $accepted = Test-HeadlessExitAccepted $Isolated.ExitCode $Isolated.Total $Isolated.Failed
+    $failedNames = [string[]]@($Isolated.Failures | Where-Object { $_ } | ForEach-Object { [string]$_.Name })
+    $passed = [string[]]@($Isolated.PassedTests)
+    $orderDependent = @()
+    if ($accepted) {
+        $orderDependent = @(Get-HeadlessIsolationCandidates $product | Where-Object {
+                $passed -contains [string]$_.Name -and $failedNames -notcontains [string]$_.Name })
+    }
+    $cleared = [string[]]@($orderDependent | ForEach-Object { [string]$_.Name })
+    $known = [string[]]@($product | ForEach-Object { [string]$_.Name })
+    $result = @($product | Where-Object { $cleared -notcontains [string]$_.Name })
+    $unverified = @()
+    foreach ($f in @($Isolated.Failures | Where-Object { $_ })) {
+        if ($known -contains [string]$f.Name) { continue }
+        if ($f.IsHarness) { $unverified += [string]$f.Name } else { $result += $f }
+    }
+    if (-not $accepted) {
+        $result += New-HeadlessBlockingEntry "isolated process (exit $($Isolated.ExitCode))" ('The isolated re-run exited ' +
+            "$($Isolated.ExitCode), which its results do not explain: no failure is cleared by it.")
+    }
+    return [pscustomobject]@{ Product = @($result); OrderDependent = @($orderDependent); Unverified = [string[]]@($unverified) }
+}
+
+<#
     FAILURE EVIDENCE (#55). A flaky headless case that fails once and leaves no
     message cannot be diagnosed, so every failed run keeps what it printed.
 
@@ -588,4 +745,6 @@ Export-ModuleMember -Function Get-HeadlessClassName, Read-HeadlessTestListing, G
     Read-HeadlessShardWeights, New-HeadlessShardPlan, Invoke-HeadlessShards, Start-TestShards, Wait-TestShards, Merge-HeadlessTrx, `
     Write-HeadlessShardWeights, Stop-ProcessTree, ConvertTo-CommandLineArgument, `
     Get-HeadlessHarnessFaults, Test-HeadlessHarnessFault, Read-HeadlessTrxFailures, Get-HeadlessRaceRerunDecision, `
+    New-HeadlessProcessStartInfo, Test-HeadlessExitAccepted, Read-HeadlessTrxCounts, Get-HeadlessIncompleteClasses, `
+    New-HeadlessBlockingEntry, Resolve-HeadlessRetry, Get-HeadlessIsolationCandidates, Resolve-HeadlessIsolatedRun, `
     Get-HeadlessFailureEvidenceRoot, Remove-OldHeadlessFailureFolders, Save-HeadlessFailureEvidence

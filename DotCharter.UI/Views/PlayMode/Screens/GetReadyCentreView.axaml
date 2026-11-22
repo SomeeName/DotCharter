@@ -227,11 +227,11 @@
                                         ToolTip.Tip="{Binding AccessibleName}"
                                         Command="{Binding $parent[ItemsControl].((vm:PlayModeViewModel)DataContext).EditSongToneCommand}"
                                         CommandParameter="{Binding}">
-                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
-                                        <TextBlock Text="{Binding Name}" />
-                                        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Warn" IsVisible="{Binding IsEdited}"
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono Warn" IsVisible="{Binding IsEdited}"
                                                    Text="{localization:Loc PlayMode_GetReady_Tones_Edited}" />
-                                    </StackPanel>
+                                    </Grid>
                                 </Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

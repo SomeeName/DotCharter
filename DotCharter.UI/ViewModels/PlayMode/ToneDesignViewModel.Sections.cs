@@ -32,9 +32,10 @@ namespace DotCharter.UI.ViewModels.PlayMode;
 ///         screen at all.
 ///     </para>
 /// </summary>
-public sealed partial class ToneDesignViewModel : IToneSectionHost
+public sealed partial class ToneDesignViewModel : IToneSectionHost, IDisposable
 {
     private ToneSectionsViewModel? _sections;
+    private ToneSectionOwnerSubscription? _sectionOwnerSubscription;
 
     /// <summary>
     ///     The section list. Built on first read rather than in the constructor:
@@ -69,13 +70,25 @@ public sealed partial class ToneDesignViewModel : IToneSectionHost
     /// <param name="saveTone">Overrides where a section's tone is saved. Omitted,
     /// it is the drawer's own "Save as tone" path, which is what a host should
     /// want.</param>
+    /// <param name="resultOwner">The active arrangement; a set matched for another
+    /// owner is dropped, never applied. The project is supplied separately.
+    /// Omitted, every match has the same owner.</param>
+    /// <param name="project">The active project; its persisted ID survives saves and path normalization.</param>
+    /// <param name="ownerChanges">The host's project, arrangement and audio notifications.</param>
+    /// <param name="songAudio">Logical song audio; defaults to the project's reference in ownerChanges.</param>
+    /// <param name="audioRevision">Committed song-audio revision; defaults to ownerChanges.</param>
     public void ConfigureSections(
         Func<IToneSectionProposer?> proposer,
         Func<IToneSetMatcher?> setMatcher,
         Func<IToneNarrator?>? narrator = null,
         Func<double>? playheadMs = null,
         Func<IReadOnlyList<ToneSetEntry>, int?>? placeToneChanges = null,
-        Func<string, DspToneCategory, string, DcRigPreset, DspTonePreset>? saveTone = null)
+        Func<string, DspToneCategory, string, DcRigPreset, DspTonePreset>? saveTone = null,
+        Func<object?>? resultOwner = null,
+        Func<object?>? project = null,
+        ProjectState? ownerChanges = null,
+        Func<string?>? songAudio = null,
+        Func<long>? audioRevision = null)
     {
         _sectionSaveTone = saveTone;
         Sections.Configure(
@@ -86,7 +99,16 @@ public sealed partial class ToneDesignViewModel : IToneSectionHost
             // the playhead is the transport's business and asking a host to wire
             // it twice is how the two drift apart.
             playheadMs ?? (() => _audio()?.CurrentTimeMs ?? 0.0),
-            placeToneChanges);
+            placeToneChanges,
+            resultOwner,
+            project,
+            songAudio ?? (ownerChanges is null ? null : () => ownerChanges.SongAudioPath),
+            audioRevision ?? (ownerChanges is null ? null : () => ownerChanges.SongAudioRevision));
+
+        _sectionOwnerSubscription?.Dispose();
+        _sectionOwnerSubscription = ownerChanges is null
+            ? null
+            : new ToneSectionOwnerSubscription(ownerChanges, () => Sections.RefreshOwner());
 
         OnPropertyChanged(nameof(IsSectionsAvailable));
     }
@@ -108,8 +130,29 @@ public sealed partial class ToneDesignViewModel : IToneSectionHost
     (string? Title, string? Artist) IToneSectionHost.SongContext() =>
         SongContextProvider?.Invoke() ?? (null, null);
 
-    void IToneSectionHost.PublishResult(ToneDesignResult result, string chainSummary) =>
-        Result = new ToneDesignResultViewModel(result, chainSummary, Loc);
+    void IToneSectionHost.PublishResult(ToneDesignResult result, string chainSummary)
+    {
+        var epoch = Sections.OwnerEpoch;
+        Result = new ToneDesignResultViewModel(result, chainSummary, Loc, () => Sections.IsCurrent(epoch));
+    }
+
+    void IToneSectionHost.ClearResult()
+    {
+        if (Result is { } result && !result.ValidityCheck()) Result = null;
+    }
+
+    protected override bool CanUseResult()
+    {
+        _sections?.RefreshOwner();
+        return base.CanUseResult();
+    }
+
+    public void Dispose()
+    {
+        _sectionOwnerSubscription?.Dispose();
+        _sectionOwnerSubscription = null;
+        _sections?.CancelCommand.Execute(null);
+    }
 
     DspTonePreset IToneSectionHost.SaveTone(
         string name, DspToneCategory category, string description, DcRigPreset rig) =>

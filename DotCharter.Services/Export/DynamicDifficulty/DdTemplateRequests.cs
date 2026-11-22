@@ -51,6 +51,86 @@ internal sealed class DdTemplateRequestApplier
 
     public DdTemplateRequestApplier(List<DdChordTemplate> templates) => _templates = templates;
 
+    /// <summary>
+    ///     One level's requests, the hand shapes' first (<c>templateRequests1 |> Seq.append
+    ///     templateRequests2</c>). The one decision that is NOT DLC Builder's: the F#
+    ///     narrows a hand shape and the chords under it independently, each by a count from
+    ///     one end of its own template. That agreed for a chord with muted strings only
+    ///     because the cleanup had cut the template both shared; now such a chord sits on
+    ///     its own reduced grip (<see cref="DdChordTemplate.ReducedFrom" />). A shape whose
+    ///     narrowed grip would lack a string that chord sounds at this level takes its full
+    ///     grip cut to exactly the strings sounded under it instead. Every other shape gets
+    ///     the F# request unchanged.
+    /// </summary>
+    public void ApplyLevel(IReadOnlyList<(DdHandShape Shape, DdTemplateRequest? Request)> handShapes,
+        IReadOnlyList<(DdEntity Entity, DdTemplateRequest? Request)> chosen)
+    {
+        foreach (var (shape, request) in handShapes)
+        {
+            if (request == null) continue;
+            var full = _templates[request.OriginalId];
+            var narrowed = RemoveNotes(DdTemplates.NoteCount(full) - request.NoteCount, request.FromHighestNote, full).Frets;
+            var sounded = new HashSet<int>();
+            var reducedChordLosesAString = false;
+            foreach (var (entity, chordRequest) in chosen)
+            {
+                if (entity.Time < shape.StartTime || entity.Time >= shape.EndTime) continue;
+                var strings = SoundedStrings(entity, chordRequest).Where(s => full.Frets[s] >= 0).ToList();
+                sounded.UnionWith(strings);
+                reducedChordLosesAString |= entity.Chord is { } chord
+                                            && _templates[chordRequest?.OriginalId ?? chord.ChordId].ReducedFrom == full
+                                            && strings.Exists(s => narrowed[s] < 0);
+            }
+
+            if (reducedChordLosesAString)
+                shape.ChordId = GripOn(full, sounded);
+            else
+                Apply(request);
+        }
+
+        foreach (var (_, request) in chosen)
+        {
+            if (request != null) Apply(request);
+        }
+    }
+
+    /// <summary>The strings a chosen note or chord sounds, the chord's read before its
+    /// own request is applied.</summary>
+    private IEnumerable<int> SoundedStrings(DdEntity entity, DdTemplateRequest? request)
+    {
+        if (entity.Note is { } note) return [note.String];
+        var chord = entity.Chord!;
+        if (chord.HasChordNotes) return chord.ChordNotes!.Select(chordNote => chordNote.String);
+        var template = _templates[request?.OriginalId ?? chord.ChordId];
+        var frets = request == null
+            ? template.Frets
+            : RemoveNotes(DdTemplates.NoteCount(template) - request.NoteCount, request.FromHighestNote, template).Frets;
+        return Enumerable.Range(0, frets.Length).Where(s => frets[s] >= 0);
+    }
+
+    /// <summary>The template holding <paramref name="full" /> on exactly
+    /// <paramref name="strings" />: the muted-string cleanup's own reduced grip when it
+    /// minted that one, else a new one.</summary>
+    private int GripOn(DdChordTemplate full, HashSet<int> strings)
+    {
+        var fingers = (int[])full.Fingers.Clone();
+        var frets = (int[])full.Frets.Clone();
+        for (var s = 0; s < frets.Length; s++)
+        {
+            if (strings.Contains(s)) continue;
+            fingers[s] = -1;
+            frets[s] = -1;
+        }
+
+        var existing = _templates.FindIndex(x =>
+            x.ReducedFrom == full
+            && x.Frets.AsSpan().SequenceEqual(frets)
+            && x.Fingers.AsSpan().SequenceEqual(fingers));
+        if (existing != -1) return existing;
+        _templates.Add(new DdChordTemplate(full.Name, full.DisplayName, fingers, frets) { Source = full.Source, ReducedFrom = full });
+        return _templates.Count - 1;
+    }
+
     public void Apply(DdTemplateRequest request)
     {
         if (!_templateMap.TryGetValue((request.OriginalId, request.NoteCount), out var chordId))
@@ -100,7 +180,7 @@ internal sealed class DdTemplateRequestApplier
             && x.Frets.AsSpan().SequenceEqual(frets)
             && x.Fingers.AsSpan().SequenceEqual(fingers));
         if (existing != -1) return existing;
-        _templates.Add(new DdChordTemplate(template.Name, template.DisplayName, fingers, frets));
+        _templates.Add(new DdChordTemplate(template.Name, template.DisplayName, fingers, frets) { ReducedFrom = template.ReducedFrom });
         return _templates.Count - 1;
     }
 }

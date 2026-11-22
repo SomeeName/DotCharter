@@ -62,7 +62,7 @@ public static class SoundingPitch
     ///     <paramref name="stringIndex" />, or <c>null</c> when that string
     ///     cannot reach the pitch — below its open note, or past the 24th fret.
     /// </summary>
-    public static int? FretForPitch(Arrangement? arrangement, int stringIndex, int midi, int maxFret = 24)
+    public static int? FretForPitch(Arrangement? arrangement, int stringIndex, int midi, int maxFret = FretLimits.MaxFret)
     {
         if (arrangement == null) return null;
         if (stringIndex < 0 || stringIndex >= StringRange(arrangement)) return null;
@@ -104,7 +104,7 @@ public static class SoundingPitch
     ///         un-capo'd chart changes behaviour.
     ///     </para>
     /// </summary>
-    public static int SnapToNeck(int fret, int capo, int direction = 0, int maxFret = 24)
+    public static int SnapToNeck(int fret, int capo, int direction = 0, int maxFret = FretLimits.MaxFret)
     {
         var clamped = Math.Clamp(fret, 0, maxFret);
         if (capo <= 0 || clamped == 0 || clamped >= capo) return clamped;
@@ -128,8 +128,29 @@ public static class SoundingPitch
     ///     B of such a bass reads B0, not the guitar's B1.
     /// </summary>
     public static string? NameFor(Arrangement? arrangement, int stringIndex, int fret) =>
+        SoundingMidiFor(arrangement, stringIndex, fret) is { } midi ? TuningDisplayNames.Pitch(midi, arrangement!, stringIndex) : null;
+
+    /// <summary>
+    ///     The MIDI note the LISTENER hears: <see cref="MidiFor" /> plus the whole octave a
+    ///     tuning reference moves every note (<see cref="ArrangementInstrument.ReferenceOctaveSemitones" />,
+    ///     A220 = −12). THE answer for anything that names a note or compares it with real
+    ///     audio (live judging, the audio lint, note names).
+    ///     <c>null</c> exactly when <see cref="MidiFor" /> is: a string the rule does not price,
+    ///     or a non-zero fret behind the capo (malformed, inspector <c>L01</c>) — the one
+    ///     below-the-capo rule, shared by every consumer.
+    /// </summary>
+    public static int? SoundingMidiFor(Arrangement? arrangement, int stringIndex, int fret) =>
         MidiFor(arrangement, stringIndex, fret) is { } midi
-            ? NameFor(midi + ArrangementInstrument.ReferenceOctaveSemitones(arrangement!.CentOffset))
+            ? midi + ArrangementInstrument.ReferenceOctaveSemitones(arrangement!.CentOffset)
+            : null;
+
+    /// <summary>
+    ///     The sounding (<see cref="SoundingMidiFor" />) pitch of an OPEN string before any
+    ///     capo, or <c>null</c> for a string the rule does not price.
+    /// </summary>
+    public static int? OpenSoundingMidi(Arrangement? arrangement, int stringIndex) =>
+        OpenStringMidi(arrangement, stringIndex) is { } open
+            ? open + ArrangementInstrument.ReferenceOctaveSemitones(arrangement!.CentOffset)
             : null;
 
     /// <summary>

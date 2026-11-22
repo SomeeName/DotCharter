@@ -14,14 +14,7 @@ internal static class PowerChordFrets
     ///     <see cref="SoundingSemitone" />.
     /// </summary>
     private static int GetStringSemitone(Arrangement arrangement, int stringIndex)
-    {
-        // Relative to E2, lowest string first; a 7-string's string 0 is B1.
-        var baseSemitone = StandardOpenStrings.SemitonesAboveLowE(arrangement.StringCount, stringIndex);
-        var offset = stringIndex >= 0 && stringIndex < arrangement.TuningPitches.Count
-            ? arrangement.TuningPitches[stringIndex].Step
-            : 0;
-        return baseSemitone + offset;
-    }
+        => SoundingPitch.OpenStringMidi(arrangement, stringIndex) ?? 0;
 
     /// <summary>
     ///     What a fret on a string actually SOUNDS. Frets are absolute on the
@@ -59,7 +52,7 @@ internal static class PowerChordFrets
     {
         if (stringIndex < 0 || fret < 0) return null;
         var stringCount = arrangement.StringCount;
-        var maxFret = 24;
+        var maxFret = FretLimits.MaxFret;
         var capo = Math.Max(0, arrangement.Capo);
 
         var rootSemitone = SoundingSemitone(arrangement, stringIndex, fret);

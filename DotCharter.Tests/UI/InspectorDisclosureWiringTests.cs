@@ -33,7 +33,6 @@ public sealed class InspectorDisclosureWiringTests
     public void EveryDisclosureBodyNamesAToggleThatExists()
     {
         var offenders = new List<string>();
-        var checkedBodies = 0;
 
         foreach (var file in InspectorViews())
         {
@@ -46,19 +45,16 @@ public sealed class InspectorDisclosureWiringTests
 
             foreach (Match body in Regex.Matches(markup, @"IsVisible=""\{Binding #(\w+)\.IsChecked\}"""))
             {
-                checkedBodies++;
                 var name = body.Groups[1].Value;
                 if (!declared.Contains(name))
                     offenders.Add($"{Path.GetFileName(file)}: no element named '{name}'");
             }
         }
 
-        // If this collapses the lint has stopped looking at anything. Since #601 the
-        // element-name gates are the section rails' (a body and an accent bar per
-        // entry: Mixer 5, Song 4, Lyrics 3) plus the Placement section's "More". A
-        // floor rather than an equality so adding a section is free.
-        Assert.True(checkedBodies >= 12,
-            $"expected the inspector's disclosure bodies to be found, saw {checkedBodies}");
+        // Since #751 no inspector tab gates a body on an element name: the Song and Lyrics
+        // tabs are design D's cards and the Mixer's sections sit behind its section strip
+        // (view-model bound), which took the last rail away. The scan stays as the guard for
+        // the next element-name gate.
         Assert.True(offenders.Count == 0,
             "these disclosure bodies bind an element name nothing declares, so they are " +
             "invisible forever: " + string.Join(", ", offenders));
@@ -103,9 +99,9 @@ public sealed class InspectorDisclosureWiringTests
     ///     while collapsed.
     /// </summary>
     [Theory]
-    [InlineData("MixerInspectorView.axaml")]
-    [InlineData("SongInspectorView.axaml")]
-    public void TheReworkedTabsUseNoExpander(string fileName)
+    [InlineData("MixerInspectorView.axaml", "MixerSectionEntries\"")]
+    [InlineData("SongInspectorView.axaml", "<ctl:ColumnFlowPanel")]
+    public void TheReworkedTabsUseNoExpander(string fileName, string sections)
     {
         var path = UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor", "Inspector", fileName));
 
@@ -114,7 +110,9 @@ public sealed class InspectorDisclosureWiringTests
         var markup = Regex.Replace(UiSourceTree.ReadAllText(path), @"<!--.*?-->", string.Empty, RegexOptions.Singleline);
 
         Assert.DoesNotContain("<Expander", markup, StringComparison.Ordinal);
-        // Since #601 the sections are behind the tab's rail (InspectorSectionRail), not disclosures.
-        Assert.Contains("RailEntries\"", markup, StringComparison.Ordinal);
+        // Since #601 the sections were behind a section rail, not disclosures;
+        // since #751 the Song tab's are design D's cards (ColumnFlowPanel) and the Mixer's sit
+        // behind its section strip.
+        Assert.Contains(sections, markup, StringComparison.Ordinal);
     }
 }

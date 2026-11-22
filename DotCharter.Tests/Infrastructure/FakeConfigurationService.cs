@@ -17,6 +17,19 @@ public sealed class FakeConfigurationService : IConfigurationService
         RecordWrite();
     }
 
+    /// <summary>Updates still land in memory, but <see cref="UpdateAndWrite" /> answers
+    /// "not written", as a failed disk write does.</summary>
+    public bool FailWrites { get; set; }
+
+    public int UpdateAndWriteCount { get; private set; }
+
+    public bool UpdateAndWrite(Action<AppConfig> mutate)
+    {
+        UpdateAndWriteCount++;
+        Update(mutate);
+        return !FailWrites;
+    }
+
     public void Update(Action<AppConfig> mutate)
     {
         ArgumentNullException.ThrowIfNull(mutate);

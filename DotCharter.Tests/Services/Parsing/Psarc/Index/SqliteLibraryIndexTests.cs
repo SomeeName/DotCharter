@@ -504,6 +504,41 @@ public sealed class SqliteLibraryIndexTests : IDisposable
         return value is null or DBNull ? null : Convert.ToDouble(value);
     }
 
+    /// <summary>
+    ///     #386: the scan skips a directory it cannot read, so "absent from the list" is not
+    ///     "deleted". A file still on disk (denied folder, dropped share) keeps its rows and
+    ///     rating; only a file that is really gone is purged.
+    /// </summary>
+    [Fact]
+    public void Purge_keeps_the_rating_of_a_file_that_is_still_on_disk_but_was_not_enumerated()
+    {
+        var root = Path.Combine(_tempDir, "library");
+        Directory.CreateDirectory(root);
+        var present = Path.Combine(root, "present.psarc");
+        var unreadable = Path.Combine(root, "unreadable.psarc");
+        var gone = Path.Combine(root, "gone.psarc");
+        File.WriteAllBytes(unreadable, [1]);
+        using (var scan = CreateIndex().BeginScan())
+        {
+            scan!.UpsertFile(present, 1, 1, [MakeSong(present, "P")]);
+            scan.UpsertFile(unreadable, 1, 1, [MakeSong(unreadable, "U")]);
+            scan.UpsertFile(gone, 1, 1, [MakeSong(gone, "G")]);
+        }
+        CreateIndex().TrySetSongRating(unreadable, "U", 8);
+        CreateIndex().TrySetSongRating(gone, "G", 9);
+
+        using (var scan = CreateIndex().BeginScan())
+        {
+            scan!.PurgeMissing(root, [present]);
+        }
+
+        using var read = CreateIndex().BeginScan();
+        Assert.True(read!.TryGetCachedSongs(unreadable, 1, 1, out _));
+        Assert.Equal(8, ReadCarriedRating(unreadable, "U"));
+        Assert.False(read.TryGetCachedSongs(gone, 1, 1, out _));
+        Assert.Null(ReadCarriedRating(gone, "G"));
+    }
+
     [Fact]
     public void UpsertFile_carries_a_known_rating_through_a_reparse()
     {

@@ -421,11 +421,12 @@
                 <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
             </Style>
             <Style Selector="^.FireModeButton:checked">
-                <Setter Property="Foreground" Value="{DynamicResource FireTextOnAccent}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
             </Style>
             <Style Selector="^.FireModeButton:checked /template/ ContentPresenter">
                 <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
             </Style>
             <Style Selector="^.FireModeButton.Scene">
                 <Setter Property="MinWidth" Value="49" />

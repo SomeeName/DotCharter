@@ -84,7 +84,10 @@ public enum ChartDiffElementKind
     ///     timeline position, so it is reported once as a
     ///     <see cref="ChartDiffChange.Changed" /> entry naming the fields.
     /// </summary>
-    ArrangementHeader
+    ArrangementHeader,
+
+    /// <summary>Name-keyed phrase metadata (solo flag and maximum difficulty), with no timeline position.</summary>
+    PhraseInfo
 }
 
 /// <summary>

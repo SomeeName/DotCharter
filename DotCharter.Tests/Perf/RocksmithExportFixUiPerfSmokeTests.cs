@@ -52,9 +52,6 @@ public sealed class RocksmithExportFixUiPerfSmokeTests
     {
         await HeadlessSessionFixture.Dispatch(() => WithDialog(FakeRocksmithExportScreen.Default(), view =>
         {
-            var review = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ReviewReportButton");
-            Assert.True(review.Bounds is { Width: > 1, Height: > 1 }, $"Review laid out as {review.Bounds}");
-
             var screen = (IRocksmithExportScreen)view.DataContext!;
             var fixes = FixButtons(view);
             Assert.Equal(screen.ValidationItems.Count, fixes.Count);
@@ -80,7 +77,8 @@ public sealed class RocksmithExportFixUiPerfSmokeTests
             Assert.Single(fixes.Where(Shown).Select(f => Math.Round(Left(f, view))).Distinct());
 
             var target = view.GetVisualDescendants().OfType<ComboBox>().Single(t => t.Name == "PackageFormPicker");
-            Assert.True(review.TranslatePoint(default, view)!.Value.Y < target.TranslatePoint(default, view)!.Value.Y,
+            var summary = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "ValidationSummaryText");
+            Assert.True(summary.TranslatePoint(default, view)!.Value.Y < target.TranslatePoint(default, view)!.Value.Y,
                 "the findings are no longer above the export target");
         }), CancellationToken.None);
     }
@@ -103,6 +101,28 @@ public sealed class RocksmithExportFixUiPerfSmokeTests
 
             // No preset picker is left: the only ComboBoxes are Platform and Package form.
             Assert.Equal(2, view.GetVisualDescendants().OfType<ComboBox>().Count());
+        }), CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     #497: the export keeps a door to the whole-project report: a Show in Issues tab button on the summary's line,
+    ///     laid out, named, bound to the contract's command, and off while the fake is building.
+    /// </summary>
+    [Fact]
+    public async Task ShowInIssuesButton_Measures_IsBoundAndNamed()
+    {
+        await HeadlessSessionFixture.Dispatch(() => WithDialog(FakeRocksmithExportScreen.Default(), view =>
+        {
+            var screen = (IRocksmithExportScreen)view.DataContext!;
+            var button = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ShowInIssuesButton");
+            Assert.True(button.Bounds is { Width: > 1, Height: > 1 }, $"Show in Issues tab laid out as {button.Bounds}");
+            Assert.Same(screen.ShowInIssuesCommand, button.Command);
+            Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)));
+            var summary = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "ValidationSummaryText");
+            Assert.InRange(Math.Abs(summary.TranslatePoint(default, view)!.Value.Y - button.TranslatePoint(default, view)!.Value.Y), 0, 40);
+            Dispatcher.UIThread.RunJobs();
+            Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            NarrowWidthLayout.Capture((Window)TopLevel.GetTopLevel(view)!, "export-dialog-after");
         }), CancellationToken.None);
     }
 }

@@ -62,7 +62,7 @@ public sealed partial class StringMaskViewModel : ViewModelBase
     {
         get
         {
-            var tuning = _projectState.ActiveArrangement?.Tuning;
+            var tuning = TuningDisplayNames.For(_projectState.ActiveArrangement);
             return GuitarStringLabel.MaskReadout(_projectState.StringEditMask, tuning?.Length ?? 6, tuning,
                 _localization);
         }
@@ -89,20 +89,21 @@ public sealed partial class StringMaskViewModel : ViewModelBase
 
     /// <summary>
     ///     Re-reads the chips for the strings the selected chords play: the set only when it
-    ///     changed (a chip row is not rebuilt on every edit), the lit state always.
+    ///     changed (a chip row is not rebuilt on every edit), the lit state always. A chip is its
+    ///     string, its name AND its colour, so a tuning or string-count change over the same
+    ///     strings renames the row too.
     /// </summary>
     internal void SyncChips(IEnumerable<int> strings, int stringCount, IReadOnlyList<string>? tuning)
     {
-        var wanted = strings.Distinct().Order().ToList();
-        if (!wanted.SequenceEqual(Chips.Select(c => c.StringIndex)))
+        var format = _localization["Inspector_StringLabelFmt"];
+        var wanted = strings.Distinct().Order()
+            .Select(index => (index, GuitarStringLabel.Format(index, stringCount, tuning, format),
+                StringColorSlots.For(index, stringCount)))
+            .ToList();
+        if (!wanted.SequenceEqual(Chips.Select(c => (c.StringIndex, c.Name, c.ColorSlot))))
         {
             Chips.Clear();
-            var format = _localization["Inspector_StringLabelFmt"];
-            foreach (var index in wanted)
-            {
-                Chips.Add(new StringMaskChip(index, GuitarStringLabel.Format(index, stringCount, tuning, format),
-                    StringColorSlots.For(index, stringCount)));
-            }
+            foreach (var (index, name, slot) in wanted) Chips.Add(new StringMaskChip(index, name, slot));
         }
 
         LightChips();

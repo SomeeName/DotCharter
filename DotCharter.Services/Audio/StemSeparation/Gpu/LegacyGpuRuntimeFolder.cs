@@ -43,7 +43,7 @@ public sealed class LegacyGpuRuntimeFolder
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Measuring the old CUDA runtime folder failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Measuring the old CUDA runtime folder failed", ex);
             return 0;
         }
     }
@@ -59,7 +59,7 @@ public sealed class LegacyGpuRuntimeFolder
         }
         catch (Exception ex)
         {
-            _logger?.Error(AppLogCategory.Audio, $"Removing the old CUDA runtime failed: {ex.Message}", ex);
+            _logger?.Error(AppLogCategory.Audio, "Removing the old CUDA runtime failed", ex);
             throw;
         }
     }

@@ -70,7 +70,12 @@
     be constructed by a test, and **could not be rendered to a picture and
     compared against the drawing it came from** — which is exactly how a first
     pass shipped that measured perfectly and did not look like the mockup.
-    `ToolbarView` hosts one element per flyout; `ProfileSwitcherFlyout.axaml`
+    #492 added two more, both `FirePopover`s of plain option-row buttons that
+    close their own flyout on a pick (`OnRowClick`): `TonePreviewTarget` (the
+    caret of the tone-preview split button) and `Export` (the Export button;
+    its rows are File > Export's commands in the same order, compared by
+    `UI/ToolbarClusterTests`). The overflow panel gained a Playback section
+    (play/pause, stop, loop, play-the-chart). `ToolbarView` hosts one element per flyout; `ProfileSwitcherFlyout.axaml`
     is now a one-line `DataTemplate` over `ProfilePopoverView`, so the status
     rail and the Play Mode front door share a real type.
     - **A popover card is a FIXED width, so every cell inside it is too — and
@@ -106,9 +111,22 @@
       once**: the app's own startup replaces the project on a later dispatcher
       turn and the transport's VST scan restores the empty persisted chain, so
       a single up-front seeding is silently undone before the second capture.
+  - **One home per mix control (#493).** The Inspector's Mixer tab has no
+    Levels or Playback FX section any more; the popovers own what it carried.
+    **Mix**: Master, Song, Guitar in, MIDI in and Track pan sliders, the INPUT
+    LEVEL meter with the guitar's M/S, a MUTE AND SOLO section (master M, song
+    M/S, MIDI M/S) and QUICK BALANCE; its Song slider runs to 200 % like the
+    tab's did. **Tempo**: speed and pitch. **Tools** lost its second Tuner door
+    (the toolbar's tuner button is the one; the row is the live `IN TUNE`
+    readout only) and its second chart-sound switch (the "Out" toggle; the
+    toolbar's piano button and the Mixer tab's checkbox write the same
+    `Transport.MidiEnabled`). The VST instrument picker lives in Tools ONLY and
+    the Mixer tab's chart-sound section links to it
+    (`MixerInspectorView.OpenVstInstrumentPicker` → `RequestPopover(Tools)`).
+    Table and guards: `UI/MixerLevelsInPopoversTests`.
   - **Everything the mockup draws is now WIRED, and each has a test in the
     default gate** (`UI/PopoverFeatureTests`): the Mix input-level meter
-    (`TransportViewModel.PollInputMeter` over `ReadInputCaptureWindow`, the
+    (`TransportInputMeter.Poll` over `ReadInputCaptureWindow`, the
     multi-consumer tap, clocked by `MixPopoverView` itself), the Tools `IN TUNE`
     readout (`Presentation/Shared/TunerReadout.Begin`, bound as
     `ToneRig.TunerReadout` off `ViewModels/Shell/ToneRigViewModel`; a lease on the shared

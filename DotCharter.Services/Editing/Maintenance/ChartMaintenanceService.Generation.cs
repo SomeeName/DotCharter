@@ -7,84 +7,55 @@ using DotCharter.Services.State;
 namespace DotCharter.Services.Editing.Maintenance;
 
 // Whole-chart generation and repair surface: FHP anchor generation,
-// improve/auto-fix pipelines, and level squashing.
+// the auto-fix pipeline (Improve chart runs through FixChart), and level squashing.
 public sealed partial class ChartMaintenanceService
 {
+    /// <summary>The Errors group of <see cref="FixChart" />: the Log Charter-parity auto-fix pipeline over every arrangement, one undo step.</summary>
+    public void AutoFixChart() => FixChart(FixChartGroups.Errors);
+
     /// <summary>
-    ///     Runs the Log Charter-parity auto-fix pipeline over every
-    ///     arrangement, recorded as one undoable snapshot.
+    ///     What <see cref="FixChart" /> would change: the two operations run on a snapshot of the chart and the
+    ///     counts are read off their results. The copy is taken on the calling thread, the work on a worker.
     /// </summary>
-    public void AutoFixChart()
+    public Task<FixChartPreview> PreviewFixChartAsync(FixChartGroups groups)
     {
-        var project = _projectState.ActiveProject;
-        if (project == null)
-        {
-            _projectState.MainDisplayMessage = L("Status_NoChartLoaded");
-            return;
-        }
-
-        try
-        {
-            var arrangementIndex = GetActiveArrangementIndex();
-            var levelIndex = GetActiveLevelIndex();
-            var vocalTrackIndex = GetActiveVocalTrackIndex();
-            var before = CloneProject(project);
-            var after = CloneProject(project);
-
-            var result = new ArrangementFixResult();
-            foreach (var arrangement in after.Arrangements)
-                _autoFixService.Fix(arrangement, result);
-
-            if (result.TotalChanges > 0)
-            {
-                _historyService.Do(new ProjectSnapshotAction(this, before, after, arrangementIndex, levelIndex,
-                    vocalTrackIndex));
-            }
-
-            _projectState.MainDisplayMessage = result.ToStatusMessage(_localization);
-            _logger.Info(AppLogCategory.Editing, $"{result.ToStatusMessage(_localization)} {result.ToLogDetails()}");
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(AppLogCategory.Editing, "Chart auto-fix failed.", ex);
-            _projectState.SetMessage(L("Status_AutoFixFailed", ex.Message), StatusSeverity.Error);
-        }
+        if (_projectState.ActiveProject is not { } project) return Task.FromResult(FixChartPreview.Empty);
+        var copy = CloneProject(project);
+        var config = _configService.LoadAppConfig();
+        var audioLengthMs = _projectState.TotalAudioLengthMs;
+        var runner = new FixChartRunner(_autoFixService, _chartImprovementService);
+        return Task.Run(() => runner.Run(copy, groups, config, audioLengthMs));
     }
 
-    public void ImproveChart()
+    /// <summary>Runs the checked groups, Errors then Polish, on the live chart as ONE undo step.</summary>
+    public void FixChart(FixChartGroups groups)
     {
-        var project = _projectState.ActiveProject;
-        if (project == null)
+        if (_projectState.ActiveProject is not { } project)
         {
             _projectState.MainDisplayMessage = L("Status_NoChartLoaded");
             return;
         }
 
+        if (groups == FixChartGroups.None) return;
         try
         {
-            var arrangementIndex = GetActiveArrangementIndex();
-            var levelIndex = GetActiveLevelIndex();
-            var vocalTrackIndex = GetActiveVocalTrackIndex();
             var before = CloneProject(project);
             var after = CloneProject(project);
-            var result = _chartImprovementService.ImproveProject(
-                after,
-                _configService.LoadAppConfig(),
-                _projectState.TotalAudioLengthMs);
-
-            if (result.TotalChanges > 0)
+            var result = new FixChartRunner(_autoFixService, _chartImprovementService)
+                .Run(after, groups, _configService.LoadAppConfig(), _projectState.TotalAudioLengthMs);
+            if (result.Total > 0)
             {
-                _historyService.Do(new ProjectSnapshotAction(this, before, after, arrangementIndex, levelIndex,
-                    vocalTrackIndex));
+                _historyService.Do(new ProjectSnapshotAction(this, before, after, GetActiveArrangementIndex(),
+                    GetActiveLevelIndex(), GetActiveVocalTrackIndex()));
             }
 
-            _projectState.MainDisplayMessage = result.ToStatusMessage(_localization);
-            _logger.Info(AppLogCategory.Editing, $"{result.ToStatusMessage(_localization)} {result.ToLogDetails()}");
+            _projectState.MainDisplayMessage = result.ToStatusMessage(_localization, groups);
+            _logger.Info(AppLogCategory.Editing, $"Fix chart {groups}: errors={result.ErrorCount}, polish={result.PolishCount}.");
         }
         catch (Exception ex)
         {
-            _logger.Error(AppLogCategory.Editing, "Chart improvement failed.", ex);
-            _projectState.SetMessage(L("Status_ImproveChartFailed", ex.Message), StatusSeverity.Error);
+            _logger.Error(AppLogCategory.Editing, "Fix chart failed.", ex);
+            _projectState.SetMessage(L("Status_FixChartFailed", ex.Message), StatusSeverity.Error);
         }
     }
 
@@ -178,8 +149,8 @@ public sealed partial class ChartMaintenanceService
             }
 
             // One arrangement changes, so the step snapshots one.
-            var before = ChartProjectCloner.CloneArrangement(live);
-            var targetArrangement = ChartProjectCloner.CloneArrangement(live);
+            var before = ChartProjectCloner.CloneArrangement(live, retainIdentities: true);
+            var targetArrangement = ChartProjectCloner.CloneArrangement(live, retainIdentities: true);
             var templates = LevelTemplateOrphans.Capture(targetArrangement);
             if (!_levelSquashService.TrySquash(targetArrangement))
             {
@@ -218,15 +189,24 @@ public sealed partial class ChartMaintenanceService
         var vocalTrackIndex = GetActiveVocalTrackIndex();
         var before = CloneProject(project);
 
-        // Deliberately NOT wrapped in try/catch: the caller owns its own failure
-        // message, and a run that threw must leave NO history node — a half-done
-        // import is not a state anyone should be able to redo onto.
-        mutate();
+        var viewState = new MutationViewState(_projectState, _chartEditor);
+
+        // Roll back partial imports before propagating the caller's failure.
+        try
+        {
+            mutate();
+        }
+        catch
+        {
+            _projectState.ActiveProject = project;
+            RestoreProjectSnapshot(before, arrangementIndex, levelIndex, vocalTrackIndex);
+            viewState.Restore();
+            throw;
+        }
 
         var after = CloneProject(_projectState.ActiveProject ?? project);
 
-        // Execute() restores `after`, which the live project already equals, so
-        // this commits the node without changing anything a second time.
+        // Execute restores `after`, which the live project already equals.
         _historyService.Do(new ProjectSnapshotAction(
             this, before, after, arrangementIndex, levelIndex, vocalTrackIndex));
         return true;

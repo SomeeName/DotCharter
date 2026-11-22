@@ -9,17 +9,38 @@ namespace DotCharter.Tests.Services.Export.GuitarPro;
 /// <summary>
 ///     A charted PICK SCRAPE leaves through <see cref="GpExporter" /> as Guitar Pro's
 ///     own pick slide (#637) — gpif <c>Slide</c> flag 64 toward the nut, 128 toward
-///     the bridge — and nothing it implies: no dead note, no slide-out, no tremolo
-///     mark. Re-imported, it is the scrape it was: the same frets, fret-hand mute,
+///     the bridge — with dead-note notation, no ordinary slide-out and no tremolo
+///     mark. Re-imported, it is the scrape it was: the same frets, unmuted strings,
 ///     unpitched slide, tap, tremolo, ignore and split chord, in the same direction.
 ///     The import charts a scrape (<see cref="GpPickScrape.Apply" />) and the export
-///     recognises one (<see cref="GpPickScrape.IsChartedScrape" />) through the same
+///     recognises one (<see cref="GpPickScrape.IsScrape" />) through the same
 ///     <see cref="GpPickScrape.IsScrape" />, so the two directions cannot disagree.
 ///     Scores come from <see cref="PickScrapeScenes" />, the import tests' fixtures;
 ///     the exporter takes <c>AlphaTabRuntime.RunExclusive</c> itself.
 /// </summary>
 public sealed class GpExporterPickScrapeTests
 {
+    [Theory]
+    [InlineData(MuteType.None)]
+    [InlineData(MuteType.Full)]
+    public void BothChartSpellingsExportDeadPickSlidesAndReimportUnmuted(MuteType mute)
+    {
+        var arrangement = PickScrapeScenes.Import(PickScrapeScenes.Gpif(BothWays()));
+        var level = Assert.Single(arrangement.Levels);
+        foreach (var sound in level.Notes.Where(GpPickScrape.IsScrape).Cast<IGuitarSound>()
+                     .Concat(level.Chords.Where(GpPickScrape.IsScrapeChord).SelectMany(c => c.ChordNotes)))
+        {
+            sound.Mute = mute;
+        }
+        var gpif = Gpif(arrangement, level, 2);
+        Assert.Equal(3, Regex.Matches(gpif, "<Property name=\"Muted\">").Count);
+        Assert.Equal(new[] { GpPickScrape.UpFlag, GpPickScrape.UpFlag, GpPickScrape.DownFlag }, SlideFlags(gpif));
+        var roundTrip = Assert.Single(Reimport(arrangement, level, 2).Levels);
+        var scrapes = Scrapes(roundTrip);
+        Assert.Equal(3, scrapes.Length);
+        Assert.All(scrapes, s => Assert.Equal(MuteType.None, s.Mute));
+    }
+
     /// <summary>
     ///     An FHP 5 riff, then an E+A scrape UP for a quarter (beat 4) and a low-E
     ///     scrape DOWN for a quarter (beat 5): the two shapes the import tests' scenes
@@ -82,7 +103,7 @@ public sealed class GpExporterPickScrapeTests
     /// <summary>
     ///     What the gpif itself says: one pick-slide flag per scrape string — 64
     ///     toward the nut, 128 toward the bridge — and none of what the scrape
-    ///     implies (the <c>Muted</c> dead note, the 4 / 8 slide-out, a beat
+    ///     implies (the 4 / 8 slide-out, a beat
     ///     <c>Tremolo</c>). A re-import alone would not show those: the scrape bit
     ///     outranks them on the way in.
     /// </summary>
@@ -90,7 +111,7 @@ public sealed class GpExporterPickScrapeTests
     [InlineData("Shinbatsu", 8, 0)]
     [InlineData("TowardBridge", 0, 2)]
     [InlineData("BothWays", 1, 2)]
-    public void Export_WritesPickSlides_AndNothingTheyImply(string scene, int down, int up)
+    public void Export_WritesDeadPickSlidesWithoutExtraSlideOrTremolo(string scene, int down, int up)
     {
         var bars = Scene(scene);
         var arrangement = PickScrapeScenes.Import(PickScrapeScenes.Gpif(bars));
@@ -101,20 +122,19 @@ public sealed class GpExporterPickScrapeTests
         Assert.Equal(down, flags.Count(f => f == GpPickScrape.DownFlag));
         Assert.Equal(up, flags.Count(f => f == GpPickScrape.UpFlag));
         Assert.Equal(down + up, flags.Count);
-        Assert.DoesNotContain("<Property name=\"Muted\">", gpif, StringComparison.Ordinal);
+        Assert.Equal(down + up, Regex.Matches(gpif, "<Property name=\"Muted\">").Count);
         Assert.DoesNotContain("<Tremolo>", gpif, StringComparison.Ordinal);
     }
 
     /// <summary>
     ///     Not a scrape: a fret-hand-muted note with an unpitched slide-out — alone,
-    ///     tapped and tremolo-picked but not ignored, or every scrape technique but
-    ///     the mute — stays a dead note (when muted) with an ordinary slide-out down
+    ///     tapped and tremolo-picked but not ignored, or a tremolo-picked note without a tap — stays a dead note (when muted) with an ordinary slide-out down
     ///     (gpif flag 4), never a pick slide, and re-imports as the same slide.
     /// </summary>
     [Theory]
     [InlineData(false, false, MuteType.Full)]
     [InlineData(true, false, MuteType.Full)]
-    [InlineData(true, true, MuteType.None)]
+    [InlineData(false, true, MuteType.None)]
     public void MutedSlideOut_IsNotAScrape(bool tapTremolo, bool ignore, MuteType mute)
     {
         var arrangement = new Arrangement { Name = "Lead", StringCount = 6 };
@@ -134,7 +154,7 @@ public sealed class GpExporterPickScrapeTests
             Ignore = ignore,
             Sustain = new FractionalPosition(1)
         });
-        Assert.False(GpPickScrape.IsChartedScrape(level.Notes[0]));
+        Assert.False(GpPickScrape.IsScrape(level.Notes[0]));
 
         var gpif = Gpif(arrangement, level, bars: 1);
         Assert.Equal(new[] { 4 }, SlideFlags(gpif));
@@ -142,7 +162,7 @@ public sealed class GpExporterPickScrapeTests
 
         var note = Assert.Single(Assert.Single(Reimport(arrangement, level, bars: 1).Levels).Notes);
         Assert.False(GpPickScrape.IsScrape(note));
-        Assert.Equal((7, 2, true, mute), (note.Fret, note.SlideTo, note.UnpitchedSlide, note.Mute));
+        Assert.Equal((7, mute == MuteType.Full ? 1 : 2, true, mute), (note.Fret, note.SlideTo, note.UnpitchedSlide, note.Mute));
     }
 
     // ── helpers ───────────────────────────────────────────────────────────

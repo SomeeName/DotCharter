@@ -73,7 +73,7 @@ public sealed class DpapiTone3000TokenStore : ITone3000TokenStore
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Application,
-                $"TONE3000 session could not be persisted: {ex.GetType().Name}: {ex.Message}");
+                "TONE3000 session could not be persisted", ex);
         }
     }
 
@@ -122,7 +122,7 @@ public sealed class DpapiTone3000TokenStore : ITone3000TokenStore
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Application,
-                $"Persisted TONE3000 session could not be deleted: {ex.GetType().Name}: {ex.Message}");
+                "Persisted TONE3000 session could not be deleted", ex);
         }
     }
 }

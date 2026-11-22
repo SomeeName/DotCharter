@@ -31,7 +31,7 @@ public sealed class SheetPdfExporter(ILocalizationService localization)
 
     /// <summary>
     /// Writes the PDF to <paramref name="path"/> ATOMICALLY: the render streams
-    /// into a sibling <c>.tmp</c> and only a complete document is moved into
+    /// into an exclusively created random sibling <c>.tmp</c> and only a complete document is moved into
     /// place.
     /// <para>The call site must not open the user's chosen path with
     /// <see cref="FileMode.Create"/> and hand that stream straight to
@@ -63,16 +63,19 @@ public sealed class SheetPdfExporter(ILocalizationService localization)
         var directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
-        var temp = path + AtomicFile.TempSuffix;
+        var temp = path + "." + Guid.NewGuid().ToString("N") + AtomicFile.TempSuffix;
+        var created = false;
         try
         {
             // Async handle: File.Create opens a SYNCHRONOUS stream, so every
             // await inside ExportAsync would still write on the calling thread.
-            await using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None,
+            await using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None,
                              bufferSize: 4096, useAsync: true))
             {
+                created = true;
                 await ExportAsync(project, arrangement, level, beats, staves, format, stream, cancellationToken)
                     .ConfigureAwait(false);
+                stream.Flush(flushToDisk: true);
             }
 
             AtomicFile.ReplaceWithRetry(temp, path);
@@ -81,7 +84,7 @@ public sealed class SheetPdfExporter(ILocalizationService localization)
         {
             // Never leave the half-written temp behind next to the real file;
             // the throw below is the real news.
-            BestEffortDelete.File(temp);
+            if (created) BestEffortDelete.File(temp);
             throw;
         }
     }

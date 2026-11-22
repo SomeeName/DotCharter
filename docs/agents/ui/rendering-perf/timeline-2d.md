@@ -53,9 +53,9 @@ Part of the rendering/perf reference. Router: [../rendering-perf-detail.md](../r
   `MinimapOverviewControl` rate-limits static-layer rebuilds (≤5 Hz with a
   guaranteed trailing rebuild) and REUSES its `RenderTargetBitmap` when the
   size is unchanged — recreating the ~2560-wide surface per edit was the LOH
-  / gen2 churn; (2) `BendEditorControl` keeps its grid layer (size+theme
-  dependent only) across the DataContext swap the inspector performs per
-  selection change — only the curve/dynamic layers rebuild; (3)
+  / gen2 churn; (2) the Note tab's bend plot (`ColumnFlowBendPlot`, #751) is one
+  immediate-mode `Render` over its editor, so a selection change rebuilds
+  no control tree; (3)
   `ChartSpacingEnforcer.EnforceSoundSpacing` is a pooled-array backward
   sweep (semantics pinned in `ChartSpacingEnforcerTests`), not LINQ +
   dictionaries. A fourth, for whole-level derived data: it is computed ONCE
@@ -367,3 +367,11 @@ Part of the rendering/perf reference. Router: [../rendering-perf-detail.md](../r
   bright pixels over a 400 px strip, which is the whole of the "1343 → 956"
   gap that read as a regression. Anchor on a fixed-content element (the playhead
   chip) and use a background-free ratio.
+
+- `ChartRenderer` registers annotation labels through
+  `ChartTextPreRegistration.RegisterAnnotations` before `BeginFrame` rebuilds
+  the atlas. This scan stays outside the whole-chart latch and snapshot-text
+  signature: editing `ChartAnnotation.Text` in place changes neither. It follows
+  `BackgroundLayer`'s unresolved, nonempty, at-most-32-character label rule and
+  pre-registers all such labels so panning does not discover glyphs during a draw
+  (`ChartTextPreRegistrationTests`, `Preview3DDriverWiringTests`).

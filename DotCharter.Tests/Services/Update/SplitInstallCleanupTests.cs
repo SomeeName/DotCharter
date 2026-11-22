@@ -49,7 +49,6 @@ public sealed class SplitInstallCleanupTests : IDisposable
     private static PayloadManifest SplitManifest()
         => Manifest(
             new[] { "DotCharter.exe", "README.txt", "voices/guitar.dcvp", "tools/ffmpeg.exe" }
-                .Concat(LegacyUpdaterShim.Files)
                 .Concat(AppFiles.Select(f => "app/" + f)), "0.63.0");
 
     /// <summary>The top folder right after the old updater's robocopy, outside app/.</summary>
@@ -104,14 +103,14 @@ public sealed class SplitInstallCleanupTests : IDisposable
     public void Plan_AfterTheOldPartialPath_TreatsTheTopManifestAsCurrent()
     {
         var top = new List<string> { "DotCharter.exe", "README.txt", "payload-manifest.json", "appconfig.json" };
-        top.AddRange(LegacyUpdaterShim.Files);
+        top.AddRange(SplitInstallCleanup.ShimFiles);
 
         var plan = SplitInstallCleanup.Plan(top, path => AppFiles.Contains(path, StringComparer.OrdinalIgnoreCase),
             SplitManifest(), appManifest: null);
 
         // Only the shim. The readme the release lists stays, and so does the
         // manifest: it is the only copy until Run moves it into app/.
-        Assert.Equal(LegacyUpdaterShim.Files.Order(StringComparer.OrdinalIgnoreCase), plan);
+        Assert.Equal(SplitInstallCleanup.ShimFiles.Order(StringComparer.OrdinalIgnoreCase), plan);
     }
 
     [Fact]

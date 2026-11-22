@@ -372,12 +372,12 @@ public sealed class AffectedTestsModuleTests : IClassFixture<AffectedTestsModule
         var lane = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "tools", "ci", "release-lane.json")))
             .RootElement.GetProperty("classes").EnumerateObject().Select(p => p.Name).ToArray();
 
-        var output = Run($$"""
+        var output = _session.Run(_scratch, $$"""
             $idx = New-AffectedTestIndex '{{root.Replace("'", "''")}}'
             $sel = Get-AffectedSelection @('DotCharter.Localization/Resources.resx', 'docs/agents/workflow.md') $idx
             $missing = @('{{string.Join("','", lane)}}' -split ',' | Where-Object { -not $idx.Classes.ContainsKey($_) })
             'count=' + $idx.Classes.Count + '|missing=' + ($missing -join ',') + '|notes=' + (@($sel.Notes) -join ';')
-            """);
+            """, timeout: TimeSpan.FromMinutes(4));
 
         var fields = output.Split('|').Select(f => f.Split('=', 2)).ToDictionary(f => f[0], f => f[1]);
         Assert.True(int.Parse(fields["count"]) > 1500, $"The index holds {fields["count"]} test classes.");
@@ -404,6 +404,14 @@ public sealed class AffectedTestsModuleTests : IClassFixture<AffectedTestsModule
 
         Assert.StartsWith("0|", output);
         Assert.Contains("nothing changed against HEAD..HEAD - nothing to run", output);
+    }
+
+    [Fact]
+    public void TimedOutCall_LeavesTheNextCallWorking()
+    {
+        Assert.Throws<TimeoutException>(() => _session.Run(_scratch, "[System.Threading.Thread]::Sleep(-1)", TimeSpan.Zero));
+
+        Assert.Equal("New-AffectedTestIndex", Run("(Get-Command New-AffectedTestIndex).Name"));
     }
 
     // ---- helpers ----
@@ -490,10 +498,10 @@ public sealed class AffectedTestsModuleTests : IClassFixture<AffectedTestsModule
         private readonly string _folder = Path.Combine(
             Path.GetTempPath(), "dotcharter-affected-session-" + Guid.NewGuid().ToString("N"));
 
-        private readonly System.Text.StringBuilder _stderr = new();
+        private System.Text.StringBuilder _stderr = new();
         private Process? _process;
 
-        public string Run(string scratchDirectory, string body)
+        public string Run(string scratchDirectory, string body, TimeSpan? timeout = null)
         {
             var process = _process ??= Start();
             var file = Path.Combine(scratchDirectory, "case-" + Guid.NewGuid().ToString("N") + ".ps1");
@@ -505,11 +513,16 @@ public sealed class AffectedTestsModuleTests : IClassFixture<AffectedTestsModule
             process.StandardInput.Flush();
 
             var output = new System.Text.StringBuilder();
+            var cap = timeout ?? TimeSpan.FromMinutes(2);
             while (true)
             {
                 var read = process.StandardOutput.ReadLineAsync();
                 // A deadlock detector for a hung host, never a budget.
-                Assert.True(read.Wait(TimeSpan.FromSeconds(120)), "powershell did not answer within 120 s.");
+                if (!read.Wait(cap))
+                {
+                    Discard(process);
+                    throw new TimeoutException($"powershell did not answer within {cap.TotalSeconds} s.");
+                }
                 var line = read.Result;
                 Assert.True(line is not null, "powershell exited." + Environment.NewLine + StdErr());
                 if (line!.StartsWith(Done, StringComparison.Ordinal))
@@ -533,6 +546,27 @@ public sealed class AffectedTestsModuleTests : IClassFixture<AffectedTestsModule
 
             _process?.Dispose();
             BestEffortDelete.Directory(_folder);
+        }
+
+        private void Discard(Process process)
+        {
+            _process = null;
+            _stderr = new();
+            using (process)
+            using (process.StandardInput)
+            using (process.StandardOutput)
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException) when (process.HasExited)
+                {
+                    // The host exited while the timeout was being handled.
+                }
+
+                process.WaitForExit(10_000);
+            }
         }
 
         private string StdErr()
@@ -585,12 +619,13 @@ public sealed class AffectedTestsModuleTests : IClassFixture<AffectedTestsModule
             }
 
             Assert.NotNull(process);
+            var stderr = _stderr;
             process!.ErrorDataReceived += (_, e) =>
             {
                 if (e.Data is null)
                     return;
-                lock (_stderr)
-                    _stderr.AppendLine(e.Data);
+                lock (stderr)
+                    stderr.AppendLine(e.Data);
             };
             process.BeginErrorReadLine();
             return process;
@@ -610,22 +645,15 @@ public sealed class AffectedTestsModuleTests : IClassFixture<AffectedTestsModule
         };
         foreach (var a in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(TestPaths.RepoRoot(), "tools", "agent", "Invoke-Gate.ps1") }.Concat(arguments.Split(' ')))
             info.ArgumentList.Add(a);
-        Process? process;
-        try
-        {
-            process = Process.Start(info);
-        }
-        catch (System.ComponentModel.Win32Exception)
+
+        // #608: both pipes drain concurrently under one cap (a deadlock detector for a hung child, never a budget).
+        var result = BoundedProcess.TryRun(info, TimeSpan.FromMinutes(4), "Invoke-Gate.ps1");
+        if (result is null)
         {
             Assert.Skip("Windows PowerShell is not available, so Invoke-Gate.ps1 cannot be executed here.");
             return "";
         }
 
-        Assert.NotNull(process);
-        var stdout = process!.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
-        process.StandardError.ReadToEnd();
-        // A deadlock detector for a hung child, never a budget.
-        Assert.True(process.WaitForExit(240_000), "Invoke-Gate.ps1 did not finish within 240 s.");
-        return process.ExitCode + "|" + stdout.GetAwaiter().GetResult().Replace("\r", "").Trim();
+        return result.ExitCode + "|" + result.StandardOutput.Replace("\r", "").Trim();
     }
 }

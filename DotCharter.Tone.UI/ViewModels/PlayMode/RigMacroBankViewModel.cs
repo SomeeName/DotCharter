@@ -25,6 +25,7 @@ public sealed class RigMacroBankViewModel : ObservableObject
         _rig = rig; _source = source; _post = post;
         Macros = Array.AsReadOnly(Enumerable.Range(0, 4).Select(i => new RigMacroViewModel(this, i)).ToArray());
         Editor = new(this);
+        Editor.AssignmentCommitted += _rig.NoteEdit;
         _rig.Nodes.CollectionChanged += OnNodesChanged;
         _rig.PropertyChanged += OnRigChanged;
         Refresh();

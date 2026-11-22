@@ -229,11 +229,11 @@ public sealed class SoundTabPitchReadoutTests
         var ns = view.Root!.Name.Namespace;
 
         var readout = view.Descendants(ns + "TextBlock")
-            .Single(e => (string?)e.Attribute("Text") == "{Binding NotePitchName}");
+            .Single(e => (string?)e.Attribute("Text") == "{Binding Staged.Placement.PitchName}");
 
         // Since #118 the pitch shares its line with the length rather than a row
         // of its own, so the readout hides ITSELF.
-        Assert.Equal("{Binding HasNotePitch}", (string?)readout.Attribute("IsVisible"));
+        Assert.Equal("{Binding Staged.Placement.HasPitch}", (string?)readout.Attribute("IsVisible"));
     }
 
     /// <summary>
@@ -322,5 +322,5 @@ public sealed class SoundTabPitchReadoutTests
         UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor", "Inspector", "SoundPlacementView.axaml"));
 
     private static string ChordEditorPath() =>
-        UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Panels", "ChordTemplateEditorView.axaml"));
+        UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor", "Inspector", "SoundLibraryTemplateView.axaml"));
 }

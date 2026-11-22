@@ -21,7 +21,7 @@ namespace DotCharter.Tests.UI;
 ///         spends a page warning about.
 ///     </para>
 /// </summary>
-public sealed class ToneDesignViewModelTests
+public sealed partial class ToneDesignViewModelTests
 {
     // ---- fakes ----------------------------------------------------------------
 
@@ -106,10 +106,16 @@ public sealed class ToneDesignViewModelTests
         public List<(ToneDesignRequest Request, string Reply)> Imports { get; } = [];
 
         public Exception? ImportThrow;
+        public TaskCompletionSource<ToneDesignManualPrompt>? PendingPrompt;
+        public TaskCompletionSource<ToneDesignResult>? PendingImport;
+        public TaskCompletionSource<bool>? ManualStarted;
+        public TaskCompletionSource<bool>? ImportStarted;
 
         public Task<ToneDesignManualPrompt> BuildManualPromptAsync(ToneDesignRequest request, CancellationToken ct)
         {
             ManualRequests.Add(request);
+            ManualStarted?.TrySetResult(true);
+            if (PendingPrompt is not null) return PendingPrompt.Task;
             var text = $"PROMPT FOR: {request.Description} ({request.History.Count} turn(s))";
             return Task.FromResult(new ToneDesignManualPrompt(
                 text, new ToneDesignPrompt("system", request.History, "{}", "tone_draft")));
@@ -119,6 +125,8 @@ public sealed class ToneDesignViewModelTests
             ToneDesignRequest request, string reply, IProgress<string>? status, CancellationToken ct)
         {
             Imports.Add((request, reply));
+            ImportStarted?.TrySetResult(true);
+            if (PendingImport is not null) return PendingImport.Task;
             status?.Report("Reading the pasted answer…");
             if (ImportThrow != null) throw ImportThrow;
             return Task.FromResult(ResultFor("Pasted Plexi") with { Usage = AiUsage.Manual });
@@ -131,11 +139,15 @@ public sealed class ToneDesignViewModelTests
         public string? Text;
         public Exception? Throw;
 
-        public Task SetTextAsync(string text)
+        public TaskCompletionSource<bool>? WriteBlock;
+        public TaskCompletionSource<bool>? WriteStarted;
+
+        public async Task SetTextAsync(string text)
         {
             if (Throw != null) throw Throw;
             Text = text;
-            return Task.CompletedTask;
+            WriteStarted?.TrySetResult(true);
+            if (WriteBlock is not null) await WriteBlock.Task;
         }
 
         public Task<string?> GetTextAsync() => Task.FromResult(Text);
@@ -440,7 +452,7 @@ public sealed class ToneDesignViewModelTests
     {
         var presets = new FakeDspTonePresetService();
         var live = Rig("amp", "cab");
-        var browser = new PresetBrowserViewModel(presets, FakeLocalization.English(), () => live, () => { },
+        var browser = new PresetBrowserViewModel(presets, FakeLocalization.English(), () => live, () => { }, new FakeConfigurationService(),
             toneDesignPanel: ToneDesignPanels.Real());
 
         // The panel exists and is the drawer's own, not a second construction.
@@ -468,7 +480,7 @@ public sealed class ToneDesignViewModelTests
     [Fact]
     public void Without_a_host_factory_the_drawer_has_no_design_panel()
     {
-        var browser = new PresetBrowserViewModel(new FakeDspTonePresetService(), FakeLocalization.English(), () => Rig("amp"), () => { });
+        var browser = new PresetBrowserViewModel(new FakeDspTonePresetService(), FakeLocalization.English(), () => Rig("amp"), () => { }, new FakeConfigurationService());
 
         Assert.Null(browser.ToneDesign);
     }

@@ -50,6 +50,10 @@ public class EofImportMetadata
     public string Year { get; set; } = "";
     public string Genre { get; set; } = "";
     public string Charter { get; set; } = "";
+
+    /// <summary>The first explicit beat key signature: negative for flats, positive for sharps.</summary>
+    public int KeyAccidentals { get; set; }
+
     public uint Revision { get; set; }
     public uint TimeDivision { get; set; }
 

@@ -89,6 +89,37 @@ public class PhrasePasteCompatibilityTests
         Assert.Contains(check.Issues, i => i.LocalizationKey == PhrasePasteCompatibility.KeyFretBelowCapo);
     }
 
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(2, true)]
+    [InlineData(3, false)]
+    [InlineData(5, false)]
+    public void SlideTarget_IsCheckedAgainstTheDestinationCapo(int slideTo, bool blocked)
+    {
+        var entry = Entry([(0, 5)]);
+        entry.Payload.Notes[0].SlideTo = slideTo;
+
+        var check = PhrasePasteCompatibility.Evaluate(entry, Arr(capo: 3));
+
+        Assert.Equal(blocked, check.IsBlocked);
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1, true)]
+    [InlineData(3, true)]
+    [InlineData(4, false)]
+    public void AnchorMustStartStrictlyAboveTheCapo(int fret, bool blocked)
+    {
+        var entry = Entry([]);
+        entry.Payload.Anchors.Add(new FretAnchor { Fret = fret });
+
+        var check = PhrasePasteCompatibility.Evaluate(entry, Arr(capo: 3));
+
+        Assert.Equal(blocked, check.IsBlocked);
+        Assert.DoesNotContain(check.Issues, i => i.LocalizationKey == PhrasePasteCompatibility.KeyCapoDiffers);
+    }
+
     [Fact]
     public void AnOpenStringUnderACapo_IsNotBelowTheCapo()
     {

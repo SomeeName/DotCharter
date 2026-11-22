@@ -1,7 +1,7 @@
 using DotCharter.Presentation.Contracts.Dialogs;
+using DotCharter.UI.ViewModels.Editor.Inspector;
 using DotCharter.Presentation.Dialogs;
 using DotCharter.Presentation.Screens.Dialogs;
-using DotCharter.Services.Editing.Linting;
 using DotCharter.Services.Editing.Maintenance;
 using DotCharter.Services.Editing.Quality;
 using DotCharter.Services.Parsing.Eof;
@@ -161,22 +161,20 @@ public sealed class EofRoundTripSectionViewModelTests
         chord.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 5 });
         level.Chords.Add(chord);
         rhythm.Levels.Add(level);
+        // The export gate's "no show lights" warning is song-wide and would add a row: this chart has them.
+        h.Project.Showlights.Add(new DotCharter.Core.Domain.Events.Showlight());
         h.Project.Arrangements.Add(rhythm);
         return (h, rhythm);
     }
 
-    private static ChartQualityReportViewModel Report(ChartEditHarness h) => new(
-        ChartQualityReportViewModelTests.Checks(), h.Services,
-        RecordingProxy.Create<IDialogs>().Proxy, RecordingProxy.Create<IChartMaintenanceService>().Proxy,
-        new CheckpointsViewModelTests.FakeDocumentService(), h.Transport,
-        new QualityAudioCheck(RecordingProxy.Create<IAudioChartLintService>().Proxy, new FakeAudioPlaybackService()));
-
-    private static EofRoundTripSectionViewModel SectionOf(IChartQualityReportScreen screen) =>
-        Assert.IsType<EofRoundTripSectionViewModel>(screen.EofRoundTrip);
+    private static ExportReadinessViewModel Report(ChartEditHarness h) => new(h.State,
+        new CheckpointsViewModelTests.FakeDocumentService(), h.Transport, h.Editor, FakeLocalization.English(),
+        RecordingProxy.Create<IChartMaintenanceService>().Proxy, RecordingProxy.Create<IDialogs>().Proxy, new FakeAppLogger(),
+        new ChartQualityReporter(new DotCharter.Services.Editing.Validation.ArrangementValidationService(new FakeAppLogger())), new DotCharter.Tests.Infrastructure.TestUiDispatcher());
 
     /// <summary>
-    ///     A charter who never exported to EOF: the report opens with the section closed and runs
-    ///     nothing, not on open and not on Check again. Opening it hands the export to the
+    ///     A charter who never exported to EOF: the Issues tab opens with the section closed and
+    ///     runs nothing, however often it is refreshed. Opening it hands the export to the
     ///     off-thread runner, shows the busy state until the run lands, then the groups.
     /// </summary>
     [Fact]
@@ -184,114 +182,124 @@ public sealed class EofRoundTripSectionViewModelTests
     {
         var (h, _) = ChartEofApproximates();
         var loc = FakeLocalization.English();
-        IChartQualityReportScreen screen = Report(h);
-        var section = SectionOf(screen);
+        var report = Report(h);
+        var section = report.EofRoundTripModel;
         var runner = new HeldRunner();
         section.OffThread = runner.Run;
 
-        Assert.False(screen.EofRoundTrip.IsExpanded);
-        Assert.Same(Task.CompletedTask, section.Pending);
-        screen.RecheckCommand.Execute(null);
+        report.RefreshChartReport();
+        Assert.False(section.IsExpanded);
         Assert.Same(Task.CompletedTask, section.Pending);
         Assert.Empty(runner.Runs);
-        Assert.Empty(screen.EofRoundTrip.Groups);
+        Assert.Empty(section.Groups);
 
-        screen.EofRoundTrip.IsExpanded = true;
+        section.IsExpanded = true;
 
         Assert.Single(runner.Runs);
-        Assert.True(screen.EofRoundTrip.IsBusy);
-        Assert.Equal(loc["Dialog_QualityReport_EofChecking"], screen.EofRoundTrip.Summary);
-        Assert.Empty(screen.EofRoundTrip.Groups);
+        Assert.True(section.IsBusy);
+        Assert.Equal(loc["Dialog_QualityReport_EofChecking"], section.Summary);
+        Assert.Empty(section.Groups);
 
         await runner.FinishAsync(0);
         await section.Pending;
 
-        Assert.False(screen.EofRoundTrip.IsBusy);
-        Assert.Contains(screen.EofRoundTrip.Groups, g => g.Title == loc["EofLoss_CentOffset"]);
-        screen.EofRoundTrip.IsExpanded = false;
-        screen.EofRoundTrip.IsExpanded = true;
+        Assert.False(section.IsBusy);
+        Assert.Contains(section.Groups, g => g.Title == loc["EofLoss_CentOffset"]);
+        section.IsExpanded = false;
+        section.IsExpanded = true;
         Assert.Single(runner.Runs);
     }
 
     /// <summary>
-    ///     A run that lands after the chart changed and was checked again is the OLD chart's: it
+    ///     A run that lands after the chart changed and the tab was refreshed is the OLD chart's: it
     ///     is dropped, and the one for the chart as it is now is shown.
     /// </summary>
     [Fact]
-    public async Task ARunThatLandsAfterAnEditAndARecheck_IsDropped()
+    public async Task ARunThatLandsAfterAnEditAndARefresh_IsDropped()
     {
         var (h, rhythm) = ChartEofApproximates();
         var loc = FakeLocalization.English();
-        IChartQualityReportScreen screen = Report(h);
-        var section = SectionOf(screen);
+        var report = Report(h);
+        var section = report.EofRoundTripModel;
         var runner = new HeldRunner();
         section.OffThread = runner.Run;
-        screen.EofRoundTrip.IsExpanded = true;
+        section.IsExpanded = true;
         var stale = section.Pending;
 
         rhythm.CentOffset = 0;
-        screen.RecheckCommand.Execute(null);
+        report.RefreshChartReport();
         Assert.Equal(2, runner.Runs.Count);
         var current = section.Pending;
         await runner.FinishAsync(1);
         await current;
 
-        Assert.False(screen.EofRoundTrip.IsBusy);
-        Assert.Contains(screen.EofRoundTrip.Groups, g => g.Title == loc["EofLoss_PartialChordTremolo"]);
-        Assert.DoesNotContain(screen.EofRoundTrip.Groups, g => g.Title == loc["EofLoss_CentOffset"]);
+        Assert.False(section.IsBusy);
+        Assert.Contains(section.Groups, g => g.Title == loc["EofLoss_PartialChordTremolo"]);
+        Assert.DoesNotContain(section.Groups, g => g.Title == loc["EofLoss_CentOffset"]);
 
         // The old chart's run lands last: it still had the cent offset, and it changes nothing.
         await runner.FinishAsync(0);
         await stale;
 
-        Assert.False(screen.EofRoundTrip.IsBusy);
-        Assert.DoesNotContain(screen.EofRoundTrip.Groups, g => g.Title == loc["EofLoss_CentOffset"]);
-        Assert.Contains(screen.EofRoundTrip.Groups, g => g.Title == loc["EofLoss_PartialChordTremolo"]);
+        Assert.False(section.IsBusy);
+        Assert.DoesNotContain(section.Groups, g => g.Title == loc["EofLoss_CentOffset"]);
+        Assert.Contains(section.Groups, g => g.Title == loc["EofLoss_PartialChordTremolo"]);
     }
 
     /// <summary>
-    ///     Opened from an EOF export's Show, the section opens and runs; and a project this charter
-    ///     exports to EOF opens with it open next time, until they close it.
+    ///     Opened from an EOF export's Show (which marks the project), the Issues tab opens the section and
+    ///     runs it; and a project this charter exports to EOF opens with it open next time, until they close it.
     /// </summary>
     [Fact]
     public async Task FromAnEofExport_TheSectionOpens_AndStaysOpenForThatProject()
     {
         var (h, _) = ChartEofApproximates();
-        IChartQualityReportScreen screen = Report(h);
+        h.State.Document.EofRoundTripProject = h.Project;
+        var report = Report(h);
         var runner = new HeldRunner();
-        SectionOf(screen).OffThread = runner.Run;
+        report.EofRoundTripModel.OffThread = runner.Run;
 
-        screen.FocusEofRoundTrip = true;
+        report.RefreshChartReport();
 
-        Assert.True(screen.EofRoundTrip.IsExpanded);
+        Assert.True(report.EofRoundTrip.IsExpanded);
         Assert.Single(runner.Runs);
         Assert.Same(h.Project, h.State.Document.EofRoundTripProject);
 
-        IChartQualityReportScreen again = Report(h);
+        var again = Report(h);
+        again.RefreshChartReport();
         Assert.True(again.EofRoundTrip.IsExpanded);
-        await SectionOf(again).Pending;
+        await again.EofRoundTripModel.Pending;
         Assert.NotEmpty(again.EofRoundTrip.Groups);
 
         again.EofRoundTrip.IsExpanded = false;
         Assert.Null(h.State.Document.EofRoundTripProject);
-        Assert.False(Report(h).EofRoundTrip.IsExpanded);
+        var closed = Report(h);
+        closed.RefreshChartReport();
+        Assert.False(closed.EofRoundTrip.IsExpanded);
     }
 
-    /// <summary>The whole dialog, opened: a chart with a cent offset and a partial tremolo chord lists both,
-    /// and Go to switches to the arrangement and seeks.</summary>
+    /// <summary>The Issues tab lists each arrangement's estimated difficulty (moved from the dialog), and the
+    /// round trip's Go to switches to the arrangement and seeks.</summary>
     [Fact]
-    public async Task TheQualityReport_ListsTheRoundTrip_AndGoToSwitchesArrangementAndSeeks()
+    public async Task TheIssuesTab_ListsTheArrangements_AndTheRoundTrip_AndGoToSwitchesArrangementAndSeeks()
     {
         var (h, rhythm) = ChartEofApproximates();
-        IChartQualityReportScreen screen = Report(h);
+        var report = Report(h);
         var loc = FakeLocalization.English();
 
-        screen.EofRoundTrip.IsExpanded = true;
-        await SectionOf(screen).Pending;
+        report.RefreshChartReport();
 
-        var titles = screen.EofRoundTrip.Groups.Select(g => g.Title).ToList();
+        await report.ProjectReportPending;
+        Assert.True(report.HasProjectArrangements);
+        Assert.Equal(h.Project.Arrangements.Select(a => a.Name), report.ProjectArrangements.Select(r => r.Name));
+        Assert.All(report.ProjectArrangements, r => Assert.NotEmpty(r.Difficulty));
+
+        report.EofRoundTrip.IsExpanded = true;
+        await report.EofRoundTripModel.Pending;
+
+        var titles = report.EofRoundTrip.Groups.Select(g => g.Title).ToList();
         Assert.Contains(loc["EofLoss_CentOffset"], titles);
-        var tremolo = Assert.Single(screen.EofRoundTrip.Groups, g => g.Title == loc["EofLoss_PartialChordTremolo"]);
+        var tremolo = Assert.Single(report.EofRoundTrip.Groups, g => g.Title == loc["EofLoss_PartialChordTremolo"]);
         var place = Assert.Single(tremolo.Items);
         Assert.Equal(("Rhythm", "M2.3 · 00:03.00"), (place.Subject, place.Where));
 

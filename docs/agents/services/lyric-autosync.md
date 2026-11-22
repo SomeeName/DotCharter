@@ -10,6 +10,19 @@ file is the service half (models, decode, stem selection, windowing, install).
 
 ## `Audio/Lyrics/`
 
+Stem time-base consumers checked for #619:
+
+| Consumer | Same mistake? | Source of audio |
+|---|---|---|
+| Lyric editor and standalone CLI | Fixed | The editor's captured stem list; folder discovery only without a list. Both go through the duration guard in `LyricAutoSyncService`. |
+| Fit tab to recording | Fixed | `Editing/Tempo/RecordingAlignment/RecordingAlignmentAudio.cs` takes declared instrument stems and checks each duration before summing. |
+| Guitar roles | No | `Audio/StemSeparation/StemFolderProbe.cs` supplies the declared, resolved guitar path; `GuitarRoleStemService` derives from that file and keys its sidecar by its content. |
+| Tone match | No | `Ai/Match/StemIsolator.cs` signs the input song and checks its content-keyed cache, rather than looking for a sibling guitar file. |
+| Tone sections (proposal and matching) | No | `Ai/Match/Sections/ToneSectionProposer.cs` and `ToneSetMatcher.cs` use that same isolator for the requested song and time window. |
+| Tone generation from placed changes | No | `Editing/Tones/ToneGenerationRun.cs` captures declared project stem paths; no folder guess. |
+| AI tone generation, creator and feedback | No | `Ai/Generate/RsToneGenerator.cs`, `ToneCreator.cs` and `RsToneFeedbackLoop.cs` use the content-keyed isolator. |
+| Live note detection | No | `DotCharter.UI/ViewModels/Editor/LivePlayViewModel.Tick.cs` reads live input capture, never song stems (`LiveDetectionAudioSourceTests`). |
+
 - `Audio/Lyrics/` — **lyric auto-sync**: paste a song's lyrics, get every
   syllable timed. `LyricAcousticModel` (ONNX wav2vec2 CTC) +
   `LyricAudioSource` (decode → 16 kHz mono) + `LyricAutoSyncService`
@@ -35,6 +48,8 @@ file is the service half (models, decode, stem selection, windowing, install).
     English head's absence must never read as "not installed"; **(c) the per-model
     onset bias lives on `LyricModel`, never on the caller** (MMS-FA 0, English
     −10 ms), because it describes where that CTC head fires inside a syllable.
+    A blend carries its own bias on `LyricModelSelection`: romaji 0, English
+    −35 ms plus −30 ms on vowel-initial syllables (JamendoLyrics, below).
     **(a) covers a BROKEN one too, and that is a fourth rule because `IsInstalled`
     cannot tell the difference:** it is a bare presence check, so the ensemble path
     is taken the moment two files exist, and a truncated `model.onnx` / an
@@ -44,6 +59,9 @@ file is the service half (models, decode, stem selection, windowing, install).
     non-cancellation failure with the primary's own emissions and one warning;
     pinned by `LyricSecondaryModelDegradationTests`, including a source lint that
     the ensemble branch still routes through it.
+    A failed secondary also restores the primary's SOLO onset and vowel corrections,
+    description and `IsEnsemble` flag; `LyricSyncSeamTests` compares the degraded
+    timings against an explicit solo run for both primary models.
     A `modelDirectoryOverride` PINS one folder and disables selection entirely, so
     a test cannot silently depend on which models happen to be on the machine.
   - **It listens to an already-separated VOCAL STEM when one exists, else the
@@ -64,6 +82,33 @@ file is the service half (models, decode, stem selection, windowing, install).
     BOTH corpora.** The romaji `TestData/EOF` figure (90% within 100 ms) shipped
     for several releases as the accuracy claim and is the optimistic end of a
     24-point range — those four charts have sparse, vocal-forward mixes.
+    The editor snapshots the project's stem names and paths in `LyricAutoSyncRunner`.
+    A nonempty project list is authoritative: `VocalStemLocator` selects the vocal
+    role OR bare filename (excluding the instrumental half in either name), and
+    resolves its path through `StemFolderProbe.ResolveStemPath` (project
+    directory first, the mixer's legacy directory second). An absent or missing
+    voice in that list means mix, never an unlisted `stems/vocals.wav`. Only an
+    empty list or a project-free CLI run permits the folder guess. With an empty list,
+    the editor checks the project's `stems/` first, then the resolved audio's `stems/`;
+    a project with audio stored elsewhere must still find its project-side voice (#572).
+    The legacy base for declared stems is the resolved audio's directory.
+    Resolution runs
+    on the sync worker through `LyricAutoSyncOptions.ToSyncOptions`.
+    Every candidate, explicit or discovered, must match the decoded mix's duration
+    within 100 ms (`StemTimeBase`, allowing codec padding). Otherwise the mix is
+    used, the vocal envelope is omitted, and a warning names both files and both
+    durations in the log and result. `LyricAutoSyncOutcome` retains the seam's
+    warnings and actual `AudioPath`; the applied status already displays `AudioSource`.
+    Regression coverage: `LyricSyncSeamTests`, `VocalStemLocatorTests` and
+    `LyricAutoSyncRunnerTests`, with injected samples and acoustic sessions.
+    A nonzero declared `Stem.Offset` is refused before the duration comparison;
+    the mix is used with a warning naming the offset. Only unshifted stem samples
+    are compared with the mix, so the duration check compares the same time base.
+    The mixer currently passes only name/path in `StemLoadRequest`; it does not
+    implement the serialized offset. Sync must not infer offset support from playback.
+    Owner's confirmed durations: mix and padded vocals 272.453 s, original vocals
+    260.453 s. The 100 ms tolerance accommodates the padder without accepting that
+    12 s mismatch.
   - **The lyric model runs on DirectML through `OnnxSessionFactory`'s Auto
     ladder** (DirectML → CPU; #151): any DirectX 12 GPU, no runtime to register,
     `DirectML.dll` ships beside the exe. It opens on DXGI adapter 0 (the display
@@ -72,7 +117,8 @@ file is the service half (models, decode, stem selection, windowing, install).
     (relative L2 3.9e-2), with graph fusion on or off.
   - **A run that fails on the GPU is retried on the CPU, per model, for the rest
     of the process** (`Audio/Lyrics/LyricProviderFallback.cs`). The ladder only
-    falls back when a session fails to CREATE; a graph can create on DirectML and
+    falls back when a provider fails to ATTACH; graph construction can fail after
+    attachment, and a graph can create on DirectML and
     still fail its first `Run`. `LyricAutoSyncService.OpenSession` wraps every head
     (the optional second one too) in `LyricProviderFallbackSession`: a failed
     `Encode` on a non-CPU provider logs ONE warning, disposes the GPU session,
@@ -84,6 +130,10 @@ file is the service half (models, decode, stem selection, windowing, install).
     fails keeps the multilingual head on the GPU. A session reports the provider it
     really attached through `ILyricAcousticSession.ActiveProvider` (default: CPU,
     which is never retried). Pinned by `LyricProviderFallbackTests`.
+    Non-CPU graph OPEN failures use the same remembered CPU fallback.
+    `LyricAcousticModel.Load` owns the session options before graph preprocessing
+    starts, so a failed in-memory rewrite releases them too
+    (`LyricAcousticModelDisposalTests`).
     **Why the published models need it:** both v1 exports (the archives the app downloads) are `torch.export` graphs, which
     write `allowzero=1` on every `Reshape` (145 nodes multilingual, 97 English), and
     ONNX Runtime 1.24.4's DirectML provider fails the first `Run` on that
@@ -122,50 +172,31 @@ file is the service half (models, decode, stem selection, windowing, install).
   - Decode via `PcmAudioLoader` then `SampleRateConverter` (Lanczos-8), never
     `JuceAudioDecoder.DecodeAs` — that resamples LINEARLY, and a 3:1 decimation
     folds 8-24 kHz straight back onto the formants the model reads.
-  - **The CTC end is a FLOOR, not the syllable's end** (`BuildPhrases`). The
-    model stops at the last frame it can still hear a syllable, which left
-    short pills with dead gaps — so a syllable SPANS to the next syllable's
-    start minus the note-style minimum gap
-    (`ChartSpacingEnforcer.GetMinDistance`, anchored at the earlier syllable
-    like `EnforceSoundSpacing` does). Within a word it always spans; across a
-    word boundary `LyricAutoSyncOptions.SpanWordEndToNextWord` decides
-    (default ON, `AppConfig.LyricSpanWordGap`); across a phrase boundary
-    `SpanPhraseEndToNextPhrase` (default OFF, `AppConfig.LyricSpanPhraseGap`).
-    Spanning never SHORTENS what was heard, and `MaxSyllableSeconds` caps a
-    spanned end exactly like a heard one. The inspector's sync call site builds
-    options through `LyricAutoSyncOptions.FromConfig` — the ONE seam the two
-    editor settings reach auto-sync through, so a settings change is live on
-    the next sync. Pinned by `LyricPhraseBuildingTests`; the mapping and the
-    call site by `LyricAutoSyncOptionsFactoryTests` (source lint — a call site
-    reverted to `Default` ships two settings that do nothing).
-  - **With a vocal STEM the end follows the voice in both directions**
-    (`Analysis/Lyrics/VocalEnvelope` + `VocalEndRefiner`, folded in by
-    `BuildPhrases`). `Align` builds a 10 ms RMS envelope from the samples it
-    already decoded — never a second decode — and only when the audio is a stem
-    (`LyricSyncResult.Envelope` is null for a mix). From the CTC end, the end
-    runs until the envelope stays under 30% of the phrase's level (p90 over the
-    phrase) for 50 ms: a held phrase-final vowel extends to its fade, and an
-    in-word span stops at a breath instead of bridging it. Bounds are the old
-    ones — never below the CTC end, never past the next onset minus the minimum
-    gap, never past `MaxSyllableSeconds`. Where the voice never falls silent
-    before the bound, a boundary the chart spans runs to the bound (as before)
-    and one it does not span keeps the CTC end. Measured on the romaji corpus
-    (stem): phrase-final ends median −308 → −15 ms from the hand-synced end,
-    within 100 ms 6.9% → 65.1%, later than 50 ms 4.0% → 21.7%; all ends within
-    100 ms 84.3% → 89.8%, p90 178 → 101 ms. The thresholds are the sweep's pick:
-    among the settings with the lowest phrase-final late share, the highest
-    phrase-final within-100 ms (10% / 80 ms keeps the fade tail: 44% / 32.6%
-    late). On a MIX the same rule moves little (the band's loudness never
-    falls silent), so it is not applied.
-  - **The app and the dotcharter-lyricsync CLI end syllables through ONE rule**,
-    `Analysis/Lyrics/LyricSyllableEnds.Compute`: clamp the CTC end to the next
-    onset and `MaxSyllableSeconds`, then move it toward the latest allowed end by
-    the span rule, or by the voice when there is an envelope. Each caller passes
-    only what differs: its span rule and where a spanned end may reach (the beat
-    grid's minimum gap in `BuildPhrases`, the fixed `MinGapSeconds` in
-    `LyricSyncCommand.SpanEnds`, which now gets the stem's envelope from the
-    seam's `LyricSyncResult.Envelope`). `LyricSyncEndParityTests` gives both the
-    same spans and envelope and expects the same ends.
+  - **An in-phrase span ends at the next start minus note spacing.**
+    `LyricPhraseSpacing` uses `ChartSpacingEnforcer.GetMinDistance` at the earlier
+    syllable's start. Auto-sync always spans syllables within a word.
+    `LyricSpanWordGap` defaults on and spans across words within a phrase.
+    With it off, word endings keep their measured duration up to the same spacing
+    limit. Lyric imports and the inspector's **Close gaps in phrases** command
+    follow the same preference. Timing gestures use the same spacing limit.
+  - **Phrase-final chart ends use the alignment and vocal envelope by default.**
+    `LyricSpanPhraseGap` defaults off. Turning it on extends the last syllable
+    toward the next phrase using the measured span rules. `LyricSyllableEnds.ComputeWithReview`
+    measures ends up to the next onset and follows any sustained voice on the
+    stem. A hold that reaches the duration cap retains its review finding.
+    `LyricAutoSyncOptions.FromConfig` reads both editor settings.
+    The CLI uses the same measurements with its seconds-based span options.
+    `LyricSyncEndParityTests` pins the shared phrase-final behavior at the defaults.
+  - **Review findings are chart data (#627).** Each `AlignedSyllable` retains
+    the original path's low-score/gap/compression findings after local repair;
+    `BuildPhrases` carries its score and reasons into `LyricEvent`, adding the
+    shared end rule's cap-hit finding. The low-confidence count includes an
+    original low score even if the repaired path scores higher. Native saves
+    use optional vocal attributes; older charts and interchange exports keep
+    their existing shape. The row mark and inspector navigation read these
+    findings, rather than trying to reconstruct them from the summary count.
+    The CLI JSON also includes each syllable's `reviewReasons`, so a higher
+    repaired confidence does not hide the original finding from scripts.
   - **Vowel-initial syllables are the late ones, not the unvoiced-consonant
     ones** (`LyricAlignmentOptions.VowelInitialOnsetBiasSeconds`, fed from
     `LyricModelSelection.VowelInitialOnsetBiasSeconds`, −50 ms for the
@@ -226,14 +257,81 @@ phrase-final ends are where the stem matters: 5.7% within 100 ms, median
   further −25 ms centres them (−12 ms) and halves their late share (17.4% →
   8.5%), but within-50/100 ms do not improve (74.8 → 74.4%, 93.0 → 92.6%) on
   258 syllables of one artist, so the constant stays where it is.
-- **English is not measured here.** This machine has no Rocksmith keys, so the
-  stock arrangements cannot be exported. Until it is measured, the English
-  numbers above (#223's `lyric-alignment.md` figures) are the latest, and the
-  vowel shift stays off for the English head. The recipe: set
+- **English is measured on JamendoLyrics instead (below).** This machine has no
+  Rocksmith keys, so the stock arrangements cannot be exported. The recipe for
+  the stock English corpus, when the keys are there: set
   `DOTCHARTER_RS_KEYS`, `DOTCHARTER_LYRIC_SOURCES` and `DOTCHARTER_LYRIC_LIBRARY`,
   run the add-on's lyric-truth exporter (filter `*LyricTruthExport*`), then `*LyricCorpusBuildProbeTests`
   and `*LyricCorpusProbeTests`. The report then gains an `english` section in
   the same shape.
+
+**JamendoLyrics, word onsets on the vocal stem** (79 songs, 21,580 words, one
+syllable per word, raw `Align` seconds; measured 2026-11-22). The English-primary
+blend used to run a median +52 ms late. Same German annotations, two routes: the
+songs the router sent to the English head sat +28 ms, the multilingual ones
+−19 ms, so the lateness is the blend's, not the language's or the reference's. Its
+old +10 ms bias had been fitted to Rocksmith charts, whose onsets sit ~25 ms
+after the voice. Vowel-initial English words were later still (+71 ms against
++44 ms). Now −35 ms, plus −30 ms on vowel-initial syllables (an offline sweep of
+both, then this re-run):
+
+| within 100 ms | en | fr | de | es | romaji (4 songs) |
+|---|---:|---:|---:|---:|---:|
+| before (+10 ms, no vowel shift) | 74.0% | 85.7% | 92.5% | 92.2% | 94.0% |
+| after | 84.8 | 86.2 | 93.5 | 92.3 | 94.0 |
+
+FR/DE/ES move only on the few songs the router reads as English. The re-run is the
+git-ignored local Jamendo onset probe (not committed) in the test project (build
+with `IncludeLocalOnlyHarnesses=true`, set `DOTCHARTER_LYRIC_JAMENDO` to a corpus
+in `LyricProbeCorpus` form and `DOTCHARTER_LYRIC_CORPUS` to the romaji one); it
+fails under English 82% or 0.5 points under any other "before" value.
+
+**Model trials (#870, measured 2026-11-22): nothing beat the shipped aligner, so
+nothing ships.** Same corpora and seam as above (vocal stem, word onsets, raw
+`Align` seconds). "gross" = more than 1 s off, PCO = within 300 ms, AAE = mean
+absolute error. The baseline is the shipping router and ensemble.
+
+| romaji (4 songs, 945 words) | within 50 ms | within 100 ms | PCO 0.3 s | gross | AAE |
+|---|---:|---:|---:|---:|---:|
+| shipped ensemble (baseline) | 84.0% | 94.0% | 96.7% | 2.43% | 120 ms |
+| shipped multilingual head alone | 83.3 | 93.3 | 95.9 | 3.07 | 171 |
+| A: kana CTC head alone (romaji turned into kana) | 62.0 | 91.9 | 95.4 | 3.39 | 236 |
+| A: English INT8 head in place of `lyric-align-en` | 83.8 | 94.0 | 96.7 | 2.43 | 122 |
+| B: phoneme refiner, every onset | 58.2 | 81.1 | 93.0 | 1.90 | 119 |
+| B: phoneme refiner, only moves over 500 ms | 83.3 | 93.2 | 96.2 | 2.01 | 90 |
+
+| JamendoLyrics English (5,693 words) | within 50 ms | within 100 ms | PCO 0.3 s | gross | AAE |
+|---|---:|---:|---:|---:|---:|
+| shipped (baseline) | 65.5% | 86.1% | 94.5% | 2.90% | 273 ms |
+| A: English INT8 head in place of `lyric-align-en` | 64.7 | 85.3 | 93.7 | 3.86 | 413 |
+| B: phoneme refiner, every onset | 44.1 | 66.1 | 86.0 | 4.53 | 350 |
+| B: phoneme refiner, clamped to ±100 ms | 46.6 | 74.0 | 94.7 | 2.95 | 291 |
+| B: phoneme refiner, only moves over 500 ms | 63.2 | 82.9 | 90.8 | 4.37 | 309 |
+
+The English INT8 head also leaves FR/DE/ES within ±0.1 point (87.8 / 94.6 / 93.3%
+within 100 ms against 87.9 / 94.6 / 93.2%).
+
+- **A: singscope-align** (Hugging Face `shinjibass/singscope-align`, Apache-2.0,
+  INT8 dynamic quantisation, ONNX opset 17; `en/` 317 MB, `ja/` 320 MB). **Dropped.**
+  `en/` is the same `wav2vec2-large-960h-lv60-self` as `lyric-align-en`, quantised
+  again: it can only match or lose, and it loses (gross 2.90 → 3.86%). `ja/` is
+  `reazon-research/japanese-wav2vec2-large-rs35kh`: a 3,003-symbol kana/kanji
+  vocabulary whose CTC blank is id 0 (`<unk>`), while its `vocab.json` lists 3,004
+  entries (`<s>`, `</s>`, `<pad>`, `|` sit past the 3,003-wide output). Fed the
+  romaji turned into hiragana, it loses to the multilingual head alone on every
+  metric, and even after an in-sample shift for its −37 ms median it stays behind
+  (81.2% against 84.8% within 50 ms). It cannot join the ensemble without a
+  cross-alphabet blend, and it would not help as a solo head.
+- **B: HubertFA v0.0.7** (GitHub `wolfgitpr/HubertFA` release asset, Apache-2.0
+  code, the release names no separate weight licence; 257 MB zip, 415 MB
+  `model.onnx`, raw 44.1 kHz waveform in, 10 ms frames, its own CMUdict and romaji
+  dictionaries). Used as a refiner: each line of aligned words, ±0.5 s, forced
+  through its phoneme sequence (Viterbi on the frame and edge outputs), and the word
+  onset taken from its first phoneme. **Dropped.** It is much less precise than the
+  CTC heads (within 100 ms falls by 13-20 points) and does not even cut the gross
+  errors in English. Gating it to large moves only fixes a handful of romaji words
+  while costing English 3 points within 100 ms. SOFA was not tried: it is the same
+  model family (HubertFA is built on it), with a non-commercial weight licence.
 
 ## The SEAM: everything above the beat grid, and the standalone tool on top of it
 
@@ -251,13 +349,13 @@ guard `no-beats`, call `Align`, `BuildPhrases`, report.
   .TheAppsAutoSyncRoutesThroughTheSeam` is a source lint on exactly that call —
   a fork would pass every behavioural test in the file and still drift.
 - **`LyricAutoSyncOptions.ToSyncOptions()` is the ONE projection and it is
-  one-way.** It carries the three knobs the alignment itself reads (onset bias,
-  star cost, provider) and DROPS the beat-grid ones. A knob left out of it is a
+  one-way.** It carries onset bias, star cost and provider, resolves the captured
+  project stem references to a path plus a discovery policy, and DROPS the beat-grid ones. A knob left out of it is a
   setting that silently stops working in the app while the CLI keeps honouring
   it, which is why `TheProjectionCarriesEveryAlignmentKnob` enumerates them.
 - **The seam accepts an EXPLICIT stem and still never separates.**
   `LyricSyncOptions.VocalStemPath` names a file; null falls back to
-  `VocalStemLocator`. A named stem that is missing is a hard `no-stem` failure
+  `VocalStemLocator` only when `DiscoverVocalStem` is true. A named stem that is missing is a hard `no-stem` failure
   rather than a quiet fall-back to the mix — the caller said which file, and the
   mix is measurably worse, so degrading silently would read as a bad model. A
   named stem whose bare name is not a vocal-stem name (the `no_vocals`
@@ -287,7 +385,15 @@ guard `no-beats`, call `Align`, `BuildPhrases`, report.
 
 The tool itself is `tools/lyric-sync/DotCharter.LyricSync/`, published by
 `tools/lyric-sync/Publish-LyricSync.ps1`, and documented for users in
-`tools/lyric-sync/README.md`. It writes seconds, never beats. Its two writers
+`tools/lyric-sync/README.md`. It writes seconds, never beats. **Its ends and review
+flags are the app's, through the app's code (#809):** `LyricSyncSpacing.Apply` runs
+`BuildPhrases` (ends, `LyricAlignmentReview`, `LyricPhraseSpacing.CloseGaps`) on a
+`LyricSyncBeatGrid` — tracked from the audio by `BeatMapAnalyzer`, a `--bpm` grid,
+or with no grid a dense neutral grid and a fixed 30 ms gap (`MinNoteDistanceMode.Milliseconds`),
+so the fallback differs in the gap only — then reads the syllables back in seconds.
+Review flags go to the report, to XML comment lines before the flagged `<vocal/>`
+(EOF skips any line holding `<!`) and to the JSON. Never re-implement a span rule in
+the tool. Its two writers
 live in Services because they need `Fmt` and `LrcLyricsWriter`'s stamp format:
 `Export/Lyrics/RsVocalsSecondsWriter` and `Export/Lyrics/LrcSecondsWriter`.
 **The `-`/`+` convention is shared with the chart writer through
@@ -301,27 +407,57 @@ three decimals, because its converter parses the string with the dot deleted.
 `LyricSyncWriterTests` pins all of it, plus a real round trip back through
 `RsXmlImporter`.
 
-## The call site hands over a SNAPSHOT, and drops a result for a project that closed
+## The call site snapshots before downloading, and cancels when its project closes
 
 **`SyncAsync` takes `IList<BeatMarker>` and must never be given
 `ProjectState.ActiveProject.Beats` itself.** It was, until 2026-09-04:
-`LyricsInspectorViewModel.AutoSync` passed `_chartEditor.Beats` — the live
+`LyricsInspectorViewModel.AutoSync` (now `LyricAutoSyncRunner.RunAsync`) passed `_chartEditor.Beats` — the live
 `ObservableCollection` — into a multi-second decode + CTC alignment on a worker.
 The UI thread can edit that collection mid-alignment, and opening a project
-REPLACES it outright. A `ToList()` costs nothing beside the decode and cannot be
-torn.
+REPLACES it outright. `LyricAutoSyncRunner` clones each `BeatMarker` into a new
+list before any await, including the model download. A plain `ToList()` still
+shares mutable markers, so edits to a marker would leak into inference.
+If tempo or marker times change during the run, returned phrases are cloned and
+remapped through absolute milliseconds from the captured grid to the live grid.
+Both phrase and syllable endpoints keep their aligned audio times.
 
 **And the outcome belongs to the project it was computed for.** The call site
-captures `ProjectState.ActiveProject` before the await and compares by
-`ReferenceEquals` after; a mismatch logs, reports
+captures `ProjectState.ActiveProject`, audio references and stems before the
+model download and compares by `ReferenceEquals` after download and alignment;
+a mismatch logs, reports
 `Status_LyricAutoSync_ProjectChanged` and applies NOTHING — the phrases were
 timed against a beat grid that belongs to a chart nobody is looking at, and
 writing them into the newly-opened song would silently mistime its lyrics. This
 is the same guard the stem pipeline already had
 (`StemSeparationViewModel`'s identity check before
 `RegisterAndPersistStemsAsync` applies); this path had none.
-`LyricAutoSyncProjectIdentityTests` covers the snapshot, the drop and the
-apply-when-still-open case.
+`LyricAutoSyncRunnerTests` covers download-time changes and marker isolation;
+`LyricAutoSyncProjectIdentityTests` covers the drop and apply-when-still-open
+case. The inspector also captures the destination vocal track before starting;
+a switched or removed destination discards the result with
+`Status_LyricAutoSync_TrackChanged`, rather than replacing another track.
+
+**`LyricAutoSyncRunner.RunAsync` captures every input before its first await:**
+project reference identity, lyric text, resolved mix path, project/audio references,
+stem values, option values and cloned `BeatMarker` values. Copying only the beat
+collection leaves its mutable markers shared with the editor. The spacing config
+also contains independent values, so edits during model installation or inference
+cannot change the inputs of a run already in progress.
+
+The runner checks reference identity after model installation, before inference and
+after inference. A replacement takes precedence over a failed installation or
+inference result. `LyricsInspectorViewModel.AutoSync` captures its own owner and
+checks it immediately after the runner await, before handling statuses or applying
+phrases. This closes the interval between a successful runner result and the UI
+continuation. Reopening the same persisted project creates a new owner too.
+A mismatch reports `Status_LyricAutoSync_ProjectChanged` and applies nothing to
+either project. An unchanged owner still applies through one undo action.
+
+`LyricAutoSyncRunnerTests` mutates captured inputs behind an injected download
+gate. `LyricAutoSyncProjectIdentityTests` covers download, inference and pre-apply
+replacement boundaries plus unchanged controls, for both another project and a
+reopened project with the same persisted identity. All gates are injected; these
+cases run without models, network, audio decoding or stem separation.
 
 ## The model download
 
@@ -331,7 +467,11 @@ apply-when-still-open case.
   zip payload — bundling them would make every update re-download 640 MB the
   machine already has. An existing model is authoritative whatever its
   provenance (hand-installed, newer export, mid-use on another thread), so the
-  presence check is the whole gate. Extraction stages into a sibling folder and
+  presence check is the whole gate. Extraction stages into a UNIQUE sibling
+  `.incoming-*` folder owned by that attempt; publication is serialized per target
+  across installer instances, with the installed winner checked again under the lock.
+  Repair removes copies from ALL search roots, including incomplete fallback copies.
+  The completed payload
   is `Directory.Move`d into place only when COMPLETE — an interrupted download
   must never leave a half-model that the presence check then trusts forever.
   Only `OperationCanceledException` escapes; an optional model that cannot be

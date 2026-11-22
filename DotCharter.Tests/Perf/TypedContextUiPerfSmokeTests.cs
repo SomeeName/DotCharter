@@ -25,8 +25,8 @@ public sealed class TypedContextUiPerfSmokeTests
         using var scope = App.Services!.CreateScope();
         var vm = (PatternBuilderViewModel)scope.ServiceProvider.GetRequiredService<IPatternBuilderScreen>();
         {
-            var first = new MatchPatternRowViewModel(new MatchPattern { Name = "First" }, vm.Choices);
-            var second = new MatchPatternRowViewModel(new MatchPattern { Name = "Second" }, vm.Choices);
+            var first = new MatchPatternRowViewModel(new MatchPattern { Name = "First" }, vm.Choices, DotCharter.Tests.Infrastructure.FakeLocalization.English());
+            var second = new MatchPatternRowViewModel(new MatchPattern { Name = "Second" }, vm.Choices, DotCharter.Tests.Infrastructure.FakeLocalization.English());
             vm.SelectedPattern = first;
             var view = new PatternBuilderDialogView { DataContext = vm };
             WithWindow(view, window =>
@@ -80,18 +80,19 @@ public sealed class TypedContextUiPerfSmokeTests
         var view = new EqModuleView { DataContext = vm, Width = 420 };
         WithWindow(view, window =>
         {
-            var chip = view.GetVisualDescendants().OfType<Button>()
-                .First(b => b.Classes.Contains("EqChip"));
-            var band = Assert.IsType<EqBandChipViewModel>(chip.DataContext);
-            Assert.True(chip.Bounds.Width > 0 && chip.Bounds.Height > 0);
+            // Design D: the Band card's picker shows the selected band, typed, dimmed while it is off.
+            var label = view.GetVisualDescendants().OfType<ComboBox>().Single(c => c.Name == "EqBandPicker")
+                .GetVisualDescendants().OfType<TextBlock>().First(t => t.DataContext is EqBandChipViewModel);
+            var band = Assert.IsType<EqBandChipViewModel>(label.DataContext);
+            Assert.True(label.Bounds.Width > 0 && label.Bounds.Height > 0);
+            // the dim is on the item's row (the colour dot and the label together)
+            var item = Assert.IsType<StackPanel>(label.GetVisualParent());
             if (band.IsEnabled) band.ToggleEnabledCommand.Execute(null);
             window.UpdateLayout();
-            Assert.Contains("EqBandOff", chip.Classes);
-            Assert.Equal(0.5, chip.Opacity);
+            Assert.Equal(0.45, item.Opacity, 2);
             band.ToggleEnabledCommand.Execute(null);
             window.UpdateLayout();
-            Assert.DoesNotContain("EqBandOff", chip.Classes);
-            Assert.Equal(1, chip.Opacity);
+            Assert.Equal(1, item.Opacity);
         }, inspectorStyles: true);
     }, CancellationToken.None);
 

@@ -113,7 +113,7 @@ public sealed class ChartSynthInstrumentCoordinator : IDisposable
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Chart synth: song tones cannot override the instrument (no tone coordinator). {ex.GetType().Name}: {ex.Message}");
+                "Chart synth: song tones cannot override the instrument (no tone coordinator)", ex);
         }
 
         if (_tones != null)
@@ -293,7 +293,7 @@ public sealed class ChartSynthInstrumentCoordinator : IDisposable
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Chart synth: following the song tone failed. {ex.GetType().Name}: {ex.Message}");
+                "Chart synth: following the song tone failed", ex);
         }
     }
 
@@ -314,7 +314,7 @@ public sealed class ChartSynthInstrumentCoordinator : IDisposable
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Chart synth: the instrument did not follow the profile switch. {ex.GetType().Name}: {ex.Message}");
+                "Chart synth: the instrument did not follow the profile switch", ex);
         }
     }
 
@@ -369,7 +369,7 @@ public sealed class ChartSynthInstrumentCoordinator : IDisposable
         try { id = _profiles.ActiveProfile.Id; }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Chart synth: the active profile could not be read: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Chart synth: the active profile could not be read", ex);
             return;
         }
 
@@ -434,7 +434,7 @@ public sealed class ChartSynthInstrumentCoordinator : IDisposable
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Chart synth: moving the app-wide instrument into the profile failed. {ex.GetType().Name}: {ex.Message}");
+                "Chart synth: moving the app-wide instrument into the profile failed", ex);
         }
     }
 
@@ -483,7 +483,7 @@ public sealed class ChartSynthInstrumentCoordinator : IDisposable
                 try { write(); }
                 catch (Exception ex)
                 {
-                    _logger?.Warning(AppLogCategory.Audio, $"Chart synth: saving the instrument failed. {ex.GetType().Name}: {ex.Message}");
+                    _logger?.Warning(AppLogCategory.Audio, "Chart synth: saving the instrument failed.", ex);
                 }
                 finally
                 {

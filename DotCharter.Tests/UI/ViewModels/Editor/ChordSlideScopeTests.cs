@@ -234,7 +234,9 @@ public sealed class ChordSlideScopeTests
     /// <summary>
     ///     The rule above is only worth anything while the inspector's two slide
     ///     writers and its readout go through it, with the MASK — rather than
-    ///     an absolute <c>cn.SlideTo = value</c> broadcast.
+    ///     an absolute <c>cn.SlideTo = value</c> broadcast. The second writer is the
+    ///     staged chord Technique page's "Copy to strings": the edited string's
+    ///     interval, on the movers only (an open string never slides).
     /// </summary>
     [Fact]
     public void TheInspectorsSlideWritersAndReadout_AskThisRule()
@@ -246,9 +248,11 @@ public sealed class ChordSlideScopeTests
         Assert.Contains("StringEditMask", typed);
         Assert.DoesNotContain("cn.SlideTo = value", typed);
 
-        var broadcast = BodyOf(source, "private void ApplyTechniquesToAllStrings()");
-        Assert.Contains("CopiedSlide(", broadcast);
-        Assert.DoesNotContain("cn.SlideTo =", broadcast);
+        var copy = StagedChordTechniqueSource();
+        var broadcast = BodyOf(copy, "internal static IEnumerable<(int StringIndex, int? End)> CopiedSlides(");
+        Assert.Contains("ChordSlideScope.Movers(", broadcast);
+        Assert.Contains("CopiedSlides(", BodyOf(copy, "private void CopyToStrings()"));
+        Assert.DoesNotContain(".SlideTo =", broadcast);
 
         var readout = BodyOf(source, "private void SyncChordSlide()");
         Assert.Contains("ChordSlideScope.Read(MaskedChordNotes(", readout);
@@ -262,6 +266,13 @@ public sealed class ChordSlideScopeTests
         Assert.NotEmpty(files);
         return Regex.Replace(string.Join("\n", files.Select(UiSourceTree.ReadAllText)), @"^\s*//.*$", "",
             RegexOptions.Multiline);
+    }
+
+    private static string StagedChordTechniqueSource()
+    {
+        var path = UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "ViewModels", "Editor", "Inspector",
+            "StagedChordTechniqueViewModel.cs"));
+        return Regex.Replace(UiSourceTree.ReadAllText(path), @"^\s*//.*$", "", RegexOptions.Multiline);
     }
 
     private static string BodyOf(string src, string signature)

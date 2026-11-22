@@ -15,6 +15,7 @@ public sealed class AiSecretStoreTests : IDisposable
     public void Dispose()
     {
         if (File.Exists(_path)) File.Delete(_path);
+        File.Delete(_path + ".writer.lock");
     }
 
     [Fact]
@@ -94,6 +95,112 @@ public sealed class AiSecretStoreTests : IDisposable
 
         Assert.Null(store.Read(AiProviderKind.Claude));
         Assert.Empty(logger.Warnings);
+    }
+
+    [Fact]
+    public void AnUnreadableStoreCannotEraseOtherProviders_AndTheNextWriteRetriesTheRead()
+    {
+        if (!new DpapiAiSecretStore().IsPersistent) Assert.Skip("DPAPI is Windows-only.");
+        var store = new DpapiAiSecretStore(filePath: _path);
+        store.Write(AiProviderKind.Claude, "claude-key");
+        store.Write(AiProviderKind.OpenAiCompatible, "gateway-key");
+        var before = File.ReadAllBytes(_path);
+
+        using (new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Write | FileShare.Delete))
+            Assert.False(store.Write(AiProviderKind.Claude, "replacement"));
+
+        Assert.Equal(before, File.ReadAllBytes(_path));
+        Assert.True(store.Write(AiProviderKind.Claude, "replacement"));
+        Assert.Equal("replacement", store.Read(AiProviderKind.Claude));
+        Assert.Equal("gateway-key", store.Read(AiProviderKind.OpenAiCompatible));
+    }
+
+    [Theory]
+    [InlineData("new-key")]
+    [InlineData(null)]
+    public void AnUndecryptableStoreIsPreservedOnWriteOrDelete(string? secret)
+    {
+        if (!new DpapiAiSecretStore().IsPersistent) Assert.Skip("DPAPI is Windows-only.");
+        var before = "not a DPAPI blob"u8.ToArray();
+        File.WriteAllBytes(_path, before);
+        Assert.False(new DpapiAiSecretStore(filePath: _path).Write(AiProviderKind.Claude, secret));
+        Assert.Equal(before, File.ReadAllBytes(_path));
+    }
+
+    [Theory]
+    [InlineData("replacement", true)]
+    [InlineData(null, true)]
+    [InlineData(null, false)]
+    public void AWriterLeaseRefusesAnotherInstanceUntilRetry_WithoutLosingOtherProviders(string? secret, bool otherProvider)
+    {
+        if (!new DpapiAiSecretStore().IsPersistent) Assert.Skip("DPAPI is Windows-only.");
+        var first = new DpapiAiSecretStore(filePath: _path);
+        Assert.True(first.Write(AiProviderKind.Claude, "claude-key"));
+        if (otherProvider) Assert.True(first.Write(AiProviderKind.OpenAiCompatible, "gateway-key"));
+        var before = File.ReadAllBytes(_path);
+        var logger = new RecordingLogger();
+        var second = new DpapiAiSecretStore(logger, _path);
+        var leasePath = _path + ".writer.lock";
+
+        using (new FileStream(leasePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+        {
+            Assert.False(second.Write(AiProviderKind.Claude, secret));
+            Assert.Equal(before, File.ReadAllBytes(_path));
+            Assert.Equal("claude-key", first.Read(AiProviderKind.Claude));
+            if (otherProvider) Assert.Equal("gateway-key", first.Read(AiProviderKind.OpenAiCompatible));
+        }
+
+        Assert.Equal("AI provider key could not acquire its writer lease: IOException.", Assert.Single(logger.Warnings));
+        Assert.True(second.Write(AiProviderKind.Claude, secret));
+        Assert.Equal(secret, first.Read(AiProviderKind.Claude));
+        if (otherProvider) Assert.Equal("gateway-key", first.Read(AiProviderKind.OpenAiCompatible));
+        else Assert.False(File.Exists(_path));
+        Assert.True(File.Exists(leasePath));
+        Assert.Empty(File.ReadAllBytes(leasePath));
+    }
+
+    [Fact]
+    public void AFailedPublicationReportsFailure_AndTheNextWriteRetries()
+    {
+        if (!new DpapiAiSecretStore().IsPersistent) Assert.Skip("DPAPI is Windows-only.");
+        var logger = new RecordingLogger();
+        var store = new DpapiAiSecretStore(logger, _path);
+        Assert.True(store.Write(AiProviderKind.Claude, "claude-key"));
+        Assert.True(store.Write(AiProviderKind.OpenAiCompatible, "gateway-key"));
+        var before = File.ReadAllBytes(_path);
+        var attributes = File.GetAttributes(_path);
+        File.SetAttributes(_path, attributes | FileAttributes.ReadOnly);
+        try
+        {
+            Assert.False(store.Write(AiProviderKind.Claude, "replacement"));
+            Assert.Equal(before, File.ReadAllBytes(_path));
+            Assert.Contains(logger.Warnings,
+                w => w.StartsWith("AI provider key could not be persisted:", StringComparison.Ordinal));
+        }
+        finally
+        {
+            File.SetAttributes(_path, attributes);
+        }
+
+        Assert.True(store.Write(AiProviderKind.Claude, "replacement"));
+        Assert.Equal("replacement", store.Read(AiProviderKind.Claude));
+        Assert.Equal("gateway-key", store.Read(AiProviderKind.OpenAiCompatible));
+    }
+
+    [Fact]
+    public void AFailedDeleteReportsFailure_AndTheNextClearRetries()
+    {
+        if (!new DpapiAiSecretStore().IsPersistent) Assert.Skip("DPAPI is Windows-only.");
+        var store = new DpapiAiSecretStore(filePath: _path);
+        Assert.True(store.Write(AiProviderKind.Claude, "claude-key"));
+        var before = File.ReadAllBytes(_path);
+
+        using (new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            Assert.False(store.Write(AiProviderKind.Claude, null));
+
+        Assert.Equal(before, File.ReadAllBytes(_path));
+        Assert.True(store.Write(AiProviderKind.Claude, null));
+        Assert.False(File.Exists(_path));
     }
 
     [Fact]

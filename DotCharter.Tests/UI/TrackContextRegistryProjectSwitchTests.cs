@@ -1,3 +1,4 @@
+using DotCharter.Core.Domain.Vocals;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.Services.Editing.Tracks;
 
@@ -25,6 +26,39 @@ namespace DotCharter.Tests.UI;
 public sealed class TrackContextRegistryProjectSwitchTests
 {
     private const int ArrangementsPerProject = 5;
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AClosedTracksFocusRequest_PreservesTheOpenProjectsSelection(bool vocalsOnly)
+    {
+        var state = new ProjectState();
+        var selection = new SelectionService();
+        using var registry = new TrackContextRegistry(state, selection);
+        var first = BuildProject("closed");
+        OpenProject(state, registry, first);
+        var closed = first.Arrangements[0];
+        var second = vocalsOnly ? new ChartProject() : BuildProject("open");
+        OpenProject(state, registry, second);
+        var focused = registry.FocusedTrack;
+        var lyric = new LyricEvent { Text = "live", IsPhraseEnd = true };
+        var phrase = new LyricPhrase { Lyrics = [lyric] };
+        second.VocalTracks.Add(new VocalTrack { Phrases = [phrase] });
+        if (vocalsOnly) selection.SelectedLyric = lyric;
+        else selection.SelectedNotes.Add(second.Arrangements[0].Levels[0].Notes[0]);
+        var selectionVersion = selection.SelectionVersion;
+        var focusChanges = 0;
+        registry.FocusedTrackChanged += () => focusChanges++;
+
+        registry.Focus(closed);
+
+        Assert.Equal(selectionVersion, selection.SelectionVersion);
+        if (vocalsOnly) Assert.Same(lyric, selection.SelectedLyric);
+        else Assert.Same(second.Arrangements[0].Levels[0].Notes[0], Assert.Single(selection.SelectedNotes));
+        Assert.Same(focused, registry.FocusedTrack);
+        Assert.Null(registry.Get(closed));
+        Assert.Equal(0, focusChanges);
+    }
 
     /// <summary>The registry must not carry a previous project's arrangements forward.</summary>
     [Fact]

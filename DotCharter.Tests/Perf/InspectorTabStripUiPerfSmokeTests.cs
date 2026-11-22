@@ -7,6 +7,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
+using DotCharter.Localization;
 using DotCharter.UI.Controls;
 using DotCharter.UI.ViewModels.Editor;
 using DotCharter.UI.Views.Editor;
@@ -15,7 +16,9 @@ namespace DotCharter.Tests.Perf;
 
 /// <summary>
 ///     #573: the Inspector's tab strip is ALL labelled or ALL icons — the active tab always keeps
-///     its caption — and what does not fit even as icons goes into "More ▾". The owner's captures
+///     its caption — and what does not fit even as icons goes into "More ▾", whose rows carry the tab's
+///     badges. Since inspector design D (#751) the labelled strip is captions only (the glyphs show only in
+///     the icons fallback), packed at the start while nothing overflows. The owner's captures
 ///     showed the opposite: some tabs labelled, some not, the set shifting as the pane resized, and
 ///     wide gaps at the end of the row.
 ///     <para>
@@ -53,14 +56,19 @@ public sealed class InspectorTabStripUiPerfSmokeTests
         }), CancellationToken.None);
 
     /// <summary>
-    ///     At the dock's 320 px floor some tabs overflow in every culture. The More menu lists
+    ///     At the dock's 320 px floor some tabs overflow in English and German; in ja-JP the
+    ///     icons all fit there, so the case narrows the pane until something does (the strip's
+    ///     rule is the same at any width). The More menu lists
     ///     exactly those, in strip order, under the tab's own name; picking one selects it and
     ///     brings it into the strip — the keyboard reaches it the same way (Tab to More, Enter,
     ///     arrows, Enter).
     /// </summary>
     [Fact]
-    public async Task TheMoreMenu_ListsTheOverflowedTabs_AndPickingOneBringsItIntoTheStrip() =>
-        await HeadlessSessionFixture.Dispatch(() => InspectorNarrowWidthUiPerfSmokeTests.WithPane(320, view =>
+    public async Task TheMoreMenu_ListsTheOverflowedTabs_AndPickingOneBringsItIntoTheStrip()
+    {
+        var width = await HeadlessSessionFixture.Dispatch(FirstWidthThatOverflows, CancellationToken.None);
+        Assert.True(width > 0, $"nothing overflows even at {MoreMenuWidths[^1]} px - this case tests nothing; repoint it");
+        await HeadlessSessionFixture.Dispatch(() => InspectorNarrowWidthUiPerfSmokeTests.WithPane(width, view =>
         {
             var vm = (InspectorViewModel)view.DataContext!;
             var window = (Window)TopLevel.GetTopLevel(view)!;
@@ -70,7 +78,7 @@ public sealed class InspectorTabStripUiPerfSmokeTests
             NarrowWidthLayout.Settle(window);
 
             var overflow = row.OverflowTabs.OfType<ToggleButton>().ToList();
-            Assert.True(overflow.Count > 0, $"nothing overflows at 320 px ({row.Mode}) - this case tests nothing; repoint it");
+            Assert.True(overflow.Count > 0, $"nothing overflows at {width} px ({row.Mode}) - this case tests nothing; repoint it");
             var more = Assert.IsType<ToggleButton>(row.OverflowButton);
             Assert.True(KeyboardNavigation.GetIsTabStop(more) && more.Focusable && more.IsEffectivelyEnabled,
                 "the More button cannot take keyboard focus");
@@ -84,12 +92,12 @@ public sealed class InspectorTabStripUiPerfSmokeTests
                 var items = menu.Items.OfType<MenuItem>().Where(i => i.IsVisible).ToList();
                 Assert.NotEmpty(items);
                 var popup = TopLevel.GetTopLevel(items[0]);
-                Assert.Equal(overflow.Select(AutomationProperties.GetName), items.Select(i => i.Header as string));
+                Assert.Equal(overflow.Select(AutomationProperties.GetName), items.Select(i => (i.Header as Panel)?.Children.OfType<TextBlock>().FirstOrDefault()?.Text));
                 Assert.Equal(overflow.Select(t => t.Tag), items.Select(i => i.Tag));
                 Assert.True(more.IsChecked == true, "the More button does not show that its menu is open");
                 Assert.All(items, item => Assert.True(item.Bounds.Width > 1 && item.IsEffectivelyEnabled,
                     $"the More row '{item.Header}' did not lay out ({item.Bounds}; menu open {menu.IsOpen}, top level {popup?.GetType().Name ?? "none"})"));
-                CaptureWithPopup(window, items[0], "tabstrip-320-more-open");
+                CaptureWithPopup(window, items[0], $"tabstrip-{width}-more-open");
 
                 var picked = items[^1];
                 picked.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
@@ -100,13 +108,127 @@ public sealed class InspectorTabStripUiPerfSmokeTests
                 Assert.Equal(TagOf(target), vm.SelectedTabIndex);
                 Assert.Contains(target, row.ShownTabs);
                 Assert.False(more.IsChecked == true, "the More button stayed lit after its menu closed");
-                AssertStrip(320, strip, row, tabs, target);
+                AssertStrip(width, strip, row, tabs, target);
             }
             finally
             {
                 menu.Hide();
             }
         }), CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     #751 review: design D's captions-only strip put the tabs that did not fit into More (two clicks, and the
+    ///     rows dropped the Issues count). At the 530 x 370 primary size and the 480 x 370 tiny one, in every
+    ///     language, every tab stands in the strip (one click) whichever is active, all labelled or all icons, and
+    ///     the Issues count shows; in English at 530 every caption fits.
+    /// </summary>
+    [Theory]
+    [InlineData(530)]
+    [InlineData(480)]
+    public async Task EveryTab_IsOneClick_AtThePrimaryAndTinySizes_InEveryCulture(int width) =>
+        await HeadlessSessionFixture.Dispatch(() => InEveryCulture(culture => InspectorNarrowWidthUiPerfSmokeTests.WithPane(width, view =>
+        {
+            var vm = (InspectorViewModel)view.DataContext!;
+            var window = (Window)TopLevel.GetTopLevel(view)!;
+            window.Height = 370;
+            NarrowWidthLayout.Settle(window);
+            var (strip, row) = Strip(view);
+            var tabs = Tabs(row);
+            foreach (var tab in tabs)
+            {
+                vm.SelectedTabIndex = TagOf(tab);
+                NarrowWidthLayout.Settle(window);
+                AssertStrip(width, strip, row, tabs, tab);
+                Assert.True(row.OverflowTabs.Count == 0,
+                    $"at {width} px ({culture}, tab {tab.Tag} active, {row.Mode}) tabs are two clicks away in More: " +
+                    string.Join(", ", row.OverflowTabs.Select(AutomationProperties.GetName)));
+                if (TagOf(tab) == 0) NarrowWidthLayout.Capture(window, $"tabstrip-{width}x370-{culture}");
+            }
+
+            if (width >= 530 && culture == "en-US") Assert.Equal(TabStripMode.Labelled, row.Mode);
+        })), CancellationToken.None);
+
+    /// <summary>
+    ///     A tab in More says what it says in the strip: the Issues row carries the live Issues count (the rows used
+    ///     to drop it). The case narrows the pane until Issues itself overflows.
+    /// </summary>
+    [Fact]
+    public async Task AMoreRow_CarriesItsTabsBadge() =>
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var tested = false;
+            foreach (var width in MoreMenuWidths)
+            {
+                InspectorNarrowWidthUiPerfSmokeTests.WithPane(width, view =>
+                {
+                    var (strip, row) = Strip(view);
+                    var issues = Tabs(row).Single(t => TagOf(t) == 4);
+                    if (tested || !row.OverflowTabs.Contains(issues)) return;
+                    tested = true;
+                    var count = strip.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("TabCountBadge"))
+                        .GetVisualDescendants().OfType<TextBlock>().Single().Text;
+                    var more = Assert.IsType<ToggleButton>(row.OverflowButton);
+                    var menu = Assert.IsType<MenuFlyout>(more.Flyout);
+                    menu.ShowAt(more);
+                    NarrowWidthLayout.Settle((Window)TopLevel.GetTopLevel(view)!);
+                    try
+                    {
+                        AssertRowCarriesBadge(menu.Items.OfType<MenuItem>().Single(i => Equals(i.Tag, "4")), count, $"at {width} px, the Issues row");
+                    }
+                    finally
+                    {
+                        menu.Hide();
+                    }
+                });
+            }
+
+            Assert.True(tested, $"Issues never overflows even at {MoreMenuWidths[^1]} px - this case tests nothing; repoint it");
+        }, CancellationToken.None);
+
+    /// <summary>A More row shows a badge whose text is <paramref name="text" />, visible and laid out.</summary>
+    internal static void AssertRowCarriesBadge(MenuItem item, string? text, string what)
+    {
+        Assert.False(string.IsNullOrEmpty(text), $"{what}: the tab's own badge is empty - this case tests nothing");
+        var header = Assert.IsAssignableFrom<Panel>(item.Header);
+        var texts = header.Children.Skip(1).SelectMany(c => c.GetVisualDescendants().Prepend(c)).OfType<TextBlock>()
+            .Where(t => t.IsEffectivelyVisible).ToList();
+        Assert.True(texts.Any(t => t.Text == text && t.Bounds.Width > 1),
+            $"{what} carries no visible '{text}' badge (it shows: {string.Join(", ", texts.Select(t => $"'{t.Text}' {t.Bounds.Width:0.#} px"))})");
+    }
+
+    private static void InEveryCulture(Action<string> body)
+    {
+        var restore = LocalizationService.Instance.ConfiguredCulture;
+        try
+        {
+            foreach (var culture in new[] { "en-US", "de-DE", "ja-JP" })
+            {
+                LocalizationService.Instance.SetConfiguredCulture(culture);
+                body(culture);
+            }
+        }
+        finally
+        {
+            LocalizationService.Instance.SetConfiguredCulture(restore);
+            System.Globalization.CultureInfo.CurrentUICulture = LocalizationService.Instance.Culture;
+        }
+    }
+
+    private static readonly int[] MoreMenuWidths = [320, 280, 240, 200, 160];
+
+    /// <summary>The widest pane width at which the strip puts a tab into More, or 0 when none does.</summary>
+    private static int FirstWidthThatOverflows()
+    {
+        foreach (var width in MoreMenuWidths)
+        {
+            var overflows = false;
+            InspectorNarrowWidthUiPerfSmokeTests.WithPane(width, view => overflows = Strip(view).Row.OverflowTabs.OfType<ToggleButton>().Any());
+            if (overflows) return width;
+        }
+
+        return 0;
+    }
 
     private static void AssertStrip(int width, Border strip, OverflowTabStrip row, List<ToggleButton> tabs, ToggleButton active)
     {
@@ -167,7 +289,10 @@ public sealed class InspectorTabStripUiPerfSmokeTests
         }
 
         var tail = row.Bounds.Width - edges[^1].Right;
-        Assert.True(tail <= narrowest + 0.5, $"{at} the strip ends in a {tail:0.#} px gap, wider than its narrowest tab ({narrowest:0.#} px)");
+        // Design D (#751) packs the tabs at the start while nothing overflows (the gap at the end is the design's);
+        // a strip with tabs in More shares its slack, so it never ends in a gap beside the More button.
+        if (row.ShareSlack || overflow.Count > 0)
+            Assert.True(tail <= narrowest + 0.5, $"{at} the strip ends in a {tail:0.#} px gap, wider than its narrowest tab ({narrowest:0.#} px)");
 
         // More is in the strip exactly when something overflows, and an overflowed tab is neither
         // drawn nor reachable by Tab or the pointer — only through More.

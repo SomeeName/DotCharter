@@ -52,6 +52,7 @@ public sealed class AiChartPassRun
     private int _inFlight;
 
     private AiChartReview? _review;
+    private readonly List<AiChartReview> _queued = [];
     private ChartQualityReporter? _quality;
 
     /// <summary>Builds the run.</summary>
@@ -110,8 +111,13 @@ public sealed class AiChartPassRun
     /// (<see cref="ProjectAudioLocator" />). A test seam.</summary>
     public Func<string?>? SongAudio { get; init; }
 
-    private ChartQualityReporter QualityReporter =>
-        _quality ??= Quality ?? new ChartQualityReporter(new ArrangementValidationService(_logger));
+    /// <summary>The app settings the default quality report reads its minimum note distance from
+    /// (D15); ignored when <see cref="Quality" /> is set. Null: the app default.</summary>
+    public IConfigurationService? AppConfiguration { get; init; }
+
+    internal ChartQualityReporter QualityReporter =>
+        _quality ??= Quality ?? new ChartQualityReporter(
+            new ArrangementValidationService(_logger, ArrangementValidationService.DefaultRules(AppConfiguration)));
 
     /// <summary>True while a run is in flight.</summary>
     public bool IsRunning => Volatile.Read(ref _inFlight) != 0;
@@ -123,7 +129,11 @@ public sealed class AiChartPassRun
     /// <see cref="DiscardReview" />; null when none is waiting.</summary>
     public AiChartReview? Review => _review;
 
-    /// <summary>Raised on the UI thread when <see cref="Review" /> changes.</summary>
+    /// <summary>How many more reviews wait behind <see cref="Review" />: the other arrangements of a
+    /// multi-arrangement chat run, shown one after the other as each is applied or discarded.</summary>
+    public int QueuedReviewCount => _queued.Count;
+
+    /// <summary>Raised on the UI thread when <see cref="Review" /> or <see cref="QueuedReviewCount" /> changes.</summary>
     public event EventHandler? ReviewChanged;
 
     /// <summary>Raised on the UI thread after <see cref="ApplyReview" /> wrote an FHP / fingering review,
@@ -261,7 +271,8 @@ public sealed class AiChartPassRun
         }
 
         SetReview(null);
-        var action = AiStructureApplier.Build(review.Arrangement, accepted, out var applied, out var stale);
+        var action = AiStructureApplier.Build(review.Arrangement, accepted, out var applied, out var stale,
+            new AiStructureWorld(review.Project.Arrangements, review.Project.Beats));
         var written = action is not null && _history.Do(action);
         if (written) _redraw?.Invoke();
         _logger.Info(AppLogCategory.Editing, string.Create(CultureInfo.InvariantCulture,
@@ -338,11 +349,45 @@ public sealed class AiChartPassRun
         Say("AiChart_ReviewDiscarded", StatusSeverity.Info);
     }
 
+    /// <summary>Retires the shown review; the next queued one that still belongs to the open project takes its place.</summary>
     private void SetReview(AiChartReview? review)
     {
+        if (review is null)
+        {
+            _queued.RemoveAll(q => !ReferenceEquals(q.Project, _state.ActiveProject));
+            if (_queued.Count > 0)
+            {
+                review = _queued[0];
+                _queued.RemoveAt(0);
+            }
+        }
+
         if (ReferenceEquals(_review, review)) return;
         _review = review;
         ReviewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Holds a run's review: shown now, or queued behind the one showing when the run is a later
+    /// arrangement of one chat request.</summary>
+    private void HoldReview(AiChartReview review, RunTarget target)
+    {
+        if (target.QueueBehindHeld && _review is not null)
+        {
+            _queued.Add(review);
+            ReviewChanged?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        SetReview(review);
+    }
+
+    /// <summary>A new run drops the shown review AND the queued ones: they wait on the chart it reads again. A question
+    /// is no new proposals, and a later arrangement of one request adds to the queue.</summary>
+    private void ClearForNewRun(AiChartJob job, RunTarget target)
+    {
+        if (job == AiChartJob.Explain || target.QueueBehindHeld) return;
+        _queued.Clear();
+        SetReview(null);
     }
 
     /// <summary>Runs the pass and HOLDS its proposals in <see cref="Review" />; nothing is
@@ -362,27 +407,17 @@ public sealed class AiChartPassRun
     /// </summary>
     /// <param name="request">The job, the instruction and the scope.</param>
     /// <param name="ct">Cancels the run, like the rail pill's cancel.</param>
-    /// <exception cref="ArgumentOutOfRangeException">The name job: the chat may change hand
-    /// positions, chord fingering, sections and phrases only, or ask (<see cref="AiChartJob.Explain" />,
-    /// a text answer, nothing held, the review still waiting left as it is).</exception>
+    /// <exception cref="ArgumentException">The instruction has no words.</exception>
     public Task<AiChartRunOutcome> RunInstructionAsync(AiChartInstructedRun request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Instruction);
-        if (!request.Job.ProposesAnchors() && !request.Job.ProposesFingers() &&
-            request.Job is not (AiChartJob.SectionsAndPhrases or AiChartJob.Explain or AiChartJob.Tones))
-        {
-            throw new ArgumentOutOfRangeException(nameof(request), request.Job,
-                "The AI chat changes hand positions, chord fingering, sections and phrases or tone definitions only, " +
-                "or answers a question.");
-        }
-
         if (string.IsNullOrWhiteSpace(request.Instruction.Text))
             throw new ArgumentException("An instructed run needs an instruction.", nameof(request));
 
-        var target = new RunTarget(request.Job, ChordNamingStyle.Eof, request.Arrangement, () => (request.From, request.To),
+        var target = new RunTarget(request.Job, request.Style, request.Arrangement, () => (request.From, request.To),
             request.Instruction, request.ModelId, request.ToneChanges);
-        return RunGuardedAsync(target with { Targets = request.Targets }, ct);
+        return RunGuardedAsync(target with { Targets = request.Targets, QueueBehindHeld = request.QueueBehindHeld, EventArrangements = request.EventArrangements }, ct);
     }
 
     private (FractionalPosition? From, FractionalPosition? To) SelectedRange()
@@ -424,7 +459,7 @@ public sealed class AiChartPassRun
         // A new run replaces proposals still waiting: they were made on the chart the new
         // run is about to read again. A question is not a new run of proposals: the
         // charter may be asking about the very card that is waiting.
-        if (job != AiChartJob.Explain) SetReview(null);
+        ClearForNewRun(job, target);
         var project = _state.ActiveProject;
         var arrangement = target.Arrangement ?? _state.ActiveArrangement;
 
@@ -449,7 +484,10 @@ public sealed class AiChartPassRun
         // The snapshot the pass reads for minutes, off this thread.
         var levelIndex = arrangement.Levels.IndexOf(level);
         var snapshot = ChartProjectCloner.CloneArrangement(arrangement);
-        var facts = new AiChartSongFacts(snapshot, ArrangementInstrument.IsBassPart(arrangement), KeyOf(project.Chart));
+        var facts = new AiChartSongFacts(snapshot, ArrangementInstrument.IsBassPart(arrangement), KeyOf(project.Chart))
+        {
+            NamingKey = job == AiChartJob.ChordNames ? ChordNamingOptions.For(target.Style, snapshot, project.Chart).Key : null
+        };
         var range = target.Range();
         var request = new AiChartPassRequest(job, target.Style, facts, snapshot.Levels[levelIndex],
             project.Beats.ToList(), range.From, range.To, ChunkOptions, target.Instruction);
@@ -524,7 +562,7 @@ public sealed class AiChartPassRun
 
         review.PassFrom = request.From;
         review.PassTo = request.To;
-        SetReview(review);
+        HoldReview(review, target);
         return Tell(AiChartRunStatus.Held,
             _localization.Format("AiChart_ReviewReady", review.Chunks.Count, result.Rejected.Count),
             result.Rejected.Count > 0 ? StatusSeverity.Warning : StatusSeverity.Success, result, review);
@@ -544,7 +582,8 @@ public sealed class AiChartPassRun
         var request = new AiStructureRequest(snapshot, facts, snapArrangement.Levels[arrangement.Levels.IndexOf(level)],
             range.From, range.To, target.Instruction)
         {
-            Targets = target.Targets
+            Targets = target.Targets,
+            EventArrangements = target.EventArrangements?.Select(a => a.Name).ToList()
         };
 
         var model = CreateModel(target);
@@ -589,7 +628,7 @@ public sealed class AiChartPassRun
                 StatusSeverity.Success, result);
         }
 
-        SetReview(review);
+        HoldReview(review, target);
         return Tell(AiChartRunStatus.Held,
             _localization.Format("AiStructure_ReviewReady", review.Items.Count, result.Rejected.Count),
             result.Rejected.Count > 0 ? StatusSeverity.Warning : StatusSeverity.Success, result, review);
@@ -701,7 +740,7 @@ public sealed class AiChartPassRun
                     StatusSeverity.Error, result);
             }
 
-            SetReview(review);
+            HoldReview(review, target);
             return Tell(AiChartRunStatus.Held, _localization.Format("AiTones_ReviewReady", review.Tones.Count, refused.Count),
                 refused.Count > 0 ? StatusSeverity.Warning : StatusSeverity.Success, result, review);
         }
@@ -820,7 +859,11 @@ public sealed class AiChartPassRun
         string? ModelId,
         IReadOnlyList<ToneChange>? ToneChanges = null)
     {
+        public bool QueueBehindHeld { get; init; }
+
         public IReadOnlyList<AiChartFindingTarget>? Targets { get; init; }
+
+        public IReadOnlyList<Arrangement>? EventArrangements { get; init; }
     }
 
     /// <summary>The pill's progress: the share of chunks answered, and a localized line.</summary>

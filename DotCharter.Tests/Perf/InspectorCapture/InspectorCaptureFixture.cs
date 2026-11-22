@@ -71,6 +71,27 @@ internal static class InspectorCaptureFixture
             ? dir
             : Path.Combine(AppContext.BaseDirectory, "TestResults", "inspector-capture");
 
+    /// <summary>The window sizes to capture: <c>DOTCHARTER_INSPECTOR_CAPTURE_SIZES</c> as
+    ///     <c>WxH</c> pairs separated by commas, else the default Inspector and the narrow one.</summary>
+    public static IReadOnlyList<(double Width, double Height)> Sizes =>
+        Environment.GetEnvironmentVariable("DOTCHARTER_INSPECTOR_CAPTURE_SIZES") is { Length: > 0 } sizes
+            ? [.. sizes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(ParseSize)]
+            : [(DefaultWidth, DefaultHeight), (NarrowWidth, DefaultHeight)];
+
+    /// <summary>The folder of one size: the width alone at the default height, else <c>WxH</c>.</summary>
+    public static string SizeFolder(double width, double height)
+    {
+        var w = ((int)width).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return height == DefaultHeight ? w : $"{w}x{((int)height).ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+    }
+
+    private static (double Width, double Height) ParseSize(string size)
+    {
+        var parts = size.Split('x');
+        return (double.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture),
+            double.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture));
+    }
+
     public static IServiceProvider Services =>
         App.Services ?? throw new InvalidOperationException("the headless app session did not boot.");
 

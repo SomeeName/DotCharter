@@ -1,0 +1,91 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.SongNamesFieldsBlock"
+             x:Name="Root"
+             x:DataType="contracts:ISongNamesFields"
+             x:CompileBindings="True">
+
+    <!-- The song-name fields New project and Song metadata both end in,
+         once. The offer to move a non-Latin name sits OUTSIDE the expander (it
+         only appears when it matters); everything a charter rarely touches
+         (Japanese, sort and DLC fields) sits INSIDE the collapsed "Advanced"
+         expander. FieldWidth is the control column each dialog already uses. -->
+    <StackPanel>
+        <!-- A non-Latin main name exports as the main name: offer to move it to the Japanese field. -->
+        <Grid x:Name="OriginalScriptOffer" Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,Auto"
+              IsVisible="{Binding HasOriginalScriptOffer}">
+            <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgDescText}" Grid.Column="0" Classes="DlgDesc"
+                       TextWrapping="Wrap" Text="{localization:Loc Dialog_OriginalScriptOffer}" />
+            <Button VerticalAlignment="Center" Grid.Column="1" Width="{Binding FieldWidth, ElementName=Root}" Theme="{DynamicResource SecondaryButton}" Classes="Secondary"
+                    HorizontalAlignment="Stretch" Command="{Binding MoveToOriginalScriptCommand}"
+                    Content="{localization:Loc Dialog_OriginalScriptMove}" />
+        </Grid>
+
+        <Expander x:Name="AdvancedMetadata" Header="{localization:Loc Dialog_AdvancedMetadata}"
+                  HorizontalAlignment="Stretch" Padding="0" Margin="0,8,0,0">
+            <Expander.Styles>
+                <Style Selector="Expander /template/ ContentPresenter#PART_ContentPresenter">
+                    <Setter Property="Padding" Value="{DynamicResource PaddingCard}" />
+                </Style>
+            </Expander.Styles>
+            <StackPanel>
+                <CheckBox x:Name="ShowJapaneseFields" Margin="0,8,0,4" IsChecked="{Binding ShowJapaneseFields, Mode=TwoWay}"
+                          Content="{localization:Loc Dialog_ShowJapaneseFields}"
+                          AutomationProperties.Name="{localization:Loc Dialog_ShowJapaneseFields}" />
+                <Grid x:Name="JapaneseFields" Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto"
+                      RowSpacing="{DynamicResource FireSpaceSm}" IsVisible="{Binding ShowJapaneseFields}">
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Row="0" Grid.Column="0" Classes="DlgLabel"
+                               Text="{localization:Loc Inspector_Project_JapaneseArtist}" />
+                    <TextBox VerticalAlignment="Center" Grid.Row="0" Grid.Column="1" Width="{Binding FieldWidth, ElementName=Root}" Text="{Binding JapaneseArtist, Mode=TwoWay}"
+                             AutomationProperties.Name="{localization:Loc Inspector_Project_JapaneseArtist}" />
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Row="1" Grid.Column="0" Classes="DlgLabel"
+                               Text="{localization:Loc Inspector_Project_JapaneseSong}" />
+                    <TextBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="1" Width="{Binding FieldWidth, ElementName=Root}" Text="{Binding JapaneseTitle, Mode=TwoWay}"
+                             AutomationProperties.Name="{localization:Loc Inspector_Project_JapaneseSong}" />
+                </Grid>
+                <CheckBox x:Name="ShowSortFields" Margin="0,8,0,4" IsChecked="{Binding ShowSortFields, Mode=TwoWay}"
+                          Content="{localization:Loc Dialog_ShowSortFields}"
+                          AutomationProperties.Name="{localization:Loc Dialog_ShowSortFields}" />
+                <Grid x:Name="SortFields" Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto"
+                      RowSpacing="{DynamicResource FireSpaceSm}" IsVisible="{Binding ShowSortFields}">
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Row="0" Grid.Column="0" Classes="DlgLabel"
+                               Text="{localization:Loc Dialog_ArtistSort}" />
+                    <TextBox VerticalAlignment="Center" Grid.Row="0" Grid.Column="1" Width="{Binding FieldWidth, ElementName=Root}" Text="{Binding ArtistSort, Mode=TwoWay}"
+                             AutomationProperties.Name="{localization:Loc Dialog_ArtistSort}" />
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Row="1" Grid.Column="0" Classes="DlgLabel"
+                               Text="{localization:Loc Dialog_TitleSort}" />
+                    <TextBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="1" Width="{Binding FieldWidth, ElementName=Root}" Text="{Binding TitleSort, Mode=TwoWay}"
+                             AutomationProperties.Name="{localization:Loc Dialog_TitleSort}" />
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Row="2" Grid.Column="0" Classes="DlgLabel"
+                               Text="{localization:Loc Dialog_AlbumSort}" />
+                    <TextBox VerticalAlignment="Center" Grid.Row="2" Grid.Column="1" Width="{Binding FieldWidth, ElementName=Root}" Text="{Binding AlbumSort, Mode=TwoWay}"
+                             AutomationProperties.Name="{localization:Loc Dialog_AlbumSort}" />
+                </Grid>
+                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Margin="0,12,0,0"
+                           Text="{localization:Loc Dialog_AdditionalMetadata}" />
+                <Grid x:Name="AdditionalMetadata" Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto"
+                      RowSpacing="{DynamicResource FireSpaceSm}">
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Row="0" Grid.Column="0" Classes="DlgLabel"
+                               Text="{localization:Loc Dialog_DlcKey}" />
+                    <TextBox VerticalAlignment="Center" Grid.Row="0" Grid.Column="1" x:Name="DlcKeyBox" Width="{Binding FieldWidth, ElementName=Root}" Text="{Binding DlcKey, Mode=TwoWay}"
+                             AutomationProperties.Name="{localization:Loc Dialog_DlcKey}" />
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Row="1" Grid.Column="0" Classes="DlgLabel"
+                               Text="{localization:Loc Dialog_Version}" />
+                    <TextBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="1" x:Name="VersionBox" Width="{Binding FieldWidth, ElementName=Root}" Text="{Binding Version, Mode=TwoWay}"
+                             AutomationProperties.Name="{localization:Loc Dialog_Version}" />
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Row="2" Grid.Column="0" Classes="DlgLabel"
+                               Text="{localization:Loc Dialog_Author}" />
+                    <TextBox VerticalAlignment="Center" Grid.Row="2" Grid.Column="1" x:Name="AuthorBox" Width="{Binding FieldWidth, ElementName=Root}" Text="{Binding Charter, Mode=TwoWay}"
+                             AutomationProperties.Name="{localization:Loc Dialog_Author}" />
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Row="3" Grid.Column="0" Classes="DlgLabel"
+                               Text="{localization:Loc Dialog_ToolVersion}" />
+                    <TextBlock VerticalAlignment="Center" Grid.Row="3" Grid.Column="1" x:Name="ToolVersionText" Width="{Binding FieldWidth, ElementName=Root}" Text="{Binding ToolVersion}"
+                               Foreground="{DynamicResource FireTextMuted}" TextWrapping="Wrap"
+                               AutomationProperties.Name="{localization:Loc Dialog_ToolVersion}" />
+                </Grid>
+            </StackPanel>
+        </Expander>
+    </StackPanel>
+</UserControl>

@@ -18,15 +18,17 @@ namespace DotCharter.Tests.Audio.Tonelab;
 /// </summary>
 internal sealed class TonelabGameMock : IDisposable
 {
-    private static int _nextPid = 1_900_000_000 + Environment.ProcessId % 10_000 * 1000;
+    private readonly TonelabMockIdentity? _identity;
+    private readonly string _directory = Directory.CreateTempSubdirectory("dotcharter-tonelab-mock-").FullName;
     private readonly CancellationTokenSource _stop = new();
     private readonly Task _serve;
     private NamedPipeServerStream? _current;
     private TonelabSharedMemoryMock? _audio;
 
-    public TonelabGameMock(int? processId = null)
+    public TonelabGameMock(int? processId = null, Func<int>? chooseId = null)
     {
-        ProcessId = processId ?? Interlocked.Increment(ref _nextPid);
+        if (processId is null) _identity = TonelabMockIdentity.Reserve(chooseId);
+        ProcessId = processId ?? _identity!.ProcessId;
         PipeName = TonelabProtocol.PipeNameFor(ProcessId);
         // The first server exists before the constructor returns, so a client never races its creation.
         var first = NewServer();
@@ -38,6 +40,10 @@ internal sealed class TonelabGameMock : IDisposable
 
     public string PipeName { get; }
 
+    public string TonePath => Path.Combine(_directory, "tone.json");
+
+    public Func<string, CancellationToken, Task<string?>>? ReplyAsync { get; set; }
+
     /// <summary>What <c>status</c> answers after <c>ok </c>.</summary>
     public string Status { get; set; } = "ready v1 48000 128 0";
 
@@ -47,6 +53,9 @@ internal sealed class TonelabGameMock : IDisposable
     /// <summary>Overrides the reply to a command line; return null to never answer it (a timeout).</summary>
     public Func<string, string?>? Responder { get; set; }
 
+    /// <summary>Keeps answering on the same connection after <c>quit</c>, so a command sent after it is recorded.</summary>
+    public bool KeepServingAfterQuit { get; set; }
+
     public ConcurrentQueue<string> Received { get; } = new();
 
     /// <summary>Each applied file's text, read when the command arrived (the host may delete it afterwards).</summary>
@@ -55,6 +64,12 @@ internal sealed class TonelabGameMock : IDisposable
     private int _connections;
 
     public int Connections => Volatile.Read(ref _connections);
+
+    /// <summary>Every command line with the number of the connection (1, 2, ...) it arrived on.</summary>
+    public ConcurrentQueue<(string Line, int Connection)> Exchanges { get; } = new();
+
+    /// <summary>The connection <paramref name="line" /> arrived on; fails when it never arrived.</summary>
+    public int ConnectionOf(string line) => Exchanges.Single(exchange => exchange.Line == line).Connection;
 
     public float Gain { get; set; } = 0.5f;
 
@@ -71,11 +86,14 @@ internal sealed class TonelabGameMock : IDisposable
         _audio?.Dispose();
         try
         {
-            _serve.Wait(TimeSpan.FromSeconds(5));
+            Assert.True(_serve.Wait(TimeSpan.FromSeconds(60)), "the mock did not stop");
         }
         catch (AggregateException)
         {
         }
+
+        _identity?.Dispose();
+        Directory.Delete(_directory, recursive: true);
     }
 
     public string[] Commands() => [.. Received];
@@ -93,17 +111,18 @@ internal sealed class TonelabGameMock : IDisposable
             try
             {
                 await server.WaitForConnectionAsync(_stop.Token);
-                Interlocked.Increment(ref _connections);
+                var connection = Interlocked.Increment(ref _connections);
                 using var reader = new StreamReader(server, new UTF8Encoding(false), false, 1024, leaveOpen: true);
                 while (await reader.ReadLineAsync(_stop.Token) is { } line)
                 {
                     Received.Enqueue(line);
-                    var reply = Responder is { } custom ? custom(line) : Answer(line);
+                    Exchanges.Enqueue((line, connection));
+                    var reply = ReplyAsync is { } asyncReply ? await asyncReply(line, _stop.Token) : Responder is { } custom ? custom(line) : Answer(line);
                     if (reply is null) continue;
                     var bytes = Encoding.UTF8.GetBytes(reply + "\n");
                     await server.WriteAsync(bytes, _stop.Token);
                     await server.FlushAsync(_stop.Token);
-                    if (line == "quit") break;
+                    if (line == "quit" && !KeepServingAfterQuit) break;
                 }
             }
             catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)

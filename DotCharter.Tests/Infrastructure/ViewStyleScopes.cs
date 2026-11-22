@@ -65,6 +65,27 @@ internal static class ViewStyleScopes
     public static bool BuildsInCode(string hostAxaml, string viewName) =>
         Instance.Value.CodeChildren.TryGetValue(Path.GetFullPath(hostAxaml), out var built) && built.Contains(viewName);
 
+    /// <summary>Whether an element's own or containing control's Styles declare this pair.
+    /// Sibling controls are outside that scope, including styles loaded through an include.</summary>
+    public static bool HasLocalSelector(XElement element, (string Element, string Class) pair)
+    {
+        var styles = element.AncestorsAndSelf().SelectMany(owner => owner.Elements()
+            .Where(e => e.Name.LocalName.EndsWith(".Styles", StringComparison.Ordinal)));
+        foreach (var scope in styles)
+        {
+            if (SelectorPairs(scope).Contains(pair)) return true;
+            foreach (var include in scope.Descendants().Where(e => e.Name.LocalName == "StyleInclude"))
+            {
+                var path = AvaresPath(TestPaths.RepoRoot(), include.Attribute("Source")?.Value);
+                if (path is null) continue;
+                if (StyleFileText.FilesOf(path).Any(file => SelectorPairs(XDocument.Load(file).Root!).Contains(pair)))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
     private sealed record Model(
         Dictionary<string, string> Views,
         Dictionary<string, HashSet<(string Element, string Class)>> Declared,

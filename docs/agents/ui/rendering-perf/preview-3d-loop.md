@@ -117,6 +117,9 @@ Part of the rendering/perf reference. Router: [../rendering-perf-detail.md](../r
   — so `_idleSkipped` substitutes a nominal 60 Hz delta and records NOTHING in
   `FrameStats`. The fps number was this second's trickle rate; the percentiles
   were the last second the loop actually ran. Only the labels lied.
+  The line is a diagnostic: the editor's preview draws it only with the diagnostics setting on
+  (the minimum log level at Debug or lower, `Preview3DStatsLine.DiagnosticsOn`); an immersive run only
+  with the detection monitor open.
   `Controls/Preview3DStatsLine` now formats the line: a window whose frames were
   ALL trickle frames reads `idle N Hz · last active p50 … / p99 … ms`
   (N = `Preview3DPacing.IdleFps`, the Graphics setting, not a constant), one
@@ -156,3 +159,10 @@ Part of the rendering/perf reference. Router: [../rendering-perf-detail.md](../r
   verdict, no second marker. Pure and allocation-free; pinned by
   `UI/LivePlayFeedbackDrainTests` and
   `Preview3DDriverWiringTests.TheSnapshot_DrainsLivePlayFeedbackThroughTheDrain_Once`.
+
+- Project switches publish an atomic atlas-reset request in
+  `Preview3DRenderDriver.OnProjectStateChanged`. The render worker consumes it
+  in `RunSnapshotUpdate` before pre-registration, resetting both the engine's
+  registrations/signature and `ChartTextRegistrationLatch`. Atlas registration,
+  reset and enumeration stay on that worker; the UI notification never mutates
+  the atlas (`Preview3DDriverWiringTests`, `FontAtlasProjectSwitchTests`).

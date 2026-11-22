@@ -145,11 +145,14 @@ public sealed class LyricAcousticModel : IDisposable
         // user-triggerable path. Same shape as OnnxStemSeparator's ctor.
         // A torch.export model (the published v1 archives) still carries Reshape allowzero, which fails the first run on
         // DirectML; drop it in memory for a GPU session. The CPU reads it fine.
-        var stripped = bundle.Active == OnnxExecutionProvider.Cpu ? null : OnnxReshapeAllowZero.StripIfPresent(modelPath);
-        if (stripped != null) log?.Invoke("Lyric alignment model: removed Reshape allowzero in memory so DirectML can run it.");
-        var session = stripped == null
-            ? BuildOrRelease(() => new InferenceSession(modelPath, bundle.Options), bundle.Options)
-            : BuildOrRelease(() => new InferenceSession(stripped, bundle.Options), bundle.Options);
+        var session = BuildOrRelease(() =>
+        {
+            var stripped = bundle.Active == OnnxExecutionProvider.Cpu ? null : OnnxReshapeAllowZero.StripIfPresent(modelPath);
+            if (stripped != null) log?.Invoke("Lyric alignment model: removed Reshape allowzero in memory so DirectML can run it.");
+            return stripped == null
+                ? new InferenceSession(modelPath, bundle.Options)
+                : new InferenceSession(stripped, bundle.Options);
+        }, bundle.Options);
 
         return BuildOrRelease(() =>
         {

@@ -18,11 +18,12 @@ public static class CountInPlan
     public readonly record struct Click(int Index, double DelayBeforeMs, bool Accent);
 
     /// <summary>Normalises a persisted setting to the supported set:
-    /// 0 = off, otherwise 4 or 8 beats.</summary>
+    /// 0 = off, otherwise 2, 4 or 8 beats.</summary>
     public static int Sanitize(int beats) => beats switch
     {
         >= 8 => 8,
         >= 4 => 4,
+        >= 2 => 2,
         _ => 0
     };
 

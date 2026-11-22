@@ -154,7 +154,8 @@ rubberband library: https://github.com/breakfastquay/rubberband
   `DotCharter.Services/Export/DynamicDifficulty/` — `src/Rocksmith2014.DD` (the
   dynamic-difficulty generator) and `src/Rocksmith2014.XML.Processing`'s
   `ArrangementImprover` with the RS2014 XML shapes of `src/Rocksmith2014.XML` it
-  works on; each marked "Ported from Rocksmith2014.NET" at the site), one data
+  works on, and `src/Rocksmith2014.DLCProject/ShowLightGenerator.fs` as
+  `DotCharter.Services/Export/Rocksmith/RsShowlightGenerator.cs`; each marked "Ported from Rocksmith2014.NET" at the site), one data
   file copied byte for byte (its git blob hash equals upstream's), one data file
   re-encoded from upstream's, embedded in the DotCharter assemblies, and two small
   tables the code regenerates to the same bytes (`DefaultVocalSymbols`,
@@ -281,9 +282,13 @@ EGDB, commercial libraries) is in any voice pack.
 
 ### 2.3 NuGet packages
 
-Every package a DotCharter or JuceSharp project references, by id. The
-version is the one in the referencing `.csproj`. Packages the tests and build
-tools use are listed separately: they are never part of a release.
+Every package a DotCharter or JuceSharp project references, by id.
+DotCharter versions are pinned in `Directory.Packages.props`; publish toolchain
+versions are pinned in `Directory.Build.targets`. JuceSharp keeps its versions
+in its own `.csproj` files. The resolved version inventory is
+[`licenses/dependencies.json`](licenses/dependencies.json); regenerate it after
+restore with `tools/release/Update-DependencyInventory.ps1`. Packages the tests
+and build tools use are listed separately: they are never part of a release.
 
 #### Shipped with the app
 
@@ -299,7 +304,7 @@ tools use are listed separately: they are never part of a release.
 | `Silk.NET.Core`, `Silk.NET.Maths`, `Silk.NET.Vulkan`, `Silk.NET.Vulkan.Extensions.KHR`, `Silk.NET.Vulkan.Extensions.EXT`, `Silk.NET.DXGI`, `Silk.NET.Direct3D11` | MIT | <https://github.com/dotnet/Silk.NET> |
 | `SkiaSharp` | MIT | <https://github.com/mono/SkiaSharp> |
 | `AlphaTab` (carries the **Bravura** music font, SIL OFL 1.1, <https://github.com/steinbergmedia/bravura>) | MPL-2.0 | <https://github.com/CoderLine/alphaTab> |
-| `AlphaSkia.Native.Windows` | MPL-2.0 | <https://github.com/CoderLine/alphaSkia> |
+| `AlphaSkia.Native.Windows` (3.5.147, paired with AlphaTab 1.9.0's managed AlphaSkia 3.5.147) | BSD-3-Clause | <https://github.com/CoderLine/alphaSkia> |
 | `Microsoft.Data.Sqlite` | MIT | <https://github.com/dotnet/efcore> |
 | `SQLitePCLRaw.bundle_e_sqlite3` (bundles `e_sqlite3.dll`, a build of **SQLite**, which is in the public domain: <https://sqlite.org/copyright.html>) | Apache-2.0 | <https://github.com/ericsink/SQLitePCL.raw> |
 | `Anthropic` (the Claude API client behind the AI assistant) | MIT | <https://github.com/anthropics/anthropic-sdk-csharp> |
@@ -605,6 +610,23 @@ uses it.
 - **Vulkan / Direct3D / OpenGL drivers** — system-provided.
 - **.NET runtime** (self-contained in the release) — MIT, <https://github.com/dotnet/runtime>.
 
+### 2.11.1 Hyphenation patterns (lyric syllable splitting)
+
+`DotCharter.Analysis/Lyrics/Syllables/Patterns/` holds four gzip-compressed pattern files, shipped inside
+`DotCharter.Analysis.dll` and read by the syllable splitter that cuts unhyphenated lyric words into syllables
+(#869). They are the LibreOffice dictionaries' TeX hyphenation patterns, unmodified apart from compression.
+Source: <https://github.com/LibreOffice/dictionaries>.
+
+| File | Language | Source file | Licence |
+|---|---|---|---|
+| `hyph_en_US.dic.gz` | English | `en/hyph_en_US.dic` | TeX Users Group 2007 permissive notice (the original `hyphen.tex` terms; copyright and licence notice kept in the file header) |
+| `hyph_de_DE.dic.gz` | German | `de/hyph_de_DE.dic` | Based on `dehyphn.tex` (LPPL); the OpenOffice.org adaptation is GNU LGPL 2 or later |
+| `hyph_fr.dic.gz` | French | `fr_FR/dictionaries/hyph_fr.dic` | GNU LGPL (originally LPPL; the TeX source `hyph-fr.tex` is MIT) |
+| `hyph_es.dic.gz` | Spanish | `es/hyph_es.dic` | MIT (hyph-utf8 `hyph-es`), also offered under GPL 3, LGPL 3 and MPL 1.1 |
+
+The files are data, loaded at run time, and replaceable: the LGPL terms are met by keeping each file separate and
+unmodified inside the assembly resources.
+
 ### 2.12 Asset inventory
 
 Every folder of the repository's DotCharter projects that holds binary assets,
@@ -615,6 +637,7 @@ and is missing from this list.
 | Folder | Covered by |
 |---|---|
 | `DotCharter.UI/NamCaptures/` | §2.6 |
+| `DotCharter.Analysis/Lyrics/Syllables/Patterns/` | §2.11.1 |
 | `DotCharter.UI/Assets/` | §2.8 |
 | `DotCharter.Tone.UI/Assets/Fonts/` | §2.5 |
 | `DotCharter.Tone.UI/Assets/Rig/` | §2.8 |
@@ -627,6 +650,7 @@ and is missing from this list.
 | `DotCharter.Services/Export/DynamicDifficulty/` | §2.1 (Rocksmith2014.NET) |
 | `DotCharter.Tone/Audio/Dsp/Tones/` | §2.1 (Rocksmith2014.NET) |
 | `DotCharter.Tests/Services/Parsing/Fixtures/` | §2.10 |
+| `DotCharter.Tests/Services/Export/Audio/Fixtures/` | DotCharter's own (GPL-3.0-or-later): synthetic decoder-parity burst, self-made with Python and ffmpeg/libmp3lame; recipe in `DotCharter.Tests/Fixtures/PROVENANCE.md` |
 | `DotCharter.Tests/Services/Export/Fixtures/Rs7/` | §2.10 |
 | `DotCharter.Tests/Services/Export/DynamicDifficulty/Fixtures/` | §2.10 |
 | `DotCharter.Tests/Ai/Model/Assets/` | §2.10 |

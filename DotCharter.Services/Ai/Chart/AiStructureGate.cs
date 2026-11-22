@@ -82,6 +82,8 @@ public sealed class AiStructureGate
     /// </summary>
     internal bool PlacesAnchors { get; init; } = true;
 
+    private AiStructureWorld World => new(_scratch.Arrangements, _scratch.Beats);
+
     /// <summary>Applies <paramref name="change" /> to the scratch, or refuses it and leaves the
     /// scratch as it was.</summary>
     /// <param name="change">A validated change.</param>
@@ -96,7 +98,7 @@ public sealed class AiStructureGate
         ArgumentNullException.ThrowIfNull(change);
         rejection = null;
         accepted = change;
-        var action = AiStructureApplier.Build(_arrangement, [change], out var applied, out _);
+        var action = AiStructureApplier.Build(_arrangement, [change], out var applied, out _, World);
         if (action is null || applied == 0)
         {
             rejection = new AiChartRejection(index, AiChartRejectionCodes.Conflict,
@@ -106,7 +108,7 @@ public sealed class AiStructureGate
 
         var withAnchors = PlacesAnchors ? WithAnchors(change, action) : change;
         if (!ReferenceEquals(withAnchors, change))
-            action = AiStructureApplier.Build(_arrangement, [withAnchors], out _, out _)!;
+            action = AiStructureApplier.Build(_arrangement, [withAnchors], out _, out _, World)!;
 
         action.Execute();
         Dictionary<FindingKey, int> after;
@@ -182,7 +184,7 @@ public sealed class AiStructureGate
         IReadOnlyList<AiStructureChange> changes, ChartQualityReporter reporter)
     {
         var gate = new AiStructureGate(project, arrangement, reporter);
-        var action = AiStructureApplier.Build(gate._arrangement, changes, out _, out _);
+        var action = AiStructureApplier.Build(gate._arrangement, changes, out _, out _, gate.World);
         if (action is null) return [];
         action.Execute();
         return Added(gate._current, Findings(reporter, gate._scratch));

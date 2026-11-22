@@ -45,9 +45,8 @@ public partial class InspectorView : UserControl, IPrewarmableSurfaces
                 _tabRewarmers.Add(tab switch
                 {
                     SongInspectorView song => song.Rewarmer,
-                    // a tab with a section rail rewarms its hidden sections too.
-                    MixerInspectorView mixer => new HiddenSurfaceRewarmer(tab, () => mixer.Rail.Bodies),
-                    LyricsInspectorView lyrics => new HiddenSurfaceRewarmer(tab, () => lyrics.Rail.Bodies),
+                    // a tab with sections (a rail or a section strip) rewarms its hidden sections too.
+                    MixerInspectorView mixer => new HiddenSurfaceRewarmer(tab, () => mixer.Bodies),
                     _ => new HiddenSurfaceRewarmer(tab)
                 });
             }
@@ -112,7 +111,7 @@ public partial class InspectorView : UserControl, IPrewarmableSurfaces
     }
 
     /// <summary>
-    ///     The seven inactive tab panels. All eight <c>UserControl</c>s are
+    ///     The six inactive tab panels. All seven <c>UserControl</c>s are
     ///     constructed with this view, but Avalonia skips <c>MeasureCore</c> for
     ///     an invisible element — so until this landed, every tab the user had
     ///     not clicked THIS SESSION paid its whole first layout on the click.
@@ -145,14 +144,15 @@ public partial class InspectorView : UserControl, IPrewarmableSurfaces
     ];
 
     /// <summary>The gated sections nested inside a tab panel that the tab sweep
-    /// stops short of: the section bodies of the Mixer, Song and Lyrics rails,
-    /// biggest tab first. The Sound tab's sections are its own owner (see
+    /// stops short of: the section bodies of the Mixer strip and the Lyrics
+    /// syllable card's body (hidden until a syllable is picked), biggest tab
+    /// first. ColumnFlow cards themselves stay visible and are measured
+    /// off-stage, so a card needs no entry. The Sound tab's sections are its own owner (see
     /// <see cref="SoundTab" />).</summary>
     internal static readonly string[] NestedPaneNames =
     [
-        "MixerLevelsCard", "MixerStemsBody", "MixerPlaybackFxBody", "MixerEqBody", "MixerMidiBody",
-        "SongKeyBody", "SongTonesBody", "SongSectionsBody",
-        "LyricsRawBody", "LyricsSyllableBody", "LyricsTransferBody"
+        "MixerStemsBody", "MixerEqBody", "MixerMidiBody",
+        "LyricsSyllableBody"
     ];
 
     /// <summary>The Sound tab instance, or null before the template has run.

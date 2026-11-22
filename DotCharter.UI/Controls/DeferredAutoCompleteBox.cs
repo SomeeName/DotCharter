@@ -2,7 +2,10 @@ using System.Collections;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Templates;
 using Avalonia.Data;
+using Avalonia.Threading;
 
 namespace DotCharter.UI.Controls;
 
@@ -36,7 +39,37 @@ public sealed class DeferredAutoCompleteBox : DeferredFieldBase
     public static readonly StyledProperty<IEnumerable?> ItemsSourceProperty =
         AvaloniaProperty.Register<DeferredAutoCompleteBox, IEnumerable?>(nameof(ItemsSource));
 
+    /// <summary>The hint shown while the field is empty, resting or realized.</summary>
+    public static readonly StyledProperty<string?> PlaceholderTextProperty =
+        AvaloniaProperty.Register<DeferredAutoCompleteBox, string?>(nameof(PlaceholderText));
+
     private AutoCompleteBox? _editor;
+
+    public string? PlaceholderText
+    {
+        get => GetValue(PlaceholderTextProperty);
+        set => SetValue(PlaceholderTextProperty, value);
+    }
+
+    /// <summary>
+    /// Whether the suggestion list is worth opening for <paramref name="text" />: it is not when the
+    /// only entry that contains the text IS the text, since the row would repeat what is typed.
+    /// </summary>
+    public static bool OffersSuggestions(string? text, IEnumerable? items)
+    {
+        if (items is null) return false;
+        var matches = 0;
+        string? only = null;
+        foreach (var item in items)
+        {
+            var name = item?.ToString();
+            if (name is null || !name.Contains(text ?? "", StringComparison.OrdinalIgnoreCase)) continue;
+            if (++matches > 1) return true;
+            only = name;
+        }
+
+        return matches == 1 && !string.Equals(only, text, StringComparison.Ordinal);
+    }
 
     public string? Text
     {
@@ -68,8 +101,10 @@ public sealed class DeferredAutoCompleteBox : DeferredFieldBase
             FilterMode = AutoCompleteFilterMode.Contains,
             MinimumPrefixLength = 0,
             ItemsSource = ItemsSource,
-            Text = Text
+            Text = Text,
+            PlaceholderText = PlaceholderText
         };
+        box.DropDownOpening += OnEditorDropDownOpening;
         box.Bind(AutoCompleteBox.FontFamilyProperty, this.GetObservable(FontFamilyProperty));
         AutomationProperties.SetName(box, AutomationProperties.GetName(this));
         box.PropertyChanged += OnEditorPropertyChanged;
@@ -77,6 +112,7 @@ public sealed class DeferredAutoCompleteBox : DeferredFieldBase
 
         ShowEditor(box);
         box.ApplyTemplate();
+        GearPickerParts.StylePopup(box, this);
         return box;
     }
 
@@ -93,10 +129,23 @@ public sealed class DeferredAutoCompleteBox : DeferredFieldBase
             RestingText = text;
             if (_editor is not null && _editor.Text != text) _editor.Text = text;
         }
+        else if (change.Property == PlaceholderTextProperty)
+        {
+            var hint = change.GetNewValue<string?>();
+            RestingPlaceholder = hint;
+            _editor?.PlaceholderText = hint;
+        }
         else if (change.Property == ItemsSourceProperty && _editor is not null)
         {
             _editor.ItemsSource = change.GetNewValue<IEnumerable?>();
         }
+    }
+
+    private void OnEditorDropDownOpening(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (sender is not AutoCompleteBox box || OffersSuggestions(box.Text, box.ItemsSource)) return;
+        e.Cancel = true;
+        CloseList(box);
     }
 
     private void OnEditorPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
@@ -104,5 +153,16 @@ public sealed class DeferredAutoCompleteBox : DeferredFieldBase
         if (e.Property != AutoCompleteBox.TextProperty) return;
         var text = e.GetNewValue<string?>();
         if (Text != text) SetCurrentValue(TextProperty, text);
+        // The list opens once per typing run, so a key typed to the end of its only match has to
+        // close the one already showing; after the box's own handling of the change.
+        if (sender is AutoCompleteBox box && !OffersSuggestions(text, box.ItemsSource))
+            Dispatcher.UIThread.Post(() => CloseList(box), DispatcherPriority.Loaded);
+    }
+
+    /// <summary>Closes the list for good: the box's own flag can read closed while its popup still shows.</summary>
+    private static void CloseList(AutoCompleteBox box)
+    {
+        box.IsDropDownOpen = false;
+        if (box.GetTemplateDescendants().OfType<Popup>().FirstOrDefault() is { IsOpen: true } popup) popup.IsOpen = false;
     }
 }

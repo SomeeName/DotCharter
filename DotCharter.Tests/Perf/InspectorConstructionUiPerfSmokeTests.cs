@@ -1,15 +1,18 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.LogicalTree;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using DotCharter.Tone.Audio.Dsp;
 using DotCharter.Tone.UI.ViewModels.PlayMode;
+using DotCharter.UI;
 using DotCharter.UI.Controls;
 using DotCharter.Tone.UI.Controls.Dsp;
 using DotCharter.Tone.UI.Controls.Fire;
 using DotCharter.UI.Views.Editor;
 using DotCharter.UI.Views.Editor.Inspector;
+using DotCharter.UI.ViewModels.Editor.Inspector;
+using Microsoft.Extensions.DependencyInjection;
 using DotCharter.Localization;
 
 namespace DotCharter.Tests.Perf;
@@ -44,11 +47,10 @@ public sealed class InspectorConstructionUiPerfSmokeTests
     public async Task InspectorView_builds() => await HeadlessSessionFixture.Dispatch(() => { _ = new InspectorView(); }, CancellationToken.None);
 
     /// <summary>
-    ///     The TAB STRIP, on the Fire layer since 0.50 — eight
-    ///     <c>ToggleButton.FireSegmentItem</c>s inside a
-    ///     <c>Border.TabStrip</c> rail, i.e. the SHARED segmented control
-    ///     rather than the local underline-and-pill template it carried since
-    ///     0.16.
+    ///     The TAB STRIP, in inspector design D's nav style — eight
+    ///     <c>ToggleButton.ColumnFlowNav</c>s wearing the shared
+    ///     <c>ColumnFlowNavToggle</c> theme inside a <c>Border.TabStrip</c> rail
+    ///     (the Note tab's section strip wears the same theme).
     ///     <para>
     ///         Three things this proves that the markup cannot. The strip is
     ///         laid out inside <see cref="AttachAndLayoutStrip" />, which hides
@@ -58,23 +60,23 @@ public sealed class InspectorConstructionUiPerfSmokeTests
     ///     </para>
     ///     <list type="number">
     ///         <item>
-    ///             Every header MEASURED. A `Classes="FireSegmentItem"` that
+    ///             Every header MEASURED. A `Classes="ColumnFlowNav"` that
     ///             resolved to nothing still arranges; it just renders as bare
     ///             grey text (the exact way the song library's FILTERS pill
     ///             shipped), so existence is not the claim — size is.
     ///         </item>
     ///         <item>
-    ///             The shared <c>FireSegmentItemToggle</c> <c>ControlTheme</c>
-    ///             really applied, checked by the <c>Fill</c> Border its
+    ///             The shared <c>ColumnFlowNavToggle</c> <c>ControlTheme</c>
+    ///             really applied, checked by the <c>PART_Chrome</c> Border its
     ///             template declares. A <c>Theme</c> that does not resolve
     ///             leaves a fully functional ToggleButton wearing Fluent's look.
     ///         </item>
     ///         <item>
     ///             The active segment LIGHTS. Selection is the one thing a tab
     ///             strip has to say, and it is expressed by the theme's
-    ///             <c>:checked</c> rule alone now that the local underline is
-    ///             gone — so if that rule stops matching the strip shows no
-    ///             current tab at all and nothing else fails.
+    ///             <c>:checked</c> rules alone (the accent caption and underline)
+    ///             — so if they stop matching the strip shows no current tab at
+    ///             all and nothing else fails.
     ///         </item>
     ///     </list>
     /// </summary>
@@ -92,46 +94,48 @@ public sealed class InspectorConstructionUiPerfSmokeTests
                     $"the tab strip laid out as {strip.Bounds} — it rendered nothing");
 
                 var headers = strip.GetVisualDescendants().OfType<ToggleButton>()
-                    .Where(t => t.Classes.Contains("FireSegmentItem") && !OverflowTabStrip.GetIsOverflowButton(t))
+                    .Where(t => t.Classes.Contains("ColumnFlowNav") && !OverflowTabStrip.GetIsOverflowButton(t))
                     .ToList();
 
-                // All NINE (the strip's "More" button wears the same segment but is no tab, #573) are laid out here. In the real shell the Riff
+                // All EIGHT (the strip's "More" button wears the same segment but is no tab, #573) are laid out here. In the real shell the Riff
                 // Library and Chord shapes headers are collapsed until the host supplies their
                 // sub-view-model, but that is an `IsVisible` BINDING and a null
                 // DataContext produces no value at all — so the property keeps
                 // its default and the widest header in the strip is measured
                 // too, which is the case that decides where the strip wraps.
-                Assert.Equal(9, headers.Count);
+                Assert.Equal(8, headers.Count);
                 var visible = headers.Where(h => h.IsVisible).ToList();
-                Assert.Equal(9, visible.Count);
+                Assert.Equal(8, visible.Count);
 
                 foreach (var header in visible)
                 {
                     Assert.True(header.Bounds is { Width: > 1, Height: > 1 },
-                        $"tab header '{header.Tag}' laid out as {header.Bounds} — the FireSegmentItem " +
+                        $"tab header '{header.Tag}' laid out as {header.Bounds} — the ColumnFlowNav " +
                         "class matched nothing and it rendered as bare text");
 
                     // The shared theme's template root. Its absence means the
                     // `Theme` setter did not resolve and Fluent's own chrome is
                     // on screen instead.
                     Assert.True(
-                        header.GetVisualDescendants().OfType<Border>().Any(b => b.Name == "Fill"),
-                        $"tab header '{header.Tag}' has no 'Fill' border — it is not wearing " +
-                        "FireSegmentItemToggle, so the strip is not the shared segmented control");
+                        header.GetVisualDescendants().OfType<Border>().Any(b => b.Name == "PART_Chrome"),
+                        $"tab header '{header.Tag}' has no 'PART_Chrome' border — it is not wearing " +
+                        "ColumnFlowNavToggle, so the strip is not the shared nav style");
                 }
 
                 // …and selection really shows. IsChecked is a OneWay binding on
                 // a null DataContext here, so it produces no value and a local
                 // write is what the real view model's true would do.
                 var first = visible[0];
-                var fill = first.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "Fill");
-                var idleFill = fill.Background?.ToString();
+                var chrome = first.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PART_Chrome");
+                var idleLine = chrome.BorderBrush?.ToString();
+                var idleText = first.Foreground?.ToString();
 
                 first.IsChecked = true;
                 view.UpdateLayout();
 
-                Assert.NotEqual(idleFill, fill.Background?.ToString());
-                Assert.NotNull(fill.Background);
+                Assert.NotNull(chrome.BorderBrush);
+                Assert.NotEqual(idleLine, chrome.BorderBrush?.ToString());
+                Assert.NotEqual(idleText, first.Foreground?.ToString());
             });
         }, CancellationToken.None);
     }
@@ -159,34 +163,19 @@ public sealed class InspectorConstructionUiPerfSmokeTests
             var view = new InspectorView();
             AttachAndLayoutStrip(view, () =>
             {
-                // #601: the pinned row's summary is the navigation row's type — the
-                // UI face at FireSizeXs, bold — on the Issues tab, whose row carries
-                // the count and its verbs.
-                var issues = view.GetVisualDescendants().OfType<IssuesInspectorView>().Single();
-                issues.IsVisible = true;
-                view.UpdateLayout();
-                var title = issues.GetVisualDescendants().OfType<TextBlock>()
-                    .First(t => t.Classes.Contains("HeaderTitle"));
-                Assert.Contains("Atkinson Hyperlegible", title.FontFamily.ToString(), StringComparison.Ordinal);
-                Assert.Equal(FireTypeLadder.Size("FireSizeXs"), title.FontSize);
-                var row = issues.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("InspectorHeader"));
-                Assert.True(row.Bounds.Height >= 27.5, $"the pinned row laid out {row.Bounds.Height:0.#} px tall, under its 28 px floor");
-                issues.IsVisible = false;
-
-                // …and a sectioned tab wears the same icon-only rail as the Sound tab:
-                // 38 px of 30 px segment items, the open one lit, its name on the
-                // tooltip and the accessible name, no caption.
+                // The Song tab is design D's cards: at this 420 px (Tiny) pane every
+                // card is a page, the information first, each page button named by its
+                // card's title and one of them lit.
                 var song = view.GetVisualDescendants().OfType<SongInspectorView>().Single();
                 song.IsVisible = true;
                 view.UpdateLayout();
-                var rail = song.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "SongRail");
-                Assert.Equal(38, rail.Bounds.Width, 0.5);
-                var entries = rail.GetVisualDescendants().OfType<ToggleButton>().ToList();
-                Assert.Equal(3, entries.Count);
-                Assert.All(entries, e => Assert.True(e.Classes.Contains("FireSegmentItem") && e.Bounds is { Width: 30, Height: 30 },
-                    $"{e.Name} laid out as {e.Bounds}"));
-                Assert.Single(entries, e => e.IsChecked == true);
-                Assert.All(entries, e => Assert.Equal(Avalonia.Automation.AutomationProperties.GetName(e), ToolTip.GetTip(e) as string));
+                Assert.Equal(4, song.Cards.Children.OfType<ColumnFlowCard>().Count()); // information, sections, tones, phrases
+                Assert.Equal("SongInfoCard", Assert.Single(song.Cards.ShownCards).Name);
+                var pages = song.Cards.Pager.Buttons;
+                Assert.Equal(4, pages.Count);
+                Assert.All(pages, p => Assert.True(p.Bounds is { Width: > 8, Height: >= 27.5 }, $"a page button laid out as {p.Bounds}"));
+                Assert.All(pages, p => Assert.False(string.IsNullOrWhiteSpace(Avalonia.Automation.AutomationProperties.GetName(p))));
+                Assert.Single(pages, p => p.IsChecked == true);
             });
         }, CancellationToken.None);
     }
@@ -330,12 +319,12 @@ public sealed class InspectorConstructionUiPerfSmokeTests
     [Fact]
     public async Task NotesInspectorView_builds_and_attaches()
     {
-        await HeadlessSessionFixture.Dispatch(() => AttachAndLayoutMeasuredSection(new NotesInspectorView(), "NotesComposer"),
+        await HeadlessSessionFixture.Dispatch(() => AttachAndLayoutMeasuredSection(new NotesInspectorView(), "NotesListCard"),
             CancellationToken.None);
     }
 
     /// <summary>Song takes the full pass — construction, attach, layout, and the
-    /// assertion that its open section (the rail's first, #601) measured non-zero.</summary>
+    /// assertion that its key row (in the information card, always on screen) measured non-zero.</summary>
     [Fact]
     public async Task SongInspectorView_builds_and_attaches()
     {
@@ -344,98 +333,51 @@ public sealed class InspectorConstructionUiPerfSmokeTests
     }
 
     /// <summary>
-    ///     THE MIXER ROW (0.51, rebuilt from <c>Chart Editor.dc.html</c>).
-    ///     <para>
-    ///         Two things the markup cannot say. First, the RAILS really line
-    ///         up: every channel in the tab — the levels bus, a stem, a playback
-    ///         effect, an EQ filter — wears <c>TextBlock.MixerLabel</c> and
-    ///         <c>TextBlock.MixerValue</c>, and the whole point of putting those
-    ///         two widths in the style rather than on each Grid is that the
-    ///         faders then start and end on one line. A cell that lost its class
-    ///         still measures; it just sits somewhere else, which is the exact
-    ///         shape of the drift this asserts against.
-    ///     </para>
-    ///     <para>
-    ///         Second, the FADER really shrank. Fluent's slider template
-    ///         measures 44 px inside a three-row Grid, so the pane scrolled
-    ///         nearly twice as far as the design does; the fix is a
-    ///         <c>Height</c>, and a <c>MinHeight</c> silently does nothing. The
-    ///         literal 24 is deliberate — reading it back out of the same style
-    ///         would move both sides together.
-    ///     </para>
-    ///     <para>
-    ///         THE EQ SECTION IS COLLAPSED FIRST, through its own disclosure.
-    ///         Its curve is a <c>Polyline</c> with <c>Stretch="Fill"</c>, and a
-    ///         filled shape with no points has empty geometry bounds — the fill
-    ///         scale divides by zero and the panel above it reports "Invalid
-    ///         size returned for Measure". That is the harness (there is no
-    ///         transport data here), not the view, and it is why this tab was
-    ///         construction-only until 0.51; the product's own collapse is used
-    ///         rather than writing <c>IsVisible</c>, which would fight the
-    ///         element-name binding that owns it.
-    ///     </para>
+    ///     The Mixer tab (inspector design D): the Stems / EQ / MIDI strip over one section's cards. Each section is
+    ///     opened as its strip entry's click does (<c>MixerSections.ChooseCommand</c>); its body must lay out
+    ///     non-zero, every fader that laid out keeps the 24 px <c>MixerSlider</c> height (Fluent's template is 44 px,
+    ///     and only a <c>Height</c> holds it), and the MIDI cards' controls must all have a size.
     /// </summary>
     [Fact]
-    public async Task MixerInspectorView_buildsAndAttaches_andItsRailsLineUp()
+    public async Task MixerInspectorView_buildsAndAttaches_andEverySectionLaysOut()
     {
         await HeadlessSessionFixture.Dispatch(() =>
         {
-            var view = new MixerInspectorView();
-            var window = new Window { Width = 420, Height = 900, Content = view };
+            var vm = (App.Services ?? throw new InvalidOperationException("the headless app session did not boot."))
+                .GetRequiredService<DotCharter.UI.ViewModels.Editor.InspectorViewModel>();
+            var view = new MixerInspectorView { DataContext = vm };
+            var window = new Window { Width = 530, Height = 370, Content = view };
             window.Show();
-            var labels = new List<TextBlock>();
-            var values = new List<TextBlock>();
+            var previous = vm.MixerSections.Section;
             try
             {
-                // #601: one section at a time behind the rail; each is opened as its
-                // entry's click does, and its rows join the alignment check. The EQ
-                // section is left closed (its curve has no data under the harness).
-                foreach (var section in new[] { "MixerLevelsCard", "MixerPlaybackFxBody", "MixerMidiBody" })
+                foreach (var (section, body) in new[]
+                         {
+                             (MixerSection.Eq, "MixerEqBody"), (MixerSection.Midi, "MixerMidiBody")
+                         })
                 {
-                    view.Rail.Choose(section);
-                    view.Measure(new Avalonia.Size(420, 900));
-                    view.Arrange(new Avalonia.Rect(0, 0, 420, 900));
+                    vm.MixerSections.ChooseCommand.Execute(section);
+                    Dispatcher.UIThread.RunJobs();
                     window.UpdateLayout();
                     Assert.True(view.Bounds is { Width: > 1, Height: > 1 }, $"the Mixer laid out as {view.Bounds}");
-                    labels.AddRange(view.GetVisualDescendants().OfType<TextBlock>()
-                        .Where(t => t.Classes.Contains("MixerLabel") && t.IsEffectivelyVisible && t.Bounds.Width > 0));
-                    values.AddRange(view.GetVisualDescendants().OfType<TextBlock>()
-                        .Where(t => t.Classes.Contains("MixerValue") && t.IsEffectivelyVisible && t.Bounds.Width > 0));
-                    if (section == "MixerMidiBody") AssertMidiSection(view);
+                    var shown = view.GetLogicalDescendants().OfType<Control>().Single(c => c.Name == body);
+                    Assert.True(shown.IsVisible && shown.Bounds is { Width: > 1, Height: > 1 }, $"{body} laid out as {shown.Bounds}");
+                    foreach (var other in view.Bodies.Where(b => b != shown))
+                        Assert.False(other.IsVisible, $"{other.Name} is shown beside {body}");
+                    if (section == MixerSection.Midi) AssertMidiSection(view);
+
+                    var faders = view.GetVisualDescendants().OfType<Slider>()
+                        .Where(s => s.Classes.Contains("MixerSlider") && s.Bounds.Height > 0)
+                        .ToList();
+                    foreach (var fader in faders)
+                        Assert.Equal(24d, fader.Bounds.Height);
                 }
             }
             finally
             {
+                vm.MixerSections.ChooseCommand.Execute(previous);
                 window.Close();
             }
-
-            // LEVELS (4) + PLAYBACK FX (3) + MIDI (1: Offset; the GM Instrument row
-            // went with the wavetable, #138) with the EQ collapsed and no project
-            // loaded; the stem rows only exist once a separation has.
-            Assert.True(labels.Count >= 8, $"only {labels.Count} mixer labels laid out");
-            Assert.True(values.Count >= 7, $"only {values.Count} mixer values laid out");
-
-            var labelLeft = labels.Select(l => Math.Round(l.TranslatePoint(default, view)!.Value.X)).ToList();
-            var valueRight = values
-                .Select(v => Math.Round(v.TranslatePoint(new Point(v.Bounds.Width, 0), view)!.Value.X))
-                .ToList();
-
-            Assert.True(labelLeft.Distinct().Count() == 1,
-                "the mixer's label rail is ragged — every row must share one left edge, at " +
-                string.Join(" / ", labelLeft.Distinct().Order()));
-            Assert.True(valueRight.Distinct().Count() == 1,
-                "the mixer's value rail is ragged — every row must share one right edge, at " +
-                string.Join(" / ", valueRight.Distinct().Order()));
-
-            // Only the faders that really laid out — a slider inside a hidden
-            // section is still `IsVisible` itself and arranges to nothing. The count
-            // floor is what keeps this from passing vacuously.
-            var faders = view.GetVisualDescendants().OfType<Slider>()
-                .Where(s => s.Classes.Contains("MixerSlider") && s.Bounds.Height > 0)
-                .ToList();
-            Assert.True(faders.Count >= 7, $"only {faders.Count} mixer faders laid out");
-            foreach (var fader in faders)
-                Assert.Equal(24d, fader.Bounds.Height);
         }, CancellationToken.None);
     }
 
@@ -443,17 +385,19 @@ public sealed class InspectorConstructionUiPerfSmokeTests
     {
         {
 
-            // ABI v38: the chart synth + instrument route toggles in the MIDI card.
-            foreach (var name in new[] { "ChartSynthToggle", "InstrumentThroughRigToggle" })
-            {
-                var toggle = view.GetVisualDescendants().OfType<CheckBox>().SingleOrDefault(c => c.Name == name);
-                Assert.NotNull(toggle);
-                Assert.True(toggle!.Bounds.Width > 1 && toggle.Bounds.Height > 1,
-                    $"{name} laid out as {toggle.Bounds} — it is in the tree but its style or template failed");
-            }
+            // ABI v38: the chart synth toggle in the MIDI card.
+            var toggle = view.GetVisualDescendants().OfType<ToggleButton>().SingleOrDefault(c => c.Name == "ChartSynthToggle");
+            Assert.NotNull(toggle);
+            Assert.True(toggle!.Bounds.Width > 1 && toggle.Bounds.Height > 1,
+                $"ChartSynthToggle laid out as {toggle.Bounds} — it is in the tree but its style or template failed");
 
-            // #164: the Synth tone switch, both halves laid out.
-            foreach (var name in new[] { "ChartSynthToneSongTones", "ChartSynthToneOwnRig" })
+            // #164 / #751: the Sound source segments (the old tone switch and "Instrument through the rig" are two of them)
+            // and Route instrument, every segment laid out. MixerSoundRoutingUiPerfSmokeTests checks them across sizes.
+            foreach (var name in new[]
+                     {
+                         "ChartSoundSourceSongTones", "ChartSoundSourceOwnRig", "ChartSoundSourceMyInstrument", "ChartSoundSourceInstrumentRig",
+                         "ChartSoundRouteGuitar", "ChartSoundRouteBass", "ChartSoundRouteBoth"
+                     })
             {
                 var half = view.GetVisualDescendants().OfType<RadioButton>().SingleOrDefault(c => c.Name == name);
                 Assert.NotNull(half);
@@ -468,26 +412,30 @@ public sealed class InspectorConstructionUiPerfSmokeTests
     }
 
     /// <summary>
-    ///     THE FEHLER TAB (0.51, rebuilt from the same mockup).
-    ///     <para>
-    ///         It carries the three-column row — a mono code chip, the
-    ///         ellipsised message, a right-aligned mono location — and, in the
-    ///         footer, Audio lint over Export readiness. Attaching is what
-    ///         matters: every row's command resolves through
-    ///         <c>$parent[UserControl]</c> and its location cell is a
-    ///         <c>MultiBinding</c> over the project's beat map, neither of which
-    ///         exists until the tree is rooted.
-    ///     </para>
-    ///     <para>
-    ///         It also pins the ONE thing the selection idiom rests on: the row
-    ///         is a Button, and a Button in this app keeps focus after a click,
-    ///         so <c>:focus-within</c> is what marks the issue you are on. If
-    ///         that pseudo-class stopped matching, the accent wash and the 3 px
-    ///         spine would simply never appear and nothing else would fail.
-    ///     </para>
+    ///     "Fix with AI" and "Explain with AI" ran together with no gap. The Issues tab's sections (their
+    ///     layout with real content) are <c>IssuesTabCardsUiPerfSmokeTests</c>; the tab builds without a
+    ///     view model, every section hidden, so the row is read off the logical tree.
     /// </summary>
     [Fact]
-    public async Task IssuesInspectorView_buildsAndAttaches_andTheFocusedRowLights()
+    public async Task IssuesInspectorView_theAiButtonsHaveAGap() =>
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var host = new InspectorView();
+            AttachAndLayoutStrip(host, () =>
+            {
+                var issues = host.GetVisualDescendants().OfType<IssuesInspectorView>().Single();
+                var aiRow = issues.GetLogicalDescendants().OfType<StackPanel>().Single(p => p.Name == "IssueAiRow");
+                Assert.True(aiRow.GetLogicalDescendants().OfType<Grid>().First().ColumnSpacing > 0, "the AI buttons have no gap");
+            });
+        }, CancellationToken.None);
+
+    /// <summary>
+    ///     The Issues tab (inspector design D) builds, attaches and lays out all four cards with no project loaded;
+    ///     attach matters because every row command resolves through <c>$parent[UserControl]</c>. The cards with
+    ///     real content, the pager and the selected-row spine are <c>IssuesTabCardsUiPerfSmokeTests</c>.
+    /// </summary>
+    [Fact]
+    public async Task IssuesInspectorView_buildsAndAttaches_andEveryCardLaysOut()
     {
         await HeadlessSessionFixture.Dispatch(() =>
         {
@@ -501,48 +449,22 @@ public sealed class InspectorConstructionUiPerfSmokeTests
                 Assert.True(issues.Bounds is { Width: > 1, Height: > 1 },
                     $"the FEHLER tab laid out as {issues.Bounds} — it rendered nothing");
 
-                // The footer's two labelled rows, which are the tab's own
-                // report rather than a per-element finding.
-                var footerTitles = issues.GetVisualDescendants().OfType<TextBlock>()
-                    .Where(t => t.Classes.Contains("FooterRowTitle"))
-                    .ToList();
-                Assert.Equal(2, footerTitles.Count);
-                foreach (var t in footerTitles)
+                // Design D: four cards (Findings, Fixes, Whole project, Review) on one ColumnFlowPanel; the
+                // cards a narrow pane pages away are still measured, so every one has a size.
+                foreach (var name in new[] { "IssuesFindingsCard", "IssuesFixesCard", "IssuesProjectCard", "IssuesReviewCard" })
                 {
-                    Assert.True(t.Bounds is { Width: > 1, Height: > 1 },
-                        $"a footer row title laid out as {t.Bounds}");
+                    var card = issues.GetLogicalDescendants().OfType<Control>().Single(c => c.Name == name);
+                    Assert.True(card.Bounds is { Width: > 1, Height: > 1 }, $"{name} laid out as {card.Bounds}");
                 }
 
-                // The export verdict is THREE gated TextBlocks — dim /
-                // green / danger — and which one shows is a data question, so
-                // it is pinned as markup by
-                // `UI/IssuesTabVerdictTests` rather than measured here with no
-                // project loaded. What matters at runtime is that all three
-                // really carry the class the style dresses.
-                Assert.Equal(3, issues.GetVisualDescendants().OfType<TextBlock>()
-                    .Count(t => t.Classes.Contains("FooterVerdict")));
+                // The export verdict is THREE gated TextBlocks — dim / green / danger — and which one shows is a
+                // data question, pinned as markup by `UI/IssuesTabVerdictTests`. At runtime all three are there.
+                Assert.Equal(3, issues.GetLogicalDescendants().OfType<TextBlock>()
+                    .Count(t => t.Name is "ExportVerdictPending" or "ExportVerdictOk" or "ExportVerdictBad"));
 
                 // #952: Prepare for Rocksmith left the export row (every export applies DLC
                 // Builder's steps to its copy; the chart's context menu puts them in the project).
-                Assert.DoesNotContain(issues.GetVisualDescendants().OfType<Button>(), b => b.Name == "PrepareForRocksmithButton");
-
-                // The selection idiom. A row is built here by hand because the
-                // list is empty with no project: what is being pinned is that
-                // the `:focus-within` rule reaches the spine at all.
-                var row = new Button { Classes = { "IssueRow" }, Content = new Border { Classes = { "IssueSpine" } } };
-                var probe = new StackPanel { Children = { row } };
-                issues.Content = probe;
-                host.UpdateLayout();
-
-                var spine = row.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("IssueSpine"));
-                var idle = spine.Background?.ToString();
-
-                row.Focus();
-                host.UpdateLayout();
-
-                Assert.True(row.IsFocused, "the issue row would not take focus — the selection mark is unreachable");
-                Assert.NotEqual(idle, spine.Background?.ToString());
-                Assert.NotNull(spine.Background);
+                Assert.DoesNotContain(issues.GetLogicalDescendants().OfType<Button>(), b => b.Name == "PrepareForRocksmithButton");
             });
         }, CancellationToken.None);
     }

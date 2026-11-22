@@ -43,7 +43,7 @@ public sealed class PatternBuilderRowTests
     private static IReadOnlyList<PatternChoice<T>> Options<T>() where T : struct, Enum =>
         Enum.GetValues<T>().Select(v => new PatternChoice<T>(v, v.ToString())).ToList();
 
-    private static MatchPatternRowViewModel Row(MatchPattern pattern) => new(pattern, Choices);
+    private static MatchPatternRowViewModel Row(MatchPattern pattern) => new(pattern, Choices, DotCharter.Tests.Infrastructure.FakeLocalization.English());
 
     private static MatchPattern FullyLoaded() => new()
     {
@@ -276,6 +276,17 @@ public sealed class PatternBuilderRowTests
 
         Assert.False(row.HasKeys);
         Assert.Equal(string.Empty, row.KeyLabel);
+    }
+
+    /// <summary>#595: the key caption spells the modifiers as the UI language does (Strg, Umschalt).</summary>
+    [Fact]
+    public void TheKeyLabelSpellsTheModifiersInTheUiLanguage()
+    {
+        var row = new MatchPatternRowViewModel(FullyLoaded(), Choices, DotCharter.Tests.Infrastructure.FakeLocalization.For("de-DE"));
+
+        Assert.Contains("Strg+F1", row.KeyLabel);
+        Assert.Contains("Umschalt+F2", row.KeyLabel);
+        Assert.DoesNotContain("Ctrl", row.KeyLabel);
     }
 
     /// <summary>A stored pattern whose enum value is not in the option list must

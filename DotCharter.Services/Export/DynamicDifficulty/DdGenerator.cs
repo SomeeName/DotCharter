@@ -45,6 +45,8 @@ internal static class DdGenerator
     /// <summary><c>generateForArrangement</c>: mutates <paramref name="arr" /> and returns it.</summary>
     public static DdArrangement GenerateForArrangement(DdGeneratorConfig config, DdArrangement arr)
     {
+        // Position-only mute events do not participate in note scoring or phrase pruning.
+        var fretHandMutes = arr.Levels.Single().FretHandMutes;
         var iterations = arr.PhraseIterations.ToList();
         var phraseIterationData = Enumerable.Range(0, iterations.Count).Select(i => DdPhraseData.For(arr, i)).ToList();
 
@@ -57,7 +59,7 @@ internal static class DdGenerator
         var combinedLevels = new List<DdLevel>(maxDiff);
         for (var diff = 0; diff < maxDiff; diff++)
         {
-            var level = new DdLevel(diff);
+            var level = new DdLevel(diff) { FretHandMutes = [.. fretHandMutes] };
             foreach (var phraseLevels in levelDataForPhrases)
             {
                 if (diff >= phraseLevels.Count) continue;
@@ -139,11 +141,7 @@ internal static class DdGenerator
                 phraseData.MaxChordStrings, arr.ChordTemplates, phraseData.HandShapes);
             var anchors = DdAnchorChooser.Choose(levelEntities, phraseData.Anchors, phraseData.StartTime, phraseData.EndTime);
 
-            // `templateRequests1 |> Seq.append templateRequests2`: the hand shapes' first.
-            foreach (var request in handShapes.Select(h => h.Request).Concat(chosen.Select(c => c.Request)))
-            {
-                if (request != null) applier.Apply(request);
-            }
+            applier.ApplyLevel(handShapes, chosen);
 
             levels.Add(new DdLevel(diff)
             {

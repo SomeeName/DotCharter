@@ -110,7 +110,7 @@ internal static class EofVocalTrackParser
         {
             var syllables = lyrics.Select(l =>
                 new RsVocalSyllable(l.PosMs, (double)l.PosMs + l.LengthMs, l.Text, NoteOf(l.Pitch)));
-            foreach (var phrase in RsVocalPhraseBuilder.Build(syllables, At)) track.Phrases.Add(phrase);
+            foreach (var phrase in RsVocalPhraseBuilder.Build(syllables, At, RsVocalLineBreaks.MarkersAndGaps)) track.Phrases.Add(phrase);
             return track;
         }
 

@@ -15,7 +15,7 @@
         },
         {
           "title": "Timeline",
-          "text": "The chart: notes as numbered gems on their string, hand shapes and hand positions under them, the red playhead.",
+          "text": "The chart. Notes are numbered gems on their string. Hand shapes and hand positions sit under them, and the playhead is red.",
           "name": "MainChartRenderer"
         },
         {
@@ -74,7 +74,7 @@
         },
         {
           "title": "Mix",
-          "text": "Song, input and metronome levels.",
+          "text": "Song, your guitar and metronome levels.",
           "name": "MixFlyoutButton"
         },
         {
@@ -84,17 +84,17 @@
         },
         {
           "title": "Tools",
-          "text": "Tuner, MIDI instrument and live effects.",
+          "text": "Tuner, chart sound instrument and live effects.",
           "name": "ToolsFlyoutButton"
         },
         {
-          "title": "Tracks",
-          "text": "The active arrangement and level, other arrangements as ghosts, and the vocal track.",
+          "title": "Arrangements",
+          "text": "The active arrangement and difficulty level, other arrangements as ghosts, and the vocal track.",
           "name": "TracksFlyoutButton"
         },
         {
-          "title": "Play the chart",
-          "text": "Plays the charted notes as a synth, to check them by ear.",
+          "title": "Chart sound",
+          "text": "Plays the charted notes, to check them by ear.",
           "name": "ChartSynthToolbarToggle"
         },
         {
@@ -150,16 +150,10 @@
           "loc": "Menu_SaveProjectAs"
         },
         {
-          "title": "Attach audio",
-          "text": "Copies an audio file into the project folder and uses it as the song's audio.",
+          "title": "Audio",
+          "text": "Attaches an audio file, downloads a video's audio from YouTube, or splits the audio into stems.",
           "side": "right",
-          "loc": "Menu_AttachAudio"
-        },
-        {
-          "title": "Chart from audio",
-          "text": "Detects beats and notes in the audio and writes a draft chart for you to correct.",
-          "side": "right",
-          "loc": "Menu_ChartFromAudio"
+          "loc": "Menu_GroupAudio"
         },
         {
           "title": "Import",
@@ -239,12 +233,6 @@
           "text": "Imports notes from a MIDI file.",
           "side": "right",
           "loc": "Menu_ImportMidi"
-        },
-        {
-          "title": "Audio from YouTube",
-          "text": "Downloads a video's audio and attaches it to the open project.",
-          "side": "right",
-          "loc": "Menu_AttachYoutubeAudio"
         }
       ]
     },
@@ -288,6 +276,12 @@
           "text": "Prints the chart as notation and tab to a PDF.",
           "side": "right",
           "loc": "Menu_ExportSheetPdf"
+        },
+        {
+          "title": "Screenshot highway",
+          "text": "Saves a picture of the 3D highway (F12).",
+          "side": "right",
+          "loc": "Menu_Screenshot"
         }
       ]
     },
@@ -315,7 +309,7 @@
         },
         {
           "title": "History",
-          "text": "The list of edits; jump back to any of them.",
+          "text": "The list of edits. You can jump back to any of them.",
           "side": "right",
           "loc": "History_Menu"
         },
@@ -345,21 +339,15 @@
         },
         {
           "title": "Paste special",
-          "text": "Chooses what to paste: notes, hand shapes, positions and more.",
+          "text": "Chooses what to paste. Options include notes, hand shapes, positions and more.",
           "side": "right",
           "loc": "Menu_PasteSpecial"
         },
         {
-          "title": "Select all",
-          "text": "Selects every note and chord of the arrangement.",
+          "title": "Select",
+          "text": "Select all, select similar, the pattern builder and your saved patterns. See below.",
           "side": "right",
-          "loc": "Menu_SelectAll"
-        },
-        {
-          "title": "Select same pattern",
-          "text": "Selects every repeat of the selected pattern.",
-          "side": "right",
-          "loc": "Menu_SelectLikePattern"
+          "loc": "Menu_Select"
         },
         {
           "title": "Delete selected",
@@ -368,20 +356,26 @@
           "loc": "Menu_DeleteSelected"
         },
         {
-          "title": "Pattern builder",
-          "text": "Builds a repeating pattern of notes and fills a range with it.",
+          "title": "Move & resize",
+          "text": "Snaps notes to the grid, changes their length, doubles or halves the tempo around them and nudges them in time. See below.",
           "side": "right",
-          "loc": "Menu_PatternBuilder"
+          "loc": "Menu_GroupMoveResize"
         },
         {
-          "title": "Snap & length",
-          "text": "Snaps notes to the grid and changes their length. See below.",
+          "title": "Technique",
+          "text": "Turns a technique on or off for the whole selection, such as hammer-on, harmonic or mute. See below.",
           "side": "right",
-          "loc": "Menu_GroupSnapLength"
+          "loc": "Menu_GroupTechnique"
+        },
+        {
+          "title": "Chord",
+          "text": "Turns notes into chords and back, and switches fingerings. See below.",
+          "side": "right",
+          "loc": "Menu_GroupChords"
         },
         {
           "title": "Bookmarks",
-          "text": "Ten bookmarks: set one at the playhead and jump back to it.",
+          "text": "Lists the ten bookmarks with their times. You can set one at the playhead, jump to it or clear it.",
           "side": "right",
           "loc": "Menu_Bookmarks"
         }
@@ -392,7 +386,7 @@
       "scene": "editor",
       "args": {
         "menu": "Menu_Edit",
-        "submenu": "Menu_GroupSnapLength"
+        "submenu": "Menu_GroupMoveResize"
       },
       "crop": [
         "EditorMenuBar"
@@ -421,329 +415,142 @@
           "text": "Makes them one grid step shorter.",
           "side": "right",
           "loc": "Menu_DecreaseLength"
+        },
+        {
+          "title": "Double time",
+          "text": "Doubles the tempo of the measures around the selection.",
+          "side": "right",
+          "loc": "Menu_DoubleTime"
+        },
+        {
+          "title": "Half time",
+          "text": "Halves it.",
+          "side": "right",
+          "loc": "Menu_HalfTime"
         }
       ]
     },
     {
-      "id": "menu-tempo-map",
+      "id": "menu-edit-select",
       "scene": "editor",
       "args": {
-        "menu": "Menu_TempoMap"
+        "menu": "Menu_Edit",
+        "submenu": "Menu_Select"
       },
       "crop": [
         "EditorMenuBar"
       ],
       "callouts": [
         {
-          "title": "Start & end",
-          "text": "Adds silence or measures before the first or after the last beat. See below.",
+          "title": "Select all",
+          "text": "Selects every note and chord of the arrangement.",
           "side": "right",
-          "loc": "Menu_GroupStartEnd"
+          "loc": "Menu_SelectAll"
         },
         {
-          "title": "Insert beat",
-          "text": "Adds a beat at the playhead.",
+          "title": "Select similar",
+          "text": "Adds every note, chord, hand shape and anchor that plays the same thing as the selection. The status bar says how many were added.",
           "side": "right",
-          "loc": "Menu_InsertBeatAtPlayhead"
+          "loc": "Menu_SelectLikePattern"
         },
         {
-          "title": "Remove beat",
-          "text": "Removes the beat at the playhead.",
+          "title": "Pattern builder",
+          "text": "Builds a repeating pattern of notes and fills a range with it.",
           "side": "right",
-          "loc": "Menu_RemoveBeatAtPlayhead"
+          "loc": "Menu_PatternBuilder"
         },
         {
-          "title": "Set BPM",
-          "text": "Sets one tempo for every measure.",
+          "title": "Saved patterns",
+          "text": "Runs one of your saved patterns on the selection in one click.",
           "side": "right",
-          "loc": "Menu_SetAllBpm"
-        },
-        {
-          "title": "Align beat grid",
-          "text": "Moves the beat grid so it lines up with the charted notes.",
-          "side": "right",
-          "loc": "Menu_AlignBeatGrid"
-        },
-        {
-          "title": "Align to recording",
-          "text": "Fits the beat map to the audio's own beats.",
-          "side": "right",
-          "loc": "Menu_AlignToRecording"
-        },
-        {
-          "title": "Lock beat map",
-          "text": "Protects the beats from being moved by accident.",
-          "side": "right",
-          "loc": "Menu_LockBeatMap"
+          "loc": "Menu_SavedPatterns"
         }
       ]
     },
     {
-      "id": "menu-tempo-map-start-end",
+      "id": "menu-edit-technique",
       "scene": "editor",
       "args": {
-        "menu": "Menu_TempoMap",
-        "submenu": "Menu_GroupStartEnd"
+        "menu": "Menu_Edit",
+        "submenu": "Menu_GroupTechnique"
       },
       "crop": [
         "EditorMenuBar"
       ],
       "callouts": [
         {
-          "title": "Default start silence",
-          "text": "Sets the standard lead-in before the first beat.",
+          "title": "Hammer-on / pull-off / tap",
+          "text": "Steps each selected note through hammer-on, pull-off, tap and off.",
           "side": "right",
-          "loc": "Menu_SetDefaultStartSilence"
+          "loc": "Menu_Tech_Hopo"
         },
         {
-          "title": "Silence at beginning",
-          "text": "Adds silence before the song starts.",
+          "title": "Harmonic",
+          "text": "Turns the harmonic on or off.",
           "side": "right",
-          "loc": "Menu_AddSilenceAtStart"
+          "loc": "Menu_Tech_Harmonic"
         },
         {
-          "title": "Measures at start",
-          "text": "Adds empty measures before the first beat.",
+          "title": "Mute / palm mute",
+          "text": "Steps each selected note through mute, palm mute and off.",
           "side": "right",
-          "loc": "Menu_AddMeasuresAtStart"
+          "loc": "Menu_Tech_Mute"
         },
         {
-          "title": "Silence at end",
-          "text": "Adds silence after the song.",
+          "title": "Link next",
+          "text": "Links each selected note to the next one.",
           "side": "right",
-          "loc": "Menu_AddSilenceAtEnd"
+          "loc": "Menu_Tech_LinkNext"
         },
         {
-          "title": "Measures at end",
-          "text": "Adds empty measures after the last beat.",
+          "title": "Vibrato",
+          "text": "Turns vibrato on or off.",
           "side": "right",
-          "loc": "Menu_AddMeasuresAtEnd"
+          "loc": "Menu_Tech_Vibrato"
+        },
+        {
+          "title": "Tremolo",
+          "text": "Turns tremolo picking on or off.",
+          "side": "right",
+          "loc": "Menu_Tech_Tremolo"
+        },
+        {
+          "title": "Bass pop / slap",
+          "text": "Steps each selected bass note through pop, slap and off.",
+          "side": "right",
+          "loc": "Menu_Tech_Picking"
+        },
+        {
+          "title": "Accent",
+          "text": "Turns the accent on or off.",
+          "side": "right",
+          "loc": "Menu_Tech_Accent"
+        },
+        {
+          "title": "Ignore",
+          "text": "Turns the ignore flag on or off.",
+          "side": "right",
+          "loc": "Menu_Tech_Ignore"
+        },
+        {
+          "title": "Pass other notes",
+          "text": "Turns the pass-other-notes flag on or off.",
+          "side": "right",
+          "loc": "Menu_Tech_PassOtherNotes"
+        },
+        {
+          "title": "Same for all",
+          "text": "Works out the next value from the first selected note and gives it to every selected note.",
+          "side": "right",
+          "loc": "Menu_TechniqueGroup"
         }
       ]
     },
     {
-      "id": "menu-arrangements",
+      "id": "menu-edit-chord",
       "scene": "editor",
       "args": {
-        "menu": "Menu_Arrangements"
-      },
-      "crop": [
-        "EditorMenuBar"
-      ],
-      "callouts": [
-        {
-          "title": "New arrangement",
-          "text": "Adds a lead, rhythm, bass or other path to the song.",
-          "side": "right",
-          "loc": "Menu_NewArrangement"
-        },
-        {
-          "title": "Delete arrangement",
-          "text": "Removes the active arrangement.",
-          "side": "right",
-          "loc": "Menu_DeleteArrangement"
-        },
-        {
-          "title": "Copy sections & phrases",
-          "text": "Copies this arrangement's section and phrase markers to every other one.",
-          "side": "right",
-          "loc": "Menu_CopyStructureToArrangements"
-        },
-        {
-          "title": "Apply edits to another",
-          "text": "Copies hand positions, fingerings and hand shapes where two arrangements play the same notes.",
-          "side": "right",
-          "loc": "Menu_ArrangementSync"
-        },
-        {
-          "title": "Arrangement settings",
-          "text": "Name, type, tuning, capo and string count.",
-          "side": "right",
-          "loc": "Menu_ArrangementSettings"
-        }
-      ]
-    },
-    {
-      "id": "menu-vocals",
-      "scene": "editor",
-      "args": {
-        "menu": "Menu_Vocals"
-      },
-      "crop": [
-        "EditorMenuBar"
-      ],
-      "callouts": [
-        {
-          "title": "New vocal track",
-          "text": "Adds a lyrics track.",
-          "side": "right",
-          "loc": "Menu_NewVocalTrack"
-        },
-        {
-          "title": "Delete vocal track",
-          "text": "Removes the active vocal track.",
-          "side": "right",
-          "loc": "Menu_DeleteVocalTrack"
-        },
-        {
-          "title": "Insert vocal",
-          "text": "Adds a placeholder syllable at the playhead.",
-          "side": "right",
-          "loc": "Menu_InsertVocalAtPlayhead"
-        },
-        {
-          "title": "Vocal track settings",
-          "text": "Name and options of the vocal track.",
-          "side": "right",
-          "loc": "Menu_VocalTrackSettings"
-        }
-      ]
-    },
-    {
-      "id": "menu-tools",
-      "scene": "editor",
-      "args": {
-        "menu": "Menu_Tools"
-      },
-      "crop": [
-        "EditorMenuBar"
-      ],
-      "callouts": [
-        {
-          "title": "Fret hand positions",
-          "text": "Generates the hand positions the highway shows.",
-          "side": "right",
-          "loc": "Menu_GroupFhp"
-        },
-        {
-          "title": "Hand shapes",
-          "text": "Creates chord and arpeggio hand shapes.",
-          "side": "right",
-          "loc": "Menu_GroupHandShapes"
-        },
-        {
-          "title": "Chords",
-          "text": "Turns notes into chords and back, and switches fingerings.",
-          "side": "right",
-          "loc": "Menu_GroupChords"
-        },
-        {
-          "title": "Fix & clean up",
-          "text": "Repairs and polishes a chart, optionally with AI help.",
-          "side": "right",
-          "loc": "Menu_GroupFixChart"
-        },
-        {
-          "title": "Structure & levels",
-          "text": "Phrases, sections and difficulty levels.",
-          "side": "right",
-          "loc": "Menu_GroupStructureLevels"
-        },
-        {
-          "title": "Tone & sound",
-          "text": "Tuner, tone designer, rig and stem separation.",
-          "side": "right",
-          "loc": "Menu_GroupToneSound"
-        },
-        {
-          "title": "Showlights editor",
-          "text": "Edits the stage lights that play with the song in the 3D view.",
-          "side": "right",
-          "loc": "Menu_ShowlightsEditor"
-        },
-        {
-          "title": "Screenshot highway",
-          "text": "Saves a picture of the 3D highway.",
-          "side": "right",
-          "loc": "Menu_Screenshot"
-        },
-        {
-          "title": "Review",
-          "text": "Quality report, comparison and library-wide checks.",
-          "side": "right",
-          "loc": "Menu_GroupReview"
-        }
-      ]
-    },
-    {
-      "id": "menu-tools-fhp",
-      "scene": "editor",
-      "args": {
-        "menu": "Menu_Tools",
-        "submenu": "Menu_GroupFhp"
-      },
-      "crop": [
-        "EditorMenuBar"
-      ],
-      "callouts": [
-        {
-          "title": "Generate FHP",
-          "text": "Places fret-hand positions over the whole arrangement.",
-          "side": "right",
-          "loc": "Menu_GenerateFhp"
-        },
-        {
-          "title": "For selection",
-          "text": "Does the same for the selected notes only.",
-          "side": "right",
-          "loc": "Menu_GenerateFhpForSelection"
-        }
-      ]
-    },
-    {
-      "id": "menu-tools-hand-shapes",
-      "scene": "editor",
-      "args": {
-        "menu": "Menu_Tools",
-        "submenu": "Menu_GroupHandShapes"
-      },
-      "crop": [
-        "EditorMenuBar"
-      ],
-      "callouts": [
-        {
-          "title": "From selection",
-          "text": "Makes a chord hand shape over the selected notes.",
-          "side": "right",
-          "loc": "Menu_GenerateHandShape"
-        },
-        {
-          "title": "Arpeggio",
-          "text": "Makes an arpeggio hand shape over the selected notes.",
-          "side": "right",
-          "loc": "Menu_GenerateArpeggio"
-        },
-        {
-          "title": "Whole arrangement",
-          "text": "Generates hand shapes for every chord.",
-          "side": "right",
-          "loc": "Menu_GenerateHandShapesArrangement"
-        },
-        {
-          "title": "Accept suggestions",
-          "text": "Turns the dashed suggested shapes in the selection into real ones.",
-          "side": "right",
-          "loc": "Menu_AcceptSuggestedHandShapes"
-        },
-        {
-          "title": "Accept as arpeggios",
-          "text": "The same, as arpeggio shapes.",
-          "side": "right",
-          "loc": "Menu_AcceptSuggestedArpeggios"
-        },
-        {
-          "title": "Apply template",
-          "text": "Applies a hand shape's chord template to the selected chords.",
-          "side": "right",
-          "loc": "Menu_ApplyHandShapeTemplateToChords"
-        }
-      ]
-    },
-    {
-      "id": "menu-tools-chords",
-      "scene": "editor",
-      "args": {
-        "menu": "Menu_Tools",
+        "menu": "Menu_Edit",
         "submenu": "Menu_GroupChords"
       },
       "crop": [
@@ -807,6 +614,271 @@
       ]
     },
     {
+      "id": "menu-tempo-map",
+      "scene": "editor",
+      "args": {
+        "menu": "Menu_TempoMap"
+      },
+      "crop": [
+        "EditorMenuBar"
+      ],
+      "callouts": [
+        {
+          "title": "Start & end",
+          "text": "Opens one dialog for adding silence or measures before the first or after the last beat, or for the default start silence.",
+          "side": "right",
+          "loc": "Menu_StartEnd"
+        },
+        {
+          "title": "Insert beat",
+          "text": "Adds a beat at the playhead. Only that measure grows, and its time signature says so (4/4 becomes 5/4); every other bar line stays.",
+          "side": "right",
+          "loc": "Menu_InsertBeatAtPlayhead"
+        },
+        {
+          "title": "Remove beat",
+          "text": "Removes the beat at the playhead. Only that measure shrinks (4/4 becomes 3/4); every other bar line stays.",
+          "side": "right",
+          "loc": "Menu_RemoveBeatAtPlayhead"
+        },
+        {
+          "title": "Insert measures",
+          "text": "Inserts whole measures before the measure at the playhead. The dialog picks their time signature and tempo; both start as that measure's.",
+          "side": "right",
+          "loc": "Menu_InsertMeasuresAtPlayhead"
+        },
+        {
+          "title": "Set BPM",
+          "text": "Sets one tempo for every measure.",
+          "side": "right",
+          "loc": "Menu_SetAllBpm"
+        },
+        {
+          "title": "Align beat grid",
+          "text": "Moves the beat grid so it lines up with the charted notes.",
+          "side": "right",
+          "loc": "Menu_AlignBeatGrid"
+        },
+        {
+          "title": "Fit tempo to recording",
+          "text": "Moves the beats of an imported tab onto the recording by matching its notes to the audio. Disabled while the chart has no notes.",
+          "side": "right",
+          "loc": "Menu_AlignToRecording"
+        },
+        {
+          "title": "Lock beat map",
+          "text": "Protects the beats from being moved by accident.",
+          "side": "right",
+          "loc": "Menu_LockBeatMap"
+        }
+      ]
+    },
+    {
+      "id": "menu-arrangements",
+      "scene": "editor",
+      "args": {
+        "menu": "Menu_Arrangements"
+      },
+      "crop": [
+        "EditorMenuBar"
+      ],
+      "callouts": [
+        {
+          "title": "New arrangement",
+          "text": "Adds a lead, rhythm, bass or other path to the song.",
+          "side": "right",
+          "loc": "Menu_NewArrangement"
+        },
+        {
+          "title": "Delete arrangement",
+          "text": "Removes the active arrangement.",
+          "side": "right",
+          "loc": "Menu_DeleteArrangement"
+        },
+        {
+          "title": "Copy sections & phrases",
+          "text": "Copies this arrangement's section and phrase markers to every other one.",
+          "side": "right",
+          "loc": "Menu_CopyStructureToArrangements"
+        },
+        {
+          "title": "Copy edits to another arrangement",
+          "text": "Copies hand positions, fingerings and hand shapes where two arrangements play the same notes.",
+          "side": "right",
+          "loc": "Menu_ArrangementSync"
+        },
+        {
+          "title": "Arrangement settings",
+          "text": "Name, type, tuning, capo and string count.",
+          "side": "right",
+          "loc": "Menu_ArrangementSettings"
+        }
+      ]
+    },
+    {
+      "id": "menu-vocals",
+      "scene": "editor",
+      "args": {
+        "menu": "Menu_Vocals"
+      },
+      "crop": [
+        "EditorMenuBar"
+      ],
+      "callouts": [
+        {
+          "title": "New vocal track",
+          "text": "Adds a lyrics track.",
+          "side": "right",
+          "loc": "Menu_NewVocalTrack"
+        },
+        {
+          "title": "Delete vocal track",
+          "text": "Removes the active vocal track.",
+          "side": "right",
+          "loc": "Menu_DeleteVocalTrack"
+        },
+        {
+          "title": "Insert vocal",
+          "text": "Adds a placeholder syllable at the playhead.",
+          "side": "right",
+          "loc": "Menu_InsertVocalAtPlayhead"
+        },
+        {
+          "title": "Vocal track settings",
+          "text": "Name and options of the vocal track.",
+          "side": "right",
+          "loc": "Menu_VocalTrackSettings"
+        }
+      ]
+    },
+    {
+      "id": "menu-tools",
+      "scene": "editor",
+      "args": {
+        "menu": "Menu_Tools"
+      },
+      "crop": [
+        "EditorMenuBar"
+      ],
+      "callouts": [
+        {
+          "title": "Generate",
+          "text": "Lets the app write hand positions, hand shapes, the COUNT and END phrases and difficulty levels. See below.",
+          "side": "right",
+          "loc": "Menu_GroupGenerate"
+        },
+        {
+          "title": "Fix & clean up",
+          "text": "The quality report first, then the tools that repair and polish a chart. See below.",
+          "side": "right",
+          "loc": "Menu_GroupFixChart"
+        },
+        {
+          "title": "AI chat",
+          "text": "Opens the AI chat panel. You can ask for fingering, hand positions, chord names, sections or tones, or ask a question about the chart. See below.",
+          "side": "right",
+          "loc": "Menu_PanelAiChat"
+        },
+        {
+          "title": "Repeats",
+          "text": "Keeps parts that come back the same. It copies a phrase to its repeats and links identical measures. See below.",
+          "side": "right",
+          "loc": "Menu_GroupRepeats"
+        },
+        {
+          "title": "Tones",
+          "text": "Tone designer, rig and tuner.",
+          "side": "right",
+          "loc": "Menu_GroupTones"
+        },
+        {
+          "title": "Showlights editor",
+          "text": "Edits the stage lights that play with the song in the 3D view.",
+          "side": "right",
+          "loc": "Menu_ShowlightsEditor"
+        },
+        {
+          "title": "Compare with the saved version",
+          "text": "Shows what differs between the open chart and a saved one.",
+          "side": "right",
+          "loc": "Menu_ChartDiff"
+        },
+        {
+          "title": "Check every chart in the library",
+          "text": "Checks every project in a folder and can fix them.",
+          "side": "right",
+          "loc": "Menu_BatchLint"
+        }
+      ]
+    },
+    {
+      "id": "menu-tools-generate",
+      "scene": "editor",
+      "args": {
+        "menu": "Menu_Tools",
+        "submenu": "Menu_GroupGenerate"
+      },
+      "crop": [
+        "EditorMenuBar"
+      ],
+      "callouts": [
+        {
+          "title": "Fret hand positions",
+          "text": "Places the hand positions for the selected notes, or for the whole arrangement when nothing is selected. The row says which.",
+          "side": "right",
+          "loc": "Menu_Generate_Fhp_Tip"
+        },
+        {
+          "title": "Hand shape from selection",
+          "text": "Makes a chord hand shape over the selected notes.",
+          "side": "right",
+          "loc": "Menu_Generate_HandShape"
+        },
+        {
+          "title": "Arpeggio from selection",
+          "text": "Makes an arpeggio hand shape over the selected notes.",
+          "side": "right",
+          "loc": "Menu_Generate_Arpeggio"
+        },
+        {
+          "title": "Hand shapes (arrangement)",
+          "text": "Generates hand shapes for every chord.",
+          "side": "right",
+          "loc": "Menu_Generate_HandShapesArrangement"
+        },
+        {
+          "title": "Accept suggestions",
+          "text": "Turns the dashed suggested shapes in the selection into real ones.",
+          "side": "right",
+          "loc": "Menu_Generate_AcceptSuggested"
+        },
+        {
+          "title": "Accept as arpeggios",
+          "text": "The same, as arpeggio shapes.",
+          "side": "right",
+          "loc": "Menu_Generate_AcceptSuggestedArpeggios"
+        },
+        {
+          "title": "Chord shape from hand shape",
+          "text": "Gives the selected chords the chord shape of the hand shape over them.",
+          "side": "right",
+          "loc": "Menu_Generate_ChordShapeFromHandShape"
+        },
+        {
+          "title": "Structure",
+          "text": "Adds the COUNT and END phrases and no-guitar sections over silences.",
+          "side": "right",
+          "loc": "Menu_Generate_Structure"
+        },
+        {
+          "title": "Difficulty levels",
+          "text": "Builds easier difficulty levels from the hardest one.",
+          "side": "right",
+          "loc": "Menu_Generate_Levels"
+        }
+      ]
+    },
+    {
       "id": "menu-tools-fix",
       "scene": "editor",
       "args": {
@@ -818,22 +890,22 @@
       ],
       "callouts": [
         {
-          "title": "Improve chart",
-          "text": "Polishes a valid chart: trims it to the audio, adds the END phrase and restates hand positions.",
+          "title": "Chart quality report",
+          "text": "Every check in one list, with Go to and Fix for each finding. Look here first.",
           "side": "right",
-          "loc": "Menu_ImproveChart"
+          "loc": "Menu_QualityReport"
         },
         {
-          "title": "Auto-fix",
-          "text": "Repairs what is broken: order, duplicates, lengths, slides and anchors.",
+          "title": "Fix chart",
+          "text": "Lists what would change before anything does. Errors are order, duplicates, lengths, slides and anchors. Polish is trim to the audio, END phrase and hand positions. It is one undo step.",
           "side": "right",
-          "loc": "Menu_AutoFixChart"
+          "loc": "Menu_FixChart"
         },
         {
-          "title": "Remove double-stop names",
-          "text": "Clears chord names from two-string shapes.",
+          "title": "Apply DLC Builder fixes",
+          "text": "Puts DLC Builder's fixes and difficulty levels into the project, as a Rocksmith export does to its copy.",
           "side": "right",
-          "loc": "Menu_RemoveDoubleStopNames"
+          "loc": "Timeline_Ctx_ApplyDlcBuilderFixes"
         },
         {
           "title": "Optimize fretting",
@@ -842,65 +914,47 @@
           "loc": "Menu_Refret"
         },
         {
-          "title": "Fix FHP & fingering with AI",
-          "text": "Asks the AI provider from Settings to correct hand positions, fingerings, or both.",
+          "title": "Remove double-stop names",
+          "text": "Clears chord names from two-string shapes.",
           "side": "right",
-          "loc": "Menu_AiFixFhpFingering"
+          "loc": "Menu_RemoveDoubleStopNames"
         },
         {
-          "title": "Fix chord names with AI",
-          "text": "Corrects chord names in Editor on Fire spelling.",
+          "title": "Merge all difficulty levels into one",
+          "text": "Merges the difficulty levels back into one.",
           "side": "right",
-          "loc": "Menu_AiFixChordNames"
-        },
-        {
-          "title": "Musical chord names",
-          "text": "The same, in musical spelling.",
-          "side": "right",
-          "loc": "Menu_AiFixChordNamesMusical"
-        },
-        {
-          "title": "AI settings",
-          "text": "Picks the AI provider and model.",
-          "side": "right",
-          "loc": "Menu_AiSettings"
+          "loc": "Menu_SquashLevels"
         }
       ]
     },
     {
-      "id": "menu-tools-structure",
+      "id": "menu-tools-repeats",
       "scene": "editor",
       "args": {
         "menu": "Menu_Tools",
-        "submenu": "Menu_GroupStructureLevels"
+        "submenu": "Menu_GroupRepeats"
       },
       "crop": [
         "EditorMenuBar"
       ],
       "callouts": [
         {
-          "title": "Generate structure",
-          "text": "Adds the COUNT and END phrases and no-guitar sections over silences.",
-          "side": "right",
-          "loc": "Menu_GenerateStructure"
-        },
-        {
-          "title": "Propagate phrase",
+          "title": "Copy this phrase to its repeats",
           "text": "Copies the phrase under the playhead to every repeat of it.",
           "side": "right",
           "loc": "Menu_PropagatePhrase"
         },
         {
-          "title": "Generate levels",
-          "text": "Builds easier difficulty levels from the hardest one.",
+          "title": "Link identical measures",
+          "text": "Links the selected measures with every other run that plays the same, so an edit reaches all of them.",
           "side": "right",
-          "loc": "Menu_GenerateLevels"
+          "loc": "LinkIdentical_Title"
         },
         {
-          "title": "Squash levels",
-          "text": "Merges the levels back into one.",
+          "title": "Linked measures",
+          "text": "Lists the song's link groups. You can rename one, unlink it or go to a placement.",
           "side": "right",
-          "loc": "Menu_SquashLevels"
+          "loc": "Menu_LinkedMeasures"
         }
       ]
     },
@@ -909,18 +963,12 @@
       "scene": "editor",
       "args": {
         "menu": "Menu_Tools",
-        "submenu": "Menu_GroupToneSound"
+        "submenu": "Menu_GroupTones"
       },
       "crop": [
         "EditorMenuBar"
       ],
       "callouts": [
-        {
-          "title": "Tuner",
-          "text": "Tunes your instrument to the arrangement's tuning.",
-          "side": "right",
-          "loc": "Menu_Tuner"
-        },
         {
           "title": "Tone designer",
           "text": "Edits the tones the song switches between.",
@@ -940,41 +988,10 @@
           "loc": "Menu_GenerateRocksmithTones"
         },
         {
-          "title": "Separate stems",
-          "text": "Splits the audio into guitar, bass, drums and vocals, so you can mute your part.",
+          "title": "Tuner",
+          "text": "Tunes your instrument to the arrangement's tuning.",
           "side": "right",
-          "loc": "Menu_SeparateStems"
-        }
-      ]
-    },
-    {
-      "id": "menu-tools-review",
-      "scene": "editor",
-      "args": {
-        "menu": "Menu_Tools",
-        "submenu": "Menu_GroupReview"
-      },
-      "crop": [
-        "EditorMenuBar"
-      ],
-      "callouts": [
-        {
-          "title": "Chart quality report",
-          "text": "Every check in one list, with Go to and Fix for each finding.",
-          "side": "right",
-          "loc": "Menu_QualityReport"
-        },
-        {
-          "title": "Compare with project file",
-          "text": "Shows what differs between the open chart and a saved one.",
-          "side": "right",
-          "loc": "Menu_ChartDiff"
-        },
-        {
-          "title": "Lint chart library",
-          "text": "Checks every project in a folder and can fix them.",
-          "side": "right",
-          "loc": "Menu_BatchLint"
+          "loc": "Menu_Tuner"
         }
       ]
     },
@@ -1080,13 +1097,13 @@
           "loc": "Menu_PanelAiChat"
         },
         {
-          "title": "Stem mixer",
+          "title": "Mixer",
           "text": "Levels of the separated stems.",
           "side": "right",
-          "loc": "Menu_PanelStemMixer"
+          "loc": "Inspector_Tab_Mixer"
         },
         {
-          "title": "Stacked tracks",
+          "title": "Other arrangements: show stacked",
           "text": "The other arrangements, stacked under this one.",
           "side": "right",
           "loc": "Menu_PanelStackedTracks"
@@ -1112,7 +1129,7 @@
       "callouts": [
         {
           "title": "Sections",
-          "text": "The section row (intro, verse, chorus...).",
+          "text": "The section row, for intro, verse, chorus and so on.",
           "side": "right",
           "loc": "Ribbon_Sections"
         },
@@ -1166,7 +1183,7 @@
         },
         {
           "title": "License & notices",
-          "text": "The licence and third-party notices.",
+          "text": "The license and third-party notices.",
           "side": "right",
           "loc": "Menu_License"
         },
@@ -1183,7 +1200,7 @@
           "loc": "Menu_UsageStatistics"
         },
         {
-          "title": "Session health",
+          "title": "Diagnostics",
           "text": "Rendering and audio diagnostics, and a bundle to attach to a bug report.",
           "side": "right",
           "loc": "Menu_SessionHealth"
@@ -1201,13 +1218,13 @@
       "callouts": [
         {
           "title": "Sound",
-          "text": "The selected note, chord or hand shape: string, fret, length, techniques and bends.",
+          "text": "The selected note, chord or hand shape, with string, fret, length, techniques and bends.",
           "side": "bottom",
           "loc": "Inspector_Tab_Sound_Tip"
         },
         {
           "title": "Mixer",
-          "text": "Volume, effects, EQ and the MIDI instrument.",
+          "text": "Volume, effects, EQ and chart sound.",
           "side": "bottom",
           "loc": "Inspector_Tab_Mixer_Tip"
         },
@@ -1236,12 +1253,6 @@
           "loc": "Inspector_Tab_Notes_Tip"
         },
         {
-          "title": "Phrases",
-          "text": "Every phrase and its repeats; copy one repeat to all others.",
-          "side": "bottom",
-          "loc": "Inspector_Tab_Phrases_Tip"
-        },
-        {
           "title": "Riff library",
           "text": "Riffs you saved, ready to drop back in.",
           "side": "bottom",
@@ -1266,18 +1277,18 @@
       "callouts": [
         {
           "title": "Selection",
-          "text": "What is selected, its position among all sounds, and arrows to step through them.",
-          "name": "SoundNavRow"
+          "text": "Which sounds the arrows step through, the arrows themselves, and the selection's position among all sounds.",
+          "name": "NoteFooter"
         },
         {
           "title": "Sections",
-          "text": "Placement, Techniques, Bends and Findings (what the checker found about this note). Click one to jump to it.",
+          "text": "Placement, Techniques, Bends and Findings. Findings shows what the checker found about this note. Click one to jump to it.",
           "side": "inside",
-          "name": "SoundRail"
+          "name": "NoteSectionStrip"
         },
         {
           "title": "String",
-          "text": "Moves the note to another string; Fret sets the fret below it.",
+          "text": "Moves the note to another string. Fret sets the fret below it.",
           "name": "NoteStringPicker"
         },
         {
@@ -1294,26 +1305,37 @@
         "select": "chord"
       },
       "width": 600,
+      "height": 460,
       "callouts": [
         {
           "title": "Shape",
           "text": "The chord's frets, name and fingering.",
-          "name": "SoundRailShapeEntry"
+          "name": "NoteSectionShapeEntry"
         },
         {
           "title": "Name",
-          "text": "The chord name the player sees.",
-          "name": "NamingBlock"
+          "text": "The Name page sets the chord name the player sees. Board, Scope, Flags and Double-stop are the other pages.",
+          "name": "SoundShapePageName"
         },
         {
           "title": "Fingering",
-          "text": "Which finger holds each string.",
-          "name": "FingeringBlock"
+          "text": "One row per string, with its fret, ghost mark and the finger that holds it.",
+          "name": "SoundShapeRowList"
+        },
+        {
+          "title": "Fretboard",
+          "text": "Click a fret to place or move the string's note.",
+          "name": "SoundShapeBoard"
         },
         {
           "title": "Apply to",
           "text": "Applies the shape to the same chord elsewhere.",
           "name": "SoundApplyRow"
+        },
+        {
+          "title": "Save",
+          "text": "Writes the shape. Save and next moves on to the next use. The arrow at the left undoes the last save.",
+          "name": "NoteFooterShapeSave"
         }
       ]
     }

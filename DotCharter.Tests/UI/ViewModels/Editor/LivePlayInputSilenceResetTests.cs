@@ -1,5 +1,7 @@
 using System.Reflection;
 using DotCharter.Services.Audio.LivePlay;
+using DotCharter.Services.Audio.LivePlay.Takes;
+using JuceSharp.Dsp;
 using DotCharter.UI.ViewModels.Editor;
 
 namespace DotCharter.Tests.UI.ViewModels.Editor;
@@ -29,6 +31,43 @@ public sealed class LivePlayInputSilenceResetTests
     private const int LastRunsSilence = 12 * 48_000;
 
     [Fact]
+    public async Task A_capture_rate_change_stops_the_take_without_relabeling_its_samples()
+    {
+        var audio = new RecordingAudio { InputSampleRate = 44100 };
+        var vm = LivePlayTestFactory.Create(audio, new ProjectState(), new FakeAppLogger(),
+            new FakeConfigurationService(), new InMemoryPracticeStore());
+        using var stream = new MemoryStream();
+        using var recorder = new LiveTakeRecorder(stream, "take.wav", 44100, TimeSpan.FromMinutes(1), autoStartWriter: false);
+        SetField(vm, "_analyzer", new GuitarInputAnalyzer(44100));
+        SetField(vm, "_takeRecorder", recorder);
+        Invoke(vm, "TickCore");
+        audio.InputSampleRate = 48000;
+        Invoke(vm, "TickCore");
+        audio.InputSampleRate = 44100;
+        Invoke(vm, "TickCore"); // changing back must not resume the take
+
+        var result = await recorder.StopAsync();
+
+        Assert.Equal(100, result.SamplesWritten);
+        var bytes = stream.ToArray();
+        Assert.Equal(44100, BitConverter.ToInt32(bytes, 24));
+        Assert.Equal(100 * 2, BitConverter.ToInt32(bytes, 40));
+    }
+
+    private sealed class RecordingAudio : FakeAudioPlaybackService
+    {
+        private ulong _position;
+
+        public override int ReadInputCapture(float[] destination, out ulong streamPosition)
+        {
+            streamPosition = _position;
+            _position += 100;
+            Array.Clear(destination);
+            return 100;
+        }
+    }
+
+    [Fact]
     public void StartingARun_ResetsTheInputSilenceWatchAndItsBanner()
     {
         var vm = NewViewModel();
@@ -56,6 +95,124 @@ public sealed class LivePlayInputSilenceResetTests
 
         AssertWatchIsClean(vm);
         Assert.False(vm.IsInputStarved); // the half that already worked
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(80)]
+    [InlineData(-80)]
+    [InlineData(-1120)]
+    public void StartingARun_WiresStrictChordsAndTheArrangementsReferencePitch(double centOffset)
+    {
+        WithVerifier(centOffset, "Strict", verifier =>
+        {
+            verifier.Push(PitchedAudio([64, 71, 76], ArrangementInstrument.ResidualCents(centOffset)), 0);
+            var sound = new ExpectedSound { TimeMs = 200, MidiNotes = [64, 71, 76], IsChord = true };
+            Assert.True(verifier.Verify(sound).Confirmed);
+            Assert.True(verifier.VerifyEarly(sound).Confirmed);
+            var missing = new ExpectedSound { TimeMs = 200, MidiNotes = [64, 71, 76, 81], IsChord = true };
+            Assert.False(verifier.Verify(missing).Confirmed);
+            Assert.False(verifier.VerifyEarly(missing).Confirmed);
+        });
+    }
+
+    [Fact]
+    public void StandardChords_StillAcceptAMissingToneInADenseVoicing()
+    {
+        WithVerifier(0, "Standard", verifier =>
+        {
+            verifier.Push(PitchedAudio([64, 71, 76], 0), 0);
+            Assert.True(verifier.Verify(new ExpectedSound
+            {
+                TimeMs = 200, MidiNotes = [64, 71, 76, 81], IsChord = true
+            }).Confirmed);
+        });
+    }
+
+    [Fact]
+    public void StrictChords_AcceptACompleteDenseVoicing()
+    {
+        WithVerifier(0, "Strict", verifier =>
+        {
+            verifier.Push(PitchedAudio([64, 71, 76, 81], 0), 0);
+            Assert.True(verifier.Verify(new ExpectedSound
+            {
+                TimeMs = 200, MidiNotes = [64, 71, 76, 81], IsChord = true
+            }).Confirmed);
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AuthoredDetuning_RejectsTheOppositeDetuning(bool chord)
+    {
+        WithVerifier(45, "Strict", verifier =>
+        {
+            var notes = chord ? (int[])[64, 71, 76] : [76];
+            verifier.Push(PitchedAudio(notes, -45), 0);
+            var sound = new ExpectedSound { TimeMs = 200, MidiNotes = notes, IsChord = chord };
+            Assert.False(verifier.Verify(sound).Confirmed);
+            Assert.False(verifier.VerifyEarly(sound).Confirmed);
+        });
+    }
+
+    [Fact]
+    public void AuthoredReferenceOffset_IsNotReadAsABendInTheContour()
+    {
+        WithVerifier(80, "Strict", verifier =>
+        {
+            verifier.Push(PitchedAudio([64], 80), 0);
+            var sound = new ExpectedSound
+            {
+                TimeMs = 200, MidiNotes = [64],
+                TechniqueContour = new TechniqueContourExpectation(ContourTechniques.Bend, 2, 250, 0, 700)
+            };
+            Assert.True(verifier.Verify(sound).Confirmed);
+            var cents = new float[100];
+            var first = (long)Math.Round(0.2 * 48_000 / LiveCqtConfig.Hop);
+            verifier.ReadContour(sound, first, cents);
+            var held = cents.Skip(10).Where(c => !float.IsNaN(c)).ToArray();
+            Assert.NotEmpty(held);
+            Assert.InRange(held.Average(), -20, 20);
+        });
+    }
+
+    private static float[] PitchedAudio(int[] notes, double cents)
+    {
+        var audio = new float[48_000];
+        foreach (var midi in notes)
+        {
+            var frequency = 440.0 * Math.Pow(2, (midi - 69 + cents / 100) / 12);
+            for (var i = 9_600; i < audio.Length; i++)
+            {
+                var t = (i - 9_600) / 48_000.0;
+                audio[i] += (float)(Math.Sin(2 * Math.PI * frequency * t) * Math.Exp(-1.2 * t) / notes.Length);
+            }
+        }
+
+        return audio;
+    }
+
+    // Use the existing startup seam so these tests also compile against the pre-fix API.
+    private static void WithVerifier(double centOffset, string strictness, Action<LiveCqtVerifier> check)
+    {
+        var vm = NewViewModel();
+        LoadChart(vm);
+        GetField<ProjectState>(vm, "_projectState").ActiveArrangement!.CentOffset = centOffset;
+        var config = GetField<IConfigurationService>(vm, "_configService").LoadAppConfig();
+        config.LivePlayUseCqtVerifier = true;
+        config.LivePlayChordStrictness = strictness;
+        SetField(vm, "_analyzer", new GuitarInputAnalyzer(48_000));
+        try
+        {
+            Assert.True((bool)Invoke(vm, "StartCore")!);
+            check(GetField<LiveCqtVerifier>(vm, "_cqtVerifier"));
+        }
+        finally
+        {
+            Invoke(vm, "TearDownAnalysis");
+        }
     }
 
     // ---- fixture -------------------------------------------------------------
@@ -132,7 +289,7 @@ public sealed class LivePlayInputSilenceResetTests
             IReadOnlyList<PhraseMasteryOutcome>? phraseOutcomes = null,
             IReadOnlyList<SectionResult>? sections = null,
             IReadOnlyList<TechniqueResult>? techniques = null,
-            double? chartDifficulty = null, bool failed = false)
+            double? chartDifficulty = null, bool failed = false, PracticeRunIdentity? run = null)
         {
             var key = songKey + "|" + arrangementName;
             if (!_profiles.TryGetValue(key, out var profile)) _profiles[key] = profile = new PracticeArrangementProfile();

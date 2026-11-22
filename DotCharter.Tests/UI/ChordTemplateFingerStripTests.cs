@@ -102,7 +102,7 @@ public sealed class ChordTemplateFingerStripTests
     }
 
     private static string ViewPath() =>
-        UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Panels", "ChordTemplateEditorView.axaml"));
+        UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor", "Inspector", "SoundLibraryTemplateView.axaml"));
 
     private static HashSet<string> KeysIn(string fileName)
     {

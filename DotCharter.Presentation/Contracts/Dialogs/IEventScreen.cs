@@ -8,8 +8,10 @@ namespace DotCharter.Presentation.Contracts.Dialogs;
 /// <summary>
 ///     Opens <see cref="IEventScreen" /> on the marker at <paramref name="TimeMs" /> (snapped to the grid) of
 ///     <paramref name="Target" />, the arrangement the user clicked in; null means the active one.
+///     <paramref name="SectionName" /> is a section already typed elsewhere (the timeline's quick-add popover's
+///     "More…"): it wins over the marker's own and the last-used section.
 /// </summary>
-public sealed record EventRequest(double TimeMs, Arrangement? Target = null)
+public sealed record EventRequest(double TimeMs, Arrangement? Target = null, string? SectionName = null)
     : IDialogRequest<EventRequest, IEventScreen, bool>;
 
 /// <summary>

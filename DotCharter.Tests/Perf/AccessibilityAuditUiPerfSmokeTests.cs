@@ -30,12 +30,14 @@ public sealed class AccessibilityAuditUiPerfSmokeTests(ITestOutputHelper output)
 {
     /// <summary>
     ///     The task the issue names — open a song, play it, edit a chord, export — screen by screen. Each must
-    ///     be audited AND expose interactive controls, or the audit passed by looking at nothing.
+    ///     be audited AND expose interactive controls, or the audit passed by looking at nothing. "Edit a chord" is
+    ///     the Note tab's Shape page (<c>SoundShapeView</c>), swept with a chord selected (<see cref="UiSweepStages" />),
+    ///     and its Library template card, which the unselected fixture shows.
     /// </summary>
     internal static readonly string[] TaskPath =
     [
         "LibraryView", "SongSelectView", "SongSelectScreenView", "PauseMenuView", "ToolbarView", "InspectorView",
-        "NotesInspectorView", "ChordTemplateEditorView", "RocksmithExportDialogView", "DcSongExportDialogView"
+        "NotesInspectorView", "SoundShapeView", "SoundLibraryTemplateView", "RocksmithExportDialogView", "DcSongExportDialogView"
     ];
 
     /// <summary>

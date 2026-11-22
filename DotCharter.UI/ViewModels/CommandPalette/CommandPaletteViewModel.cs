@@ -17,6 +17,7 @@ public sealed class CommandPaletteItem
         var chord = command.Shortcut();
         ShortcutText = chord.IsBound ? chord.ToDisplayString(localization) : string.Empty;
         IsEnabled = SafeCanExecute(command);
+        DisabledReason = IsEnabled ? null : SafeReason(command);
     }
 
     public AppCommand Command { get; }
@@ -25,6 +26,17 @@ public sealed class CommandPaletteItem
     public string ShortcutText { get; }
     public bool HasShortcut => ShortcutText.Length > 0;
     public bool IsEnabled { get; }
+
+    /// <summary>Why a disabled row is disabled, shown under its title; null when enabled or unexplained.</summary>
+    public string? DisabledReason { get; }
+
+    public bool HasDisabledReason => !string.IsNullOrEmpty(DisabledReason);
+
+    private static string? SafeReason(AppCommand command)
+    {
+        try { return command.DisabledReason(); }
+        catch { return null; }
+    }
 
     private static bool SafeCanExecute(AppCommand command)
     {
@@ -68,6 +80,10 @@ public partial class CommandPaletteViewModel : ViewModelBase
         _localization = localization;
         _filterPass = new Tone.UI.ViewModels.Shell.CoalescedFilterPass(ApplyFilter, searchPost ?? (action => action()));
     }
+
+    /// <summary>The catalogue as of now: the timeline's right-click menu runs its rows through these
+    /// (the same command the menu bar and the key run) and reads each one's chord and availability.</summary>
+    public IReadOnlyList<AppCommand> CurrentCommands() => _catalogProvider();
 
     public ObservableCollection<CommandPaletteItem> Results { get; } = [];
 

@@ -10,11 +10,6 @@ public sealed class DialogMemory
 
     public bool PasteAtMouse { get; set; }
 
-    /// <summary>Chart from audio's WAV, valid only for <see cref="AudioPathProject" />: a path never outlives its song.</summary>
-    public string AudioPath { get; set; } = "";
-
-    public ChartProject? AudioPathProject { get; set; }
-
     /// <summary>Generate tones with AI's text, for <see cref="AiToneNotesProject" /> only: a reopen keeps it, another project starts empty.</summary>
     public string AiToneNotes { get; set; } = "";
 
@@ -66,11 +61,20 @@ public sealed class ExportDraft
     public required string AppId { get; init; }
     public required string AudioPath { get; init; }
     public required string PreviewAudioPath { get; init; }
+    public required string PreviewStartText { get; init; }
     public required string AlbumArtPath { get; init; }
     public required string OutputPath { get; init; }
-    public required double AudioVolume { get; init; }
-    public required double PreviewVolume { get; init; }
+
+    /// <summary>The PC package name the song's title, artist and version derived when the dialog closed; tells a derived output name from a typed one.</summary>
+    public string DerivedPackageName { get; init; } = "";
+
+    /// <summary>Null follows the Settings default. An empty override uses the song's export folder.</summary>
+    public string? TestFolderOverride { get; init; }
+
+    public required double? AudioVolume { get; init; }
+    public required double? PreviewVolume { get; init; }
+    public int? AudioAutoTargetLufs { get; init; }
+    public int? PreviewAutoTargetLufs { get; init; }
     public required bool IncludeVocals { get; init; }
-    public bool SplitExtendedStringChords { get; init; }
     public required IReadOnlyDictionary<string, bool> Ticks { get; init; }
 }

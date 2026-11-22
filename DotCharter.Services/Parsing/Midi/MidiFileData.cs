@@ -16,7 +16,7 @@ public sealed class MidiFileData
         TimeSignatureEvents = timeSignatureEvents;
     }
 
-    /// <summary>SMF format: 0 (single track), 1 (parallel tracks), 2 (sequential).</summary>
+    /// <summary>SMF format: 0 (single track), 1 (parallel tracks), 2 (independent sequences).</summary>
     public int Format { get; }
 
     /// <summary>Pulses per quarter note (PPQ). Always &gt; 0 — SMPTE division is rejected.</summary>
@@ -24,19 +24,23 @@ public sealed class MidiFileData
 
     public IReadOnlyList<MidiTrackData> Tracks { get; }
 
-    /// <summary>Tempo (meta 0x51) events merged across all tracks, tick-sorted.</summary>
+    /// <summary>Shared tempo events for formats 0/1, tick-sorted. Format 2 uses each track's events.</summary>
     public IReadOnlyList<MidiTempoEvent> TempoEvents { get; }
 
-    /// <summary>Time-signature (meta 0x58) events merged across all tracks, tick-sorted.</summary>
+    /// <summary>Shared meter events for formats 0/1, tick-sorted. Format 2 uses each track's events.</summary>
     public IReadOnlyList<MidiTimeSignatureEvent> TimeSignatureEvents { get; }
 }
 
 public sealed class MidiTrackData
 {
-    public MidiTrackData(string name, IReadOnlyList<MidiNoteEvent> notes)
+    public MidiTrackData(string name, IReadOnlyList<MidiNoteEvent> notes,
+        IReadOnlyList<MidiTempoEvent>? tempoEvents = null,
+        IReadOnlyList<MidiTimeSignatureEvent>? timeSignatureEvents = null)
     {
         Name = name;
         Notes = notes;
+        TempoEvents = tempoEvents ?? [];
+        TimeSignatureEvents = timeSignatureEvents ?? [];
     }
 
     /// <summary>Track name (meta 0x03), empty when absent.</summary>
@@ -44,6 +48,8 @@ public sealed class MidiTrackData
 
     /// <summary>Paired note-on/off events, sorted by start tick.</summary>
     public IReadOnlyList<MidiNoteEvent> Notes { get; }
+    public IReadOnlyList<MidiTempoEvent> TempoEvents { get; }
+    public IReadOnlyList<MidiTimeSignatureEvent> TimeSignatureEvents { get; }
 }
 
 /// <summary>One paired note: on-tick plus length in ticks.</summary>

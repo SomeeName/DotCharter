@@ -35,6 +35,7 @@ public static class MusicBrainzJson
 
         MusicBrainzMatch? best = null;
         var bestRank = (double.MinValue, double.MinValue, double.MinValue);
+        var latinCandidates = new List<(double Score, bool ArtistMatches, string Title)>();
 
         foreach (var recording in recordings.EnumerateArray())
         {
@@ -48,6 +49,9 @@ public static class MusicBrainzJson
             var score = JsonFields.Int32OrNumericText(recording, "score") ?? 0;
             var (releaseId, releaseTitle) = FirstRelease(recording);
 
+            foreach (var candidate in TitleCandidates(recording, recordingTitle))
+                latinCandidates.Add((score, Similar(credited, artist), candidate));
+
             var rank = (
                 (double)score,
                 Similar(credited, artist) ? 1d : 0d,
@@ -60,12 +64,41 @@ public static class MusicBrainzJson
                 id, recordingTitle, credited, releaseId, releaseTitle, score);
         }
 
-        // A high text score on a completely different artist is a miss, not a match.
-        if (best is not null && !Similar(best.Artist, artist) && !Similar(best.Title, title))
-            return null;
+        // A high text score on a completely different artist is a miss, not a match. Except across scripts:
+        // when we searched in an original script, a Latin-credited hit with a top score matched through the
+        // artist's or title's alias, and its spelling cannot resemble ours at all.
+        var acrossScripts = ScriptDetection.NeedsRomanization(artist) || ScriptDetection.NeedsRomanization(title);
+        var unrelated = best is not null && !Similar(best.Artist, artist) && !Similar(best.Title, title);
+        if (unrelated && !(acrossScripts && best!.Score >= 90)) return null;
 
-        return best;
+        return best is null ? null : best with { LatinTitle = BestLatinTitle(latinCandidates, best.Score) };
     }
+
+    /// <summary>A recording's title and its English aliases: the names it is known by in Latin script.</summary>
+    private static IEnumerable<string> TitleCandidates(JsonElement recording, string title)
+    {
+        yield return title;
+        if (!recording.TryGetProperty("aliases", out var aliases) || aliases.ValueKind != JsonValueKind.Array) yield break;
+        foreach (var alias in aliases.EnumerateArray())
+        {
+            if (alias.ValueKind != JsonValueKind.Object) continue;
+            var name = JsonFields.String(alias, "name");
+            var locale = JsonFields.String(alias, "locale");
+            if (!string.IsNullOrWhiteSpace(name) && (string.IsNullOrEmpty(locale) || ScriptDetection.LooksLikeEnglishLocale(locale)))
+                yield return name;
+        }
+    }
+
+    /// <summary>
+    ///     The best Latin-script title among the recordings that scored within a few points of the top one
+    ///     (or equal to it, when the credit is not the artist's own spelling); empty when none qualifies.
+    /// </summary>
+    private static string BestLatinTitle(List<(double Score, bool ArtistMatches, string Title)> candidates, int bestScore) =>
+        candidates
+            .Where(c => (c.ArtistMatches ? c.Score >= bestScore - 5 : c.Score >= bestScore) && !string.IsNullOrWhiteSpace(c.Title) && ScriptDetection.IsLatin(c.Title))
+            .OrderByDescending(c => c.Score)
+            .Select(c => c.Title.Trim())
+            .FirstOrDefault() ?? "";
 
     private static string ArtistCredit(JsonElement recording)
     {

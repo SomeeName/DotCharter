@@ -1,4 +1,6 @@
+using System.Text.Json;
 using DotCharter.Analysis.Lyrics;
+using DotCharter.Core.Domain.Vocals;
 using DotCharter.LyricSync;
 using DotCharter.Services.Audio.Lyrics;
 using DotCharter.Tone.Infrastructure.Storage;
@@ -47,6 +49,11 @@ public sealed class LyricSyncCommandTests : IDisposable
 
         public LyricSyncResult Result { get; init; } = Aligned();
 
+        public Action? AfterAlignment { get; init; }
+
+        /// <summary>A status line the core reports before it answers, as the real service does.</summary>
+        public string? StatusLine { get; init; }
+
         public string? SeenLyrics { get; private set; }
 
         public LyricSyncOptions? SeenOptions { get; private set; }
@@ -57,6 +64,8 @@ public sealed class LyricSyncCommandTests : IDisposable
         {
             SeenLyrics = lyricsText;
             SeenOptions = options;
+            if (StatusLine != null) status?.Report(StatusLine);
+            AfterAlignment?.Invoke();
             return Task.FromResult(Result);
         }
     }
@@ -90,6 +99,118 @@ public sealed class LyricSyncCommandTests : IDisposable
 
     private async Task<int> Run(FakeCore core, params string[] args) =>
         await Command(core).RunAsync(args, Ct);
+
+    [Fact]
+    public async Task JsonRetainsOriginalReviewFindingsAfterARepairRaisesConfidence()
+    {
+        var result = Aligned();
+        var syllables = result.Syllables.ToArray();
+        const LyricReviewReason reasons = LyricReviewReason.LowScore | LyricReviewReason.Repaired;
+        syllables[0] = syllables[0] with { Confidence = 0.9, ReviewReasons = reasons };
+        var core = new FakeCore { Result = result with { Syllables = syllables } };
+        var output = Path.Combine(_dir, "review");
+        var code = await Run(core, Touch("song.wav"), Touch("lyrics.txt", "Hel-lo world"), "--json", "--out", output);
+
+        Assert.Equal(LyricSyncExit.Ok, code);
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(output + ".lyricsync.json", Ct));
+        var first = json.RootElement.GetProperty("syllables")[0];
+        Assert.Equal(0.9, first.GetProperty("confidence").GetDouble());
+        Assert.Equal(reasons.ToString(), first.GetProperty("reviewReasons").GetString());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TextOutputs_ReplaceDestinationWithoutOpeningItForWrite(bool json)
+    {
+        var outputBase = Path.Combine(_dir, "output");
+        var path = Touch(json ? "output.lyricsync.json" : "output.lrc", "previous");
+        using var previous = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        var args = new List<string>
+        {
+            Touch("song.wav"), Touch("lyrics.txt", "Hel-lo world"), "--out", outputBase, "--format", "lrc"
+        };
+        if (json) args.Add("--json");
+
+        var code = await Command(new FakeCore()).RunAsync(args, Ct);
+
+        Assert.Equal(LyricSyncExit.Ok, code);
+        using var reader = new StreamReader(previous);
+        Assert.Equal("previous", reader.ReadToEnd());
+        Assert.Contains(json ? "audioSource" : "world", File.ReadAllText(path), StringComparison.Ordinal);
+        Assert.Empty(Directory.GetFiles(_dir, "*.tmp"));
+    }
+
+    [Fact]
+    public async Task LrcEncodingFailure_PreservesPreviousExportAndRemovesStage()
+    {
+        var path = Touch("output.lrc", "previous");
+        var result = Aligned();
+        var core = new FakeCore
+        {
+            Result = result with { Syllables = [result.Syllables[0] with { Text = "\uD800" }] }
+        };
+
+        await Assert.ThrowsAsync<System.Text.EncoderFallbackException>(() => Command(core).RunAsync(
+            [Touch("song.wav"), Touch("lyrics.txt", "hello"), "--out", Path.Combine(_dir, "output"),
+                "--format", "lrc"], Ct));
+
+        Assert.Equal("previous", File.ReadAllText(path));
+        Assert.Empty(Directory.GetFiles(_dir, "*.tmp"));
+    }
+
+    [Fact]
+    public async Task CancellationAfterAlignment_PreservesAllPreviousOutputs()
+    {
+        var paths = new[]
+        {
+            Touch("output_vocals.xml", "previous xml"),
+            Touch("output.lrc", "previous lrc"),
+            Touch("output.lyricsync.json", "previous json")
+        };
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        var core = new FakeCore { AfterAlignment = () => cancellation.Cancel() };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Command(core).RunAsync(
+            [Touch("song.wav"), Touch("lyrics.txt", "hello"), "--out", Path.Combine(_dir, "output"),
+                "--format", "both", "--json"], cancellation.Token));
+
+        Assert.Equal(["previous xml", "previous lrc", "previous json"], paths.Select(File.ReadAllText).ToArray());
+        Assert.Empty(Directory.GetFiles(_dir, "*.tmp"));
+        Assert.DoesNotContain("Wrote ", _out.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Cancellation_while_reporting_a_warning_preserves_the_previous_xml()
+    {
+        var path = Touch("output_vocals.xml", "previous xml");
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        using var warnings = new HeldWarningWriter();
+        var core = new FakeCore { Result = Aligned() with { Warnings = ["warning"] } };
+        var command = new LyricSyncCommand(_out, warnings, _ => core, (_, _, _) => Task.FromResult(true));
+        var run = command.RunAsync([Touch("song.wav"), Touch("lyrics.txt", "hello"),
+            "--out", Path.Combine(_dir, "output"), "--format", "rsxml"], cancellation.Token);
+        await warnings.Entered.Task.WaitAsync(Ct);
+        cancellation.Cancel();
+        warnings.Release.SetResult();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+        Assert.Equal("previous xml", File.ReadAllText(path));
+        Assert.DoesNotContain("Wrote ", _out.ToString(), StringComparison.Ordinal);
+    }
+
+    private sealed class HeldWarningWriter : StringWriter
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override async Task WriteLineAsync(string? value)
+        {
+            Entered.TrySetResult();
+            await Release.Task;
+            await base.WriteLineAsync(value);
+        }
+    }
 
     // ─────────────────────────── argument parsing ────────────────────────────
 
@@ -224,6 +345,24 @@ public sealed class LyricSyncCommandTests : IDisposable
         Assert.Contains("ffmpeg", _err.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    ///     A status line is on stderr by the time <c>Report</c> returns (#819). A
+    ///     <see cref="Progress{T}" /> posts it to the thread pool instead, where it
+    ///     lands out of order, after the process has exited, or on a writer its owner
+    ///     already closed: a test host died on that <c>ObjectDisposedException</c>.
+    /// </summary>
+    [Fact]
+    public async Task AStatusLineIsWrittenBeforeReportReturns()
+    {
+        string? seen = null;
+        var core = new FakeCore { StatusLine = "Decoding audio", AfterAlignment = () => seen = _err.ToString() };
+
+        var code = await Run(core, Touch("song.wav"), Touch("lyrics.txt", "a b"));
+
+        Assert.Equal(LyricSyncExit.Ok, code);
+        Assert.Contains("Decoding audio", seen, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task AHelpfulRunSucceedsAndPrintsTheLicences()
     {
@@ -303,61 +442,21 @@ public sealed class LyricSyncCommandTests : IDisposable
         Assert.Equal("a b", core.SeenLyrics);
     }
 
-    // ───────────────────────── the seconds-only span ─────────────────────────
-
     /// <summary>
-    ///     <b>Inside a word the end always spans; across a word boundary only when
-    ///     asked.</b> The CTC end is a floor — the last frame the model could still
-    ///     hear the syllable — so leaving it alone produces short pills with dead
-    ///     gaps in words that are sung legato.
+    ///     The tool reads its status text through <c>LocalizationService</c>, whose
+    ///     type initializer builds <c>en-US</c>. Globalization-invariant mode refuses
+    ///     every culture but the invariant one, so with it on the published tool died
+    ///     before aligning anything (found while checking #809).
     /// </summary>
     [Fact]
-    public void SyllablesInsideAWordAlwaysSpanTowardTheNextOnset()
+    public void TheToolKeepsTheCultureDataItsLocalizationNeeds()
     {
-        var spanned = LyricSyncCommand.SpanEnds(
-        [
-            new LyricSyncSyllable(0, "Hel", true, false, 0, 1.0, 1.1, 0.5, false),
-            new LyricSyncSyllable(1, "lo", false, false, 0, 1.5, 1.6, 0.5, false),
-            new LyricSyncSyllable(2, "world", false, true, 0, 2.0, 2.1, 0.5, false),
-        ], spanWordGap: false);
+        var tool = Path.Combine(TestPaths.RepoRoot(), "tools", "lyric-sync", "DotCharter.LyricSync");
+        var program = File.ReadAllText(Path.Combine(tool, "Program.cs"));
+        var project = System.Xml.Linq.XDocument.Load(Path.Combine(tool, "DotCharter.LyricSync.csproj"));
 
-        // Inside the word: held until 1.5 minus the gap.
-        Assert.Equal(1.5 - LyricSyncCommand.MinGapSeconds, spanned[0].EndSeconds, 6);
-        // Across a word boundary without the flag: the heard end stands.
-        Assert.Equal(1.6, spanned[1].EndSeconds, 6);
-    }
-
-    [Fact]
-    public void TheWordGapFlagSpansTheWordBoundaryButNeverThePhraseBreak()
-    {
-        var spanned = LyricSyncCommand.SpanEnds(
-        [
-            new LyricSyncSyllable(0, "a", false, false, 0, 1.0, 1.1, 0.5, false),
-            new LyricSyncSyllable(1, "b", false, true, 0, 1.5, 1.6, 0.5, false),
-            new LyricSyncSyllable(2, "c", false, true, 1, 5.0, 5.1, 0.5, false),
-        ], spanWordGap: true);
-
-        Assert.Equal(1.5 - LyricSyncCommand.MinGapSeconds, spanned[0].EndSeconds, 6);
-        // A phrase break is a breath or an instrumental; holding across it reads as
-        // a sustain that was never sung.
-        Assert.Equal(1.6, spanned[1].EndSeconds, 6);
-    }
-
-    /// <summary>Spanning never SHORTENS what was heard, and never exceeds the cap.</summary>
-    [Fact]
-    public void SpanningNeitherShortensNorExceedsTheCap()
-    {
-        var spanned = LyricSyncCommand.SpanEnds(
-        [
-            new LyricSyncSyllable(0, "a", true, false, 0, 1.0, 1.94, 0.5, false),
-            new LyricSyncSyllable(1, "b", true, false, 0, 1.95, 2.0, 0.5, false),
-            new LyricSyncSyllable(2, "c", false, true, 0, 60.0, 60.1, 0.5, false),
-        ], spanWordGap: true);
-
-        // The heard end (1.94) already reaches past the next onset minus the gap
-        // (1.95 - 0.03 = 1.92), so spanning leaves it alone: it never SHORTENS.
-        Assert.Equal(1.94, spanned[0].EndSeconds, 6);
-        // …and a syllable before a minute-long gap is capped, not held for a minute.
-        Assert.Equal(1.95 + LyricSyncCommand.MaxSyllableSeconds, spanned[1].EndSeconds, 6);
+        Assert.Contains("LocalizationService", program, StringComparison.Ordinal);
+        Assert.DoesNotContain(project.Descendants("InvariantGlobalization"),
+            e => string.Equals(e.Value.Trim(), "true", StringComparison.OrdinalIgnoreCase));
     }
 }

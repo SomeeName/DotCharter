@@ -191,46 +191,52 @@ public sealed class EqModulePixelUiPerfSmokeTests
 
         // The PLOT is the flexible part and the one that can be starved to
         // nothing without any of its ancestors noticing.
-        var plot = view.GetVisualDescendants().OfType<EqPlotControl>().FirstOrDefault();
+        var plot = view.GetVisualDescendants().OfType<ColumnFlowEqPlot>().FirstOrDefault();
         Assert.True(plot is { Bounds: { Width: > 1, Height: > 1 } },
             $"'{id}' has no laid-out plot — the curve area collapsed");
         Assert.True(plot!.Bounds.Height >= 56,
             $"'{id}' gave the plot only {plot.Bounds.Height:0.#} px — the module's MinHeight and the " +
             "plot's own floor are what stop a short dock crushing the curve into a line");
 
-        // The six chips must be one ROW of six, not two rows of three. A
-        // UniformGrid that wrapped is the first thing that stops this being the
-        // drawing, and it measures perfectly.
-        var chips = view.GetVisualDescendants().OfType<Button>()
-            .Where(b => b.Classes.Contains("EqChip"))
-            .ToList();
-        Assert.Equal(EqLimits.BandCount, chips.Count);
-        var chipTop = chips[0].Bounds.Y;
-        Assert.All(chips, chip => Assert.Equal(chipTop, chip.Bounds.Y, 1));
-        Assert.All(chips, chip => Assert.True(chip.Bounds.Width > 8,
-            $"'{id}' squeezed a band chip to {chip.Bounds.Width:0.#} px"));
-
-        // NOTHING may be drawn on top of anything else. This is the assertion
-        // the short case exists for: at 420 x 250 the module used to draw its
-        // plot straight through the header and the chip row, and every bounds
-        // check still passed because each control had measured perfectly.
-        var plotBottom = (plot.TranslatePoint(new Point(0, plot.Bounds.Height), view)
-                          ?? new Point(0, 0)).Y;
-        var firstChipTop = (chips[0].TranslatePoint(new Point(0, 0), view) ?? new Point(0, 0)).Y;
-        Assert.True(firstChipTop >= plotBottom - 1,
-            $"'{id}' drew the band chips at y={firstChipTop:0.#} under a plot ending at " +
-            $"y={plotBottom:0.#} — the module overlapped itself instead of scrolling");
-
-        // Every param row's value rail must still be on screen. A slider that
-        // pushed its readout off the right edge is the classic variable-width
-        // failure and no bounds check on the ROW would see it.
-        foreach (var value in view.GetVisualDescendants().OfType<TextBlock>()
-                     .Where(t => t.Classes.Contains("EqParamValue")))
+        // Design D: three cards (Response, Band, Routing), every one measured even when a narrow dock pages
+        // it away, and the Band card's picker offers every band.
+        var cards = view.GetVisualDescendants().OfType<ColumnFlowPanel>().Single(p => p.Name == "EqCards");
+        foreach (var name in new[] { "EqResponseCard", "EqBandCard", "EqRoutingCard" })
         {
-            var origin = value.TranslatePoint(new Point(0, 0), view) ?? new Point(0, 0);
-            Assert.True(origin.X + value.Bounds.Width <= width + 1,
-                $"'{id}' pushed a value readout to {origin.X + value.Bounds.Width:0.#} px in a " +
-                $"{width:0} px module");
+            var card = cards.GetVisualDescendants().OfType<Control>().Single(c => c.Name == name);
+            Assert.True(card.Bounds is { Width: > 1, Height: > 1 }, $"'{id}' laid out {name} as {card.Bounds}");
+        }
+
+        var picker = view.GetVisualDescendants().OfType<ComboBox>().Single(c => c.Name == "EqBandPicker");
+        Assert.True(picker.Bounds.Width > 8, $"'{id}' squeezed the band picker to {picker.Bounds.Width:0.#} px");
+        Assert.Equal(EqLimits.BandCount, picker.ItemCount);
+
+        // NOTHING may be drawn on top of the plot. At 420 x 250 the module used to draw its plot straight
+        // through its neighbours, and every bounds check still passed because each control had measured
+        // perfectly: every text on the Response card sits wholly above or below the plot.
+        var response = cards.GetVisualDescendants().OfType<Control>().Single(c => c.Name == "EqResponseCard");
+        var plotTop = (plot.TranslatePoint(new Point(0, 0), view) ?? new Point(0, 0)).Y;
+        var plotBottom = plotTop + plot.Bounds.Height;
+        foreach (var text in response.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsVisible && t.Bounds.Height > 0))
+        {
+            var top = (text.TranslatePoint(new Point(0, 0), view) ?? new Point(0, 0)).Y;
+            if (text.GetVisualAncestors().Contains(plot)) continue;
+            Assert.True(top + text.Bounds.Height <= plotTop + 1 || top >= plotBottom - 1,
+                $"'{id}' drew '{text.Text}' at y={top:0.#} over a plot spanning y={plotTop:0.#}..{plotBottom:0.#}");
+        }
+
+        // Every param row's value rail must still be on screen. A slider that pushed its readout off the right
+        // edge is the classic variable-width failure and no bounds check on the ROW would see it. A card the
+        // pager put away is arranged off stage on purpose.
+        foreach (var card in cards.ShownCards)
+        {
+            foreach (var value in card.GetVisualDescendants().OfType<TextBlock>().Where(t => t.Classes.Contains("ColumnFlowValue")))
+            {
+                var origin = value.TranslatePoint(new Point(0, 0), view) ?? new Point(0, 0);
+                Assert.True(origin.X + value.Bounds.Width <= width + 1,
+                    $"'{id}' pushed a value readout to {origin.X + value.Bounds.Width:0.#} px in a " +
+                    $"{width:0} px module");
+            }
         }
 
         _ = height;
@@ -252,16 +258,18 @@ public sealed class EqModulePixelUiPerfSmokeTests
     /// </summary>
     private static void AssertPlotIsTheMockupsSize(string id, EqModuleView view, bool natural)
     {
-        var plot = view.GetVisualDescendants().OfType<EqPlotControl>().Single();
+        var plot = view.GetVisualDescendants().OfType<ColumnFlowEqPlot>().Single();
+        // design D's Response card asks for a 96 px well
+        Assert.Equal(96, plot.PreferredHeight);
 
         // The ask is the PLOT's, not the well's. A MinHeight on the Border would
         // produce the same drawn height and would stop a constrained dock ever
         // shrinking the curve.
-        Assert.Equal(EqPlotControl.DefaultPreferredHeight, plot.DesiredSize.Height, 1);
+        Assert.Equal(plot.PreferredHeight, plot.DesiredSize.Height, 1);
 
-        Assert.True(plot.Bounds.Height >= EqPlotControl.DefaultPreferredHeight - 0.5,
+        Assert.True(plot.Bounds.Height >= plot.PreferredHeight - 0.5,
             $"'{id}' gave the plot {plot.Bounds.Height:0.#} px against the mockup's " +
-            $"{EqPlotControl.DefaultPreferredHeight:0} — a star row measured against infinity is worth " +
+            $"{plot.PreferredHeight:0} — a star row measured against infinity is worth " +
             "its child's DESIRED size, so the plot has to ask for one");
 
         // In the host the product actually has — unconstrained — it must be the
@@ -269,7 +277,7 @@ public sealed class EqModulePixelUiPerfSmokeTests
         // fill a window, which is what every fixed-height capture shows and the
         // real inspector never does.
         if (natural)
-            Assert.Equal(EqPlotControl.DefaultPreferredHeight, plot.Bounds.Height, 1);
+            Assert.Equal(plot.PreferredHeight, plot.Bounds.Height, 1);
     }
 
     /// <summary>
@@ -284,7 +292,7 @@ public sealed class EqModulePixelUiPerfSmokeTests
     /// </summary>
     private static void AssertPlotDrewTheRightSpectrum(string id, EqModuleView view)
     {
-        var plot = view.GetVisualDescendants().OfType<EqPlotControl>().Single();
+        var plot = view.GetVisualDescendants().OfType<ColumnFlowEqPlot>().Single();
         var expected = id is "silent" or "no-engine" ? EqSpectrumKind.Preview : EqSpectrumKind.Live;
 
         Assert.Equal(expected, plot.SpectrumKind);

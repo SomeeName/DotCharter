@@ -160,6 +160,69 @@ public sealed class PatternMatcherTests
         Assert.Same(level.Notes[1], Assert.Single(matches.Notes));
     }
 
+    [Fact]
+    public void FretTransposable_AtTheCapoMatchesOpenNotesInsteadOfFrettedNotes()
+    {
+        var level = new ChartLevel();
+        var seed = Note(0, 0, 3);
+        level.Notes.Add(seed);
+        level.Notes.Add(Note(4, 0, 0));
+        level.Notes.Add(Note(8, 0, 3));
+        level.Notes.Add(Note(12, 0, 5));
+
+        var pattern = NotePattern();
+        pattern.Fret = FretRule.Transposable;
+
+        var matches = PatternMatcher.Find(pattern, SeedNotes(seed), SourceOf(level, new Arrangement { Capo = 3 }));
+
+        Assert.Equal(new[] { level.Notes[1], level.Notes[2] }, matches.Notes);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    public void FretTransposable_ChordsKeepCapoOpenStringsOutOfTheTransposeBase(int openFret)
+    {
+        var level = new ChartLevel();
+        var seed = Strum(0, (0, openFret), (1, 7), (2, 9));
+        level.Chords.Add(seed);
+        level.Chords.Add(Strum(4, (0, 3 - openFret), (1, 10), (2, 12)));
+        level.Chords.Add(Strum(8, (0, 6), (1, 10), (2, 12)));
+
+        var pattern = NotePattern();
+        pattern.Scope = PatternScope.Chords;
+        pattern.Fret = FretRule.Transposable;
+
+        var matches = PatternMatcher.Find(pattern, SeedChords(seed), SourceOf(level, new Arrangement { Capo = 3 }));
+
+        Assert.Same(level.Chords[1], Assert.Single(matches.Chords));
+    }
+
+    [Fact]
+    public void FretTransposable_RunsKeepCapoOpenNotesOutOfTheTransposeBase()
+    {
+        var level = new ChartLevel();
+        var a = Note(0, 0, 3);
+        var b = Note(1, 1, 7);
+        level.Notes.Add(a);
+        level.Notes.Add(b);
+        level.Notes.Add(Note(4, 0, 0));
+        level.Notes.Add(Note(5, 1, 10));
+        level.Notes.Add(Note(8, 0, 6));
+        level.Notes.Add(Note(9, 1, 10));
+
+        var pattern = NotePattern();
+        pattern.Fret = FretRule.Transposable;
+        pattern.Grouping = PatternGrouping.AsRun;
+        pattern.Rhythm = RhythmRule.Exact;
+        pattern.MaxFretDistance = 3;
+
+        var matches = PatternMatcher.Find(pattern, SeedNotes(a, b), SourceOf(level, new Arrangement { Capo = 3 }));
+
+        Assert.Equal(At(4), Assert.Single(matches.Groups).Position);
+        Assert.Equal(new[] { level.Notes[2], level.Notes[3] }, matches.Notes);
+    }
+
     // ------------------------------------------------------------- the shape
 
     [Fact]

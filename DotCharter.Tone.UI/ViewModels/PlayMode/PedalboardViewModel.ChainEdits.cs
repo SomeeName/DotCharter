@@ -2,6 +2,7 @@
 
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Tone.Audio.Dsp;
+using JuceSharp.Dsp;
 
 namespace DotCharter.Tone.UI.ViewModels.PlayMode;
 
@@ -31,6 +32,8 @@ public sealed record RigModuleReplacement(PedalNodeViewModel? Node, DspModuleTyp
 /// MODELLESS neural amp, i.e. a silent one.</param>
 /// <param name="WasSelected">Whether it was the selected unit, so undo re-opens
 /// the editor on it.</param>
+/// <param name="Sidechain">Its ABI-v34 sidechain source (None when unsupported).</param>
+/// <param name="ControlAssignments">Its MIDI control assignments.</param>
 public sealed record RemovedUnitSnapshot(
     string ModuleTypeId,
     int Index,
@@ -38,7 +41,9 @@ public sealed record RemovedUnitSnapshot(
     bool Bypassed,
     IReadOnlyDictionary<string, float> Values,
     IReadOnlyDictionary<string, string> StringValues,
-    bool WasSelected);
+    bool WasSelected,
+    JuceDspSidechainSource Sidechain,
+    IReadOnlyList<RigControlAssignment> ControlAssignments);
 
 public sealed partial class PedalboardViewModel
 {
@@ -80,7 +85,7 @@ public sealed partial class PedalboardViewModel
     // pairing or a board rebuild — the composable primitive for AddGear/AddGearAt.
     private PedalNodeViewModel? AddGearCore(DspModuleType type)
     {
-        var node = _dsp.AddNode(type.Id);
+        var node = ChainAdd(type.Id);
         if (node == null) return null;
 
         var vm = CreateNodeVm(node);
@@ -118,9 +123,17 @@ public sealed partial class PedalboardViewModel
     {
         var target = Math.Clamp(index, 0, Nodes.Count - 1);
         var current = Nodes.IndexOf(vm);
-        if (current >= 0 && target != current && _dsp.MoveNode(vm.NodeId, target))
+        if (current >= 0 && target != current && ChainMove(vm.NodeId, target))
             Nodes.Move(current, target);
     }
+
+    // ---- scenes follow structure ----------------------------------------
+
+    private DspNode? ChainAdd(string moduleTypeId) => RigSceneChainEdits.Add(_dsp, moduleTypeId);
+
+    private bool ChainMove(int nodeId, int index) => RigSceneChainEdits.Move(_dsp, nodeId, index);
+
+    private bool ChainRemove(int nodeId) => RigSceneChainEdits.Remove(_dsp, nodeId);
 
     // ---- duplicate ------------------------------------------------------------
 
@@ -168,6 +181,7 @@ public sealed partial class PedalboardViewModel
         if (copy == null) return null;
 
         CopyUnitState(node, copy);
+        RigSceneChainEdits.CopyScenes(_dsp, node.NodeId, copy.NodeId);
         SelectedNode = copy;
         return copy;
     }
@@ -196,6 +210,9 @@ public sealed partial class PedalboardViewModel
         }
 
         if (source.Bypassed != target.Bypassed) target.Bypassed = source.Bypassed;
+
+        if (source.SupportsSidechain && target.SupportsSidechain) target.SidechainSource = source.SidechainSource;
+        RigSceneChainEdits.CopyAssignments(_dsp, source.NodeId, target.NodeId);
 
         // Branch 0 is "unassigned" and DropToRow clamps to 1..3, so an untagged
         // source has nothing to carry — the fresh node is already untagged.
@@ -237,11 +254,11 @@ public sealed partial class PedalboardViewModel
         var fresh = AddGearAt(type, index);
         if (fresh == null) return null;
 
-        if (!_dsp.RemoveNode(node.NodeId))
+        if (!ChainRemove(node.NodeId))
         {
             // The chain refused the removal, so the swap cannot complete — take
             // the node we just added back out again rather than leaving two.
-            if (_dsp.RemoveNode(fresh.NodeId)) Nodes.Remove(fresh);
+            if (ChainRemove(fresh.NodeId)) Nodes.Remove(fresh);
             OnPropertyChanged(nameof(HasNodes));
             RebuildBoardColumns();
             return null;
@@ -283,7 +300,7 @@ public sealed partial class PedalboardViewModel
         // Taken BEFORE the native call — after it the card's params cannot be
         // read back off a node the chain has forgotten.
         var snapshot = SnapshotForUndo(node);
-        if (!_dsp.RemoveNode(node.NodeId)) return;
+        if (!ChainRemove(node.NodeId)) return;
 
         var wasSelected = ReferenceEquals(SelectedNode, node);
         if (wasSelected) SelectedNode = null;
@@ -360,7 +377,9 @@ public sealed partial class PedalboardViewModel
             node.Params.ToDictionary(p => p.Id, p => p.Value, StringComparer.Ordinal),
             node.StringParams.Where(p => p.Value.Length > 0)
                 .ToDictionary(p => p.Id, p => p.Value, StringComparer.Ordinal),
-            false);
+            false,
+            node.SupportsSidechain ? node.SidechainSource : JuceDspSidechainSource.None,
+            RigSceneChainEdits.AssignmentsOf(_dsp, node.NodeId));
     }
 
     /// <summary>
@@ -408,6 +427,9 @@ public sealed partial class PedalboardViewModel
         }
 
         if (snapshot.Bypassed) restored.Bypassed = true;
+        if (snapshot.Sidechain != JuceDspSidechainSource.None && restored.SupportsSidechain)
+            restored.SidechainSource = snapshot.Sidechain;
+        RigSceneChainEdits.Assign(_dsp, restored.NodeId, snapshot.ControlAssignments);
         if (snapshot.Branch >= 1) DropToRow(restored, Nodes.IndexOf(restored), snapshot.Branch);
         return restored;
     }
@@ -422,7 +444,7 @@ public sealed partial class PedalboardViewModel
         if (node == null) return;
         var index = Nodes.IndexOf(node);
         if (index <= 0) return;
-        if (!_dsp.MoveNode(node.NodeId, index - 1)) return;
+        if (!ChainMove(node.NodeId, index - 1)) return;
 
         Nodes.Move(index, index - 1);
         RebuildBoardColumns();
@@ -434,7 +456,7 @@ public sealed partial class PedalboardViewModel
         if (node == null) return;
         var index = Nodes.IndexOf(node);
         if (index < 0 || index >= Nodes.Count - 1) return;
-        if (!_dsp.MoveNode(node.NodeId, index + 1)) return;
+        if (!ChainMove(node.NodeId, index + 1)) return;
 
         Nodes.Move(index, index + 1);
         RebuildBoardColumns();
@@ -452,7 +474,7 @@ public sealed partial class PedalboardViewModel
         if (index < 0) return false;
         if (newIndex < 0 || newIndex >= Nodes.Count) return false;
         if (newIndex == index) return true;
-        if (!_dsp.MoveNode(node.NodeId, newIndex)) return false;
+        if (!ChainMove(node.NodeId, newIndex)) return false;
 
         Nodes.Move(index, newIndex);
         RebuildBoardColumns();
@@ -473,7 +495,7 @@ public sealed partial class PedalboardViewModel
         branch = Math.Clamp(branch, 1, 3);
 
         var target = Math.Clamp(newIndex, 0, Nodes.Count - 1);
-        var moved = target == index || (_dsp.MoveNode(node.NodeId, target) && MirrorMove(index, target));
+        var moved = target == index || (ChainMove(node.NodeId, target) && MirrorMove(index, target));
         if (!moved) return false;
 
         node.ApplyBranch(branch);

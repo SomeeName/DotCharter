@@ -39,8 +39,13 @@ public sealed class SelectLikePatternTests
         }
 
         h.Selection.SelectedChords.Add(refingered);
-        h.Coordinator.SelectLikePattern();
+        var added = h.Coordinator.SelectLikePattern();
 
+        // The result is what the status rail says: 7 chords added, 8 selected in all.
+        Assert.Equal(SelectionAddOutcome.Searched, added.Outcome);
+        Assert.Equal(7, added.Chords);
+        Assert.Equal(0, added.Notes);
+        Assert.Equal(8, added.Selected);
         Assert.Equal(8, h.Selection.SelectedChords.Count);
         Assert.All(siblings, c => Assert.Contains(c, h.Selection.SelectedChords));
     }
@@ -72,8 +77,10 @@ public sealed class SelectLikePatternTests
         h.Arrangement.ChordTemplates.Add(NewTemplate(0, "A5", [(1, 7), (2, 7)]));
         h.Level.Chords.Add(NewChord(0, 0, (1, 7), (2, 7)));
 
-        h.Coordinator.SelectLikePattern();
+        var added = h.Coordinator.SelectLikePattern();
 
+        Assert.Equal(SelectionAddOutcome.NothingSelected, added.Outcome);
+        Assert.Equal(0, added.Total);
         Assert.Empty(h.Selection.SelectedChords);
         Assert.Empty(h.Selection.SelectedHandShapes);
     }

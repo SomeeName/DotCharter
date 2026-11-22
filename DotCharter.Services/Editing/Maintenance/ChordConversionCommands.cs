@@ -1,4 +1,5 @@
 using DotCharter.Localization;
+using DotCharter.Services.Editing.ChordShapes;
 using DotCharter.Services.Editing.Fixing;
 using DotCharter.Services.State;
 
@@ -137,10 +138,10 @@ internal sealed class ChordConversionCommands(
     }
 
     /// <summary>The span of the phrase iteration under the playhead (the last one at or before it, else
-    /// the first), end exclusive; both null when the arrangement has no phrase iterations.</summary>
+    /// the first), end exclusive; both null when neither phrase store has markers.</summary>
     private (FractionalPosition? Start, FractionalPosition? End) PhraseSpanAtPlayhead(Arrangement arrangement)
     {
-        var ordered = arrangement.PhraseIterations.OrderBy(pi => pi.Position).ToList();
+        var ordered = PhraseMarkers.Iterations(arrangement).Iterations.OrderBy(pi => pi.Position).ToList();
         if (ordered.Count == 0) return (null, null);
         var playhead = TimelineMath.PositionFromMs(_projectState.CurrentTimeMs, _chartEditor.Beats);
         var index = Math.Max(0, ordered.FindLastIndex(pi => pi.Position <= playhead));
@@ -160,7 +161,7 @@ internal sealed class ChordConversionCommands(
         var requiredStrings = big ? 3 : 2;
         var maxStringIndex = arrangement.StringCount - requiredStrings;
         var selectedNotes = _chartEditor.SelectedNotes
-            .Where(n => n.StringIndex >= 0 && n.StringIndex <= maxStringIndex)
+            .Where(n => level.Notes.Contains(n) && n.StringIndex >= 0 && n.StringIndex < arrangement.StringCount)
             .ToList();
         if (selectedNotes.Count == 0)
         {
@@ -171,11 +172,28 @@ internal sealed class ChordConversionCommands(
         var newTemplates = new List<ChordTemplate>();
         var newChords = new List<Chord>();
         var notesToRemove = new List<GuitarNote>();
+        var chordsToRemove = new List<Chord>();
 
-        foreach (var note in selectedNotes)
+        foreach (var group in selectedNotes.GroupBy(n => n.Position))
         {
-            var frets = PowerChordFrets.Build(arrangement, note.StringIndex, note.Fret, big);
-            if (frets == null) continue;
+            // One onset is one strum. The lowest convertible selected string
+            // supplies the root; authored notes take precedence over generated
+            // fifths/octaves, including notes already held in a chord here.
+            var root = group.OrderBy(n => n.StringIndex)
+                .Where(n => n.StringIndex <= maxStringIndex)
+                .Select(n => (Note: n, Frets: PowerChordFrets.Build(arrangement, n.StringIndex, n.Fret, big)))
+                .FirstOrDefault(candidate => candidate.Frets != null);
+            if (root.Note == null || root.Frets == null) continue;
+            var note = root.Note;
+            var frets = root.Frets;
+            var existing = level.Chords.Where(c => c.Position == group.Key).ToList();
+            var authored = new Dictionary<int, ChordNote>();
+            foreach (var part in existing.SelectMany(c => c.ChordNotes))
+                authored.TryAdd(part.StringIndex, part.Clone());
+            foreach (var source in group)
+                authored[source.StringIndex] = SoundConversion.ToChordNote(source);
+            foreach (var (stringIndex, part) in authored)
+                frets[stringIndex] = part.Fret;
 
             // Find-or-create goes through the ONE documented editing resolver,
             // same as MergeSelectedNotesIntoChords above and for the same
@@ -193,13 +211,17 @@ internal sealed class ChordConversionCommands(
             var finalTemplate = ChordTemplateResolver.Resolve(
                 arrangement, frets, ArpeggioFlavour.Plain, null, newTemplates);
 
-            var chord = new Chord
-            {
-                Position = note.Position,
-                TemplateId = finalTemplate.Id
-            };
+            var chord = existing.FirstOrDefault()?.Clone() ?? new Chord { Position = note.Position, NotationDuration = note.NotationDuration };
+            chord.TemplateId = finalTemplate.Id;
+            chord.ChordNotes.Clear();
             foreach (var (s, f) in finalTemplate.Frets.OrderBy(kv => kv.Key))
             {
+                if (authored.TryGetValue(s, out var part))
+                {
+                    chord.ChordNotes.Add(part);
+                    continue;
+                }
+
                 chord.ChordNotes.Add(new ChordNote
                 {
                     StringIndex = s,
@@ -215,7 +237,8 @@ internal sealed class ChordConversionCommands(
             }
 
             newChords.Add(chord);
-            notesToRemove.Add(note);
+            notesToRemove.AddRange(group);
+            chordsToRemove.AddRange(existing);
         }
 
         if (newChords.Count == 0)
@@ -228,11 +251,14 @@ internal sealed class ChordConversionCommands(
         if (newTemplates.Count > 0)
             actions.Add(new AddChordTemplatesAction(arrangement.ChordTemplates, newTemplates));
         actions.Add(new RemoveNotesAction(level.Notes, notesToRemove));
+        if (chordsToRemove.Count > 0)
+            actions.Add(new RemoveChordsAction(level.Chords, chordsToRemove));
         actions.Add(new AddChordsAction(level.Chords, newChords));
 
         var composite = actions.Count == 1 ? actions[0] : new CompositeAction(actions) { LabelKey = "History_PowerChord" };
-        if (!_historyService.Do(composite)) return;
+        if (!_historyService.Do(StrandedShapes.Wrap(arrangement, composite))) return;
 
+        SelectConvertedChords(level, newChords);
         _chartEditor.RequestRedraw();
         _projectState.MainDisplayMessage = big
             ? _localization.Plural("Status_PowerChordBigCreatedOne", "Status_PowerChordBigCreated", newChords.Count)
@@ -261,6 +287,7 @@ internal sealed class ChordConversionCommands(
         }
 
         var groups = _chartEditor.SelectedNotes
+            .Where(level.Notes.Contains)
             .GroupBy(n => n.Position)
             .Select(g => g.DistinctBy(n => n.StringIndex).ToList())
             .Where(g => g.Count >= 2)
@@ -302,29 +329,7 @@ internal sealed class ChordConversionCommands(
             if (durations.Count == 1) chord.NotationDuration = durations[0];
 
             foreach (var note in group.OrderBy(n => n.StringIndex))
-            {
-                var cn = new ChordNote
-                {
-                    StringIndex = note.StringIndex,
-                    Fret = note.Fret,
-                    // Notation-only grace ornament: per-string on a chord, so
-                    // each merged note keeps its own
-                    // (ChordNote has a per-string grace field).
-                    GraceFret = note.GraceFret,
-                    Sustain = note.Sustain,
-                    Mute = note.Mute,
-                    Hopo = note.Hopo,
-                    BassPicking = note.BassPicking,
-                    LinkNext = note.LinkNext,
-                    Vibrato = note.Vibrato,
-                    Tremolo = note.Tremolo,
-                    Harmonic = note.Harmonic,
-                    SlideTo = note.SlideTo,
-                    UnpitchedSlide = note.UnpitchedSlide
-                };
-                foreach (var bend in note.BendValues) cn.BendValues.Add(bend);
-                chord.ChordNotes.Add(cn);
-            }
+                chord.ChordNotes.Add(SoundConversion.ToChordNote(note));
 
             newChords.Add(chord);
             notesToRemove.AddRange(group);
@@ -339,6 +344,7 @@ internal sealed class ChordConversionCommands(
         var composite = actions.Count == 1 ? actions[0] : new CompositeAction(actions) { LabelKey = "History_MergeIntoChords" };
         if (!_historyService.Do(composite)) return;
 
+        SelectConvertedChords(level, newChords);
         _chartEditor.RequestRedraw();
         _projectState.MainDisplayMessage = _localization.PluralWith("Status_NotesMergedIntoChordsOne", "Status_NotesMergedIntoChords", newChords.Count,
             notesToRemove.Count, newChords.Count);
@@ -361,7 +367,8 @@ internal sealed class ChordConversionCommands(
             return;
         }
 
-        var selectedChords = _chartEditor.SelectedChords.Where(c => c.ChordNotes.Count > 0).ToList();
+        var selectedChords = _chartEditor.SelectedChords
+            .Where(c => level.Chords.Contains(c) && c.ChordNotes.Count > 0).ToList();
         if (selectedChords.Count == 0)
         {
             _projectState.MainDisplayMessage = L("Status_NoChordsSelected");
@@ -391,7 +398,7 @@ internal sealed class ChordConversionCommands(
                     UnpitchedSlide = cn.UnpitchedSlide,
                     NotationDuration = chord.NotationDuration
                 };
-                foreach (var bend in cn.BendValues) note.BendValues.Add(bend);
+                foreach (var bend in cn.BendValues) note.BendValues.Add(bend.Clone());
                 newNotes.Add(note);
             }
         }
@@ -438,6 +445,16 @@ internal sealed class ChordConversionCommands(
         if (!_historyService.Do(action)) return;
         _chartEditor.RequestRedraw();
         _logger.Info(AppLogCategory.Editing, $"Toggled {label} on {selected.Count} chord(s).");
+    }
+
+    private void SelectConvertedChords(ChartLevel level, IEnumerable<Chord> converted)
+    {
+        var liveNotes = level.Notes.ToHashSet();
+        var liveChords = level.Chords.ToHashSet();
+        SelectionBulkOps.ReplaceWith(_chartEditor.Selection.SelectedNotes,
+            _chartEditor.SelectedNotes.Where(liveNotes.Contains).ToList());
+        SelectionBulkOps.ReplaceWith(_chartEditor.Selection.SelectedChords,
+            _chartEditor.SelectedChords.Where(liveChords.Contains).Concat(converted).Distinct().ToList());
     }
 
     private string FormatPosition(FractionalPosition position)

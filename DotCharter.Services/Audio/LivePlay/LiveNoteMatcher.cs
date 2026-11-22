@@ -244,8 +244,8 @@ public sealed class LiveNoteMatcher
 
     /// <summary>
     ///     Rebuilds the expected timeline with new per-phrase levels WITHOUT
-    ///     losing the run: verdicts already judged before the playhead's
-    ///     horizon are carried over (matched by time/string/kind), the stats
+    ///     losing the run: every verdict already credited is carried over
+    ///     (matched by time/string/kind), including inside open hit windows; the stats
     ///     are replayed from them and the cursor lands back on the horizon.
     ///     This is what lets dynamic difficulty swap LATER iterations of a
     ///     phrase to a new level mid-song.
@@ -274,12 +274,11 @@ public sealed class LiveNoteMatcher
         frozen.Clear();
         foreach (var sound in _expected)
         {
-            if (sound.Verdict is { } v && sound.TimeMs < horizon)
+            if (sound.Verdict is { } v)
                 judged.TryAdd((sound.TimeMs, sound.StringIndex, sound.IsChord), (v, sound.TimingTier));
-            // The whole iteration is frozen the moment ANY of it is behind the
-            // horizon: a difficulty change part-way through one phrase would add
-            // or remove notes under the player's hands.
-            if (sound.PhraseIterationIndex >= 0 && sound.TimeMs < horizon)
+            // A credited hit freezes its iteration even before the horizon reaches it:
+            // otherwise a lower level could delete the very sound we must carry over.
+            if (sound.PhraseIterationIndex >= 0 && (sound.TimeMs < horizon || sound.Verdict != null))
                 frozen[sound.PhraseIterationIndex] = sound.LevelIndex;
         }
 

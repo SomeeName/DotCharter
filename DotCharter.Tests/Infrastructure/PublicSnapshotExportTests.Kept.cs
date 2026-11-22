@@ -126,7 +126,8 @@ public sealed partial class PublicSnapshotExportTests
 
             // The dev tree on record (the merge train's): the snapshot is built, not re-tested.
             var train = Path.Combine(scratch, "cache-train");
-            var save = RunPwsh(scratch, $"$env:DOTCHARTER_RELEASE_CACHE = {Quote(train)}\nImport-Module {Quote(CacheModule)} -Force\n[void](Save-GateRecord -Tree '{devTree}' -Commit 'abc' -Gate -Source 'Merge-Train.ps1 (1, 2)')");
+            var seed = $"$env:DOTCHARTER_RELEASE_CACHE = {Quote(train)}\nImport-Module {Quote(CacheModule)} -Force\n[void](Save-GateRecord -Tree '{devTree}' -Commit 'abc' -Gate -Configuration Release -InputKey (Get-PinKey -Root {Quote(f.DevDc)} -RelativePaths 'tools/ci/release-lane.json') -Source 'Merge-Train.ps1 (1, 2)')";
+            var save = RunPwsh(scratch, seed);
             Assert.True(save.ExitCode == 0, save.Output);
             var reused = RunDry(scratch, f, "g", "-Gate", train);
             Assert.True(reused.ExitCode == 0, reused.Output);
@@ -135,15 +136,32 @@ public sealed partial class PublicSnapshotExportTests
                 reused.Output, StringComparison.Ordinal);
             Assert.Contains("(-ForceGate re-runs it)", reused.Output, StringComparison.Ordinal);
 
+            var lost = RunDry(scratch, f, "g", "-Gate", train, revokeTree: devTree);
+            Assert.NotEqual(0, lost.ExitCode);
+            Assert.Contains("Reused gate evidence lost", lost.Output, StringComparison.Ordinal);
+            Assert.Equal("ran -Build", File.ReadAllText(f.GateMarker).Trim());
+            var restored = RunPwsh(scratch, seed);
+            Assert.True(restored.ExitCode == 0, restored.Output);
+
             var forced = RunDry(scratch, f, "g", "-Gate -ForceGate", train);
             Assert.True(forced.ExitCode == 0, forced.Output);
             Assert.Equal("ran -Gate", File.ReadAllText(f.GateMarker).Trim());
             Assert.DoesNotContain("NOT re-run", forced.Output, StringComparison.Ordinal);
 
+            // A forced red gate invalidates both the public and dev aliases in this same cache.
+            var forcedRed = RunDry(scratch, f, "g", "-Gate -ForceGate", train, gateExit: 1);
+            Assert.Contains("build: Invoke-Gate.ps1 -Public -Gate exited 1", forcedRed.Output, StringComparison.Ordinal);
+            var afterRed = RunDry(scratch, f, "g", "-Gate", train, gateExit: 1);
+            Assert.Contains("build: Invoke-Gate.ps1 -Public -Gate exited 1", afterRed.Output, StringComparison.Ordinal);
+            Assert.DoesNotContain("NOT re-run", afterRed.Output, StringComparison.Ordinal);
+
             // A red gate records nothing.
             var red = Path.Combine(scratch, "cache-red");
             var failed = RunDry(scratch, f, "g", "-Gate", red, gateExit: 1);
             Assert.Contains("build: Invoke-Gate.ps1 -Public -Gate exited 1", failed.Output, StringComparison.Ordinal);
+            // A dry run whose requested gate failed fails too, not only a -Push.
+            Assert.True(failed.ExitCode != 0, failed.Output);
+            Assert.Contains("the requested build/gate failed (exit 1)", failed.Output, StringComparison.Ordinal);
             Assert.False(Directory.Exists(Path.Combine(red, "gate-results")), "a red gate was recorded.\n" + failed.Output);
         }
         finally
@@ -156,7 +174,7 @@ public sealed partial class PublicSnapshotExportTests
 
     // A dry run (no URLs, no push) of the fixture into <scratch>/<root>, with its own release cache.
     private static (int ExitCode, string Output) RunDry(string scratch, PushFixture f, string root, string extra = "",
-        string? cache = null, int gateExit = 0)
+        string? cache = null, int gateExit = 0, string revokeTree = "")
     {
         if (File.Exists(f.GateMarker)) File.Delete(f.GateMarker);
         var cacheLine = cache is null ? "" : $"$env:DOTCHARTER_RELEASE_CACHE = {Quote(cache)}\n";
@@ -164,6 +182,8 @@ public sealed partial class PublicSnapshotExportTests
             {{cacheLine}}$env:DC_FAKE_GATE_MARKER = {{Quote(f.GateMarker)}}
             $env:DC_FAKE_GATE_EXIT = '{{gateExit}}'
             $env:DC_FAKE_GATE_MOVE = ''
+            $env:DC_FAKE_GATE_REVOKE_TREE = {{Quote(revokeTree)}}
+            $env:DC_FAKE_GATE_CACHE_MODULE = {{Quote(CacheModule)}}
             & {{Quote(ExportScript)}} -DevRepo {{Quote(f.DevDc)}} -DevRef main -DevJuceSharpGitDir {{Quote(Path.Combine(f.DevJuce, ".git"))}} -ScratchRoot {{Quote(Path.Combine(scratch, root))}} {{extra}}
             exit $LASTEXITCODE
             """);

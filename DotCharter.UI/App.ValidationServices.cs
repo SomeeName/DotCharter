@@ -1,6 +1,7 @@
 // Composition root, validation slice: the arrangement validation service with EVERY
 // IArrangementRule (registration order is what DI injects as one IEnumerable), the
 // auto-fix service, the batch + audio chart lints, and the lyric parsing/auto-sync stack.
+// A static class beside App, not an App partial (SplitTypePartialRatchetTests).
 
 using DotCharter.Services.Editing.Fixing;
 using DotCharter.Services.Parsing;
@@ -9,16 +10,12 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DotCharter.UI;
 
-public partial class App
+internal static class AppValidationServices
 {
-    private static void AddValidationServices(IServiceCollection services)
+    internal static void AddValidationServices(IServiceCollection services)
     {
         services.AddSingleton<IArrangementValidationService, ArrangementValidationService>();
-        // EVERY rule together — they are injected as one
-        // IEnumerable<IArrangementRule>, so a split that put
-        // IArrangementAutoFixService in the middle would read as if it meant
-        // something and invite someone to "fix" it by moving the auto-fix
-        // registration.
+        // Keep the rules together. DI injects them in registration order.
         services.AddSingleton<IArrangementRule, PhraseRule>();
         services.AddSingleton<IArrangementRule, NoteRule>();
         services.AddSingleton<IArrangementRule, ChordRule>();
@@ -35,6 +32,10 @@ public partial class App
         services.AddSingleton<IArrangementRule, PhraseAnchorRule>();
         services.AddSingleton<IArrangementRule, OpenNoteBendRule>();
         services.AddSingleton<IArrangementRule, ChordOutsideHandShapeRule>();
+        services.AddSingleton<IArrangementRule, ShowlightRule>();
+        services.AddSingleton<IArrangementRule, DifficultyLevelRule>();
+        services.AddSingleton<IArrangementRule, HandShapeGapRule>();
+        services.AddSingleton<IArrangementRule, SectionNameVarietyRule>();
         services.AddSingleton<IArrangementAutoFixService, ArrangementAutoFixService>();
         // Batch library lint over a folder of projects; IChartSerializer is only registered keyed.
         services.AddSingleton<DotCharter.Services.Editing.Linting.IBatchChartLintService>(sp =>
@@ -49,7 +50,12 @@ public partial class App
             new DotCharter.Services.Editing.Linting.AudioChartLintService(
                 sp.GetService<IAppLogger>()));
         services.AddSingleton<DotCharter.Services.Editing.Quality.ChartQualityReporter>();
+        // Song key from the mix's chroma, for File > Song metadata when there are no notes.
+        services.AddSingleton<DotCharter.Services.Audio.Key.ISongKeyAudioEstimator,
+            DotCharter.Services.Audio.Key.SongKeyAudioEstimator>();
         services.AddSingleton<LrcLyricsParser>();
+        services.AddSingleton<DotCharter.Services.Import.Lyrics.ILyricsFileService,
+            DotCharter.Services.Import.Lyrics.LyricsFileService>();
         // Lyric auto-sync: CTC forced alignment of pasted (romanized) lyrics
         // against the song. Prefers a vocal stem separation has ALREADY cached
         // and falls back to the mix — it never starts a separation of its own.
@@ -70,5 +76,11 @@ public partial class App
                     sp.GetService<IAppLogger>()),
                 sp.GetRequiredService<ILocalizationService>(),
                 sp.GetService<IAppLogger>()));
+        services.AddSingleton<DotCharter.Services.Editing.Lyrics.ILyricAutoSyncRunner>(sp =>
+            new DotCharter.Services.Editing.Lyrics.LyricAutoSyncRunner(
+                sp.GetRequiredService<DotCharter.Services.Audio.Lyrics.ILyricAutoSyncService>(),
+                sp.GetService<DotCharter.Services.Audio.Lyrics.ILyricModelDownloadService>(),
+                sp.GetService<IConfigurationService>(),
+                sp.GetRequiredService<ProjectState>()));
     }
 }

@@ -35,7 +35,7 @@ public sealed class FakeDcSongExportScreen : FakeDialog<bool>, IDcSongExportScre
         SongLine = s.Song;
         AudioQualityIndex = s.Lossless ? 1 : 0;
         AudioQualityNote = s.Lossless
-            ? "Lossless, for charting: chart from audio and stem separation can use it. About five times larger."
+            ? "Lossless, for charting: stem separation can use it. About five times larger."
             : "Small, for playing. Compressed audio is playback-only.";
         Arrangements = [.. s.Arrangements.Select(a => new Row(a.Name, a.Type, a.On))];
         CanIncludeStems = s.Stems.Count > 0;

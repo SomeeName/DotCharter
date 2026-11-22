@@ -12,6 +12,46 @@ public sealed class ExportTargetWriterTests : IDisposable
     public void Dispose() => BestEffortDelete.Directory(_dir);
 
     [Fact]
+    public async Task TextExport_ReplacesDestinationWithoutOpeningItForWrite()
+    {
+        var path = Path.Combine(_dir, "preset.json");
+        File.WriteAllText(path, "previous");
+        using var previous = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+
+        await _files.WriteAllTextAsync(path, "replacement");
+
+        using var reader = new StreamReader(previous);
+        Assert.Equal("previous", reader.ReadToEnd());
+        Assert.Equal("replacement", File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_dir));
+    }
+
+    [Fact]
+    public async Task TextExport_EncodingFailure_PreservesDestinationAndRemovesStage()
+    {
+        var path = Path.Combine(_dir, "preset.json");
+        File.WriteAllText(path, "previous");
+
+        await Assert.ThrowsAsync<System.Text.EncoderFallbackException>(() => _files.WriteAllTextAsync(path, "\uD800"));
+
+        Assert.Equal("previous", File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_dir));
+    }
+
+    [Fact]
+    public async Task TextExport_WritesUtf8WithoutBomAndReadsItBack()
+    {
+        var path = Path.Combine(_dir, "preset.json");
+
+        await _files.WriteAllTextAsync(path, "Gr\u00fc\u00dfe \u6b4c");
+
+        Assert.Equal(System.Text.Encoding.UTF8.GetBytes("Gr\u00fc\u00dfe \u6b4c"), _files.ReadAllBytes(path));
+        using var held = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+        Assert.Equal("Gr\u00fc\u00dfe \u6b4c", await _files.ReadAllTextAsync(path));
+        Assert.Equal([path], Directory.GetFiles(_dir));
+    }
+
+    [Fact]
     public void CopyFile_OverwritesAnExistingDestination()
     {
         var source = Path.Combine(_dir, "song.ogg");

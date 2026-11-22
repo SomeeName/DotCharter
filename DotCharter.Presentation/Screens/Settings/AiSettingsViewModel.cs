@@ -9,17 +9,10 @@ using DotCharter.Tone.Logging;
 
 namespace DotCharter.Presentation.Screens.Settings;
 
-/// <summary>
-///     Settings ▸ AI. The values that persist through <c>AppConfig.Ai</c> — the
-///     provider, the model id, the base URL, the library-tones anchor, web research
-///     and the reasoning level — are what the change set tracks; everything else on the tab is
-///     status. The API key goes to <see cref="IAiSecretStore" /> instead, and is
-///     never read back into the box.
-/// </summary>
+/// <summary>AI settings and pending key input; persisted secrets are never read into the box.</summary>
 public sealed partial class AiSettingsViewModel : ObservableObject,
     IAiSettingsScreen, ISettingsTab, ISettingsChangeSource, IDisposable
 {
-    /// <summary>The model id Claude Code is given when it is picked with nothing chosen yet.</summary>
     public const string DefaultClaudeModel = ClaudeCliToneModel.DefaultModelId;
 
     private readonly IConfigurationService _config;
@@ -32,6 +25,7 @@ public sealed partial class AiSettingsViewModel : ObservableObject,
     private readonly SettingsChangeSet _changes = new();
     private string _query = "";
     private bool _loading;
+    private int _statusGeneration;
 
     public AiSettingsViewModel(
         IConfigurationService config,
@@ -50,8 +44,6 @@ public sealed partial class AiSettingsViewModel : ObservableObject,
         _design = design;
         _logger = logger;
 
-        // Every row but None is enabled by the FACTORY, never by a list kept
-        // here: a second hand-kept copy of what a build can offer is what goes stale.
         Providers = AiProviderShape.Options(localization, Supports);
         _selectedProvider = Providers[0];
         Reasoning = new AiReasoningPart(localization);
@@ -95,10 +87,10 @@ public sealed partial class AiSettingsViewModel : ObservableObject,
 
     [ObservableProperty] private bool _useLibraryTones = true;
 
-    /// <summary>The combo's selection: an option OBJECT, which the change set cannot compare — <see cref="ProviderKind" /> is the value it writes.</summary>
     [ObservableProperty] private AiProviderOption _selectedProvider;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UnsavedSettings))]
     [NotifyCanExecuteChangedFor(nameof(TestConnectionCommand))]
     private string _apiKeyEntry = "";
 
@@ -156,7 +148,6 @@ public sealed partial class AiSettingsViewModel : ObservableObject,
 
     public bool IsEnabledProvider => ProviderKind != AiProviderKind.None;
 
-    /// <summary>The rows, notes and words the chosen provider wants.</summary>
     public AiProviderShape Shape => AiProviderShape.For(ProviderKind);
 
     public string CliPathLabel => _localization[Shape.CliPathLabelKey];
@@ -167,7 +158,6 @@ public sealed partial class AiSettingsViewModel : ObservableObject,
 
     public string KeyStateText => _localization[HasStoredKey ? "Ai_KeyStored" : "Ai_KeyMissing"];
 
-    /// <summary>True where the store cannot SEAL the key, so it lives for the session only.</summary>
     public bool KeyIsSessionOnly => _secrets is { IsPersistent: false };
 
     ICommand IAiSettingsScreen.UseClaudeHaikuCommand => UseClaudeHaikuCommand;
@@ -192,9 +182,11 @@ public sealed partial class AiSettingsViewModel : ObservableObject,
 
     public Type? Screen => typeof(IAiSettingsScreen);
 
-    public IReadOnlyList<string> UnsavedSettings => _changes.Differences();
+    public IReadOnlyList<string> UnsavedSettings => ApiKeyEntry.Trim().Length > 0
+        ? [.. _changes.Differences(), "ai.ApiKeyEntry"] : _changes.Differences();
 
-    /// <summary>The settings as the factory wants them — trimmed, and an empty base URL reported as null.</summary>
+    public bool HasSaveError { get; private set; }
+
     public AiProviderSettings CurrentSettings => new(
         ProviderKind, ModelId.Trim(), string.IsNullOrWhiteSpace(BaseUrl) ? null : BaseUrl.Trim(), UseLibraryTones, WebResearch,
         Reasoning.Effort);
@@ -202,6 +194,7 @@ public sealed partial class AiSettingsViewModel : ObservableObject,
     /// <summary>Re-reads the persisted settings and the key's PRESENCE, never its value. Also the page's revert.</summary>
     public void Load()
     {
+        _statusGeneration++;
         _loading = true;
         try
         {
@@ -224,19 +217,15 @@ public sealed partial class AiSettingsViewModel : ObservableObject,
         IsStatusError = false;
         RaiseKeyState();
 
-        // Cheap: a file-presence check and at most one already-taken verdict.
         _match.Refresh();
         ApplySearch(_query);
         Rebaseline();
     }
 
-    /// <summary>
-    ///     Persists the non-secret settings and, when the box holds something,
-    ///     the key. An EMPTY box means "leave the stored key alone"; Clear is
-    ///     the erase.
-    /// </summary>
+    /// <summary>Saves settings and pending key input; an empty key box preserves the stored key.</summary>
     public void Save()
     {
+        HasSaveError = false;
         var settings = CurrentSettings;
         var config = _config.LoadAppConfig();
         if (config.Ai != settings)
@@ -245,15 +234,14 @@ public sealed partial class AiSettingsViewModel : ObservableObject,
             _config.SaveAppConfig(config);
             _logger?.Info(Tone.Infrastructure.Configuration.AppLogCategory.Settings,
                 $"AI provider set to {settings.Kind} (model '{settings.ModelId}', enabled={settings.IsEnabled}).");
-            // Inside the change test on purpose: a Save that moved nothing must
-            // not make an open "Design a tone" panel republish.
             _design?.NotifyConfigurationChanged();
         }
 
-        if (ApiKeyEntry.Trim().Length > 0 && _secrets != null)
+        if (ApiKeyEntry.Trim().Length > 0)
         {
-            _secrets.Write(settings.Kind, ApiKeyEntry.Trim());
-            ApiKeyEntry = "";
+            HasSaveError = _secrets is null || !_secrets.Write(settings.Kind, ApiKeyEntry.Trim());
+            if (!HasSaveError) ApiKeyEntry = "";
+            SetStatus(_localization[HasSaveError ? "Ai_KeySaveFailed" : "Ai_KeySaved"], HasSaveError);
         }
 
         RaiseKeyState();
@@ -270,15 +258,17 @@ public sealed partial class AiSettingsViewModel : ObservableObject,
         OnPropertyChanged(nameof(UnsavedSettings));
     }
 
-    public void Dispose() => _match.Dispose();
+    public void Dispose()
+    {
+        _statusGeneration++;
+        _match.Dispose();
+    }
 
     partial void OnSelectedProviderChanged(AiProviderOption value)
     {
         if (!value.IsAvailable)
         {
-            // A disabled row in a ComboBox is not reliably unpickable, so the
-            // refusal lives here: bounce the selection back and SAY why. An
-            // option that silently reverts reads as a broken control.
+            // Refuse unavailable providers even when the picker allows the selection.
             SetStatus(_localization[AiProviderShape.For(value.Kind).MissingKey], isError: false);
             SelectedProvider = Providers.First(p => p.Kind == ProviderKind);
             return;
@@ -334,11 +324,15 @@ public sealed partial class AiSettingsViewModel : ObservableObject,
     [RelayCommand]
     private void UseOllama() => BaseUrl = AiProviderPresets.OllamaBaseUrl;
 
-    /// <summary>Erases the stored key for the CURRENT provider.</summary>
     [RelayCommand]
     private void ClearKey()
     {
-        _secrets?.Write(ProviderKind, null);
+        if (_secrets is null || !_secrets.Write(ProviderKind, null))
+        {
+            SetStatus(_localization["Ai_KeyClearFailed"], isError: true);
+            return;
+        }
+
         ApiKeyEntry = "";
         RaiseKeyState();
         SetStatus(_localization["Ai_KeyCleared"], isError: false);
@@ -354,24 +348,29 @@ public sealed partial class AiSettingsViewModel : ObservableObject,
         if (IsBusy || _factory is null) return;
 
         Save();
+        if (HasSaveError) return;
         IsBusy = true;
         SetStatus(_localization["Ai_Testing"], isError: false);
+        var statusGeneration = _statusGeneration;
         try
         {
             var model = _factory.Create(CurrentSettings);
             var probe = await model.ProbeAsync(CancellationToken.None).ConfigureAwait(true);
+            if (statusGeneration != _statusGeneration) return;
             SetStatus(probe.Ok
                 ? _localization.Format("Ai_TestOk", probe.ModelId ?? CurrentSettings.ModelId)
                 : _localization.Format("Ai_TestFailed", probe.Message), isError: !probe.Ok);
         }
         catch (ToneDesignException ex)
         {
-            SetStatus(_localization.Format("Ai_TestFailed", ex.Message), isError: true);
+            if (statusGeneration == _statusGeneration)
+                SetStatus(_localization.Format("Ai_TestFailed", ex.Message), isError: true);
             _logger?.Warning(Tone.Infrastructure.Configuration.AppLogCategory.Settings, $"AI probe failed: {ex.Fault} — {ex.Detail}");
         }
         catch (Exception ex)
         {
-            SetStatus(_localization.Format("Ai_TestFailed", ex.Message), isError: true);
+            if (statusGeneration == _statusGeneration)
+                SetStatus(_localization.Format("Ai_TestFailed", ex.Message), isError: true);
         }
         finally
         {
@@ -383,6 +382,7 @@ public sealed partial class AiSettingsViewModel : ObservableObject,
 
     private void SetStatus(string text, bool isError)
     {
+        _statusGeneration++;
         StatusText = text;
         IsStatusError = isError;
     }

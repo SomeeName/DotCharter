@@ -28,7 +28,7 @@ internal static partial class DdImprover
         AddIgnores(arr);
         FixLinkNexts(arr);
         RemoveOverlappingBendValues(arr);
-        RemoveMutedNotesFromChords(arr);
+        var reboundChords = RemoveMutedNotesFromChords(arr);
         // Do before phrase start anchors are fixed
         MoveAnchors(arr);
         MovePhrases(arr);
@@ -41,6 +41,7 @@ internal static partial class DdImprover
         ProcessCustomEvents(arr);
         LengthenHandShapes(arr);
         ShortenHandShapes(arr);
+        RebindMutedHandShapes(arr, reboundChords);
     }
 
     // ── BasicFixes ──────────────────────────────────────────────────────
@@ -122,29 +123,20 @@ internal static partial class DdImprover
         }
     }
 
-    /// <summary>Removes fret-hand-muted notes from chords that also contain normal notes.</summary>
-    private static void RemoveMutedNotesFromChords(DdArrangement arr)
-    {
-        var fixedTemplates = new HashSet<int>();
-        foreach (var chord in arr.Levels.SelectMany(l => l.Chords))
-        {
-            if (fixedTemplates.Contains(chord.ChordId) || !chord.HasChordNotes || chord.IsFretHandMute) continue;
-            var muted = chord.ChordNotes!.FindAll(n => n.IsFretHandMute);
-            // Remove the mutes unless all notes are muted
-            if (muted.Count == 0 || muted.Count == chord.ChordNotes.Count) continue;
-            chord.ChordNotes.RemoveAll(n => n.IsFretHandMute);
-            if (Template(arr, chord.ChordId) is { } template)
-            {
-                foreach (var n in muted)
-                {
-                    template.Frets[n.String] = -1;
-                    template.Fingers[n.String] = -1;
-                }
-            }
+    /// <summary>
+    ///     Removes fret-hand-muted notes from chords that also contain normal notes. The one
+    ///     step that is NOT DLC Builder's: the F# cuts the muted strings out of the chord's
+    ///     SHARED template (and then skips every later chord on it), so an unmuted chord on
+    ///     the same template lost a played string. Here the template stays as authored
+    ///     and each such chord is rebound to a reduced copy (<see cref="DdMutedChordCleanup" />).
+    /// </summary>
+    private static Dictionary<DdChord, int> RemoveMutedNotesFromChords(DdArrangement arr) =>
+        DdMutedChordCleanup.ReduceChords(arr);
 
-            fixedTemplates.Add(chord.ChordId);
-        }
-    }
+    /// <summary>Last step: a hand shape follows its rebound chord only when nothing it
+    /// covers needs the full grip, judged on the shapes' final ranges.</summary>
+    private static void RebindMutedHandShapes(DdArrangement arr, Dictionary<DdChord, int> reboundChords) =>
+        DdMutedChordCleanup.RebindShapes(arr, reboundChords);
 
     /// <summary>Removes anchors identical (fret and width) to the previous one, except at a phrase start.</summary>
     private static void RemoveRedundantAnchors(DdArrangement arr)
@@ -396,13 +388,26 @@ internal static partial class DdImprover
     {
         foreach (var template in arr.ChordTemplates)
         {
-            template.Name = string.IsNullOrWhiteSpace(template.Name)
-                ? ""
-                : template.Name.Replace("min", "m").Replace("CONV", "").Replace("-nop", "").Replace("-arp", "");
-            template.DisplayName = string.IsNullOrWhiteSpace(template.DisplayName)
-                ? ""
-                : template.DisplayName.Replace("min", "m").Replace("CONV", "-arp");
+            template.Name = NormalizeChordName(template.Name, false);
+            template.DisplayName = NormalizeChordName(template.DisplayName, true);
         }
+    }
+
+    [GeneratedRegex("(?:CONV|-arp|-nop)+$")]
+    private static partial Regex ChordNameSuffixes();
+
+    [GeneratedRegex(@"^([A-G](?:#|b)?)min((?:(?:maj|add|sus|dim|aug)?[0-9]+|[#b][0-9]+|\((?:maj|add|sus|dim|aug|[0-9#b,+-])+\))*(?:/[A-G](?:#|b)?)?)$")]
+    private static partial Regex MinorChordName();
+
+    private static string NormalizeChordName(string name, bool displayName)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "";
+        var suffix = ChordNameSuffixes().Match(name);
+        var bareName = suffix.Success ? name[..suffix.Index] : name;
+        var normalized = MinorChordName().Replace(bareName, "$1m$2");
+        return displayName && suffix.Success
+            ? normalized + suffix.Value.Replace("CONV", "-arp", StringComparison.Ordinal)
+            : normalized;
     }
 
     // ── CustomEvents ────────────────────────────────────────────────────

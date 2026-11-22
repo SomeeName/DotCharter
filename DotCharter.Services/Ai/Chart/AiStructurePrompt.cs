@@ -7,7 +7,8 @@ namespace DotCharter.Services.Ai.Chart;
 /// <summary>
 /// What the structure job is shown: the beat grid bar by bar, the level's sounds summed
 ///     up per bar (with a repeat letter, so identical bars read as identical), the section and
-///     phrase markers as they are, the scope it may change, and the charter's instruction. ONE
+///     phrase markers as they are (name, place and, where not default, status, solo, tone, event
+///     codes and arrangements), the scope it may change, and the charter's instruction. ONE
 ///     request over the whole scope — a song's form is only visible all at once.
 ///     <para>
 ///         The job never sees a note it could change: a bar is counts, a fret span and a repeat
@@ -41,14 +42,29 @@ public static class AiStructurePrompt
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["op", "kind", "id", "bar", "beat", "name"],
+                "required": ["op", "kind", "id", "bar", "beat", "name", "event"],
                 "properties": {
-                  "op": { "type": "string", "enum": ["add", "rename", "move", "remove"] },
+                  "op": { "type": "string", "enum": ["add", "rename", "move", "remove", "event"] },
                   "kind": { "type": ["string", "null"], "enum": ["section", "phrase", null], "description": "Required for add; null otherwise (the id says it)." },
                   "id": { "type": ["string", "null"], "description": "The listed marker (s1, p3, ...) for rename, move, remove; null for add." },
                   "bar": { "type": ["integer", "null"], "description": "Bar number for add and move; null otherwise." },
                   "beat": { "type": ["integer", "null"], "description": "1-based beat in the bar for a phrase add or move; null or 1 for a section (always on the bar line)." },
-                  "name": { "type": ["string", "null"], "description": "The name for add and rename; null otherwise." }
+                  "name": { "type": ["string", "null"], "description": "The name for add and rename; null otherwise." },
+                  "event": {
+                    "type": ["object", "null"],
+                    "description": "Only for op event (bar, beat say where): the fields of the Edit event / phrase dialog to set; null otherwise. A null field keeps what the marker has; \"\" clears a section, phrase or tone.",
+                    "additionalProperties": false,
+                    "required": ["section", "status", "phrase", "solo", "tone", "events", "arrangements"],
+                    "properties": {
+                      "section": { "type": ["string", "null"] },
+                      "status": { "type": ["string", "null"], "enum": ["none", "todo", "draft", "review", "done", null], "description": "Charting status; only on a section." },
+                      "phrase": { "type": ["string", "null"] },
+                      "solo": { "type": ["boolean", "null"], "description": "Solo phrase; needs a phrase." },
+                      "tone": { "type": ["string", "null"], "description": "Tone name placed at this beat." },
+                      "events": { "type": ["array", "null"], "items": { "type": "string" }, "description": "The Rocksmith event codes the marker carries (B0, B1, e0, e1, e2, E3, D3, E13), replacing the ones it has." },
+                      "arrangements": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Apply to these arrangements (one shared marker edit); null = the default set." }
+                    }
+                  }
                 }
               }
             }
@@ -86,6 +102,8 @@ public static class AiStructurePrompt
         - add: kind, bar (and beat for a phrase), name. Never where a marker of that kind already is.
         - rename: id and the new name. move: id and the new bar (and beat). remove: id.
         - Change a marker at most once. Markers marked [fixed] cannot be changed.
+        - A listed marker may end in {...}: its status, solo, tone, event codes and the arrangements
+          carrying it (only what is not the default). An event change keeps or changes these on purpose.
         - Stay inside the scope you are given. Propose only what the charter asked for; when the
           structure is already right, answer with no changes.
 
@@ -105,7 +123,7 @@ public static class AiStructurePrompt
         ArgumentNullException.ThrowIfNull(facts);
         ArgumentNullException.ThrowIfNull(level);
         ArgumentNullException.ThrowIfNull(context);
-        var text = Listing(facts, level, beats, context) + AiChartPrompt.InstructionSection(instruction);
+        var text = Listing(facts, level, beats, context) + EventHelp(context) + AiChartPrompt.InstructionSection(instruction);
         return new ToneDesignPrompt(System, [new ToneDesignTurn(ToneDesignRole.User, text)], Schema, SchemaName);
     }
 
@@ -132,6 +150,19 @@ public static class AiStructurePrompt
         };
     }
 
+    /// <summary>The event block: what op "event" sets and the arrangements it may name; empty where events are off.</summary>
+    internal static string EventHelp(AiStructureContext context)
+    {
+        if (context.Events is not { } scope) return "";
+        return "--- event markers ---\n" +
+               "op event sets the fields of the editor's Edit event / phrase dialog on the marker at bar + beat: section " +
+               "(on a bar line), status (on a section), phrase, solo (a solo phrase), tone (a tone name), events (Rocksmith " +
+               "event codes " + string.Join(", ", RsEventCatalog.Events.Select(e => e.Code)) + ") and arrangements. " +
+               "Leave a field null to keep it. ONE event change writes ONE marker on all its arrangements; never repeat it per arrangement.\n" +
+               "arrangements of this song: " + string.Join(", ", scope.All.Select(n => $"\"{n}\"")) +
+               "; default for an event change: " + string.Join(", ", scope.Defaults.Select(n => $"\"{n}\"")) + ".\n";
+    }
+
     /// <summary>The listing (internal for the tests).</summary>
     internal static string Listing(AiChartSongFacts facts, ChartLevel level, IList<BeatMarker> beats,
         AiStructureContext context)
@@ -153,6 +184,7 @@ public static class AiStructurePrompt
         {
             sb.Append(CultureInfo.InvariantCulture,
                 $"{m.Id} {(m.Kind == AiStructureKind.Section ? "section" : "phrase")} \"{m.Name}\" at {Where(context, m.Position)} ({Clock(m.Position.GetPositionMs(beats))})");
+            if (m.Notes.Length > 0) sb.Append(" {").Append(m.Notes).Append('}');
             if (!m.Editable) sb.Append(" [fixed]");
             sb.Append('\n');
         }

@@ -1,0 +1,123 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.EstimateBpmDialogView"
+             x:DataType="contracts:IEstimateBpmScreen"
+             x:CompileBindings="True">
+
+    <!-- Tempo map ▸ Estimate BPM. Grammar: Views/Dialogs/DialogStyles.axaml.
+         Range first, then Estimate; the result rows (tempo, half, double) show once a run
+         finishes and each is a radio the Apply button reads. Hosted by Views/Shell/DialogHost,
+         which focuses `EstimateButton` on open — keep the x:Name. -->
+    <Grid x:Name="DialogGrid" Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconPulse}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_EstimateBpm_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" TextWrapping="Wrap"
+                                   Text="{localization:Loc Dialog_EstimateBpm_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1" IsEnabled="{Binding !IsBusy}">
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,280">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_EstimateBpm_Source_Label}" />
+                        <TextBlock x:Name="SourceValue" Theme="{DynamicResource DlgValueText}" Grid.Column="1" Classes="DlgValue"
+                                   VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis"
+                                   Text="{Binding SourceText}" ToolTip.Tip="{Binding SourceText}" />
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,280">
+                        <TextBlock VerticalAlignment="Top" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_EstimateBpm_Range_Label}" />
+                        <StackPanel x:Name="RangePanel" Grid.Column="1" Spacing="{DynamicResource SpaceSm}">
+                            <RadioButton GroupName="EstimateBpmRange" IsChecked="{Binding IsWholeSong, Mode=TwoWay}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_EstimateBpm_Range_Whole}">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                           Text="{localization:Loc Dialog_EstimateBpm_Range_Whole}" />
+                            </RadioButton>
+                            <RadioButton GroupName="EstimateBpmRange" IsChecked="{Binding IsMarkedPart, Mode=TwoWay}"
+                                         IsEnabled="{Binding HasMarkedPart}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_EstimateBpm_Range_Marked}">
+                                <StackPanel>
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                               Text="{localization:Loc Dialog_EstimateBpm_Range_Marked}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap" Text="{Binding MarkedPartText}" />
+                                </StackPanel>
+                            </RadioButton>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+
+                <Grid Grid.Row="2" Margin="{DynamicResource GapTopLg}" RowDefinitions="Auto,Auto,Auto">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                        <TextBlock x:Name="StatusNote" Grid.Column="0" Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
+                                   VerticalAlignment="Center" TextWrapping="Wrap" IsVisible="{Binding !StatusIsProblem}"
+                                   Text="{Binding StatusText}" />
+                        <TextBlock x:Name="ProblemNote" Grid.Column="0" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource WarningColor}" FontSize="{DynamicResource FontSizeSm}"
+                                   IsVisible="{Binding StatusIsProblem}" Text="{Binding StatusText}" />
+                        <Button x:Name="EstimateButton" Grid.Column="1" Theme="{DynamicResource SubtleButton}" Classes="Subtle"
+                                dlgv:FocusOnOpen.IsTarget="True"
+                                Content="{localization:Loc Dialog_EstimateBpm_Estimate}"
+                                Command="{Binding EstimateCommand}" IsVisible="{Binding !IsBusy}" />
+                        <Button Grid.Column="1" Theme="{DynamicResource SubtleButton}" Classes="Subtle"
+                                Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}" />
+                    </Grid>
+                    <ProgressBar Grid.Row="1" IsIndeterminate="True" IsVisible="{Binding IsBusy}" VerticalAlignment="Top"
+                                 Margin="{DynamicResource GapTopMd}" />
+
+                    <StackPanel x:Name="ResultPanel" Grid.Row="2" IsVisible="{Binding HasResult}" Margin="{DynamicResource GapTopMd}">
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,280">
+                            <RadioButton Grid.Column="0" GroupName="EstimateBpmChoice" IsChecked="{Binding UseEstimate, Mode=TwoWay}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_EstimateBpm_Estimated_Label}">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                           Text="{localization:Loc Dialog_EstimateBpm_Estimated_Label}" />
+                            </RadioButton>
+                            <TextBlock x:Name="BpmValue" Grid.Column="1" Theme="{DynamicResource DlgValueText}" Classes="DlgValue"
+                                       VerticalAlignment="Center" HorizontalAlignment="Right" Text="{Binding BpmText}" />
+                        </Grid>
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,280" IsVisible="{Binding HasHalf}">
+                            <RadioButton Grid.Column="0" GroupName="EstimateBpmChoice" IsChecked="{Binding UseHalf, Mode=TwoWay}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_EstimateBpm_Half_Label}">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                           Text="{localization:Loc Dialog_EstimateBpm_Half_Label}" />
+                            </RadioButton>
+                            <TextBlock x:Name="HalfValue" Grid.Column="1" Theme="{DynamicResource DlgValueText}" Classes="DlgValue"
+                                       VerticalAlignment="Center" HorizontalAlignment="Right" Text="{Binding HalfText}" />
+                        </Grid>
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,280" IsVisible="{Binding HasDouble}">
+                            <RadioButton Grid.Column="0" GroupName="EstimateBpmChoice" IsChecked="{Binding UseDouble, Mode=TwoWay}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_EstimateBpm_Double_Label}">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                           Text="{localization:Loc Dialog_EstimateBpm_Double_Label}" />
+                            </RadioButton>
+                            <TextBlock x:Name="DoubleValue" Grid.Column="1" Theme="{DynamicResource DlgValueText}" Classes="DlgValue"
+                                       VerticalAlignment="Center" HorizontalAlignment="Right" Text="{Binding DoubleText}" />
+                        </Grid>
+                        <TextBlock x:Name="TargetNote" Theme="{DynamicResource DlgHintText}" Classes="DlgHint" TextWrapping="Wrap"
+                                   Margin="{DynamicResource GapTopMd}" Text="{Binding TargetText}" />
+                    </StackPanel>
+                </Grid>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="3" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button x:Name="ApplyButton" Classes="DlgAction Primary" Content="{localization:Loc Action_Apply}"
+                                Command="{Binding ApplyCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

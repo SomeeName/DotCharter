@@ -8,6 +8,37 @@ namespace DotCharter.Tests.UI;
 /// <summary>The Keybinds screen against the REAL registrar and dispatch: a revert restores dispatch, and a save after it uses the replacement table.</summary>
 public sealed class RegistrarKeybindReplacementTests
 {
+    [Theory]
+    [InlineData(nameof(KeybindConfig.BookmarkBase))]
+    [InlineData(nameof(KeybindConfig.SetFretBase))]
+    [InlineData(nameof(KeybindConfig.StringMaskBase))]
+    [InlineData(nameof(KeybindConfig.PenToggleStringBase))]
+    public void ClearingADigitFamily_RemovesEverySlot(string family)
+    {
+        var config = new FakeConfigurationService();
+        var state = new ProjectState { Keybinds = new KeybindConfig() };
+        state.Keybinds.PenToggleStringBase = new KeyChord(Key.D1, KeyModifiers.Control | KeyModifiers.Alt);
+        var property = typeof(KeybindConfig).GetProperty(family)!;
+        var modifiers = KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Alt;
+        property.SetValue(state.Keybinds, new KeyChord(Key.D0, modifiers));
+        var handler = new ChartKeybindHandler(() => false, new FakeAppLogger());
+        var registrar = new AppKeybindRegistrar(handler, state, null!, null!, null!, null!, null!,
+            config, null!, null!, null!, null!, null!, null!, new MatchPatternStore(config));
+        registrar.RegisterAll();
+        handler.RefreshBinds();
+        Assert.Equal(family, handler.DescribeBinding(new KeyChord(Key.D1, modifiers)));
+
+        property.SetValue(state.Keybinds, KeyChord.None);
+        handler.RefreshBinds();
+
+        for (var digit = 0; digit < 10; digit++)
+        {
+            var key = (Key)((int)Key.D0 + digit);
+            Assert.NotEqual(family, handler.DescribeBinding(new KeyChord(key)));
+            Assert.NotEqual(family, handler.DescribeBinding(new KeyChord(key, modifiers)));
+        }
+    }
+
     [Fact]
     public void RevertRestoresDispatch_AndSubsequentSaveUsesTheReplacementTable()
     {

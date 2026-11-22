@@ -88,17 +88,18 @@ public sealed class ProjectFilesTests : IDisposable
     public void TheLegacyBackupName_NeverReusesAnExistingBackup()
     {
         var rscp = Path.Combine(_dir, "project.rscp");
-        var taken = new HashSet<string> { rscp + ".bak", rscp + ".2.bak" };
+        var backup = Path.Combine(_dir, "backups", "project.rscp");
+        var taken = new HashSet<string> { backup + ".bak", backup + ".2.bak" };
 
-        Assert.Equal(rscp + ".bak", CharterRscp.LegacyBackupPath(rscp, _ => false));
-        Assert.Equal(rscp + ".3.bak", CharterRscp.LegacyBackupPath(rscp, taken.Contains));
+        Assert.Equal(backup + ".bak", CharterRscp.LegacyBackupPath(rscp, _ => false));
+        Assert.Equal(backup + ".3.bak", CharterRscp.LegacyBackupPath(rscp, taken.Contains));
         Assert.False(ProjectFiles.IsOpenable(rscp + ".3.bak"));
     }
 
     [Fact]
     public void TheCompanion_IsTheProjectNameWithRscp()
     {
-        Assert.Equal(Path.Combine(_dir, "project.rscp"), CharterRscp.CompanionPath(Path.Combine(_dir, "project.dcproj")));
-        Assert.Equal(Path.Combine(_dir, "Song.rscp"), CharterRscp.CompanionPath(Path.Combine(_dir, "Song.dcproj")));
+        Assert.Equal(Path.Combine(_dir, "export", "project.rscp"), CharterRscp.CompanionPath(Path.Combine(_dir, "project.dcproj")));
+        Assert.Equal(Path.Combine(_dir, "export", "Song.rscp"), CharterRscp.CompanionPath(Path.Combine(_dir, "Song.dcproj")));
     }
 }

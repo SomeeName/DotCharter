@@ -27,8 +27,8 @@ namespace DotCharter.Services.Editing;
 ///         left open overnight wrote a backup every five minutes of byte-for-byte
 ///         the same content — and the owner's no-retention choice means nothing
 ///         ever prunes them. The second signal is
-///         <c>ProjectDirtyTracker.ChangeStamp</c>: the undo history's node id IS
-///         the change stamp, so "the stamp has not moved since the last backup"
+///         <c>ProjectDirtyTracker.ChangeStamp</c>: the history's content identity
+///         also advances for merged ticks, so "the stamp has not moved since the last backup"
 ///         is exactly "nothing has changed since it". An idle dirty project backs
 ///         up ONCE and then rests until the next edit.
 ///     </para>

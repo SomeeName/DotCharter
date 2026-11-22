@@ -15,7 +15,7 @@ public sealed partial class ExportArrangementRow : ObservableObject, IExportArra
 
     public required string TypeLabel { get; init; }
 
-    /// <summary>A 7-/8-string guitar: ticked, it rules the Mac package out.</summary>
+    /// <summary>Whether the source arrangement has extended guitar or bass strings.</summary>
     public bool IsExtendedString { get; init; }
 }
 
@@ -24,14 +24,21 @@ public sealed record ExportPlatformChoice(ExportPlatform Value, string Label) : 
 public sealed record ExportPackageChoice(bool Plain, string Label) : IExportChoice;
 
 public sealed record ExportFindingRow(bool IsError, string Location, string Message, bool HasTime, ICommand JumpCommand,
-    ExportFindingFix Fix) : IExportFinding
+    ExportFindingFix Fix, ExportFindingLink Link) : IExportFinding
 {
+    public bool HasSongMetadataLink => Link.Available;
+
+    public ICommand OpenSongMetadataCommand => Link.Command;
+
     public bool HasFix => Fix.Available;
 
     public string FixDescription => Fix.Description;
 
     public ICommand FixCommand => Fix.Command;
 }
+
+/// <summary>A finding's way to Song metadata, where its text is edited: whether it has one and the command that opens it.</summary>
+public sealed record ExportFindingLink(bool Available, ICommand Command);
 
 /// <summary>A finding's Fix: whether a verb repairs it, what it does, and the command that runs it.</summary>
 public sealed record ExportFindingFix(bool Available, string Description, ICommand Command);
@@ -44,6 +51,8 @@ public sealed partial class ExportTargetViewModel : ObservableObject, IExportTar
 {
     private ExportPlatformChoice _selectedPlatform;
     private ExportPackageChoice _selectedPackage;
+    private ExportPackageChoice? _stockPackage;
+    private bool _extendedRange;
 
     public ExportTargetViewModel(ILocalizationService loc)
     {
@@ -53,13 +62,12 @@ public sealed partial class ExportTargetViewModel : ObservableObject, IExportTar
             new ExportPlatformChoice(ExportPlatform.PcAndMac, loc["Dialog_Export_PlatformPcAndMac"]),
             new ExportPlatformChoice(ExportPlatform.Mac, loc["Dialog_Export_PlatformMac"])
         ];
-        PackageOptions =
-        [
-            new ExportPackageChoice(false, loc["Dialog_Export_PackageEncrypted"]),
-            new ExportPackageChoice(true, loc["Dialog_Export_PackagePlain"])
-        ];
+        var plain = new ExportPackageChoice(true, loc["Dialog_Export_PackagePlain"]);
+        PackageOptions = RocksmithKeys.CanWriteEncrypted
+            ? [new ExportPackageChoice(false, loc["Dialog_Export_PackageEncrypted"]), plain]
+            : [plain];
         // Encrypted unless asked otherwise; without keys only plain can be written.
-        _selectedPackage = PackageOptions[RocksmithKeys.CanWriteEncrypted ? 0 : 1];
+        _selectedPackage = PackageOptions[0];
         // DLC Builder's default, PC + Mac, wherever a Mac package can be encrypted at all.
         _selectedPlatform = PlatformOptions.First(o =>
             o.Value == (RocksmithKeys.CanWriteMac ? ExportPlatform.PcAndMac : ExportPlatform.Pc));
@@ -68,17 +76,24 @@ public sealed partial class ExportTargetViewModel : ObservableObject, IExportTar
     /// <summary>The platform changed: re-gate and re-suffix.</summary>
     public event EventHandler? TargetChanged;
 
+    /// <summary>The package form changed: re-gate and update the extended-range file tag.</summary>
+    public event EventHandler? PackageChanged;
+
     public IReadOnlyList<ExportPlatformChoice> PlatformOptions { get; }
     public IReadOnlyList<ExportPackageChoice> PackageOptions { get; }
 
-    /// <summary>The package form can be picked: it cannot without keys, where plain is the only one.</summary>
-    public bool CanChoosePackage => RocksmithKeys.CanWriteEncrypted;
+    public bool CanChoosePackage => !_extendedRange && RocksmithKeys.CanWriteEncrypted;
+
+    public bool WritesExtendedRange => _extendedRange;
 
     /// <summary>The PC package is written plain, by choice or for want of keys.</summary>
-    public bool WritesPlain => SelectedPackageOption.Plain || !RocksmithKeys.CanWriteEncrypted;
+    public bool WritesPlain => _extendedRange || SelectedPackageOption.Plain || !RocksmithKeys.CanWriteEncrypted;
 
     /// <summary>The PC package is written plain, so the dialog warns: a Mac-only target writes no PC package.</summary>
-    public bool WritesPlainPackage => WritesPlain && !IsMacOnly;
+    public bool WritesPlainPackage => WritesPlain && !IsMacOnly && !_extendedRange;
+
+    internal RocksmithMacBlock? MacUnavailableReason(bool extendedStrings) =>
+        extendedStrings ? RocksmithMacBlock.RsxrWindowsOnly : RocksmithPlatformTargets.MacUnavailableReason();
 
     /// <summary>The target writes a Mac package (Mac or PC + Mac).</summary>
     public bool IncludesMac => SelectedPlatformOption.Value != ExportPlatform.Pc;
@@ -104,10 +119,25 @@ public sealed partial class ExportTargetViewModel : ObservableObject, IExportTar
         get => _selectedPackage;
         set
         {
-            if (value is null || !SetProperty(ref _selectedPackage, value)) return;
+            if (value is null || _extendedRange && !value.Plain || !SetProperty(ref _selectedPackage, value)) return;
             OnPropertyChanged(nameof(WritesPlain));
             OnPropertyChanged(nameof(WritesPlainPackage));
+            PackageChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    internal void SetExtendedContent(bool extendedRange)
+    {
+        if (_extendedRange == extendedRange) return;
+        if (extendedRange) _stockPackage = _selectedPackage;
+        _extendedRange = extendedRange;
+        _selectedPackage = extendedRange ? PackageOptions.Single(p => p.Plain) : _stockPackage ?? PackageOptions[0];
+        OnPropertyChanged(nameof(SelectedPackageOption));
+        OnPropertyChanged(nameof(CanChoosePackage));
+        OnPropertyChanged(nameof(WritesExtendedRange));
+        OnPropertyChanged(nameof(WritesPlain));
+        OnPropertyChanged(nameof(WritesPlainPackage));
+        PackageChanged?.Invoke(this, EventArgs.Empty);
     }
 
     IReadOnlyList<IExportChoice> IExportTarget.PackageOptions => PackageOptions;

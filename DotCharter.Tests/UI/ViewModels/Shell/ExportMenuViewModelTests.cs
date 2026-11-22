@@ -1,10 +1,8 @@
-using DotCharter.Presentation.Contracts.Dialogs;
-using DotCharter.Presentation.Dialogs;
-using DotCharter.Presentation.Fakes.Dialogs;
 using DotCharter.Services.Editing.Highway;
 using DotCharter.Services.Export.Validation;
 using DotCharter.Services.Parsing.Eof;
 using DotCharter.Tests.Presentation.Dialogs;
+using DotCharter.Tests.UI.ViewModels.Editor;
 using DotCharter.Tone.Infrastructure.Storage;
 using DotCharter.UI.ViewModels.Editor;
 using DotCharter.UI.ViewModels.Shell;
@@ -53,6 +51,22 @@ public sealed class ExportMenuViewModelTests
         Assert.Equal("before", harness.State.MainDisplayMessage);
     }
 
+    /// <summary>The .eof carries the vocals: a lyric draft still in its text box is applied before
+    /// the picker opens.</summary>
+    [Fact]
+    public async Task AnEditorOnFireExport_AppliesALyricDraftFirst()
+    {
+        var harness = new ChartEditHarness();
+        var rig = new LyricDraftRig(harness, "lo");
+        var storage = new FakeFileStorageService { NextSaveFile = null };
+        var exports = Build(harness.State, storage, new ExportTargetWriter(), harness);
+
+        await exports.ExportEditorOnFireCommand.ExecuteAsync(null);
+
+        Assert.Equal("lo", rig.Syllable.Text);
+        Assert.Single(storage.RequestedTitles);
+    }
+
     [Fact]
     public async Task AGuitarProExport_OfASoundOnAStringTheTuningLacks_IsRefusedBeforeThePickerOpens()
     {
@@ -99,8 +113,9 @@ public sealed class ExportMenuViewModelTests
     {
         var state = new ProjectState();
         var project = new ChartProject();
-        var (dialogs, recorder) = RecordingProxy.Create<IDialogs>();
-        var exports = Build(state, new FakeFileStorageService(), new ExportTargetWriter(), dialogs);
+        var exports = Build(state, new FakeFileStorageService(), new ExportTargetWriter());
+        var shown = 0;
+        exports.ShowChartReport = () => shown++;
         var report = new EofConversionReport();
         report.Add(EofConversionKind.Dropped, EofLoss.UnusedTone, "Lead", "m", detail: "clean");
         for (var level = 0; level < 3; level++)
@@ -117,11 +132,8 @@ public sealed class ExportMenuViewModelTests
 
         show.Run();
 
-        var init = Assert.IsType<Action<IChartQualityReportScreen>>(Assert.Single(recorder.Invocations).Args[0]);
-        var screen = FakeChartQualityReportScreen.Default();
-        init(screen);
-        Assert.True(screen.FocusEofRoundTrip);
-        Assert.True(screen.EofRoundTrip.IsExpanded);
+        // "Show" brings the Issues tab up; the tab opens the round trip because the project is marked above.
+        Assert.Equal(1, shown);
 
         state.Document.EofRoundTripProject = null;
         exports.ReportEofExport(project, "song.eof", EofLossSummary.Empty);
@@ -131,12 +143,63 @@ public sealed class ExportMenuViewModelTests
     }
 
     private static ExportMenuViewModel Build(ProjectState state, IFileStorageService storage, IExportTargetWriter writer,
-        IDialogs? dialogs = null)
+        ChartEditHarness? editorHarness = null)
     {
-        var harness = new ChartEditHarness();
+        var harness = editorHarness ?? new ChartEditHarness();
         var (highway, _) = RecordingProxy.Create<IHighwayEditingService>();
         var sheet = new SheetMusicPaneViewModel(harness.State, harness.Editor, highway, harness.History,
             new FakeConfigurationService());
-        return new ExportMenuViewModel(state, sheet, new FakeAppLogger(), FakeLocalization.English(), storage, writer, dialogs);
+        return new ExportMenuViewModel(state, sheet, harness.Editor, new FakeAppLogger(), FakeLocalization.English(), new FakeConfigurationService(), storage, writer);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReplacingTheProjectWhileThePickerIsOpen_CancelsTheExport(bool sheet)
+    {
+        var harness = new ChartEditHarness();
+        var dir = Path.Combine(Path.GetTempPath(), "dotcharter-export-picker-" + Guid.NewGuid().ToString("N"));
+        var picked = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var storage = new PendingPicker(picked.Task);
+        var exports = Build(harness.State, storage, new ExportTargetWriter());
+        var command = sheet ? exports.ExportSheetPdfCommand : exports.ExportGuitarProCommand;
+        var exporting = command.ExecuteAsync(null);
+        Assert.True(storage.Opened);
+        Assert.False(exporting.IsCompleted);
+        var replacement = new ChartProject();
+        replacement.Chart.SongName = "Another recording";
+        replacement.Beats.Add(new BeatMarker { Bpm = 60, Time = 0 });
+        harness.State.ActiveProject = replacement;
+        harness.State.MainDisplayMessage = "replacement loaded";
+        try
+        {
+            picked.SetResult(Path.Combine(dir, sheet ? "song.pdf" : "song.gp"));
+            await exporting;
+
+            Assert.False(Directory.Exists(dir));
+            Assert.Equal("replacement loaded", harness.State.MainDisplayMessage);
+        }
+        finally
+        {
+            BestEffortDelete.Directory(dir);
+        }
+    }
+
+    private sealed class PendingPicker(Task<string?> result) : IFileStorageService
+    {
+        public bool Opened { get; private set; }
+
+        public Task<string?> SaveFilePickerAsync(string title, string suggestedFileName,
+            IReadOnlyList<FilePickerFilter>? filters = null, string? startingDirectory = null)
+        {
+            Opened = true;
+            return result;
+        }
+
+        public Task<string?> OpenFilePickerAsync(string title, IReadOnlyList<FilePickerFilter>? filters = null,
+            string? startingDirectory = null) => throw new NotSupportedException();
+
+        public Task<string?> OpenFolderPickerAsync(string title, string? startingDirectory = null) =>
+            throw new NotSupportedException();
     }
 }

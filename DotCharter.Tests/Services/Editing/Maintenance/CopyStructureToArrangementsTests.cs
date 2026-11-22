@@ -1,4 +1,7 @@
+using System.Text;
+using System.Xml.Linq;
 using DotCharter.Services.Editing.Maintenance;
+using DotCharter.Services.Parsing.Xml.Song;
 
 namespace DotCharter.Tests.Services.Editing.Maintenance;
 
@@ -16,6 +19,160 @@ namespace DotCharter.Tests.Services.Editing.Maintenance;
 /// </summary>
 public sealed class CopyStructureToArrangementsTests
 {
+    [Fact]
+    public void GeneratingStructureKeepsMainXmlBytesWhenAnEditorMarkerHidesImportedEnd()
+    {
+        var h = new ChartPowerToolsTests.Harness();
+        var project = h.State.ActiveProject!;
+        var arrangement = h.State.ActiveArrangement!;
+        arrangement.Levels[0].Notes.Clear();
+        arrangement.Levels[0].Notes.Add(new GuitarNote
+        {
+            Position = new FractionalPosition(8), Sustain = new FractionalPosition(1), Fret = 5
+        });
+        arrangement.Phrases.Add("COUNT");
+        arrangement.Phrases.Add("END");
+        arrangement.PhraseIterations.Add(new PhraseIteration(FractionalPosition.Zero, 0));
+        arrangement.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(12), 1));
+        var before = ChartProjectCloner.Clone(project, retainIdentities: true);
+        var marker = new EventPoint { Position = new FractionalPosition(12), Phrase = "outro" };
+        Assert.True(h.History.Do(new AddEventPointsAction(arrangement.EventPoints, [marker])));
+        var edited = ChartProjectCloner.Clone(project, retainIdentities: true);
+
+        // Main's name-table check makes generation a no-op for this chart, so its
+        // unchanged export is the reference. Normalize only the conversion stamp.
+        var mainBytes = StructureXmlBytes(project);
+        var generator = new DotCharter.Services.Editing.Structure.StructureGenerationService(h.State, h.History, new FakeAppLogger());
+        var result = generator.Generate();
+        var exported = StableStructureXml(project);
+        var song = exported.Root!;
+        var names = song.Element("phrases")!.Elements("phrase")
+            .Select(phrase => (string)phrase.Attribute("name")!).ToList();
+        var end = Assert.Single(song.Element("phraseIterations")!.Elements("phraseIteration"),
+            iteration => names[(int)iteration.Attribute("phraseId")!] == "END");
+
+        Assert.Equal("6.000", (string)end.Attribute("time")!);
+        Assert.Equal(mainBytes, StructureXmlBytes(project));
+        Assert.True(result.IsEmpty);
+        Assert.Single(h.History.GetUndoSteps());
+        Assert.Empty(DeepCompare.Diff("generation", edited, project, new HashSet<string>()));
+        for (var cycle = 0; cycle < 3; cycle++)
+        {
+            h.History.Undo();
+            Assert.Empty(DeepCompare.Diff("undo authoring", before, project, new HashSet<string>()));
+            h.History.Redo();
+            Assert.Empty(DeepCompare.Diff("redo authoring", edited, project, new HashSet<string>()));
+            Assert.Equal(mainBytes, StructureXmlBytes(project));
+        }
+    }
+
+    private static XDocument StableStructureXml(ChartProject project)
+    {
+        var document = new RsXmlSongWriter().Write(project, 15000);
+        document.Root!.Element("lastConversionDateTime")!.Value = "2020-01-02 03:04";
+        return document;
+    }
+
+    private static byte[] StructureXmlBytes(ChartProject project) =>
+        Encoding.UTF8.GetBytes(StableStructureXml(project).ToString(SaveOptions.DisableFormatting));
+
+    [Fact]
+    public void CopyThenGenerateRepairsAnOrphanedEndAndBothStepsUndoExactly()
+    {
+        var h = new ChartPowerToolsTests.Harness();
+        var project = h.State.ActiveProject!;
+        var source = h.State.ActiveArrangement!;
+        source.Phrases.Add("verse");
+        source.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(4), 0));
+        var target = new Arrangement { Name = "Rhythm" };
+        var level = new ChartLevel();
+        level.Notes.Add(new GuitarNote { Position = new FractionalPosition(8), Sustain = new FractionalPosition(1), Fret = 5 });
+        target.Levels.Add(level);
+        target.Phrases.Add("END");
+        target.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(4), 0));
+        project.Arrangements.Add(target);
+        var before = ChartProjectCloner.Clone(project, retainIdentities: true);
+
+        Assert.True(h.Maintenance.CopyStructureToOtherArrangements() > 0);
+        Assert.Contains("END", target.Phrases);
+        Assert.DoesNotContain(PhraseMarkers.All(target), marker => marker.Name == "END");
+        var copied = ChartProjectCloner.Clone(project, retainIdentities: true);
+        h.State.ActiveArrangement = target;
+        h.State.ActiveLevel = level;
+        var generator = new DotCharter.Services.Editing.Structure.StructureGenerationService(h.State, h.History, new FakeAppLogger());
+
+        Assert.Equal(1, generator.Generate().EndPhrases);
+        Assert.Single(PhraseMarkers.All(target), marker => marker.Name == "END");
+        var generated = ChartProjectCloner.Clone(project, retainIdentities: true);
+        for (var cycle = 0; cycle < 3; cycle++)
+        {
+            h.History.Undo();
+            Assert.Empty(DeepCompare.Diff("undo generation", copied, project, new HashSet<string>()));
+            h.History.Undo();
+            Assert.Empty(DeepCompare.Diff("undo copy", before, project, new HashSet<string>()));
+            h.History.Redo();
+            Assert.Empty(DeepCompare.Diff("redo copy", copied, project, new HashSet<string>()));
+            h.History.Redo();
+            Assert.Empty(DeepCompare.Diff("redo generation", generated, project, new HashSet<string>()));
+        }
+    }
+
+    [Fact]
+    public void ImportedPhrasesAreCopiedWithSoloMetadataAndOverrideTargetIterations()
+    {
+        var source = ArrangementWith();
+        source.Phrases.Add("solo");
+        source.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(4), 0));
+        source.PhraseInfos["solo"] = new PhraseInfo(7, true);
+        var target = ArrangementWith();
+        target.Phrases.Add("verse");
+        target.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(4), 0));
+
+        Assert.True(ChartMaintenanceService.MergeStructureInto(source, target) > 0);
+
+        Assert.Equal("solo", Assert.Single(PhraseMarkers.All(target)).Name);
+        var iterations = PhraseMarkers.Iterations(target);
+        Assert.Equal("solo", iterations.Phrases[Assert.Single(iterations.Iterations).PhraseId]);
+        Assert.True(target.PhraseInfos["solo"].Solo);
+        Assert.Equal(0, target.PhraseInfos["solo"].MaxDifficulty);
+        Assert.Equal(0, ChartMaintenanceService.MergeStructureInto(source, target));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CopyCommitsAndUndoesImportedOrSoloOnlyChanges(bool imported)
+    {
+        var h = new ChartPowerToolsTests.Harness();
+        var source = h.State.ActiveArrangement!;
+        if (imported)
+        {
+            source.Phrases.Add("solo");
+            source.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(4), 0));
+        }
+        else
+        {
+            source.EventPoints.Add(new EventPoint { Position = new FractionalPosition(4), Phrase = "solo" });
+        }
+        source.PhraseInfos["solo"] = new PhraseInfo(7, true);
+        var target = ArrangementWith(("", "solo", 4));
+        target.PhraseInfos["solo"] = new PhraseInfo(0, false);
+        h.State.ActiveProject!.Arrangements.Add(target);
+
+        var before = ChartProjectCloner.Clone(h.State.ActiveProject!, retainIdentities: true);
+        Assert.True(h.Maintenance.CopyStructureToOtherArrangements() > 0);
+        var after = ChartProjectCloner.Clone(h.State.ActiveProject!, retainIdentities: true);
+        Assert.True(target.PhraseInfos["solo"].Solo);
+        Assert.Single(h.History.GetUndoSteps());
+        h.History.Undo();
+        Assert.False(target.PhraseInfos["solo"].Solo);
+        Assert.Empty(DeepCompare.Diff("undo", before, h.State.ActiveProject!, new HashSet<string>()));
+        h.History.Redo();
+        Assert.True(target.PhraseInfos["solo"].Solo);
+        Assert.Empty(DeepCompare.Diff("redo", after, h.State.ActiveProject!, new HashSet<string>()));
+        Assert.Equal(0, h.Maintenance.CopyStructureToOtherArrangements());
+    }
+
     [Fact]
     public void MarkersTheTargetLacks_AreAdded()
     {

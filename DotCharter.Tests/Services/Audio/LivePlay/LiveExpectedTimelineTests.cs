@@ -154,4 +154,30 @@ public sealed class LiveExpectedTimelineTests
 
         Assert.Empty(expected);
     }
+
+    [Fact]
+    public void WithoutPhrases_UsesTheGreatestDifficultyAndItsStorageIndex()
+    {
+        var arrangement = SmallArrangement();
+        arrangement.Levels[0].DifficultyIndex = 10;
+        var reduced = new ChartLevel { DifficultyIndex = 0 };
+        reduced.Notes.Add(new GuitarNote { Position = new FractionalPosition(6), Fret = 12 });
+        arrangement.Levels.Add(reduced);
+        var expected = new List<ExpectedSound>();
+        var timeline = new LiveExpectedTimeline();
+
+        timeline.Build(expected, arrangement, Beats(), _ => 1, transposeSemitones: -2);
+
+        Assert.Equal([500.0, 1500.0, 2000.0, 2500.0], expected.Select(s => s.TimeMs));
+        Assert.Equal([40], expected[0].MidiNotes);
+        Assert.All(expected, s => Assert.Equal(0, s.LevelIndex));
+        Assert.All(expected, s => Assert.Equal(-1, s.PhraseIterationIndex));
+
+        arrangement.Levels.Move(0, 1);
+        timeline.Build(expected, arrangement, Beats(), _ => 0, transposeSemitones: -2);
+
+        Assert.Equal(4, expected.Count);
+        Assert.Equal([40], expected[0].MidiNotes);
+        Assert.All(expected, s => Assert.Equal(1, s.LevelIndex));
+    }
 }

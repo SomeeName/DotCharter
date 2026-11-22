@@ -36,6 +36,7 @@ internal sealed class FakeLocalization : ILocalizationService
 
     private readonly bool _keysOnly;
     private readonly CultureInfo _formatCulture;
+    private CultureInfo _lookupCulture = EnUs;
 
     private FakeLocalization(bool keysOnly, CultureInfo? formatCulture)
     {
@@ -58,6 +59,11 @@ internal sealed class FakeLocalization : ILocalizationService
     /// <summary>English resx values; arguments formatted with <paramref name="formatCulture" />
     /// (invariant when null).</summary>
     public static FakeLocalization English(CultureInfo? formatCulture = null) => new(false, formatCulture);
+
+    /// <summary>The resx table of <paramref name="culture" /> (e.g. de-DE), looked up through the
+    /// ResourceManager only: the process culture is never written.</summary>
+    public static FakeLocalization For(string culture) =>
+        new(false, CultureInfo.GetCultureInfo(culture)) { _lookupCulture = CultureInfo.GetCultureInfo(culture) };
 
     /// <summary>
     ///     Answers with the key itself: <c>["Foo"]</c> is <c>Foo</c>, and a formatted
@@ -88,6 +94,15 @@ internal sealed class FakeLocalization : ILocalizationService
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ConfiguredCulture)));
     }
 
+    /// <summary>Switches the lookup table to <paramref name="culture" /> and raises what the real service
+    /// raises on a language switch (an empty property name: everything changed). The process culture
+    /// and the argument format culture are left alone.</summary>
+    public void SwitchTo(string culture)
+    {
+        _lookupCulture = CultureInfo.GetCultureInfo(culture);
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
+    }
+
     /// <summary>A no-op: the fake serves the built-in English table only.</summary>
     public void LoadCommunityLanguages(string folder)
     {
@@ -105,7 +120,7 @@ internal sealed class FakeLocalization : ILocalizationService
             return key;
         }
 
-        return Resources.GetString(key, EnUs) ?? key;
+        return Resources.GetString(key, _lookupCulture) ?? key;
     }
 
     private string Render(string key, object[] args)

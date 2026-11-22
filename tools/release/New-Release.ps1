@@ -5,6 +5,14 @@
     locally and prints the exact `gh release create` command (never runs it).
 
 .DESCRIPTION
+    Reused green evidence is never re-saved by this attempt. It is re-read on
+    its original tree and inputs before acceptance and before landing/publication;
+    lost evidence stops the operation and names the lane to re-run.
+
+    Gate-record reads/updates use one exclusive store lock (10-second bounded
+    contention). Planned lanes revoke before execution and unaccepted lanes
+    revoke again in finally: a later red completion removes concurrent greens.
+
     CI cannot upload release artifacts (artifact storage quota), so releases are
     built and shipped locally. A release has exactly 5 assets — count them off
     the printed `gh release create` line, which uploads every member of $assets:
@@ -46,12 +54,12 @@
 
     INSTALL LAYOUT (#413). Asset 1 unpacks to a folder whose TOP holds only
     DotCharter.exe (the NativeAOT launcher, DotCharter.Launcher), voices/,
-    tools/, README.txt and LegacyUpdaterShim's four copies; the app and its ~390
-    files are in app/. The launcher starts app\DotCharter.exe. The four copies
-    (DotCharter.runtimeconfig.json, DotCharter.deps.json, hostfxr.dll,
-    coreclr.dll) are there ONLY so the updater inside every v0.62-and-older
-    install accepts the payload; the app deletes them on its first start
-    (SplitInstallCleanup). Removing them strands every such install.
+    tools/ and README.txt; the app and its ~390 files are in app/. The launcher
+    starts app\DotCharter.exe. Since then the top carries NO copies of
+    DotCharter.runtimeconfig.json, DotCharter.deps.json, hostfxr.dll or
+    coreclr.dll (older zips did, for pre-0.63 updaters); the validators refuse
+    them, and the app still deletes them from installs that have them
+    (SplitInstallCleanup).
 
     ZIP INVARIANT (do not "simplify" to Compress-Archive):
     The in-app updater's AppPayload.ResolveArchiveRoot matches entry names with
@@ -155,12 +163,20 @@
     (it cannot share a testhost with the default gate). Skipping it means the
     pack is unverified, and the script says so.
 
+.PARAMETER ForceGate
+    Run the default gate (tools/agent/Invoke-Gate.ps1 -Gate) even when a green run of
+    it is on record for this exact tree (the merge train records one). Without a
+    record the release runs it: no release is cut on a tree the default gate never
+    passed.
+
 .PARAMETER ForceHeadlessUi
-    Run the headless UI suite's main pass even when a green run of it is on record
-    for this exact tree (ReleaseCache.psm1 Find-GateRecord: the merge train, an
-    earlier release run, or the dev tree a scratch export was cut from). Without it
-    the recorded run is reused and named; the test build and the localized layout
-    sweeps run either way.
+    Run the headless UI suite (the en-US pass AND the localized layout sweeps) even
+    when a green run of it is on record for this exact tree (ReleaseCache.psm1
+    Find-GateRecord: the merge train, an earlier release run, or the dev tree a
+    scratch export was cut from). Without it each recorded pass is reused and named.
+    The merge train records the en-US pass only; the sweeps are recorded by a release
+    run, so a second run on the same tree (the public build after the add-on build, a
+    retry after a late failure) runs no headless test at all.
 
 .PARAMETER ForceReleaseLane
     Run the release lane even when a green run of it is on record for this exact tree
@@ -169,9 +185,17 @@
     (tools/ci/release-lane.json), and a release is not cut without them.
 
 .PARAMETER HeadlessShards
-    How many concurrent testhosts each headless-UI pass is split across
-    (tools/ci/HeadlessShards.psm1 — whole classes, balanced by measured class
-    time). Default 4. Retries and isolated re-runs stay one fresh process.
+    How many concurrent testhosts each headless-UI pass, the default gate and the
+    release lane are split across (tools/ci/HeadlessShards.psm1 — whole classes,
+    balanced by measured class time). Default: the CPU plan's (4 on CPUs 8-15, 8 with
+    -AllCores). The localized layout sweeps run AT THE SAME TIME, each with this
+    many, at most twice it in all (ReleaseGates.psm1 Get-CultureShardSplit). Retries and isolated re-runs
+    stay one fresh process.
+
+.PARAMETER AllCores
+    Use every logical processor (8 shards) instead of the default CPUs 8-15 at
+    BelowNormal (4 shards; tools/agent/DevBuild.psm1 Get-DevCpuPlan). ONLY when the
+    owner says the machine is free: CPUs 0-7 are theirs by default.
 
 .PARAMETER SigningKeyPath
     The release-signing Ed25519 PRIVATE key (base64, 32 bytes) that signs
@@ -228,14 +252,19 @@ param(
     [bool]$ContestedFeatures = $true,
     [switch]$AllowMissingTools,
     [switch]$SkipHeadlessUi,
+    # Run the default gate even when a green run is on record for this exact tree.
+    [switch]$ForceGate,
     # Re-run the headless suite even when a green run is on record for this exact tree.
     [switch]$ForceHeadlessUi,
     # Run the release lane even when a green run of it is on record for this exact tree.
     [switch]$ForceReleaseLane,
     [switch]$SkipRigLab,
     [string]$Tone3000ClientId,
-    [ValidateRange(1, 16)]
-    [int]$HeadlessShards = 4,
+    # 0 = the CPU plan's (4 on CPUs 8-15, 8 with -AllCores).
+    [ValidateRange(0, 16)]
+    [int]$HeadlessShards = 0,
+    # Every core instead of CPUs 8-15: only when the owner allows it (see .PARAMETER AllCores).
+    [switch]$AllCores,
     [switch]$SkipLaunchSmoke,
     [ValidateRange(10, 900)]
     [int]$SmokeTimeoutSeconds = 120,
@@ -315,7 +344,15 @@ Import-Module (Join-Path $PSScriptRoot 'PinnedDownload.psm1') -Force
 # The redist cache and the gate records live OUTSIDE the tree (ReleaseCache.psm1), so a
 # fresh scratch export reuses the minimal ffmpeg and a green headless run of its tree.
 Import-Module (Join-Path $PSScriptRoot 'ReleaseCache.psm1') -Force
+# Which gates run and which reuse a record, and the culture sweeps' shard split (pure).
+Import-Module (Join-Path $PSScriptRoot 'ReleaseGates.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'VcRedist.psm1') -Force
+# The CPU plan (#171): CPUs 8-15 at BelowNormal unless -AllCores; children inherit it.
+Import-Module (Join-Path $RepoRoot 'tools/agent/DevBuild.psm1') -Force
+$CpuPlan = Set-DevCpuPlan -AllCores:$AllCores
+if ($HeadlessShards -le 0) { $HeadlessShards = $CpuPlan.Shards }
+$GateCpuSwitch = @()
+if ($AllCores) { $GateCpuSwitch = @('-AllCores') }
 # The key's default lives in the owner's DotCharter-local, beside the DEV checkout: for a
 # scratch export (export-origin.json) the checkout it came from, for a worktree its main one.
 if (-not $SigningKeyPath) {
@@ -399,10 +436,9 @@ function Test-ReleaseZip([string]$ZipPath, [string]$ExpectedRoot) {
 }
 
 # The top level of a split install (#413), exactly: the launcher, voices/,
-# tools/, the readme, the app folder and LegacyUpdaterShim's four copies. Anything
-# else up there is the clutter #413 removed, back again.
-$InstallTopFiles = @('DotCharter.exe', 'README.txt',
-                     'DotCharter.runtimeconfig.json', 'DotCharter.deps.json', 'hostfxr.dll', 'coreclr.dll')
+# tools/, the readme and the app folder. Anything else up there is the clutter
+# #413 removed, back again (the four pre-0.63 updater shim files included).
+$InstallTopFiles = @('DotCharter.exe', 'README.txt')
 $InstallTopFolders = @('app', 'voices', 'tools')
 
 # The launcher (DotCharter.Launcher), published NativeAOT and copied to the top as
@@ -429,13 +465,10 @@ function Publish-Launcher([string]$Destination, [string]$AppVersion) {
 
 # Lays the published app out as a split install: the app stays in app/, the
 # voice packs move to the top (the app points the native store there through
-# DOTCHARTER_VOICE_DIR), the shim copies and the readme are written.
+# DOTCHARTER_VOICE_DIR), the readme is written.
 function New-SplitInstallLayout([string]$InstallDir, [string]$AppDir) {
     $voices = Join-Path $AppDir 'voices'
     if (Test-Path $voices) { Move-Item $voices (Join-Path $InstallDir 'voices') }
-    foreach ($name in 'DotCharter.runtimeconfig.json', 'DotCharter.deps.json', 'hostfxr.dll', 'coreclr.dll') {
-        Copy-Item (Join-Path $AppDir $name) (Join-Path $InstallDir $name) -Force
-    }
     # The source pointer names the exact tag (GPL-3.0 corresponding source, #753).
     Set-Content -Path (Join-Path $InstallDir 'README.txt') -Encoding utf8 -Value @"
 DotCharter $($Version)
@@ -456,10 +489,6 @@ Not affiliated with or endorsed by Ubisoft. Rocksmith is a trademark of Ubisoft 
 
 Settings, profiles and logs are kept in your user profile, or in this folder
 when an appconfig.json sits beside DotCharter.exe (a portable install).
-
-DotCharter.runtimeconfig.json, DotCharter.deps.json, hostfxr.dll and
-coreclr.dll up here are only for updating installs older than 0.63; the app
-removes them the first time it starts.
 "@
 }
 
@@ -1158,31 +1187,30 @@ function Invoke-SelfTest {
         }
         Write-Ok "-WithPlugins: a payload or zip WITHOUT the plugin is REFUSED; the one carrying it passes"
 
-        # 1b) The SPLIT layout (#413): app/ validated, the top passing the v0.62
-        #     updater's flat rule through LegacyUpdaterShim's copies - and the same
-        #     payload WITHOUT those copies must FAIL, or old installs are stranded.
+        # 1b) The SPLIT layout (#413): app/ validated, and no pre-0.63 updater shim
+        #     file at the top - the same payload WITH one must FAIL.
         $splitName = 'DotCharter-v0.0.0-split-win-x64'
         $split = Join-Path $work $splitName
         New-Item -ItemType Directory -Force -Path (Join-Path $split 'app') | Out-Null
         foreach ($file in Get-ChildItem $payload -File) { Copy-Item $file.FullName (Join-Path $split 'app') }
         Set-Content -Path (Join-Path $split 'app/payload-manifest.json') -Value '{}'
         Set-Content -Path (Join-Path $split 'DotCharter.exe') -Value 'launcher'
-        foreach ($name in 'DotCharter.runtimeconfig.json', 'DotCharter.deps.json', 'hostfxr.dll', 'coreclr.dll') {
-            Copy-Item (Join-Path $split "app/$name") (Join-Path $split $name)
-        }
         $splitZip = Join-Path $work 'split.zip'
         New-FolderWrappedZip -Directory $split -ZipPath $splitZip
         Test-ReleaseZip -ZipPath $splitZip -ExpectedRoot "$splitName/"
-        Write-Ok 'split zip (launcher + app/ + the v0.62 shim) PASSES validation'
+        Write-Ok 'split zip (launcher + app/, no shim files at the top) PASSES validation'
 
-        Remove-Item (Join-Path $split 'hostfxr.dll')
-        New-FolderWrappedZip -Directory $split -ZipPath $splitZip
-        & dotnet run $Validator $splitZip
-        if ($LASTEXITCODE -eq 0) {
-            throw 'Self-test FAILED: a split zip without the v0.62 shim passed validation - old installs could not update to it.'
+        foreach ($name in 'DotCharter.runtimeconfig.json', 'DotCharter.deps.json', 'hostfxr.dll', 'coreclr.dll') {
+            Copy-Item (Join-Path $split "app/$name") (Join-Path $split $name)
+            New-FolderWrappedZip -Directory $split -ZipPath $splitZip
+            & dotnet run $Validator $splitZip
+            if ($LASTEXITCODE -eq 0) {
+                throw "Self-test FAILED: a split zip carrying $name at its top passed validation."
+            }
+            $global:LASTEXITCODE = 0
+            Remove-Item (Join-Path $split $name)
         }
-        $global:LASTEXITCODE = 0
-        Write-Ok 'split zip WITHOUT the v0.62 shim is REJECTED, as required'
+        Write-Ok 'split zip WITH a shim file at the top is REJECTED, as required'
 
         # 2) A backslash-entry zip (what Compress-Archive can emit) must FAIL —
         #    built deterministically so the test does not depend on the local
@@ -1500,15 +1528,21 @@ $HeadlessUiFilter = @('--filter-class', '*UiPerfSmokeTests', '--filter-not-class
 # If a third localized culture ships, add it to $HeadlessSweepCultures. Entries
 # are '*<Class>' — the lint reads them by that shape.
 $HeadlessLayoutFilter = @(
+    '--filter-class', '*InspectorProjectTabsUiPerfSmokeTests',
+    '--filter-class', '*NoteFingerPickStrumInspectorUiPerfSmokeTests',
+    '--filter-class', '*RigFooterOneRowUiPerfSmokeTests',
     '--filter-class', '*UiSweepUiPerfSmokeTests',
     '--filter-class', '*AlignToRecordingDialogUiPerfSmokeTests',
     '--filter-class', '*SettingsConstructionUiPerfSmokeTests',
     '--filter-class', '*LinkedMeasuresConstructionUiPerfSmokeTests',
     '--filter-class', '*LinkDialogsUiPerfSmokeTests',
     '--filter-class', '*StatusRailNarrowWidthUiPerfSmokeTests',
+    '--filter-class', '*LayoutShellBatchUiPerfSmokeTests',
     '--filter-class', '*InspectorNarrowWidthUiPerfSmokeTests',
+    '--filter-class', '*NarrowEditorPanesUiPerfSmokeTests',
     '--filter-class', '*EditorShortWindowUiPerfSmokeTests',
     '--filter-class', '*TimelineLaneMenuUiPerfSmokeTests',
+    '--filter-class', '*LyricInlineEditingUiPerfSmokeTests',
     '--filter-class', '*LibraryDetailRailUiPerfSmokeTests',
     '--filter-class', '*LibraryTuningPopoverUiPerfSmokeTests',
     '--filter-class', '*SongTableColumnsUiPerfSmokeTests',
@@ -1516,30 +1550,37 @@ $HeadlessLayoutFilter = @(
     '--filter-class', '*PlaySetlistUiPerfSmokeTests',
     '--filter-class', '*DialogWindowFitUiPerfSmokeTests',
     '--filter-class', '*RocksmithExportLayoutUiPerfSmokeTests',
+    '--filter-class', '*SixStringDropFindingUiPerfSmokeTests',
     '--filter-class', '*OnboardingSystemCheckUiPerfSmokeTests',
     '--filter-class', '*ShapesPanelConstructionUiPerfSmokeTests',
+    '--filter-class', '*ShapesPanelKeyboardUiPerfSmokeTests',
     '--filter-class', '*ShapeEditDialogLiveUiPerfSmokeTests',
     '--filter-class', '*ShapeCleanupDialogLiveUiPerfSmokeTests',
-    '--filter-class', '*SoundTabRailUiPerfSmokeTests',
+    '--filter-class', '*NoteSectionStripUiPerfSmokeTests',
+    '--filter-class', '*BendHoldPlotUiPerfSmokeTests',
+    '--filter-class', '*NoteShellUiPerfSmokeTests',
+    '--filter-class', '*SoundShapeViewUiPerfSmokeTests',
+    '--filter-class', '*NoteFooterUiPerfSmokeTests',
     '--filter-class', '*AiChatPaneConstructionUiPerfSmokeTests',
     '--filter-class', '*AiChatDockUiPerfSmokeTests',
     '--filter-class', '*InspectorTabStripUiPerfSmokeTests',
     '--filter-class', '*AiChartReviewSizesUiPerfSmokeTests',
     '--filter-class', '*AiChartReviewConstructionUiPerfSmokeTests',
     '--filter-class', '*AiChartReviewTonesUiPerfSmokeTests',
-    '--filter-class', '*DraftMergeReviewConstructionUiPerfSmokeTests',
     '--filter-class', '*LiveDetectionMonitorConstructionUiPerfSmokeTests',
     '--filter-class', '*GetReadyDropTunerUiPerfSmokeTests',
     '--filter-class', '*AlignBeatGridDialogUiPerfSmokeTests',
+    '--filter-class', '*EstimateBpmDialogUiPerfSmokeTests',
     '--filter-class', '*DcSongExportDialogUiPerfSmokeTests',
     '--filter-class', '*AmpFxRackUiPerfSmokeTests',
-    '--filter-class', '*ChartFromAudioStemStripUiPerfSmokeTests',
+    '--filter-class', '*RigEditorLabelsLayoutUiPerfSmokeTests',
     '--filter-class', '*ChartSynthInstrumentUiPerfSmokeTests',
     '--filter-class', '*ChartSynthPlayStyleUiPerfSmokeTests',
     '--filter-class', '*CommandPaletteUiPerfSmokeTests',
     '--filter-class', '*DialogConstructionUiPerfSmokeTests',
     '--filter-class', '*RigToneImportReviewUiPerfSmokeTests',
     '--filter-class', '*EditorPaneConstructionUiPerfSmokeTests',
+    '--filter-class', '*EditorUiFaultsUiPerfSmokeTests',
     '--filter-class', '*EqModulePixelUiPerfSmokeTests',
     '--filter-class', '*FireComponentUiPerfSmokeTests',
     '--filter-class', '*FireControlsUiPerfSmokeTests',
@@ -1576,13 +1617,23 @@ $HeadlessLayoutFilter = @(
     '--filter-class', '*RigTonesRedesignUiPerfSmokeTests',
     '--filter-class', '*SettingsScrollAnchorUiPerfSmokeTests',
     '--filter-class', '*ShellConstructionUiPerfSmokeTests',
+    '--filter-class', '*StackedTrackHeaderConstructionUiPerfSmokeTests',
     '--filter-class', '*SongSelectRedesignUiPerfSmokeTests',
     '--filter-class', '*SongToneEditBarUiPerfSmokeTests',
     '--filter-class', '*ToneDesignManualRouteUiPerfSmokeTests',
     '--filter-class', '*ToneDesignerSlotEditorUiPerfSmokeTests',
+    '--filter-class', '*ToneSlotSuggestionsUiPerfSmokeTests',
     '--filter-class', '*ToneDesignerGearSearchUiPerfSmokeTests',
     '--filter-class', '*UiBreakpointUiPerfSmokeTests',
-    '--filter-class', '*UiResolutionAuditUiPerfSmokeTests')
+    '--filter-class', '*UiResolutionAuditUiPerfSmokeTests',
+    '--filter-class', '*ChartViewPolishConstructionUiPerfSmokeTests',
+    '--filter-class', '*ToolbarClusterUiPerfSmokeTests',
+    '--filter-class', '*InspectorGroupedTabsUiPerfSmokeTests',
+    '--filter-class', '*InlineEditConstructionUiPerfSmokeTests',
+    '--filter-class', '*IssuesTabCardsUiPerfSmokeTests',
+    '--filter-class', '*MixerTabCardsUiPerfSmokeTests',
+    '--filter-class', '*MixerStemsMidiCardsUiPerfSmokeTests',
+    '--filter-class', '*MixerSoundRoutingUiPerfSmokeTests')
 $HeadlessSweepCultures = @('de-DE', 'ja-JP')
 
 # The Avalonia headless session can fault OUTSIDE a test body: its per-test
@@ -1595,7 +1646,9 @@ $HeadlessSweepCultures = @('de-DE', 'ja-JP')
 # fault of this shape never blocks: its CLASS is re-run in a fresh process
 # (which is what gives the case a chance to run the assertions it never
 # reached), a real failure from either run blocks, and a case that races again
-# is reported as unverified rather than counted green. The needles that say
+# is reported as unverified rather than counted green, and keeps the run from
+# being recorded green. The grading itself lives in HeadlessShards.psm1, shared
+# with CI. The needles that say
 # "harness fault" are the ONE shared list in tools/ci/HeadlessShards.psm1
 # (Test-HeadlessHarnessFault), the same CI and Invoke-Gate.ps1 -Headless use.
 
@@ -1635,6 +1688,8 @@ function Read-TrxResults([string]$TrxPath) {
         if ($bare -match '^(.*)\.[^.]+$') { $Matches[1] } else { $bare }
     }
 
+    $passedTests = foreach ($node in (Select-Xml -Xml $trx -XPath "//t:UnitTestResult[@outcome='Passed']" -Namespace $ns).Node) { [string]$node.testName }
+
     [pscustomobject]@{
         Total      = [int]$counters.total
         Passed     = [int]$counters.passed
@@ -1642,6 +1697,7 @@ function Read-TrxResults([string]$TrxPath) {
         Skipped    = [int]$counters.total - [int]$counters.executed
         Failures   = @($failures)
         RanClasses = @($ranClasses | Sort-Object -Unique)
+        PassedTests = @($passedTests)
     }
 }
 
@@ -1656,7 +1712,7 @@ function Get-DiscoveredTestClasses([string[]]$Filter, [string]$ResultsDir) {
     # The runner prints a (localized!) banner and then one indented
     # fully-qualified name per line; Read-HeadlessTestListing keys on the SHAPE
     # of the lines rather than the banner, so a German shell lists the same set.
-    $counts = Get-HeadlessDiscovery @('test', '--project', $script:HeadlessTestProject, '--no-build') $Filter $logPath
+    $counts = Get-HeadlessDiscovery @('test', '--project', $script:HeadlessTestProject, '--no-build', '-c', 'Release') $Filter $logPath
     $classes = @($counts.Keys | Sort-Object)
 
     $script:DiscoveryCounts[$key] = $counts
@@ -1705,10 +1761,12 @@ function Invoke-HeadlessUiRun([string[]]$Filter, [string]$ResultsDir, [string]$L
     $previousCulture = $env:DOTCHARTER_HEADLESS_CULTURE
     if ($Culture) { $env:DOTCHARTER_HEADLESS_CULTURE = $Culture }
 
+    $exitCode = $null
     try {
-        & dotnet test --project $script:HeadlessTestProject --no-build @Filter `
+        & dotnet test --project $script:HeadlessTestProject --no-build -c Release @Filter `
             --report-xunit-trx --report-xunit-trx-filename $trxName `
             --results-directory $ResultsDir *> $logPath
+        $exitCode = $LASTEXITCODE
     }
     finally {
         $env:DOTCHARTER_HEADLESS_CULTURE = $previousCulture
@@ -1720,6 +1778,8 @@ function Invoke-HeadlessUiRun([string[]]$Filter, [string]$ResultsDir, [string]$L
     $results = Read-TrxResults $trxPath
     Add-Member -InputObject $results -NotePropertyName LogPath -NotePropertyValue $logPath
     Add-Member -InputObject $results -NotePropertyName TrxPath -NotePropertyValue $trxPath
+    # Graded with the results (HeadlessShards.psm1 Test-HeadlessExitAccepted, #611).
+    Add-Member -InputObject $results -NotePropertyName ExitCode -NotePropertyValue $exitCode
     return $results
 }
 
@@ -1730,7 +1790,7 @@ function Invoke-HeadlessUiRun([string[]]$Filter, [string]$ResultsDir, [string]$L
 # run. A shard that crashed writes no TRX: its classes are then ABSENT from the
 # merge, and Test-HeadlessCoverage (same discovery, same filter) re-runs them
 # and blocks if they still report nothing — the guarantee is unchanged.
-function Invoke-HeadlessUiShardedRun([string[]]$Filter, [string]$ResultsDir, [string]$Label, [string]$Culture, [int]$Shards) {
+function Start-HeadlessUiShardedRun([string[]]$Filter, [string]$ResultsDir, [string]$Label, [string]$Culture, [int]$Shards) {
     New-Item -ItemType Directory -Force -Path $ResultsDir | Out-Null
     $null = Get-DiscoveredTestClasses -Filter $Filter -ResultsDir $ResultsDir
     $counts = $script:DiscoveryCounts[($Filter -join ' ')]
@@ -1738,14 +1798,20 @@ function Invoke-HeadlessUiShardedRun([string[]]$Filter, [string]$ResultsDir, [st
         throw "Test discovery listed no headless classes for '$($Filter -join ' ')' — nothing to run. See $(Join-Path $ResultsDir 'headless-ui-discovery.log')."
     }
     $plan = @(New-HeadlessShardPlan $counts (Read-HeadlessShardWeights (Join-Path $RepoRoot 'tools/ci/headless-shard-weights.json')) $Shards)
-    $runs = @(Invoke-HeadlessShards -Plan $plan -DotnetTestArgs @('test', '--project', $script:HeadlessTestProject, '--no-build') `
+    $runs = @(Start-TestShards -Plan $plan -DotnetTestArgs @('test', '--project', $script:HeadlessTestProject, '--no-build', '-c', 'Release') `
         -ResultsDir $ResultsDir -Label "headless-ui-$Label" -Culture $Culture -WorkingDirectory $RepoRoot)
+    return [pscustomobject]@{ Runs = $runs; ResultsDir = $ResultsDir; Label = $Label; Culture = $Culture }
+}
+
+# The shards of a Start-HeadlessUiShardedRun, once Wait-TestShards has filled them in.
+function Complete-HeadlessUiShardedRun($Pending) {
+    $runs = @($Pending.Runs)
     foreach ($r in $runs) {
         Write-Host ('    [{0}] shard {1}: {2} classes, {3:mm\:ss}, peak {4:0.0} GB, exit {5}{6}' -f `
-            $Culture, $r.Index, $r.Classes.Count, $r.Elapsed, ($r.PeakBytes / 1GB), $r.ExitCode,
+            $Pending.Culture, $r.Index, $r.Classes.Count, $r.Elapsed, ($r.PeakBytes / 1GB), $r.ExitCode,
             $(if ($r.TrxPath) { '' } else { ' - NO RESULTS FILE (its classes count as absent)' })) -ForegroundColor Gray
     }
-    $trxPath = Join-Path $ResultsDir "headless-ui-$Label.trx"
+    $trxPath = Join-Path $Pending.ResultsDir "headless-ui-$($Pending.Label).trx"
     if (Test-Path $trxPath) { Remove-Item $trxPath -Force }
     if (-not (Merge-HeadlessTrx @($runs | ForEach-Object { $_.TrxPath }) $trxPath)) {
         throw "The headless UI suite produced no results file in ANY shard — the run never started. See $($runs[0].LogPath)."
@@ -1753,16 +1819,25 @@ function Invoke-HeadlessUiShardedRun([string[]]$Filter, [string]$ResultsDir, [st
     $results = Read-TrxResults $trxPath
     Add-Member -InputObject $results -NotePropertyName LogPath -NotePropertyValue (($runs | ForEach-Object { $_.LogPath }) -join ', ')
     Add-Member -InputObject $results -NotePropertyName TrxPath -NotePropertyValue $trxPath
+    Add-Member -InputObject $results -NotePropertyName Shards -NotePropertyValue $runs
     return $results
+}
+
+function Invoke-HeadlessUiShardedRun([string[]]$Filter, [string]$ResultsDir, [string]$Label, [string]$Culture, [int]$Shards) {
+    $pending = Start-HeadlessUiShardedRun -Filter $Filter -ResultsDir $ResultsDir -Label $Label -Culture $Culture -Shards $Shards
+    $null = Wait-TestShards -Runs $pending.Runs
+    return Complete-HeadlessUiShardedRun $pending
 }
 
 # One pass: run the filter, retry anything the session race killed, and hand
 # back only the failures that are about the PRODUCT. Extracted from
 # Invoke-HeadlessUiGate when the culture sweep arrived — the retry rules are the
 # same whichever language the pass ran in, and two copies of them would drift.
-function Invoke-HeadlessUiPass([string[]]$Filter, [string]$ResultsDir, [string]$Label, [string]$Culture, [int]$Shards = 1) {
-    $started = Get-Date
-    $run = if ($Shards -gt 1) {
+# -Run hands in a run already made (the culture sweeps start together and are graded here
+# one by one); -Started is when it began.
+function Invoke-HeadlessUiPass([string[]]$Filter, [string]$ResultsDir, [string]$Label, [string]$Culture, [int]$Shards = 1, $Run = $null, $Started = $null) {
+    $started = if ($Started) { $Started } else { Get-Date }
+    $run = if ($Run) { $Run } elseif ($Shards -gt 1) {
         Invoke-HeadlessUiShardedRun -Filter $Filter -ResultsDir $ResultsDir -Label $Label -Culture $Culture -Shards $Shards
     } else {
         Invoke-HeadlessUiRun -Filter $Filter -ResultsDir $ResultsDir -Label $Label -Culture $Culture
@@ -1783,18 +1858,28 @@ function Invoke-HeadlessUiPass([string[]]$Filter, [string]$ResultsDir, [string]$
         Write-Warn2 ("[$Culture] $($absent.Count) DISCOVERED class(es) reported no result at all — the run " +
                      "silently executed less than the filter selects: " + ($absent -join ', '))
     }
+    # A process whose exit its own results do not explain (#611: it crashed after writing
+    # some passes) left results that may be partial: its classes are retried like absent ones.
+    $incomplete = @(Get-HeadlessIncompleteClasses $run (Get-DiscoveredTestClasses -Filter $Filter -ResultsDir $ResultsDir) |
+            Where-Object { $absent -notcontains $_ })
+    if ($incomplete.Count -gt 0) {
+        Write-Warn2 ("[$Culture] $($incomplete.Count) class(es) ran in a process whose exit its results do not explain: " +
+                     ($incomplete -join ', '))
+    }
+    $mustReport = @(@($absent) + @($incomplete))
+    $unverified = @()
 
-    if ($harness.Count -gt 0 -or $absent.Count -gt 0) {
+    if ($harness.Count -gt 0 -or $mustReport.Count -gt 0) {
         # A case killed by the session race never reached its own assertions, so
         # the first run says NOTHING about it. The retry is what gives it a
         # chance to fail for real. A single case cannot be re-run alone — the
         # session is built per run, so a lone Scenario_0* hits the race every
         # time — so the retry is per CLASS, the granularity that reproduces
         # cleanly.
-        $classes = @(@(@($harness | Select-Object -ExpandProperty Class) + $absent) | Sort-Object -Unique)
+        $classes = @(@(@($harness | Select-Object -ExpandProperty Class) + $mustReport) | Sort-Object -Unique)
         Write-Warn2 ("[$Culture] $($harness.Count) case(s) died inside the Avalonia headless session itself " +
                      "(a harness fault: the setup race or the teardown drain) without running their assertions, and " +
-                     "$($absent.Count) class(es) never reported. " +
+                     "$($mustReport.Count) class(es) never reported or ran in a process that did not end cleanly. " +
                      "Re-running $($classes.Count) class(es) in a fresh process.")
         $retryFilter = [string[]]@($classes | ForEach-Object { @('--filter-class', $_) })
         $retry = Invoke-HeadlessUiRun -Filter $retryFilter -ResultsDir $ResultsDir `
@@ -1802,37 +1887,21 @@ function Invoke-HeadlessUiPass([string[]]$Filter, [string]$ResultsDir, [string]$
         Write-Host ('    [{0}] retry: {1} cases, {2} passed, {3} failed' -f `
             $Culture, $retry.Total, $retry.Passed, $retry.Failed) -ForegroundColor Gray
 
-        # Only REAL failures block, in either run. A session-race exception is
-        # never a product signal, so a release is not held hostage to it — but
-        # a case still unverified after the retry is said out loud, because
-        # "green" would be a lie about it.
-        $product += @($retry.Failures | Where-Object { -not $_.IsHarness })
-        $stillRacing = @($retry.Failures | Where-Object { $_.IsHarness })
-        if ($stillRacing.Count -eq 0) {
+        # Only REAL failures block, in either run (HeadlessShards.psm1 Resolve-HeadlessRetry).
+        # A session-race exception is never a product signal, so a release is not held
+        # hostage to it — but a case still unverified after the retry is said out loud and
+        # kept in the pass's Unverified, which refuses a green record (#611): "green" would
+        # be a lie about it. A class that STILL does not report, and a retry whose exit its
+        # results do not explain, block: nothing graded them.
+        $graded = Resolve-HeadlessRetry $retry $harness $mustReport
+        $product += @($graded.Product)
+        $unverified += @($graded.Unverified)
+        if ($graded.Unverified.Count -eq 0) {
             Write-Ok "[$Culture] the $($harness.Count) session-race case(s) ran clean on re-run"
         }
         else {
-            Write-Warn2 ("[$Culture] $($stillRacing.Count) case(s) hit the session race AGAIN and are " +
-                         "UNVERIFIED by this release: " +
-                         "$(($stillRacing | Select-Object -ExpandProperty Name) -join ', ')")
-        }
-
-        # A class that STILL does not report has not been graded by anything —
-        # unlike a race failure, there is no assertion result to tolerate. That
-        # blocks: shipping on a suite that quietly ran two thirds of itself is
-        # the exact trap this check exists for.
-        $stillAbsent = @($absent | Where-Object { @($retry.RanClasses) -notcontains $_ })
-        if ($stillAbsent.Count -gt 0) {
-            $product += @($stillAbsent | ForEach-Object {
-                [pscustomobject]@{
-                    Name      = $_
-                    Class     = $_
-                    Message   = 'DISCOVERED but never executed, in the full run AND in its own retry process. ' +
-                                'Nothing in this class was graded; treating it as green would be a lie.'
-                    Frame     = ''
-                    IsHarness = $false
-                }
-            })
+            Write-Warn2 ("[$Culture] $($graded.Unverified.Count) case(s) hit the session race AGAIN and are " +
+                         "UNVERIFIED by this release: $($graded.Unverified -join ', ')")
         }
     }
 
@@ -1846,7 +1915,7 @@ function Invoke-HeadlessUiPass([string[]]$Filter, [string]$ResultsDir, [string]$
     # EscapeKeyRoutingUiPerfSmokeTests.Escape_AfterFocusedElementRemoved_
     # StillNavigates — green 6/6 in isolation every time, pairwise with its
     # neighbours too, red only as the first key press of a full run.
-    $orderCandidates = @($product | Where-Object { $_.Frame -ne '' -or $_.Class -ne $_.Name })
+    $orderCandidates = @(Get-HeadlessIsolationCandidates $product)
     if ($orderCandidates.Count -gt 0) {
         $classes = @($orderCandidates | Select-Object -ExpandProperty Class | Sort-Object -Unique)
         Write-Warn2 ("[$Culture] $($orderCandidates.Count) case(s) FAILED their assertions in the full run. " +
@@ -1856,16 +1925,21 @@ function Invoke-HeadlessUiPass([string[]]$Filter, [string]$ResultsDir, [string]$
             -ResultsDir $ResultsDir -Label "$Label-isolated" -Culture $Culture
         Write-Host ('    [{0}] isolated: {1} cases, {2} passed, {3} failed' -f `
             $Culture, $isolated.Total, $isolated.Passed, $isolated.Failed) -ForegroundColor Gray
-        $isolatedFailed = @($isolated.Failures | Select-Object -ExpandProperty Name)
-        $orderDependent = @($orderCandidates | Where-Object {
-            (@($isolated.RanClasses) -contains $_.Class) -and ($isolatedFailed -notcontains $_.Name) })
+        # Every case that fails in isolation blocks, even one that passed in the full run, and
+        # a candidate is cleared only when IT passed there (Resolve-HeadlessIsolatedRun, #611).
+        $graded = Resolve-HeadlessIsolatedRun $product $isolated
+        $orderDependent = @($graded.OrderDependent)
+        $product = @($graded.Product)
+        $unverified += @($graded.Unverified)
         if ($orderDependent.Count -gt 0) {
             Write-Warn2 ("[$Culture] $($orderDependent.Count) case(s) passed in a fresh process and are " +
                          "ORDER-DEPENDENT in the full run — NOT blocking this release, but a class earlier " +
                          "in the run leaves state behind that breaks them. Find it: " +
                          "$(($orderDependent | Select-Object -ExpandProperty Name) -join ', ')")
-            $names = @($orderDependent | Select-Object -ExpandProperty Name)
-            $product = @($product | Where-Object { $names -notcontains $_.Name })
+        }
+        if ($graded.Unverified.Count -gt 0) {
+            Write-Warn2 ("[$Culture] $($graded.Unverified.Count) case(s) hit the session race in the isolated re-run and are " +
+                         "UNVERIFIED by this release: $($graded.Unverified -join ', ')")
         }
     }
 
@@ -1876,19 +1950,20 @@ function Invoke-HeadlessUiPass([string[]]$Filter, [string]$ResultsDir, [string]$
     }
 
     return [pscustomobject]@{
-        Run      = $run
-        Product  = @($product)
+        Run        = $run
+        Product    = @($product)
+        Unverified = [string[]]@($unverified | Sort-Object -Unique)
     }
 }
 
-# DotCharter.Tests, built once per run: the headless gate and the release lane both run its output.
+# DotCharter.Tests, built once per run: every gate below runs its output. Not built at all
+# when every gate reuses a record (Get-ReleaseGatePlan NeedsTestBuild).
 function Build-ReleaseTestProject([string]$ResultsDir) {
     if ($script:TestProjectBuilt) { return }
-    $script:HeadlessTestProject = Join-Path $RepoRoot 'DotCharter.Tests/DotCharter.Tests.csproj'
     New-Item -ItemType Directory -Force -Path $ResultsDir | Out-Null
     Write-Host '    building DotCharter.Tests…' -ForegroundColor DarkGray
     $buildLog = Join-Path $ResultsDir 'headless-ui-build.log'
-    & dotnet build $script:HeadlessTestProject --nologo -v:m *> $buildLog
+    & dotnet build $script:HeadlessTestProject -c Release --nologo -v:m *> $buildLog
     if ($LASTEXITCODE -ne 0) {
         Get-Content $buildLog | Select-String -Pattern 'error|Fehler' | Select-Object -First 20 |
             ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
@@ -1897,95 +1972,200 @@ function Build-ReleaseTestProject([string]$ResultsDir) {
     $script:TestProjectBuilt = $true
 }
 
+# Every blocking gate of a release, in fail-fast order: the default gate (the broadest and
+# among the cheapest), the headless UI suite and its localized layout sweeps, the release
+# lane. Each one is reused when a GREEN run of it is on record for this exact, clean tree
+# (ReleaseCache.psm1; the merge train records the default gate, the release lane and, when
+# it ran it, the headless suite) and run otherwise; a run that passes is recorded, so the
+# next release run on the same tree (the public build after the add-on build, a retry after
+# a late failure) runs none of them. The decision is the pure Get-ReleaseGatePlan.
+# Planned lanes revoke prior evidence before the test build; all release gates
+# build/run Release and record the same configuration and lane-list hash as the train.
+function Invoke-ReleaseGates([string]$ResultsDir) {
+    $script:HeadlessTestProject = Join-Path $RepoRoot 'DotCharter.Tests/DotCharter.Tests.csproj'
+    $tree = Get-CleanTreeId -Repo $RepoRoot
+    $trees = @(Get-GateRecordTrees -RepoRoot $RepoRoot -Tree $tree)
+    $scope = Get-GateRecordInputs -RepoRoot $RepoRoot -Configuration Release
+    $gateRecord = $null; $headlessRecord = $null; $culturesRecord = $null; $laneRecord = $null
+    if ($tree) {
+        $gateRecord = Find-GateRecord -Trees $trees -Kind gate @scope
+        $headlessRecord = Find-GateRecord -Trees $trees -Kind headless @scope
+        $culturesRecord = Find-GateRecord -Trees $trees -Kind headlessCultures -Cultures $HeadlessSweepCultures @scope
+        $laneRecord = Find-GateRecord -Trees $trees -Kind releaseLane @scope
+    }
+    else { Write-Host '    the tree is not clean HEAD, so no recorded gate run applies: every gate runs' -ForegroundColor DarkGray }
+    $plan = Get-ReleaseGatePlan -CleanTree ([bool]$tree) -GateRecord $gateRecord -HeadlessRecord $headlessRecord `
+        -CulturesRecord $culturesRecord -ReleaseLaneRecord $laneRecord `
+        -ForceGate:$ForceGate -ForceHeadless:$ForceHeadlessUi -ForceReleaseLane:$ForceReleaseLane -SkipHeadless:$SkipHeadlessUi
+    $step = @{}
+    foreach ($s in $plan.Steps) { $step[$s.Name] = $s }
+    $plannedKinds = @($plan.Steps | Where-Object { $_.Action -eq 'run' } | ForEach-Object { $_.Name })
+    $script:ReleaseReusedRecords = @{}
+    foreach ($s in @($plan.Steps | Where-Object { $_.Action -eq 'reuse' })) { $script:ReleaseReusedRecords[$s.Name] = $s.Record }
+    $script:ReleaseRecordScope = $scope
+    $script:ReleaseAcceptedKinds = @()
+    Start-GateRecordRun -Trees $trees -Kinds $plannedKinds @scope
+    try {
+        if ($plan.NeedsTestBuild) { Build-ReleaseTestProject -ResultsDir $ResultsDir }
+        else { Write-Ok 'every gate is on record for this tree: DotCharter.Tests is not even built' }
+
+        Invoke-DefaultGate -Step $step['gate'] -Tree $tree
+        if ($SkipHeadlessUi) {
+            Write-Warn2 'SKIPPING the headless UI suite (-SkipHeadlessUi). The five silent XAML faults are UNCHECKED for this pack.'
+        }
+        else {
+            Invoke-HeadlessUiGate -ResultsDir $ResultsDir -MainStep $step['headless'] -SweepStep $step['headlessCultures'] -Tree $tree
+        }
+        Invoke-ReleaseLaneGate -ResultsDir $ResultsDir -Step $step['releaseLane'] -Tree $tree
+        Assert-GateRecordsCurrent -Records $script:ReleaseReusedRecords -Cultures $HeadlessSweepCultures @scope
+        $global:LASTEXITCODE = 0
+    }
+    finally { Complete-GateRecordRun -Trees $trees -Kinds $plannedKinds -AcceptedKinds $script:ReleaseAcceptedKinds @scope }
+}
+
+# The default gate (tools/agent/Invoke-Gate.ps1 -Gate): what every merge train runs. A release
+# on a tree no train tested runs it here, BEFORE the slower suites, so a stale pinned hash
+# fails in minutes; on a train's tree it is reused.
+function Invoke-DefaultGate($Step, [string]$Tree) {
+    Write-Step "Gate: the default gate (Invoke-Gate.ps1 -Gate, $HeadlessShards concurrent testhosts)"
+    if ($Step.Action -eq 'reuse') {
+        Write-Ok "default gate NOT re-run: reusing the green run recorded for $(Format-GateRecord $Step.Record) (-ForceGate re-runs it)"
+        return
+    }
+    if ($ForceGate) { Write-Host '    -ForceGate: running the default gate whatever is on record' -ForegroundColor DarkGray }
+    $gateArgs = @('-NoProfile', '-File', (Join-Path $RepoRoot 'tools/agent/Invoke-Gate.ps1'), '-Gate', '-NoBuild', '-Configuration', 'Release', '-Shards', $HeadlessShards) + $GateCpuSwitch
+    & pwsh @gateArgs | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw 'The default gate is red - not cutting a release. Re-run it alone: pwsh -NoProfile -File tools/agent/Invoke-Gate.ps1 -Gate'
+    }
+    Write-Ok 'default gate green'
+    if ($Tree) {
+        $recordScope = Get-GateRecordInputs -RepoRoot $RepoRoot -Configuration Release
+        $saved = Save-GateRecord -Tree $Tree -Commit (git -C $RepoRoot rev-parse HEAD) -Gate -Source 'New-Release.ps1 default gate' @recordScope
+        $script:ReleaseAcceptedKinds += @('gate')
+        Write-Ok "recorded: a green default gate on tree $Tree ($saved)"
+    }
+    $global:LASTEXITCODE = 0
+}
+
 # The release lane (tools/ci/release-lane.json): the slow corpus / integration / determinism
 # classes the default gate leaves out. NEVER skipped - only reused when a green run of it is on
 # record for this exact tree (the merge train records one; -ForceReleaseLane runs it anyway).
-function Invoke-ReleaseLaneGate([string]$ResultsDir) {
+function Invoke-ReleaseLaneGate([string]$ResultsDir, $Step, [string]$Tree) {
     Write-Step "Gate: release lane (the slow classes tools/ci/release-lane.json lists, $HeadlessShards concurrent testhosts)"
-    Build-ReleaseTestProject -ResultsDir $ResultsDir
-    $tree = Get-CleanTreeId -Repo $RepoRoot
-    $recorded = $null
-    if (-not $tree) { Write-Host '    the tree is not clean HEAD, so no recorded release-lane run applies' -ForegroundColor DarkGray }
-    elseif ($ForceReleaseLane) { Write-Host '    -ForceReleaseLane: running the lane whatever is on record' -ForegroundColor DarkGray }
-    else { $recorded = Find-GateRecord -Trees (Get-GateRecordTrees -RepoRoot $RepoRoot -Tree $tree) -Kind releaseLane }
-    if ($recorded) {
-        Write-Ok "release lane NOT re-run: reusing the green run recorded for $(Format-GateRecord $recorded) (-ForceReleaseLane re-runs it)"
+    if ($Step.Action -eq 'reuse') {
+        Write-Ok "release lane NOT re-run: reusing the green run recorded for $(Format-GateRecord $Step.Record) (-ForceReleaseLane re-runs it)"
         return
     }
-    $laneArgs = @('-NoProfile', '-File', (Join-Path $RepoRoot 'tools/agent/Invoke-Gate.ps1'), '-ReleaseLane', '-NoBuild', '-Shards', $HeadlessShards)
+    if ($ForceReleaseLane) { Write-Host '    -ForceReleaseLane: running the lane whatever is on record' -ForegroundColor DarkGray }
+    $laneArgs = @('-NoProfile', '-File', (Join-Path $RepoRoot 'tools/agent/Invoke-Gate.ps1'), '-ReleaseLane', '-NoBuild', '-Configuration', 'Release', '-Shards', $HeadlessShards) + $GateCpuSwitch
     & pwsh @laneArgs | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw 'The release lane is red - not cutting a release. Re-run it alone: pwsh -NoProfile -File tools/agent/Invoke-Gate.ps1 -ReleaseLane'
     }
     Write-Ok 'release lane green'
-    if ($tree) {
-        $saved = Save-GateRecord -Tree $tree -Commit (git -C $RepoRoot rev-parse HEAD) -ReleaseLane -Source 'New-Release.ps1 release lane'
-        Write-Ok "recorded: a green release lane on tree $tree ($saved)"
+    if ($Tree) {
+        $recordScope = Get-GateRecordInputs -RepoRoot $RepoRoot -Configuration Release
+        $saved = Save-GateRecord -Tree $Tree -Commit (git -C $RepoRoot rev-parse HEAD) -ReleaseLane -Source 'New-Release.ps1 release lane' @recordScope
+        $script:ReleaseAcceptedKinds += @('releaseLane')
+        Write-Ok "recorded: a green release lane on tree $Tree ($saved)"
     }
     $global:LASTEXITCODE = 0
 }
 
-function Invoke-HeadlessUiGate([string]$ResultsDir) {
-    Write-Step "Gate: headless UI suite ($HeadlessShards concurrent testhosts, plus the localized layout sweeps)"
-    $script:HeadlessTestProject = Join-Path $RepoRoot 'DotCharter.Tests/DotCharter.Tests.csproj'
+# The headless UI suite: the en-US pass, then the localized layout sweeps of every culture in
+# $HeadlessSweepCultures STARTED TOGETHER, each with -HeadlessShards testhosts (at most twice that in all)
+# (Get-CultureShardSplit), graded one culture at a time with the same retry rules.
+function Invoke-HeadlessUiGate([string]$ResultsDir, $MainStep, $SweepStep, [string]$Tree) {
+    Write-Step "Gate: headless UI suite ($HeadlessShards concurrent testhosts, then the localized layout sweeps side by side)"
     New-Item -ItemType Directory -Force -Path $ResultsDir | Out-Null
 
-    Build-ReleaseTestProject -ResultsDir $ResultsDir
-
-    # One test run per tree: a green main pass on record for this exact, clean tree is
-    # reused (named below); -ForceHeadlessUi runs it again. The sweeps below always run.
-    $tree = Get-CleanTreeId -Repo $RepoRoot
-    $recorded = $null
-    if (-not $tree) { Write-Host '    the tree is not clean HEAD, so no recorded headless run applies' -ForegroundColor DarkGray }
-    elseif ($ForceHeadlessUi) { Write-Host '    -ForceHeadlessUi: running the main pass whatever is on record' -ForegroundColor DarkGray }
-    else { $recorded = Find-GateRecord -Trees (Get-GateRecordTrees -RepoRoot $RepoRoot -Tree $tree) -Kind headless }
-
     $product = @()
-    if ($recorded) {
-        Write-Ok "headless UI main pass NOT re-run: reusing the green run recorded for $(Format-GateRecord $recorded) (-ForceHeadlessUi re-runs it)"
-        $run = [pscustomobject]@{ Passed = 'recorded'; Skipped = 'recorded'; LogPath = (Get-GateRecordPath -Tree $recorded.Tree) }
+    $mainUnverified = @()
+    $sweepUnverified = @()
+    if ($MainStep.Action -eq 'reuse') {
+        Write-Ok "headless UI main pass NOT re-run: reusing the green run recorded for $(Format-GateRecord $MainStep.Record) (-ForceHeadlessUi re-runs it)"
+        $run = [pscustomobject]@{ Passed = 'recorded'; Skipped = 'recorded'; LogPath = (Get-GateRecordPath -Tree $MainStep.Record.Tree) }
     }
     else {
         $pass = Invoke-HeadlessUiPass -Filter $HeadlessUiFilter -ResultsDir $ResultsDir `
             -Label 'run1' -Culture 'en-US' -Shards $HeadlessShards
         $run = $pass.Run
         $product = @($pass.Product)
+        $mainUnverified = @($pass.Unverified)
     }
 
     # The localized layout sweeps. Only the classes that compare a size, because
     # a full run per culture would cost more than a release should spend before
-    # it publishes anything — see the note beside $HeadlessLayoutFilter.
-    foreach ($culture in $HeadlessSweepCultures) {
-        # Sharded too: the layout classes are dealt across -HeadlessShards processes.
-        $localized = Invoke-HeadlessUiPass -Filter $HeadlessLayoutFilter -ResultsDir $ResultsDir `
-            -Label "layout-$culture" -Culture $culture -Shards $HeadlessShards
-        $product += @($localized.Product)
+    # it publishes anything — see the note beside $HeadlessLayoutFilter. A red
+    # main pass stops HERE (#614, ReleaseGates.psm1 Get-HeadlessSweepAction): its
+    # evidence is kept, and the sweeps run once the main pass is accepted.
+    $sweepAction = Get-HeadlessSweepAction -SweepStep $SweepStep -MainFailures $product.Count
+    if ($sweepAction -eq 'blocked') {
+        Write-Warn2 "localized layout sweeps ($($HeadlessSweepCultures -join ' + ')) NOT started: the en-US pass is red"
+        Stop-HeadlessUiGate -Product $product -Run $run
+    }
+    if ($sweepAction -eq 'reuse') {
+        Write-Ok "localized layout sweeps ($($HeadlessSweepCultures -join ' + ')) NOT re-run: reusing the green run recorded for $(Format-GateRecord $SweepStep.Record) (-ForceHeadlessUi re-runs them)"
+    }
+    else {
+        $split = @(Get-CultureShardSplit -Shards $HeadlessShards -Cultures $HeadlessSweepCultures)
+        $started = Get-Date
+        $pending = @(foreach ($part in $split) {
+                Start-HeadlessUiShardedRun -Filter $HeadlessLayoutFilter -ResultsDir $ResultsDir `
+                    -Label "layout-$($part.Culture)" -Culture $part.Culture -Shards $part.Shards
+            })
+        $null = Wait-TestShards -Runs @($pending | ForEach-Object { $_.Runs })
+        foreach ($sweep in $pending) {
+            $localized = Invoke-HeadlessUiPass -Filter $HeadlessLayoutFilter -ResultsDir $ResultsDir `
+                -Label $sweep.Label -Culture $sweep.Culture -Run (Complete-HeadlessUiShardedRun $sweep) -Started $started
+            $product += @($localized.Product)
+            $sweepUnverified += @($localized.Unverified)
+        }
     }
 
-    if ($product.Count -gt 0) {
-        Write-Host ''
-        Write-Host "  $($product.Count) headless UI test(s) FAILED:" -ForegroundColor Red
-        foreach ($failure in $product) { Write-HeadlessFailure $failure }
-        Write-Host ''
-        Write-Host "  Full output: $($run.LogPath)" -ForegroundColor DarkGray
-        Write-Host '  Re-run just this gate:' -ForegroundColor DarkGray
-        Write-Host "    dotnet test --project DotCharter.Tests\DotCharter.Tests.csproj --no-build $($HeadlessUiFilter -join ' ')" -ForegroundColor DarkGray
-        Write-Host '  …or one localized layout sweep:' -ForegroundColor DarkGray
-        Write-Host "    `$env:DOTCHARTER_HEADLESS_CULTURE='de-DE'; dotnet test --project DotCharter.Tests\DotCharter.Tests.csproj --no-build $($HeadlessLayoutFilter -join ' ')" -ForegroundColor DarkGray
-        throw "The headless UI suite is red ($($product.Count) failing) — not cutting a release. " +
-              'Fix it, or pass -SkipHeadlessUi only if you know exactly why that is safe.'
-    }
+    if ($product.Count -gt 0) { Stop-HeadlessUiGate -Product $product -Run $run }
 
     Write-Ok ("headless UI suite green ($($run.Passed) passed, $($run.Skipped) skipped), " +
               "and its layout classes green in $($HeadlessSweepCultures -join ' + ')")
-    if ($tree -and -not $recorded) {
-        $saved = Save-GateRecord -Tree $tree -Commit (git -C $RepoRoot rev-parse HEAD) -Headless -Source 'New-Release.ps1 headless gate'
-        Write-Ok "recorded: a green headless run on tree $tree ($saved)"
+    # A case that hit the harness fault again has no accepted result (#611): the release goes on,
+    # as before, but the run is NOT recorded green, so the next release runs it again.
+    $recordScope = Get-GateRecordInputs -RepoRoot $RepoRoot -Configuration Release
+    if ($Tree -and (Test-HeadlessGateRecordable -Step $MainStep -Unverified $mainUnverified)) {
+        $saved = Save-GateRecord -Tree $Tree -Commit (git -C $RepoRoot rev-parse HEAD) -Headless -Source 'New-Release.ps1 headless gate' @recordScope
+        $script:ReleaseAcceptedKinds += @('headless')
+        Write-Ok "recorded: a green headless run on tree $Tree ($saved)"
+    }
+    elseif ($Tree -and $mainUnverified.Count -gt 0) {
+        Write-Warn2 "NOT recorded green: $($mainUnverified.Count) en-US case(s) are unverified, so the next release runs the suite again"
+    }
+    if ($Tree -and (Test-HeadlessGateRecordable -Step $SweepStep -Unverified $sweepUnverified)) {
+        $saved = Save-GateRecord -Tree $Tree -Commit (git -C $RepoRoot rev-parse HEAD) -HeadlessCultures $HeadlessSweepCultures -Source 'New-Release.ps1 layout sweeps' @recordScope
+        $script:ReleaseAcceptedKinds += @('headlessCultures')
+        Write-Ok "recorded: green layout sweeps ($($HeadlessSweepCultures -join ' + ')) on tree $Tree ($saved)"
+    }
+    elseif ($Tree -and $sweepUnverified.Count -gt 0) {
+        Write-Warn2 "NOT recorded green: $($sweepUnverified.Count) layout-sweep case(s) are unverified, so the next release sweeps again"
     }
     # A tolerated session-race failure leaves $LASTEXITCODE at 1. Everything
     # after this point sets it before reading it, but a stale non-zero is a
     # footgun waiting for the next `if ($LASTEXITCODE -ne 0)` someone adds.
     $global:LASTEXITCODE = 0
+}
+
+# The headless gate's red end: every blocking failure, where its evidence is, how to re-run it.
+function Stop-HeadlessUiGate([object[]]$Product, $Run) {
+    Write-Host ''
+    Write-Host "  $($product.Count) headless UI test(s) FAILED:" -ForegroundColor Red
+    foreach ($failure in $product) { Write-HeadlessFailure $failure }
+    Write-Host ''
+    Write-Host "  Full output: $($run.LogPath)" -ForegroundColor DarkGray
+    Write-Host '  Re-run just this gate:' -ForegroundColor DarkGray
+    Write-Host "    dotnet test --project DotCharter.Tests\DotCharter.Tests.csproj --no-build $($HeadlessUiFilter -join ' ')" -ForegroundColor DarkGray
+    Write-Host '  …or one localized layout sweep:' -ForegroundColor DarkGray
+    Write-Host "    `$env:DOTCHARTER_HEADLESS_CULTURE='de-DE'; dotnet test --project DotCharter.Tests\DotCharter.Tests.csproj --no-build $($HeadlessLayoutFilter -join ' ')" -ForegroundColor DarkGray
+    throw "The headless UI suite is red ($($product.Count) failing) — not cutting a release. " +
+          'Fix it, or pass -SkipHeadlessUi only if you know exactly why that is safe.'
 }
 
 if ($SelfTest) { Invoke-SelfTest; exit 0 }
@@ -2030,28 +2210,16 @@ Write-Step "Releasing DotCharter v$Version -> $OutputDir ($(if ($WithPlugins) { 
 
 # --- Preflight -------------------------------------------------------------
 Write-Step 'Preflight checks'
+# Preflight order (fail fast): git-only checks, then hash checks of pinned files,
+# then the checks that build or restore (signing tool, licence inventory), then the
+# ones that may rebuild or download (voice packs, media tools). Every one of them
+# runs BEFORE the first gate: a stale pin costs seconds, not a gate run.
 $nativeDll = Join-Path $RepoRoot 'JuceSharp/src/JuceSharp/runtimes/win-x64/native/juce_sharp.dll'
 if (-not (Test-Path $nativeDll)) {
     throw "juce_sharp.dll is not built ($nativeDll). Build it first:`n" +
           '  cmake -S JuceSharp/src/JuceSharp.Native -B JuceSharp/src/JuceSharp.Native/build -G "Visual Studio 17 2022" -A x64' + "`n" +
           '  cmake --build JuceSharp/src/JuceSharp.Native/build --config Release'
 }
-# The release-signing key is checked FIRST: an unsigned release is one
-# every install from v1.1.0 on refuses, so a missing key must stop the release
-# before an hour of building, not after it. `pubkey` prints only the PUBLIC half.
-Write-Step 'Release-signing key present and matching the pinned public key'
-if (-not (Test-Path -LiteralPath $SigningKeyPath)) {
-    throw "The release-signing key is missing ($SigningKeyPath). Every release must be signed: restore the key " +
-          'from its backup, or pass -SigningKeyPath / set DOTCHARTER_RELEASE_SIGNING_KEY. See tools/release/README.md § Release signing.'
-}
-$signingPublicKey = (& dotnet run $SignTool pubkey $SigningKeyPath | Select-Object -Last 1)
-if ($LASTEXITCODE -ne 0) { throw "The release-signing key at $SigningKeyPath could not be read (see above)." }
-$pinnedLine = Select-String -Path (Join-Path $RepoRoot 'DotCharter.Services/Update/ReleaseSignature.cs') -Pattern 'PinnedPublicKeyBase64 = "([^"]+)"'
-if (-not $pinnedLine -or $pinnedLine.Matches[0].Groups[1].Value -ne "$signingPublicKey".Trim()) {
-    throw "The release-signing key at $SigningKeyPath is not the one pinned in ReleaseSignature.PinnedPublicKeyBase64: every install would refuse this release."
-}
-Initialize-VoicePacks
-Assert-NoSeparatelyLicensedVoice (Join-Path $RepoRoot 'artifacts/voice-pack')
 $dirty = git -C $RepoRoot status --porcelain
 if ($dirty) { Write-Warn2 'Working tree is dirty — the release should be cut from a clean, committed tree.' }
 if ($ReleaseFeed.IsOtherCheckout -and (git -C $ReleaseFeed.TargetCheckout status --porcelain)) {
@@ -2079,16 +2247,6 @@ else {
     if ($LASTEXITCODE -ne 0) { throw 'JuceSharp''s <Version> must be bumped before this release (see above), or pass -SkipPublicSyncCheck.' }
 }
 
-# Dependency licences (#828): the committed inventory must match the packages
-# the projects resolve (offline), and DependencyLicenceTests (in the gate)
-# holds every licence to the GPL-3.0-compatible allowlist.
-# -Restore first: the check reads every obj/project.assets.json, and this
-# runs BEFORE the publishes, so a fresh clone has none and an old tree has a
-# stale set (the v0.70.0 rehearsal stopped here with 5 packages missing).
-Write-Step 'Dependency licence inventory is current'
-& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Update-DependencyInventory.ps1') -Check -Restore
-if ($LASTEXITCODE -ne 0) { throw 'licenses/dependencies.json is out of date: run tools/release/Update-DependencyInventory.ps1 and commit it.' }
-
 # tonelab's prebuilt files are checked HERE too: a wrong hash costs seconds, not a pack.
 if (-not $SkipUi -and -not $SkipTonelab) {
     Write-Step 'tonelab prebuilt files match tools/release/tonelab/tonelab.json'
@@ -2108,6 +2266,33 @@ if (-not $SkipUi) {
     Write-Ok "$(@($VcRedistPin.Files.Keys) -join ', ') from $vcSource, each matching its pinned SHA-256"
 }
 
+# The release-signing key: an unsigned release is one every install from v1.1.0
+# on refuses, so a missing key must stop the release before any gate or publish,
+# not after it. `pubkey` prints only the PUBLIC half. (It builds the sign tool,
+# so it follows the git- and hash-only checks above.)
+Write-Step 'Release-signing key present and matching the pinned public key'
+if (-not (Test-Path -LiteralPath $SigningKeyPath)) {
+    throw "The release-signing key is missing ($SigningKeyPath). Every release must be signed: restore the key " +
+          'from its backup, or pass -SigningKeyPath / set DOTCHARTER_RELEASE_SIGNING_KEY. See tools/release/README.md § Release signing.'
+}
+$signingPublicKey = (& dotnet run $SignTool pubkey $SigningKeyPath | Select-Object -Last 1)
+if ($LASTEXITCODE -ne 0) { throw "The release-signing key at $SigningKeyPath could not be read (see above)." }
+$pinnedLine = Select-String -Path (Join-Path $RepoRoot 'DotCharter.Services/Update/ReleaseSignature.cs') -Pattern 'PinnedPublicKeyBase64 = "([^"]+)"'
+if (-not $pinnedLine -or $pinnedLine.Matches[0].Groups[1].Value -ne "$signingPublicKey".Trim()) {
+    throw "The release-signing key at $SigningKeyPath is not the one pinned in ReleaseSignature.PinnedPublicKeyBase64: every install would refuse this release."
+}
+# Dependency licences (#828): the committed inventory must match the packages
+# the projects resolve (offline), and DependencyLicenceTests (in the gate)
+# holds every licence to the GPL-3.0-compatible allowlist.
+# -Restore first: the check reads every obj/project.assets.json, and this
+# runs BEFORE the publishes, so a fresh clone has none and an old tree has a
+# stale set (the v0.70.0 rehearsal stopped here with 5 packages missing).
+Write-Step 'Dependency licence inventory is current'
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Update-DependencyInventory.ps1') -Check -Restore
+if ($LASTEXITCODE -ne 0) { throw 'licenses/dependencies.json is out of date: run tools/release/Update-DependencyInventory.ps1 and commit it.' }
+
+Initialize-VoicePacks
+Assert-NoSeparatelyLicensedVoice (Join-Path $RepoRoot 'artifacts/voice-pack')
 # The media tools are acquired HERE, not after the publishes: a pin that 404s
 # (BtbN deleted n7.1 under the v0.59.0 pack) should cost seconds, not a pack.
 $redist = $null
@@ -2125,20 +2310,12 @@ if (-not $SkipUi -and -not $SkipTools) {
 }
 Write-Ok 'preflight done'
 
-# --- Blocking gate: the headless UI suite ----------------------------------
-# Runs BEFORE the ~300 MB publishes: a red suite should cost a few minutes, not
-# a full pack. See Invoke-HeadlessUiGate above for why this is the only place
-# the suite has ever had.
-if ($SkipHeadlessUi) {
-    Write-Warn2 'SKIPPING the headless UI suite (-SkipHeadlessUi). The five silent XAML faults are UNCHECKED for this pack.'
-}
-else {
-    Invoke-HeadlessUiGate -ResultsDir (Join-Path $OutputDir 'tests')
-}
-
-# --- Blocking gate: the release lane -----------------------------------------
-# The slow classes the default gate leaves out. Not skippable (see Invoke-ReleaseLaneGate).
-Invoke-ReleaseLaneGate -ResultsDir (Join-Path $OutputDir 'tests')
+# --- Blocking gates ----------------------------------------------------------
+# The default gate, the headless UI suite (en-US + the localized layout sweeps) and the
+# release lane, each reused when a green run of it is on record for this exact tree. They
+# run BEFORE the ~300 MB publishes: a red suite should cost minutes, not a full pack. See
+# Invoke-ReleaseGates above.
+Invoke-ReleaseGates -ResultsDir (Join-Path $OutputDir 'tests')
 
 $assets = @()
 
@@ -2403,9 +2580,13 @@ if (-not $SkipUi) {
         Write-Host "WARNING: launch smoke $($script:SmokeSummary) - start the packed DotCharter.exe by hand before publishing." -ForegroundColor Yellow
     }
 }
+$quotedAssets = ($assets | ForEach-Object { '"' + $_ + '"' }) -join " `` `n    "
+# Local metadata/asset preparation is complete. This script prints instructions;
+# it performs no remote publication or ref update and holds no store lock here.
+Assert-GateRecordsCurrent -Records $script:ReleaseReusedRecords -Cultures $HeadlessSweepCultures @script:ReleaseRecordScope
 Write-Host 'All assets built. Review the notes, then publish with:' -ForegroundColor Cyan
 Write-Host ''
-$quotedAssets = ($assets | ForEach-Object { '"' + $_ + '"' }) -join " `` `n    "
+
 Write-Host @"
 gh release create v$Version -R $($ReleaseFeed.Repo) --latest ``
     --target $sha ``

@@ -74,7 +74,7 @@ if (args.Contains("--list"))
             try
             {
                 var arr = new XmlChartSerializer().Load(path).Arrangements[0];
-                var lv = arr.Levels[^1];
+                var lv = ChartLevels.Hardest(arr) ?? throw new InvalidDataException("Arrangement has no levels.");
                 Console.WriteLine($"{a.GetProperty("kind").GetString(),-6} levels {arr.Levels.Count} notes {lv.Notes.Count,5} chords {lv.Chords.Count,4}  {name}|{Path.GetFileName(path)}");
             }
             catch (Exception ex) { Console.WriteLine($"unreadable {name}|{Path.GetFileName(path)}: {ex.GetType().Name}"); }

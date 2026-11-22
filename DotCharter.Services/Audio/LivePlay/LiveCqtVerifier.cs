@@ -12,8 +12,7 @@ namespace DotCharter.Services.Audio.LivePlay;
 ///     axis and calls <see cref="Verify"/> as each sound's hit window closes. The
 ///     chart time is mapped into the capture axis here, via <see cref="SetAnchor"/>.
 ///     Single notes are one Binary-Match-Mask call; chords verify each distinct tone
-///     and credit at the "half" coverage threshold, mirroring how
-///     <see cref="LiveNoteMatcher"/> scores a strum.
+///     and credit at the configured weighted coverage; Strict requires every tone.
 ///     </para>
 ///     <para>
 ///     <b>Do not go back to pushing "transport-aligned" PCM.</b> The CQT's position
@@ -42,6 +41,15 @@ public sealed class LiveCqtVerifier
     /// weighted by harmonic function, so a fifth buys less than a third.
     /// 0.5 keeps roughly the old leniency for chords whose quality is unambiguous.</summary>
     public double ChordCoverage { get; init; } = 0.5;
+
+    /// <summary>Strict voicing practice requires every distinct tone, including dense chords.</summary>
+    public LiveChordVoicingStrictness ChordStrictness { get; init; } = LiveChordVoicingStrictness.Standard;
+
+    /// <summary>The arrangement's authored reference offset. Its reference octave is already
+    /// in the expected MIDI notes; only the residual cents move the CQT targets.</summary>
+    public double CentOffset { get; init; }
+
+    private double PitchOffsetSemitones => ArrangementInstrument.ResidualCents(CentOffset) / 100.0;
 
     /// <summary>When a chord has exactly one third, require the player to have actually
     /// sounded it. This is what stops a minor chord scoring a hit against a charted major
@@ -172,7 +180,8 @@ public sealed class LiveCqtVerifier
     public const double LiveNoiseHistorySeconds = LiveCqtConfig.NoiseHistorySeconds;
 
     /// <summary>Builds a live-play verifier over a fresh streaming CQT.</summary>
-    public static LiveCqtVerifier CreateStreaming(int sampleRate = 44100, double chordCoverage = 0.5, bool forgiving = false)
+    public static LiveCqtVerifier CreateStreaming(int sampleRate = 44100, double chordCoverage = 0.5, bool forgiving = false,
+        LiveChordVoicingStrictness chordStrictness = LiveChordVoicingStrictness.Standard, double centOffset = 0)
         => new(new JuceConstantQ(sampleRate,
                                  hop: LiveHop,
                                  fMinMidi: LiveMinMidi,
@@ -184,12 +193,14 @@ public sealed class LiveCqtVerifier
                                  idleSteadyRatio: LiveCqtConfig.IdleSteadyRatio,
                                  idleFloorRiseDbPerSecond: LiveCqtConfig.IdleFloorRiseDbPerSecond),
                chordCoverage)
-        { Forgiving = forgiving, RequireQualityTone = !forgiving };
+        { Forgiving = forgiving, RequireQualityTone = !forgiving, ChordStrictness = chordStrictness, CentOffset = centOffset };
 
     /// <summary>The live verifier for a hit-window preset: <see cref="LiveHitWindowPreset.Lenient" />
     /// is also the FORGIVING detection mode (<see cref="Forgiving" />); Normal and Strict are not.</summary>
-    public static LiveCqtVerifier ForPreset(int sampleRate, LiveHitWindowPreset preset)
-        => CreateStreaming(sampleRate, forgiving: preset == LiveHitWindowPreset.Lenient);
+    public static LiveCqtVerifier ForPreset(int sampleRate, LiveHitWindowPreset preset,
+        LiveChordVoicingStrictness chordStrictness = LiveChordVoicingStrictness.Standard, double centOffset = 0)
+        => CreateStreaming(sampleRate, forgiving: preset == LiveHitWindowPreset.Lenient,
+            chordStrictness: chordStrictness, centOffset: centOffset);
 
     /// <summary>Re-anchor the streaming CQT to a capture-stream position (seek/skip).</summary>
     public void Reset(long streamPosition) => _cqt.Reset(streamPosition);
@@ -256,12 +267,13 @@ public sealed class LiveCqtVerifier
             // so energy an octave below means the player is playing THAT note, not this one —
             // UNLESS that note was just played and credited, in which case it is still ringing.
             var veto = !OctaveBelowIsStillRinging(notes[0], sound.TimeMs);
-            var r = single.Verify(notes[0], t, allowHarmonic, allowSubOctaveVeto: veto);
-            if (!r.Hit && harmonic && TryOvertone(single, notes[0], t, out var overtone)) r = overtone;
+            var midi = notes[0] + PitchOffsetSemitones;
+            var r = single.Verify(midi, t, allowHarmonic, allowSubOctaveVeto: veto);
+            if (!r.Hit && harmonic && TryOvertone(single, midi, t, out var overtone)) r = overtone;
             // A bend or a slide sounds its charted pitch only for a moment: every semitone it
             // travels through counts, the range the attack path has always accepted.
-            if (!r.Hit && TryTravel(single, sound, t, allowHarmonic, veto, out var travelled)) r = travelled;
-            if (!r.Hit && Forgiving && IsDetuned(single, notes[0], t, allowHarmonic, veto)) r = new JuceVerifyResult(true, 0.5f, 0f);
+            if (!r.Hit && TryTravel(single, sound, notes[0], t, allowHarmonic, veto, out var travelled)) r = travelled;
+            if (!r.Hit && Forgiving && IsDetuned(single, midi, t, allowHarmonic, veto)) r = new JuceVerifyResult(true, 0.5f, 0f);
             if (r.Hit) Remember(notes[0], sound.TimeMs);
             return new ChartVerifyOutcome(r.Hit, r.Confidence);
         }
@@ -280,19 +292,21 @@ public sealed class LiveCqtVerifier
         // genuinely fretted right next to it.
         foreach (var m in distinct)
         {
-            if (chord.Verify(m, t, allowHarmonic, allowSubOctaveVeto: false).Hit ||
-                (harmonic && TryOvertone(chord, m, t, out _)) ||
-                (Forgiving && IsDetuned(chord, m, t, allowHarmonic, false)))
-            {
-                confirmed.Add(m);
-            }
+            if (ConfirmsChordTone(chord, sound, m, t, allowHarmonic, harmonic)) confirmed.Add(m);
         }
 
         // A dense chord (4+ distinct tones) hides its middle strings: a lower bar, and no
         // lone-third rule (LiveCqtConfig.DenseChordTones).
-        var dense = distinct.Count >= LiveCqtConfig.DenseChordTones;
+        var strict = ChordStrictness == LiveChordVoicingStrictness.Strict;
+        var coverage = ChordStrictness switch
+        {
+            LiveChordVoicingStrictness.Lenient => Math.Min(ChordCoverage, 0.5),
+            LiveChordVoicingStrictness.Strict => 1.0,
+            _ => ChordCoverage
+        };
+        var dense = !strict && distinct.Count >= LiveCqtConfig.DenseChordTones;
         var outcome = ChordQuality.Judge(distinct, confirmed,
-            dense ? Math.Min(ChordCoverage, LiveCqtConfig.DenseChordCoverage) : ChordCoverage,
+            dense ? Math.Min(coverage, LiveCqtConfig.DenseChordCoverage) : coverage,
             RequireQualityTone && !dense);
         if (outcome.Confirmed)
             foreach (var m in confirmed) Remember(m, sound.TimeMs);
@@ -356,15 +370,21 @@ public sealed class LiveCqtVerifier
     /// either side confirms AND is a strict local maximum against its immediate quarter-tone
     /// neighbours at its loudest frame. A note a whole semitone off peaks on its own bin, which
     /// leaves the quarter-tone bin on its slope, so it is not accepted this way.</summary>
-    private bool IsDetuned(JuceChartVerifier verifier, int midi, double t, bool allowHarmonic, bool veto)
+    private bool IsDetuned(JuceChartVerifier verifier, double midi, double t, bool allowHarmonic, bool veto)
+        => TryDetuned(verifier, midi, t, allowHarmonic, veto, out _);
+
+    private bool TryDetuned(JuceChartVerifier verifier, double midi, double t, bool allowHarmonic, bool veto,
+        out int matchedBin, HashSet<int>? used = null)
     {
+        matchedBin = -1;
         foreach (var q in stackalloc double[] { midi - 0.5, midi + 0.5 })
         {
+            var b = _cqt.BinForMidi(q);
+            if (used?.Contains(b) == true) continue;
             if (!verifier.Verify(q, t, allowHarmonic, veto).Hit) continue;
             // Mains hum sits between the semitone bins (100 Hz is G2 + 35 cents), so a quarter-
             // tone bin is where an idle input's own peaks are: demand twice the presence margin.
             if (!Present(verifier, t, 2f * verifier.NoiseMargin)) continue;
-            var b = _cqt.BinForMidi(q);
             long f0 = _cqt.FrameOfSeconds(t - verifier.PostWindow.Before), f1 = _cqt.FrameOfSeconds(t + verifier.PostWindow.After);
             long fi = -1;
             var best = 0f;
@@ -373,7 +393,11 @@ public sealed class LiveCqtVerifier
                 var m = _cqt.Magnitude(b, f);
                 if (m > best || fi < 0) { best = m; fi = f; }
             }
-            if (fi >= 0 && best > _cqt.Magnitude(b - 1, fi) && best > _cqt.Magnitude(b + 1, fi)) return true;
+            if (fi >= 0 && best > _cqt.Magnitude(b - 1, fi) && best > _cqt.Magnitude(b + 1, fi))
+            {
+                matchedBin = b;
+                return true;
+            }
         }
         return false;
     }
@@ -393,22 +417,16 @@ public sealed class LiveCqtVerifier
     ///     up to the bend's peak, or to the slide's target — the same range
     ///     <see cref="LiveNoteMatcher" />'s attack path has always accepted for these notes.
     /// </summary>
-    private static bool TryTravel(JuceChartVerifier verifier, ExpectedSound sound, double t,
-        bool allowHarmonic, bool veto, out JuceVerifyResult result)
+    private bool TryTravel(JuceChartVerifier verifier, ExpectedSound sound, int midi, double t,
+        bool allowHarmonic, bool veto, out JuceVerifyResult result, int? bendSemis = null)
     {
-        var m = sound.MidiNotes[0];
-        var lo = m;
-        var hi = m + Math.Max(0, sound.MaxBendSemis);
-        if (sound.SlideToMidi is { } to)
-        {
-            lo = Math.Min(lo, to);
-            hi = Math.Max(hi, to);
-        }
+        var m = midi;
+        var (lo, hi) = TravelRange(sound, midi, bendSemis ?? BendAtIndex(sound, 0));
 
         for (var p = lo; p <= hi; p++)
         {
             if (p == m) continue;
-            var r = verifier.Verify(p, t, allowHarmonic, veto);
+            var r = verifier.Verify(p + PitchOffsetSemitones, t, allowHarmonic, veto);
             if (r.Hit)
             {
                 result = r;
@@ -420,7 +438,119 @@ public sealed class LiveCqtVerifier
         return false;
     }
 
-    private static bool TryOvertone(JuceChartVerifier verifier, int frettedMidi, double t, out JuceVerifyResult result)
+    private bool ConfirmsChordTone(JuceChartVerifier verifier, ExpectedSound sound, int midi, double t,
+        bool allowHarmonic, bool harmonic)
+    {
+        var bends = _unisonBends;
+        bends.Clear();
+        for (var i = 0; i < sound.MidiNotes.Length; i++)
+        {
+            if (sound.MidiNotes[i] != midi) continue;
+            var bend = TravelRange(sound, midi, BendAtIndex(sound, i)).High - midi;
+            if (!bends.Contains(bend)) bends.Add(bend);
+        }
+
+        if (bends.Count > 1) return ConfirmsDistinctUnisons(verifier, sound, midi, t, allowHarmonic, harmonic);
+        var pitch = midi + PitchOffsetSemitones;
+        return verifier.Verify(pitch, t, allowHarmonic, allowSubOctaveVeto: false).Hit ||
+               (harmonic && TryOvertone(verifier, pitch, t, out _)) ||
+               TryTravel(verifier, sound, midi, t, allowHarmonic, false, out _, bends[0]) ||
+               (Forgiving && IsDetuned(verifier, pitch, t, allowHarmonic, false));
+    }
+
+    private bool ConfirmsDistinctUnisons(JuceChartVerifier verifier, ExpectedSound sound, int midi, double t,
+        bool allowHarmonic, bool harmonic)
+    {
+        // Match nested bend ranges smallest first, using peaks that coexist in ONE
+        // frame. A window-wide union lets one swept string answer several ranges.
+        _unisonBends.Sort();
+        for (var frame = _cqt.FrameOfSeconds(t - verifier.PostWindow.Before);
+             frame <= _cqt.FrameOfSeconds(t + verifier.PostWindow.After); frame++)
+        {
+            if (_cqt.FrameEnergy(frame) <= verifier.NoiseMargin * _cqt.NoiseFloorEnergy()) continue;
+            _unisonPitches.Clear();
+            foreach (var bend in _unisonBends)
+            {
+                var (lo, hi) = TravelRange(sound, midi, bend);
+                var found = false;
+                for (var p = lo; p <= hi; p++)
+                {
+                    var pitch = p + PitchOffsetSemitones;
+                    var bin = UnisonEvidenceBin(verifier, pitch, t, frame, allowHarmonic, Forgiving && p == midi);
+                    if (bin < 0 && harmonic)
+                    {
+                        foreach (var overtone in LivePitchAcceptance.HarmonicOvertoneSemis)
+                        {
+                            bin = UnisonEvidenceBin(verifier, pitch + overtone, t, frame, false, false);
+                            if (bin >= 0) break;
+                        }
+                    }
+
+                    if (bin < 0 || !_unisonPitches.Add(bin)) continue;
+                    found = true;
+                    break;
+                }
+
+                if (!found) break;
+            }
+
+            if (_unisonPitches.Count == _unisonBends.Count) return true;
+        }
+
+        return false;
+    }
+
+    private int UnisonEvidenceBin(JuceChartVerifier verifier, double pitch, double t, long frame,
+        bool allowHarmonic, bool detuned)
+    {
+        var bin = _cqt.BinForMidi(pitch);
+        if (bin < 0 || bin >= _cqt.BinCount) return -1;
+        var level = _cqt.Magnitude(bin, frame);
+        if (level <= UnisonGate(verifier, bin, t)) return -1;
+        var peak = bin;
+        if (_cqt.Magnitude(bin - 1, frame) > level) peak = bin - 1;
+        if (_cqt.Magnitude(bin + 1, frame) > _cqt.Magnitude(peak, frame)) peak = bin + 1;
+        var magnitude = _cqt.Magnitude(peak, frame);
+        // Immediate quarter-tone neighbours resolve simultaneous semitones. The
+        // ordinary +/-semitone comparison asks each tone to exceed the OTHER tone.
+        if (magnitude <= _cqt.Magnitude(peak - 1, frame) || magnitude <= _cqt.Magnitude(peak + 1, frame)) return -1;
+        if (peak == bin) return peak;
+
+        // Preserve the ordinary preset's detuning tolerance, but charge the actual
+        // evidence bin so the same quarter-tone peak cannot be matched twice.
+        if (verifier.Verify(pitch, t, allowHarmonic, allowSubOctaveVeto: false).Hit) return peak;
+        return detuned && IsDetuned(verifier, pitch, t, allowHarmonic, false) &&
+               _cqt.FrameEnergy(frame) > 2 * verifier.NoiseMargin * _cqt.NoiseFloorEnergy() ? peak : -1;
+    }
+
+    private float UnisonGate(JuceChartVerifier verifier, int bin, double t)
+    {
+        var gate = _cqt.Floor(bin);
+        if (verifier.PreRatio <= 0) return gate;
+        var lo = _cqt.FrameOfSeconds(t - verifier.PreWindow.Before);
+        var hi = Math.Max(lo + 1, _cqt.FrameOfSeconds(t - verifier.PreWindow.After));
+        var baseline = float.MaxValue;
+        for (var f = lo; f < hi; f++) baseline = MathF.Min(baseline, _cqt.Magnitude(bin, f));
+        return MathF.Max(gate, (float)verifier.PreRatio * baseline);
+    }
+
+    private static int BendAtIndex(ExpectedSound sound, int index)
+        => index < sound.ChordBendSemis.Length ? sound.ChordBendSemis[index] : sound.IsChord ? 0 : sound.MaxBendSemis;
+
+    private static (int Low, int High) TravelRange(ExpectedSound sound, int midi, int bend)
+    {
+        var lo = Math.Min(midi, midi + sound.SlideSemis);
+        var hi = Math.Max(midi + Math.Max(0, bend), midi + sound.SlideSemis);
+        if (sound.SlideToMidi is { } to)
+        {
+            lo = Math.Min(lo, to);
+            hi = Math.Max(hi, to);
+        }
+
+        return (lo, hi);
+    }
+
+    private static bool TryOvertone(JuceChartVerifier verifier, double frettedMidi, double t, out JuceVerifyResult result)
     {
         foreach (var semis in LivePitchAcceptance.HarmonicOvertoneSemis)
         {
@@ -438,6 +568,8 @@ public sealed class LiveCqtVerifier
 
     private readonly HashSet<int> _chordTones = [];
     private readonly HashSet<int> _chordConfirmed = [];
+    private readonly List<int> _unisonBends = [];
+    private readonly HashSet<int> _unisonPitches = [];
 
     // One CQT ring's worth of contour, reused: a longer window has left the ring anyway.
     private readonly float[] _contour = new float[LiveCqtConfig.RingFrames];
@@ -482,7 +614,7 @@ public sealed class LiveCqtVerifier
     /// </summary>
     internal void ReadContour(ExpectedSound sound, long firstFrame, Span<float> cents)
     {
-        var midi = sound.MidiNotes[0];
+        var midi = sound.MidiNotes[0] + PitchOffsetSemitones;
         var expect = sound.TechniqueContour;
         var lo = midi - 1 + Math.Min(0, expect.SlideSemis);
         var hi = midi + 1 + Math.Max((int)Math.Ceiling(expect.BendSemis), expect.SlideSemis);

@@ -107,7 +107,16 @@ public partial class TransportViewModel : ViewModelBase, IEditorTransport
     [ObservableProperty] private bool _isMasterMuted;
     [ObservableProperty] private bool _isMidiMuted;
     [ObservableProperty] private bool _isMidiSoloed;
-    [ObservableProperty] private bool _isPlaying;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PlayPauseLabel))]
+    [NotifyPropertyChangedFor(nameof(PlayPauseTip))]
+    private bool _isPlaying;
+
+    /// <summary>The toolbar's ONE Play/Pause button: the verb its press performs (its accessible name).</summary>
+    public string PlayPauseLabel => Loc(IsPlaying ? "Toolbar_Pause" : "Toolbar_Play");
+
+    /// <summary>The tooltip's format string for the same button; the live chord is its argument.</summary>
+    public string PlayPauseTip => Loc(IsPlaying ? "Toolbar_Pause_Hint" : "Toolbar_Play_Hint");
 
     [ObservableProperty] private double _lowPassFreq = 20000;
     [ObservableProperty] private double _lowPassQ = 0.707;
@@ -173,8 +182,10 @@ public partial class TransportViewModel : ViewModelBase, IEditorTransport
     {
         _localization = localization;
         _audioService = audioService;
+        InputMeter = new TransportInputMeter(audioService, localization);
         _projectState = projectState;
         _configService = configService;
+        _sessionMemory = new EditorSessionMemory(configService);
         _ui = ui ?? new Tone.UI.Platform.AvaloniaUiDispatcher();
         // Null coordinator in a test transport built without one: the pickers then
         // write the service directly and nothing is saved.
@@ -208,7 +219,7 @@ public partial class TransportViewModel : ViewModelBase, IEditorTransport
         // reset each time would be a control that lies about being persistent.
         Eq = new Inspector.EqModuleViewModel(_audioService, _localization);
 
-        var noneVst = new VstPluginInfo { Name = "None", PluginPath = "" };
+        var noneVst = new VstPluginInfo { Name = _localization["Inspector_None"], PluginPath = "" };
         AvailableVstPlugins.Add(noneVst);
         InstrumentVstPlugins.Add(noneVst);
         SelectedInstrumentVst = InstrumentVstPlugins[0];
@@ -251,8 +262,24 @@ public partial class TransportViewModel : ViewModelBase, IEditorTransport
         // rebuild — moves whether the chart can sound at all.
         ChartSynth?.ChartSynthAvailabilityChanged += (_, _) => _ui.Post(RefreshChartSynthAvailability);
 
+        SoundRouting.Restore();
         UpdateEqCurve();
+        _sessionMemory.Restore(this);
+        _sessionRestored = true;
     }
+
+    private readonly EditorSessionMemory _sessionMemory;
+    private readonly bool _sessionRestored;
+
+    protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (_sessionRestored && EditorSessionMemory.Remembers(e.PropertyName)) _sessionMemory.Persist(this);
+    }
+
+    public (bool On, bool Rocksmith) SavedTonePreview => _sessionMemory.SavedTonePreview;
+
+    public void RememberTonePreview(bool on, bool rocksmith) => _sessionMemory.RememberTonePreview(on, rocksmith);
 
     /// <summary>Test seam: the startup VST scan/restore worker. Never faults (the
     /// body catches + logs); production code fires and forgets it.</summary>
@@ -371,11 +398,15 @@ public partial class TransportViewModel : ViewModelBase, IEditorTransport
     /// Reuses the native click via the same path as the playback metronome.</summary>
     public void PlayMetronomeClick(bool accent) => _audioService.PlayMetronomeTick(accent);
 
+    /// <summary>Raised after every accepted Play, including Space and count-in completion.</summary>
+    public event Action? PlaybackStarted;
+
     [RelayCommand]
     private void Play()
     {
         if (_projectState.TotalAudioLengthMs <= 0) return;
         _audioService.Play();
+        if (_audioService.IsPlaying) PlaybackStarted?.Invoke();
         IsPlaying = true;
         // Starting playback re-locks the decoupled viewport onto the
         // playhead (0.16 6.6) — Play means "watch it play".

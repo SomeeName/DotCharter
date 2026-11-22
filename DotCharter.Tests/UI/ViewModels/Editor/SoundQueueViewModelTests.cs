@@ -1,5 +1,6 @@
 using DotCharter.Services.Editing.Selection;
 using DotCharter.UI.ViewModels.Editor;
+using DotCharter.UI.ViewModels.Editor.Inspector;
 
 namespace DotCharter.Tests.UI.ViewModels.Editor;
 
@@ -16,6 +17,8 @@ public class SoundQueueViewModelTests
         public readonly List<ArrangementIssue> Issues = [];
         public readonly SelectionService Selection = new();
         public readonly List<double> Seeks = [];
+        public ChordNamingOptions Naming = ChordNamingOptions.Default;
+        public DoubleStopNameOptions DoubleStops = DoubleStopNameOptions.Default;
 
         public Harness()
         {
@@ -60,7 +63,8 @@ public class SoundQueueViewModelTests
             },
             Selection,
             ms => Seeks.Add(ms),
-            FakeLocalization.English());
+            FakeLocalization.English(),
+            _ => (Naming, DoubleStops));
     }
 
     private static GuitarNote Note(int beat, int stringIdx = 0, int fret = 5) => new()
@@ -73,6 +77,195 @@ public class SoundQueueViewModelTests
         var c = new Chord { Position = new FractionalPosition(beat), TemplateId = templateId };
         foreach (var (s, f) in notes) c.ChordNotes.Add(new ChordNote { StringIndex = s, Fret = f });
         return c;
+    }
+
+    [Fact]
+    public void SplitChordNeedsNoFingering()
+    {
+        var h = UnfingeredChord();
+        h.Level.Chords[0].SplitIntoNotes = true;
+        Assert.Empty(h.Create().Matches(SoundQueueFilter.MissingFingering));
+    }
+
+    [Fact]
+    public void CapoOpenChordNeedsNoFingering()
+    {
+        var h = UnfingeredChord();
+        h.Arrangement.Capo = 5;
+        Assert.Empty(h.Create().Matches(SoundQueueFilter.MissingFingering));
+    }
+
+    [Fact]
+    public void FingerlessChordNeedsNoFingering()
+    {
+        var h = UnfingeredChord();
+        h.Arrangement.ChordTemplates[0].Fingerless = true;
+        Assert.Empty(h.Create().Matches(SoundQueueFilter.MissingFingering));
+    }
+
+    [Fact]
+    public void FullyMutedChordNeedsNoFingering()
+    {
+        var h = UnfingeredChord();
+        foreach (var note in h.Level.Chords[0].ChordNotes) note.Mute = MuteType.Full;
+        Assert.Empty(h.Create().Matches(SoundQueueFilter.MissingFingering));
+    }
+
+    [Fact]
+    public void ExplicitNegativeFingerIsMissing()
+    {
+        var h = UnfingeredChord();
+        h.Arrangement.ChordTemplates[0].Fingers = new Dictionary<int, int> { [0] = -1, [1] = -1 };
+        Assert.Single(h.Create().Matches(SoundQueueFilter.MissingFingering));
+    }
+
+    [Fact]
+    public void IntentionalNoNameNeedsNoName()
+    {
+        var h = UnfingeredChord();
+        h.Arrangement.ChordTemplates[0].Frets[2] = 5;
+        h.Level.Chords[0].ChordNotes.Add(new ChordNote { StringIndex = 2, Fret = 5 });
+        h.Arrangement.ChordTemplates[0].Unnamed = true;
+        Assert.Empty(h.Create().Matches(SoundQueueFilter.UnnamedChord));
+    }
+
+    [Fact]
+    public void SuppressedDoubleStopNeedsNoName()
+    {
+        var h = UnfingeredChord();
+        Assert.Empty(h.Create().Matches(SoundQueueFilter.UnnamedChord));
+    }
+
+    [Fact]
+    public void SplitTriadNeedsNoName()
+    {
+        var h = UnfingeredChord();
+        h.Arrangement.ChordTemplates[0].Frets[2] = 5;
+        h.Level.Chords[0].ChordNotes.Add(new ChordNote { StringIndex = 2, Fret = 5 });
+        h.Level.Chords[0].SplitIntoNotes = true;
+        Assert.Empty(h.Create().Matches(SoundQueueFilter.UnnamedChord));
+    }
+
+    [Fact]
+    public void LinkedLandingNeedsNoTemplateWork()
+    {
+        var h = UnfingeredChord();
+        h.Level.Chords[0].Position = new FractionalPosition(1);
+        h.Level.Notes.Add(new GuitarNote
+        {
+            Position = FractionalPosition.Zero, Sustain = new FractionalPosition(1), StringIndex = 0, LinkNext = true
+        });
+        var vm = h.Create();
+        Assert.Empty(vm.Matches(SoundQueueFilter.MissingFingering));
+        Assert.Empty(vm.Matches(SoundQueueFilter.UnnamedChord));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExportSynthesizedOrSplitChordNeedsNoStoredTemplate(bool split)
+    {
+        var h = UnfingeredChord();
+        h.Level.Chords[0].TemplateId = -1;
+        h.Level.Chords[0].SplitIntoNotes = split;
+        Assert.Empty(h.Create().Matches(SoundQueueFilter.Untemplated));
+    }
+
+    [Fact]
+    public void SynthesizedTriadStillNeedsItsMissingFingersAndName()
+    {
+        var h = UnfingeredChord();
+        h.Level.Chords[0].TemplateId = -1;
+        h.Level.Chords[0].ChordNotes.Add(new ChordNote { StringIndex = 2, Fret = 5 });
+        var vm = h.Create();
+        Assert.Single(vm.Matches(SoundQueueFilter.MissingFingering));
+        Assert.Single(vm.Matches(SoundQueueFilter.UnnamedChord));
+        Assert.Empty(vm.Matches(SoundQueueFilter.Untemplated));
+    }
+
+    [Fact]
+    public void AShapeTheNamerCannotNameNeedsNoName()
+    {
+        var h = UnfingeredChord();
+        var template = h.Arrangement.ChordTemplates[0];
+        template.Frets = new Dictionary<int, int> { [0] = 0, [1] = 8, [2] = 4 };
+        Assert.Empty(ChordNameSuggester.SuggestFirstChordName(h.Arrangement, template.Frets));
+        Assert.Empty(h.Create().Matches(SoundQueueFilter.UnnamedChord));
+    }
+
+    [Theory]
+    [InlineData(ChordNamingStyle.Eof)]
+    [InlineData(ChordNamingStyle.Musical)]
+    public void NamingPreferencesCountTriadsAndExemptedPowerChords(ChordNamingStyle style)
+    {
+        var h = UnfingeredChord();
+        h.Naming = new ChordNamingOptions(style);
+        h.DoubleStops = new DoubleStopNameOptions(Suppress: true, KeepPowerChordNames: true);
+        h.Arrangement.ChordTemplates.Add(new ChordTemplate
+        {
+            Id = 1, Frets = new Dictionary<int, int> { [0] = 3, [1] = 5, [2] = 5 }
+        });
+        h.Arrangement.ChordTemplates.Add(new ChordTemplate
+        {
+            Id = 2, Frets = new Dictionary<int, int> { [3] = 4, [4] = 3 }
+        });
+        var triad = Chord(2, 1, (0, 3), (1, 5), (2, 5));
+        h.Level.Chords.Add(triad);
+        h.Level.Chords.Add(Chord(4, 2, (3, 4), (4, 3)));
+        var vm = h.Create();
+
+        Assert.Equal(new[] { h.Level.Chords[0], triad }, vm.Matches(SoundQueueFilter.UnnamedChord));
+        h.DoubleStops = DoubleStopNameOptions.Default;
+        vm.Refresh();
+        Assert.Same(triad, Assert.Single(vm.Matches(SoundQueueFilter.UnnamedChord)));
+        Assert.Equal(1, vm.UnnamedChordCount);
+        h.DoubleStops = DoubleStopNameOptions.NameEverything;
+        vm.Refresh();
+        Assert.Equal(3, vm.UnnamedChordCount);
+    }
+
+    private static Harness UnfingeredChord()
+    {
+        var h = new Harness();
+        h.Arrangement.ChordTemplates.Add(new ChordTemplate
+        {
+            Id = 0, Frets = new Dictionary<int, int> { [0] = 3, [1] = 5 }
+        });
+        h.Level.Chords.Add(Chord(0, 0, (0, 3), (1, 5)));
+        return h;
+    }
+
+    [Fact]
+    public void QueueCardAndUnnamedBannerShareEligibleCounts()
+    {
+        var h = UnfingeredChord();
+        h.Arrangement.ChordTemplates.Add(new ChordTemplate
+        {
+            Id = 1, Frets = new Dictionary<int, int> { [0] = 3, [1] = 5, [2] = 5 },
+            Fingers = new Dictionary<int, int> { [0] = 1, [1] = 3, [2] = 4 }
+        });
+        h.Level.Chords.Add(Chord(2, 1, (0, 3), (1, 5), (2, 5)));
+        var queue = h.Create();
+        var loc = FakeLocalization.English();
+        var card = new SoundNextTaskViewModel(queue, loc);
+
+        Assert.Equal(1, queue.MissingFingeringCount);
+        Assert.Equal(1, queue.UnnamedChordCount);
+        Assert.Equal(queue.UnnamedChordCount, queue.Filters.Single(f => f.Filter == SoundQueueFilter.UnnamedChord).Count);
+        Assert.Equal(loc.Plural("Inspector_Task_FingeringsOne", "Inspector_Task_Fingerings", queue.MissingFingeringCount), card.Title);
+        Assert.True(card.HasUnnamedTask);
+
+        h.Arrangement.ChordTemplates[0].Fingerless = true;
+        queue.Refresh();
+
+        Assert.Equal(0, queue.MissingFingeringCount);
+        Assert.Equal(SoundQueueFilter.UnnamedChord, card.Filter);
+        Assert.Equal(loc.Plural("Inspector_Task_UnnamedOne", "Inspector_Task_Unnamed", queue.UnnamedChordCount), card.Title);
+        Assert.True(card.HasUnnamedTask);
+
+        var banner = UiSourceTree.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor", "Inspector", "SoundTaskView.axaml"));
+        Assert.Contains("Text=\"{Binding Queue.UnnamedChordCount}\"", banner, StringComparison.Ordinal);
+        Assert.Contains("IsEnabled=\"{Binding NextTask.HasUnnamedTask}\"", banner, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -136,14 +329,14 @@ public class SoundQueueViewModelTests
     }
 
     [Fact]
-    public void UntemplatedIsTheMinusOneSentinelAndNotTemplateZero()
+    public void UntemplatedKeepsAnUnresolvedEmptyChordAndNotTemplateZero()
     {
-        // 0 is a REAL template id; -1 is the sentinel. Reading 0 as "unset" is
-        // the bug this repo has paid for more than once.
+        // A stored template resolves even an empty chord; the sentinel without
+        // chord notes leaves the export no grip to synthesize.
         var h = new Harness();
         h.Arrangement.ChordTemplates.Add(new ChordTemplate { Id = 0, Name = "A5" });
         h.Level.Chords.Add(Chord(0, 0, (0, 3)));
-        h.Level.Chords.Add(Chord(4, -1, (0, 3)));
+        h.Level.Chords.Add(Chord(4, -1));
 
         var matches = h.Create().Matches(SoundQueueFilter.Untemplated);
         Assert.Single(matches);
@@ -241,7 +434,7 @@ public class SoundQueueViewModelTests
     {
         var h = new Harness();
         for (var beat = 0; beat < 4; beat++) h.Level.Notes.Add(Note(beat * 4));
-        var untemplated = Chord(20, -1, (0, 3), (1, 5));
+        var untemplated = Chord(20, -1);
         h.Level.Chords.Add(untemplated);
         var vm = h.Create();
         vm.NextMatch();
@@ -515,7 +708,7 @@ public class SoundQueueViewModelTests
         h.Arrangement.ChordTemplates.Add(new ChordTemplate
         {
             Id = 0,
-            Frets = new Dictionary<int, int> { { 0, 3 }, { 1, 5 } },
+            Frets = new Dictionary<int, int> { { 0, 3 }, { 1, 5 }, { 2, 5 } },
             Fingers = new Dictionary<int, int> { { 0, 1 } }
         });
         var blocking = Note(0);
@@ -524,8 +717,8 @@ public class SoundQueueViewModelTests
         h.Level.Notes.Add(blocking);
         h.Level.Notes.Add(unanchored);
         h.Level.Notes.Add(clean);
-        h.Level.Chords.Add(Chord(2, 0, (0, 3), (1, 5)));   // missing a finger, unnamed
-        h.Level.Chords.Add(Chord(6, -1, (0, 3)));          // untemplated
+        h.Level.Chords.Add(Chord(2, 0, (0, 3), (1, 5), (2, 5))); // missing fingers and a name
+        h.Level.Chords.Add(Chord(6, -1)); // no stored or synthesizable grip
         h.Issues.Add(new ArrangementIssue(ArrangementIssueType.NoteFretBelowCapo, "", Note: blocking));
         h.Issues.Add(new ArrangementIssue(ArrangementIssueType.NoteWithoutAnchor, "", Note: unanchored));
         // Advisory: counts under HasIssue and nowhere else, so the three
@@ -701,7 +894,7 @@ public class SoundQueueViewModelTests
             System.Text.RegularExpressions.RegexOptions.Multiline);
         Assert.Contains("if (IsSoundTabSelected) Queue.Refresh();", source);
         Assert.Contains("else Queue.MarkStale();", source);
-        Assert.Contains("if (value == SoundTabIndex) Queue.EnsureCurrent();", source);
+        Assert.Contains("if (tab == InspectorViewModel.SoundTabIndex) queue.EnsureCurrent();", TabActivationSource());
     }
 
     /// <summary>The whole <c>InspectorViewModel</c>, which is a set of topic
@@ -714,4 +907,11 @@ public class SoundQueueViewModelTests
         Assert.NotEmpty(files);
         return string.Join("\n", files.Select(UiSourceTree.ReadAllText));
     }
+
+    /// <summary>What the inspector does when a tab opens lives in its own type; comments stripped as above.</summary>
+    private static string TabActivationSource() => System.Text.RegularExpressions.Regex.Replace(
+        UiSourceTree.ReadAllText(Path.Combine(
+            UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "ViewModels", "Editor", "Inspector")),
+            "InspectorTabActivation.cs")),
+        @"^\s*//.*$", "", System.Text.RegularExpressions.RegexOptions.Multiline);
 }

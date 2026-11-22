@@ -18,6 +18,55 @@ public sealed class FhpViewModelTests
     }
 
     [Fact]
+    public void CreatingAnAnchor_ThenSwitchingArrangements_UndoesAndRedoesInItsOriginalCollection()
+    {
+        var h = new ChartEditHarness();
+        var original = h.Editor.Anchors;
+        var vm = Open(h, new FhpRequest(1000));
+        vm.SaveCommand.Execute(null);
+        var added = Assert.Single(original);
+        var other = new Arrangement { Name = "Rhythm" };
+        other.Levels.Add(new ChartLevel());
+        h.Project.Arrangements.Add(other);
+        h.Editor.ActiveArrangement = other;
+        h.State.ActiveLevel = other.Levels[0];
+        var otherAnchors = h.Editor.Anchors;
+        Assert.NotSame(original, otherAnchors);
+
+        h.History.Undo();
+        Assert.Empty(original);
+        Assert.Empty(otherAnchors);
+        h.History.Redo();
+        Assert.Same(added, Assert.Single(original));
+        Assert.Empty(otherAnchors);
+    }
+
+    [Fact]
+    public void MovingAnAnchor_ThenSwitchingLevels_ResortsItsOriginalCollectionOnUndoAndRedo()
+    {
+        var h = new ChartEditHarness();
+        var original = h.Editor.Anchors;
+        var first = new FretAnchor { Position = new FractionalPosition(1), Fret = 3 };
+        var second = new FretAnchor { Position = new FractionalPosition(2), Fret = 5 };
+        original.Add(first);
+        original.Add(second);
+        var after = first.Clone();
+        after.Position = new FractionalPosition(3);
+        h.History.Do(FhpAnchorEdit.Mutate(h.Editor, first, first.Clone(), after));
+        Assert.Equal([second, first], original);
+        var other = new ChartLevel();
+        h.State.ActiveArrangement!.Levels.Add(other);
+        h.State.ActiveLevel = other;
+
+        h.History.Undo();
+        Assert.Equal([first, second], original);
+        Assert.Empty(other.Anchors);
+        h.History.Redo();
+        Assert.Equal([second, first], original);
+        Assert.Empty(other.Anchors);
+    }
+
+    [Fact]
     public void A_new_anchor_starts_from_the_one_spanning_its_position_and_saves_as_one_undo_step()
     {
         var h = new ChartEditHarness();
@@ -39,6 +88,19 @@ public sealed class FhpViewModelTests
 
         h.History.Undo();
         Assert.Same(earlier, Assert.Single(h.Editor.Anchors));
+    }
+
+    [Fact]
+    public void A_new_anchor_starts_from_the_latest_anchor_by_position_not_the_last_one_stored()
+    {
+        var h = new ChartEditHarness();
+        h.Editor.Anchors.Add(new FretAnchor { Position = h.Editor.SnapToGrid(1000), Fret = 9, Width = 5 });
+        h.Editor.Anchors.Add(new FretAnchor { Position = h.Editor.SnapToGrid(0), Fret = 2, Width = 4 });
+
+        var vm = Open(h, new FhpRequest(2000));
+
+        Assert.Equal(9, vm.Fret);
+        Assert.Equal(5, vm.Width);
     }
 
     [Fact]

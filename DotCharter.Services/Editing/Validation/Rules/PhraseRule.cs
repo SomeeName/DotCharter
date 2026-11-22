@@ -37,9 +37,7 @@ public sealed class PhraseRule : IArrangementRule
                 return;
         }
 
-        issues.Add(new ArrangementIssue(
-            ArrangementIssueType.NoEndPhrase,
-            "The arrangement is missing an END phrase."));
+        issues.Add(ArrangementIssues.Make(ArrangementIssueType.NoEndPhrase, "Validation_NoEndPhrase"));
     }
 
     public void Validate(ArrangementValidationContext context, ICollection<ArrangementIssue> issues)
@@ -72,9 +70,9 @@ public sealed class PhraseRule : IArrangementRule
         var firstNoteTimeMs = GetFirstNoteOrChordTimeMs(arr, beats);
         if (firstNoteTimeMs is { } t && t < secondPhraseTime)
         {
-            issues.Add(new ArrangementIssue(
+            issues.Add(ArrangementIssues.Make(
                 ArrangementIssueType.FirstPhraseNotEmpty,
-                "The first phrase contains notes; it should be empty so the song fades in cleanly.",
+                "Validation_FirstPhraseNotEmpty",
                 t));
         }
 
@@ -87,9 +85,9 @@ public sealed class PhraseRule : IArrangementRule
         // same question of arrangement.Phrases.
         if (distinctNames.Count > MaxPhrases)
         {
-            issues.Add(new ArrangementIssue(
+            issues.Add(ArrangementIssues.Make(
                 ArrangementIssueType.MoreThan100Phrases,
-                $"Arrangement has {distinctNames.Count} distinct phrases; the in-game limit is {MaxPhrases}."));
+                "Validation_MoreThan100Phrases", args: [distinctNames.Count, MaxPhrases]));
         }
     }
 
@@ -118,11 +116,10 @@ public sealed class PhraseRule : IArrangementRule
         for (var i = 0; i < names.Count; i++)
         {
             if (string.Equals(names[i], exported[i], StringComparison.Ordinal)) continue;
-            issues.Add(new ArrangementIssue(
+            issues.Add(ArrangementIssues.Make(
                 ArrangementIssueType.PhraseNameRewrittenForRocksmith,
-                $"Phrase \"{names[i]}\" is exported to Rocksmith as \"{exported[i]}\": Rocksmith only accepts " +
-                "the letters A-Z, digits, spaces, _ and #. The chart keeps your name.",
-                firstAt[i].GetPositionMs(beats)));
+                "Validation_PhraseNameRewrittenForRocksmith",
+                firstAt[i].GetPositionMs(beats), args: [names[i], exported[i]]));
         }
     }
 

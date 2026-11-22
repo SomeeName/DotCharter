@@ -54,7 +54,7 @@ public sealed class SevenStringGutterColourUiPerfSmokeTests
                 // The recorded drawing, not pixels: headless drawing only rasterizes under the
                 // capture switch. Each string's tick is a 3 x 18 rectangle centred on its lane.
                 var layout = TimelineGutterLayout.For(gutter.Bounds.Height, renderer.TopRibbon, stringCount,
-                    renderer.LeftyFlip ^ renderer.InvertStrings, renderer.BottomMargin);
+                    renderer.InvertStrings, renderer.BottomMargin);
                 var group = new DrawingGroup();
                 using (var ctx = group.Open()) gutter.Render(ctx);
                 var ticks = group.Children.OfType<GeometryDrawing>()

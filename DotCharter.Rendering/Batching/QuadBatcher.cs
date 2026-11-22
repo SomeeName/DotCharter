@@ -143,6 +143,19 @@ public class QuadBatcher
         AddVertex(p4, color1, Vector3.UnitY, new Vector2(0, 1), type);
     }
 
+    /// <summary>A flat quad whose colour runs across x: <paramref name="colorLeft" /> at
+    /// <paramref name="x0" />, <paramref name="colorRight" /> at <paramref name="x1" />,
+    /// constant along z (the overload above grades along z).</summary>
+    public void AddSafeFlatQuadAcrossX(float x0, float x1, float z0, float z1, float y, Color colorLeft,
+        Color colorRight, float type = 1.0f)
+    {
+        EnsureCapacity(FloatsPerQuad);
+        AddVertex(new Vector3(x0, y, z0), colorLeft, Vector3.UnitY, new Vector2(0, 0), type);
+        AddVertex(new Vector3(x1, y, z0), colorRight, Vector3.UnitY, new Vector2(1, 0), type);
+        AddVertex(new Vector3(x1, y, z1), colorRight, Vector3.UnitY, new Vector2(1, 1), type);
+        AddVertex(new Vector3(x0, y, z1), colorLeft, Vector3.UnitY, new Vector2(0, 1), type);
+    }
+
     public void AddTexturedQuad_Matrix(Matrix4x4 m, float halfWidth, Color c, float tx0, float tx1, float ty0,
         float ty1, float type)
     {

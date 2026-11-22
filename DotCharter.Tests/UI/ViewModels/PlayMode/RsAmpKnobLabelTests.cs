@@ -17,7 +17,7 @@ public sealed class RsAmpKnobLabelTests
     private static List<PedalParamViewModel> Knobs()
     {
         var dsp = new FakeDspChainService();
-        return RsAmpKnobs.ParamIds.Select(id => new PedalParamViewModel(dsp, 1, new DspParamInfo(id, id, 0f, 1f, 0.5f), 0.5f)).ToList();
+        return RsAmpKnobs.ParamIds.Select(id => new PedalParamViewModel(dsp, 1, new DspParamInfo(id, id, 0f, 1f, 0.5f), 0.5f, FakeLocalization.KeysOnly())).ToList();
     }
 
     [Fact]

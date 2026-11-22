@@ -26,6 +26,7 @@ public partial class App
         services.AddSingleton<ITrackContextRegistry, TrackContextRegistry>();
         services.AddSingleton<ISelectionService, SelectionService>();
         services.AddSingleton<ISelectLikeService, SelectLikeService>();
+        services.AddSingleton<SelectionEditsViewModel>();
         services.AddSingleton<DotCharter.Services.Editing.Structure.IStructureGenerationService,
             DotCharter.Services.Editing.Structure.StructureGenerationService>();
 
@@ -91,9 +92,6 @@ public partial class App
         services.AddSingleton<DotCharter.Services.Editing.Phrases.IPhraseIterationPropagationService,
             DotCharter.Services.Editing.Phrases.PhraseIterationPropagationService>();
         services.AddSingleton<IFretAnchorGenerationService, FretAnchorGenerationService>();
-        // Chart from audio's merge: the ONE draft review the dialog holds and the
-        // merge card over the timeline decides, phrase by phrase.
-        services.AddSingleton<DotCharter.Services.Editing.DraftMerge.DraftMergeReviewHost>();
         services.AddSingleton<IFingeringGenerationService, FingeringGenerationService>();
         // Refret engine (v0.24 charting power tool): DP fretting optimizer —
         // same pitches, new string/fret positions, minimal hand movement.
@@ -115,6 +113,7 @@ public partial class App
         services.AddSingleton<DotCharter.Services.State.Checkpoints.ICheckpointService>(_ =>
             new DotCharter.Services.State.Checkpoints.CheckpointService());
         AddExportServices(services);
+        services.AddSingleton<DotCharter.Services.Session.ProjectViewMemory>();
         services.AddSingleton<IProjectSessionService, ProjectSessionService>();
         services.AddSingleton<ITimelineInteractionFactory, TimelineInteractionFactory>();
         services.AddSingleton<IDiagnosticsDialogService>(sp =>

@@ -118,6 +118,47 @@ public class MinimapDragControllerTests
         Assert.False(c.TakePendingSeek());
     }
 
+    /// <summary>
+    ///     #587 row 3: releasing capture raises <c>PointerCaptureLost</c>
+    ///     synchronously, and its handler clears the pending flag. The release
+    ///     used to call <c>Capture(null)</c> before it took the flag, so the final
+    ///     seek was lost. The release capture here is that synchronous callback.
+    /// </summary>
+    [Fact]
+    public void The_release_takes_the_pending_seek_before_capture_loss_can_clear_it()
+    {
+        var c = new MinimapDragController(() => 0);
+
+        c.BeginDrag(1000);
+        Assert.False(c.TryTakeMoveSlot(1005));
+
+        var flush = c.EndDrag(() => c.OnPointerCaptureLost());
+
+        Assert.True(flush);
+        Assert.False(c.IsDragging);
+    }
+
+    /// <summary>
+    ///     #587 row 5: the host pins continuous rendering per drag, so the capture
+    ///     loss raised inside the release must not report a SECOND end, and a
+    ///     capture loss with no drag reports none.
+    /// </summary>
+    [Fact]
+    public void Exactly_one_exit_reports_the_end_of_a_drag()
+    {
+        var c = new MinimapDragController(() => 0);
+        Assert.False(c.OnPointerCaptureLost());
+
+        c.BeginDrag(1000);
+        var lostInsideRelease = true;
+        c.EndDrag(() => lostInsideRelease = c.OnPointerCaptureLost());
+        Assert.False(lostInsideRelease);
+
+        c.BeginDrag(2000);
+        Assert.True(c.OnPointerCaptureLost());
+        Assert.False(c.OnPointerCaptureLost());
+    }
+
     private static double InvokeCompute(double pointerX, double width, double totalMs)
     {
         var method = typeof(MinimapDragController).GetMethod("ComputeTargetMs",

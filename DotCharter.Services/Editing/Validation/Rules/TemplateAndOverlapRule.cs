@@ -56,8 +56,8 @@ public sealed class TemplateAndOverlapRule : IArrangementRule
     ///         say the same thing twice.
     ///     </para>
     ///     <para>
-    /// <b>A FULLY fret-hand-muted chord is no use of a grip</b> (a
-    ///         Guitar Pro pick scrape is one). EOF's rule, with its default
+    /// <b>A FULLY fret-hand-muted chord is no use of a grip</b>. Split chords,
+    ///         including unmuted pick slides, are loose notes. EOF's rule, with its default
     ///         <c>eof_fingering_checks_include_mutes = 0</c> (<c>main.c:240</c>):
     ///         <c>eof_pro_guitar_note_fingering_valid</c> skips every muted string
     ///         and calls a note with only open or muted strings and no fingering
@@ -78,13 +78,14 @@ public sealed class TemplateAndOverlapRule : IArrangementRule
         var firstUse = new Dictionary<int, TemplateUse>();
         foreach (var level in context.Arrangement.Levels)
         {
+            var looseNotes = ChordWorkEligibility.SoundsWithoutTemplate(level);
             foreach (var chord in level.Chords)
             {
                 // NOT `chord.TemplateId < 0 ⇒ continue`: that reported a chord
                 // still on the -1 sentinel as having no fingering problem
                 // instead of judging the shape it actually plays. The context
                 // resolves it — see ArrangementValidationContext.ChordTemplateFor.
-                if (chord.IsFullyMuted()) continue;
+                if (!ChordWorkEligibility.UsesFingering(chord, looseNotes)) continue;
                 var template = context.ChordTemplateFor(chord);
                 if (template == null) continue;
                 if (!firstUse.ContainsKey(template.Id))
@@ -120,32 +121,39 @@ public sealed class TemplateAndOverlapRule : IArrangementRule
                 if (isOpen && finger > 0)
                 {
                     issues.Add(Issue(ArrangementIssueType.FingerSetForOpenString, use, timeMs,
-                        $"Template '{template.Name}' assigns finger {finger} to the open string {stringIndex + 1}.",
-                        stringIndex));
+                        "Validation_FingerSetForOpenString", stringIndex, [Label(template), finger, stringIndex + 1]));
                 }
-                else if (!isOpen && finger < 0)
+                else if (ChordWorkEligibility.IsMissingFinger(template, stringIndex, capo))
                 {
                     issues.Add(Issue(ArrangementIssueType.FingerMissingOnFrettedString, use, timeMs,
-                        $"Template '{template.Name}' has no finger on the fretted string {stringIndex + 1} (fret {fret}).",
-                        stringIndex));
+                        "Validation_FingerMissingOnFrettedString", stringIndex, [Label(template), stringIndex + 1, fret]));
                 }
                 else if (finger == 1 && lowestFrettedFret > 0 && fret > lowestFrettedFret)
                 {
                     issues.Add(Issue(ArrangementIssueType.FirstFingerNotOnLowestFret, use, timeMs,
-                        $"Template '{template.Name}' puts the index finger on fret {fret} while the lowest fretted note is fret {lowestFrettedFret}.",
-                        stringIndex));
+                        "Validation_FirstFingerNotOnLowestFret", stringIndex, [Label(template), fret, lowestFrettedFret]));
                 }
             }
         }
     }
 
+    /// <summary>The template's name, or its grip (<c>12-12-x-x-x-x</c>) when it has
+    /// none, so a finding never prints <c>''</c>.</summary>
+    private static string Label(ChordTemplate template)
+    {
+        if (template.Name.Length > 0) return template.Name;
+        var count = Math.Max(6, template.Frets.Count == 0 ? 0 : template.Frets.Keys.Max() + 1);
+        return string.Join("-", Enumerable.Range(0, count)
+            .Select(i => template.Frets.TryGetValue(i, out var fret) ? fret.ToString() : "x"));
+    }
+
     /// <summary>The finding hangs off whichever element the template was first
     /// used by, so a shape-only template is still click-to-select.</summary>
     private static ArrangementIssue Issue(ArrangementIssueType type, TemplateUse use, double timeMs,
-        string message, int stringIndex) =>
+        string key, int stringIndex, object[] args) =>
         use.Chord != null
-            ? ArrangementIssues.Chord(type, use.Chord, timeMs, message, stringIndex)
-            : new ArrangementIssue(type, message, timeMs, HandShape: use.Shape, StringIndex: stringIndex);
+            ? ArrangementIssues.Chord(type, use.Chord, timeMs, key, stringIndex, args)
+            : ArrangementIssues.Make(type, key, timeMs, handShape: use.Shape, stringIndex: stringIndex, args: args);
 
     private static void ValidateOverlaps(ArrangementValidationContext context, IList<BeatMarker> beats,
         ICollection<ArrangementIssue> issues)
@@ -160,7 +168,7 @@ public sealed class TemplateAndOverlapRule : IArrangementRule
                 if (!seenNotes.Add((ms, note.StringIndex)))
                 {
                     issues.Add(ArrangementIssues.Note(ArrangementIssueType.OverlappingNotes, note, ms,
-                        "Two notes share the same position on the same string."));
+                        "Validation_OverlappingNotes"));
                 }
             }
 
@@ -172,8 +180,7 @@ public sealed class TemplateAndOverlapRule : IArrangementRule
                     if (!seenNotes.Add((ms, cn.StringIndex)))
                     {
                         issues.Add(ArrangementIssues.Chord(ArrangementIssueType.OverlappingNotes, chord, ms,
-                            "A chord note overlaps another sound on the same string at the same position.",
-                            cn.StringIndex));
+                            "Validation_OverlappingChordNotes", cn.StringIndex));
                         break;
                     }
                 }
@@ -186,8 +193,8 @@ public sealed class TemplateAndOverlapRule : IArrangementRule
                 var ms = (long)Math.Round(anchor.Position.GetPositionMs(beats));
                 if (!seenAnchors.Add(ms))
                 {
-                    issues.Add(new ArrangementIssue(ArrangementIssueType.OverlappingAnchors,
-                        "Two anchors share the same position.", ms, Anchor: anchor));
+                    issues.Add(ArrangementIssues.Make(ArrangementIssueType.OverlappingAnchors,
+                        "Validation_OverlappingAnchors", ms, anchor: anchor));
                 }
             }
 
@@ -197,9 +204,9 @@ public sealed class TemplateAndOverlapRule : IArrangementRule
             {
                 if (shapes[i].Position < shapes[i - 1].EndPosition)
                 {
-                    issues.Add(new ArrangementIssue(ArrangementIssueType.OverlappingHandShapes,
-                        "Hand shape starts before the previous hand shape ends.",
-                        shapes[i].Position.GetPositionMs(beats), HandShape: shapes[i]));
+                    issues.Add(ArrangementIssues.Make(ArrangementIssueType.OverlappingHandShapes,
+                        "Validation_OverlappingHandShapes",
+                        shapes[i].Position.GetPositionMs(beats), handShape: shapes[i]));
                 }
             }
         }

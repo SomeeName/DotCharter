@@ -28,7 +28,7 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
     private readonly StemWaveformCoordinator? _waveform;
     private readonly IGuitarRoleStems? _guitarRoleStems;
     private readonly ILocalizationService _localization;
-    private readonly Dictionary<string, string> _stemPaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, StemLoadRequest> _stemSources = new(StringComparer.OrdinalIgnoreCase);
     private bool _loading;
     private bool _rebuildRequested;
     private bool _waveformRefreshInFlight;
@@ -41,6 +41,7 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
         IGuitarRoleStems? guitarRoleStems = null)
     {
         _state = state;
+        ResetLevelsConfirm = new Inspector.InspectorPendingAction().ClearOn(state, null);
         _audio = audio;
         _logger = logger;
         _waveform = waveform;
@@ -49,8 +50,11 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
         _ui = ui ?? new Tone.UI.Platform.AvaloniaUiDispatcher();
         GuitarRoles = new GuitarRolesViewModel(guitarRoleStems, localization, new ReleaseAwareDispatcher(this),
             Rebuild, logger);
+        GuitarRoles.ProjectChanged += _state.NotifyProjectChanged;
         Tracks = [];
         _state.PropertyChanged += OnStateChanged;
+        _state.AudioCleared += OnAudioCleared;
+        _state.AudioLoaded += RefreshWaveform;
         Rebuild();
     }
 
@@ -85,6 +89,10 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
     {
         if (Interlocked.Exchange(ref _released, 1) != 0) return;
         _state.PropertyChanged -= OnStateChanged;
+        _state.AudioCleared -= OnAudioCleared;
+        _state.AudioLoaded -= RefreshWaveform;
+        GuitarRoles.ProjectChanged -= _state.NotifyProjectChanged;
+        ResetLevelsConfirm.Dispose();
         var spin = new SpinWait();
         while (Volatile.Read(ref _dispatchesInFlight) != 0) spin.SpinOnce();
     }
@@ -178,7 +186,20 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
     /// </summary>
     [ObservableProperty] private bool _waveformFollowsMix;
 
-    partial void OnWaveformFollowsMixChanged(bool value) => RefreshWaveform();
+    partial void OnWaveformFollowsMixChanged(bool value)
+    {
+        _ = value;
+        RefreshWaveform();
+        NotifyWaveform();
+    }
+
+    private void OnAudioCleared()
+    {
+        _audioGeneration++;
+        _loadedStemsProject = null;
+        _loadedStemsSignature = null;
+        Rebuild();
+    }
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -195,6 +216,10 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
             (nameof(ProjectState.CurrentAudioFileName)))
         {
             PostWhileAlive(Rebuild);
+        }
+        else if (e.PropertyName == nameof(ProjectState.WaveformData))
+        {
+            PostWhileAlive(NotifyWaveform);
         }
     }
 
@@ -326,6 +351,7 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
     // What the engine currently holds, so an identical rebuild does not reload it.
     private ChartProject? _loadedStemsProject;
     private string? _loadedStemsSignature;
+    private int _audioGeneration;
 
     private void ClearStemsAndTheirWaveforms()
     {
@@ -405,7 +431,7 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
             // has to hydrate, or a cold spinning disk would freeze the whole window for
             // the duration of the enumeration.
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            var probe = await Task.Run(() => StemFolderProbe.Probe(projectDir, legacyDir, declared, rolesWanted, _guitarRoleStems))
+            var probe = await Task.Run(() => StemFolderProbe.Probe(projectDir, legacyDir, declared, rolesWanted, _guitarRoleStems, _logger))
                 .ConfigureAwait(false);
             var probeMs = sw.Elapsed.TotalMilliseconds;
 
@@ -462,7 +488,8 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
     ///     was swapped under us, or it declares no stems at all.
     /// </summary>
     private sealed record RebuildPlan(
-        List<StemLoadRequest> Requests, string Signature, bool NeedsEngineLoad, string? GuitarPath, bool RolesActive);
+        List<StemLoadRequest> Requests, string Signature, bool NeedsEngineLoad, string? GuitarPath, bool RolesActive,
+        int AudioGeneration);
 
     /// <summary>
     ///     Rebuilds the channel strips from a finished probe. <b>UI thread only</b>
@@ -493,6 +520,7 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
                 Offset = 0.0
             });
         }
+        if (probe.Recovered.Count > 0) _state.NotifyProjectChanged(project);
 
         var stems = probe.Recovered.Count > 0 ? project.Stems.ToArray() : declared;
         if (stems.Length == 0)
@@ -504,7 +532,7 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
         }
 
         var requests = new List<StemLoadRequest>(stems.Length);
-        _stemPaths.Clear();
+        _stemSources.Clear();
         _waveform?.Reset();
         foreach (var s in stems)
         {
@@ -559,9 +587,10 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
         // twice unless guarded — and an engine load is the expensive half (six 183 s stems
         // measured at ~37 s per pass, so the whole project
         // would wait 75 s). The tracks above are rebuilt regardless (cheap); the
-        // engine is asked only when the resolved (name, path) sequence differs
+        // engine is asked only when the resolved (name, path, offset) sequence differs
         // from what it already holds for this project.
-        var signature = string.Join("\n", requests.Select(r => r.Name + "\0" + r.Path));
+        var signature = string.Join("\n", requests.Select(r =>
+            r.Name + "\0" + r.Path + "\0" + r.OffsetMs.ToString("R", System.Globalization.CultureInfo.InvariantCulture)));
         var engineHasThisSet = ReferenceEquals(_loadedStemsProject, project) &&
                                _loadedStemsSignature == signature;
 
@@ -569,13 +598,14 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
 
         return new RebuildPlan(requests, signature,
             NeedsEngineLoad: requests.Count > 0 && !engineHasThisSet,
-            probe.GuitarPath, RolesActive: probe.RolePair != null);
+            probe.GuitarPath, RolesActive: probe.RolePair != null, _audioGeneration);
     }
 
     private void AddStrip(List<StemLoadRequest> requests, Stem stem, string path)
     {
-        requests.Add(new StemLoadRequest(stem.Name, path));
-        _stemPaths[stem.Name] = path;
+        var request = new StemLoadRequest(stem.Name, path, stem.Offset);
+        requests.Add(request);
+        _stemSources[stem.Name] = request;
         var trk = new StemTrackViewModel(_audio, stem, _localization);
         trk.AttachOwner(this);
         Tracks.Add(trk);
@@ -598,6 +628,7 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
         Path = string.Empty,
         Local = true,
         Volume = guitar.Volume,
+        Offset = guitar.Offset,
         Muted = guitar.Muted,
         Solo = guitar.Solo,
     };
@@ -609,7 +640,7 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
     /// </summary>
     private void FinishRebuild(ChartProject project, RebuildPlan plan)
     {
-        if (plan.NeedsEngineLoad)
+        if (plan.NeedsEngineLoad && plan.AudioGeneration == _audioGeneration)
         {
             _loadedStemsProject = project;
             _loadedStemsSignature = plan.Signature;
@@ -707,7 +738,11 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
 
     /// <summary>Any change to what is audible re-draws the waveform, when it is
     /// following the mix.</summary>
-    internal void OnTrackAudibilityChanged() => RefreshWaveform();
+    internal void OnTrackAudibilityChanged()
+    {
+        RefreshWaveform();
+        NotifyPlayback();
+    }
 
     /// <summary>
     ///     Writes the "Original" channel's mute back to the project, the way a stem
@@ -722,7 +757,9 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
     /// </remarks>
     internal void PersistOriginalMixMuted(bool muted)
     {
-        if (_state.ActiveProject is { } project) project.OriginalMixMuted = muted;
+        if (_state.ActiveProject is not { } project || project.OriginalMixMuted == muted) return;
+        project.OriginalMixMuted = muted;
+        _state.NotifyProjectChanged(project);
     }
 
     /// <summary>
@@ -756,8 +793,9 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
                 // the original against stems the same slider just made equally
                 // quiet. The drawing is a picture of the BALANCE, not a meter.
                 Channel: new StemMixChannel(t.Name, t.IsMasterMix,
-                    t.IsMasterMix ? 1.0 : t.VolumeLinear, t.IsMuted, t.IsSolo),
-                Path: t.IsMasterMix ? null : _stemPaths.GetValueOrDefault(t.Name)))
+                    t.IsMasterMix ? 1.0 : t.VolumeLinear, t.IsMuted, t.IsSolo,
+                    t.IsMasterMix ? 0 : _stemSources.GetValueOrDefault(t.Name).OffsetMs),
+                Path: t.IsMasterMix ? null : _stemSources.GetValueOrDefault(t.Name).Path))
             .ToList();
 
         _waveformRefreshInFlight = true;
@@ -766,6 +804,10 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
             try
             {
                 await _waveform.ApplyAsync(follow, channels).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(AppLogCategory.Audio, "Refreshing the stem waveform failed.", ex);
             }
             finally
             {

@@ -1,3 +1,6 @@
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
 namespace DotCharter.Tests.Services.Audio;
 
 /// <summary>
@@ -98,6 +101,27 @@ public sealed class PlaybackGateHoldGuardTests
                         "six UI-thread members wait on _gate — Play/Pause/Stop/SeekTo all reach it through " +
                         "SnapshotStems(). Collect the transition under the lock and apply it in the unlocked " +
                         "phase 1c. NOTE: JuceAudioPlugin.Bypass's SETTER is one of these calls.");
+                }
+            }
+        }
+    }
+
+    /// <summary>Callback indirection must not hide native transport waits inside the state gate.</summary>
+    [Fact]
+    public void NoOwnedTransportCallbackRunsInsideThePlaybackGate()
+    {
+        foreach (var file in ServiceFiles)
+        {
+            var root = CSharpSyntaxTree.ParseText(File.ReadAllText(file), cancellationToken: TestContext.Current.CancellationToken).GetRoot(TestContext.Current.CancellationToken);
+            foreach (var method in root.DescendantNodes().OfType<MethodDeclarationSyntax>())
+            {
+                var callbacks = method.ParameterList.Parameters
+                    .Where(p => p.Type?.ToString() is "Action" || p.Type?.ToString().StartsWith("Action<", StringComparison.Ordinal) == true)
+                    .Select(p => p.Identifier.ValueText).ToHashSet(StringComparer.Ordinal);
+                foreach (var gate in method.DescendantNodes().OfType<LockStatementSyntax>().Where(l => l.Expression.ToString() == "_gate"))
+                {
+                    var invoked = gate.Statement.DescendantNodes().OfType<InvocationExpressionSyntax>();
+                    Assert.DoesNotContain(invoked, call => callbacks.Contains(call.Expression.ToString()));
                 }
             }
         }

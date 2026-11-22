@@ -2,6 +2,7 @@ using System.Collections;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using DotCharter.Tone.Audio;
+using DotCharter.Tone.Audio.Engine;
 
 namespace DotCharter.Tests.Services.Audio;
 
@@ -40,6 +41,7 @@ public sealed class EngineReplaceStemRestoreTests
         Assert.Equal(0.25, drums.Volume);
         Assert.True(drums.Muted);
         Assert.False(drums.Soloed);
+        Assert.Equal(125, drums.OffsetMs);
 
         var vocals = snap.Stems.Single(s => s.Name == "vocals");
         Assert.Equal(1.75, vocals.Volume);
@@ -66,7 +68,7 @@ public sealed class EngineReplaceStemRestoreTests
     {
         using var svc = new JuceAudioPlaybackService(FakeLocalization.English());
         var snap = new JuceAudioPlaybackService.StemMixerSnapshot(
-            [("drums", @"C:\stems\drums.wav", 1.0, false, false)], MasterMixMuted: true);
+            [("drums", @"C:\stems\drums.wav", 1.0, false, false, 125)], MasterMixMuted: true);
 
         // Returns promptly instead of recursing into an engine rebuild.
         svc.RestoreStemsAfterEngineRebuild(snap);
@@ -74,27 +76,28 @@ public sealed class EngineReplaceStemRestoreTests
         Assert.False(svc.HasStems);
     }
 
-    /// <summary>
-    /// The wiring itself: `ReplaceEngineGated` must take the snapshot BEFORE the
-    /// teardown that clears the dictionary, and re-issue it afterwards. Asserted
-    /// on the source because driving a real engine replace needs a real device.
-    /// </summary>
     [Fact]
-    public void ReplaceEngineGated_SnapshotsBeforeTeardownAndRestoresAfter()
+    public void AQueuedMasterReload_PreservesTheCapturedRealMixerSettings()
     {
-        var body = MethodBody("private void ReplaceEngineGated(");
-
-        var snapshot = body.IndexOf("SnapshotStemMixerLocked()", StringComparison.Ordinal);
-        var free = body.IndexOf("FreeAudioLocked()", StringComparison.Ordinal);
-        var restore = body.IndexOf("RestoreStemsAfterEngineRebuild(", StringComparison.Ordinal);
-
-        Assert.True(snapshot >= 0,
-            "ReplaceEngineGated must snapshot the stem mixer — FreeAudioLocked clears it.");
-        Assert.True(free >= 0, "ReplaceEngineGated must still tear the audio down.");
-        Assert.True(restore >= 0,
-            "ReplaceEngineGated must re-issue the stem set after the rebuild.");
-        Assert.True(snapshot < free, "The snapshot must be taken BEFORE the teardown clears the stems.");
-        Assert.True(restore > free, "The restore must run AFTER the engine has been rebuilt.");
+        using var svc = new JuceAudioPlaybackService(FakeLocalization.English());
+        SetStem(svc, "drums", "drums.wav", 0.25, true, false);
+        SetStem(svc, "vocals", "vocals.wav", 1.75, false, true);
+        SetField(svc, "_masterMixMuted", false);
+        var snapshot = svc.SnapshotStemMixerLocked();
+        svc.FreeAudio();
+        Assert.False(svc.HasStems);
+        JuceAudioPlaybackService.StemMixerSnapshot? restored = null;
+        var engine = new object();
+        MediaRebuildReplay.Replay<MemoryStream, JuceAudioPlaybackService.StemMixerSnapshot>(new object(), new object(),
+            new MediaLoadRequest("song.wav", 1), () => new MediaLoadRequest("song.wav", 2), engine, () => engine,
+            () => new MemoryStream(), _ => Assert.Fail("The obsolete master must not be reopened."), () => true,
+            snapshot, state => restored = state);
+        Assert.NotNull(restored);
+        Assert.Equal(snapshot, restored);
+        Assert.False(restored.MasterMixMuted);
+        Assert.Equal(0.25, restored.Stems.Single(s => s.Name == "drums").Volume);
+        Assert.True(restored.Stems.Single(s => s.Name == "drums").Muted);
+        Assert.True(restored.Stems.Single(s => s.Name == "vocals").Soloed);
     }
 
     // ----- reflection helpers ------------------------------------------------
@@ -109,6 +112,7 @@ public sealed class EngineReplaceStemRestoreTests
         var entry = RuntimeHelpers.GetUninitializedObject(entryType);
         entryType.GetProperty("Name")!.SetValue(entry, name);
         entryType.GetProperty("Path")!.SetValue(entry, path);
+        entryType.GetProperty("OffsetMs")!.SetValue(entry, 125.0);
         entryType.GetField("UserVolume")!.SetValue(entry, volume);
         entryType.GetField("UserMuted")!.SetValue(entry, muted);
         entryType.GetField("UserSoloed")!.SetValue(entry, soloed);
@@ -124,29 +128,4 @@ public sealed class EngineReplaceStemRestoreTests
             .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)!
             .SetValue(svc, value);
 
-    private static string MethodBody(string signature)
-    {
-        // EVERY partial of the service, concatenated: the class is split across a
-        // dozen files, so pinning one filename makes this lint go vacuous the
-        // moment a method moves to a neighbouring partial.
-        var src = ServiceSource();
-        var start = src.IndexOf(signature, StringComparison.Ordinal);
-        Assert.True(start >= 0, $"Could not find '{signature}'.");
-        var open = src.IndexOf('{', start + signature.Length);
-        var depth = 0;
-        var i = open;
-        for (; i < src.Length; i++)
-        {
-            if (src[i] == '{') depth++;
-            else if (src[i] == '}' && --depth == 0) break;
-        }
-        return src[open..Math.Min(i + 1, src.Length)];
-    }
-
-    /// <summary>Every `JuceAudioPlaybackService*.cs` partial and its extracted
-    /// collaborators (<see cref="PlaybackServiceSourceFiles" />), concatenated in a
-    /// stable order — derived from the directory so a new partial is covered the
-    /// day it appears.</summary>
-    private static string ServiceSource() =>
-        string.Concat(PlaybackServiceSourceFiles.All().Select(File.ReadAllText));
 }

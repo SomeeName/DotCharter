@@ -23,6 +23,30 @@ public sealed class ShowlightsViewModelTests
         return (new ShowlightsViewModel(h.Services), h);
     }
 
+    /// <summary>
+    ///     In German the cue pickers use the 3D preview chip's colour words, a plus beam keeps its "+",
+    ///     and picking a German entry still writes the cue type Rocksmith reads.
+    /// </summary>
+    [Fact]
+    public void In_German_the_cue_names_are_German_and_save_the_same_cue()
+    {
+        var german = FakeLocalization.For("de-DE");
+        var h = new ChartEditHarness(german);
+        h.State.CurrentTimeMs = 1000;
+        var vm = new ShowlightsViewModel(h.Services);
+
+        Assert.Contains(german["Preview3D_ShowlightColor_Green"], vm.FogOptions);
+        Assert.DoesNotContain("Green", vm.FogOptions);
+        Assert.Contains(german["Preview3D_ShowlightColor_Red"] + "+", vm.BeamsOptions);
+        Assert.Equal([german["Dialog_Showlights_None"], german["Dialog_Showlights_On"], german["Dialog_Showlights_Off"]], vm.LasersOptions);
+        Assert.NotEqual("On", vm.LasersOptions[1]);
+
+        vm.SelectedFogIndex = IndexOf(vm.FogOptions, german["Preview3D_ShowlightColor_Green"]);
+        vm.SaveCommand.Execute(null);
+
+        Assert.Contains(h.Project.Showlights, s => s.Type == "FOG_GREEN");
+    }
+
     private static int IndexOf(IReadOnlyList<string> options, string displayName) =>
         options.ToList().IndexOf(displayName);
 

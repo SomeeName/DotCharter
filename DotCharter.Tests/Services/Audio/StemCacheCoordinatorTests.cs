@@ -123,6 +123,26 @@ public sealed class StemCacheCoordinatorTests : IDisposable
     // ---- the contract -------------------------------------------------------
 
     [Fact]
+    public async Task An_unparseable_directory_guard_keeps_the_archive_byte_for_byte()
+    {
+        var audio = WriteAudio("song.wav", 1);
+        var id = StemCacheIdentity.ForLibrary("lib:ABC");
+        var store = NewStore();
+        await SeedCacheAsync(store, id, audio);
+        var path = store.ArchivePath(StemCacheKey.Derive(id, StemAudioSignature.ComputeFile(audio)));
+        var bytes = File.ReadAllBytes(path);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(bytes.Length - 6), uint.MaxValue);
+        File.WriteAllBytes(path, bytes);
+
+        var cached = await new StemCacheCoordinator(store).TryLoadCachedAsync(id, audio, Path.Combine(_tmp, "play"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(cached);
+        Assert.True(File.Exists(path), "a guard that cannot parse directory metadata must not delete stems");
+        Assert.Equal(bytes, File.ReadAllBytes(path));
+    }
+
+    [Fact]
     public async Task Nothing_cached_reports_a_miss_so_the_caller_separates()
     {
         var audio = WriteAudio("song.wav", 1);
@@ -240,6 +260,52 @@ public sealed class StemCacheCoordinatorTests : IDisposable
         var hit = await new StemCacheCoordinator(NewStore())
             .TryLoadCachedAsync(id, audio, Path.Combine(_tmp, "play"), TestContext.Current.CancellationToken);
         Assert.Equal(2, hit!.Count);
+    }
+
+    /// <summary>A stem the user named "Lead..solo" is a legitimate archive: it comes back as
+    /// a hit, never a refusal that would trigger a re-separation.</summary>
+    [Fact]
+    public async Task A_stem_named_with_a_double_dot_round_trips_through_the_cache()
+    {
+        var audio = WriteAudio("song.wav", 1);
+        var id = StemCacheIdentity.ForLibrary("lib:ABC");
+        var sig = StemAudioSignature.ComputeFile(audio);
+        var key = StemCacheKey.Derive(id, sig);
+        var stems = new[] { new StemTrack { Name = "Lead..solo", Path = WriteStemWav(7) } };
+        await NewStore().SaveAsync(key, id, sig, stems, "htdemucs-4s", "0.13.0", TestContext.Current.CancellationToken);
+
+        var cached = await new StemCacheCoordinator(NewStore())
+            .TryLoadCachedAsync(id, audio, Path.Combine(_tmp, "play"), TestContext.Current.CancellationToken);
+
+        Assert.NotNull(cached);
+        Assert.Single(cached!);
+        Assert.True(File.Exists(cached![0].Path));
+    }
+
+    /// <summary>A refused archive (an entry name that escapes the destination) is not
+    /// corruption: the file stays byte-identical and the call is a plain miss.</summary>
+    [Fact]
+    public async Task A_refused_archive_is_kept_untouched_and_reports_a_miss()
+    {
+        var audio = WriteAudio("song.wav", 1);
+        var id = StemCacheIdentity.ForLibrary("lib:ABC");
+        var store = NewStore();
+        await SeedCacheAsync(store, id, audio);
+        var archivePath = store.ArchivePath(StemCacheKey.Derive(id, StemAudioSignature.ComputeFile(audio)));
+        using (var fs = new FileStream(archivePath, FileMode.Open, FileAccess.ReadWrite))
+        using (var zip = new System.IO.Compression.ZipArchive(fs, System.IO.Compression.ZipArchiveMode.Update))
+        using (var s = zip.CreateEntry("sub/escape.opus").Open())
+        {
+            s.WriteByte(1);
+        }
+        var before = await File.ReadAllBytesAsync(archivePath, TestContext.Current.CancellationToken);
+
+        var cached = await new StemCacheCoordinator(NewStore())
+            .TryLoadCachedAsync(id, audio, Path.Combine(_tmp, "play"), TestContext.Current.CancellationToken);
+
+        Assert.Null(cached);
+        Assert.True(File.Exists(archivePath), "a refused archive must never be deleted");
+        Assert.Equal(before, await File.ReadAllBytesAsync(archivePath, TestContext.Current.CancellationToken));
     }
 
     /// <summary>The other half of the same line: an archive whose MANIFEST reads but

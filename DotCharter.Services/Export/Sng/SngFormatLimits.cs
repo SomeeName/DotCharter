@@ -29,5 +29,5 @@ internal static class SngFormatLimits
         arrangement.Levels.Count > MaxLevels
             ? string.Create(CultureInfo.InvariantCulture,
                 $"'{arrangement.Name}' has {arrangement.Levels.Count} difficulty levels; a song file holds at most {MaxLevels}.")
-            : Rs7StringLayout.ExportRefusal(arrangement);
+            : RsxrStringLayout.ExportRefusal(arrangement);
 }

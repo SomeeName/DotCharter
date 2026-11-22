@@ -66,12 +66,12 @@ public static class AppConfigBackupFilter
         "StemSeparationSecondsPerAudioSecond", "UseInGameTones", "ShowGameplayToneHud", "ShowMinimap",
         "SongTonePreferences", "DropTunerSongs", "LivePlayTakeRecorderEnabled", "LivePlayTakeMaxMinutes",
         "LivePlayTakeCacheMaxMB", "StreamingMirrorDevice", "AutoFollowDeviceAudioSettings", "MidiOutputDeviceName",
-        "ChartSynthPlaysOwnRig", "UseFastChartingInput", "SyncHandShapeToChordTemplate", "TappedHarmonicFretOffset",
-        "SyncAnchorToChordFingering", "SuppressDoubleStopChordNames", "AutoNameNewChords", "KeepPowerChordNames", "ChordNamingStyle",
+        "ChartSynthPlaysOwnRig", "ChartSoundUsesInstrument", "InstrumentThroughRig", "ChartSoundSeatRoute", "UseFastChartingInput", "SyncHandShapeToChordTemplate", "TappedHarmonicFretOffset",
+        "SyncAnchorToChordFingering", "InspectorApplyStep", "SuppressDoubleStopChordNames", "AutoNameNewChords", "KeepPowerChordNames", "ChordNamingStyle",
         "AiFingeringJobGuitar", "AiFingeringJobBass", "LyricSpanWordGap", "LyricSpanPhraseGap", "MinNoteDistanceMode",
         "MinNoteDistanceMs", "MinNoteDistanceDivisor", "AutoBackupEnabled", "AutoBackupIntervalMinutes",
         "AutoBackupKeepCount", "RecoveryEnabled", "RecoveryAutosaveSeconds", "PadSilenceOnNewProject",
-        "LeadingSilenceSeconds", "TrailingSilenceSeconds", "PasteIncludeNotes", "PasteIncludeChords",
+        "LeadingSilenceSeconds", "TrailingSilenceSeconds", "PasteReplacesExisting", "PasteIncludeNotes", "PasteIncludeChords",
         "PasteIncludeHandShapes", "PasteIncludeFretAnchors", "PasteIncludeEvents", "PasteIncludeTones",
         "Show3DFingering", "AnimatedHomeHero", "RenderScalePercent", "MaxFps", "IdleFps", "PresentMode",
         "PresentModeMailboxMigrated", "MsaaSamples", "Preview3DCameraFill", "EnableNoteHitExplosions",
@@ -90,7 +90,7 @@ public static class AppConfigBackupFilter
         "GpImportTruncateShortNotes", "GpImportTruncateShortChords", "GpImportPreserveShortRests",
         "OnlineLatinNameLookup", "GpImportBeatTextTechniques", "GpImportMarkersToSections",
         "GpImportSlideInFretDistance", "GpImportTimeSignatures", "GpImportDropMidBeatTempoChanges", "LastExportAppId",
-        "ExportAudioVolume", "ExportPreviewVolume", "ExportIncludeVocals", "SaveCompanionEof",
+        "ExportIncludeVocals", nameof(AppConfig.ExportAutoVolumeTargetLufs), "SaveCompanionEof",
         "SaveCompanionEofAudio", "PsarcOpenHardestLevelOnly", "SaveCompanionPsarc", "SaveCompanionPsarcCodec",
         "SaveCompanionRs2Dlc", "RsXmlSixStringProjection", "RsXmlMoverPhrases", "ExportGenerateDynamicDifficulty",
         "ExportApplyDlcBuilderFixes", "ExportDdLevelCountMode", "RocksmithKeys", "DefaultCharterName",
@@ -109,15 +109,17 @@ public static class AppConfigBackupFilter
         "ActiveToneRigsByPlayer", "DefaultTonePresetId", "RestoreToneOnStartup", "PedalboardZoom",
         "RigMidiInputDevice", "RigMidiChannel", "RigMidiProgramChange", "RigMidiSceneCc", "RigSetlists",
         "RigActiveSetlistId", "RigWorkspaceHeight", "RigToneBrowserHeight", "RigFavoriteGear", "RigSpillover",
-        "TunerReferenceHz", "TunerTuning", "InputPitchShiftSemis", "Ai"
+        "TunerReferenceHz", "TunerTuning", "InputPitchShiftSemis", "EditorSession", "Ai"
     ];
 
     /// <summary>Folders the user works in; restored when they exist here.</summary>
     internal static readonly string[] DataFolderKeys =
     [
-        "PsarcLibraryPath", "ExportTestFolder", "LastRscpDir", "LastAudioDir", "LastEofDir", "LastGpDir",
+        "PsarcLibraryPath", nameof(AppConfig.ExportTestDefaultFolder), "LastRscpDir", "LastAudioDir", "LastEofDir", "LastGpDir",
         "LastRsXmlDir", "LastMidiDir", "LastLintFolderDir", "LastProjectFolderDir", "LastExportDir",
-        "LastAlbumArtDir"
+        "LastAlbumArtDir", "LastProfileDir", "LastProfilePictureDir", "LastDiagnosticsDir", "LastBackupDir",
+        "LastLyricsDir", "LastChartDiffDir", "LastConversionOutputDir", "LastDcSongDir",
+        "LastToneFileDir", "LastPsarcToneDir", "LastNamCaptureDir", "LastIrDir", "LastPresetDir", "LastReampDiDir"
     ];
 
     internal static readonly string[] ExistingProjectFileKeys = ["RecentProjects"];
@@ -128,6 +130,8 @@ public static class AppConfigBackupFilter
     [
         // Native code loaded at startup.
         "GuitarVstChain", "LastGuitarVstPath", "LastInstrumentVstPath",
+        // Keyed by this machine's project paths.
+        "ProjectViews",
         // Executables the app starts.
         "FfmpegPath", "YtDlpPath",
         // Opened at startup / a file the app writes to.

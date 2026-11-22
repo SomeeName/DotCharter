@@ -82,20 +82,47 @@ public sealed class SongOverviewKeySignatureTests
     }
 
     /// <summary>
-    ///     The guard must not cost the pane its real job: a key the USER picks is
-    ///     still one undo node, and still reaches the chart.
+    ///     The guard must not cost the pane its real job: a key the USER picks is STAGED with the song
+    ///     details (design D) and "Apply song details" writes it, one undo node, to the chart.
     /// </summary>
     [Fact]
-    public void AKeyThePlayerPicks_IsStillAuthored()
+    public void AKeyThePlayerPicks_IsStaged_ThenAuthoredByApply()
     {
         var (vm, history, state) = NewPane();
         state.ActiveProject = NewProject();
         vm.Refresh();
 
         vm.KeyAccidentalsIndex = 9; // D major
+        vm.KeyIsMinor = true;
 
-        Assert.True(history.CanUndo);
-        Assert.Equal(2, state.ActiveProject!.Chart.KeyAccidentals);
+        Assert.False(history.CanUndo);
+        Assert.Equal(0, state.ActiveProject!.Chart.KeyAccidentals);
+        Assert.True(vm.Details.IsDirty);
+        Assert.Equal((2, true), (vm.Details.KeyAccidentals, vm.Details.KeyIsMinor));
+        vm.Refresh(); // a history change elsewhere keeps the staged pick on the picker
+        Assert.Equal((9, true), (vm.KeyAccidentalsIndex, vm.KeyIsMinor));
+
+        vm.Details.ApplyCommand.Execute(null);
+
+        Assert.Equal((2, true), (state.ActiveProject.Chart.KeyAccidentals, state.ActiveProject.Chart.KeyIsMinor));
+        Assert.Single(history.GetUndoSteps());
+    }
+
+    /// <summary>Revert puts the picker back on the chart's key.</summary>
+    [Fact]
+    public void Revert_PutsThePickerBackOnTheChartsKey()
+    {
+        var (vm, _, state) = NewPane();
+        var project = NewProject();
+        project.Chart.KeyAccidentals = -3;
+        state.ActiveProject = project;
+        vm.Refresh();
+
+        vm.KeyAccidentalsIndex = 9;
+        vm.Details.RevertCommand.Execute(null);
+
+        Assert.Equal(4, vm.KeyAccidentalsIndex);
+        Assert.False(vm.Details.IsDirty);
     }
 
     /// <summary>

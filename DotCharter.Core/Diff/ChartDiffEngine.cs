@@ -44,7 +44,8 @@ public static class ChartDiffEngine
         {
             var oldLevel = oldArrangement.Levels.FirstOrDefault(l => l.DifficultyIndex == index) ?? empty;
             var newLevel = newArrangement.Levels.FirstOrDefault(l => l.DifficultyIndex == index) ?? empty;
-            var entries = DiffLevel(oldLevel, newLevel, options);
+            var entries = DiffLevel(oldLevel, newLevel, options,
+                (a, b) => TemplatesEqual(oldArrangement, a, newArrangement, b));
             if (entries.Count > 0) levelDiffs.Add(new ChartLevelDiff(index, entries));
         }
 
@@ -69,6 +70,7 @@ public static class ChartDiffEngine
         var entries = new List<ChartStructureDiff>();
 
         DiffHeader(entries, oldArrangement, newArrangement);
+        DiffPhraseInfos(entries, oldArrangement, newArrangement);
 
         // Sections, phrases and events are diffed as three independent MARKER
         // streams rather than by pairing EventPoint objects. An EventPoint is a
@@ -107,7 +109,7 @@ public static class ChartDiffEngine
             p => p.Position, p => PhraseName(oldArrangement, p.PhraseId),
             (a, b) => PhraseName(oldArrangement, a.PhraseId) != PhraseName(newArrangement, b.PhraseId)
                 ? ["Phrase"]
-                : []);
+                : [], newLabel: p => PhraseName(newArrangement, p.PhraseId));
 
         DiffTemplates(entries, oldArrangement.ChordTemplates, newArrangement.ChordTemplates);
 
@@ -140,7 +142,7 @@ public static class ChartDiffEngine
                 {
                     var changed = new List<string>();
                     if (a.EndPosition != b.EndPosition) changed.Add("EndPosition");
-                    if (a.TemplateId != b.TemplateId) changed.Add("Template");
+                    if (!TemplatesEqual(oldArrangement, a.TemplateId, newArrangement, b.TemplateId)) changed.Add("Template");
                     if (a.Name != b.Name) changed.Add("Name");
                     return changed;
                 });
@@ -180,10 +182,9 @@ public static class ChartDiffEngine
     ///     <para>
     ///         <c>Name</c> is deliberately excluded — the two sides are PAIRED by
     ///         the user (or by name), so a differing name is the premise of the
-    ///         comparison rather than a finding. <c>Properties</c> is excluded
-    ///         too: all but one of its flags are DERIVED from the notes by
-    ///         <c>ArrangementPropertiesDeriver</c>, so it would double-report
-    ///         every technique edit the sound pass already names.
+    ///         comparison rather than a finding. The four undecidable, authored
+    ///         <c>Properties</c> flags are compared; derived flags are excluded
+    ///         because they summarize content already covered by the other passes.
     ///     </para>
     /// </summary>
     private static void DiffHeader(List<ChartStructureDiff> entries, Arrangement oldArrangement,
@@ -203,6 +204,10 @@ public static class ChartDiffEngine
         if (oldArrangement.PickedBass != newArrangement.PickedBass) changed.Add("PickedBass");
         if (!Nullable.Equals(oldArrangement.ScrollSpeed, newArrangement.ScrollSpeed)) changed.Add("ScrollSpeed");
         if (!TonesEqual(oldArrangement, newArrangement)) changed.Add("Tones");
+        if (oldArrangement.Properties.FingerPicking != newArrangement.Properties.FingerPicking) changed.Add("FingerPicking");
+        if (oldArrangement.Properties.TwoFingerPicking != newArrangement.Properties.TwoFingerPicking) changed.Add("TwoFingerPicking");
+        if (oldArrangement.Properties.PickDirection != newArrangement.Properties.PickDirection) changed.Add("PickDirection");
+        if (oldArrangement.Properties.Syncopation != newArrangement.Properties.Syncopation) changed.Add("Syncopation");
 
         if (changed.Count == 0) return;
         entries.Add(new ChartStructureDiff(ChartDiffChange.Changed, ChartDiffElementKind.ArrangementHeader,
@@ -245,6 +250,37 @@ public static class ChartDiffEngine
         return phraseId >= 0 && phraseId < arrangement.Phrases.Count
             ? arrangement.Phrases[phraseId]
             : $"#{phraseId}";
+    }
+
+    private static void DiffPhraseInfos(List<ChartStructureDiff> entries, Arrangement oldArrangement,
+        Arrangement newArrangement)
+    {
+        var names = oldArrangement.PhraseInfos.Keys.Concat(newArrangement.PhraseInfos.Keys)
+            .Distinct(StringComparer.Ordinal).OrderBy(name => name, StringComparer.Ordinal);
+        foreach (var name in names)
+        {
+            oldArrangement.PhraseInfos.TryGetValue(name, out var oldInfo);
+            newArrangement.PhraseInfos.TryGetValue(name, out var newInfo);
+            // Missing metadata leaves every level playable, as the live timeline does.
+            var changed = new List<string>();
+            if ((oldInfo?.Solo ?? false) != (newInfo?.Solo ?? false)) changed.Add("Solo");
+            var oldMax = oldInfo?.MaxDifficulty ?? Math.Max(0, oldArrangement.Levels.Count - 1);
+            var newMax = newInfo?.MaxDifficulty ?? Math.Max(0, newArrangement.Levels.Count - 1);
+            if (oldMax != newMax) changed.Add("MaxDifficulty");
+            if (changed.Count == 0) continue;
+            entries.Add(new ChartStructureDiff(ChartDiffChange.Changed, ChartDiffElementKind.PhraseInfo,
+                FractionalPosition.Zero, ArrangementScope, name, changed));
+        }
+    }
+
+    private static bool TemplatesEqual(Arrangement oldArrangement, int oldId, Arrangement newArrangement, int newId)
+    {
+        var oldTemplate = oldArrangement.FindChordTemplate(oldId);
+        var newTemplate = newArrangement.FindChordTemplate(newId);
+        // Preserve dangling/custom references when neither side can resolve one.
+        if (oldTemplate is null || newTemplate is null)
+            return oldTemplate is null && newTemplate is null && oldId == newId;
+        return oldTemplate.Equals(newTemplate);
     }
 
     /// <summary>One timeline marker carried by an <see cref="EventPoint" />.
@@ -292,8 +328,10 @@ public static class ChartDiffEngine
     private static void DiffTimed<T>(List<ChartStructureDiff> entries,
         IEnumerable<T> oldItems, IEnumerable<T> newItems,
         ChartDiffElementKind kind, int difficultyIndex, FractionalPosition tolerance,
-        Func<T, FractionalPosition> position, Func<T, string> label, Func<T, T, List<string>> compare)
+        Func<T, FractionalPosition> position, Func<T, string> label, Func<T, T, List<string>> compare,
+        Func<T, string>? newLabel = null)
     {
+        newLabel ??= label;
         var oldSorted = oldItems.OrderBy(position).ToList();
         var newSorted = newItems.OrderBy(position).ToList();
 
@@ -307,17 +345,22 @@ public static class ChartDiffEngine
                 if (changed.Count > 0)
                 {
                     entries.Add(new ChartStructureDiff(ChartDiffChange.Changed, kind, position(newItem),
-                        difficultyIndex, label(newItem), changed));
+                        difficultyIndex, newLabel(newItem), changed));
                 }
             },
             onOldOnly: oldItem => entries.Add(new ChartStructureDiff(ChartDiffChange.Removed, kind,
                 position(oldItem), difficultyIndex, label(oldItem))),
             onNewOnly: newItem => entries.Add(new ChartStructureDiff(ChartDiffChange.Added, kind,
-                position(newItem), difficultyIndex, label(newItem))));
+                position(newItem), difficultyIndex, newLabel(newItem))));
     }
 
+    /// <summary>Compares sounds without arrangement context. Template references
+    /// use numeric identity here; use <see cref="Diff"/> to compare resolved grips.</summary>
     public static IReadOnlyList<ChartSoundDiff> DiffLevel(ChartLevel oldLevel, ChartLevel newLevel,
-        ChartDiffOptions? options = null)
+        ChartDiffOptions? options = null) => DiffLevel(oldLevel, newLevel, options, (a, b) => a == b);
+
+    private static IReadOnlyList<ChartSoundDiff> DiffLevel(ChartLevel oldLevel, ChartLevel newLevel,
+        ChartDiffOptions? options, Func<int, int, bool> templatesEqual)
     {
         ArgumentNullException.ThrowIfNull(oldLevel);
         ArgumentNullException.ThrowIfNull(newLevel);
@@ -359,7 +402,8 @@ public static class ChartDiffEngine
         MatchSequences(oldChords, newChords, c => c.Position, tolerance,
             onMatch: (oldChord, newChord) =>
             {
-                var changed = CompareChords(oldChord, newChord, tolerance);
+                var changed = CompareChords(oldChord, newChord, tolerance,
+                    templatesEqual(oldChord.TemplateId, newChord.TemplateId));
                 if (changed.Count > 0)
                 {
                     entries.Add(new ChartSoundDiff(ChartDiffChange.Changed, ChartDiffSoundKind.Chord,
@@ -423,25 +467,26 @@ public static class ChartDiffEngine
         AppendSoundTechniqueDiffs(changed, a, b, a.Position, b.Position, tolerance);
         if (a.Accent != b.Accent) changed.Add("Accent");
         if (a.Ignore != b.Ignore) changed.Add("Ignore");
-        // These three are real, exportable authoring decisions that were simply
-        // never compared, so a chart edited only in these ways diffed as
-        // IDENTICAL — and IsEmpty is the documented LAN "has update" signal, so
-        // peers were told a changed chart was unchanged.
         if (a.PassOtherNotes != b.PassOtherNotes) changed.Add("PassOtherNotes");
-        if (a.LinkNext != b.LinkNext) changed.Add("LinkNext");
+        if (a.LeftHandFinger != b.LeftHandFinger) changed.Add("LeftHandFinger");
+        if (a.PickDirection != b.PickDirection) changed.Add("PickDirection");
+        if (a.NotationDuration != b.NotationDuration) changed.Add("NotationDuration");
+        if (a.GraceFret != b.GraceFret) changed.Add("GraceFret");
         return changed;
     }
 
-    private static List<string> CompareChords(Chord a, Chord b, FractionalPosition tolerance)
+    private static List<string> CompareChords(Chord a, Chord b, FractionalPosition tolerance, bool templatesEqual)
     {
         var changed = new List<string>();
         if (a.Position != b.Position) changed.Add("Position");
-        if (a.TemplateId != b.TemplateId) changed.Add("Template");
+        if (!templatesEqual) changed.Add("Template");
         if (a.Accent != b.Accent) changed.Add("Accent");
         if (a.Ignore != b.Ignore) changed.Add("Ignore");
         if (a.SplitIntoNotes != b.SplitIntoNotes) changed.Add("SplitIntoNotes");
         if (a.ForceNoNotes != b.ForceNoNotes) changed.Add("ForceNoNotes");
         if (a.PassOtherNotes != b.PassOtherNotes) changed.Add("PassOtherNotes");
+        if (a.Strum != b.Strum) changed.Add("Strum");
+        if (a.NotationDuration != b.NotationDuration) changed.Add("NotationDuration");
 
         // Ordered so ChangedFields is a stable SEQUENCE, not just a stable set:
         // without it the order in which technique fields were appended followed
@@ -464,16 +509,7 @@ public static class ChartDiffEngine
             }
 
             if (oldNote.Fret != newNote.Fret) notesDiffer = true;
-            // Per-STRING accent and ignore were invisible to the diff: only the
-            // chord-level flags were compared, so accenting one string of a
-            // strum reported no change at all.
-            if (oldNote.Accent != newNote.Accent && !techniqueDiffs.Contains("Accent"))
-                techniqueDiffs.Add("Accent");
-            if (oldNote.Ignore != newNote.Ignore && !techniqueDiffs.Contains("Ignore"))
-                techniqueDiffs.Add("Ignore");
-            if (oldNote.Sustain != newNote.Sustain && !techniqueDiffs.Contains("Sustain"))
-                techniqueDiffs.Add("Sustain");
-            AppendSoundTechniqueDiffs(techniqueDiffs, oldNote, newNote, a.Position, b.Position, tolerance);
+            AppendChordNoteDiffs(techniqueDiffs, oldNote, newNote, a.Position, b.Position, tolerance);
         }
 
         if (notesDiffer) changed.Add("Notes");
@@ -484,6 +520,17 @@ public static class ChartDiffEngine
         }
 
         return changed;
+    }
+
+    private static void AppendChordNoteDiffs(List<string> changed, ChordNote a, ChordNote b,
+        FractionalPosition oldAnchor, FractionalPosition newAnchor, FractionalPosition tolerance)
+    {
+        if (a.Accent != b.Accent && !changed.Contains("Accent")) changed.Add("Accent");
+        if (a.Ignore != b.Ignore && !changed.Contains("Ignore")) changed.Add("Ignore");
+        if (a.Sustain != b.Sustain && !changed.Contains("Sustain")) changed.Add("Sustain");
+        if (a.ExplicitSustain != b.ExplicitSustain && !changed.Contains("ExplicitSustain")) changed.Add("ExplicitSustain");
+        if (a.GraceFret != b.GraceFret && !changed.Contains("GraceFret")) changed.Add("GraceFret");
+        AppendSoundTechniqueDiffs(changed, a, b, oldAnchor, newAnchor, tolerance);
     }
 
     private static void AppendSoundTechniqueDiffs(List<string> changed, IGuitarSound a, IGuitarSound b,

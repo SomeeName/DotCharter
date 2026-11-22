@@ -9,10 +9,63 @@ namespace DotCharter.Services.State;
 
 public class ProjectState : ObservableObject
 {
+    private Func<Arrangement?>? _previewArrangementResolver;
+
+    // Installed with the editing scope so previews use the same target as
+    // placement. Bare state users retain the active-arrangement fallback.
+    internal void SetPreviewArrangementResolver(Func<Arrangement?> resolver) => _previewArrangementResolver = resolver;
+
+    private int PreviewCapo => Math.Max(0, (_previewArrangementResolver?.Invoke() ?? ActiveArrangement)?.Capo ?? 0);
+
     public ChartDocumentState Document { get; } = new();
     public EditorUiState EditorUi { get; } = new();
     public PlaybackState Playback { get; } = new();
     public UserSettingsState UserSettings { get; } = new();
+
+    /// <summary>A persisted edit outside undo history; the session forwards it to its dirty tracker.</summary>
+    public event Action? ProjectChanged;
+
+    /// <summary>The native audio sources were cleared, including the stem sources.</summary>
+    public event Action? AudioCleared;
+
+    /// <summary>The master audio and its file waveform are ready; existing stems remain loaded.</summary>
+    public event Action? AudioLoaded;
+
+    public void NotifyProjectChanged(ChartProject project)
+    {
+        if (ReferenceEquals(ActiveProject, project)) ProjectChanged?.Invoke();
+    }
+
+    public void NotifyAudioCleared() => AudioCleared?.Invoke();
+
+    public void NotifyAudioLoaded() => AudioLoaded?.Invoke();
+
+    private long _songAudioRevision;
+
+    /// <summary>Committed song attachments/replacements/detachments; transport notifications never advance it.</summary>
+    public long SongAudioRevision => _songAudioRevision;
+
+    /// <summary>The declared song-audio reference, unresolved; its presence distinguishes first attachment.</summary>
+    public string? SongAudioPath
+    {
+        get
+        {
+            var reference = ActiveProject?.AudioFileName;
+            return string.IsNullOrWhiteSpace(reference)
+                ? null
+                : reference;
+        }
+    }
+
+    /// <summary>Commits a song-audio change, including a same-path replacement or an empty reference for detach.</summary>
+    public void CommitSongAudio(ChartProject project, string reference)
+    {
+        if (!ReferenceEquals(project, ActiveProject)) return;
+        project.AudioFileName = reference;
+        _songAudioRevision++;
+        CurrentAudioFileName = reference;
+        OnPropertyChanged(nameof(SongAudioRevision));
+    }
 
     /// <summary>A bare state (tests, tools): the rail starts empty.</summary>
     public ProjectState()
@@ -28,6 +81,8 @@ public class ProjectState : ObservableObject
         get => Document.ActiveArrangement;
         set
         {
+            if (ReferenceEquals(Document.ActiveArrangement, value)) return;
+            OnPropertyChanging(nameof(ActiveArrangement));
             if (!SetStateProperty(Document.ActiveArrangement, value, v => Document.ActiveArrangement = v)) return;
 
             OnPropertyChanged(nameof(EventPoints));
@@ -41,14 +96,10 @@ public class ProjectState : ObservableObject
             // chart with dynamic difficulty, level 0 is the thinnest beginner
             // reduction — so opening or switching to an imported RS/psarc
             // arrangement dropped the editor onto a chart with most of its notes
-            // missing, which reads as "the import lost my notes". Every other
-            // place that has to pick THE level of a leveled arrangement already
-            // picks the top: Play Mode and Live Play take Levels[^1], the
-            // generator reads OrderBy(DifficultyIndex).Last() as its source and
-            // deliberately lands the editor on N-1 afterwards, and the matcher's
-            // no-phrase fallback takes Levels.Count - 1. MaxBy rather than [^1]
-            // so a collection that is not in index order still answers correctly.
-            ActiveLevel = value?.Levels.MaxBy(level => level.DifficultyIndex);
+            // missing, which reads as "the import lost my notes". Share the
+            // difficulty-based choice with gameplay, alignment and analysis:
+            // imported levels need not be stored in difficulty order.
+            ActiveLevel = ChartLevels.Hardest(value);
 
             // The string-edit mask is addressed by DIGIT KEYS (nine of them) but
             // DRAWN on the active arrangement's lanes, so it has to be narrowed
@@ -92,6 +143,34 @@ public class ProjectState : ObservableObject
     ///     </para>
     /// </remarks>
     public void NotifyActiveArrangementChanged() => OnPropertyChanged(nameof(ActiveArrangement));
+
+    private int _projectOpenDepth;
+
+    /// <summary>
+    ///     True while an open replaces the project (the file load, a library song) and
+    ///     puts back its remembered arrangement. Arrangement changes inside it are the
+    ///     open's own, not a switch the user asked for.
+    /// </summary>
+    public bool IsOpeningProject => _projectOpenDepth > 0;
+
+    /// <summary>Marks an open in progress until the returned scope is disposed; scopes nest.</summary>
+    public IDisposable BeginProjectOpen()
+    {
+        _projectOpenDepth++;
+        return new ProjectOpenScope(this);
+    }
+
+    private sealed class ProjectOpenScope(ProjectState state) : IDisposable
+    {
+        private ProjectState? _state = state;
+
+        public void Dispose()
+        {
+            if (_state is null) return;
+            _state._projectOpenDepth--;
+            _state = null;
+        }
+    }
 
     private ChartLevel? _gameplayLevel;
 
@@ -333,30 +412,20 @@ public class ProjectState : ObservableObject
             v => UserSettings.EnableHitSparks = v);
     }
 
-    /// <summary>Left-handed mode (v0.34, profile-level — see
-    /// <see cref="UserSettingsState.LeftyFlip"/>).</summary>
+    /// <summary>Profile-level fret-axis mirror in 3D. All 2D string rows use
+    /// <see cref="InvertStrings"/> independently of handedness.</summary>
     public bool LeftyFlip
     {
         get => UserSettings.LeftyFlip;
-        set
-        {
-            SetStateProperty(UserSettings.LeftyFlip, value, v => UserSettings.LeftyFlip = v);
-            OnPropertyChanged(nameof(FlipStrings));
-        }
+        set => SetStateProperty(UserSettings.LeftyFlip, value, v => UserSettings.LeftyFlip = v);
     }
 
     /// <summary>
-    ///     THE string-orientation answer, and the only one anything should ask.
-    ///     <para>
-    ///         <c>IChartViewport.FlipStrings</c> is this same XOR and the 2D/3D
-    ///         renderers lay their lanes out with it; exposing it here is what
-    ///         lets a surface OUTSIDE a viewport — the inspector's chord box, its
-    ///         per-string rows — follow the toggle instead of quietly disagreeing.
-    ///         They did disagree: the chord box drew the high E on top while the
-    ///         highway drew the low E there, and no toggle moved it.
-    ///     </para>
+    ///     Vertical string order for every 2D surface, including chord boxes
+    ///     and their per-string editor rows. An alias for <see cref="InvertStrings"/>,
+    ///     independent of profile handedness, matching timeline lanes and hit-testing.
     /// </summary>
-    public bool FlipStrings => LeftyFlip ^ InvertStrings;
+    public bool FlipStrings => InvertStrings;
 
     /// <summary>Inverted string layout (tab convention — see
     /// <see cref="UserSettingsState.InvertStrings"/>). Vertical string flip in
@@ -385,11 +454,21 @@ public class ProjectState : ObservableObject
         set => SetStateProperty(UserSettings.GameplayPresentation, value, v => UserSettings.GameplayPresentation = v);
     }
 
-    /// <summary>Both String orders at once, as AppConfig stores them.</summary>
-    public void ApplyStringOrders(AppConfig config)
+    /// <summary>The note inspector's Apply step (<see cref="UserSettingsState.InspectorApplyStep"/>): on, its edits wait
+    /// as a draft; off (the default), each edit is written at once.</summary>
+    public bool InspectorApplyStep
+    {
+        get => UserSettings.InspectorApplyStep;
+        set => SetStateProperty(UserSettings.InspectorApplyStep, value, v => UserSettings.InspectorApplyStep = v);
+    }
+
+    /// <summary>The editor preferences AppConfig stores and this state mirrors: both String orders and the inspector's
+    /// Apply step.</summary>
+    public void ApplyEditorPreferences(AppConfig config)
     {
         InvertStrings = config.InvertStrings;
         PlayModeInvertStrings = config.PlayModeInvertStrings;
+        InspectorApplyStep = config.InspectorApplyStep;
     }
 
     public bool EnableFilmicTonemap
@@ -477,14 +556,15 @@ public class ProjectState : ObservableObject
     ///     pen's typed digit, the pointer's right-click placement and the
     ///     inspector's queue readout all read this one value.
     ///     <para>
-    ///         Snapped to the frets the ACTIVE arrangement's neck actually has
+    ///         Snapped to the frets the focused edit arrangement's neck actually has
     ///         (<see cref="SoundingPitch.SnapToNeck" />, legal set
     ///         <c>{0} ∪ [capo, 24]</c>). Every writer clamped to a plain
     ///         <c>0..24</c>, so on a capo-5 chart wheeling the ghost to fret 3 and
     ///         pressing a string key CREATED an <c>L01</c>
     ///         (<c>NoteFretBelowCapo</c>) — the malformed sound the app's own
     ///         validator flags and <c>FixCapoFrets</c> silently raises on the next
-    ///         auto-fix. Snapping HERE rather than at
+    ///         auto-fix. Reads also snap a fret armed before focus changed.
+    ///         Snapping HERE rather than only at
     ///         <c>ApplyNotePlacementCommand</c> keeps the ghost and the note the
     ///         same fret: a preview that advertises a fret the placement will not
     ///         use is its own bug. Capo 0 is a strict no-op.
@@ -492,9 +572,9 @@ public class ProjectState : ObservableObject
     /// </summary>
     public int PreviewNoteFret
     {
-        get => EditorUi.PreviewNoteFret;
+        get => SoundingPitch.SnapToNeck(EditorUi.PreviewNoteFret, PreviewCapo);
         set => SetStateProperty(EditorUi.PreviewNoteFret,
-            SoundingPitch.SnapToNeck(value, Math.Max(0, ActiveArrangement?.Capo ?? 0)),
+            SoundingPitch.SnapToNeck(value, PreviewCapo),
             v => EditorUi.PreviewNoteFret = v);
     }
 

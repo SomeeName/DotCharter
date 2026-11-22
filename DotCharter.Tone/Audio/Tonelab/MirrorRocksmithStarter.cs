@@ -34,10 +34,12 @@ public sealed class MirrorRocksmithStarter : IRocksmithStarter
     private readonly Func<bool> _steamRunning;
     private readonly IGameProcessCreator _creator;
     private readonly Func<IDictionary> _environment;
+    private readonly IAppLogger? _logger;
 
     public MirrorRocksmithStarter(TonelabGameMirror mirror, Func<string?> gameDirectory, Func<bool> steamRunning, IGameProcessCreator creator,
-        Func<IDictionary> environment)
+        Func<IDictionary> environment, IAppLogger? logger)
     {
+        _logger = logger;
         _mirror = mirror;
         _gameDirectory = gameDirectory;
         _steamRunning = steamRunning;

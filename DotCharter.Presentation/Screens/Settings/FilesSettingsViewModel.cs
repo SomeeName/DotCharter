@@ -293,7 +293,7 @@ public sealed partial class FilesSettingsViewModel : ObservableObject,
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Settings, $"PSARC audio cache measure failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Settings, "PSARC audio cache measure failed", ex);
         }
     }
 
@@ -309,7 +309,7 @@ public sealed partial class FilesSettingsViewModel : ObservableObject,
         }
         catch (Exception ex)
         {
-            _logger?.Error(AppLogCategory.Settings, $"PSARC audio cache clear failed: {ex.Message}", ex);
+            _logger?.Error(AppLogCategory.Settings, "PSARC audio cache clear failed", ex);
             detail = ex.Message;
         }
 

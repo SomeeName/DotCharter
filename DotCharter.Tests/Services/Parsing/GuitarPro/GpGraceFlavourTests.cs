@@ -24,6 +24,24 @@ namespace DotCharter.Tests.Services.Parsing.GuitarPro;
 /// </summary>
 public sealed class GpGraceFlavourTests
 {
+    [Fact]
+    public void RepeatedOnBeatGrace_PreservesItsPlacementOnEveryPass()
+    {
+        var bar = GracedBar(new FxNote(0, 7, GraceFret: 5, GraceSlide: true, GraceOnBeat: true));
+        bar.RepeatStart = true;
+        bar.RepeatTotalPasses = 2;
+
+        var level = ImportLevel(LegacyGpFixtureBuilder.WriteFile("5.10", [bar]));
+        var origins = level.Notes.Where(n => n.Fret == 5).OrderBy(n => n.Position).ToArray();
+        var targets = level.Notes.Where(n => n.Fret == 7).OrderBy(n => n.Position).ToArray();
+
+        Assert.Equal(2, origins.Length);
+        Assert.Equal(2, targets.Length);
+        Assert.Equal(new FractionalPosition(4), origins[1].Position - origins[0].Position);
+        Assert.Equal(new FractionalPosition(4), targets[1].Position - targets[0].Position);
+        Assert.Equal(origins[0].Sustain, origins[1].Sustain);
+    }
+
     // ---- binary (.gp3/.gp4/.gp5) fixtures ---------------------------------
 
     private static ChartLevel ImportLevel(string path)

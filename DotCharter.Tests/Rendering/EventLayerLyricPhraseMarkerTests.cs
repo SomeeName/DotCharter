@@ -20,6 +20,20 @@ namespace DotCharter.Tests.Rendering;
 /// </summary>
 public sealed class EventLayerLyricPhraseMarkerTests
 {
+    [Fact]
+    public void ReviewFindingsPaintAMarkOnTheLyricRow()
+    {
+        var phrase = PhraseAt(2, 4, "la", "la");
+        var plain = Render([phrase]);
+        var reasons = typeof(LyricEvent).GetProperty("ReviewReasons");
+        Assert.NotNull(reasons);
+        reasons.SetValue(phrase.Lyrics[0], Enum.ToObject(reasons.PropertyType, 1));
+
+        var marked = Render([phrase]);
+
+        Assert.True(marked.SolidVertexCount > plain.SolidVertexCount);
+    }
+
     private const double Zoom = 0.2;
     private const double ViewWidth = 1920;
 

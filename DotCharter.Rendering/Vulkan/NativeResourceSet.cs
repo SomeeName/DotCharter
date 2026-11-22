@@ -34,6 +34,26 @@ namespace DotCharter.Rendering.Vulkan;
 /// </summary>
 public static class NativeResourceSet
 {
+    /// <summary>Completes a partially built native object, rolling back its owned
+    /// handles on failure and releasing temporary upload resources on either path.
+    /// Delegates keep the allocation-failure path testable without a device.</summary>
+    internal static void CompleteOrRollback(Action complete, Action rollback, Action? releaseTemporary = null)
+    {
+        try
+        {
+            complete();
+        }
+        catch
+        {
+            rollback();
+            throw;
+        }
+        finally
+        {
+            releaseTemporary?.Invoke();
+        }
+    }
+
     /// <summary>
     ///     Creates <paramref name="count" /> resources via
     ///     <paramref name="create" />. On success returns them all; on any

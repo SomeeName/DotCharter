@@ -35,10 +35,13 @@
   a bend alike only to a bend at the same instant of the song, i.e. never), the
   slide as a distance rather than a destination fret (a slide is a movement, so
   it survives transposition by construction).
-  **(d) `FretRule.Transposable` NEVER transposes an open string** — fret 0 only
-  ever matches fret 0, because a capo-less open string does not move with the
-  hand. The transposition base is the lowest FRETTED fret of the element (or of
-  the whole run), never the lowest fret.
+  **(d) `FretRule.Transposable` NEVER transposes an open string** — frets at or
+  below the destination arrangement's capo are open and match only other open
+  strings, including fret 0. The transposition base is the lowest fret ABOVE
+  the capo of the element (or of the whole run), never the lowest fret.
+  `MaxFretDistance` compares that fretted position for sounds and hand shapes,
+  and the anchor's own fret for anchors, against every matching seed's position.
+  All-open shapes have no neck position to limit; 0 disables the distance limit.
   **(e) `PatternMatches.Groups` is what the navigate verb walks**, not the flat
   element lists: a run pattern's occurrence is N elements, and without the
   grouping "go to next match" steps through one lick note by note. Overlapping
@@ -48,7 +51,8 @@
   times three verbs is twenty-one chords, and `ChartKeybindHandler.RefreshBinds`
   resolves a collision last-registration-wins with only a log line. The builder
   can run a pattern without a key, so binding is a decision made after the
-  pattern has earned it.
+  pattern has earned it. The builder checks collisions between all three verbs
+  within one pattern as well as between patterns and against built-in bindings.
   **(g) `AppConfig.MatchPatternsSeeded` is what makes the starter set arrive
   once.** An empty list is a legitimate state (the user deleted them all) and
   must not be re-seeded on the next launch.

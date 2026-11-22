@@ -57,6 +57,15 @@ internal readonly record struct VerifiedFileRequest(
 /// </summary>
 internal static class StemModelDownloadPlan
 {
+    /// <summary>Built-ins keep their catalogue names; imports are isolated by stable id.</summary>
+    internal static string LocalFileName(StemModelDescriptor descriptor) =>
+        StemModelCatalog.BuiltIn.Any(d => string.Equals(d.Id, descriptor.Id, StringComparison.OrdinalIgnoreCase))
+            ? StemModelFileName.Contained(descriptor.FileName)
+            : IdentityToken(descriptor.Id.ToLowerInvariant()) + "-" + StemModelFileName.Contained(descriptor.FileName);
+
+    internal static string IdentityToken(string identity) =>
+        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(identity)));
+
     /// <summary>
     ///     A catalogue descriptor as a kind-less verified fetch — that means a USER IMPORT, the only descriptor left that no
     ///     JuceSharp catalogue knows about. The ggml built-ins do not come through here:
@@ -91,7 +100,7 @@ internal static class StemModelDownloadPlan
 
         return new VerifiedFileRequest(
             url,
-            Path.Combine(modelsDirectory, name),
+            Path.Combine(modelsDirectory, LocalFileName(descriptor)),
             string.IsNullOrWhiteSpace(descriptor.Sha256) ? null : descriptor.Sha256.Trim().ToLowerInvariant(),
             descriptor.ExactBytes > 0 ? descriptor.ExactBytes : null);
     }

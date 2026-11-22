@@ -44,31 +44,31 @@ public sealed class NoteRule : IArrangementRule
         if (note.Fret > 24)
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.FretNumberMoreThan24, note, timeMs,
-                $"Fret number {note.Fret} exceeds the in-game maximum of 24."));
+                "Validation_NoteFretNumberMoreThan24", args: [note.Fret]));
         }
 
         if (isBass && note.StringIndex >= 4)
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.InvalidBassArrangementString, note, timeMs,
-                $"Bass arrangements only have 4 strings (got string index {note.StringIndex})."));
+                "Validation_NoteInvalidBassArrangementString", args: [note.StringIndex]));
         }
 
         if (context.TotalAudioLengthMs is { } endMs && timeMs >= endMs)
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.NoteAfterSongEnd, note, timeMs,
-                "Note is placed after the end of the song audio."));
+                "Validation_NoteAfterSongEnd"));
         }
 
         if (context.IsInsideNoguitar(timeMs))
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.NoteInsideNoguitarSection, note, timeMs,
-                "Note is placed inside a no-guitar section."));
+                "Validation_NoteInsideNoguitarSection"));
         }
 
         if (context.IsOnToneChange(timeMs))
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.ToneChangeOnNote, note, timeMs,
-                "A tone change happens at the same time as this note. Move it just before or after."));
+                "Validation_ToneChangeOnNote"));
         }
     }
 
@@ -79,13 +79,13 @@ public sealed class NoteRule : IArrangementRule
         if (note.Harmonic == HarmonicType.Normal && hasBend)
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.NaturalHarmonicWithBend, note, timeMs,
-                "Natural harmonics cannot be bent."));
+                "Validation_NoteNaturalHarmonicWithBend"));
         }
 
         if (note.Harmonic == HarmonicType.Normal && note.Fret == 7 && sustainMs > 0 && !note.Ignore)
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.SeventhFretHarmonicWithSustain, note, timeMs,
-                "7th-fret natural harmonic with sustain will not ring out in-game."));
+                "Validation_NoteSeventhFretHarmonicWithSustain"));
         }
 
         if (!hasBend) return;
@@ -93,13 +93,13 @@ public sealed class NoteRule : IArrangementRule
         if (!note.BendValues.Any(bv => bv.Step != 0.0))
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.MissingBendValue, note, timeMs,
-                "Note is marked as a bend but no bend value reaches a non-zero step."));
+                "Validation_NoteMissingBendValue"));
         }
 
         if (FindOverlappingBendValue(note.BendValues, beats) is { } overlapMs)
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.OverlappingBendValues, note, overlapMs,
-                "Two bend values share the same time."));
+                "Validation_OverlappingBendValues"));
         }
     }
 
@@ -110,19 +110,19 @@ public sealed class NoteRule : IArrangementRule
         if (requiresSustain && sustainMs < TechniqueMinSustainMs)
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.TechniqueNoteWithoutSustain, note, timeMs,
-                "Tremolo/vibrato/slide notes need a sustain to be audible."));
+                "Validation_NoteTechniqueNoteWithoutSustain"));
         }
 
         if (note.LinkNext && note.UnpitchedSlide)
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.UnpitchedSlideWithLinkNext, note, timeMs,
-                "Unpitched slide notes cannot use Link-Next."));
+                "Validation_NoteUnpitchedSlideWithLinkNext"));
         }
 
         if (note.LinkNext && context.HasPhraseChangeOnSustain(note))
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.PhraseChangeOnLinkNextNote, note, timeMs,
-                "A non-mover phrase change occurs while this Link-Next note is still ringing."));
+                "Validation_PhraseChangeOnLinkNextNote"));
         }
     }
 
@@ -142,7 +142,7 @@ public sealed class NoteRule : IArrangementRule
                 && (note.Hopo == HopoType.PullOff || !SoundsBetween(level, prev.Position, note.Position)))
             {
                 issues.Add(ArrangementIssues.Note(ArrangementIssueType.HopoIntoSameNote, note, timeMs,
-                    "HOPO into a note on the same fret as the previous note."));
+                    "Validation_HopoIntoSameNote"));
             }
         }
 
@@ -155,7 +155,7 @@ public sealed class NoteRule : IArrangementRule
         if (prevAnchor != null && prevAnchor.Fret != here.Fret)
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.PositionShiftIntoPullOff, note, timeMs,
-                "Pull-off note coincides with an anchor change — finger position would need to shift."));
+                "Validation_PositionShiftIntoPullOffNote"));
         }
     }
 
@@ -178,7 +178,7 @@ public sealed class NoteRule : IArrangementRule
         if (!fingerCannotBeDetermined && !slideFromLowPosition && startFinger != endFinger)
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.FingerChangeDuringSlide, note, timeMs,
-                $"Slide requires a finger change ({startFinger} → {endFinger}) — likely an anchor mistake."));
+                "Validation_FingerChangeDuringSlide", args: [startFinger, endFinger]));
         }
     }
 

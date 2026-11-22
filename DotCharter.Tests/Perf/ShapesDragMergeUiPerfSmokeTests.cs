@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Threading;
@@ -15,8 +16,9 @@ namespace DotCharter.Tests.Perf;
 
 /// <summary>
 ///     Drag-to-merge on the Shapes panel over the app's own inspector view model and a real arrangement, driven
-///     with real pointer presses, moves and releases: a card dragged from its diagram lights the card that can
-///     take it, the release waits in the one confirmation bar, one yes merges as one undo step, and a release on
+///     with real pointer presses, moves and releases at design D's 530 px width: a list line dragged from its frets lights
+///     the line that can take it, the release waits in the Checked page's one confirmation bar (the page comes on
+///     screen), one yes merges as one undo step, and a release on
 ///     other frets, over nothing or with Esc changes nothing. Dragging near the list's edge scrolls it, and a
 ///     press that never moves begins no drag. Captures <c>shapes-drag-*</c> with
 ///     <c>DOTCHARTER_UI_SWEEP_DUMP=1</c>.
@@ -24,36 +26,36 @@ namespace DotCharter.Tests.Perf;
 [Collection("HeadlessUI")]
 public sealed class ShapesDragMergeUiPerfSmokeTests
 {
-    private const double Width = 600;
+    private const double Width = 530;
     private const double Height = 900;
 
     [Fact]
     public Task ACardDraggedOntoItsCopy_LightsTheTarget_WaitsInTheBar_AndOneYesMergesAsOneUndoStep() =>
         WithPanel(Height, p =>
         {
-            var source = p.Cards[1];
-            var target = p.Cards[0];
+            var source = 1;
+            var target = 0;
             p.Press(source);
             p.MoveTo(source, 14, 0);
             Assert.True(p.Screen.IsChoosingMergeTarget, "the drag did not begin");
-            Assert.StartsWith("Drop “", p.Screen.MergeHintText, StringComparison.Ordinal);
-            Assert.True(p.Tab.FindControl<Border>("ShapesMergeHint")!.IsEffectivelyVisible, "the drop hint is not showing");
-            Assert.Contains("Unavailable", source.Classes);
-            Assert.False(target.Classes.Contains("selected"), "the target lit before the pointer reached it");
+            Assert.True(LocalizedText.Matches("Shapes_DragHint", p.Screen.MergeHintText), $"the drop hint '{p.Screen.MergeHintText}' is not Shapes_DragHint's format");
+            Assert.True(p.Tab.FindControl<Grid>("ShapesMergeHint")!.IsEffectivelyVisible, "the drop hint is not showing");
+            Assert.Contains("Unavailable", p.Card(source).Classes);
+            Assert.False(p.Card(target).Classes.Contains("selected"), "the target lit before the pointer reached it");
 
             p.MoveTo(target, 0, 0);
-            Assert.Contains("selected", target.Classes);
-            Assert.Equal(1, p.Cards.Count(c => c.Classes.Contains("selected")));
+            Assert.Contains("selected", p.Card(target).Classes);
+            Assert.Equal(1, p.RealizedCards.Count(c => c.Classes.Contains("selected")));
             Assert.Equal(6, p.Arrangement.ChordTemplates.Count);
             NarrowWidthLayout.Capture(p.Window, "shapes-drag-over");
 
             p.Release(target);
-            var bar = p.Tab.FindControl<Border>("ShapesPendingBar")!;
+            var bar = p.Tab.FindControl<StackPanel>("ShapesPendingBar")!;
+            Assert.Contains(p.Tab.FindControl<Control>("ShapesCheckedCard")!, p.Tab.Cards.ShownCards);
             Assert.True(bar.IsEffectivelyVisible && bar.Bounds is { Width: > 1, Height: > 1 }, $"the merge bar laid out {bar.Bounds}");
-            Assert.False(p.Tab.FindControl<Border>("ShapesMergeHint")!.IsEffectivelyVisible, "the drop hint stayed after the drop");
-            Assert.StartsWith("Merge “", p.Screen.PendingText, StringComparison.Ordinal);
-            Assert.Contains("into “Am”", p.Screen.PendingText, StringComparison.Ordinal);
-            Assert.EndsWith("One undo step.", p.Screen.PendingText, StringComparison.Ordinal);
+            Assert.False(p.Tab.FindControl<Grid>("ShapesMergeHint")!.IsEffectivelyVisible, "the drop hint stayed after the drop");
+            Assert.True(LocalizedText.Matches("Shapes_Pending_Merge", p.Screen.PendingText, (1, "Am")),
+                $"the pending text '{p.Screen.PendingText}' is not Shapes_Pending_Merge's format, merging into Am");
             Assert.Equal(6, p.Arrangement.ChordTemplates.Count);
             Assert.False(p.History.CanUndo, "the drop changed the chart before its yes");
             NarrowWidthLayout.Capture(p.Window, "shapes-drag-merge");
@@ -72,15 +74,15 @@ public sealed class ShapesDragMergeUiPerfSmokeTests
     public Task ADropOnOtherFrets_OrOverNothing_OrWithEsc_ChangesNothing() =>
         WithPanel(Height, p =>
         {
-            var source = p.Cards[1];
+            var source = 1;
 
             // Other frets: the reason is said on the status rail, the pick is dropped, nothing waits in the bar.
             p.Press(source);
             p.MoveTo(source, 14, 0);
-            p.MoveTo(p.Cards[3], 0, 0);
-            Assert.DoesNotContain("selected", p.Cards[3].Classes);
-            p.Release(p.Cards[3]);
-            Assert.Equal("Not merged: the two shapes have different frets.", p.State.MainDisplayMessage);
+            p.MoveTo(3, 0, 0);
+            Assert.DoesNotContain("selected", p.Card(3).Classes);
+            p.Release(3);
+            Assert.Equal(LocalizedText.Of("ChordShapes_Refused_DifferentFrets"), p.State.MainDisplayMessage);
             Assert.False(p.Screen.HasPending);
             Assert.False(p.Screen.IsChoosingMergeTarget);
             Assert.Equal(6, p.Arrangement.ChordTemplates.Count);
@@ -101,11 +103,11 @@ public sealed class ShapesDragMergeUiPerfSmokeTests
             // Esc while dragging, then the release lands on a card that could have taken it: nothing happens.
             p.Press(source);
             p.MoveTo(source, 14, 0);
-            p.MoveTo(p.Cards[0], 0, 0);
+            p.MoveTo(0, 0, 0);
             p.Window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
             p.Settle();
             Assert.False(p.Screen.IsChoosingMergeTarget);
-            p.Release(p.Cards[0]);
+            p.Release(0);
             Assert.False(p.Screen.HasPending);
             Assert.Equal(6, p.Arrangement.ChordTemplates.Count);
             Assert.False(p.History.CanUndo);
@@ -115,9 +117,9 @@ public sealed class ShapesDragMergeUiPerfSmokeTests
     public Task ADragNearTheEdge_ScrollsTheList_AndAPressWithoutAMove_BeginsNoDrag() =>
         WithPanel(330, p =>
         {
-            var scroll = p.Tab.FindControl<ScrollViewer>("ShapesScroll")!;
+            var scroll = p.Tab.Scroll;
             Assert.True(scroll.Extent.Height > scroll.Viewport.Height, "the fixture list does not scroll");
-            var source = p.Cards[0];
+            var source = 0;
             p.Press(source);
             p.MoveTo(source, 14, 0);
             var edge = scroll.TranslatePoint(new Point(scroll.Bounds.Width / 2, scroll.Bounds.Height - 6), p.Window)!.Value;
@@ -137,10 +139,50 @@ public sealed class ShapesDragMergeUiPerfSmokeTests
             // No movement: no drag, no pick.
             scroll.Offset = default;
             p.Settle();
-            p.Press(p.Cards[0]);
-            p.Release(p.Cards[0]);
+            p.Press(0);
+            p.Release(0);
             Assert.False(p.Screen.IsChoosingMergeTarget);
             Assert.False(p.Screen.HasPending);
+        });
+
+    [Fact]
+    public Task ADistantDropKeepsTheOriginalSourceAfterItsCardIsRecycled() =>
+        WithPanel(520, p =>
+        {
+            p.Tab.RowsList.ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel { CacheLength = 0 });
+            for (var id = 6; id < 66; id++)
+            {
+                p.Arrangement.ChordTemplates.Add(new ChordTemplate
+                {
+                    Id = id, Name = $"Filler {id}", Frets = new() { [0] = id % 24, [1] = id / 24 + 1 }
+                });
+            }
+            var source = p.Arrangement.ChordTemplates[1];
+            var keeper = p.Arrangement.ChordTemplates[0];
+            var distant = new ChordTemplate
+            {
+                Id = 1000, Name = "Distant", Frets = new(keeper.Frets), Fingers = new(keeper.Fingers)
+            };
+            p.Arrangement.ChordTemplates.Add(distant);
+            p.Screen.Refresh();
+            p.Settle();
+            var sourceRow = p.Screen.AllRows.Single(r => ReferenceEquals(r.Template, source));
+            var moved = p.Arrangement.Levels[0].Chords.Single(c => c.TemplateId == source.Id);
+            var target = p.Arrangement.ChordTemplates.Count - 1;
+            p.Press(1);
+            p.MoveTo(1, 14, 0);
+            p.Tab.FindControl<TextBox>("ShapesSearch")!.Focus();
+            p.MoveTo(target, 0, 0);
+
+            Assert.DoesNotContain(p.RealizedCards, c => ReferenceEquals(c.DataContext, sourceRow));
+            Assert.True(p.Screen.IsChoosingMergeTarget);
+            Assert.True(sourceRow.IsMergeSource);
+            p.Release(target);
+            Assert.True(p.Screen.HasPending);
+            p.Click(p.Tab.FindControl<Button>("ShapesConfirm")!);
+
+            Assert.Equal(distant.Id, moved.TemplateId);
+            Assert.DoesNotContain(source, p.Arrangement.ChordTemplates);
         });
 
     private static Task WithPanel(double height, Action<Rig> body) =>
@@ -195,15 +237,15 @@ public sealed class ShapesDragMergeUiPerfSmokeTests
 
         internal IHistoryService History { get; } = history;
 
-        /// <summary>The cards in the order of the arrangement's templates (the first three are copies of one grip).</summary>
-        internal IReadOnlyList<Border> Cards =>
-            Arrangement.ChordTemplates.Select(t =>
-            {
-                var row = Screen.AllRows.Single(r => ReferenceEquals(r.Template, t));
-                var list = Tab.FindControl<ItemsControl>("ShapesRows")!;
-                return list.ContainerFromIndex(list.Items.Cast<object>().ToList().IndexOf(row))!
-                    .GetVisualDescendants().OfType<Border>().First(b => b.Name == "ShapeCard");
-            }).ToList();
+        /// <summary>The currently realized card visuals.</summary>
+        internal IReadOnlyList<Border> RealizedCards => ShapesPanelCards.Realized(Tab).ToList();
+
+        internal Border Card(int index)
+        {
+            var template = Arrangement.ChordTemplates[index];
+            var row = Screen.AllRows.Single(r => ReferenceEquals(r.Template, template));
+            return ShapesPanelCards.Card(Tab, row);
+        }
 
         internal void Settle()
         {
@@ -214,15 +256,16 @@ public sealed class ShapesDragMergeUiPerfSmokeTests
             }
         }
 
+        /// <summary>A point on the line's frets stamp: blank card, so a press there arms a drag.</summary>
         private Point DiagramOf(Border card, double dx, double dy)
         {
-            var button = card.GetVisualDescendants().OfType<Button>().First(b => b.Name == "ShapePlace");
-            return button.TranslatePoint(new Point(button.Bounds.Width / 2 + dx, button.Bounds.Height / 2 + dy), Window)!.Value;
+            var grip = card.GetVisualDescendants().OfType<TextBlock>().First(b => b.Name == "ShapeFrets");
+            return grip.TranslatePoint(new Point(grip.Bounds.Width / 2 + dx, grip.Bounds.Height / 2 + dy), Window)!.Value;
         }
 
-        internal void Press(Border card)
+        internal void Press(int index)
         {
-            card.BringIntoView();
+            var card = Card(index);
             Settle();
             var at = DiagramOf(card, 0, 0);
             Window.MouseMove(at);
@@ -230,15 +273,17 @@ public sealed class ShapesDragMergeUiPerfSmokeTests
             Settle();
         }
 
-        /// <summary>Moves the held pointer to <paramref name="card" />'s diagram, offset by the given pixels, and lets the layout settle.</summary>
-        internal void MoveTo(Border card, double dx, double dy)
+        /// <summary>Moves the held pointer to <paramref name="index" />'s frets, offset by the given pixels, and lets the layout settle.</summary>
+        internal void MoveTo(int index, double dx, double dy)
         {
+            var card = Card(index);
             Window.MouseMove(DiagramOf(card, dx, dy), RawInputModifiers.LeftMouseButton);
             Settle();
         }
 
-        internal void Release(Border card)
+        internal void Release(int index)
         {
+            var card = Card(index);
             Window.MouseUp(DiagramOf(card, 0, 0), MouseButton.Left);
             Settle();
         }

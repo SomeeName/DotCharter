@@ -402,6 +402,59 @@ public sealed class AudioPlaybackCoordinatorTests
         Assert.Equal(1, h.Audio.ScheduledClicks.Count(c => c.TransportMs == 1000));
     }
 
+    /// <summary>
+    ///     #571 row 3: SeekTo raises PositionChanged on the CALLER's thread, so a seek
+    ///     from the UI runs the handler beside a timer tick. The seek's discontinuity
+    ///     reset (cursor rewind + queue clear) used to land in the middle of the tick's
+    ///     scan; it must wait for the scan to finish. The tick is held inside its first
+    ///     scheduled click until the seek either overlaps it or is seen blocked.
+    /// </summary>
+    [Fact]
+    public async Task ASeekFromAnotherThread_WaitsForTheTimerScanInsteadOfResettingItMidway()
+    {
+        var h = new Harness();
+        h.Transport.MetronomeEnabled = true;
+        h.Audio.RawPlayheadMs = 400;
+        var scheduleCalls = 0;
+        var insideScan = 0;
+        var overlapped = false;
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var seekCleared = new ManualResetEventSlim();
+        h.Audio.DuringScheduleClick = () =>
+        {
+            if (Interlocked.Increment(ref scheduleCalls) != 1) return;
+            Volatile.Write(ref insideScan, 1);
+            entered.Set();
+            Assert.True(release.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken), "The test never released the timer scan.");
+            Volatile.Write(ref insideScan, 0);
+        };
+        h.Audio.DuringClearScheduledClicks = () =>
+        {
+            if (Volatile.Read(ref insideScan) == 1) overlapped = true;
+            seekCleared.Set();
+        };
+
+        var tick = new Thread(() => h.Coordinator.OnAudioPositionChanged(null, 380)) { IsBackground = true };
+        tick.Start();
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken), "The timer tick never reached its first click.");
+
+        // A forward jump past the 2 s window: a discontinuity, as a seek is.
+        var seek = new Thread(() => h.Coordinator.OnAudioPositionChanged(null, 5000)) { IsBackground = true };
+        seek.Start();
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (!seekCleared.IsSet && (seek.ThreadState & System.Threading.ThreadState.WaitSleepJoin) == 0 && DateTime.UtcNow < deadline)
+            await Task.Delay(1, TestContext.Current.CancellationToken);
+        var settled = seekCleared.IsSet || (seek.ThreadState & System.Threading.ThreadState.WaitSleepJoin) != 0;
+
+        release.Set();
+        Assert.True(tick.Join(TimeSpan.FromSeconds(60)), "The timer tick never finished.");
+        Assert.True(seek.Join(TimeSpan.FromSeconds(60)), "The seek never finished.");
+        Assert.True(settled, "The seek neither ran nor blocked within 60 s; the box was starved.");
+        Assert.False(overlapped, "The seek reset the click cursors while the timer scan was still running.");
+        Assert.True(seekCleared.IsSet);
+    }
+
     private sealed class Harness
     {
         public Harness()

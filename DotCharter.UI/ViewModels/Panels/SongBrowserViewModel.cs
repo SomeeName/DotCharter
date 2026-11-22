@@ -1,4 +1,5 @@
 ﻿using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -175,6 +176,20 @@ public sealed partial class SongBrowserViewModel : ViewModelBase, IDisposable
             facet.ResetOptions(LibraryFacetOptions.For(facet.Key, _allSongs, _localization));
     }
 
+    /// <summary>Raised after a language switch has re-read the songs', facets' and chips' words.</summary>
+    internal event Action? LanguageChanged;
+
+    /// <summary>A language switch: every song's capo words, every facet's option words and the chips read
+    /// again. A ticked option keeps its tick (facets keep their selection by value).</summary>
+    private void OnLanguageChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        foreach (var song in _allSongs) song.Relabel();
+        BuildFacetOptions();
+        RefreshFilterChips();
+        RefreshResultCount();
+        LanguageChanged?.Invoke();
+    }
+
     /// <summary>Rebuilds the detail pane for the current selection.</summary>
     private void RefreshSelectionDetail()
     {
@@ -302,6 +317,7 @@ public sealed partial class SongBrowserViewModel : ViewModelBase, IDisposable
         _transport = transport;
         _dialogs = dialogs;
         _localization = localization;
+        _localization.PropertyChanged += OnLanguageChanged;
         Songs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsEmptyStateVisible));
 
         // The column facets, titled with their captions' words. Every selection
@@ -597,7 +613,7 @@ public sealed partial class SongBrowserViewModel : ViewModelBase, IDisposable
         // ApplyProject leaves the previous project open with its own edits, and
         // the finally below must not speak for those.
         var sessionReplaced = false;
-
+        using var opening = _projectState.BeginProjectOpen(); // its arrangement picks are not user switches
         IsScanning = true;
         StatusText = _localization.Format("Status_PsarcLoadingSong", item.Title);
 
@@ -940,6 +956,18 @@ public sealed partial class SongBrowserViewModel : ViewModelBase, IDisposable
         // result publishes nothing at all.
         ((BulkObservableCollection<PsarcSongListItem>)Songs).SyncWith(filtered);
 
+        RefreshResultCount();
+
+        RefreshFilterChips();
+
+        // The selection survives a pass that keeps its song (the list's own transient null while it
+        // follows the edit is ignored by LibraryScreen); a song filtered out falls to the first row.
+        if (SelectedSong is null || !filtered.Contains(SelectedSong)) SelectedSong = Songs.FirstOrDefault();
+        WarmInitialCovers();
+    }
+
+    /// <summary>Formats <see cref="ResultCountText" /> in the current language from the published list.</summary>
+    private void RefreshResultCount() =>
         // "N of M songs", where M is what the list COULD show — the collapsed
         // total, not the uncollapsed master. `_allSongs` keeps every byte-copy of
         // a pack (the LibraryDoctor's diagnosis surface needs them) while the list
@@ -950,15 +978,7 @@ public sealed partial class SongBrowserViewModel : ViewModelBase, IDisposable
         ResultCountText = string.Format(
             CultureInfo.CurrentCulture,
             _localization["Dialog_SongBrowser_Count"],
-            filtered.Count, CollapsedSongs.Count);
-
-        RefreshFilterChips();
-
-        // The selection survives a pass that keeps its song (the list's own transient null while it
-        // follows the edit is ignored by LibraryScreen); a song filtered out falls to the first row.
-        if (SelectedSong is null || !filtered.Contains(SelectedSong)) SelectedSong = Songs.FirstOrDefault();
-        WarmInitialCovers();
-    }
+            Songs.Count, CollapsedSongs.Count);
 
     /// <summary>Rebuilds <see cref="ActiveFilterChips" /> from the live filter
     /// state. Called from the single <see cref="ApplyFilter" /> chokepoint — a
@@ -1092,6 +1112,7 @@ public sealed partial class SongBrowserViewModel : ViewModelBase, IDisposable
     // memory until process exit.
     public void Dispose()
     {
+        _localization.PropertyChanged -= OnLanguageChanged;
         Interlocked.Increment(ref _coverLoadRevision);
 
         foreach (var song in _allSongs)

@@ -11,18 +11,21 @@ public readonly struct FractionalPosition : IComparable<FractionalPosition>, IEq
 
     public FractionalPosition(int beatId, Fraction fraction)
     {
-        var fullBeats = fraction.Numerator / fraction.Denominator;
+        var normalizedBeatId = NormalizedBeatId(beatId, fraction);
+        if (normalizedBeatId is < int.MinValue or > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(beatId), "The normalized beat index does not fit in a position.");
         var remainderNumerator = fraction.Numerator % fraction.Denominator;
 
         if (remainderNumerator < 0)
-        {
-            fullBeats--;
             remainderNumerator += fraction.Denominator;
-        }
 
-        BeatId = beatId + fullBeats;
+        BeatId = (int)normalizedBeatId;
         Fraction = new Fraction(remainderNumerator, fraction.Denominator);
     }
+
+    private static long NormalizedBeatId(int beatId, Fraction fraction)
+        => (long)beatId + fraction.Numerator / fraction.Denominator -
+           (fraction.Numerator % fraction.Denominator < 0 ? 1 : 0);
 
     public FractionalPosition(int beatId) : this(beatId, Fraction.Zero)
     {
@@ -53,6 +56,7 @@ public readonly struct FractionalPosition : IComparable<FractionalPosition>, IEq
         {
             if (Fraction.TryParse(value.Substring(split + 1), out var fraction))
             {
+                if (NormalizedBeatId(beatId, fraction) is < int.MinValue or > int.MaxValue) return false;
                 result = new FractionalPosition(beatId, fraction);
                 return true;
             }

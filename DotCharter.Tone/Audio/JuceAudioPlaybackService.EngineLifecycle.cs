@@ -2,11 +2,14 @@
 using DotCharter.Tone.Audio.Dsp.RsToneConversion;
 using DotCharter.Tone.Audio.Midi;
 using JuceSharp;
+using DotCharter.Tone.Audio.Engine;
 
 namespace DotCharter.Tone.Audio;
 
 public sealed partial class JuceAudioPlaybackService
 {
+    private readonly MediaRebuildRecovery<StemMixerSnapshot> _mediaRebuildRecovery = new(MergeStemMixerSnapshots);
+
     public Task InitializeAsync()
     {
         // Device enumeration is LAZY: a startup probe would
@@ -43,7 +46,7 @@ public sealed partial class JuceAudioPlaybackService
         ReplaceEngine(cfg);
     }
 
-    private void ReplaceEngine(JuceEngineConfig cfg)
+    internal void ReplaceEngine(JuceEngineConfig cfg)
     {
         const string taskId = "audio-engine-restart";
         _statusBar?.BeginTask(taskId, _localization["Progress_RestartingAudioEngine"], indeterminate: true);
@@ -103,7 +106,9 @@ public sealed partial class JuceAudioPlaybackService
             // The queued-VST drain at the end of this method only *spawns*
             // workers (they acquire _vstGate themselves once we release it
             // below), so holding the gate across the whole body is safe.
-            ReplaceEngineGated(cfg);
+            // A media decode must finish before its engine is destroyed, and a
+            // new load must not publish a source that the teardown then frees.
+            lock (_mediaLoadGate) ReplaceEngineGated(cfg);
         }
         finally
         {
@@ -124,6 +129,8 @@ public sealed partial class JuceAudioPlaybackService
         if (IsDisposing) return;
         string? reloadPath;
         string? instrumentReload = null;
+        byte[]? instrumentState = null;
+        MediaLoadRequest reloadRequest;
         List<VstChainEntry>? guitarChainReload = null;
         // FreeAudioLocked below clears the stem dictionary, so it is snapshotted
         // first — otherwise ANY device change, buffer-size change or
@@ -132,10 +139,23 @@ public sealed partial class JuceAudioPlaybackService
         // data loss rather than silence). Take the whole mixer state now; it is
         // re-issued after the rebuild. See RestoreStemsAfterEngineRebuild.
         StemMixerSnapshot? stemReload;
+        MediaRebuildRecovery<StemMixerSnapshot>.Snapshot? mediaRecovery;
+        long stemClearGeneration, stemLineage;
         lock (_gate)
         {
+            stemClearGeneration = _stemClearGeneration;
+            stemLineage = _mediaLineage;
             reloadPath = _loadedPath;
+            reloadRequest = _loadedPath is null ? Volatile.Read(ref _requestedMediaLoad) : _loadedMediaLoad;
             stemReload = SnapshotStemMixerLocked();
+            mediaRecovery = _mediaRebuildRecovery.Capture(reloadPath, reloadRequest,
+                Volatile.Read(ref _requestedMediaLoad), stemReload);
+            if (mediaRecovery is not null)
+            {
+                reloadPath = mediaRecovery.Path;
+                reloadRequest = mediaRecovery.Request;
+                stemReload = mediaRecovery.Stems;
+            }
         }
 
         // Tear plugins down BEFORE we touch the engine. The native
@@ -157,6 +177,7 @@ public sealed partial class JuceAudioPlaybackService
         {
             engineForTeardown = _engine;
             chainSnapshot = _guitarChain
+                .OrderBy(kv => _guitarChainOrder.IndexOf(kv.Key))
                 .Select(kv => (kv.Key, kv.Value, Player: _guitarSlotPlayer.GetValueOrDefault(kv.Key),
                     BypassIntent: _guitarSlotBypass.GetValueOrDefault(kv.Key)))
                 .ToList();
@@ -171,6 +192,7 @@ public sealed partial class JuceAudioPlaybackService
                     .Select(s => new VstChainEntry
                     {
                         Id = s.Id, PluginPath = s.Plugin.Path,
+                        State = VstRebuildState.Capture(s.Plugin, _logger),
                         // The APP's recorded intent, never `s.Plugin.Bypass`.
                         // That property answers "not in any seat's input chain",
                         // so a slot the app considers ACTIVE but that is not
@@ -189,6 +211,7 @@ public sealed partial class JuceAudioPlaybackService
             // Capture the instrument path before DetachInstrumentLocked
             // clears it.
             lock (_gate) { instrumentReload = _instrumentPath; }
+            instrumentState = VstRebuildState.Capture(_instrumentPlugin, _logger);
 
             // Stop the audio source so processBlock() can't race with
             // plugin destructors.
@@ -200,7 +223,7 @@ public sealed partial class JuceAudioPlaybackService
             catch (Exception ex)
             {
                 _logger?.Warning(AppLogCategory.Audio,
-                    $"Instrument VSTi teardown before engine swap failed: {ex.Message}");
+                    "Instrument VSTi teardown before engine swap failed", ex);
             }
 
             // Guitar chain: strict-order unload while engine is still alive.
@@ -232,37 +255,43 @@ public sealed partial class JuceAudioPlaybackService
         // handles: it is null before the first init and after a failed one.
         try
         {
-            lock (_gate)
-            {
-                FreeAudioLocked();
-                // Plugins have been disposed above against the soon-to-be-destroyed engine.
-                _guitarChain.Clear();
-                _guitarSlotPlayer.Clear();
-                _guitarSlotBypass.Clear();
-                _instrumentPlugin = null;
-                instrumentReload ??= _instrumentPath;
-                _instrumentPath = null;
-                if (_engine != null)
+            lock (_mediaOperationGate)
+                lock (_gate)
                 {
-                    // Detach the DSP tone rig BEFORE the engine dies. It holds a
-                    // bare dca_engine* (JuceAudioEngine.NativeHandle is unpinned),
-                    // and the pedalboard writes to it from the UI thread. Leaving
-                    // it pointed at the old engine across the dispose + rebuild
-                    // below — hundreds of ms — means any knob turn in that window
-                    // lands in freed native memory. Dispose() already does this;
-                    // this path did not.
-                    try { AttachDspChainsToEngine(null); } catch { /* ignored */ }
-                    try { CloseRigMidiInputLocked(); } catch { /* engine disposal also owns MIDI children */ }
-                    // Disposed below, UNLOCKED: closing a device is a driver call.
-                    outgoingEngine = _engine;
-                    _engine = null;
-                    // A new device's block size is news even when it happens to
-                    // equal the outgoing one's — the subscribers have been shown
-                    // nothing since the last report and the row must agree with
-                    // the device that is actually open.
-                    _bufferReporter.Forget();
+                    FreeAudioLocked();
+                    // Plugins have been disposed above against the soon-to-be-destroyed engine.
+                    _guitarChain.Clear();
+                    _guitarSlotPlayer.Clear();
+                    _guitarSlotBypass.Clear();
+                    _instrumentPlugin = null;
+                    instrumentReload ??= _instrumentPath;
+                    _instrumentPath = null;
+                    if (_engine != null)
+                    {
+                        // Detach the DSP tone rig BEFORE the engine dies. It holds a
+                        // bare dca_engine* (JuceAudioEngine.NativeHandle is unpinned),
+                        // and the pedalboard writes to it from the UI thread. Leaving
+                        // it pointed at the old engine across the dispose + rebuild
+                        // below — hundreds of ms — means any knob turn in that window
+                        // lands in freed native memory. Dispose() already does this;
+                        // this path did not.
+                        try { AttachDspChainsToEngine(null); } catch { /* ignored */ }
+                        try { CloseRigMidiInputLocked(); } catch { /* engine disposal also owns MIDI children */ }
+                        // Disposed below, UNLOCKED: closing a device is a driver call.
+                        outgoingEngine = _engine;
+                        lock (_midiGate)
+                        {
+                            FlushMidiActiveNotes();
+                            _midiScheduler.ResetForEngine();
+                            _engine = null;
+                        }
+                        // A new device's block size is news even when it happens to
+                        // equal the outgoing one's — the subscribers have been shown
+                        // nothing since the last report and the row must agree with
+                        // the device that is actually open.
+                        _bufferReporter.Forget();
+                    }
                 }
-            }
 
             try { outgoingEngine?.Dispose(); } catch { /* ignored */ }
             outgoingEngine = null;
@@ -304,7 +333,7 @@ public sealed partial class JuceAudioPlaybackService
                 // seat on its default channel, so without this a device change
                 // mid-song silently ends the per-seat routing.
                 try { AttachPerPlayerStateToEngine(engine); }
-                catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, $"DSP rig attach failed: {ex.Message}"); }
+                catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, "DSP rig attach failed", ex); }
                 // Every remaining piece of MASTER-BUS state, each individually
                 // guarded — see ReapplyMasterBusStateLocked.
                 ReapplyMasterBusStateLocked(engine);
@@ -349,7 +378,7 @@ public sealed partial class JuceAudioPlaybackService
                 catch (Exception disposeEx)
                 {
                     _logger?.Warning(AppLogCategory.Audio,
-                        $"Disposing the half-built engine also threw: {disposeEx.Message}");
+                        "Disposing the half-built engine also threw", disposeEx);
                 }
             }
         }
@@ -367,33 +396,45 @@ public sealed partial class JuceAudioPlaybackService
         // while every UI-thread transport member waits on _gate. Only the
         // publish is locked. We are the engine's exclusive owner here (the caller
         // holds _vstGate), so the engine cannot be swapped under us.
+        RebuildReplayHook?.Invoke();
         var reloadEngine = _engine;
-        if (!string.IsNullOrWhiteSpace(reloadPath) && File.Exists(reloadPath) && reloadEngine != null)
+        if (reloadEngine is not null)
         {
             try
             {
-                var reopened = reloadEngine.OpenFile(reloadPath);
+                MediaRebuildReplay.Replay<JuceAudioSource, StemMixerSnapshot>(_mediaLoadGate, _gate, reloadRequest,
+                    () => Volatile.Read(ref _requestedMediaLoad), reloadEngine, () => _engine,
+                    !string.IsNullOrWhiteSpace(reloadPath) && File.Exists(reloadPath) ? () => reloadEngine.OpenFile(reloadPath) : null,
+                    reopened =>
+                    {
+                        _source = reopened;
+                        _loadedPath = reloadPath;
+                        DecideMedia(MediaSourceOwnership.Event.Swap, reloadRequest);
+                        BindSongClock(reloadEngine, reopened);
+                        ApplyGain();
+                        try { reopened.Pan = (float)Math.Clamp(_pan, -1.0, 1.0); } catch { /* ignored */ }
+                        try { reopened.PitchSemitones = (float)Math.Clamp(_pitchShift, -24.0, 24.0); } catch { /* ignored */ }
+                        try { reopened.TempoRatio = (float)(_playbackSpeed <= 0 ? 1.0 : _playbackSpeed); } catch { /* ignored */ }
+                    }, () => _source == null && !IsDisposing &&
+                        DecideMedia(MediaSourceOwnership.Event.EngineReplay, reloadRequest) == MediaSourceOwnership.Action.Replay,
+                    stemReload, stems => RestoreStemsAfterEngineRebuild(stems, stemClearGeneration),
+                    sameSong => KeepsRebuildStems(sameSong, stemClearGeneration, stemLineage), _mediaOperationGate);
                 lock (_gate)
                 {
-                    _source = reopened;
-                    _loadedPath = reloadPath;
-                    BindSongClock(reloadEngine, reopened);
-                    ApplyGain();
-                    try { reopened.Pan = (float)Math.Clamp(_pan, -1.0, 1.0); } catch { /* ignored */ }
-                    try { reopened.PitchSemitones = (float)Math.Clamp(_pitchShift, -24.0, 24.0); } catch { /* ignored */ }
-                    try { reopened.TempoRatio = (float)(_playbackSpeed <= 0 ? 1.0 : _playbackSpeed); } catch { /* ignored */ }
+                    if (mediaRecovery is not null)
+                    {
+                        _mediaRebuildRecovery.Complete(mediaRecovery,
+                            (reloadPath is null || _source is not null)
+                            && (stemReload is null || IsStemClearNewerLocked(stemClearGeneration)
+                                || stemReload.Stems.All(s => _stems.ContainsKey(s.Name))));
+                    }
                 }
-                _logger?.Info(AppLogCategory.Audio, $"Re-opened '{reloadPath}' after engine rebuild.");
             }
             catch (Exception ex)
             {
-                _logger?.Error(AppLogCategory.Audio, $"Failed to re-open '{reloadPath}' after engine rebuild.", ex);
+                _logger?.Error(AppLogCategory.Audio, $"Failed to restore media after engine rebuild ('{reloadPath}').", ex);
             }
         }
-
-        // Re-open the stem set. Must come AFTER the song re-open: LoadStemsCore
-        // syncs every stem to the master source's position.
-        RestoreStemsAfterEngineRebuild(stemReload);
 
         // Re-attach the instrument VSTi against the freshly-built engine so
         // MIDI routing survives device / driver changes.
@@ -403,7 +444,7 @@ public sealed partial class JuceAudioPlaybackService
             // call that follows this method (e.g. from ApplyAudioConfiguration)
             // will defer to the VSTi route instead of opening WinMM in the gap.
             _instrumentReloadPending = true;
-            LoadInstrumentVst(instrumentReload, openEditorAfterLoad: false);
+            LoadInstrumentVstCore(instrumentReload, false, instrumentState);
         }
 
         // Drain any VST work that was queued while the engine was being
@@ -417,14 +458,16 @@ public sealed partial class JuceAudioPlaybackService
         // the lock: both appliers take _gate themselves.
         string? queuedInstrument = null;
         List<VstChainEntry>? queuedChain = null;
+        long queuedChainGeneration = 0;
         lock (_gate)
         {
             if (_engine != null)
             {
                 queuedInstrument = _pendingInstrumentLoadPath;
                 _pendingInstrumentLoadPath = null;
-                queuedChain = _pendingGuitarChain ?? guitarChainReload;
-                _pendingGuitarChain = null;
+                queuedChain = VstRebuildState.Merge(_pendingGuitarChain, guitarChainReload);
+                queuedChainGeneration = _guitarChainGeneration;
+                _pendingGuitarChain = queuedChain;
             }
         }
 
@@ -436,11 +479,11 @@ public sealed partial class JuceAudioPlaybackService
             LoadInstrumentVst(queuedInstrument, openEditorAfterLoad: false);
         }
 
-        if (queuedChain != null && queuedChain.Count > 0)
+        if (queuedChain != null)
         {
             _logger?.Info(AppLogCategory.Audio,
                 $"Applying queued guitar VST3 chain now that engine is up ({queuedChain.Count} slot(s)).");
-            SetGuitarVstChain(queuedChain);
+            QueueGuitarVstChain(queuedChain, queuedChainGeneration);
         }
     }
 
@@ -674,7 +717,7 @@ public sealed partial class JuceAudioPlaybackService
             {
                 lastError = ex;
                 _logger?.Warning(AppLogCategory.Audio,
-                    $"JUCE engine_create failed (driver={attempt.PreferredDriver}, output='{attempt.OutputDeviceId}'): {ex.Message}");
+                    $"JUCE engine_create failed (driver={attempt.PreferredDriver}, output='{attempt.OutputDeviceId}')", ex);
 
                 // ASIO drivers can take a short moment to release after a
                 // failed open. Sleep briefly before the next attempt so the

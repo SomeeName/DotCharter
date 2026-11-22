@@ -286,21 +286,16 @@ public sealed class AudioMetadataExtractorTests : IDisposable
             mp3
         ]);
 
-        var psi = new ProcessStartInfo(ffmpeg)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardError = true,
-            RedirectStandardOutput = true
-        };
+        var psi = new ProcessStartInfo(ffmpeg);
         foreach (var a in args) psi.ArgumentList.Add(a);
 
-        var proc = Process.Start(psi)!;
-        proc.StandardError.ReadToEnd();
-        proc.StandardOutput.ReadToEnd();
-        proc.WaitForExit(60_000);
-
-        return File.Exists(mp3) && new FileInfo(mp3).Length > 0 ? mp3 : null;
+        // #608: both pipes drain concurrently under one cap (a deadlock detector, never a budget); a hung ffmpeg fails the test.
+        var run = BoundedProcess.TryRun(psi, TimeSpan.FromMinutes(2), "ffmpeg (metadata fixture)");
+        // Only an ffmpeg that cannot start is a skip; a failed encode is a broken fixture.
+        if (run is null) return null;
+        Assert.True(run.ExitCode == 0, $"ffmpeg exited {run.ExitCode} encoding the metadata fixture: {run.StandardError}");
+        Assert.True(File.Exists(mp3) && new FileInfo(mp3).Length > 0, "ffmpeg exited 0 but wrote no metadata fixture.");
+        return mp3;
     }
 
     public void Dispose() => BestEffortDelete.Directory(_dir);

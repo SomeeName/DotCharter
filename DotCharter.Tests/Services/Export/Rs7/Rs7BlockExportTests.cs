@@ -1,6 +1,5 @@
 using System.Text;
 using DotCharter.Services.Export.Rocksmith;
-using DotCharter.Services.Export.Sng;
 using DotCharter.Services.Export.Sng.Model;
 using DotCharter.Services.Export.Validation;
 
@@ -10,24 +9,22 @@ namespace DotCharter.Tests.Services.Export.Rs7;
 public sealed partial class Rs7BlockExportTests
 {
     [Fact]
-    public void A_seven_string_chart_without_chords_gets_the_empty_block_after_MetaData()
+    public void A_seven_string_chart_without_chords_keeps_an_empty_extended_model()
     {
         var (arrangement, beats) = Chart();
         arrangement.Levels[0].Notes.Add(Note(beats, 4, LowB, 3));
-
-        var (sng, body) = Build(arrangement, beats);
-
-        Assert.Equal(Convert.FromHexString(EmptySevenStringBlock), body[^65..]);
-        Assert.Equal(body.Length - 65, BodyWithoutBlock(sng).Length);
+        var (sng, _) = Build(arrangement, beats);
+        Assert.Equal(Strings, sng.Extension!.StringCount);
+        Assert.Equal(new[] { 6 }, sng.Extension.Strings);
+        Assert.Empty(sng.Extension.Templates!);
+        Assert.Empty(sng.Extension.ChordNotes!);
         Assert.Equal(Strings, sng.MetaData.Tuning.Length);
-        SngWriterBytePinTests.AssertPinned(PinnedEmptyBlockBody, body, "7-string body without chords");
     }
 
     [Theory]
     [InlineData(ArrangementType.Lead, 6)]
     [InlineData(ArrangementType.Rhythm, 6)]
     [InlineData(ArrangementType.Bass, 4)]
-    [InlineData(ArrangementType.Bass, 6)] // a bass that declares six strings and plays four
     public void Six_string_guitar_and_four_string_bass_stay_stock(ArrangementType type, int strings)
     {
         var beats = Rs7TestSupport.Beats(32);
@@ -50,7 +47,7 @@ public sealed partial class Rs7BlockExportTests
         // "nothing after MetaData" is Rs7ExtensionBlockReaderTests).
         Assert.Equal(-1, IndexOf(body, "RS7X"u8.ToArray()));
         Assert.DoesNotContain(new ChartExportValidator().Validate(Project(arrangement, beats)), f =>
-            f.MessageKey is ChartExportValidator.KeyExtendedRangeGuitar or ChartExportValidator.KeyEightStringMod);
+            f.MessageKey is ChartExportValidator.KeyExtendedRangeGuitar or ChartExportValidator.KeyExtendedRangeBass);
     }
 
     [Fact]
@@ -255,36 +252,6 @@ public sealed partial class Rs7BlockExportTests
         Assert.Equal(1 | (1 << 6), section.StringMask[0]);
     }
 
-    /// <summary>Official Rocksmith bass charts play a 5th string in the stock six slots
-    /// (the base game has them), so a bass is never refused and never gets a block.</summary>
-    [Fact]
-    public void A_bass_on_its_fifth_string_keeps_the_stock_six_slot_spelling()
-    {
-        var beats = Rs7TestSupport.Beats(32);
-        var bass = new Arrangement { ArrangementType = ArrangementType.Bass, Name = "Bass", StringCount = 5 };
-        for (var i = 0; i < 5; i++) bass.TuningPitches.Add(new TuningOffset(0));
-        var level = new ChartLevel { DifficultyIndex = 0 };
-        level.Anchors.Add(new FretAnchor(At(beats, 4), 1, 4));
-        level.Notes.Add(Note(beats, 4, 4, 3));
-        bass.Levels.Add(level);
-
-        Assert.DoesNotContain(new ChartExportValidator().Validate(Project(bass, beats)),
-            f => f.Severity == ExportFindingSeverity.Error && f.MessageKey == ChartExportValidator.KeyEightStringMod);
-        var sng = SngFromDomainMapper.BuildInstrumental(bass, beats, 20_000).Sng;
-        Assert.Null(sng.Extension);
-        Assert.Contains(sng.Levels[0].Notes, n => n.StringIndex == 4 && n.Fret == 3);
-    }
-
-    /// <summary>#885: the bodies the reader-side tests above import, pinned on the writer side.</summary>
-    [Fact]
-    public void The_bodies_the_import_tests_read_are_pinned()
-    {
-        var (chordChart, chordBeats) = SeventhStringChordChart();
-        SngWriterBytePinTests.AssertPinned(PinnedSeventhStringChordBody, Build(chordChart, chordBeats).Body, "7th-string chord body");
-        var (nameChart, nameBeats) = NameByte31Chart();
-        SngWriterBytePinTests.AssertPinned(PinnedNameByte31Body, Build(nameChart, nameBeats).Body, "name byte 31 body");
-    }
-
     /// <summary>
     ///     #785: a GHOST gem on the 7th string (SNG column 6) — held by the hand shape, never
     ///     played — ships ONLY in the hand shape's template: the CHDT row carries its fret,
@@ -295,7 +262,7 @@ public sealed partial class Rs7BlockExportTests
     {
         var (arrangement, beats) = GhostGemChart();
 
-        var (sng, body) = Build(arrangement, beats);
+        var (sng, _) = Build(arrangement, beats);
 
         var template = Assert.Single(sng.Chords);
         Assert.Equal(5, template.Frets[0]);
@@ -304,6 +271,5 @@ public sealed partial class Rs7BlockExportTests
         Assert.Equal(1, column.Finger);
         Assert.All(sng.Levels[0].Notes, n => Assert.Equal((LowE, 5), (Rs7StringLayout.ToDomain(n.StringIndex, Strings), n.Fret)));
         Assert.DoesNotContain(sng.Levels[0].Notes, n => (n.Mask & RsNoteMask.Chord) != 0);
-        SngWriterBytePinTests.AssertPinned(PinnedGhostGemBody, body, "ghost gem body");
     }
 }

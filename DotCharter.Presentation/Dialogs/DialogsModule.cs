@@ -1,7 +1,14 @@
+using DotCharter.Presentation.Shared;
 using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Contracts.Editor;
 using DotCharter.Presentation.Screens.Dialogs;
 using DotCharter.Presentation.Screens.Editor;
+using DotCharter.Localization;
+using DotCharter.Services.Editing;
+using DotCharter.Services.Editing.Events;
+using DotCharter.Services.Infrastructure.Configuration;
+using DotCharter.Services.State;
+using DotCharter.Tone.Logging;
 using DotCharter.Services.Infrastructure.Features;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -17,11 +24,25 @@ public static class DialogsModule
     public static void Register(IServiceCollection services, bool contestedFeatures = ContestedFeatures.Enabled)
     {
         services.AddSingleton<DialogsSlot>();
+        services.AddSingleton<ChartIssuesDoor>();
         services.AddSingleton<IDialogs>(sp => sp.GetRequiredService<DialogsSlot>());
         services.AddScoped<IMessagePromptScreen, MessagePromptViewModel>();
 
         services.AddScoped<ChartEditDialogServices>();
         services.AddSingleton<DialogBasics>();
+        services.AddSingleton<EofImportFiles>();
+        // The timeline's in-place editors share the dialogs' edit services but live as long as the shell.
+        services.AddSingleton<InlineEditViewModel>(sp =>
+        {
+            var edit = new ChartEditDialogServices(sp.GetRequiredService<IChartEditorSurface>(),
+                sp.GetRequiredService<IHistoryService>(), sp.GetRequiredService<ProjectState>(),
+                sp.GetRequiredService<IConfigurationService>(), sp.GetRequiredService<ILocalizationService>(),
+                sp.GetRequiredService<IAppLogger>());
+            return new InlineEditViewModel(new FhpInlineEditorViewModel(edit),
+                new SectionQuickAddViewModel(edit, sp.GetRequiredService<IEventEditingService>()),
+                new LyricInlineEditorViewModel(edit),
+                sp.GetRequiredService<ProjectState>());
+        });
         // File ▸ Import ▸ Convert PSARC to DotCharter song: reads the plugin's converter, so a build without one never shows the row.
         services.AddSingleton<PackageConversionLauncher>();
         services.AddScoped<IUnsavedChangesScreen, UnsavedChangesViewModel>();
@@ -30,12 +51,26 @@ public static class DialogsModule
         services.AddScoped<ITempoMapOperationScreen, TempoMapOperationViewModel>();
         services.AddScoped<IAlignBeatGridScreen, AlignBeatGridViewModel>();
         services.AddScoped<IAlignToRecordingScreen, AlignToRecordingViewModel>();
+        services.AddScoped<IEstimateBpmScreen, EstimateBpmViewModel>();
+        services.AddSingleton<DotCharter.Services.Editing.Tempo.Estimate.ITempoEstimateService, DotCharter.Services.Editing.Tempo.Estimate.TempoEstimateService>();
         services.AddSingleton<AlignToRecordingOffer>();
+        // A factory: its playback transport comes from the app's graph, which a dialog-only container lacks.
+        services.AddSingleton<DotCharter.Services.Audio.Tuning.IReferencePitchService>(sp =>
+            ActivatorUtilities.CreateInstance<DotCharter.Services.Audio.Tuning.ReferencePitchService>(sp));
+        // A factory, like the shape-cleanup offer: it outlives any dialog scope.
+        services.AddSingleton(sp =>
+        {
+            var offer = new ReferencePitchOffer(sp.GetRequiredService<DotCharter.Services.Audio.Tuning.IReferencePitchService>(),
+                ActivatorUtilities.CreateInstance<ChartEditDialogServices>(sp));
+            offer.Watch(sp.GetRequiredService<DotCharter.Services.Session.IProjectSessionService>());
+            return offer;
+        });
         // A factory: its editing services come from the app's graph, which a dialog-only container lacks.
         services.AddSingleton<DotCharter.Services.Editing.Tempo.RecordingAlignment.IRecordingAlignmentService>(sp =>
             ActivatorUtilities.CreateInstance<DotCharter.Services.Editing.Tempo.RecordingAlignment.RecordingAlignmentService>(sp));
         services.AddScoped<IUpdateAvailableScreen, UpdateAvailableViewModel>();
         services.AddScoped<IFhpScreen, FhpViewModel>();
+        services.AddScoped<IFixChartScreen, FixChartViewModel>();
         services.AddScoped<ILevelGenerationScreen, LevelGenerationViewModel>();
         services.AddScoped<IBeatScreen, BeatViewModel>();
         services.AddScoped<IShapeEditScreen, ShapeEditViewModel>();
@@ -49,9 +84,6 @@ public static class DialogsModule
         services.AddScoped<IArrangementSyncScreen, ArrangementSyncViewModel>();
         services.AddScoped<IKeyboardShortcutsScreen, KeyboardShortcutsViewModel>();
         services.AddScoped<IVocalTrackSettingsScreen, VocalTrackSettingsViewModel>();
-        services.AddScoped<ChartFromAudioStemServices>();
-        services.AddScoped<ChartFromAudioMerge>();
-        services.AddScoped<IChartFromAudioScreen, ChartFromAudioViewModel>();
         services.AddScoped<IRsXmlImportScreen, RsXmlImportViewModel>();
         services.AddScoped<IMidiImportScreen, MidiImportViewModel>();
         services.AddScoped<IEofImportScreen, EofImportViewModel>();
@@ -62,6 +94,7 @@ public static class DialogsModule
         services.AddScoped<IBatchLintScreen, BatchLintViewModel>();
         services.AddScoped<IShowlightsScreen, ShowlightsViewModel>();
         services.AddScoped<ICheckpointsScreen, CheckpointsViewModel>();
+        services.AddScoped<IBookmarksScreen, BookmarksViewModel>();
         services.AddScoped<IGpImportScreen, GpImportViewModel>();
         services.AddScoped<ILinkSuggestionsScreen, LinkSuggestionsViewModel>();
         services.AddScoped<ILinkGroupsScreen, LinkGroupsViewModel>();
@@ -111,9 +144,6 @@ public static class DialogsModule
             sp.GetRequiredService<DotCharter.Tone.Audio.Tonelab.IGameToneRenderer>(),
             sp.GetRequiredService<DotCharter.Services.Ai.Match.IStemIsolator>()));
         services.AddScoped<IRocksmithExportScreen, RocksmithExportViewModel>();
-        services.AddScoped<IChartQualityReportScreen, ChartQualityReportViewModel>();
-        services.AddSingleton<QualityAudioCheck>();
-        services.AddSingleton<QualityReportChecks>();
         services.AddSingleton<DotCharter.Services.Export.Rocksmith.IRocksmithGameProbe, DotCharter.Services.Export.Rocksmith.RocksmithGameProbe>();
         services.AddScoped<RocksmithExportServices>();
         services.AddScoped<DcSongExportServices>();

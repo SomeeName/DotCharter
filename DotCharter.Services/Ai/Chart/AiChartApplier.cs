@@ -147,7 +147,7 @@ public static class AiChartApplier
     {
         var guarded = !checkGuards || ((plan.Guards ?? []).All(g =>
             StillMatches(g.ChordIndex, g.Position, g.FretSignature, g.TemplateId, level, templatesById)) &&
-            SameAnchors(plan, level));
+            SameAnchors(plan, level) && SameNotes(plan, level));
         return guarded && plan.Chords.All(c =>
             StillMatches(c.ChordIndex, c.Position, c.FretSignature, c.OldTemplateId, level, templatesById));
     }
@@ -308,6 +308,15 @@ public static class AiChartApplier
         }
 
         return (gone, unmatched);
+    }
+
+    /// <summary>True when the level's single notes inside the plan's span are still the ones the
+    /// model was shown (<see cref="AiChartChunkPlan.SeenNotes" />; null = not checked).</summary>
+    private static bool SameNotes(AiChartChunkPlan plan, ChartLevel level)
+    {
+        if (plan.SeenNotes is not { } seen) return true;
+        var span = new AiChartChunk(plan.ChunkIndex, plan.Start, plan.End, 0, [], [], [], "");
+        return seen.SequenceEqual(AiChartValidator.SeenNotes(level, span));
     }
 
     /// <summary>True when the level's anchors inside the plan's span are still the ones the

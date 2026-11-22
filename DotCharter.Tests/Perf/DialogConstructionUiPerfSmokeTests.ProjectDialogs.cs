@@ -2,6 +2,10 @@
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.VisualTree;
+using DotCharter.Presentation.Contracts.Dialogs;
+using DotCharter.Presentation.Fakes;
 using DotCharter.Presentation.Fakes.Dialogs;
 using DotCharter.UI.Views.Dialogs;
 
@@ -54,6 +58,63 @@ public sealed partial class DialogConstructionUiPerfSmokeTests
             });
         }, CancellationToken.None);
     }
+
+    [Theory]
+    [InlineData(typeof(ISongMetadataScreen), "songmetadata-inset")]
+    [InlineData(typeof(INewProjectScreen), "newproject-inset")]
+    public Task AdvancedMetadata_AlignsWithTheHeaderAndClearsTheScrollbar(Type contract, string capture) =>
+        HeadlessSessionFixture.Dispatch(() =>
+        {
+            var entry = HostedDialogs.Single(e => e.Contract == contract);
+            WithHostedDialog(entry, FakeVariantNames.Full, (view, _) =>
+            {
+                var window = Assert.IsType<Window>(TopLevel.GetTopLevel(view));
+                var metadata = Assert.IsAssignableFrom<ISongNamesFields>(view.DataContext);
+                metadata.ShowJapaneseFields = true;
+                view.DataContext = null;
+                view.DataContext = metadata;
+                var advanced = NarrowWidthLayout.Named<Expander>(view, "AdvancedMetadata");
+                advanced.IsExpanded = true;
+                NarrowWidthLayout.Settle(window);
+                var scroll = advanced.FindAncestorOfType<ScrollViewer>();
+                Assert.NotNull(scroll);
+                var scrollbar = scroll.GetVisualDescendants().OfType<ScrollBar>()
+                    .Single(bar => bar.Name == "PART_VerticalScrollBar" && bar.TemplatedParent == scroll);
+                Assert.True(scroll.Extent.Height > scroll.Viewport.Height);
+                Assert.True(scrollbar.IsEffectivelyVisible && scrollbar.Bounds.Width > 0,
+                    $"The dialog scrollbar must be visible and measured, got {scrollbar.Bounds}");
+
+                if (UiSweepRunner.CaptureEnabled)
+                {
+                    scroll.Offset = new Vector(scroll.Offset.X, scroll.Offset.Y
+                        + NarrowWidthLayout.TopIn(advanced, scroll));
+                    NarrowWidthLayout.Settle(window);
+                    NarrowWidthLayout.Capture(window, capture);
+                }
+
+                var headerCaption = Assert.IsType<string>(advanced.Header);
+                var headerText = advanced.GetVisualDescendants().OfType<TextBlock>()
+                    .Single(text => text.Text == headerCaption);
+                var japanese = NarrowWidthLayout.Named<Grid>(advanced, "JapaneseFields");
+                var label = japanese.Children.OfType<TextBlock>().First();
+                Assert.True(label.IsEffectivelyVisible && label.Bounds is { Width: > 1, Height: > 1 });
+                var headerLeft = NarrowWidthLayout.Span(headerText, view).Left;
+                var labelLeft = NarrowWidthLayout.Span(label, view).Left;
+                var borderRight = NarrowWidthLayout.Span(advanced, view).Right;
+                var scrollbarLeft = NarrowWidthLayout.Span(scrollbar, view).Left;
+
+                Assert.Equal(headerLeft, labelLeft, precision: 0);
+                var fields = advanced.GetVisualDescendants().OfType<TextBox>().Cast<Control>()
+                    .Append(NarrowWidthLayout.Named<TextBlock>(advanced, "ToolVersionText"));
+                Assert.All(fields, field =>
+                {
+                    Assert.True(field.IsEffectivelyVisible && field.Bounds is { Width: > 1, Height: > 1 });
+                    var fieldRight = NarrowWidthLayout.Span(field, view).Right;
+                    Assert.True(fieldRight < borderRight && fieldRight < scrollbarLeft,
+                        $"Field right edge {fieldRight}, expander right edge {borderRight}, scrollbar left edge {scrollbarLeft}");
+                });
+            });
+        }, CancellationToken.None);
 
     /// <summary>
     ///     File ▸ Audio from YouTube (#820) on first open: the link box, the one-time

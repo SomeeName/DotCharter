@@ -181,7 +181,7 @@ internal sealed class DdEntityChooser
             return;
         }
 
-        if (copy.HasChordNotes) PruneChordNotes(copy);
+        if (copy.HasChordNotes) PruneChordNotes(copy, DdTemplates.StartFromHighestNote(noteCount, template));
         _level.Add((DdEntity.Of(copy), DdTemplates.Request(chord.ChordId, _allowedChordNotes, noteCount, template, copy, null)));
     }
 
@@ -213,20 +213,21 @@ internal sealed class DdEntityChooser
         if (_diffPercent <= 0.60 && note.IsPinchHarmonic) note.IsPinchHarmonic = false;
     }
 
-    /// <summary>Keeps the FIRST <see cref="_allowedChordNotes" /> chord notes, in chord-note order.</summary>
-    private void PruneChordNotes(DdChord chord)
+    /// <summary>Keeps chord notes from the same end as the reduced template.</summary>
+    private void PruneChordNotes(DdChord chord, bool fromHighest)
     {
         var cn = chord.ChordNotes!;
         var notesToRemove = cn.Count - _allowedChordNotes;
         if (notesToRemove < 0)
             throw new InvalidOperationException($"Chord at time {chord.Time / 1000.0} has less chord notes than its chord template.");
 
-        for (var i = cn.Count - notesToRemove; i < cn.Count; i++)
+        var removeFrom = fromHighest ? 0 : _allowedChordNotes;
+        for (var i = removeFrom; i < removeFrom + notesToRemove; i++)
         {
             if (cn[i].IsLinkNext) _removedLinkNexts[cn[i].String] = true;
         }
 
-        cn.RemoveRange(cn.Count - notesToRemove, notesToRemove);
+        cn.RemoveRange(removeFrom, notesToRemove);
         foreach (var n in cn)
         {
             PruneTechniques(n);
@@ -340,7 +341,7 @@ internal sealed class DdEntityChooser
                 if (i != noteIndex && cns[i].IsLinkNext) _removedLinkNexts[cns[i].String] = true;
             }
 
-            var note = new DdNote(cns[noteIndex]) { LeftHand = -1 };
+            var note = new DdNote(cns[noteIndex]) { LeftHand = -1, IsIgnore = chord.IsIgnore || cns[noteIndex].IsIgnore };
             PruneTechniques(note);
             return note;
         }

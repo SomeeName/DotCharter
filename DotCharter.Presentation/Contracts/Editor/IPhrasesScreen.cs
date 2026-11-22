@@ -4,7 +4,7 @@ using System.Windows.Input;
 namespace DotCharter.Presentation.Contracts.Editor;
 
 /// <summary>
-///     The Phrases panel, an inspector tab: every phrase of the active arrangement from both
+///     The Phrases section of the Inspector's Song tab (beside Sections and Tones): every phrase of the active arrangement from both
 ///     phrase stores, each with its iterations in time order. A phrase line renames in place and
 ///     deletes; an iteration line jumps the editor there and copies its content into every other
 ///     iteration of the phrase. Every edit is one undo step.
@@ -20,9 +20,6 @@ public interface IPhrasesScreen : INotifyPropertyChanged
 
     /// <summary>What an export adds that the arrangement does not carry (COUNT, END); empty when nothing.</summary>
     string ExportNote { get; }
-
-    /// <summary>Re-reads the arrangement.</summary>
-    ICommand RefreshCommand { get; }
 
     /// <summary>Renames the phrase of the row passed as the parameter to its edited name.</summary>
     ICommand RenamePhraseCommand { get; }

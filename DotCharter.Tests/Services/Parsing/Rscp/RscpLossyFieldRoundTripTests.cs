@@ -42,6 +42,33 @@ public sealed class RscpLossyFieldRoundTripTests : IDisposable
     }
 
     [Fact]
+    public void TargetlessUnpitchedSlides_RoundTrip_OnNotesAndChordNotes()
+    {
+        var project = new ChartProject();
+        var arrangement = NewArrangement();
+        arrangement.Levels[0].Notes.Add(new GuitarNote { Fret = 5, UnpitchedSlide = true });
+        var template = new ChordTemplate { Id = 0 };
+        template.Frets[0] = 3;
+        template.Frets[1] = 5;
+        arrangement.ChordTemplates.Add(template);
+        var chord = new Chord { TemplateId = template.Id };
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 0, Fret = 3, UnpitchedSlide = true });
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 5 });
+        arrangement.Levels[0].Chords.Add(chord);
+        project.Arrangements.Add(arrangement);
+
+        var level = SaveAndReload(project).Arrangements[0].Levels[0];
+
+        var note = Assert.Single(level.Notes);
+        Assert.True(note.UnpitchedSlide);
+        Assert.Null(note.SlideTo);
+        var chordNotes = Assert.Single(level.Chords).ChordNotes;
+        Assert.True(chordNotes.Single(n => n.StringIndex == 0).UnpitchedSlide);
+        Assert.False(chordNotes.Single(n => n.StringIndex == 1).UnpitchedSlide);
+        Assert.All(chordNotes, n => Assert.Null(n.SlideTo));
+    }
+
+    [Fact]
     public void VibratoStrength_RoundTrips_OnNotesAndChordNotes()
     {
         var project = new ChartProject();

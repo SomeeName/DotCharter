@@ -48,7 +48,8 @@ internal sealed class TwoPathChartSession(ProjectState state) : IProjectSessionS
     public Task<bool> AttachAudioAsync(string path) => Task.FromResult(true);
     public Task LoadSilentTransportAsync(double length) => Task.CompletedTask;
     public Task OpenProject() => Task.CompletedTask;
-    public Task<bool> SaveProjectAsync() => Task.FromResult(true);
+    public bool HasUnsavedWork() => IsProjectDirty;
+    public Task<bool> SaveProjectAsync(SaveInitiator initiator) => Task.FromResult(true);
     public Task<bool> SaveProjectAsAsync() => Task.FromResult(true);
     public IReadOnlyList<RecentProjectEntry> GetRecentProjects() => [];
     public void Dispose() { }

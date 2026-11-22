@@ -13,7 +13,9 @@ using DotCharter.Services.State;
 
 namespace DotCharter.Presentation.Screens.Dialogs;
 
-/// <summary>Tempo map ▸ Align to recording. One instance per open; nothing is written before Apply.</summary>
+/// <summary>Tempo map ▸ Fit the tab's tempo to the recording. One instance per open; nothing is written before Apply.
+///     A chart without notes is told so as the dialog opens, and a result in which no section matched is one
+///     problem line with the rows hidden behind a toggle.</summary>
 public sealed class AlignToRecordingViewModel : DialogViewModel<bool>, IAlignToRecordingScreen, ICancelableDialog, IDisposable
 {
     private readonly ProjectState _state;
@@ -36,6 +38,9 @@ public sealed class AlignToRecordingViewModel : DialogViewModel<bool>, IAlignToR
     private string _statusText = "";
     private bool _statusIsProblem;
     private string _summaryText = "";
+    private bool _isWeakMatch;
+    private bool _showSections;
+    private string _sectionsToggleText = "";
 
     public AlignToRecordingViewModel(ProjectState state, IRecordingAlignmentService service, IPlaybackTransport playback,
         DialogBasics basics)
@@ -61,8 +66,11 @@ public sealed class AlignToRecordingViewModel : DialogViewModel<bool>, IAlignToR
         _analyze = new AsyncRelayCommand(AnalyzeAsync, () => !IsBusy);
         _apply = new RelayCommand(Apply, () => _proposal != null && !IsBusy && _sections.Any(s => s.IsApplied));
         CancelCommand = new RelayCommand(() => TryCancel());
+        var hasNotes = state.ActiveProject is { } project && RecordingAlignmentPlan.HasNotes(project);
         if (string.IsNullOrEmpty(_audioPath)) SetStatus(_loc["Dialog_AlignToRecording_NoAudio"], true);
-        _logger.Info(AppLogCategory.Events, $"Align-to-recording dialog opened. beats={beats.Count}, anchors={anchors}, audio={!string.IsNullOrEmpty(_audioPath)}.");
+        else if (!hasNotes) SetStatus(_loc["Dialog_AlignToRecording_NeedsNotes"], true);
+        _logger.Info(AppLogCategory.Events,
+            $"Align-to-recording dialog opened. beats={beats.Count}, anchors={anchors}, audio={!string.IsNullOrEmpty(_audioPath)}, notes={hasNotes}.");
     }
 
     public string SourceText { get; }
@@ -138,6 +146,24 @@ public sealed class AlignToRecordingViewModel : DialogViewModel<bool>, IAlignToR
 
     public bool HasResult => _proposal != null;
 
+    public bool IsWeakMatch
+    {
+        get => _isWeakMatch;
+        private set => SetProperty(ref _isWeakMatch, value);
+    }
+
+    public bool ShowSections
+    {
+        get => _showSections;
+        set => SetProperty(ref _showSections, value && HasResult);
+    }
+
+    public string SectionsToggleText
+    {
+        get => _sectionsToggleText;
+        private set => SetProperty(ref _sectionsToggleText, value);
+    }
+
     public IReadOnlyList<IAlignSectionRow> Sections
     {
         get => _sections;
@@ -200,7 +226,8 @@ public sealed class AlignToRecordingViewModel : DialogViewModel<bool>, IAlignToR
         SetStatus(_loc["Dialog_AlignToRecording_Analyzing"], false);
         try
         {
-            var analysis = await _service.AnalyzeAsync(project, Range(), KeepAnchors, _audioPath, _cts.Token);
+            var analysis = await _service.AnalyzeAsync(project, Range(), KeepAnchors, _audioPath, _cts.Token,
+                _state.CurrentProjectPath);
             if (analysis.Proposal is { } proposal) Show(proposal);
             else SetStatus(FailureText(analysis.Failure), true);
         }
@@ -221,7 +248,10 @@ public sealed class AlignToRecordingViewModel : DialogViewModel<bool>, IAlignToR
         _proposal = proposal;
         Sections = rows;
         OnPropertyChanged(nameof(HasResult));
-        SetStatus("", false);
+        IsWeakMatch = !rows.Any(r => r.IsApplied);
+        SectionsToggleText = _loc.Format("Dialog_AlignToRecording_ShowSections", rows.Count);
+        ShowSections = !IsWeakMatch;
+        SetStatus(IsWeakMatch ? _loc["Dialog_AlignToRecording_WeakMatch"] : "", IsWeakMatch);
         RefreshSummary();
     }
 
@@ -231,7 +261,7 @@ public sealed class AlignToRecordingViewModel : DialogViewModel<bool>, IAlignToR
         var applied = _sections.Count(s => s.IsApplied);
         SummaryText = _loc.Format(_proposal.Source == RecordingAlignmentSource.Stems
             ? "Dialog_AlignToRecording_SummaryStems"
-            : "Dialog_AlignToRecording_SummaryMix", applied, _sections.Count);
+            : "Dialog_AlignToRecording_SummaryMix", applied, _sections.Count(s => s.CanApply));
         _apply.NotifyCanExecuteChanged();
     }
 
@@ -263,9 +293,12 @@ public sealed class AlignToRecordingViewModel : DialogViewModel<bool>, IAlignToR
     private void Invalidate()
     {
         if (_proposal == null) return;
+        if (IsWeakMatch) SetStatus("", false);
         _proposal = null;
         Sections = [];
         SummaryText = "";
+        IsWeakMatch = false;
+        ShowSections = false;
         OnPropertyChanged(nameof(HasResult));
         _apply.NotifyCanExecuteChanged();
     }
@@ -288,6 +321,9 @@ public sealed class AlignToRecordingViewModel : DialogViewModel<bool>, IAlignToR
         RecordingAlignmentFailure.DecodeFailed => _loc["Dialog_AlignToRecording_DecodeFailed"],
         RecordingAlignmentFailure.Locked => _loc["Status_BeatMapLocked"],
         RecordingAlignmentFailure.TooFewBeats => _loc["Dialog_AlignToRecording_TooFewBeats"],
+        RecordingAlignmentFailure.NoNotes => _loc[_state.ActiveProject is { } project && RecordingAlignmentPlan.HasNotes(project)
+            ? "Dialog_AlignToRecording_RangeNeedsNotes"
+            : "Dialog_AlignToRecording_NeedsNotes"],
         _ => _loc["Dialog_AlignToRecording_NothingToAlign"]
     };
 

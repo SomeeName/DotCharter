@@ -342,6 +342,34 @@ public sealed partial class PlayModeScreensUiPerfSmokeTests
         }, seedProject: SeedThreeArrangementChart);
     }
 
+    [Theory]
+    [InlineData("rig")]
+    [InlineData("settings")]
+    [InlineData("amp")]
+    public async Task GetReadyShortcuts_LeaveInputWithTheOpenOverlay(string overlay)
+    {
+        await WithView((view, vm) =>
+        {
+            EnterGetReady(vm, view);
+            if (overlay == "rig") vm.ToneRig.IsPedalboardOpen = true;
+            else if (overlay == "settings") vm.Settings.IsGameplaySettingsOpen = true;
+            else vm.IsAmpFxOpen = true;
+            view.UpdateLayout();
+
+            var tunerAsked = 0;
+            vm.TunerRequested += () => tunerAsked++;
+            foreach (var key in new[] { Key.Enter, Key.T })
+                view.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = key, Source = view });
+
+            Assert.Equal(PlayModeScreen.TuningCheck, vm.CurrentScreen);
+            Assert.Equal(0, tunerAsked);
+            Assert.True(view.Bounds is { Width: > 1, Height: > 1 });
+            Assert.True(vm.TryCloseOverlay());
+            view.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter, Source = view });
+            Assert.Equal(PlayModeScreen.Countdown, vm.CurrentScreen);
+        }, seedProject: SeedThreeArrangementChart);
+    }
+
     /// <summary>
     ///     A tuner row can be PRESSED, and pressing it really re-selects that
     ///     string. `SkipCurrentCommand`'s own doc says a skipped string is
@@ -454,6 +482,41 @@ public sealed partial class PlayModeScreensUiPerfSmokeTests
             AssertLaidOut(view, "GetReadyFlowError");
             Assert.Equal("No input device is open.",
                 Find<TextBlock>(view, "GetReadyFlowError").Text);
+        }, seedProject: SeedThreeArrangementChart);
+    }
+
+    /// <summary>
+    ///     Layout traps seen in the 2026-11-06 capture review (#336, #337): the "How it plays" label
+    ///     column must fit its longest label in every culture (German "Trefferfenster" was sliced at a
+    ///     fixed 92 px), and a long tone name on a chip is trimmed with an ellipsis inside the
+    ///     tones card instead of being cut at the card edge.
+    /// </summary>
+    [Fact]
+    public async Task GetReadyScreen_fitsItsLabelColumn_AndTrimsALongToneName()
+    {
+        const string longTone = "3doohere_acoustic_with_an_unreasonably_long_tone_name_that_never_fits_the_card [Remastered 2014 Edition]";
+        await WithView((view, vm) =>
+        {
+            EnterGetReady(vm, view);
+            vm.ApplyToneSummary(new RsToneConversionSummary(
+                    HasTones: true, DspAvailable: true, ToneCount: 2,
+                    ApproximatedEffectCount: 0, SkippedEffectCount: 0, Notes: [])
+            { ToneNames = [longTone, "clean"] });
+            view.UpdateLayout();
+
+            var label = Find<TextBlock>(view, "GetReadyHitWindowLabel");
+            Assert.True(label.DesiredSize.Width <= label.Bounds.Width + 0.5,
+                $"the hit-window label '{label.Text}' needs {label.DesiredSize.Width:0.#} px but its column gives {label.Bounds.Width:0.#}");
+
+            var chips = Find(view, "GetReadyToneChips");
+            var name = chips.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == longTone);
+            Assert.Equal(TextTrimming.CharacterEllipsis, name.TextTrimming);
+            var panel = Find(view, "GetReadyTonesPanel");
+            var right = name.TranslatePoint(new Point(name.Bounds.Width, 0), panel)!.Value.X;
+            Assert.True(right <= panel.Bounds.Width + 0.5,
+                $"the tone name ends at x={right:0.#}, past its {panel.Bounds.Width:0.#} px card");
+            Assert.True(name.DesiredSize.Width <= name.Bounds.Width + 0.5,
+                $"the tone name wants {name.DesiredSize.Width:0.#} px but is laid out {name.Bounds.Width:0.#} px wide");
         }, seedProject: SeedThreeArrangementChart);
     }
 

@@ -22,6 +22,19 @@ public static class AiChatColumnPolicy
         savedPx is { } px && double.IsFinite(px) && px >= MinWidthPx ? px : DefaultWidthPx;
 
     /// <summary>
+    ///     A chat width inside a split <paramref name="splitWidthPx" /> wide: it leaves the splitter
+    ///     and <see cref="MinEditorWidthPx" /> for the editor, never goes under <see cref="MinWidthPx" />,
+    ///     and is unchanged while the split has no size yet. A width saved on a wider monitor would
+    ///     otherwise put the splitter off-screen.
+    /// </summary>
+    public static double ClampToSplit(double widthPx, double splitWidthPx)
+    {
+        if (!double.IsFinite(splitWidthPx) || splitWidthPx <= 0) return widthPx;
+        var max = Math.Max(MinWidthPx, splitWidthPx - SplitterPx - MinEditorWidthPx);
+        return Math.Min(widthPx, max);
+    }
+
+    /// <summary>
     ///     The width to persist: the column's own while it shows, else the one it had when it
     ///     was hidden (a hidden column measures 0). Null during a run, which hides the column
     ///     itself (<see cref="ShellGeometryPersistPolicy" />).

@@ -24,7 +24,7 @@ namespace DotCharter.Tests.UI;
 ///         does and is applied, saved and discarded by the same four commands.
 ///     </para>
 /// </summary>
-public sealed class ToneDesignMatchTests
+public sealed partial class ToneDesignMatchTests
 {
     // ---- fakes ----------------------------------------------------------------
 

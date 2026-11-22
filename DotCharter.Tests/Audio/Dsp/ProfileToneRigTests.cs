@@ -141,7 +141,179 @@ public sealed class ProfileToneRigTests : IDisposable
         Assert.False(store.Rescope());
     }
 
-    // ---- migration -----------------------------------------------------------
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AQueuedPresetCannotOverwriteTheIncomingProfilesRestoredRig(bool switchDuringPreparation)
+    {
+        using var h = NewHarness(seats: 1);
+        var a = h.Profiles.ActiveProfile;
+        var b = h.Profiles.Create("Second");
+        h.Coordinator.Start();
+        h.Chains.AttachEngineToAll(EngineA);
+        h.Profiles.SwitchTo(b.Id);
+        h.Chain(0).AddNode("delay");
+        h.Sessions.FlushAll();
+        h.Profiles.SwitchTo(a.Id);
+
+        var workers = new Queue<Action>();
+        var presets = new DspTonePresetService(h.Chain(0), h.Config, logger: null,
+            namCaptureDirectory: () =>
+            {
+                if (switchDuringPreparation) h.Profiles.SwitchTo(b.Id);
+                return null;
+            }, chains: h.Chains, rigStore: h.Store);
+        var queue = new ToneApplyQueue(presets, runOnWorker: workers.Enqueue);
+        queue.ApplyToPlayer(0, Rig("overdrive").ToPreset());
+        if (!switchDuringPreparation) h.Profiles.SwitchTo(b.Id);
+        workers.Dequeue()();
+        h.Sessions.FlushAll();
+
+        Assert.Equal("delay", Assert.Single(h.Chain(0).GetNodes()).ModuleTypeId);
+        h.Store.InvalidateCache();
+        Assert.Equal("delay", Assert.Single(h.Store.GetRig(0)!.Modules).ModuleTypeId);
+    }
+
+    [Fact]
+    public void AnUnreadableStoreCannotReplaceTheOtherSeats_AndRetriesTheRead()
+    {
+        if (!OperatingSystem.IsWindows()) Assert.Skip("Windows file sharing is required.");
+        var seeded = new ProfileToneRigStore(_dir);
+        seeded.SetRig(0, Rig("overdrive"));
+        seeded.SetRig(1, Rig("delay"));
+        var path = Path.Combine(_dir, ProfileToneRigStore.StoreFileName);
+        var original = File.ReadAllBytes(path);
+        var store = new ProfileToneRigStore(_dir);
+
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Write | FileShare.Delete))
+        {
+            Assert.Null(store.GetRig(0));
+            store.SetRig(0, Rig("reverb"));
+        }
+
+        Assert.Equal(original, File.ReadAllBytes(path));
+        Assert.Equal("delay", store.GetRig(1)!.Modules.Single().ModuleTypeId);
+        store.SetRig(0, Rig("reverb"));
+        Assert.Equal("delay", new ProfileToneRigStore(_dir).GetRig(1)!.Modules.Single().ModuleTypeId);
+    }
+
+    [Fact]
+    public void ACorruptStoreIsPreservedBeforeStartingFresh()
+    {
+        Directory.CreateDirectory(_dir);
+        var path = Path.Combine(_dir, ProfileToneRigStore.StoreFileName);
+        const string corrupt = "{ not a rig store";
+        File.WriteAllText(path, corrupt);
+        var store = new ProfileToneRigStore(_dir);
+        store.SetRig(0, Rig("overdrive"));
+
+        var quarantine = Assert.Single(Directory.GetFiles(_dir, "tone-rig.json.corrupt-*"));
+        Assert.Equal(corrupt, File.ReadAllText(quarantine));
+        Assert.Equal("overdrive", new ProfileToneRigStore(_dir).GetRig(0)!.Modules.Single().ModuleTypeId);
+    }
+
+    [Fact]
+    public void ANullRigMap_IsQuarantinedAndReplacedWithAWritableStore()
+    {
+        Directory.CreateDirectory(_dir);
+        var path = Path.Combine(_dir, ProfileToneRigStore.StoreFileName);
+        const string corrupt = "{\"Rigs\":null}";
+        File.WriteAllText(path, corrupt);
+        var store = new ProfileToneRigStore(_dir);
+
+        Assert.Null(store.GetRig(0));
+        Assert.True(store.SetRig(0, Rig("overdrive")));
+
+        Assert.Equal(corrupt, File.ReadAllText(Assert.Single(Directory.GetFiles(_dir, "tone-rig.json.corrupt-*"))));
+        Assert.Equal("overdrive", Assert.Single(new ProfileToneRigStore(_dir).GetRig(0)!.Modules).ModuleTypeId);
+    }
+
+    [Fact]
+    public void AFailedOutgoingWrite_IsPublishedUnderItsOwnerAfterAProfileSwitch()
+    {
+        using var h = NewHarness(seats: 1);
+        h.Config.Update(c => c.DefaultTonePresetId = "");
+        var owner = h.Profiles.ActiveProfile.Id;
+        var next = h.Profiles.Create("Second");
+        h.Coordinator.Start();
+        h.Chains.AttachEngineToAll(EngineA);
+        h.Chain(0).AddNode("overdrive");
+        var directory = h.Profiles.GetDataDirectory(owner);
+        var path = Path.Combine(directory, ProfileToneRigStore.StoreFileName);
+        Directory.CreateDirectory(path);
+        h.Sessions.FlushAll();
+        h.Profiles.SwitchTo(next.Id);
+        Directory.Delete(path);
+
+        h.Sessions.FlushAll();
+
+        Assert.Equal("overdrive", Assert.Single(new ProfileToneRigStore(directory).GetRig(0)!.Modules).ModuleTypeId);
+        Assert.Null(h.Store.GetRig(0));
+    }
+
+    [Theory]
+    [InlineData("{\"Rigs\":{\"0\":{\"Modules\":null}}}")]
+    [InlineData("{\"Rigs\":{\"0\":{\"Modules\":[null]}}}")]
+    public void InvalidNestedRigContents_AreQuarantinedInsteadOfCached(string corrupt)
+    {
+        Directory.CreateDirectory(_dir);
+        var path = Path.Combine(_dir, ProfileToneRigStore.StoreFileName);
+        File.WriteAllText(path, corrupt);
+        var store = new ProfileToneRigStore(_dir);
+
+        Assert.Null(store.GetRig(0));
+        Assert.True(store.SetRig(0, Rig("overdrive")));
+
+        Assert.Equal(corrupt, File.ReadAllText(Assert.Single(Directory.GetFiles(_dir, "tone-rig.json.corrupt-*"))));
+        Assert.Equal("overdrive", Assert.Single(new ProfileToneRigStore(_dir).GetRig(0)!.Modules).ModuleTypeId);
+    }
+
+    [Fact]
+    public void StartingWithALiveBoardAfterRescope_PersistsThatBoardsEdits()
+    {
+        var profiles = NewProfiles();
+        profiles.SwitchTo(profiles.Create("Second").Id);
+        var store = new ProfileToneRigStore(profiles);
+        Assert.True(store.Rescope());
+        var chain = new FakeDspChainService();
+        chain.AttachEngine(EngineA);
+        chain.AddNode("overdrive");
+        var config = new FakeConfigurationService();
+        using var session = new ToneSessionService(chain, config, new DspTonePresetService(chain, config), store);
+
+        session.Start();
+        session.Flush();
+
+        var saved = new ProfileToneRigStore(profiles).GetRig(0);
+        Assert.Equal("overdrive", Assert.Single(saved!.Modules).ModuleTypeId);
+    }
+
+    [Fact]
+    public void EndingDisplacementAfterAProfileSwitch_RestoresTheNewOwnersBoardBeforeSaving()
+    {
+        var profiles = NewProfiles();
+        var next = profiles.Create("Second");
+        var store = new ProfileToneRigStore(profiles);
+        store.SetRig(0, Rig("overdrive"));
+        new ProfileToneRigStore(profiles.GetDataDirectory(next.Id)).SetRig(0, Rig("delay"));
+        var chain = new FakeDspChainService();
+        var config = new FakeConfigurationService();
+        using var session = new ToneSessionService(chain, config, new DspTonePresetService(chain, config), store);
+        session.Start();
+        chain.AttachEngine(EngineA);
+        session.BoardDisplaced = () => true;
+        profiles.SwitchTo(next.Id);
+        store.Rescope();
+        session.ReloadForActiveProfile();
+        session.BoardDisplaced = () => false;
+
+        session.Flush();
+
+        Assert.Equal("delay", Assert.Single(chain.GetNodes()).ModuleTypeId);
+        chain.SetParam(Assert.Single(chain.GetNodes()).NodeId, "time", 0.3f);
+        session.Flush();
+        Assert.Equal("delay", Assert.Single(new ProfileToneRigStore(profiles).GetRig(0)!.Modules).ModuleTypeId);
+    }
 
     [Fact]
     public void ThePre045GlobalRig_IsAdoptedIntoTheActiveProfile_AndCleared()

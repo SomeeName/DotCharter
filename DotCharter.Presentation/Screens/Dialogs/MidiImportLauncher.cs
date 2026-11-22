@@ -60,7 +60,7 @@ public sealed class MidiImportLauncher(
         }
         catch (ImportFileTooLargeException tooLarge)
         {
-            _logger.Warning(AppLogCategory.Import, $"MIDI import refused: {tooLarge.Message} File='{filePath}'.");
+            _logger.Warning(AppLogCategory.Import, $"MIDI import refused. File='{filePath}'.", tooLarge);
             state.SetMessage(
                 _localization.Format("Status_ImportFileTooLarge", Path.GetFileName(filePath),
                     ImportSizeLimits.ToMegabytes(tooLarge.Length), ImportSizeLimits.ToMegabytes(tooLarge.Cap)),

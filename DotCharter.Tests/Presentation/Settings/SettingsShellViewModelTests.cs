@@ -272,6 +272,53 @@ public sealed class SettingsShellViewModelTests
     }
 
     [Fact]
+    public void FailedAiKeySave_KeepsTheActualSettingsPageOpenAndRetryEnabled()
+    {
+        if (!OperatingSystem.IsWindows()) Assert.Skip("DPAPI is Windows-only.");
+        var path = Path.Combine(Path.GetTempPath(), $"dc-ai-shell-{Guid.NewGuid():N}.bin");
+        try
+        {
+            var store = new DotCharter.Tone.Ai.DpapiAiSecretStore(filePath: path);
+            store.Write(DotCharter.Tone.Ai.AiProviderKind.Claude, "previous-key");
+            store.Write(DotCharter.Tone.Ai.AiProviderKind.OpenAiCompatible, "other-key");
+            var config = new FakeConfigurationService();
+            config.AppConfig.Ai = new(DotCharter.Tone.Ai.AiProviderKind.Claude, "model", null);
+            using var ai = AiTabRig.Create(config, store);
+            var rig = new Rig();
+            using var shell = new SettingsShellViewModel([rig.General, ai], [rig.General, ai],
+                rig.Session, FakeLocalization.English(), rig.Ui, rig.Dialogs, rig.Logger);
+            rig.Session.IsOpen = true;
+            rig.Ui.Drain();
+            ai.ApiKeyEntry = "pending-key";
+            Assert.True(shell.SaveCommand.CanExecute(null));
+
+            using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Write | FileShare.Delete))
+                shell.SaveCommand.Execute(null);
+            rig.Ui.Drain();
+
+            Assert.True(rig.Session.IsOpen);
+            Assert.Same(ai, shell.SelectedTab);
+            Assert.True(ai.IsStatusError);
+            Assert.Equal("pending-key", ai.ApiKeyEntry);
+            Assert.True(shell.HasUnsavedChanges);
+            Assert.True(shell.SaveCommand.CanExecute(null));
+
+            shell.SaveCommand.Execute(null);
+            rig.Ui.Drain();
+
+            Assert.False(rig.Session.IsOpen);
+            Assert.Empty(ai.ApiKeyEntry);
+            Assert.False(shell.HasUnsavedChanges);
+            Assert.Equal("pending-key", store.Read(DotCharter.Tone.Ai.AiProviderKind.Claude));
+            Assert.Equal("other-key", store.Read(DotCharter.Tone.Ai.AiProviderKind.OpenAiCompatible));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Cancel_RevertsEveryTab_AndClosesThePage()
     {
         var rig = new Rig();

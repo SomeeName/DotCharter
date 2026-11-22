@@ -34,22 +34,17 @@ public class ChartRenderContext
     public float FhpY { get; set; }
     public int StringCount { get; set; }
 
-    /// <summary>v0.34 lefty flip: inverts the vertical string→lane order of
-    /// the 2D timeline (the 2D analogue of the mirrored 3D highway). The time
-    /// axis is untouched, so the time↔screen anchor rule holds by
-    /// construction. Hit-testing MUST use the same mapping —
-    /// <c>ChartHitTester.GetLaneY/GetLaneIndexAtY</c> take the same flag.</summary>
+    /// <summary>Profile handedness, retained as frame metadata. It mirrors only
+    /// the 3D fret axis and does not affect any 2D string rows.</summary>
     public bool LeftyFlip { get; set; }
 
-    /// <summary>Inverted string layout (tab convention): a vertical string flip
-    /// that COMPOSES with <see cref="LeftyFlip" /> — either one alone flips the
-    /// lane order, both together cancel (XOR). Hit-testing must use the same
-    /// combined flip (<c>IChartViewport.FlipStrings</c>).</summary>
+    /// <summary>Inverted string layout (tab convention): the only vertical lane
+    /// flip, also used by hit-testing through <c>IChartViewport.FlipStrings</c>.</summary>
     public bool InvertStrings { get; set; }
 
     /// <summary>THE string→lane mapping for every 2D layer: top Y of the lane
-    /// for <paramref name="stringIndex" />, honoring <see cref="LeftyFlip" /> and
-    /// <see cref="InvertStrings" /> (they XOR). Never inline the formula —
+    /// for <paramref name="stringIndex" />, honoring <see cref="InvertStrings" />
+    /// independently of handedness. Never inline the formula —
     /// renderer and hit-testers must agree.
     /// <para>
     /// Default (no flip) puts StringIndex 0 (low E) at the TOP lane, matching
@@ -59,7 +54,7 @@ public class ChartRenderContext
     /// views. `InvertStrings` then flips both to the tab layout (low E at bottom).
     /// </para></summary>
     public float LaneTopFor(int stringIndex)
-        => TopMargin + (LeftyFlip ^ InvertStrings ? StringCount - 1 - stringIndex : stringIndex) * LaneHeight;
+        => TopMargin + (InvertStrings ? StringCount - 1 - stringIndex : stringIndex) * LaneHeight;
     public double CurrentTimeMs { get; set; }
     public bool DrawLabels { get; set; }
 

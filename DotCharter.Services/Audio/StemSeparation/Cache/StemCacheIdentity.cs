@@ -44,11 +44,11 @@ public sealed record StemCacheIdentity
     /// an archive an earlier build filed under the <c>psarc:</c>-derived name is
     /// re-keyed on lookup (<see cref="StemCacheKey.LegacyLibraryForm" />,
     /// <c>StemCacheStore.TryRekeyLegacyLibraryArchive</c>), never re-separated.</para></summary>
-    public static StemCacheIdentity ForLibrary(string leaderboardOrSongKey, string sourceLabel = "")
+    public static StemCacheIdentity ForLibrary(string songKey, string sourceLabel = "")
     {
-        var id = string.IsNullOrWhiteSpace(leaderboardOrSongKey)
+        var id = string.IsNullOrWhiteSpace(songKey)
             ? null
-            : LibrarySongIdentity.Normalize(leaderboardOrSongKey.Trim());
+            : LibrarySongIdentity.Normalize(songKey.Trim());
         return new StemCacheIdentity { LogicalId = id, SourceLabel = sourceLabel };
     }
 

@@ -12,7 +12,9 @@
         <AssemblyName>dotcharter-lyricsync</AssemblyName>
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
         <SelfContained>false</SelfContained>
-        <InvariantGlobalization>true</InvariantGlobalization>
+        <!-- NOT invariant: LocalizationService (the status text) builds en-US in its
+             type initializer, which invariant mode refuses (LyricSyncCommandTests). -->
+        <InvariantGlobalization>false</InvariantGlobalization>
         <Version>1.0.0</Version>
     </PropertyGroup>
 

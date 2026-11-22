@@ -1,0 +1,26 @@
+song:
+  key: RS7Gold7
+  file: rs7g7
+  title: Golden 7
+  artist: DotCharter
+  album: Golden
+  year: 2026
+  length: 60
+  audio: control
+  date: 10-13-26 12:00
+tempo: 80
+beats_per_measure: 4
+strings: 7
+tuning: [0, 0, 0, 0, 0, 0, -2]
+chord_mode: projection
+sections: auto
+anchors: auto
+notes:
+- {beat: 4, string: 6, fret: 3}
+- {beat: 5, string: 0, fret: 5}
+- {beat: 6, string: 6, fret: 0}
+chords:
+- {beat: 8, name: C#5, frets: {6: 2, 0: 4}, fingers: {6: 1, 0: 3}}
+- {beat: 12, name: B5, frets: {6: 0, 0: 2}, fingers: {0: 1}}
+- {beat: 16, name: C#5, frets: {6: 2, 0: 4}, fingers: {6: 1, 0: 3}}
+- {beat: 20, name: X, frets: {6: 2, 0: 2, 1: 4}, fingers: {6: 1, 0: 1, 1: 3}}

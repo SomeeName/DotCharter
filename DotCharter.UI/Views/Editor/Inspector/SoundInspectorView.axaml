@@ -2,20 +2,22 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
              xmlns:panels="clr-namespace:DotCharter.UI.Views.Panels;assembly=DotCharter"
+             xmlns:panelVms="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
              xmlns:inspector="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
              xmlns:local="using:DotCharter.UI.Views.Editor.Inspector"
              xmlns:shell="using:DotCharter.UI.Views.Shell"
              xmlns:linkViews="using:DotCharter.UI.Views.Editor.Linking"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:ctl="using:DotCharter.UI.Controls"
              x:Class="DotCharter.UI.Views.Editor.Inspector.SoundInspectorView"
              x:DataType="viewModels:InspectorViewModel">
 
     <!--
-        THE SOUND TAB (#601, "Rail (dense)", the owner's pick from the design study).
+        THE NOTE TAB (#601's sections, laid out as inspector design D).
 
-        What is on screen is a function of the SELECTION (InspectorViewModel.SelectionKind), shown
-        ONE SECTION AT A TIME beside an icon-only rail (SoundSectionsViewModel, which owns the
-        matrix and remembers the open section per selection type):
+        What is on screen is a function of the SELECTION (InspectorViewModel.SelectionKind), ONE
+        SECTION AT A TIME under a strip of section names (SoundSectionsViewModel owns the matrix and
+        remembers the open section per selection type):
 
           Empty          → Task · Library
           Note           → Placement · Technique · Bends · Findings
@@ -24,200 +26,171 @@
           Multi*         → Selection · Technique · Findings
           ShapeAndSounds → Shape (+ Span) · Technique · Findings
 
-        * The rail is ICON ONLY (38 px). A section's name is its tooltip (after the app-wide hover
-          dwell, Platform/ToolTipHoverPolicy) and its accessible name, off the same key. The open
-          section carries an accent bar; Findings carries a count badge, Bends a dot when the
-          sound bends.
-        * Above every section, ONE slim pinned row navigates sounds: the selection, its place in
-          the queue (it follows the selection, #611), ‹ › (the queue's own step, Ctrl+PgUp/PgDn)
-          and the queue filter behind a funnel.
-        * Under it, ONE pinned "Apply to" row, only over the sections it governs (a chord's Shape,
-          Technique and Bends; SoundSectionsViewModel.ShowApplyBar).
-        * Playback is not a section: the whole-chord flags are a group inside Technique. No
-          section repeats its name as a heading.
+        * The SECTION STRIP (`NoteSectionStrip`) is captions only, in D's quiet nav style; Findings
+          carries a count badge, Bends a dot when the sound bends. What does not fit goes into its
+          "More" button (OverflowTabStrip with IconsFallback off). The selection's summary stands at its end.
+        * The BODY is a ColumnFlowPanel of CARDS (`NoteCards`): a section is one card here (every
+          section body rehosted unchanged); each card scrolls its own content under a "More below"
+          cue. A section split into several cards is laid in columns by width, the rest paged.
+        * The pinned FOOTER (`NoteFooter`) navigates sounds: the queue filter, ‹ › (the queue's own
+          step, Ctrl+PgUp/PgDn), the help mark and the place in the queue (it follows the selection,
+          #611) and the playhead time (InspectorPlayheadClock); at its right end the "Apply to" ladder, over a
+          chord's Shape, Technique and Bends only (SoundSectionsViewModel.ShowApplyBar): the picker and a short
+          reach, ONE row. The #485 preview and the reshape hint stand in a pinned strip over the footer
+          (`NoteApplyStrip`), outside the card scroller. An edit still writes at once.
+        * No section repeats its name as a heading.
 
-        Not a TabControl: every section body is IsVisible-gated, stays in the logical tree, and is
-        prewarmed through IPrewarmableSurfaces (the x:Names below are looked up by string).
+        Not a TabControl: every card is IsVisible-gated, stays in the logical tree, and is prewarmed
+        through IPrewarmableSurfaces (the x:Names in SectionBodyNames are looked up by string).
     -->
-    <Grid x:Name="SoundTabGrid" ColumnDefinitions="38,*">
-        <!-- ── the rail: icons only ── -->
-        <Border x:Name="SoundRail" Grid.Column="0"
-                Background="{DynamicResource FireSurfaceSunken}"
-                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,1,0">
-            <StackPanel x:Name="SoundRailEntries" Spacing="{StaticResource SpaceXxs}" Margin="{StaticResource GapTopXs}"
-                        HorizontalAlignment="Center">
-                <Panel x:Name="SoundRailTask" IsVisible="{Binding Sections.OffersTask}">
-                    <ToggleButton x:Name="SoundRailTaskEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
-                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                  IsChecked="{Binding Sections.IsTask, Mode=OneWay}"
-                                  Command="{Binding Sections.ChooseCommand}"
-                                  CommandParameter="{x:Static inspector:SoundSection.Task}"
-                                  AutomationProperties.Name="{localization:Loc Inspector_Section_Task}"
-                                  ToolTip.Tip="{localization:Loc Inspector_Section_Task}" ToolTip.Placement="Right">
-                        <PathIcon Data="{DynamicResource IconTarget}" Width="13" Height="13" />
-                    </ToggleButton>
-                    <!-- the open section's accent bar -->
-                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
-                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsTask}" />
-                </Panel>
-                <Panel x:Name="SoundRailLibrary" IsVisible="{Binding Sections.OffersLibrary}">
-                    <ToggleButton x:Name="SoundRailLibraryEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
-                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                  IsChecked="{Binding Sections.IsLibrary, Mode=OneWay}"
-                                  Command="{Binding Sections.ChooseCommand}"
-                                  CommandParameter="{x:Static inspector:SoundSection.Library}"
-                                  AutomationProperties.Name="{localization:Loc Inspector_Empty_Library}"
-                                  ToolTip.Tip="{localization:Loc Inspector_Empty_Library}" ToolTip.Placement="Right">
-                        <PathIcon Data="{DynamicResource IconLibraryMusic}" Width="13" Height="13" />
-                    </ToggleButton>
-                    <!-- the open section's accent bar -->
-                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
-                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsLibrary}" />
-                </Panel>
-                <Panel x:Name="SoundRailPlacement" IsVisible="{Binding Sections.OffersPlacement}">
-                    <ToggleButton x:Name="SoundRailPlacementEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
-                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                  IsChecked="{Binding Sections.IsPlacement, Mode=OneWay}"
-                                  Command="{Binding Sections.ChooseCommand}"
-                                  CommandParameter="{x:Static inspector:SoundSection.Placement}"
-                                  AutomationProperties.Name="{localization:Loc Inspector_Placement}"
-                                  ToolTip.Tip="{localization:Loc Inspector_Placement}" ToolTip.Placement="Right">
-                        <PathIcon Data="{DynamicResource IconGuitar}" Width="13" Height="13" />
-                    </ToggleButton>
-                    <!-- the open section's accent bar -->
-                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
-                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsPlacement}" />
-                </Panel>
-                <Panel x:Name="SoundRailShape" IsVisible="{Binding Sections.OffersShape}">
-                    <ToggleButton x:Name="SoundRailShapeEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
-                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                  IsChecked="{Binding Sections.IsShape, Mode=OneWay}"
-                                  Command="{Binding Sections.ChooseCommand}"
-                                  CommandParameter="{x:Static inspector:SoundSection.Shape}"
-                                  AutomationProperties.Name="{localization:Loc Inspector_Shape}"
-                                  ToolTip.Tip="{localization:Loc Inspector_Shape}" ToolTip.Placement="Right">
-                        <PathIcon Data="{DynamicResource IconSheetMusic}" Width="13" Height="13" />
-                    </ToggleButton>
-                    <!-- the open section's accent bar -->
-                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
-                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsShape}" />
-                </Panel>
-                <Panel x:Name="SoundRailSelection" IsVisible="{Binding Sections.OffersSelection}">
-                    <ToggleButton x:Name="SoundRailSelectionEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
-                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                  IsChecked="{Binding Sections.IsSelection, Mode=OneWay}"
-                                  Command="{Binding Sections.ChooseCommand}"
-                                  CommandParameter="{x:Static inspector:SoundSection.Selection}"
-                                  AutomationProperties.Name="{localization:Loc Inspector_Selection}"
-                                  ToolTip.Tip="{localization:Loc Inspector_Selection}" ToolTip.Placement="Right">
-                        <PathIcon Data="{DynamicResource IconPencil}" Width="13" Height="13" />
-                    </ToggleButton>
-                    <!-- the open section's accent bar -->
-                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
-                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsSelection}" />
-                </Panel>
-                <Panel x:Name="SoundRailTechnique" IsVisible="{Binding Sections.OffersTechnique}">
-                    <ToggleButton x:Name="SoundRailTechniqueEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
-                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                  IsChecked="{Binding Sections.IsTechnique, Mode=OneWay}"
-                                  Command="{Binding Sections.ChooseCommand}"
-                                  CommandParameter="{x:Static inspector:SoundSection.Technique}"
-                                  AutomationProperties.Name="{localization:Loc Inspector_Technique}"
-                                  ToolTip.Tip="{localization:Loc Inspector_Technique}" ToolTip.Placement="Right">
-                        <PathIcon Data="{DynamicResource IconSparkles}" Width="13" Height="13" />
-                    </ToggleButton>
-                    <!-- the open section's accent bar -->
-                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
-                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsTechnique}" />
-                </Panel>
-                <Panel x:Name="SoundRailBends" IsVisible="{Binding Sections.OffersBends}">
-                    <ToggleButton x:Name="SoundRailBendsEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
-                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                  IsChecked="{Binding Sections.IsBends, Mode=OneWay}"
-                                  Command="{Binding Sections.ChooseCommand}"
-                                  CommandParameter="{x:Static inspector:SoundSection.Bends}"
-                                  AutomationProperties.Name="{localization:Loc Inspector_Bends}"
-                                  ToolTip.Tip="{localization:Loc Inspector_Bends}" ToolTip.Placement="Right">
-                        <PathIcon Data="{DynamicResource IconSineWave}" Width="13" Height="13" />
-                    </ToggleButton>
-                    <!-- the open section's accent bar -->
-                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
-                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsBends}" />
-                    <!-- The selected sound bends: a dot, since the rail must not switch sections by itself. -->
-                    <Ellipse x:Name="SoundRailBendsDot" Width="6" Height="6" HorizontalAlignment="Right" VerticalAlignment="Top"
-                             Margin="{StaticResource GapChip}" Fill="{DynamicResource FireAccent}" IsHitTestVisible="False"
-                             IsVisible="{Binding SelectionHasBends}" />
-                </Panel>
-                <Panel x:Name="SoundRailFindings" IsVisible="{Binding Sections.OffersFindings}">
-                    <ToggleButton x:Name="SoundRailFindingsEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
-                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                  IsChecked="{Binding Sections.IsFindings, Mode=OneWay}"
-                                  Command="{Binding Sections.ChooseCommand}"
-                                  CommandParameter="{x:Static inspector:SoundSection.Findings}"
-                                  AutomationProperties.Name="{localization:Loc Inspector_Section_Findings}"
-                                  ToolTip.Tip="{localization:Loc Inspector_Section_Findings}" ToolTip.Placement="Right">
-                        <PathIcon Data="{DynamicResource IconAlert}" Width="13" Height="13" />
-                    </ToggleButton>
-                    <!-- the open section's accent bar -->
-                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
-                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsFindings}" />
-                    <!-- How many findings this selection has: red when one would make the export
-                         refuse the package, amber otherwise. Spoken and tipped as "2 findings". -->
-                    <Panel x:Name="SoundRailFindingsBadge" HorizontalAlignment="Right" VerticalAlignment="Top"
-                           RenderTransform="translate(3px, -3px)" IsHitTestVisible="False"
-                           IsVisible="{Binding HasSelectionIssues}">
-                        <Border MinWidth="13" Height="13" CornerRadius="{StaticResource FireRadiusPill}" Padding="{StaticResource PaddingChipSm}"
-                                Background="{DynamicResource FireWarning}" IsVisible="{Binding !SelectionBlocksExport}" />
-                        <Border MinWidth="13" Height="13" CornerRadius="{StaticResource FireRadiusPill}" Padding="{StaticResource PaddingChipSm}"
-                                Background="{DynamicResource FireDanger}" IsVisible="{Binding SelectionBlocksExport}" />
-                        <TextBlock Text="{Binding SelectionIssueCount}" FontSize="{StaticResource FireSizeNano}" FontWeight="Bold"
-                                   Foreground="{DynamicResource FireTextBright}" Margin="{StaticResource PaddingChipSm}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Panel>
-                </Panel>
-            </StackPanel>
+    <Grid x:Name="SoundTabGrid" RowDefinitions="Auto,Auto,*,Auto,Auto">
+        <!-- ── the section strip: captions only, the selection's summary at its end ── -->
+        <Border x:Name="NoteSectionStrip" Grid.Row="0" Padding="8,2" IsEnabled="{Binding Staged.Footer.IsIdle}"
+                Background="{DynamicResource FireSurfaceChrome}"
+                BorderBrush="{DynamicResource FireBorder}" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource SpaceSm}">
+                <ctl:OverflowTabStrip x:Name="NoteSectionEntries" Grid.Column="0" Spacing="3" IconsFallback="False" ShareSlack="False">
+                <ToggleButton x:Name="NoteSectionTaskEntry" Tag="0" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              IsVisible="{Binding Sections.OffersTask}"
+                              IsChecked="{Binding Sections.IsTask, Mode=OneWay}"
+                              Command="{Binding Staged.Footer.ChooseSectionCommand}"
+                              CommandParameter="{x:Static inspector:SoundSection.Task}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Section_Task}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                        <TextBlock Text="{localization:Loc Inspector_Section_Task}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ToggleButton>
+                <ToggleButton x:Name="NoteSectionLibraryEntry" Tag="1" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              IsVisible="{Binding Sections.OffersLibrary}"
+                              IsChecked="{Binding Sections.IsLibrary, Mode=OneWay}"
+                              Command="{Binding Staged.Footer.ChooseSectionCommand}"
+                              CommandParameter="{x:Static inspector:SoundSection.Library}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Empty_Library}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                        <TextBlock Text="{localization:Loc Inspector_Empty_Library}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ToggleButton>
+                <ToggleButton x:Name="NoteSectionPlacementEntry" Tag="2" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              IsVisible="{Binding Sections.OffersPlacement}"
+                              IsChecked="{Binding Sections.IsPlacement, Mode=OneWay}"
+                              Command="{Binding Staged.Footer.ChooseSectionCommand}"
+                              CommandParameter="{x:Static inspector:SoundSection.Placement}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Placement}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                        <TextBlock Text="{localization:Loc Inspector_Placement}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ToggleButton>
+                <ToggleButton x:Name="NoteSectionShapeEntry" Tag="3" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              IsVisible="{Binding Sections.OffersShape}"
+                              IsChecked="{Binding Sections.IsShape, Mode=OneWay}"
+                              Command="{Binding Staged.Footer.ChooseSectionCommand}"
+                              CommandParameter="{x:Static inspector:SoundSection.Shape}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Shape}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                        <TextBlock Text="{localization:Loc Inspector_Shape}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ToggleButton>
+                <ToggleButton x:Name="NoteSectionSelectionEntry" Tag="4" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              IsVisible="{Binding Sections.OffersSelection}"
+                              IsChecked="{Binding Sections.IsSelection, Mode=OneWay}"
+                              Command="{Binding Staged.Footer.ChooseSectionCommand}"
+                              CommandParameter="{x:Static inspector:SoundSection.Selection}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Selection}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                        <TextBlock Text="{localization:Loc Inspector_Selection}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ToggleButton>
+                <ToggleButton x:Name="NoteSectionTechniqueEntry" Tag="5" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              IsVisible="{Binding Sections.OffersTechnique}"
+                              IsChecked="{Binding Sections.IsTechnique, Mode=OneWay}"
+                              Command="{Binding Staged.Footer.ChooseSectionCommand}"
+                              CommandParameter="{x:Static inspector:SoundSection.Technique}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Technique}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                        <TextBlock Text="{localization:Loc Inspector_Technique}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ToggleButton>
+                <ToggleButton x:Name="NoteSectionBendsEntry" Tag="6" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              IsVisible="{Binding Sections.OffersBends}"
+                              IsChecked="{Binding Sections.IsBends, Mode=OneWay}"
+                              Command="{Binding Staged.Footer.ChooseSectionCommand}"
+                              CommandParameter="{x:Static inspector:SoundSection.Bends}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Bends}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                        <TextBlock Text="{localization:Loc Inspector_Bends}" VerticalAlignment="Center" />
+                        <!-- The selected sound bends: a dot, since the strip must not switch sections by itself. -->
+                        <Ellipse x:Name="NoteSectionBendsDot" Width="6" Height="6" VerticalAlignment="Center"
+                                 Fill="{DynamicResource FireAccent}" IsHitTestVisible="False"
+                                 IsVisible="{Binding SelectionHasBends}" />
+                    </StackPanel>
+                </ToggleButton>
+                <ToggleButton x:Name="NoteSectionFindingsEntry" Tag="7" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              IsVisible="{Binding Sections.OffersFindings}"
+                              IsChecked="{Binding Sections.IsFindings, Mode=OneWay}"
+                              Command="{Binding Staged.Footer.ChooseSectionCommand}"
+                              CommandParameter="{x:Static inspector:SoundSection.Findings}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Section_Findings}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                        <TextBlock Text="{localization:Loc Inspector_Section_Findings}" VerticalAlignment="Center" />
+                        <!-- How many findings this selection has: red when one would make the export
+                             refuse the package, amber otherwise. -->
+                        <Panel x:Name="NoteSectionFindingsBadge" VerticalAlignment="Center" IsHitTestVisible="False"
+                               IsVisible="{Binding HasSelectionIssues}">
+                            <Border MinWidth="13" Height="13" CornerRadius="{StaticResource FireRadiusPill}" Padding="{StaticResource PaddingChipSm}"
+                                    Background="{DynamicResource FireWarning}" IsVisible="{Binding !SelectionBlocksExport}" />
+                            <Border MinWidth="13" Height="13" CornerRadius="{StaticResource FireRadiusPill}" Padding="{StaticResource PaddingChipSm}"
+                                    Background="{DynamicResource FireDanger}" IsVisible="{Binding SelectionBlocksExport}" />
+                            <TextBlock Text="{Binding SelectionIssueCount}" FontSize="{StaticResource FireSizeNano}" FontWeight="Bold"
+                                       Foreground="{DynamicResource FireTextBright}" Margin="{StaticResource PaddingChipSm}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Panel>
+                    </StackPanel>
+                </ToggleButton>
+                <!-- "More": the sections that do not fit at this width (InspectorTabMoreMenu). -->
+                <ToggleButton x:Name="NoteSectionMore" ctl:OverflowTabStrip.IsOverflowButton="True"
+                              Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              AutomationProperties.Name="{localization:Loc Inspector_Tab_More}"
+                              ToolTip.Tip="{localization:Loc Inspector_Tab_More_Tip}">
+                    <ToggleButton.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight" />
+                    </ToggleButton.Flyout>
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}" VerticalAlignment="Center">
+                        <TextBlock Text="{localization:Loc Inspector_Tab_More}" />
+                        <PathIcon Data="{DynamicResource IconChevronDown}" Width="9" Height="9" />
+                    </StackPanel>
+                </ToggleButton>
+                </ctl:OverflowTabStrip>
+                <TextBlock x:Name="NoteSummary" Grid.Column="1" Text="{Binding SelectionSummary}" ToolTip.Tip="{Binding SelectionSummary}"
+                           FontSize="{StaticResource FireSizeXs}" FontWeight="Bold"
+                           Foreground="{DynamicResource FireTextBright}" TextTrimming="CharacterEllipsis" MaxWidth="140"
+                           VerticalAlignment="Center" />
+            </Grid>
         </Border>
 
-        <Grid Grid.Column="1" RowDefinitions="Auto,Auto,Auto,*">
-            <!-- ── ONE slim row: the selection, its place in the queue, ‹ ›, the filter ── -->
-            <Border x:Name="SoundNavRow" Grid.Row="0" MinHeight="28" Padding="{StaticResource FirePadTag}"
-                    BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1">
-                <!-- The filter takes the star column, so at the dock's 320 px floor its label trims
-                     instead of pushing the row past the pane. -->
-                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto" ColumnSpacing="{StaticResource SpaceXs}">
-                    <TextBlock x:Name="SoundNavSummary" Grid.Column="0" Text="{Binding SelectionSummary}" ToolTip.Tip="{Binding SelectionSummary}"
-                               FontSize="{StaticResource FireSizeXs}" FontWeight="Bold"
-                               Foreground="{DynamicResource FireTextBright}" TextTrimming="CharacterEllipsis" MaxWidth="140"
-                               VerticalAlignment="Center" />
-                    <TextBlock x:Name="SoundNavPosition" Grid.Column="1" Text="{Binding Queue.PositionLabel}" VerticalAlignment="Center"
-                               FontFamily="{StaticResource FireFontMono}" FontSize="{StaticResource FireSizeNano}"
-                               Foreground="{DynamicResource FireTextSecondary}" Margin="{StaticResource GapLeftXs}" />
-                    <Button x:Name="SoundNavPrevious" Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                            Command="{Binding Queue.PreviousMatchCommand}" IsEnabled="{Binding Queue.HasMatches}"
-                            AutomationProperties.Name="{localization:Loc Inspector_Queue_PrevMatchTip}"
-                            ToolTip.Tip="{localization:Loc Inspector_Queue_PrevMatchTip}">
-                        <PathIcon Data="{DynamicResource IconChevronLeft}" Width="9" Height="9" />
-                    </Button>
-                    <Button x:Name="SoundNavNext" Grid.Column="3" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                            Command="{Binding Queue.NextMatchCommand}" IsEnabled="{Binding Queue.HasMatches}"
-                            AutomationProperties.Name="{localization:Loc Inspector_Queue_NextMatchTip}"
-                            ToolTip.Tip="{localization:Loc Inspector_Queue_NextMatchTip}">
-                        <PathIcon Data="{DynamicResource IconChevronRight}" Width="9" Height="9" />
-                    </Button>
-                    <!-- The queue filter: a funnel with the active filter beside it; its list is
-                         the queue's own filters with their counts. -->
-                    <Button x:Name="SoundNavFilter" Grid.Column="4" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                            MinWidth="0" HorizontalAlignment="Right"
+        <!-- The footer and the strip over it come BEFORE the banner and the cards in the markup, though they are
+             drawn under them: the Tab order is the section strip, the queue's arrows, the "Apply to" ladder (as
+             before design D) and its preview, then the card. -->
+        <!-- ── the pinned footer: queue navigation, then the "Apply to" ladder ── -->
+        <Border x:Name="NoteFooter" Grid.Row="4" Padding="8,3" IsVisible="{Binding Staged.Footer.IsIdle}"
+                Background="{DynamicResource FireSurfaceFooter}"
+                BorderBrush="{DynamicResource FireBorder}" BorderThickness="0,1,0,0">
+            <ctl:FooterRail x:Name="NoteFooterRail" Spacing="{StaticResource SpaceSm}">
+                <!-- Where the footer is short of room, the place in the queue goes first, then the playhead time, then
+                     the ladder's short reach (FooterRail.DropOrder), then the rail stacks; the buttons always stay. -->
+                <StackPanel x:Name="NoteFooterNav" Orientation="Horizontal" Spacing="3">
+                    <!-- The queue filter: the active filter's name; its list is the queue's own
+                         filters with their counts. -->
+                    <Button x:Name="NoteFooterFilter" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
                             AutomationProperties.Name="{localization:Loc Inspector_Queue_FilterTip}"
                             ToolTip.Tip="{localization:Loc Inspector_Queue_FilterTip}">
-                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceXs}">
-                            <PathIcon Grid.Column="0" Data="{DynamicResource IconFilter}" Width="10" Height="10" />
-                            <TextBlock Grid.Column="1" Text="{Binding Queue.SelectedFilter.Label, FallbackValue=''}" FontSize="{StaticResource FireSizeNano}"
-                                       TextTrimming="CharacterEllipsis" MaxWidth="120" VerticalAlignment="Center" />
-                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                            <TextBlock Text="{Binding Queue.SelectedFilter.Label, FallbackValue=''}"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="110" VerticalAlignment="Center" />
+                            <PathIcon Data="{DynamicResource IconChevronDown}" Width="8" Height="8" VerticalAlignment="Center" />
+                        </StackPanel>
                         <Button.Flyout>
-                            <shell:PrewarmableFlyout Placement="BottomEdgeAlignedRight">
-                                <ListBox x:Name="SoundNavFilterList" ItemsSource="{Binding Queue.Filters}"
+                            <shell:PrewarmableFlyout Placement="TopEdgeAlignedLeft">
+                                <ListBox x:Name="NoteFooterFilterList" ItemsSource="{Binding Queue.Filters}"
                                          SelectedItem="{Binding Queue.SelectedFilter}"
                                          SelectionChanged="OnFilterPicked" MinWidth="200"
                                          AutomationProperties.Name="{localization:Loc Inspector_Queue_FilterTip}">
@@ -230,76 +203,336 @@
                             </shell:PrewarmableFlyout>
                         </Button.Flyout>
                     </Button>
-                    <PathIcon Grid.Column="5" Data="{DynamicResource IconInfo}"
-                              Width="11" Height="11" VerticalAlignment="Center"
-                              Foreground="{DynamicResource TextMuted}"
-                              ToolTip.Tip="{localization:Loc Inspector_Sound_Help}"
-                              ToolTip.ShowDelay="150" />
-                </Grid>
-            </Border>
+                    <Button x:Name="NoteFooterPrevious" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                            Command="{Binding Staged.Footer.PreviousMatchCommand}" IsEnabled="{Binding Queue.HasMatches}"
+                            AutomationProperties.Name="{localization:Loc Inspector_Queue_PrevMatchTip}"
+                            ToolTip.Tip="{localization:Loc Inspector_Queue_PrevMatchTip}">
+                        <PathIcon Data="{DynamicResource IconChevronLeft}" Width="9" Height="9" />
+                    </Button>
+                    <Button x:Name="NoteFooterNext" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                            Command="{Binding Staged.Footer.NextMatchCommand}" IsEnabled="{Binding Queue.HasMatches}"
+                            AutomationProperties.Name="{localization:Loc Inspector_Queue_NextMatchTip}"
+                            ToolTip.Tip="{localization:Loc Inspector_Queue_NextMatchTip}">
+                        <PathIcon Data="{DynamicResource IconChevronRight}" Width="9" Height="9" />
+                    </Button>
+                    <!-- What the tab shows and why: a mark with the help in its tooltip (the last optional part the
+                         footer drops before it takes a second row). -->
+                    <Border x:Name="NoteFooterHelp" MinWidth="28" Height="28" CornerRadius="{StaticResource FireRadiusMicro}" ctl:FooterRail.DropOrder="7"
+                            Background="{DynamicResource FireSurfaceField}" BorderBrush="{DynamicResource FireBorder}" BorderThickness="1"
+                            ToolTip.Tip="{localization:Loc Inspector_Sound_Help}" ToolTip.ShowDelay="150">
+                        <TextBlock Text="?" FontSize="{StaticResource FireSizeXs}" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource FireTextPrimary}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <!-- Where the playhead is, time only (design D). -->
+                    <TextBlock x:Name="NoteFooterTime" Text="{Binding Clock.TimeLabel}" VerticalAlignment="Center" ctl:FooterRail.DropOrder="2"
+                               FontFamily="{StaticResource FireFontMono}" FontSize="{StaticResource FireSizeNano}"
+                               Foreground="{DynamicResource FireTextSecondary}" Margin="{StaticResource GapLeftXs}" />
+                    <TextBlock x:Name="NoteFooterPosition" Text="{Binding Queue.PositionLabel}" VerticalAlignment="Center"
+                               ctl:FooterRail.DropOrder="1"
+                               FontFamily="{StaticResource FireFontMono}" FontSize="{StaticResource FireSizeNano}"
+                               Foreground="{DynamicResource FireTextMuted}" Margin="{StaticResource GapLeftXs}" />
+                </StackPanel>
 
-            <!-- ── the selection is in a linked placement: an edit lands in N places ── -->
-            <linkViews:LinkBannerView x:Name="SoundLinkBanner" Grid.Row="1" Margin="6,4,6,0"
-                                      DataContext="{Binding LinkedMeasures}"
-                                      IsVisible="{Binding IsBannerVisible, FallbackValue=False}" />
-
-            <!-- ── ONE pinned "Apply to" row, over a chord's Shape, Technique and Bends only ── -->
-            <Border x:Name="SoundApplyBar" Grid.Row="2" Padding="{StaticResource FirePadTag}"
-                    IsVisible="{Binding Sections.ShowApplyBar}"
-                    BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1">
-                <local:SoundApplyBarView x:Name="SoundApplyScope" DataContext="{Binding ChordTemplateEditor}" />
-            </Border>
-
-            <!-- ── the content: ONE section ── -->
-            <ScrollViewer x:Name="SoundSectionScroll" Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                          Padding="{StaticResource PaddingRow}">
-                <Panel>
-                    <local:SoundTaskView x:Name="SoundTaskBody" IsVisible="{Binding Sections.IsTask}" />
-
-                    <!-- CHORD LIBRARY — the old browse mode, NAMED. Name, fingering and arpeggio
-                         stay editable; the SHAPE is read-only with its reason on the box, so browse
-                         mode can never reshape anything. -->
-                    <StackPanel x:Name="SoundLibraryBody" Spacing="{StaticResource SpaceSm}" IsVisible="{Binding Sections.IsLibrary}">
-                        <Border Classes="ScopeBar">
-                            <TextBlock Text="{localization:Loc Inspector_Library_ReadOnlyShape}" TextWrapping="Wrap" />
-                        </Border>
-                        <panels:ChordTemplateEditorView DataContext="{Binding ChordTemplateEditor}" ShapeRole="ReadOnly" />
+                <StackPanel x:Name="NoteFooterTrail" Orientation="Horizontal" Spacing="{StaticResource SpaceSm}">
+                    <!-- The "Apply to" ladder, over a chord's Shape, Technique and Bends only: the picker and a short
+                         reach; the preview and the reshape hint stand in the pinned strip over the footer. Over a
+                         chord's Technique it is the staged edit's scope. -->
+                    <Border x:Name="SoundApplyBar" VerticalAlignment="Center"
+                            IsVisible="{Binding Sections.ShowApplyBar}">
+                        <local:SoundApplyBarView x:Name="SoundApplyScope" DataContext="{Binding ChordTemplateEditor}" />
+                    </Border>
+                    <!-- The Shape page's Save set (#751 P5), pinned on the footer so it never scrolls away with the grip:
+                         Undo save, Save with the sounds it reaches, Save and next and Save & next missing (where each goes
+                         is its tooltip), all four always shown as buttons, never behind a menu. Short of room the footer
+                         drops their captions to their icons (FooterRail.DropOrder 4-6: Save & next missing first) before
+                         it takes a second row; Save keeps its caption and count. -->
+                    <StackPanel x:Name="NoteFooterShapeSave" Orientation="Horizontal" Spacing="{StaticResource SpaceXxs}">
+                        <StackPanel.IsVisible>
+                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                <Binding Path="Sections.IsShape" />
+                                <Binding Path="GripInspector.IsAvailable" />
+                            </MultiBinding>
+                        </StackPanel.IsVisible>
+                        <Button x:Name="SoundShapeUndoSave" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                VerticalAlignment="Stretch" Command="{Binding GripInspector.UndoSaveCommand}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Grip_UndoSave}"
+                                ToolTip.Tip="{localization:Loc Inspector_Grip_UndoSaveTip}">
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                                <PathIcon Data="{DynamicResource IconUndo}" Width="10" Height="10" VerticalAlignment="Center" />
+                                <TextBlock x:Name="SoundShapeUndoSaveLabel" Text="{localization:Loc Inspector_Grip_UndoSave}"
+                                           ctl:FooterRail.DropOrder="4" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="SoundShapeSave" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary"
+                                Command="{Binding GripInspector.SaveFingeringCommand}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Grip_Save}"
+                                ToolTip.Tip="{Binding GripInspector.TargetCount}">
+                            <StackPanel>
+                                <!-- Two lines in the footer's 28 px: tight line heights. -->
+                                <TextBlock Text="{localization:Loc Inspector_Grip_Save}" HorizontalAlignment="Center" LineHeight="{StaticResource FireLineHeightFooterCaption}" />
+                                <TextBlock x:Name="SoundShapeSaveCount" Text="{Binding GripInspector.TargetChords}" LineHeight="{StaticResource FireLineHeightFooterCount}"
+                                           FontSize="{StaticResource FireSizeNano}" HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="SoundShapeSaveNext" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                VerticalAlignment="Stretch" Command="{Binding GripInspector.SaveAndNextCommand}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Grip_SaveNext}"
+                                ToolTip.Tip="{Binding GripInspector.NextDestination}">
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                                <PathIcon Data="{DynamicResource IconChevronRight}" Width="9" Height="9" VerticalAlignment="Center" />
+                                <!-- The caption and, under it, where the button goes (like Save's count); they drop together. -->
+                                <StackPanel x:Name="SoundShapeSaveNextLabelStack" ctl:FooterRail.DropOrder="6" VerticalAlignment="Center">
+                                    <TextBlock x:Name="SoundShapeSaveNextLabel" Text="{localization:Loc Inspector_Grip_SaveNext}" LineHeight="{StaticResource FireLineHeightFooterCaption}" />
+                                    <TextBlock x:Name="SoundShapeSaveNextDestination" Text="{Binding GripInspector.NextDestination}" LineHeight="{StaticResource FireLineHeightFooterCount}"
+                                               FontSize="{StaticResource FireSizeNano}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="SoundShapeSaveNextMissing" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                VerticalAlignment="Stretch" Command="{Binding GripInspector.SaveAndNextMissingCommand}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Grip_SaveNextMissing}"
+                                ToolTip.Tip="{Binding GripInspector.NextMissingDestination}">
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                                <PathIcon Data="{DynamicResource IconChevronDoubleRight}" Width="9" Height="9" VerticalAlignment="Center" />
+                                <!-- The caption and, under it, where the button goes (like Save's count); they drop together. -->
+                                <StackPanel x:Name="SoundShapeSaveNextMissingLabelStack" ctl:FooterRail.DropOrder="5" VerticalAlignment="Center">
+                                    <TextBlock x:Name="SoundShapeSaveNextMissingLabel" Text="{localization:Loc Inspector_Grip_SaveNextMissing}" LineHeight="{StaticResource FireLineHeightFooterCaption}" />
+                                    <TextBlock x:Name="SoundShapeSaveNextMissingDestination" Text="{Binding GripInspector.NextMissingDestination}" LineHeight="{StaticResource FireLineHeightFooterCount}"
+                                               FontSize="{StaticResource FireSizeNano}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
+                    <!-- Design D's staged Apply (#751 P4): the scope and how many sounds Apply writes, then Apply. -->
+                    <StackPanel x:Name="NoteFooterApply" Orientation="Horizontal" Spacing="{StaticResource SpaceXs}"
+                                IsVisible="{Binding Staged.Footer.ShowsApply}">
+                        <Button x:Name="NoteFooterNoteScope" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                IsVisible="{Binding Staged.Footer.CanWidenNoteScope}"
+                                Command="{Binding Staged.Footer.ToggleNoteScopeCommand}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Staged_ScopeTip}"
+                                ToolTip.Tip="{localization:Loc Inspector_Staged_ScopeTip}">
+                            <TextBlock Text="{Binding Staged.Footer.ScopeText}" />
+                        </Button>
+                        <TextBlock x:Name="NoteFooterScope" Text="{Binding Staged.Footer.ScopeText}" VerticalAlignment="Center"
+                                   IsVisible="{Binding Staged.Footer.ShowsScopeText}"
+                                   FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextMuted}" />
+                        <Button x:Name="NoteFooterApplyButton" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary"
+                                IsVisible="{Binding Staged.Footer.ShowsApplyButton}"
+                                Content="{localization:Loc Inspector_Staged_ApplyButton}"
+                                Command="{Binding Staged.Footer.ApplyCommand}" IsEnabled="{Binding Staged.Footer.CanApply}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Staged_ApplyButton}"
+                                ToolTip.Tip="{Binding Staged.Footer.ApplyTip}" ToolTip.ShowOnDisabled="True" />
+                    </StackPanel>
+                </StackPanel>
+            </ctl:FooterRail>
+        </Border>
 
-                    <local:SoundPlacementView x:Name="SoundPlacementCard" IsVisible="{Binding Sections.IsPlacement}" />
+        <!-- ── the footer asking (design D's confirmation bar, in the footer's place): the review sentence with
+             Confirm / Cancel, or the leave guard's Stay / Discard / Apply. The pages take no input meanwhile. ── -->
+        <Border x:Name="NoteFooterAsk" Grid.Row="4" Padding="8,3" IsVisible="{Binding Staged.Footer.IsAsking}"
+                Background="{DynamicResource FireSurfaceFooter}"
+                BorderBrush="{DynamicResource FireAccent}" BorderThickness="0,1,0,0">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource SpaceSm}">
+                <TextBlock x:Name="NoteFooterAskText" Grid.Column="0" Text="{Binding Staged.Footer.AskText}"
+                           ToolTip.Tip="{Binding Staged.Footer.AskText}" VerticalAlignment="Center"
+                           TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                           FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextPrimary}" />
+                <StackPanel x:Name="NoteFooterAskActions" Grid.Column="1" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                    <Button x:Name="NoteFooterCancel" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                            IsVisible="{Binding Staged.Footer.IsReviewing}"
+                            Content="{localization:Loc Inspector_Staged_Cancel}" Command="{Binding Staged.Footer.CancelCommand}"
+                            AutomationProperties.Name="{localization:Loc Inspector_Staged_Cancel}" />
+                    <Button x:Name="NoteFooterConfirm" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary"
+                            IsVisible="{Binding Staged.Footer.IsReviewing}"
+                            Content="{localization:Loc Inspector_Staged_Confirm}" Command="{Binding Staged.Footer.ConfirmCommand}"
+                            AutomationProperties.Name="{localization:Loc Inspector_Staged_Confirm}" />
+                    <Button x:Name="NoteFooterStay" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                            IsVisible="{Binding Staged.Footer.IsLeaving}"
+                            Content="{localization:Loc Inspector_Staged_Stay}" Command="{Binding Staged.Footer.CancelCommand}"
+                            AutomationProperties.Name="{localization:Loc Inspector_Staged_Stay}" />
+                    <Button x:Name="NoteFooterDiscard" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                            IsVisible="{Binding Staged.Footer.IsLeaving}"
+                            Content="{localization:Loc Inspector_Staged_Discard}" Command="{Binding Staged.Footer.DiscardCommand}"
+                            AutomationProperties.Name="{localization:Loc Inspector_Staged_Discard}" />
+                    <Button x:Name="NoteFooterLeaveApply" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary"
+                            IsVisible="{Binding Staged.Footer.IsLeaving}" IsEnabled="{Binding Staged.Footer.CanApply}"
+                            Content="{localization:Loc Inspector_Staged_ApplyButton}" Command="{Binding Staged.Footer.ApplyAndLeaveCommand}"
+                            AutomationProperties.Name="{localization:Loc Inspector_Staged_ApplyButton}" />
+                </StackPanel>
+            </Grid>
+        </Border>
 
-                    <local:SoundShapeView x:Name="SoundShapeCard" IsVisible="{Binding Sections.IsShape}" />
+        <!-- ── pinned over the footer, outside the card scroller: a staged draft held on another sound, then what
+             the "Apply to" ladder is about to reach (the #485 preview, its own arrows stepping the playhead between
+             the marks) and the refused reshape hint, only where the ladder is (Sections.ShowApplyBar). ── -->
+        <StackPanel x:Name="NoteStrips" Grid.Row="3">
+            <!-- ── a staged draft left on another sound (a timeline click, a level switch): named, one click back
+                 to it (through the leave guard). Only while one is held. ── -->
+            <Border x:Name="NoteDraftsElsewhere" Padding="8,2" IsVisible="{Binding Staged.Footer.ShowsElsewhere}"
+                    Background="{DynamicResource FireSurfaceChrome}"
+                    BorderBrush="{DynamicResource FireBorder}" BorderThickness="0,1,0,0">
+                <Button x:Name="NoteDraftsElsewhereButton" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                        HorizontalAlignment="Left" IsEnabled="{Binding Staged.Footer.IsIdle}"
+                        Command="{Binding Staged.Footer.JumpToDraftCommand}"
+                        AutomationProperties.Name="{Binding Staged.Footer.ElsewhereText}"
+                        ToolTip.Tip="{localization:Loc Inspector_Staged_ElsewhereTip}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                        <PathIcon Data="{DynamicResource IconChevronLeft}" Width="8" Height="8" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Staged.Footer.ElsewhereText}" TextTrimming="CharacterEllipsis"
+                                   FontSize="{StaticResource FireSizeXs}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </Border>
+            <StackPanel x:Name="NoteApplyStrip" IsVisible="{Binding Sections.ShowApplyBar}">
+                <Border x:Name="NoteApplyPreviewStrip" Padding="8,2" IsVisible="{Binding ChordTemplateEditor.Preview.IsActive}"
+                        Background="{DynamicResource FireSurfaceChrome}"
+                        BorderBrush="{DynamicResource FireBorder}" BorderThickness="0,1,0,0">
+                    <Grid x:Name="SoundApplyPreview" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource SpaceXs}"
+                          DataContext="{Binding ChordTemplateEditor.Preview}" x:DataType="panelVms:ChordApplyPreview">
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="{Binding Summary}" TextWrapping="Wrap"
+                                   FontSize="{StaticResource FireSizeNano}" Foreground="{DynamicResource FireTextSecondary}" />
+                        <Button x:Name="NoteApplyPreviewPrevious" Grid.Column="1" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                                Command="{Binding PreviousTargetCommand}" IsEnabled="{Binding CanStep}"
+                                ToolTip.Tip="{localization:Loc ChordTemplate_Preview_Previous}"
+                                AutomationProperties.Name="{localization:Loc ChordTemplate_Preview_Previous}">
+                            <PathIcon Data="{DynamicResource IconChevronLeft}" Width="9" Height="9" />
+                        </Button>
+                        <Button x:Name="NoteApplyPreviewNext" Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                                Command="{Binding NextTargetCommand}" IsEnabled="{Binding CanStep}"
+                                ToolTip.Tip="{localization:Loc ChordTemplate_Preview_Next}"
+                                AutomationProperties.Name="{localization:Loc ChordTemplate_Preview_Next}">
+                            <PathIcon Data="{DynamicResource IconChevronRight}" Width="9" Height="9" />
+                        </Button>
+                    </Grid>
+                </Border>
+            </StackPanel>
+            <!-- A reshape with nothing selected is refused (it would rewrite every use). Outside the apply strip, which
+                 hides with nothing selected: that is exactly when this shows (the Library page's template card). -->
+            <Border x:Name="NoteReshapeHint" Padding="8,3" IsVisible="{Binding ChordTemplateEditor.Ladder.ShowsReshapeHint}"
+                    Background="{DynamicResource FireSurfaceChrome}"
+                    BorderBrush="{DynamicResource FireBorder}" BorderThickness="0,1,0,0">
+                <TextBlock Text="{localization:Loc ChordTemplate_SelectToReshape}"
+                           Foreground="{DynamicResource FireWarning}"
+                           FontSize="{StaticResource FireSizeNano}" TextWrapping="Wrap" />
+            </Border>
+        </StackPanel>
 
-                    <local:SoundBulkCardView x:Name="SoundBulkCard" IsVisible="{Binding Sections.IsSelection}" />
+        <!-- ── the selection is in a linked placement: an edit lands in N places ── -->
+        <linkViews:LinkBannerView x:Name="SoundLinkBanner" Grid.Row="1" Margin="8,4,8,0"
+                                  DataContext="{Binding LinkedMeasures}"
+                                  IsVisible="{Binding IsBannerVisible, FallbackValue=False}" />
 
-                    <local:SoundNoteTechniqueView x:Name="SoundNoteTechniqueCard" IsVisible="{Binding Sections.ShowNoteTechnique}" />
+        <!-- ── the cards: ONE section at a time ── -->
+        <ctl:ColumnFlowPanel x:Name="NoteCards" Grid.Row="2" Margin="8,6" IsEnabled="{Binding Staged.Footer.IsIdle}">
+            <!-- Task (#751 P5): what needs work next, the export readiness, and where the playhead is. The page titles are
+                 D's short ones, so at the Tiny tier the page buttons leave the pager row room for the "More below" cue (and
+                 the card its whole height). -->
+            <ctl:ColumnFlowCard x:Name="NoteTaskCard" IsVisible="{Binding Sections.IsTask}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Task_PageTriage}">
+                <local:SoundTaskView x:Name="SoundTaskBody" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteTaskReadinessCard" IsVisible="{Binding Sections.IsTask}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Task_PageReadiness}">
+                <local:SoundTaskReadinessView x:Name="SoundTaskReadinessBody" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteTaskPlayheadCard" IsVisible="{Binding Sections.IsTask}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Task_PagePlayhead}">
+                <local:SoundTaskPlayheadView x:Name="SoundTaskPlayheadBody" />
+            </ctl:ColumnFlowCard>
+            <!-- Library (#751 P5): the searchable template list, the picked grip, its uses, and the template card
+                 (the old browse mode's chord panel fields). -->
+            <ctl:ColumnFlowCard x:Name="NoteLibraryCard" IsVisible="{Binding Sections.IsLibrary}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Library_PageTemplates}">
+                <local:SoundLibraryView x:Name="SoundLibraryBody" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteLibraryGripCard" IsVisible="{Binding Sections.IsLibrary}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Library_Grip}">
+                <local:SoundLibraryGripView x:Name="SoundLibraryGripBody" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteLibraryUsesCard" IsVisible="{Binding Sections.IsLibrary}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Library_PageUses}">
+                <local:SoundLibraryUsesView x:Name="SoundLibraryUsesBody" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteLibraryTemplateCard" IsVisible="{Binding Sections.IsLibrary}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Library_PageTemplate}">
+                <local:SoundLibraryTemplateView x:Name="SoundLibraryTemplateBody" DataContext="{Binding ChordTemplateEditor}" />
+            </ctl:ColumnFlowCard>
+            <!-- Placement (#751 P4): the board, then the position fields and the imported values. -->
+            <ctl:ColumnFlowCard x:Name="NotePlacementBoardCard" IsVisible="{Binding Sections.IsPlacement}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Staged_PageBoard}">
+                <local:SoundPlacementBoardView x:Name="SoundPlacementBoard" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NotePlacementCard" IsVisible="{Binding Sections.IsPlacement}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Staged_PagePosition}">
+                <local:SoundPlacementView x:Name="SoundPlacementCard" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NotePlacementImportCard" IsVisible="{Binding Sections.IsPlacement}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Staged_PageImport}">
+                <local:SoundPlacementImportView x:Name="SoundPlacementImport" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteShapeCard" IsVisible="{Binding Sections.IsShape}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Shape}">
+                <local:SoundShapeView x:Name="SoundShapeCard" />
+            </ctl:ColumnFlowCard>
+            <!-- Selection (#751 P4): Move now, then the staged values and the summary. -->
+            <ctl:ColumnFlowCard x:Name="NoteSelectionCard" IsVisible="{Binding Sections.IsSelection}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Staged_PageMove}">
+                <local:SoundBulkCardView x:Name="SoundBulkCard" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteSelectionValuesCard" IsVisible="{Binding Sections.IsSelection}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Staged_PageValues}">
+                <local:SoundBulkValuesView x:Name="SoundBulkValues" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteSelectionSummaryCard" IsVisible="{Binding Sections.IsSelection}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Staged_PageSummary}">
+                <local:SoundBulkSummaryView x:Name="SoundBulkSummary" />
+            </ctl:ColumnFlowCard>
+            <!-- Technique (#751 P4): a note's techniques and detail; a chord's string card and whole-chord card (a
+                 mixed selection shows the note cards and the whole-chord card, which offers to edit the chords). -->
+            <ctl:ColumnFlowCard x:Name="NoteTechniqueCard" IsVisible="{Binding Sections.ShowNoteTechnique}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Staged_PageNotes}">
+                <local:SoundNoteTechniqueView x:Name="SoundNoteTechniqueCard" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteDetailCard" IsVisible="{Binding Sections.ShowNoteTechnique}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Staged_PageDetail}">
+                <local:SoundNoteDetailView x:Name="SoundNoteDetail" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteChordStringsCard" IsVisible="{Binding Sections.ShowChordStrings}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Staged_PageStrings}">
+                <local:SoundChordTechniqueView x:Name="SoundChordTechniqueCard" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteChordWholeCard" IsVisible="{Binding Sections.ShowChordTechnique}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Staged_PageChord}">
+                <local:SoundChordWholeView x:Name="SoundChordWhole" />
+            </ctl:ColumnFlowCard>
+            <!-- Bends (#751 P5): exactly one sound. The curve, the presets and the scope; every edit stages. -->
+            <ctl:ColumnFlowCard x:Name="NoteBendsCard" IsVisible="{Binding Sections.IsBends}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Bends_Curve}">
+                <local:SoundBendsCurveView x:Name="SoundBendsBody" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteBendsPresetsCard" IsVisible="{Binding Sections.IsBends}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Bends_Presets}">
+                <local:SoundBendsPresetsView x:Name="SoundBendsPresetsBody" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteBendsScopeCard" IsVisible="{Binding Sections.IsBends}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Bends_Scope}">
+                <local:SoundBendsScopeView x:Name="SoundBendsScopeBody" />
+            </ctl:ColumnFlowCard>
+            <!-- Findings (#751 P5): the list, the picked finding, and a review of the selected sounds. -->
+            <ctl:ColumnFlowCard x:Name="NoteFindingsCard" IsVisible="{Binding Sections.IsFindings}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Section_Findings}">
+                <local:SoundFindingsView x:Name="SoundFindingsBody" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteFindingsDetailCard" IsVisible="{Binding Sections.IsFindings}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Findings_PageDetail}">
+                <local:SoundFindingsDetailView x:Name="SoundFindingsDetailBody" />
+            </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteFindingsReviewCard" IsVisible="{Binding Sections.IsFindings}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Findings_PageReview}">
+                <local:SoundFindingsReviewView x:Name="SoundFindingsReviewBody" />
+            </ctl:ColumnFlowCard>
+        </ctl:ColumnFlowPanel>
 
-                    <local:SoundChordTechniqueView x:Name="SoundChordTechniqueCard" IsVisible="{Binding Sections.ShowChordTechnique}" />
-
-                    <!-- BENDS — exactly one sound, never a multi-selection: the string picker for a
-                         chord, then the graph at the pane's full width (the presets are one glyph
-                         row over it, Clear bend at that row's end). -->
-                    <Panel x:Name="SoundBendsBody" IsVisible="{Binding Sections.IsBends}">
-                        <Panel x:Name="NoteBendsBody" IsVisible="{Binding ShowNoteBends}">
-                            <panels:BendEditorControl DataContext="{Binding NoteBendEditor}" />
-                        </Panel>
-                        <StackPanel x:Name="ChordBendsBody" Spacing="{StaticResource SpaceXs}" IsVisible="{Binding ShowChordBends}">
-                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}">
-                                <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_StringColon}" Theme="{StaticResource LabelText}" Classes="Label"
-                                           VerticalAlignment="Center" />
-                                <ComboBox Grid.Column="1" ItemsSource="{Binding ChordBendStringLabels}"
-                                          AutomationProperties.Name="{localization:Loc Inspector_StringColon}"
-                                          SelectedIndex="{Binding ChordBendStringPosition}"
-                                          HorizontalAlignment="Left" MinWidth="120"
-                                          ToolTip.Tip="{localization:Loc Inspector_BendStringTip}" />
-                            </Grid>
-                            <panels:BendEditorControl DataContext="{Binding ChordBendEditor}" />
-                        </StackPanel>
-                    </Panel>
-
-                    <local:SoundFindingsView x:Name="SoundFindingsBody" IsVisible="{Binding Sections.IsFindings}" />
-                </Panel>
-            </ScrollViewer>
-        </Grid>
     </Grid>
 </UserControl>

@@ -18,6 +18,26 @@ namespace DotCharter.Tests.Services.Export.DynamicDifficulty;
 /// </summary>
 public sealed class DynamicDifficultyExportTests : IDisposable
 {
+    [Fact]
+    public void DlcSteps_KeepConfiguredDoubleStopNames()
+    {
+        var project = RocksmithPackageBuilderTests.CreateProject();
+        var chart = project.Arrangements[0];
+        // Make the fixture's two-string chord an actual power chord in its drop-D tuning.
+        chart.ChordTemplates[0].Frets[1] = 0;
+        chart.Levels[0].Chords[0].ChordNotes[1].Fret = 0;
+        var config = new AppConfig();
+        var suppressed = DlcBuilderBuildSteps.Apply(project, chart, null, DlcBuilderSteps.FromConfig(config));
+        config.KeepPowerChordNames = true;
+        var named = DlcBuilderBuildSteps.Apply(project, chart, null, DlcBuilderSteps.FromConfig(config));
+
+        Assert.NotNull(suppressed);
+        Assert.NotNull(named);
+        Assert.DoesNotContain(suppressed.ChordTemplates, t => t.Name == "E5");
+        Assert.Contains(named.ChordTemplates, t => t.Name == "E5");
+        Assert.Equal("E5", chart.ChordTemplates[0].Name);
+    }
+
     private static readonly DateTime ConversionTime = new(2026, 10, 15, 12, 0, 0, DateTimeKind.Unspecified);
     private static readonly DlcBuilderSteps DdOnly = new(false, true);
     private readonly string _tempDir = Directory.CreateTempSubdirectory("dotcharter-dd-export-").FullName;

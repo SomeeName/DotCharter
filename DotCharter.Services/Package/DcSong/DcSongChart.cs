@@ -16,9 +16,12 @@ public static class DcSongChart
     /// <param name="stemPaths">Each packaged stem's name and member, in package order.</param>
     /// <param name="keepArrangements">Indexes into <see cref="ChartProject.Arrangements" /> the
     /// package carries; null carries every arrangement.</param>
+    /// <param name="originalStems">The original project stems, aligned with <paramref name="stemPaths" />,
+    /// whose cloned state travels even when the package name differs. Null falls back to name matching.</param>
     public static ChartProject ForPackage(
         ChartProject project, string audioPath, string? coverPath,
-        IReadOnlyList<(string Name, string Path)> stemPaths, IReadOnlyCollection<int>? keepArrangements = null)
+        IReadOnlyList<(string Name, string Path)> stemPaths, IReadOnlyCollection<int>? keepArrangements = null,
+        IReadOnlyList<Stem?>? originalStems = null)
     {
         ArgumentNullException.ThrowIfNull(project);
         var packaged = ChartProjectCloner.Clone(project);
@@ -38,10 +41,15 @@ public static class DcSongChart
         // carry is dropped, and a packaged stem the project never listed is added.
         var byName = packaged.Stems.GroupBy(s => s.Name, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var clonedStems = packaged.Stems.ToList();
         packaged.Stems.Clear();
-        foreach (var (name, path) in stemPaths)
+        for (var i = 0; i < stemPaths.Count; i++)
         {
-            var stem = byName.TryGetValue(name, out var existing) ? existing : new Stem { Name = name };
+            var (name, path) = stemPaths[i];
+            var index = originalStems?[i] is { } original ? project.Stems.IndexOf(original) : -1;
+            var stem = index >= 0 ? clonedStems[index]
+                : byName.TryGetValue(name, out var existing) ? existing : new Stem();
+            stem.Name = name;
             stem.Path = path;
             stem.Local = true;
             packaged.Stems.Add(stem);

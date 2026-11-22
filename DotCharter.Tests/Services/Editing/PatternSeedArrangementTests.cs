@@ -63,7 +63,7 @@ public sealed class PatternSeedArrangementTests
 
         Assert.True(harness.Coordinator.PatternSeedIsFromAnotherArrangement());
         Assert.Equal(0, harness.Coordinator.CountPatternMatches(SameFrets()));
-        Assert.Equal(0, harness.Coordinator.SelectByPattern(SameFrets()));
+        Assert.Equal(0, harness.Coordinator.SelectByPattern(SameFrets()).Total);
         Assert.Null(harness.Coordinator.MoveToPatternMatch(SameFrets(), 0, 1));
 
         // …and the refusal did not touch the selection.

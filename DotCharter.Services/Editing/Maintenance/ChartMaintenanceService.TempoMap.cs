@@ -266,6 +266,9 @@ public sealed partial class ChartMaintenanceService
     /// Inserts a new beat at the playhead. Mirrors RsCharter's <c>BeatsService.addBeat()</c>:
     /// shifts every chart position with <c>BeatId &gt;= pivot</c> by +1, shifts beats[pivot..]
     /// time forward by one beat interval, then inserts a duplicated beat at <c>pivot</c>.
+    /// Every bar line stays where it was: the bar that holds the pivot is one beat longer and
+    /// carries its new length as its signature (<see cref="TempoMapBeats.RelabelBarAt" />, 4/4
+    /// becomes 5/4), so every other bar and the linked-measure groups after it are untouched.
     /// </summary>
     public void InsertBeatAtPlayhead()
     {
@@ -303,6 +306,7 @@ public sealed partial class ChartMaintenanceService
 
             ChartProjectPositions.ShiftFromBeat(after, pivot, +1);
             TempoMapBeats.InsertBeatAt(after, pivot);
+            TempoMapBeats.RelabelBarAt(after.Beats, pivot, +1);
 
             _historyService.Do(new ProjectSnapshotAction(this, before, after, arrangementIndex, levelIndex,
                 vocalTrackIndex));
@@ -320,7 +324,9 @@ public sealed partial class ChartMaintenanceService
     /// Removes the beat closest to the playhead. Mirrors RsCharter's
     /// <c>BeatsService.removeBeat()</c>: deletes any chart content at <c>BeatId == pivot</c>,
     /// shifts remaining content with <c>BeatId &gt; pivot</c> back by -1, shifts beats[pivot+1..]
-    /// time backward, and removes the beat marker.
+    /// time backward, and removes the beat marker. The bar that held it is one beat shorter
+    /// (4/4 becomes 3/4) and every other bar line stays. Removing the only beat of a one-beat
+    /// bar removes that bar: the bars around it keep their lengths.
     /// </summary>
     public void RemoveBeatAtPlayhead()
     {
@@ -352,10 +358,16 @@ public sealed partial class ChartMaintenanceService
             var vocalTrackIndex = GetActiveVocalTrackIndex();
             var before = CloneProject(project);
             var after = CloneProject(project);
+            var beats = project.Beats;
+            var removesWholeBar = beats[pivot].IsMeasure && (pivot + 1 == beats.Count || beats[pivot + 1].IsMeasure);
 
             TempoMapBeats.RemoveContentAtBeat(after, pivot);
             ChartProjectPositions.ShiftFromBeat(after, pivot + 1, -1);
             TempoMapBeats.RemoveBeatAt(after, pivot);
+            // A removed bar line hands over to the beat now at pivot; any other beat leaves its bar at pivot - 1
+            // (at pivot it would be the NEXT bar's downbeat when the removed beat was its bar's last).
+            if (!removesWholeBar)
+                TempoMapBeats.RelabelBarAt(after.Beats, beats[pivot].IsMeasure ? pivot : Math.Max(0, pivot - 1), -1);
 
             _historyService.Do(new ProjectSnapshotAction(this, before, after, arrangementIndex, levelIndex,
                 vocalTrackIndex));
@@ -366,6 +378,72 @@ public sealed partial class ChartMaintenanceService
         {
             _logger.Error(AppLogCategory.Editing, "Remove beat at playhead failed.", ex);
             _projectState.SetMessage(L("Status_RemoveBeatFailed", ex.Message), StatusSeverity.Error);
+        }
+    }
+
+    /// <summary>
+    ///     Tempo map ▸ Insert measures at playhead: whole bars before the bar that holds
+    ///     the playhead, at that bar's beat spacing and time signature. Everything from that
+    ///     bar on moves back by the same number of beats, so every later bar line keeps its
+    ///     beat; one <c>ProjectSnapshotAction</c>, like every sibling here.
+    /// </summary>
+    public MeasureInsertTempo? PlayheadBarTempo()
+    {
+        var project = _projectState.ActiveProject;
+        if (project == null || project.Beats.Count == 0) return null;
+        var barStart = TempoMapBeats.BarLineAtOrBefore(project.Beats,
+            TempoMapBeats.BeatAtOrBefore(project.Beats, _projectState.CurrentTimeMs));
+        return barStart < 0 ? null : TempoMapBeats.BarTempo(project, barStart);
+    }
+
+    public void InsertMeasuresAtPlayhead(int measureCount, MeasureInsertTempo? tempo = null)
+    {
+        var project = _projectState.ActiveProject;
+        if (project == null)
+        {
+            _projectState.MainDisplayMessage = L("Status_NoChartLoaded");
+            return;
+        }
+
+        if (project.IsBeatMapLocked)
+        {
+            _projectState.MainDisplayMessage = L("Status_BeatMapLocked");
+            return;
+        }
+
+        var barStart = TempoMapBeats.BarLineAtOrBefore(project.Beats,
+            TempoMapBeats.BeatAtOrBefore(project.Beats, _projectState.CurrentTimeMs));
+        if (measureCount <= 0 || barStart < 0)
+        {
+            _projectState.MainDisplayMessage = L("Status_TempoMapOperationNoChange");
+            return;
+        }
+
+        try
+        {
+            var arrangementIndex = GetActiveArrangementIndex();
+            var levelIndex = GetActiveLevelIndex();
+            var vocalTrackIndex = GetActiveVocalTrackIndex();
+            var before = CloneProject(project);
+            var after = CloneProject(project);
+
+            var chosen = tempo is { BeatsPerMeasure: > 0, NoteDenominator: > 0, Bpm: > 0 } picked ? picked
+                : TempoMapBeats.BarTempo(after, barStart);
+            var added = TempoMapBeats.InsertMeasuresBefore(after, barStart, measureCount, chosen);
+            ChartProjectPositions.ShiftFromBeat(after, barStart, added);
+
+            _historyService.Do(new ProjectSnapshotAction(this, before, after, arrangementIndex, levelIndex,
+                vocalTrackIndex));
+            _projectState.MainDisplayMessage = _localization.Plural("Status_MeasuresInsertedAtPlayheadOne",
+                "Status_MeasuresInsertedAtPlayhead", measureCount, added);
+            _logger.Info(AppLogCategory.Editing,
+                $"Inserted {measureCount} measure(s) ({added} beat(s)) of {chosen.BeatsPerMeasure}/{chosen.NoteDenominator} " +
+                $"at {chosen.Bpm:0.##} BPM before beat {barStart}.");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(AppLogCategory.Editing, "Insert measures at playhead failed.", ex);
+            _projectState.SetMessage(L("Status_AddBeatsFailed", ex.Message), StatusSeverity.Error);
         }
     }
 }

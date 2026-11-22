@@ -1,12 +1,15 @@
 using System.Diagnostics;
 using Avalonia.Controls;
+using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using DotCharter.Services.Audio.StemSeparation.GuitarRoles;
 using DotCharter.Tests.Services.Audio.GuitarRoles;
 using DotCharter.Tone.Infrastructure.Storage;
 using DotCharter.UI;
+using DotCharter.UI.Controls;
 using DotCharter.UI.ViewModels.Editor;
+using DotCharter.UI.ViewModels.Editor.Inspector;
 using DotCharter.UI.ViewModels.Shell;
 using DotCharter.UI.Views;
 using DotCharter.UI.Views.Editor.Inspector;
@@ -81,8 +84,8 @@ public sealed class GuitarRolesMixerUiPerfSmokeTests
                 // 1. A splittable guitar: the switch comes up live, off.
                 await WaitFor(window, () => vm.StemMixer.Tracks.Any(t => t.Name == "guitar") && roles.CanToggle,
                     "the switch never came up live for a splittable guitar");
-                // #601: the stems are a section of the Mixer's rail; open it, as its entry's click does.
-                window.GetVisualDescendants().OfType<MixerInspectorView>().Single().Rail.Choose("MixerStemsBody");
+                // Design D: the stems are a section of the Mixer's strip; open it, as its entry's click does.
+                vm.Inspector.MixerSections.ChooseCommand.Execute(MixerSection.Stems);
                 Dispatcher.UIThread.RunJobs();
                 window.UpdateLayout();
                 var view = window.GetVisualDescendants().OfType<GuitarRolesView>().Single();
@@ -139,11 +142,14 @@ public sealed class GuitarRolesMixerUiPerfSmokeTests
             }
         }, CancellationToken.None);
 
-    /// <summary>The Stems card sits below the Levels card: scroll its strips (and the
-    /// switch above them) into the frame for the capture.</summary>
+    /// <summary>Design D: the strips sit on the Levels card, the switch on the Routing card; show the Levels
+    /// card (a narrow pane pages them) and scroll its strips into the frame for the capture.</summary>
     private static void BringStemsIntoView(GuitarRolesView view)
     {
-        var strips = ((Panel)view.Parent!).Children.OfType<ItemsControl>().Single();
+        var mixer = view.GetVisualAncestors().OfType<MixerInspectorView>().First();
+        var strips = mixer.GetLogicalDescendants().OfType<ItemsControl>().Single(i => i.Name == "StemRows");
+        var card = strips.GetVisualAncestors().OfType<ColumnFlowCard>().First();
+        card.GetVisualAncestors().OfType<ColumnFlowPanel>().First().ShowPage(card);
         strips.BringIntoView();
     }
 

@@ -1,20 +1,9 @@
 using Avalonia;
+using DotCharter.Services.Editing.Lyrics;
 
 namespace DotCharter.UI.Input.Tools.EventInteractionGestures;
 
-/// <summary>
-/// Drag a lyric pill horizontally. The pill is moved live during the drag
-/// (so the user sees real placement); on Commit we restore the pre-drag
-/// position and replay the move through a <see cref="MoveLyricAction"/>
-/// so undo/redo are correct.
-/// <para>
-/// The drag is CLAMPED between the neighbouring syllables (which may live in
-/// the adjacent phrase) with the note-style minimum gap — a lyric can no more
-/// be dragged past its neighbour than a note can, and since no spacing pass
-/// covers vocals on save, this gesture is the only enforcement. See
-/// <see cref="LyricDragBounds"/>.
-/// </para>
-/// </summary>
+/// <summary>Previews and commits a snapped lyric move with its in-phrase neighbour adjustment.</summary>
 public sealed class LyricDragGesture : IEventGesture
 {
     private readonly IHistoryService _historyManager;
@@ -24,6 +13,8 @@ public sealed class LyricDragGesture : IEventGesture
     private readonly GestureDragThreshold _threshold = new();
 
     private LyricEvent? _target;
+    private LyricEvent? _previousInPhrase;
+    private FractionalPosition _previousEnd;
     private FractionalPosition _originalPos;
     private FractionalPosition _originalEnd;
     private double _startMouseMs;
@@ -53,76 +44,62 @@ public sealed class LyricDragGesture : IEventGesture
     public void OnMoved(ToolContext context)
     {
         if (!IsActive || _target == null) return;
-        // A CLICK is not a drag — see GestureDragThreshold. Selecting a pill
-        // must not snap it to the grid or to a waveform onset.
         if (!_threshold.Observe(context.Position)) return;
 
-        var beats = context.ViewModel.ChartEditor.Beats;
+        RestoreTiming(_target);
+        _previousInPhrase = null;
+        var editor = context.ViewModel.ChartEditor;
+        var beats = editor.Beats;
+        var phrases = editor.ActiveVocalTrack?.Phrases;
+        if (beats.Count == 0 || phrases == null) return;
+
         var deltaMs = context.ExactTimeMs - _startMouseMs;
-        var newStartMs = _originalPos.GetPositionMs(beats) + deltaMs;
-        if (newStartMs < 0) newStartMs = 0;
-        var span = _originalEnd.GetPositionMs(beats) - _originalPos.GetPositionMs(beats);
-        if (span <= 0) span = 200.0;
-
-        // Snap the start to the editor grid (or to a nearby note / waveform
-        // onset), then preserve the original pill width so the user is
-        // repositioning, not resizing.
-        var snappedStart = context.ViewModel.ChartEditor.SnapLyricStartMs(newStartMs);
-        var snappedStartMs = snappedStart.GetPositionMs(beats);
-        if (snappedStartMs < 0) snappedStartMs = 0;
-
-        // Clamp AFTER the snap: the start stays between the neighbouring
-        // syllables' starts with the note-style minimum gap, each gap evaluated
-        // at the neighbour it bounds against. Recomputed from the ORIGINAL span
-        // every move, so dragging against a wall and back never ratchets.
-        var finalStart = snappedStart;
-        double? nextStartMs = null;
-        var upperGapMs = 0.0;
-        var phrases = context.ViewModel.ChartEditor.ActiveVocalTrack?.Phrases;
-        if (phrases != null)
+        var startMs = Math.Max(0.0, _originalPos.GetPositionMs(beats) + deltaMs);
+        var snapped = editor.SnapLyricStartMs(startMs);
+        var (prev, next) = LyricDragBounds.FindNeighbors(phrases, _target, out var prevInPhrase, out var nextInPhrase);
+        var config = _configService.LoadAppConfig();
+        var minimumLength = LyricPhraseSpacing.MinimumLength(context.ViewModel.Transport.GridDivisor);
+        var lower = FractionalPosition.Zero;
+        if (prev != null)
         {
-            var config = _configService.LoadAppConfig();
-            var (prev, next) = LyricDragBounds.FindNeighbors(phrases, _target);
-            var prevStartMs = prev?.Position.GetPositionMs(beats);
-            nextStartMs = next?.Position.GetPositionMs(beats);
-            var lowerGapMs = prev != null ? LyricDragBounds.MinGapMsAt(prev.Position, beats, config) : 0.0;
-            upperGapMs = next != null ? LyricDragBounds.MinGapMsAt(next.Position, beats, config) : 0.0;
+            var previousFloor = prevInPhrase
+                ? prev.Position + minimumLength
+                : FractionalPosition.Max(prev.Position, prev.EndPosition);
+            lower = FractionalPosition.Max(lower,
+                previousFloor + ChartSpacingEnforcer.GetMinDistance(prev.Position, beats, config));
+        }
 
-            var (lower, upper) = LyricDragBounds.ComputeStartBounds(
-                prevStartMs, lowerGapMs, nextStartMs, upperGapMs);
-            lower = Math.Max(lower, 0.0);
-            if (upper < lower)
+        var start = FractionalPosition.Max(snapped, lower);
+        FractionalPosition? limit = null;
+        if (next != null)
+        {
+            // Recheck after each retreat because crossing a tempo or meter boundary changes the gap.
+            start = FractionalPosition.Min(start, next.Position);
+            while (true)
             {
-                // The neighbours already sit closer than two gaps — there is
-                // nowhere legal to go, so the pill stays where it started.
-                snappedStartMs = _originalPos.GetPositionMs(beats);
-                finalStart = _originalPos;
-            }
-            else
-            {
-                var clampedMs = LyricDragBounds.Clamp(snappedStartMs, lower, upper);
-                if (clampedMs != snappedStartMs)
-                {
-                    snappedStartMs = clampedMs;
-                    finalStart = TimelineMath.PositionFromMs(clampedMs, beats);
-                }
+                if (start < lower) return;
+                limit = LyricPhraseSpacing.EndLimit(start, next.Position, beats, config);
+                var latest = limit.Value - minimumLength;
+                if (start <= latest) break;
+                start = latest;
             }
         }
 
-        _target.Position = finalStart;
-        TrimAndSetEnd(snappedStartMs, span, nextStartMs, upperGapMs, beats);
-    }
-
-    /// <summary>The pill keeps its span, but its END may never cross into the
-    /// next syllable's minimum gap — mirrors how note sustains are capped at
-    /// the next onset minus the minimum distance.</summary>
-    private void TrimAndSetEnd(double startMs, double span, double? nextStartMs, double gapMs,
-        IList<BeatMarker> beats)
-    {
-        var endMs = startMs + span;
-        if (nextStartMs is { } next) endMs = Math.Min(endMs, next - gapMs);
-        if (endMs < startMs) endMs = startMs;
-        _target!.EndPosition = TimelineMath.PositionFromMs(endMs, beats);
+        if (start == _originalPos) return;
+        _target.Position = start;
+        var durationMs = _originalEnd.GetPositionMs(beats) - _originalPos.GetPositionMs(beats);
+        var preservedEnd = TimelineMath.PositionFromMs(
+            start.GetPositionMs(beats) + (durationMs > 0 ? durationMs : 200.0), beats);
+        var end = nextInPhrase && !_target.IsSustainShortened
+            ? limit!.Value
+            : FractionalPosition.Max(start + minimumLength, preservedEnd);
+        _target.EndPosition = limit is { } cap ? FractionalPosition.Min(end, cap) : end;
+        if (prevInPhrase && prev != null)
+        {
+            _previousInPhrase = prev;
+            _previousEnd = prev.EndPosition;
+            prev.EndPosition = LyricPhraseSpacing.EndLimit(prev.Position, start, beats, config);
+        }
     }
 
     public void Commit(ToolContext context)
@@ -131,9 +108,11 @@ public sealed class LyricDragGesture : IEventGesture
 
         var newPos = _target.Position;
         var newEnd = _target.EndPosition;
-        _target.Position = _originalPos;
-        _target.EndPosition = _originalEnd;
-        var action = new MoveLyricAction(_target, _originalPos, _originalEnd, newPos, newEnd);
+        var previousNewEnd = _previousInPhrase?.EndPosition;
+        RestoreTiming(_target);
+        IChartAction action = new MoveLyricAction(_target, _originalPos, _originalEnd, newPos, newEnd);
+        if (_previousInPhrase is { } previous && previousNewEnd is { } end)
+            action = new CompositeAction([action, new ResizeLyricAction(previous, _previousEnd, end, shortened: false)]);
         if (_historyManager.Do(action))
             _logger.Info(AppLogCategory.Events, $"Committed lyric drag. Text='{_target.Text}'.");
 
@@ -142,15 +121,21 @@ public sealed class LyricDragGesture : IEventGesture
 
     public void Cancel(ToolContext context)
     {
-        if (!IsActive || _target == null) { Reset(); return; }
-        _target.Position = _originalPos;
-        _target.EndPosition = _originalEnd;
+        if (IsActive && _target != null) RestoreTiming(_target);
         Reset();
+    }
+
+    private void RestoreTiming(LyricEvent lyric)
+    {
+        lyric.Position = _originalPos;
+        lyric.EndPosition = _originalEnd;
+        _previousInPhrase?.EndPosition = _previousEnd;
     }
 
     private void Reset()
     {
         _target = null;
+        _previousInPhrase = null;
         Track = null;
         IsActive = false;
         _threshold.Reset();

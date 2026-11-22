@@ -106,6 +106,16 @@
                                 </RadioButton>
                                 </Grid>
                             </StackPanel>
+                            <!-- The author of a charter's packages, the same value as Settings ▸ Editor's default charter name. -->
+                            <Grid x:Name="OnboardingCharterName" Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260"
+                                  IsVisible="{Binding IsCharter}">
+                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Settings_DefaultCharterName}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc Settings_Tip_DefaultCharterName}" />
+                                </StackPanel>
+                                <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding CharterName, Mode=TwoWay}"
+                                         AutomationProperties.Name="{localization:Loc Settings_DefaultCharterName}" />
+                            </Grid>
                             <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
                                 <StackPanel VerticalAlignment="Center" Grid.Column="0">
                                     <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Settings_Language}" />

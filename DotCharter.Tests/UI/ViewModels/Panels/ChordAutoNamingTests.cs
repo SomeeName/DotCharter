@@ -7,6 +7,8 @@ using DotCharter.Services.Parsing.GuitarPro;
 using DotCharter.Tone.Diagnostics;
 using DotCharter.UI.ViewModels.Editor;
 using DotCharter.UI.ViewModels.Panels;
+using DotCharter.UI.ViewModels.CommandPalette;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DotCharter.Tests.UI.ViewModels.Panels;
 
@@ -34,10 +36,37 @@ public sealed class ChordAutoNamingTests : IDisposable
     private static readonly (int String, int Fret)[] Am = [(1, 0), (2, 2), (3, 2), (4, 1), (5, 0)];
 
     private readonly FakeConfigurationService _config = new();
+    private readonly Action _restoreTracker;
 
-    public ChordAutoNamingTests() => NewChordNames.Configure(() => _config.AppConfig.AutoNameNewChords);
+    public ChordAutoNamingTests()
+    {
+        var previousTracker = AppCommand.Tracker;
+        _restoreTracker = () => AppCommand.Tracker = previousTracker;
+        using var services = new ServiceCollection().AddSingleton<IConfigurationService>(_config).BuildServiceProvider();
+        DotCharter.UI.AppStatics.Wire(services);
+    }
 
-    public void Dispose() => NewChordNames.Configure(static () => true);
+    public void Dispose()
+    {
+        NewChordNames.Configure(static () => true);
+        _restoreTracker();
+    }
+
+    [Theory]
+    [InlineData(false, false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    public void AutomaticNaming_ReadsTheLiveDoubleStopPreferences(bool suppress, bool keepPower, bool named)
+    {
+        _config.AppConfig.SuppressDoubleStopChordNames = suppress;
+        _config.AppConfig.KeepPowerChordNames = keepPower;
+        var frets = new Dictionary<int, int> { [0] = 3, [1] = 5 };
+
+        Assert.Equal(named, NewChordNames.For(Guitar(), frets).Length > 0);
+        _config.AppConfig.SuppressDoubleStopChordNames = true;
+        _config.AppConfig.KeepPowerChordNames = false;
+        Assert.Empty(NewChordNames.For(Guitar(), frets));
+    }
 
     private static Dictionary<int, int> Frets((int String, int Fret)[] grip) => grip.ToDictionary(g => g.String, g => g.Fret);
 
@@ -59,18 +88,24 @@ public sealed class ChordAutoNamingTests : IDisposable
     /// <summary>Each creation path, run once; returns the name the template it made got.</summary>
     public static TheoryData<string> Paths => ["resolver", "guitarPro", "reshape", "generateFingerings", "panelSeed"];
 
-    private string MakeAChordThrough(string path)
+    private string MakeAChordThrough(string path, bool flat = false)
     {
+        Arrangement Tune(Arrangement arrangement)
+        {
+            if (flat) arrangement.Tuning = ["Eb", "Ab", "Db", "Gb", "Bb", "Eb"];
+            return arrangement;
+        }
+
         switch (path)
         {
             case "resolver":
             {
                 var created = new List<ChordTemplate>();
-                return ChordTemplateResolver.Resolve(Guitar(), Frets(Am), ArpeggioFlavour.Plain, null, created).Name;
+                return ChordTemplateResolver.Resolve(Tune(Guitar()), Frets(Am), ArpeggioFlavour.Plain, null, created).Name;
             }
             case "guitarPro":
             {
-                var arrangement = Guitar();
+                var arrangement = Tune(Guitar());
                 arrangement.Levels[0].Chords.Add(ChordOf(Am));
                 ChordHandShapeBuilder.BuildAndTrim(arrangement.Levels[0], arrangement);
                 return arrangement.ChordTemplates.Single().Name;
@@ -78,6 +113,7 @@ public sealed class ChordAutoNamingTests : IDisposable
             case "reshape":
             {
                 var h = new Harness(_config);
+                Tune(h.Arrangement);
                 // One fret off A minor; moving it back reshapes the chord onto a new template.
                 var chord = ChordOf([(1, 0), (2, 2), (3, 2), (4, 1), (5, 1)]);
                 h.Arrangement.Levels[0].Chords.Add(chord);
@@ -98,6 +134,7 @@ public sealed class ChordAutoNamingTests : IDisposable
             case "panelSeed":
             {
                 var h = new Harness(_config);
+                Tune(h.Arrangement);
                 var chord = ChordOf(Am);
                 h.Arrangement.Levels[0].Chords.Add(chord);
                 var vm = h.ChordEditor();
@@ -125,6 +162,39 @@ public sealed class ChordAutoNamingTests : IDisposable
         _config.AppConfig.AutoNameNewChords = true;
 
         Assert.Equal("Amin", MakeAChordThrough(path));
+    }
+
+    [Theory]
+    [InlineData("resolver")]
+    [InlineData("guitarPro")]
+    [InlineData("reshape")]
+    [InlineData("panelSeed")]
+    public void GeneratedNames_InFlatTuning_UseFlats(string path) =>
+        Assert.Equal("Abmin", MakeAChordThrough(path, flat: true));
+
+    [Theory]
+    [InlineData(false, false, false, "")]
+    [InlineData(true, true, false, "")]
+    [InlineData(true, true, true, "G5")]
+    public void ClearingNoName_UsesAutomaticNamingAndDoubleStopSettings(bool automatic, bool suppress, bool keepPower, string expected)
+    {
+        _config.AppConfig.AutoNameNewChords = automatic;
+        _config.AppConfig.SuppressDoubleStopChordNames = suppress;
+        _config.AppConfig.KeepPowerChordNames = keepPower;
+        var h = new Harness(_config);
+        var grip = automatic ? [(0, 3), (1, 5)] : Am;
+        var template = new ChordTemplate { Id = 0, Unnamed = true, Frets = Frets(grip) };
+        h.Arrangement.ChordTemplates.Add(template);
+        var chord = ChordOf(grip, templateId: template.Id);
+        h.Arrangement.Levels[0].Chords.Add(chord);
+        var vm = h.ChordEditor();
+        h.Selection.SelectedChords.Add(chord);
+        Assert.True(vm.IsUnnamed);
+
+        vm.IsUnnamed = false;
+
+        Assert.False(template.Unnamed);
+        Assert.Equal(expected, template.Name);
     }
 
     /// <summary>A name the Guitar Pro file carries is the arranger's, kept with naming off.</summary>
@@ -172,13 +242,17 @@ public sealed class ChordAutoNamingTests : IDisposable
     }
 
     /// <summary>The app wires the switch to the setting; a setting nothing reads is a dead feature.</summary>
-    [Fact]
-    public void TheAppWiresTheSwitchToTheSetting()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TheAppWiresTheSwitchToTheSetting(bool doubleStopPolicy)
     {
         var ui = Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI");
+        var pattern = doubleStopPolicy
+            ? @"NewChordNames\.Configure\([^,\r\n]+,\s*\(\) => NewChordNames\.OptionsFor\(\w+\.LoadAppConfig\(\)\),"
+            : @"NewChordNames\.Configure\(\(\) => \w+\.LoadAppConfig\(\)\.AutoNameNewChords(?:,|\))";
 
-        Assert.Matches(@"NewChordNames\.Configure\(\(\) => \w+\.LoadAppConfig\(\)\.AutoNameNewChords\)",
-            File.ReadAllText(Path.Combine(ui, "App.Statics.cs")));
+        Assert.Matches(pattern, File.ReadAllText(Path.Combine(ui, "App.Statics.cs")));
         Assert.Contains("AppStatics.Wire(Services);", File.ReadAllText(Path.Combine(ui, "App.axaml.cs")));
     }
 

@@ -92,11 +92,10 @@ removed) ever asked for a second seat, and the run's exit hard-coded one. Three 
 - **`Audio/Abstractions/LiveInputSeatLayout`** — count + per-seat channel +
   per-seat trim as ONE immutable value, and `FromInputConfig` is the only
   producer of the resting one. **The channels index the OPEN set, not the
-  jacks**: ASIO builds an input MASK and JUCE compacts the enabled bits
+  jacks**: ASIO and WASAPI build an input MASK and JUCE compacts the enabled bits
   ascending, so a rig on inputs 3 and 4 reads 0 and 1 — and a user who typed the
-  HIGHER jack in the "left" box gets the seats swapped. WASAPI has no mask
-  (`ApplyAudioConfigurationCore` builds one only when `AppConfig.AudioDriver` is
-  ASIO), so the channel numbers do nothing there and the settings row hides them.
+  HIGHER jack in the "left" box gets the seats swapped. The same mask-order
+  mapping applies on both drivers.
 - **The intent is EXPLICIT: `AppConfig.InputChannelsAreSeparateGuitars`.**
   Unticking Mono has always meant "give the chain a real L and R" for a genuine
   stereo pickup; inferring "two players" from it would silently collapse that
@@ -171,7 +170,7 @@ removed) ever asked for a second seat, and the run's exit hard-coded one. Three 
   which follows the rig's seat picker and applies AT ONCE — by saving the
   config and calling `ApplyAudioConfiguration`, i.e. through the one baseline
   writer above, never by touching the seat layout. It ships disabled with its
-  reason on WASAPI (no mask) and with input off. Guards:
+  reason while input is off; ASIO and WASAPI both support the jack picker. Guards:
   `Services/Audio/GuitarInputChannelsTests`, `UI/LiveInputChannelViewModelTests`,
   `UI/AudioSettingsJackPickerTests`, the rig / onboarding / latency-wizard
   headless smokes.

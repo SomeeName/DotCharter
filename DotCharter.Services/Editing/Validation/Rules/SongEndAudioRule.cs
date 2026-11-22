@@ -23,10 +23,9 @@ public sealed class SongEndAudioRule : IArrangementRule
             sounds += level.Notes.Count + level.Chords.Count;
         if (sounds == 0) return;
 
-        var counted = sounds == 1 ? "1 sound is" : $"{sounds} sounds are";
-        issues.Add(new ArrangementIssue(
+        issues.Add(ArrangementIssues.Make(
             ArrangementIssueType.SongEndUnverifiedNoAudio,
-            $"No audio is attached, so the after-song-end check (I29) cannot run — {counted} unchecked. " +
-            "Attach the song audio before exporting."));
+            sounds == 1 ? "Validation_SongEndUnverifiedNoAudio_One" : "Validation_SongEndUnverifiedNoAudio_Many",
+            args: [sounds]));
     }
 }

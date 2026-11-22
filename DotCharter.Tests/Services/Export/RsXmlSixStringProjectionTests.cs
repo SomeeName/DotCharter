@@ -34,9 +34,9 @@ public sealed class RsXmlSixStringProjectionTests : IDisposable
 
         Assert.Equal("7", (string?)song.Element("tuning")!.Attribute("strings"));
         Assert.NotNull(song.Element("tuning")!.Attribute("string6"));
-        Assert.Contains(song.Descendants("note"), n => (int)n.Attribute("string")! == 6);
+        Assert.Contains(song.Descendants("note"), n => (int)n.Attribute("string")! == 0);
         Assert.Contains(song.Element("chordTemplates")!.Elements("chordTemplate"),
-            t => t.Attribute("fret6") is not null);
+            t => t.Attribute("fret0") is not null);
         Assert.DoesNotContain(_logger.Entries, e => e.Level == "WARN");
     }
 
@@ -68,7 +68,7 @@ public sealed class RsXmlSixStringProjectionTests : IDisposable
         config.ExportApplyDlcBuilderFixes = false;
         config.ExportGenerateDynamicDifficulty = false;
         Service(config).SaveDlcBuilderXmlBundle(Path.Combine(_dir, "project.rscp"), Chart(strings));
-        var file = Directory.GetFiles(Path.Combine(_dir, DlcBuilderBundle.DirectoryName), "*_Lead_*.xml").Single();
+        var file = Directory.GetFiles(Path.Combine(_dir, "export", DlcBuilderBundle.DirectoryName), "*_Lead_*.xml").Single();
         return XDocument.Load(file).Root!;
     }
 
@@ -81,7 +81,7 @@ public sealed class RsXmlSixStringProjectionTests : IDisposable
             RsXmlSixStringProjection = projection, ExportApplyDlcBuilderFixes = false, ExportGenerateDynamicDifficulty = false
         };
         Service(config).SaveDlcBuilderXmlBundle(Path.Combine(dir, "project.rscp"), bass ? BassChart() : Chart(6));
-        var file = Directory.GetFiles(Path.Combine(dir, DlcBuilderBundle.DirectoryName), "*.xml")
+        var file = Directory.GetFiles(Path.Combine(dir, "export", DlcBuilderBundle.DirectoryName), "*.xml")
             .Single(f => !f.Contains("Vocals") && !f.Contains("Showlights"));
         var copy = XDocument.Load(file);
         copy.Root!.Element("lastConversionDateTime")?.Remove();
@@ -100,7 +100,7 @@ public sealed class RsXmlSixStringProjectionTests : IDisposable
 
     [Theory]
     [InlineData(true, 1, 1)]
-    [InlineData(false, 6, 0)]
+    [InlineData(false, 2, 0)]
     public void Save_as_xml_follows_the_option(bool sixString, int expectedHighestString, int expectedWarnings)
     {
         Directory.CreateDirectory(_dir);
@@ -211,7 +211,7 @@ public sealed class RsXmlSixStringProjectionTests : IDisposable
 
         Assert.Null(writer.LastLoss);
         Assert.Equal("7", (string?)song.Element("tuning")!.Attribute("strings"));
-        Assert.Contains(song.Descendants("note"), n => (int)n.Attribute("string")! == 6);
+        Assert.Contains(song.Descendants("note"), n => (int)n.Attribute("string")! == 0);
     }
 
     [Fact]
@@ -264,7 +264,7 @@ public sealed class RsXmlSixStringProjectionTests : IDisposable
         var xml = new RsXmlSongWriter().Write(project).Root!.Element("tuning")!;
         Assert.Equal(7, tuning.Length);
         Assert.Equal(Enumerable.Range(0, 7).Select(i => (short)(int)xml.Attribute($"string{i}")!), tuning);
-        Assert.Equal(new short[] { -2, 0, -1, 0, 0, 0, -5 }, tuning);
+        Assert.Equal(new short[] { -5, -2, 0, -1, 0, 0, 0 }, tuning);
     }
 
     [Fact]
@@ -352,7 +352,7 @@ public sealed class RsXmlSixStringProjectionTests : IDisposable
 
     /// <summary>A guitar of <paramref name="strings" /> strings, chart order lowest first: a note on its
     /// low E and A, a low-B note and a chord over low B, low E and A when it has a 7th string.</summary>
-    private static ChartProject Chart(int strings)
+    internal static ChartProject Chart(int strings)
     {
         var beats = Enumerable.Range(0, 32).Select(i => new BeatMarker
         {

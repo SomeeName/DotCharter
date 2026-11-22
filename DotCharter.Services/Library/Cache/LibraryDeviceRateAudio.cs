@@ -178,7 +178,7 @@ public sealed class LibraryDeviceRateAudio
             }
 
             var convertedBytes = new FileInfo(staging).Length;
-            File.Move(staging, playablePath, overwrite: true);
+            AtomicFile.Publish(staging, playablePath);
             _logger?.Info(AppLogCategory.Audio,
                 $"Cached song converted to the device rate: '{playablePath}' {sourceRate} -> {deviceSampleRate} Hz, " +
                 $"step {result.Step * 32768f:0.0000}/32768, {length:N0} -> {convertedBytes:N0} bytes, in " +
@@ -188,7 +188,7 @@ public sealed class LibraryDeviceRateAudio
         {
             // Best effort: without it the next open converts, exactly as before.
             _logger?.Warning(AppLogCategory.Audio,
-                $"Device-rate conversion of '{playablePath}' at {deviceSampleRate} Hz failed: {ex.Message}");
+                $"Device-rate conversion of '{playablePath}' at {deviceSampleRate} Hz failed", ex);
         }
         finally
         {
@@ -224,7 +224,7 @@ public sealed class LibraryDeviceRateAudio
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"'{playablePath}': {why}; re-deriving it from '{wem}' failed: {ex.Message}");
+                $"'{playablePath}': {why}; re-deriving it from '{wem}' failed", ex);
             return false;
         }
     }

@@ -126,6 +126,7 @@ public partial class LinkOverlayView : UserControl
 
     private void PlaceToast()
     {
+        LinkToast.MaxWidth = Math.Max(0, Bounds.Width - 16);
         var width = LinkToast.Bounds.Width > 0 ? LinkToast.Bounds.Width : 420;
         Canvas.SetLeft(LinkToast, Math.Max(4, Bounds.Width - width - 12));
         Canvas.SetTop(LinkToast, 6);

@@ -35,14 +35,19 @@ public sealed class DlcBuilderProjectWriter(IProjectDocumentService documents, I
         ArgumentNullException.ThrowIfNull(sources);
         PlayOnlyExportGuard.ThrowIfPlayOnly(snapshot, nameof(DlcBuilderProjectWriter));
 
+        var projectPath = ProjectFiles.Beside(DlcBuilderProjectFile.PathIn(folder, snapshot));
         var path = DlcBuilderProjectFile.PathIn(folder, snapshot);
         // The bundle writer names its folder after the project file it is given.
-        documents.SaveDlcBuilderXmlBundle(ProjectFiles.Beside(path), snapshot, sources.AudioLengthMs);
-        if (!Directory.Exists(DlcBuilderBundle.DirectoryFor(path)))
+        var bundle = Path.Combine(folder, DlcBuilderBundle.DirectoryName);
+        documents.SaveDlcBuilderXmlBundleToDirectory(bundle, snapshot, sources.AudioLengthMs);
+        if (!Directory.Exists(bundle))
             throw new IOException($"The '{DlcBuilderBundle.DirectoryName}' folder was not written in '{folder}'.");
 
-        Rs2DlcWriter.WriteTo(path, DlcBuilderProjectFile.Build(config.LoadAppConfig(), snapshot, folder, sources.AudioPath,
-            sources.CoverArtPath, sources.AudioLengthMs));
+        var settings = config.LoadAppConfig();
+        var media = new ExportCompanionMedia(logger).Ensure(projectPath, snapshot, sources.AudioLengthMs, settings,
+            sources.AudioPath, sources.CoverArtPath, outputDirectory: folder);
+        Rs2DlcWriter.WriteTo(path, DlcBuilderProjectFile.Build(settings, snapshot, folder, media.Audio,
+            media.Cover, sources.AudioLengthMs));
         logger.Info(AppLogCategory.Project, $"DLC Builder project exported. Path='{path}'.");
         return path;
     }

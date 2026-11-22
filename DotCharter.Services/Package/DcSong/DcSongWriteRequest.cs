@@ -42,8 +42,9 @@ public sealed record DcSongWriteRequest
 }
 
 /// <summary>One stem: a name (<c>[a-z0-9_-]{1,32}</c>) and an audio file. An
-/// <c>.opus</c> file is stored as it is; anything else is encoded to Opus.</summary>
-public sealed record DcSongStemSource(string Name, string SourcePath);
+/// <c>.opus</c> file is stored as it is; anything else is encoded to Opus.
+/// <paramref name="Original" /> identifies the project stem whose cloned mixer state travels with it.</summary>
+public sealed record DcSongStemSource(string Name, string SourcePath, Stem? Original = null);
 
 /// <summary>The stages of a write, in the order they run.</summary>
 public enum DcSongWriteStage

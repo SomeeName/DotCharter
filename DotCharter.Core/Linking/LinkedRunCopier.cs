@@ -114,6 +114,7 @@ public static class LinkedRunCopier
         copy.Anchors.Removed.AddRange(targetLevel.Anchors.Where(a => Inside(a.Position, targetStart, targetEnd)));
         copy.HandShapes.Removed.AddRange(targetLevel.HandShapes.Where(h => Inside(h.Position, targetStart, targetEnd)));
         copy.Mutes.Removed.AddRange(targetLevel.FretHandMutes.Where(m => Inside(m.Position, targetStart, targetEnd)));
+        PinEndAnchor(copy, targetLevel, targetStart, targetEnd);
         foreach (var shape in targetLevel.HandShapes)
         {
             if (shape.Position < targetStart && shape.EndPosition > targetStart)
@@ -216,6 +217,43 @@ public static class LinkedRunCopier
         copy.Anchors.Added.Add(new FretAnchor(targetStart, inEffect.Fret, inEffect.Width));
     }
 
+    /// <summary>
+    ///     The fret-hand position the target had in effect at its run's end, pinned there when the
+    ///     copied anchors would hand a different one to the sounds after the run. Without
+    ///     it a propagated last anchor moves the hand of every unlinked note that follows.
+    /// </summary>
+    private static void PinEndAnchor(LinkedRunCopy copy, ChartLevel target, FractionalPosition targetStart,
+        FractionalPosition targetEnd)
+    {
+        if (target.Anchors.Any(a => a.Position == targetEnd)) return;
+        var follows = target.Notes.Any(n => n.Position >= targetEnd) || target.Chords.Any(c => c.Position >= targetEnd);
+        if (!follows) return;
+        var before = target.Anchors.Where(a => a.Position < targetEnd).MaxBy(a => a.Position);
+        if (before == null) return;
+        var after = target.Anchors.Where(a => a.Position < targetStart).Concat(copy.Anchors.Added).MaxBy(a => a.Position);
+        if (after != null && after.Fret == before.Fret && after.Width == before.Width) return;
+        var pin = new FretAnchor(targetEnd, before.Fret, before.Width);
+        copy.Anchors.Added.Add(pin);
+        copy.EndPin = pin;
+    }
+
+    /// <summary>
+    ///     A stored anchor at <paramref name="at" /> holding <paramref name="hand" />, planned as a copy
+    ///     step of its own; null when the level already stores one there. The reconciler gives every
+    ///     placement of a group the start anchor an end pin put at one placement's start, so the
+    ///     copies keep storing the same anchors.
+    /// </summary>
+    public static LinkedRunCopy? PlanStartAnchor(Arrangement target, ChartLevel targetLevel, FractionalPosition at,
+        FretAnchor hand)
+    {
+        ArgumentNullException.ThrowIfNull(targetLevel);
+        ArgumentNullException.ThrowIfNull(hand);
+        if (targetLevel.Anchors.Any(a => a.Position == at)) return null;
+        var copy = new LinkedRunCopy(target, targetLevel);
+        copy.Anchors.Added.Add(new FretAnchor(at, hand.Fret, hand.Width));
+        return copy;
+    }
+
     private static bool Inside(FractionalPosition position, FractionalPosition start, FractionalPosition end) =>
         position >= start && position < end;
 
@@ -234,7 +272,7 @@ public static class LinkedRunCopier
             if (id < 0 || ReferenceEquals(source, target)) return id;
             if (_map.TryGetValue(id, out var mapped)) return mapped;
 
-            var template = source.ChordTemplates.FirstOrDefault(t => t.Id == id);
+            var template = source.FindChordTemplate(id);
             if (template == null) return _map[id] = -1;
 
             var match = target.ChordTemplates.Concat(minted)
@@ -278,6 +316,9 @@ public sealed class LinkedRunCopy
 
     public Arrangement Target { get; }
     public ChartLevel Level { get; }
+
+    /// <summary>The anchor pinned at the target run's end to keep the hand of what follows, if any.</summary>
+    public FretAnchor? EndPin { get; internal set; }
 
     internal Swap<GuitarNote> Notes { get; } = new(n => n.Position);
     internal Swap<Chord> Chords { get; } = new(c => c.Position);

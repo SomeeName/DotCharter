@@ -24,12 +24,25 @@ namespace DotCharter.Tests.UI;
 /// </summary>
 public sealed class ToneSectionsViewModelTests
 {
+    [Theory]
+    [InlineData("ToneSectionsAdd", "AddSectionCommand")]
+    [InlineData("ToneSectionsPropose", "ProposeCommand")]
+    public void SectionButtons_InvokeTheirNamedAction(string name, string command)
+    {
+        var path = Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "PlayMode", "ToneSectionsPanel.axaml");
+        var markup = System.Xml.Linq.XDocument.Load(path);
+        var button = Assert.Single(markup.Descendants(), e =>
+            (string?)e.Attribute(System.Xml.Linq.XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == name);
+        Assert.Equal("{Binding " + command + "}", (string?)button.Attribute("Command"));
+    }
+
     // ---- fakes ----------------------------------------------------------------
 
     private sealed class FakeHost : IToneSectionHost
     {
         public ToneMatchSource? Source = new("C:/songs/song.wav", Array.Empty<ToneSpan>(), 0, 0);
         public MonoAudio? Di = new(new float[4800], 48_000);
+        public TaskCompletionSource<MonoAudio?>? DiLoad;
         public (string? Title, string? Artist) Song = ("Master of Puppets", "Metallica");
 
         public readonly List<(ToneDesignResult Result, string Chain)> Published = [];
@@ -37,7 +50,7 @@ public sealed class ToneSectionsViewModelTests
 
         public ToneMatchSource? ResolveMatchSource() => Source;
 
-        public Task<MonoAudio?> EnsureReferenceDiAsync(CancellationToken ct) => Task.FromResult(Di);
+        public Task<MonoAudio?> EnsureReferenceDiAsync(CancellationToken ct) => DiLoad?.Task ?? Task.FromResult(Di);
 
         public string ChainSummary(DcRigPreset rig) =>
             string.Join(" → ", rig.Modules.Select(m => m.ModuleTypeId));
@@ -46,6 +59,8 @@ public sealed class ToneSectionsViewModelTests
 
         public void PublishResult(ToneDesignResult result, string chainSummary) =>
             Published.Add((result, chainSummary));
+
+        public void ClearResult() { }
 
         public DspTonePreset SaveTone(
             string name, DspToneCategory category, string description, DcRigPreset rig)
@@ -59,6 +74,7 @@ public sealed class ToneSectionsViewModelTests
     {
         public readonly List<(string Path, string Stem, IReadOnlyList<ToneSection> Chart)> Calls = [];
         public IReadOnlyList<ToneSectionProposal>? Answer;
+        public Action? BeforeComplete;
 
         public Task<IReadOnlyList<ToneSectionProposal>> ProposeAsync(
             string songAudioPath, string stem, IReadOnlyList<ToneSection> chartSpans,
@@ -66,6 +82,7 @@ public sealed class ToneSectionsViewModelTests
         {
             Calls.Add((songAudioPath, stem, chartSpans));
             status?.Report("scanning");
+            BeforeComplete?.Invoke();
             return Task.FromResult(Answer ?? Array.Empty<ToneSectionProposal>());
         }
     }
@@ -93,12 +110,15 @@ public sealed class ToneSectionsViewModelTests
         public bool IsAvailable { get; init; } = true;
         public ToneNarration? Answer = new("Crunch", "a mid-gain crunch; the amp is doing the work", new AiUsage("m", 1, 1));
         public readonly List<ToneSection> Calls = [];
+        public TaskCompletionSource<ToneNarration?>? Pending;
+        public readonly List<CancellationToken> Tokens = [];
 
         public Task<ToneNarration?> NarrateAsync(
             DcRigPreset rig, ToneSection section, string? songTitle, string? artist, CancellationToken ct)
         {
             Calls.Add(section);
-            return Task.FromResult(Answer);
+            Tokens.Add(ct);
+            return Pending?.Task ?? Task.FromResult(Answer);
         }
     }
 
@@ -140,6 +160,12 @@ public sealed class ToneSectionsViewModelTests
         public int? PlaceAnswer = 0;
         public double PlayheadMs;
 
+        /// <summary>The host's song and arrangement the matches belong to.</summary>
+        public object? Owner = "song A";
+        public object? Project = new ChartProject();
+        public string? SongAudio = "C:/songs/song.wav";
+        public long AudioRevision;
+
         public Harness(
             bool withProposer = true,
             bool withMatcher = true,
@@ -158,7 +184,28 @@ public sealed class ToneSectionsViewModelTests
                 () => withMatcher ? Matcher : null,
                 () => withNarrator ? Narrator : null,
                 () => PlayheadMs,
-                withPlacement ? place : null);
+                withPlacement ? place : null,
+                () => Owner,
+                () => Project,
+                () => SongAudio,
+                () => AudioRevision);
+        }
+
+        /// <summary>Opens another song: a new project over different audio.</summary>
+        public void SwitchSong()
+        {
+            Owner = "song B";
+            Project = new object();
+            SetAudio("C:/songs/other.wav");
+        }
+
+        /// <summary>Changes the audio while keeping the current project instance.</summary>
+        public void SetAudio(string? path)
+        {
+            if (!string.Equals(SongAudio?.Replace('\\', '/'), path?.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                AudioRevision++;
+            SongAudio = path;
+            Host.Source = new ToneMatchSource(path, Array.Empty<ToneSpan>(), 0, 0);
         }
 
         public ToneSectionRowViewModel Add(string label, double fromSeconds, double toSeconds) =>
@@ -168,6 +215,106 @@ public sealed class ToneSectionsViewModelTests
     }
 
     // ---- the section list -----------------------------------------------------
+
+    private static void NotifyOwnerChanged(Harness h) =>
+        h.Vm.RefreshOwner();
+
+    [Fact]
+    public void First_attach_then_replace_without_a_command_invalidates_eagerly()
+    {
+        var h = new Harness();
+        h.SetAudio(null);
+        h.Add("Clean", 10, 30);
+        h.SetAudio("C:/songs/a.wav");
+        NotifyOwnerChanged(h);
+        Assert.Single(h.Vm.Sections);
+        h.SetAudio("C:/songs/b.wav");
+        NotifyOwnerChanged(h);
+        Assert.Empty(h.Vm.Sections);
+    }
+
+    [Fact]
+    public async Task Arrangement_switch_during_async_DI_drops_the_run()
+    {
+        var h = new Harness();
+        var row = h.Add("Lead", 10, 30);
+        h.Host.DiLoad = new TaskCompletionSource<MonoAudio?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var run = h.Vm.MatchAllCommand.ExecuteAsync(null);
+        Assert.False(run.IsCompleted);
+        h.Owner = "Rhythm";
+        NotifyOwnerChanged(h);
+        h.Host.DiLoad.SetResult(h.Host.Di);
+        await run;
+        Assert.Empty(h.Matcher.Requests);
+        Assert.False(row.HasCandidates);
+        Assert.Empty(h.Host.Published);
+    }
+
+    [Fact]
+    public async Task Old_candidate_and_late_narration_cannot_publish_after_switch()
+    {
+        var h = new Harness();
+        var row = h.Add("Lead", 10, 30);
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+        var oldCandidate = row.Candidates[1];
+        h.Narrator.Pending = new TaskCompletionSource<ToneNarration?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var run = row.ExplainCommand.ExecuteAsync(null);
+        Assert.False(run.IsCompleted);
+        h.SwitchSong();
+        NotifyOwnerChanged(h);
+        var published = h.Host.Published.Count;
+        row.SelectedCandidate = oldCandidate;
+        h.Narrator.Pending.SetResult(h.Narrator.Answer);
+        await run;
+        Assert.Equal(published, h.Host.Published.Count);
+        Assert.Empty(row.Explanation);
+        Assert.Empty(h.Vm.Sections);
+        Assert.False(h.Vm.ApplyCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task A_new_row_cannot_save_a_candidate_retained_from_the_previous_owner()
+    {
+        var h = new Harness();
+        var oldRow = h.Add("Lead", 10, 30);
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+        var oldCandidate = oldRow.Candidates[0];
+        h.SwitchSong();
+        NotifyOwnerChanged(h);
+        var current = h.Add("Rhythm", 10, 30);
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+        current.SelectedCandidate = oldCandidate;
+        h.Vm.ApplyCommand.Execute(null);
+        Assert.Empty(h.Host.Saved);
+        Assert.Empty(h.Placed);
+        Assert.Null(current.SelectedCandidate);
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static WeakReference CloseProject(Harness h, bool withAudio)
+    {
+        h.SetAudio(withAudio ? "C:/songs/song.wav" : null);
+        h.Project = new object();
+        h.Add("Clean", 10, 30);
+        var weak = new WeakReference(h.Project);
+        h.Project = null;
+        NotifyOwnerChanged(h);
+        return weak;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Closed_project_is_collectable_while_the_section_owner_lives(bool withAudio)
+    {
+        var h = new Harness();
+        var project = CloseProject(h, withAudio);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        Assert.False(project.IsAlive);
+        GC.KeepAlive(h);
+    }
 
     [Fact]
     public void AddSection_TakesThePlayhead_AndTheNewRowIsAlreadyValid()
@@ -307,6 +454,27 @@ public sealed class ToneSectionsViewModelTests
         var offered = Assert.Single(h.Vm.Proposals);
         Assert.Equal("Verse", offered.Title);
         Assert.Equal(Loc("ToneSections_Origin_Both"), offered.OriginText);
+    }
+
+    [Fact]
+    public async Task A_proposal_that_finishes_after_the_song_changed_is_dropped()
+    {
+        var h = new Harness();
+        h.Add("Clean", 10, 30);
+        h.Proposer.Answer =
+        [
+            new ToneSectionProposal(
+                new ToneSection("p1", "Verse", ToneStems.Guitar, TimeSpan.FromSeconds(40), TimeSpan.FromSeconds(60)),
+                0.8, ToneSectionOrigins.Audio)
+        ];
+        h.Proposer.BeforeComplete = h.SwitchSong;
+
+        await h.Vm.ProposeCommand.ExecuteAsync(null);
+
+        Assert.Empty(h.Vm.Proposals);
+        Assert.Empty(h.Vm.Sections);
+        Assert.Equal(Loc("ToneSections_Fault_SongChanged"), h.Vm.ErrorText);
+        Assert.False(h.Vm.IsBusy);
     }
 
     [Fact]
@@ -497,6 +665,80 @@ public sealed class ToneSectionsViewModelTests
         Assert.False(row.ExplainCommand.CanExecute(null));
     }
 
+    [Fact]
+    public async Task WhileOneSectionIsExplained_AnotherCannotStart_AndStopStaysLive()
+    {
+        var h = new Harness();
+        h.Add("Clean", 10, 30);
+        h.Add("Lead", 40, 60);
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+        var pending = h.Narrator.Pending = new TaskCompletionSource<ToneNarration?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = h.Vm.Sections[0];
+        var second = h.Vm.Sections[1];
+        var changes = 0;
+        second.ExplainCommand.CanExecuteChanged += (_, _) => changes++;
+
+        var running = first.ExplainCommand.ExecuteAsync(null);
+        try
+        {
+            Assert.True(h.Vm.IsBusy);
+            Assert.True(changes > 0);
+            Assert.False(second.ExplainCommand.CanExecute(null));
+            var refused = second.ExplainCommand.ExecuteAsync(null);
+            Assert.True(refused.IsCompleted);
+            await refused;
+            Assert.Single(h.Narrator.Calls);
+            Assert.True(h.Vm.IsBusy);
+            Assert.True(h.Vm.CancelCommand.CanExecute(null));
+            h.Vm.CancelCommand.Execute(null);
+            Assert.True(Assert.Single(h.Narrator.Tokens).IsCancellationRequested);
+        }
+        finally
+        {
+            pending.TrySetResult(h.Narrator.Answer);
+            await running.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        }
+
+        Assert.False(h.Vm.IsBusy);
+        Assert.True(second.ExplainCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task StaleRunCompletion_CannotClearANewerRunsBusyStateOrStopToken()
+    {
+        var h = new Harness();
+        var oldRow = h.Add("Lead", 10, 30);
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+        var oldPending = h.Narrator.Pending = new TaskCompletionSource<ToneNarration?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldRun = oldRow.ExplainCommand.ExecuteAsync(null);
+        Assert.True(h.Vm.IsBusy);
+        h.SwitchSong();
+        NotifyOwnerChanged(h);
+        var current = h.Add("Rhythm", 10, 30);
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+        var currentPending = h.Narrator.Pending = new TaskCompletionSource<ToneNarration?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var currentRun = current.ExplainCommand.ExecuteAsync(null);
+        try
+        {
+            Assert.True(h.Vm.IsBusy);
+            oldPending.SetResult(h.Narrator.Answer);
+            await oldRun.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+            Assert.True(h.Vm.IsBusy);
+            Assert.True(h.Vm.CancelCommand.CanExecute(null));
+            Assert.False(h.Narrator.Tokens[^1].IsCancellationRequested);
+            h.Vm.CancelCommand.Execute(null);
+            Assert.True(h.Narrator.Tokens[^1].IsCancellationRequested);
+        }
+        finally
+        {
+            oldPending.TrySetResult(h.Narrator.Answer);
+            currentPending.TrySetResult(h.Narrator.Answer);
+            await Task.WhenAll(oldRun, currentRun).WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        }
+
+        Assert.False(h.Vm.IsBusy);
+    }
+
     // ---- apply as tone set ----------------------------------------------------
 
     [Fact]
@@ -545,6 +787,225 @@ public sealed class ToneSectionsViewModelTests
             Strings.Format("ToneSections_AppliedPresetsOnly", 1),
             h.Vm.Status);
         Assert.Empty(h.Vm.ErrorText);
+    }
+
+    [Fact]
+    public async Task Apply_AfterTheSongChanged_PlacesAndSavesNothing_AndDropsTheOldMatches()
+    {
+        var h = new Harness();
+        h.Add("Clean", 10, 30);
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+        Assert.True(h.Vm.ApplyCommand.CanExecute(null));
+
+        h.SwitchSong();
+        h.Vm.ApplyCommand.Execute(null);
+
+        Assert.Empty(h.Placed);
+        Assert.Empty(h.Host.Saved);
+        Assert.Equal(Loc("ToneSections_Fault_SongChanged"), h.Vm.ErrorText);
+        Assert.All(h.Vm.Sections, r => Assert.False(r.HasCandidates));
+        Assert.False(h.Vm.ApplyCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task A_match_that_finishes_after_the_song_changed_is_not_published()
+    {
+        var h = new Harness();
+        h.Add("Clean", 10, 30);
+        h.Matcher.Block = new TaskCompletionSource<bool>();
+
+        var run = h.Vm.MatchAllCommand.ExecuteAsync(null);
+        h.SwitchSong();
+        h.Matcher.Block.SetResult(true);
+        await run;
+
+        Assert.All(h.Vm.Sections, r => Assert.False(r.HasCandidates));
+        Assert.Equal(Loc("ToneSections_Fault_SongChanged"), h.Vm.ErrorText);
+        Assert.False(h.Vm.ApplyCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Match_again_after_the_song_changed_matches_no_section_of_the_old_song()
+    {
+        var h = new Harness();
+        h.Proposer.Answer =
+        [
+            new ToneSectionProposal(
+                new ToneSection("p1", "Verse", ToneStems.Guitar, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)),
+                0.8, ToneSectionOrigins.Audio)
+        ];
+        await h.Vm.ProposeCommand.ExecuteAsync(null);
+        h.Vm.Proposals[0].AcceptCommand.Execute(null);
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+        Assert.Single(h.Matcher.Requests);
+
+        h.SwitchSong();
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+
+        Assert.Single(h.Matcher.Requests);
+        Assert.Empty(h.Vm.Sections);
+        Assert.Equal(Loc("ToneSections_Fault_SongChanged"), h.Vm.ErrorText);
+    }
+
+    [Fact]
+    public async Task Sections_and_proposals_of_the_old_song_are_refused_after_a_switch()
+    {
+        var h = new Harness();
+        h.Add("Clean", 10, 30);
+        h.Proposer.Answer =
+        [
+            new ToneSectionProposal(
+                new ToneSection("p1", "Verse", ToneStems.Guitar, TimeSpan.FromSeconds(40), TimeSpan.FromSeconds(60)),
+                0.8, ToneSectionOrigins.Audio)
+        ];
+        await h.Vm.ProposeCommand.ExecuteAsync(null);
+
+        h.SwitchSong();
+        h.Vm.Proposals[0].AcceptCommand.Execute(null);
+        Assert.Empty(h.Vm.Sections);
+        Assert.Empty(h.Vm.Proposals);
+
+        h.Add("Lead", 5, 25);
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+
+        var request = Assert.Single(h.Matcher.Requests);
+        Assert.Equal("Lead", Assert.Single(request.Sections).Label);
+    }
+
+    [Fact]
+    public async Task An_arrangement_switch_drops_sections_and_matches()
+    {
+        var h = new Harness();
+        h.Add("Clean", 10, 30);
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+        Assert.True(h.Vm.ApplyCommand.CanExecute(null));
+
+        // Lead -> Rhythm of the same song: same audio, another arrangement.
+        h.Owner = "song A, rhythm";
+        h.Vm.ApplyCommand.Execute(null);
+
+        Assert.Empty(h.Placed);
+        Assert.Empty(h.Host.Saved);
+        Assert.Equal(Loc("ToneSections_Fault_ArrangementChanged"), h.Vm.ErrorText);
+        Assert.Empty(h.Vm.Sections);
+
+        h.Add("Rhythm", 10, 30);
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+        Assert.Equal(2, h.Matcher.Requests.Count);
+        Assert.True(h.Vm.ApplyCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task An_arrangement_switch_during_a_match_drops_the_sections()
+    {
+        var h = new Harness();
+        h.Add("Clean", 10, 30);
+        h.Matcher.Block = new TaskCompletionSource<bool>();
+
+        var run = h.Vm.MatchAllCommand.ExecuteAsync(null);
+        h.Owner = "song A, rhythm";
+        h.Matcher.Block.SetResult(true);
+        await run;
+
+        Assert.Empty(h.Vm.Sections);
+        Assert.Equal(Loc("ToneSections_Fault_ArrangementChanged"), h.Vm.ErrorText);
+    }
+
+    [Fact]
+    public async Task Reloading_the_same_song_keeps_its_sections_and_proposals()
+    {
+        var h = new Harness();
+        h.Add("Clean", 10, 30);
+        h.Proposer.Answer =
+        [
+            new ToneSectionProposal(
+                new ToneSection("p1", "Verse", ToneStems.Guitar, TimeSpan.FromSeconds(40), TimeSpan.FromSeconds(60)),
+                0.8, ToneSectionOrigins.Audio)
+        ];
+        await h.Vm.ProposeCommand.ExecuteAsync(null);
+
+        // A production reload carries the persisted project ID into the new graph.
+        h.Project = ChartProjectCloner.Clone(Assert.IsType<ChartProject>(h.Project));
+        h.SetAudio("c:\\SONGS\\song.wav");
+        h.Vm.Proposals[0].AcceptCommand.Execute(null);
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+
+        Assert.Equal(new[] { "Clean", "Verse" }, h.Vm.Sections.Select(r => r.Label));
+        Assert.Equal(2, Assert.Single(h.Matcher.Requests).Sections.Count);
+        Assert.Empty(h.Vm.ErrorText);
+    }
+
+    [Fact]
+    public void Two_unsaved_projects_without_audio_do_not_share_sections()
+    {
+        var h = new Harness();
+        h.SetAudio(null);
+        h.Add("Clean", 10, 30);
+
+        h.Project = new object();
+        h.Add("Lead", 40, 60);
+
+        Assert.Equal("Lead", Assert.Single(h.Vm.Sections).Label);
+    }
+
+    [Fact]
+    public async Task First_audio_attachment_on_the_same_project_keeps_sections()
+    {
+        var h = new Harness();
+        h.SetAudio(null);
+        var row = h.Add("Clean", 10, 30);
+
+        h.SetAudio("C:/songs/song.wav");
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+
+        Assert.Same(row, Assert.Single(h.Vm.Sections));
+        Assert.Equal("Clean", Assert.Single(Assert.Single(h.Matcher.Requests).Sections).Label);
+        Assert.Empty(h.Vm.ErrorText);
+    }
+
+    [Fact]
+    public void Attaching_different_audio_to_the_same_project_clears_sections()
+    {
+        var h = new Harness();
+        h.Add("Clean", 10, 30);
+
+        h.SetAudio("C:/songs/other.wav");
+        h.Add("Lead", 40, 60);
+
+        Assert.Equal("Lead", Assert.Single(h.Vm.Sections).Label);
+    }
+
+    [Fact]
+    public async Task Replacing_the_first_attached_audio_clears_the_original_sections()
+    {
+        var h = new Harness();
+        h.SetAudio(null);
+        h.Add("Clean", 10, 30);
+        h.SetAudio("C:/songs/song.wav");
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+        Assert.Single(h.Matcher.Requests);
+
+        h.SetAudio("C:/songs/other.wav");
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+
+        Assert.Empty(h.Vm.Sections);
+        Assert.Single(h.Matcher.Requests);
+        Assert.Equal(Loc("ToneSections_Fault_SongChanged"), h.Vm.ErrorText);
+    }
+
+    [Fact]
+    public async Task A_different_song_clears_the_sections_and_the_matches()
+    {
+        var h = new Harness();
+        h.Add("Clean", 10, 30);
+        await h.Vm.MatchAllCommand.ExecuteAsync(null);
+
+        h.SwitchSong();
+        h.Vm.ApplyCommand.Execute(null);
+
+        Assert.Empty(h.Placed);
+        Assert.Empty(h.Vm.Sections);
+        Assert.Equal(Loc("ToneSections_Fault_SongChanged"), h.Vm.ErrorText);
     }
 
     [Fact]
@@ -641,6 +1102,126 @@ public sealed class ToneSectionsViewModelTests
             FakeLocalization.English(),
             static id => id);
 
+    [Theory]
+    [InlineData("replace")]
+    [InlineData("detach")]
+    [InlineData("project")]
+    [InlineData("close")]
+    [InlineData("arrangement")]
+    public void Host_notifications_clear_the_shared_result_and_disable_hear_and_save(string change)
+    {
+        var saves = new List<string>();
+        using var panel = NewPanel(saves.Add);
+        var state = new ProjectState { ActiveProject = new ChartProject { AudioFileName = "C:/songs/song.wav" }, ActiveArrangement = new Arrangement() };
+        var path = "C:/songs/song.wav";
+        panel.MatchSourceProvider = () => new ToneMatchSource(path, [], 0, 0);
+        panel.ConfigureSections(static () => null, () => new FakeSetMatcher(),
+            resultOwner: () => state.ActiveArrangement, project: () => state.ActiveProject, ownerChanges: state);
+        var row = panel.Sections.AddForTests("Lead", ToneStems.Guitar, TimeSpan.Zero, TimeSpan.FromSeconds(20));
+        row.PublishCandidates(MatchWith(0.2, 0.4), panel);
+        var old = row.Candidates[1];
+        Assert.True(panel.HasResult);
+
+        switch (change)
+        {
+            case "replace":
+                path = "C:/songs/other.wav";
+                state.CommitSongAudio(state.ActiveProject!, path);
+                state.NotifyAudioLoaded();
+                break;
+            case "detach":
+                path = null;
+                state.CommitSongAudio(state.ActiveProject!, "");
+                state.NotifyAudioCleared();
+                break;
+            case "project":
+                path = null;
+                state.ActiveProject = new ChartProject();
+                break;
+            case "close":
+                state.ActiveProject = null;
+                break;
+            case "arrangement":
+                state.ActiveArrangement = new Arrangement();
+                break;
+        }
+
+        Assert.Empty(panel.Sections.Sections);
+        Assert.Empty(row.Candidates);
+        Assert.Null(row.SelectedCandidate);
+        Assert.False(panel.HasResult);
+        Assert.False(panel.HearItCommand.CanExecute(null));
+        Assert.False(panel.SaveToneCommand.CanExecute(null));
+        row.SelectedCandidate = old;
+        panel.HearItCommand.Execute(null);
+        panel.SaveToneCommand.Execute(null);
+        Assert.False(panel.HasResult);
+        Assert.Empty(saves);
+    }
+
+    [Fact]
+    public void Host_notifications_record_first_attach_before_the_next_audio_replacement()
+    {
+        using var panel = NewPanel();
+        var state = new ProjectState { ActiveProject = new ChartProject() };
+        string? path = null;
+        panel.MatchSourceProvider = () => new ToneMatchSource(path, [], 0, 0);
+        panel.ConfigureSections(static () => null, static () => null,
+            project: () => state.ActiveProject, ownerChanges: state);
+        var row = panel.Sections.AddForTests("Clean", ToneStems.Guitar, TimeSpan.Zero, TimeSpan.FromSeconds(20));
+        path = "C:/songs/a.wav";
+        state.CommitSongAudio(state.ActiveProject!, path);
+        state.NotifyAudioLoaded();
+        Assert.Same(row, Assert.Single(panel.Sections.Sections));
+        path = "C:/songs/b.wav";
+        state.CommitSongAudio(state.ActiveProject!, path);
+        state.NotifyAudioLoaded();
+        Assert.Empty(panel.Sections.Sections);
+    }
+
+    [Fact]
+    public void Disposing_the_panel_unsubscribes_its_owner_notifications()
+    {
+        var panel = NewPanel();
+        var state = new ProjectState { ActiveProject = new ChartProject() };
+        panel.ConfigureSections(static () => null, static () => null,
+            project: () => state.ActiveProject, ownerChanges: state);
+        panel.Sections.AddForTests("Clean", ToneStems.Guitar, TimeSpan.Zero, TimeSpan.FromSeconds(20));
+        panel.Dispose();
+        state.ActiveProject = null;
+        Assert.Single(panel.Sections.Sections);
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static WeakReference CloseHostedProject(ProjectState state, ToneDesignViewModel panel)
+    {
+        state.ActiveProject = new ChartProject();
+        var row = panel.Sections.AddForTests("Clean", ToneStems.Guitar, TimeSpan.Zero, TimeSpan.FromSeconds(20));
+        row.PublishCandidates(MatchWith(0.2), panel);
+        var project = new WeakReference(state.ActiveProject);
+        state.ActiveProject = null;
+        return project;
+    }
+
+    [Fact]
+    public void Closed_project_is_collectable_with_the_real_singleton_rig_host_alive()
+    {
+        var state = new ProjectState();
+        using var panel = NewPanel();
+        var singleton = PlayModeToneRigViewModel.Detached(state, null, null, null);
+        singleton.UseRigForTests(TestRigBuilders.Pedalboard(new FakeDspChainService(),
+            new FakeDspTonePresetService(), Strings, toneDesignPanel: _ => panel));
+        Assert.NotNull(singleton.AmpFxRig);
+        var project = CloseHostedProject(state, panel);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        Assert.False(project.IsAlive);
+        Assert.Empty(panel.Sections.Sections);
+        Assert.False(panel.HasResult);
+        GC.KeepAlive(singleton);
+    }
+
     // ---- the clock ------------------------------------------------------------
 
     [Theory]
@@ -659,6 +1240,10 @@ public sealed class ToneSectionsViewModelTests
     [InlineData("-1:00")]
     [InlineData("1:-5")]
     [InlineData("banana")]
+    [InlineData("1e20")]
+    [InlineData("Infinity")]
+    [InlineData("1e309")]
+    [InlineData("922337203685.4776")]
     [InlineData(null)]
     public void ATimeThatIsNotATimecode_IsRefusedRatherThanGuessedAt(string? text) => Assert.False(ToneSectionTime.TryParse(text, out _));
 

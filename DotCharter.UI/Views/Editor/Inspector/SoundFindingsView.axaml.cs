@@ -2,7 +2,7 @@ using Avalonia.Controls;
 
 namespace DotCharter.UI.Views.Editor.Inspector;
 
-/// <summary>The Sound tab's Findings section: the selection's findings, one row per problem.</summary>
+/// <summary>The Findings page's list card: the selection's findings, Open Issues, Fix all.</summary>
 public partial class SoundFindingsView : UserControl
 {
     public SoundFindingsView() => InitializeComponent();

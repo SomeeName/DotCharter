@@ -43,12 +43,12 @@ public sealed class PlayModeAnnouncementUiPerfSmokeTests : IDisposable
 
             vm.FlowSongTitle = "Sweet Child";
             Assert.Equal("", region.Text ?? "");
-            Assert.Contains("Get ready", Say(PlayModeScreen.Countdown));
-            Assert.Equal("Now playing: Sweet Child", Say(PlayModeScreen.Playing));
-            Assert.Equal("Paused", Say(PlayModeScreen.Paused));
-            Assert.Equal("Resumed", Say(PlayModeScreen.Playing));
-            Assert.Equal("Song failed", Say(PlayModeScreen.Failed));
-            Assert.Contains("Results", Say(PlayModeScreen.Results));
+            Assert.Equal(LocalizedText.Of("PlayMode_Announce_Countdown"), Say(PlayModeScreen.Countdown));
+            Assert.Equal(string.Format(LocalizedText.Of("PlayMode_Announce_Playing"), "Sweet Child"), Say(PlayModeScreen.Playing));
+            Assert.Equal(LocalizedText.Of("PlayMode_Announce_Paused"), Say(PlayModeScreen.Paused));
+            Assert.Equal(LocalizedText.Of("PlayMode_Announce_Resumed"), Say(PlayModeScreen.Playing));
+            Assert.Equal(LocalizedText.Of("PlayMode_Announce_Failed"), Say(PlayModeScreen.Failed));
+            Assert.Equal(LocalizedText.Of("PlayMode_Announce_Finished"), Say(PlayModeScreen.Results));
             Assert.Equal("", Say(PlayModeScreen.Start));
         });
     }

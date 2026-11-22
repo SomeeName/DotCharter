@@ -171,9 +171,22 @@ public sealed class ArrangementSettingsViewModelTests
     [Fact]
     public void Conforms_to_its_contract() => Assert.Empty(ContractConformanceTests.Violations(typeof(IArrangementSettingsScreen), Open(new ChartEditHarness())));
 
+    [Fact]
+    public void DisplayNotes_UseTheWholeDraftTuning_AndRefreshOtherRowsLive()
+    {
+        var vm = Open(new ChartEditHarness());
+        vm.TuningPreset = "Eb Standard";
+        Assert.Equal(new[] { "Eb", "Ab", "Db", "Gb", "Bb", "Eb" }, vm.TuningOffsets.Select(t => t.ResultingNote));
+        Assert.Contains("Eb Ab Db Gb Bb Eb", vm.TuningPresets.Single(p => p.Key == "Eb Standard").Label);
+        vm.TuningOffsets[0].Step = 1;
+        Assert.Equal("G#", vm.TuningOffsets[1].ResultingNote);
+        vm.TuningOffsets[0].Step = -1;
+        Assert.Equal("Ab", vm.TuningOffsets[1].ResultingNote);
+    }
+
     private static ArrangementSettingsViewModel Open(ChartEditHarness chart, bool createNew = false)
     {
-        var vm = new ArrangementSettingsViewModel(chart.Services);
+        var vm = new ArrangementSettingsViewModel(chart.Services, new DotCharter.Tests.Infrastructure.FakeReferencePitchService());
         vm.Configure(new ArrangementSettingsRequest(createNew));
         return vm;
     }

@@ -133,7 +133,7 @@ public sealed class ChartEditRevisionCoverageTests
         Type[] bases = [typeof(AddElementsAction<>), typeof(RemoveElementsAction<>), typeof(MutateElementsAction<>)];
         var offenders = new List<string>();
         foreach (var type in typeof(HistoryService).Assembly.GetTypes()
-                     .Concat(typeof(DotCharter.Presentation.Screens.Dialogs.QualityReportChecks).Assembly.GetTypes())
+                     .Concat(typeof(DotCharter.Presentation.Screens.Dialogs.EofRoundTripSectionViewModel).Assembly.GetTypes())
                      .Concat(typeof(DotCharter.UI.App).Assembly.GetTypes()))
         {
             if (type.IsAbstract || !DerivesFrom(type, typeof(CollectionActionBase<>))) continue;

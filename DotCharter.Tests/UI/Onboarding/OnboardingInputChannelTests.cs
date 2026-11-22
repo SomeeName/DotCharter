@@ -123,6 +123,153 @@ public sealed class OnboardingInputChannelTests
         Assert.False(finder.IsRunning);
     }
 
+    /// <summary>
+    ///     Next, Skip, Back or closing the wizard mid-scan ends the wizard's own scan
+    ///     there: the jack goes back at once, and the scan's pending steps open no
+    ///     further input and reconfigure nothing after the page is gone.
+    /// </summary>
+    [Theory]
+    [InlineData("next")]
+    [InlineData("skip")]
+    [InlineData("back")]
+    [InlineData("close")]
+    public async Task FindMyGuitar_LeavingThePageMidScan_StopsTheScan(string leave)
+    {
+        var rig = AsioRig(jacks: 4);
+        rig.AudioSettings.SelectedInputJackIndex = 2;
+        rig.Engine.InputCaptureFor = _ => [];
+        var finder = rig.Vm.InputFinder;
+
+        var scan = finder.FindCommand.ExecuteAsync(null);
+        Assert.True(finder.IsRunning, "the scan finished before the page was left; the test proves nothing");
+        switch (leave)
+        {
+            case "next":
+                rig.Vm.Next();
+                break;
+            case "skip":
+                rig.Vm.SkipCommand.Execute(null);
+                break;
+            case "back":
+                rig.Vm.BackCommand.Execute(null);
+                break;
+            default:
+                rig.Vm.RequestClose();
+                break;
+        }
+
+        Assert.False(finder.IsRunning);
+        Assert.Equal(2, rig.Config.AppConfig.AsioInputChannelLeft);
+        var appliedWhenLeft = rig.Engine.AppliedConfigs.Count;
+
+        await scan.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+
+        Assert.Equal(appliedWhenLeft, rig.Engine.AppliedConfigs.Count);
+        Assert.Equal(2, rig.Config.AppConfig.AsioInputChannelLeft);
+        Assert.False(finder.IsRunning);
+    }
+
+    /// <summary>
+    ///     #601 row 2: the scan forces Mono on every input it tries. Hearing nothing must put the
+    ///     whole routing back, a stereo pair and the two-guitar split included, not only the jack.
+    /// </summary>
+    [Fact]
+    public async Task FindMyGuitar_HearingNothing_PutsAStereoTwoGuitarRoutingBack()
+    {
+        var rig = StereoTwoGuitarRig();
+        rig.Engine.InputCaptureFor = _ => [];
+
+        await Finder(rig).FindCommand.ExecuteAsync(null);
+
+        AssertStereoTwoGuitarRouting(rig);
+    }
+
+    /// <summary>#601 row 2: a cancelled scan restores the same full routing.</summary>
+    [Fact]
+    public async Task FindMyGuitar_Cancelled_PutsAStereoTwoGuitarRoutingBack()
+    {
+        var rig = StereoTwoGuitarRig();
+        using var cts = new CancellationTokenSource();
+        var waits = 0;
+        var finder = Finder(rig, (_, _) =>
+        {
+            if (++waits == 3) cts.Cancel();
+            cts.Token.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        });
+
+        await finder.FindCommand.ExecuteAsync(cts.Token);
+
+        AssertStereoTwoGuitarRouting(rig);
+    }
+
+    /// <summary>
+    ///     Next mid-scan stops the scan through the same restore: the stereo pair and the
+    ///     two-guitar split come back at once, Next commits that routing, and the scan's
+    ///     pending steps do not overwrite it afterwards.
+    /// </summary>
+    [Fact]
+    public async Task FindMyGuitar_LeftByNextMidScan_PutsAStereoTwoGuitarRoutingBack()
+    {
+        var rig = StereoTwoGuitarRig();
+        rig.Engine.InputCaptureFor = _ => [];
+        var finder = rig.Vm.InputFinder;
+
+        var scan = finder.FindCommand.ExecuteAsync(null);
+        Assert.True(finder.IsRunning, "the scan finished before the page was left; the test proves nothing");
+        rig.Vm.Next();
+
+        AssertStereoTwoGuitarRouting(rig);
+        await scan.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        AssertStereoTwoGuitarRouting(rig);
+    }
+
+    private static OnboardingWizardRig StereoTwoGuitarRig()
+    {
+        var rig = AsioRig(jacks: 4);
+        rig.AudioSettings.SelectedInputJackIndex = 1;
+        rig.AudioSettings.AsioInputMono = false;
+        rig.AudioSettings.AsioInputChannelRight = 2;
+        rig.AudioSettings.InputChannelsAreSeparateGuitars = true;
+        return rig;
+    }
+
+    private static void AssertStereoTwoGuitarRouting(OnboardingWizardRig rig)
+    {
+        var config = rig.Config.AppConfig;
+        Assert.Equal(1, config.AsioInputChannelLeft);
+        Assert.Equal(2, config.AsioInputChannelRight);
+        Assert.False(config.AsioInputMono, "the scan's forced Mono was saved over a stereo routing");
+        Assert.True(config.InputChannelsAreSeparateGuitars, "the two-guitar split was lost with the forced Mono");
+        Assert.False(rig.AudioSettings.AsioInputMono);
+        Assert.False(rig.Engine.AppliedConfigs[^1].AsioInputMono);
+    }
+
+    /// <summary>
+    ///     #601 row 1: the wizard closed while still on the Input page no longer saves. A jack or
+    ///     Mono change made later in Settings, which edits the same audio page, waits for Settings'
+    ///     own Save instead of being written at once.
+    /// </summary>
+    [Fact]
+    public void AClosedWizard_LeftOnTheInputPage_DoesNotSaveSettingsPicks()
+    {
+        var rig = AsioRig(jacks: 4);
+        rig.Vm.CancelCommand.Execute(null);
+        Assert.False(rig.Vm.IsOpen);
+        Assert.True(rig.Vm.IsInput);
+        var savedJack = rig.Config.AppConfig.AsioInputChannelLeft;
+        var savedMono = rig.Config.AppConfig.AsioInputMono;
+        var applied = rig.Engine.AppliedConfigs.Count;
+
+        rig.AudioSettings.SelectedInputJackIndex = 2;
+        rig.AudioSettings.AsioInputMono = !rig.AudioSettings.AsioInputMono;
+
+        Assert.NotEqual(2, savedJack);
+        Assert.Equal(savedJack, rig.Config.AppConfig.AsioInputChannelLeft);
+        Assert.Equal(savedMono, rig.Config.AppConfig.AsioInputMono);
+        Assert.Equal(applied, rig.Engine.AppliedConfigs.Count);
+    }
+
     [Fact]
     public void FindMyGuitar_NeedsInputAndSeveralJacks_OnEitherDriver()
     {

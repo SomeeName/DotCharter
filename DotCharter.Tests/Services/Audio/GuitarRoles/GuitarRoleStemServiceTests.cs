@@ -26,6 +26,30 @@ public sealed class GuitarRoleStemServiceTests : IDisposable
 
     private string GuitarPath => Path.Combine(_dir, "stems", "guitar.wav");
 
+    [Theory]
+    [InlineData("Lead", false)]
+    [InlineData("Rhythm", false)]
+    [InlineData("Lead", true)]
+    [InlineData("Rhythm", true)]
+    public void ASidecarCannotRedirectEitherDerivedStemOutsideItsFolder(string member, bool absolute)
+    {
+        WriteSplittableGuitar(WavSampleFormat.Pcm16);
+        var service = new GuitarRoleStemService();
+        var pair = service.Derive(GuitarPath, ct: Ct).Pair!;
+        var folder = GuitarRoleStems.FolderFor(GuitarPath);
+        var outside = Path.Combine(_dir, "outside.wav");
+        File.Copy(member == "Lead" ? pair.LeadPath : pair.RhythmPath, outside);
+        var path = Path.Combine(folder, GuitarRoleStems.SidecarName);
+        var sidecar = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
+        var key = sidecar.AsObject().Select(p => p.Key).Single(k => string.Equals(k, member, StringComparison.OrdinalIgnoreCase));
+        sidecar[key] = absolute ? outside : Path.GetRelativePath(folder, outside);
+        File.WriteAllText(path, sidecar.ToJsonString());
+
+        Assert.Null(service.TryGetDerived(GuitarPath));
+        Assert.Equal(GuitarRoleVerdict.Plausible, service.Assess(GuitarPath, Ct).Verdict);
+        Assert.True(File.Exists(outside));
+    }
+
     [Fact]
     public void ASplittableStem_IsDerivedBesideIt_AndTheTwoFilesSumBackToIt()
     {

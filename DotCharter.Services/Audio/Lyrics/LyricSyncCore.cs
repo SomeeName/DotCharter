@@ -39,16 +39,32 @@ public sealed record LyricSyncOptions
     /// <summary>
     ///     An ALREADY-SEPARATED vocal stem to listen to instead of the mix.
     ///     <para>
-    ///         <b>Null asks <see cref="VocalStemLocator" />; it never starts a
+    ///         <b>Null asks <see cref="VocalStemLocator" /> when discovery is enabled; it never starts a
     ///         separation either way.</b> The stem wins decisively when one exists
     ///         (English corpus, within 100 ms: 66.2% on the mix, 75.5% on the
     ///         stem) but separating costs minutes and a GPU, and the caller asked
     ///         for lyrics to be timed. A path given here that does not exist is a
     ///         hard failure, not a silent fall-back to the mix — the caller said
-    ///         which file to listen to.
+    ///         which file to listen to. Every stem's decoded duration is compared with
+    ///         the mix; a mismatch over 100 ms falls back to the mix with a warning.
     ///     </para>
     /// </summary>
     public string? VocalStemPath { get; init; }
+
+    /// <summary>Whether a missing explicit choice may discover a stem beside the mix.
+    /// False for an authoritative project list, even when that list has no usable voice.</summary>
+    public bool DiscoverVocalStem { get; init; } = true;
+
+    /// <summary>Warnings from rejecting a declared stem before decoding (for example a project offset).</summary>
+    internal IReadOnlyList<string> StemWarnings { get; init; } = [];
+
+    /// <summary>
+    ///     Split words typed without a hyphen into syllables when the sheet is clearly
+    ///     English, German, French or Spanish: LibreOffice hyphenation patterns, corrected by
+    ///     vowel-nucleus rules. A hand-hyphenated word is never touched. Off leaves every
+    ///     unhyphenated word one syllable.
+    /// </summary>
+    public bool SplitUnhyphenatedWords { get; init; } = true;
 
     /// <summary>
     ///     Overrides the language router. Null detects with
@@ -64,6 +80,12 @@ public sealed record LyricSyncOptions
     ///     SOLO onset bias.
     /// </summary>
     public bool AllowEnsemble { get; init; } = true;
+
+    /// <summary>
+    ///     Moves each aligned onset to the vocal stem's clear onset within 80 ms
+    ///     (<see cref="LyricOnsetSnap" />). Only runs on a stem; null turns it off.
+    /// </summary>
+    public LyricOnsetSnapOptions? OnsetSnap { get; init; } = new();
 }
 
 /// <summary>One syllable of the sheet, timed in SECONDS of the audio file.</summary>
@@ -92,7 +114,11 @@ public readonly record struct LyricSyncSyllable(
     double StartSeconds,
     double EndSeconds,
     double Confidence,
-    bool IsInterpolated);
+    bool IsInterpolated)
+{
+    /// <summary>Review findings, including those retained after a local repair.</summary>
+    public LyricReviewReason ReviewReasons { get; init; }
+}
 
 /// <summary>What one alignment produced, in seconds — no chart, no beat grid.</summary>
 /// <param name="Ran">False when the run could not happen at all; <paramref name="Error" /> says why.</param>
@@ -159,7 +185,8 @@ public sealed record LyricSyncResult(
 ///     <para>
 ///         Everything above the seam is the chart's business: the beat grid, the
 ///         note-spacing span rules, <c>SetVocalPhrasesAction</c>. Nothing below it
-///         knows a chart exists.
+///         knows a chart exists. The CLI reaches the span rules through
+///         <see cref="LyricSyncSpacing" />, which runs the app's fold on a beat grid.
 ///     </para>
 /// </summary>
 public interface ILyricSyncCore

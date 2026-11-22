@@ -213,7 +213,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       # global.json pins no SDK, so '10.0.x' means "newest 10.0 on the day". The
-      # step makes the release's floor (SDK 10.0.402 / runtime 10.0.13) a failure.
+      # step makes the release's floor (SDK 10.0.403 / runtime 10.0.15) a failure.
       - name: Assert the .NET floor
         shell: pwsh
         run: pwsh -NoProfile -File tools/ci/Assert-DotnetSdk.ps1
@@ -366,7 +366,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       # global.json pins no SDK, so '10.0.x' means "newest 10.0 on the day". The
-      # step makes the release's floor (SDK 10.0.402 / runtime 10.0.13) a failure.
+      # step makes the release's floor (SDK 10.0.403 / runtime 10.0.15) a failure.
       - name: Assert the .NET floor
         shell: pwsh
         run: pwsh -NoProfile -File tools/ci/Assert-DotnetSdk.ps1
@@ -449,7 +449,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       # global.json pins no SDK, so '10.0.x' means "newest 10.0 on the day". The
-      # step makes the release's floor (SDK 10.0.402 / runtime 10.0.13) a failure.
+      # step makes the release's floor (SDK 10.0.403 / runtime 10.0.15) a failure.
       - name: Assert the .NET floor
         shell: pwsh
         run: pwsh -NoProfile -File tools/ci/Assert-DotnetSdk.ps1

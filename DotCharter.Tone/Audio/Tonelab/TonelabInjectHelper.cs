@@ -15,11 +15,15 @@ public interface IHelperProcessRunner
 
 /// <summary>
 ///     The real runner: <c>CreateNoWindow</c>, no shell, stdout and stderr redirected; past the
-///     timeout the helper (never the game) is ended.
+///     timeout, or when the caller cancels, the helper (never the game) is ended and awaited, so
+///     it cannot go on and inject after its caller gave up.
 /// </summary>
 public sealed class HiddenHelperProcessRunner : IHelperProcessRunner
 {
     public static HiddenHelperProcessRunner Instance { get; } = new();
+
+    /// <summary>Told the helper's process id once it started; tests watch the process with it.</summary>
+    internal Action<int>? Started { get; init; }
 
     public async Task<HelperProcessRun> RunAsync(string exe, IReadOnlyList<string> arguments, TimeSpan timeout, CancellationToken ct)
     {
@@ -38,6 +42,7 @@ public sealed class HiddenHelperProcessRunner : IHelperProcessRunner
         foreach (var argument in arguments) info.ArgumentList.Add(argument);
         using var process = Process.Start(info);
         if (process is null) return new HelperProcessRun(null, "", false);
+        Started?.Invoke(process.Id);
         var output = process.StandardOutput.ReadToEndAsync(ct);
         _ = process.StandardError.ReadToEndAsync(ct);
         using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -46,9 +51,11 @@ public sealed class HiddenHelperProcessRunner : IHelperProcessRunner
         {
             await process.WaitForExitAsync(wait.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
             process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
             return new HelperProcessRun(null, "", true);
         }
 

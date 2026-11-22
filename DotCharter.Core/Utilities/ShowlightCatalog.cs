@@ -67,17 +67,6 @@ public static class ShowlightCatalog
     public static IReadOnlyList<ShowlightDefinition> LaserDefinitions { get; } =
         Definitions.Where(d => d.Lane == ShowlightLane.Lasers).ToArray();
 
-    public static IReadOnlyList<ShowlightDefinition> GetDefinitions(ShowlightLane lane)
-    {
-        return lane switch
-        {
-            ShowlightLane.Fog => FogDefinitions,
-            ShowlightLane.Beams => BeamDefinitions,
-            ShowlightLane.Lasers => LaserDefinitions,
-            _ => AllDefinitions
-        };
-    }
-
     public static bool TryGetDefinition(string? type, int note, out ShowlightDefinition definition)
     {
         var resolved = ResolveDefinition(type, note);

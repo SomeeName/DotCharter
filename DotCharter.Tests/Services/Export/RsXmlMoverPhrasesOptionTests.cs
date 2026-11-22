@@ -52,7 +52,7 @@ public sealed class RsXmlMoverPhrasesOptionTests : IDisposable
 
         Service(config).SaveDlcBuilderXmlBundle(Path.Combine(_dir, "project.rscp"), MoverPhraseRoundTripTests.Project());
 
-        var file = Directory.GetFiles(Path.Combine(_dir, DlcBuilderBundle.DirectoryName), "*_Lead_*.xml").Single();
+        var file = Directory.GetFiles(Path.Combine(_dir, "export", DlcBuilderBundle.DirectoryName), "*_Lead_*.xml").Single();
         var times = IterationTimes(XDocument.Load(file));
         Assert.Contains(expectedTime, times);
         Assert.DoesNotContain(notTime, times);

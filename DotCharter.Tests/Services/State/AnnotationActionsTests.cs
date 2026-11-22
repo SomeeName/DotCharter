@@ -12,6 +12,18 @@ namespace DotCharter.Tests.Services.State;
 /// </summary>
 public sealed class AnnotationActionsTests
 {
+    [Fact]
+    public void The_resolved_checkbox_reads_the_model_and_sends_edits_to_a_command()
+    {
+        var path = Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor", "Inspector", "NotesInspectorView.axaml");
+        var document = System.Xml.Linq.XDocument.Load(path);
+        var checkbox = Assert.Single(document.Descendants(), e => e.Name.LocalName == "CheckBox");
+
+        Assert.Equal("{Binding Resolved, Mode=OneWay}", checkbox.Attribute("IsChecked")?.Value);
+        Assert.Contains("ToggleAnnotationResolvedCommand", checkbox.Attribute("Command")?.Value ?? "");
+        Assert.Equal("{Binding}", checkbox.Attribute("CommandParameter")?.Value);
+    }
+
     private static ObservableCollection<ChartAnnotation> ThreeOrdered() =>
     [
         new ChartAnnotation { TimeMs = 1000, Text = "a" },

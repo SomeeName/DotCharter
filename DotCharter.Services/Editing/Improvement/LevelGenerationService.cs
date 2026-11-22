@@ -69,7 +69,7 @@ public sealed class LevelGenerationService : ILevelGenerationService
         if (arrangement.Levels.Count == 0) return false;
 
         // Source = the hardest existing level (a squashed chart has exactly one).
-        var source = arrangement.Levels.OrderBy(l => l.DifficultyIndex).Last();
+        var source = ChartLevels.Hardest(arrangement)!;
 
         var sounds = RankSounds(source, arrangement, beats);
         var newLevels = new List<ChartLevel>(levelCount);

@@ -42,8 +42,9 @@ public class ChordTemplate
     ///     where a charter's identical uniform shift (a double stop fingered 2-2)
     /// is AUTHORED and pins its anchor.
     ///     <para>
-    ///         Provenance, not the grip: it is in no find-or-create key and not in
-    ///         <see cref="Equals(object?)" />, and no exporter writes it. False is
+    ///         Provenance, not the grip: shape resolution and
+    ///         <see cref="Equals(object?)" /> exclude it, while authored transfers preserve
+    ///         it as part of their identity. No exporter writes it. False is
     ///         the safe default — "nobody says the generator made this", so an old
     ///         project or an imported chart never has a hand-set fingering moved.
     ///         Every manual fingering edit clears it. A fingering that IS the
@@ -78,10 +79,9 @@ public class ChordTemplate
     /// <summary>
     /// GHOST GEMS, EOF's per-note ghost bitmask (<c>song.h:200</c>, bit n = string
     ///     n, the same numbering as <see cref="Frets" />): the strings of this grip the hand
-    ///     HOLDS but does not play — the fretting finger of a tapped harmonic, the full chord
-    ///     a partial strum sits in. Such a string is in <see cref="Frets" /> and
-    ///     <see cref="Fingers" /> (the chord box and the Rocksmith template show it) and is
-    ///     never a note, so nothing plays, scores, detects or exports it as one.
+    ///     holds without sounding at the opening onset, such as the fretting finger of a tapped
+    ///     harmonic or an unstruck string of a partial strum. The ghost fret and finger appear in
+    ///     the chord box and the Rocksmith template. A later pick remains a separate note.
     ///     <para>
     ///         Only a HAND SHAPE's template carries ghosts: EOF exports a partially ghosted
     ///         chord's chord tag on a ghost-less clone and its handshape tag on the full
@@ -183,7 +183,7 @@ public class ChordTemplate
     /// </summary>
     public bool DescribesChordNotes(IReadOnlyCollection<ChordNote> chordNotes)
     {
-        // A ghost gem is held, never played: no chord's notes play a ghost grip.
+        // Ghost masks describe hand shapes. Chords use a plain template for the strings they strike.
         if (GhostMask != 0 || Frets.Count != chordNotes.Count) return false;
         foreach (var note in chordNotes)
         {
@@ -199,8 +199,6 @@ public class ChordTemplate
     public int GetHighestString() => Frets.Count > 0 ? Frets.Keys.Max() : 0;
 
     public int GetLowestFret() => Frets.Count > 0 ? Frets.Values.Min() : 0;
-
-    public int GetHighestFret() => Frets.Count > 0 ? Frets.Values.Max() : 0;
 
     public int GetLowestNotOpenFret(int capo = 0)
     {

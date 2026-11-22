@@ -2,7 +2,6 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using DotCharter.Services.Export;
 using DotCharter.Services.Export.Audio;
-using DotCharter.Tests.Services.Export.Rs7;
 using DotCharter.Tone.Infrastructure.Storage;
 
 namespace DotCharter.Tests.Services.Export;
@@ -24,46 +23,43 @@ public sealed class RocksmithPackageBytePinTests : IDisposable
     public void Dispose() => BestEffortDelete.Directory(_tempDir);
 
     /// <summary>Scenario → pinned SHA-256, and the reader-side test(s) it stands in for.</summary>
+    // #565: package pins include the shared XML/SNG song-end policy and its derived tail events.
+    // #875: fixtures without show lights now carry the generated set; only songs/arr/*_showlights.xml changed.
     private static readonly Dictionary<string, string> Pins = new(StringComparer.Ordinal)
     {
         // RocksmithPackageBuilderTests.Built_psarc_reimports_with_equal_chart_data, .Package_contains_the_full_flat_file_layout
-        ["golden"] = "201fd7660b15fe00cab173e401d18e75042465129b0fff2b41eb90f7273f0ffe",
+        ["golden"] = "8b2cb3d53db24aea3a4aae7bcab1bb2a8d45435b79a4658b4e774ad54b6001cc",
         // RocksmithPackageBuilderTests: the same chart, plain (#736)
-        ["golden_plain"] = "1cc4b6b11bf4f0f6e58ae468bb29bb5181b9a255c0a13b1b4d269a037d7b4d65",
+        ["golden_plain"] = "6fdfb90beed4dadc7ac522a9bed6685870ceab864c35e72fa7db8a34df8881be",
         // .Japanese_title_builds_a_package_with_only_ascii_names
         // The song's version reaches toolkit.version (the VersionBytePinTests half below)
-        ["version"] = "438055344c0778676a09a0c23348e7d5b46a5ec0d97012ea50022769019c53ec",
-        ["japanese"] = "ab43967aa11ccebbf5d3905b52c1edbb27a669d7207ebde88eec5d50ee2f7d45",
+        ["version"] = "31836e2a9a7e310dd8801937ec3ab512db31a3301b3e37e45f316ab450b89b47",
+        ["japanese"] = "9d72c2b1480200151d7c22e2226f384a84ae56471da692e07f4d76ad6a3d2ee1",
         // .Arrangement_filter_limits_the_exported_arrangements
-        ["filter_rhythm"] = "b5b2d585cbbce49fae9c7a904405b53cef14672df7a41552501927e0be5b21b8",
+        ["filter_rhythm"] = "7ce22c34eef09528ed623966f0e8514148161931cb0603a200922289a808e99c",
         // .Tone_map_and_tone_definitions_flow_into_the_manifest
-        ["tone_map"] = "ccf88ebd16feeec48a96b7a114815cb0333f9511ae04c35bfe35e2e943927535",
+        ["tone_map"] = "561ec30c6b2f21005615db6eb86f9768a8ea09bfbdd5ea734c606325f1d81c9a",
         // .Tone_change_events_index_the_slot_table_the_manifest_declares
-        ["tone_order"] = "7ce0d511c5f0efe512c79a442c0e5ca2e357fd1f4a71288aa05162a0e3db6dc7",
+        ["tone_order"] = "2680a86abb4d4089bca31816fc9b6fb574f2d31ebdd1a3fb5f4c50f535fa8d00",
         // .Arrangement_without_any_tone_gets_a_default_base_tone_name
-        ["no_tone"] = "40ed6b2ce64e6e3c1235bc298a12cb6ef594b871922dbee9a9c941fb56c891b2",
+        ["no_tone"] = "846c4bc1d569a3ae6980d143e607ffb319d7d2806ee5ea6e04468d4d82919832",
         // .Charter_flows_into_toolkit_version_with_options_fallback (both halves)
-        ["charter"] = "d34f8e5ae4e2d676e7b88c364e036b640893190f2b732be220e0441948f8529e",
-        ["charter_fallback"] = "3d3a174689bb02f2dd4651b7c32becf17a204106cfcc3baebfbc974bc91f2541",
+        ["charter"] = "4115a796638f64f267ac28b45a052e38f0a37530c7690eb43cfad2c2c1f10b21",
+        ["charter_fallback"] = "22ff24fcaa5d80583667f2c251eab5ebb243a963f9005a50c5b7c19018f97bae",
         // .Project_authored_tone_definitions_win_over_imported_passthrough
-        ["authored_tones"] = "466acd23c0e4d0963e10649dfe44e72e8487c0c298725034b68c381bb77a8e00",
+        ["authored_tones"] = "386681a073434e0f38b3009fb01207456e5319ee1e17e64c761834643a4dee47",
         // .A_slot_naming_a_tone_by_its_NAME_still_exports_the_body
-        ["tone_by_name"] = "64d6843a1a219cc16eb8eb3a18ce0890ff1cf5196ea4a36db317b24f056c03aa",
+        ["tone_by_name"] = "581f00c9d7de7cbbe47c1dc27bf7d11203a8063564f72d83376dc46ea03bffd8",
         // .Packages_without_tone_definitions_export_an_empty_tones_array, .The_xblock_names_exactly_the_three_album_art_sizes
-        ["no_vocals"] = "a53b56fa112bf752b06f3e890b78837078592e46c8c418bfad71c0d22164df0d",
-        // Rs7PackageExportTests.Plain_package_carries_every_byte_the_mod_reads, .Export_then_import_is_lossless(true)
-        ["rs7_plain"] = "86e0dc720f7d3673061b8ec2cba0260863d4eae55ab4bcbedfad70d362e77dfa",
-        // Rs7PackageExportTests.A_seven_string_package_is_encrypted_by_default_and_the_block_survives_the_decryption,
-        // .Export_then_import_is_lossless(null/false), SaveCompanionServiceTests.Psarc_is_built_encrypted_for_a_seven_string_guitar
-        ["rs7_encrypted"] = "92fa57839e2ffd19f861b32c9e049ab758167b97a3ed7e620ec58c0a6597ecd3",
+        ["no_vocals"] = "1d1a8486564a7b7a6fd9aea24c26b19e166819c9c9fe1a761ab14b704b769496",
         // RocksmithPlatformPackageTests.Mac_package_differs_from_the_pc_one_only_where_the_platform_does, .Mac_package_round_trips_through_the_import
-        ["mac"] = "d647027b08396bd8bdfc614b3d221ba6a996a7540c237be4dd811c8249b5931a",
+        ["mac"] = "09672baeb53481213cb3ebe7c7a499ae7fa6dbd8923696cec425daa959274c4a",
         // WwiseFreeExportTests.Builds_a_psarc_from_a_wav_with_no_wwise(Pcm), .A_cached_wem_whose_codec_disagrees_is_re_encoded_instead_of_mis_declared
-        ["wav_pcm"] = "9fc72bdc40c6de15c3113c0417ed42c6c949ac4dee5d0a7631d9eeee0f097542",
+        ["wav_pcm"] = "64ef4c104a06a9a794afb8684bcc00796ab87a19bea6eb0d8832d8d35d4fd4ed",
         // WwiseFreeExportTests.Builds_a_psarc_from_a_wav_with_no_wwise(Vorbis), .Without_wwise_every_request_but_pcm_is_written_as_vorbis
-        ["wav_vorbis"] = "17c3eab19306c620c4d0b1ec2647004cef60c9ff92d5935b8b216df944dec1b5",
-        // RocksmithPackageBuilderTests.Auto_preview_is_a_short_clip_not_the_full_song
-        ["wav_preview"] = "e57aae6f93e8f29f885d57bae4820e8750311f43fc3ff1b82406fcf683d38ff1"
+        ["wav_vorbis"] = "22f1c481065a510d9124682773d6f9ab1da8fa97197e8a8725fe8f7278c01801",
+        // RocksmithPackageBuilderTests.Auto_preview_is_a_short_clip_not_the_full_song (re-pinned for #456: the preview fade-out now follows DLC Builder)
+        ["wav_preview"] = "0153c5a88628d3c82896b0fe881a6533beb9d08c041e2b5fffbdc0bf0963b4b3"
     };
 
     public static TheoryData<string> Scenarios => [.. Pins.Keys];
@@ -100,8 +96,6 @@ public sealed class RocksmithPackageBytePinTests : IDisposable
     [Theory]
     [InlineData("golden", true)]
     [InlineData("golden_plain", false)]
-    [InlineData("rs7_plain", false)]
-    [InlineData("rs7_encrypted", true)]
     [InlineData("mac", true)]
     public async Task The_toc_is_encrypted_exactly_when_the_build_asks(string scenario, bool encrypted)
     {
@@ -141,9 +135,7 @@ public sealed class RocksmithPackageBytePinTests : IDisposable
     private static (ChartProject Project, RocksmithBuildOptions Options) Scenario(string name, string output, string directory,
         string wem)
     {
-        var project = name.StartsWith("rs7_", StringComparison.Ordinal)
-            ? ChartProjectCloner.Clone(Rs7PackageExportTests.CreateProject(7))
-            : RocksmithPackageBuilderTests.CreateProject();
+        var project = RocksmithPackageBuilderTests.CreateProject();
         var spec = Mutate(name, project);
         return (project, new RocksmithBuildOptions
         {
@@ -170,7 +162,6 @@ public sealed class RocksmithPackageBytePinTests : IDisposable
     private static Spec Mutate(string name, ChartProject project)
     {
         var lead = project.Arrangements[0];
-        var rs7 = new Spec(1) { DlcKey = "rs7pin", SongLengthMs = 64 * Rs7TestSupport.BeatMs, PreviewStartMs = 0 };
         switch (name)
         {
             case "golden":
@@ -225,10 +216,6 @@ public sealed class RocksmithPackageBytePinTests : IDisposable
                 return new Spec(1) { ToneMap = new() { ["Lead"] = ("Clean Verse", [" clean verse "]) } };
             case "no_vocals":
                 return new Spec(1);
-            case "rs7_plain":
-                return rs7 with { Plain = true };
-            case "rs7_encrypted":
-                return rs7;
             case "mac":
                 return new Spec(2) { Vocals = true, Platform = ExportPlatform.PcAndMac };
             case "wav_pcm":
@@ -254,8 +241,12 @@ public sealed class RocksmithPackageBytePinTests : IDisposable
             new Guid(i, 0x33, 0x44, [1, 2, 3, 4, 5, 6, 7, (byte)i]), new Guid(2000 + i, 0, 0, new byte[8])))],
         MainBank = new SoundBankIds(0x1111_2222, 0x0333_4444, 0x0555_6666, 0x7777_8888, 0x0999_AAAA),
         PreviewBank = new SoundBankIds(0x2111_2222, 0x0433_4444, 0x0655_6666, 0x8777_8888, 0x0999_AAAA),
-        SngIv = [.. Enumerable.Range(0, 16).Select(i => (byte)(0xC0 + i))]
+        SngIv = [.. Enumerable.Range(0, 16).Select(i => (byte)(0xC0 + i))],
+        // toolkit.version names the running version; the pins keep one fixed, so a release re-pins nothing.
+        ToolVersion = PinnedToolVersion
     };
+
+    private const string PinnedToolVersion = "1.0.0";
 
     private static void ClearTones(Arrangement arrangement)
     {

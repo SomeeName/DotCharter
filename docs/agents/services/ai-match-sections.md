@@ -31,6 +31,12 @@ interface is someone else's and is faked in tests.
 
 ## The algorithm
 
+`StemIsolator` resolves the store-aware source key for playback and again at
+the save boundary (`StemCacheSource.ResolveForStore`), including a verified
+sampled-signature collision. Each audio version is separated once, and a retained
+archive that cannot decode blocks another separation. `AudioSilenceSplicer` and
+the separation screen use the same save decision.
+
 1. **Isolate the whole stem, cache-first.** One `IStemIsolator.IsolateAsync` call
    for the requested stem over `ToneSectionProposer.WholeSong`. Never a
    separation per window; never a second separation for a second stem of the

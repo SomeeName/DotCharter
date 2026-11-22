@@ -98,6 +98,36 @@ public sealed class GpAuthoredFingeringTests
             "the suggester happens to reproduce the authored fingering — pick a different fixture shape");
     }
 
+    [Theory]
+    [InlineData("4.06")]
+    [InlineData("5.10")]
+    public void LegacyBinary_AuthoredFollowerFingersSurviveTheImportFhpPass(string version)
+    {
+        var suggestion = new ChordTemplate { Frets = new() { [3] = 9, [4] = 10 } };
+        ChordTemplateFingerSetter.SetSuggestedFingers(suggestion, 6);
+        Assert.Equal(1, suggestion.GetFinger(3));
+        var first = FxBeat.Chord(1, new FxNote(3, 9), new FxNote(4, 10));
+        var follower = FxBeat.Chord(1,
+            new FxNote(3, 9, LeftFinger: suggestion.GetFinger(3)),
+            new FxNote(4, 10, LeftFinger: suggestion.GetFinger(4)));
+        var measure = new FxMeasure().AddVoice(
+            FxBeat.Chord(0, new FxNote(3, 8)), first, follower,
+            FxBeat.Chord(0, new FxNote(3, 8)), FxBeat.Chord(0, new FxNote(4, 8)));
+
+        var arrangement = ImportLegacy(LegacyGpFixtureBuilder.WriteFile(version, new[] { measure }));
+
+        var level = Assert.Single(arrangement.Levels);
+        Assert.NotEmpty(level.Anchors);
+        Assert.Equal(2, level.Chords.Count);
+        var bar = Assert.Single(level.HandShapes);
+        Assert.All(level.Chords, chord =>
+        {
+            Assert.Equal(bar.TemplateId, chord.TemplateId);
+            var template = arrangement.FindChordTemplate(chord.TemplateId)!;
+            Assert.Equal(suggestion.Fingers, template.Fingers);
+        });
+    }
+
     // ---- End to end: the modern gpif reader ---------------------------------
 
     [Fact]

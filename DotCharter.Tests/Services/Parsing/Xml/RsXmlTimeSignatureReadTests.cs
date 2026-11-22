@@ -105,6 +105,20 @@ public sealed class RsXmlTimeSignatureReadTests
         Assert.All(project.Beats, b => Assert.Equal(4, b.BeatsInMeasure));
     }
 
+    [Theory]
+    [InlineData("-1", false)]
+    [InlineData("-2", false)]
+    [InlineData("0", true)]
+    [InlineData("1", true)]
+    [InlineData("", false)]
+    [InlineData("invalid", false)]
+    public void OnlyNonNegativeMeasureIndices_StartAMeasure(string measure, bool expected)
+    {
+        var project = Read($"<song><ebeats><ebeat time=\"0.000\" measure=\"{measure}\" /></ebeats></song>");
+
+        Assert.Equal(expected, Assert.Single(project.Beats).IsMeasure);
+    }
+
     // ---- helpers ------------------------------------------------------------
 
     private static ChartProject Read(string xml) =>

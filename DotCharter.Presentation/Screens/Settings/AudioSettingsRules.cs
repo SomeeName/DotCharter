@@ -93,8 +93,12 @@ public static class AudioSettingsRules
         EnableStreamingMirror = src.EnableStreamingMirror,
         StreamingMirrorDevice = src.StreamingMirrorDevice,
         MidiOutputDevice = src.MidiOutputDevice,
+        MidiOutputDeviceName = src.MidiOutputDeviceName,
         AutoFollowDeviceAudioSettings = src.AutoFollowDeviceAudioSettings
     };
+
+    private static bool MidiOutputChanged(AppConfig oldCfg, AppConfig newCfg) =>
+        oldCfg.MidiOutputDevice != newCfg.MidiOutputDevice || !DeviceNameEquals(oldCfg.MidiOutputDeviceName, newCfg.MidiOutputDeviceName);
 
     /// <summary>
     ///     Whether a save changed anything only <c>ApplyAudioConfiguration</c>
@@ -112,7 +116,7 @@ public static class AudioSettingsRules
         || !DeviceNameEquals(oldCfg.WasapiInputDeviceName, newCfg.WasapiInputDeviceName)
         || !DeviceNameEquals(oldCfg.AsioInputDeviceName, newCfg.AsioInputDeviceName)
         || !DeviceNameEquals(oldCfg.StreamingMirrorDeviceName, newCfg.StreamingMirrorDeviceName)
-        || oldCfg.MidiOutputDevice != newCfg.MidiOutputDevice
+        || MidiOutputChanged(oldCfg, newCfg)
         || oldCfg.AsioOutputChannelLeft != newCfg.AsioOutputChannelLeft
         || oldCfg.AsioOutputChannelRight != newCfg.AsioOutputChannelRight
         || oldCfg.EnableInput != newCfg.EnableInput

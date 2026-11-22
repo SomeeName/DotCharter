@@ -15,6 +15,32 @@ public sealed class CtcForcedAlignerTests
     /// <summary>Star lives one past the model's own width — see <see cref="LyricVocabulary" />.</summary>
     private const int Star = Width;
 
+    [Fact]
+    public void CancellationDuringTokenPreparationStopsTheTrellis()
+    {
+        using var cancelled = new CancellationTokenSource();
+        var tokens = new CancellingTokens(cancelled);
+        var frames = LogProbs(Dominant(A), Dominant(B), Dominant(A), Dominant(B));
+
+        Assert.Throws<OperationCanceledException>(() => CtcForcedAligner.Align(
+            frames, 4, Width, tokens, Blank, cancellationToken: cancelled.Token));
+    }
+
+    private sealed class CancellingTokens(CancellationTokenSource cancellation) : IReadOnlyList<int>
+    {
+        public int Count => 2;
+        public int this[int index]
+        {
+            get
+            {
+                cancellation.Cancel();
+                return index == 0 ? A : B;
+            }
+        }
+        public IEnumerator<int> GetEnumerator() => ((IEnumerable<int>)[A, B]).GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     /// <summary>A frame where the named symbols carry the given probability and the rest share what's left.</summary>
     private static double[] Frame(params (int Symbol, double Probability)[] weights)
     {
@@ -40,7 +66,7 @@ public sealed class CtcForcedAlignerTests
             Dominant(A), Dominant(A), Dominant(A),
             Dominant(B), Dominant(B), Dominant(B));
 
-        var result = CtcForcedAligner.Align(frames, frameCount: 6, Width, [A, B], Blank);
+        var result = CtcForcedAligner.Align(frames, frameCount: 6, Width, [A, B], Blank, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded, result.Failure);
         Assert.Equal(0, result.Tokens[0].StartFrame);
@@ -67,7 +93,7 @@ public sealed class CtcForcedAlignerTests
         // the constraint deleted.
         var frames = LogProbs(Dominant(A), Dominant(A), Dominant(A));
 
-        var result = CtcForcedAligner.Align(frames, frameCount: 3, Width, [A, A], Blank);
+        var result = CtcForcedAligner.Align(frames, frameCount: 3, Width, [A, A], Blank, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded, result.Failure);
         Assert.Equal(0, result.Tokens[0].EndFrame);
@@ -83,7 +109,7 @@ public sealed class CtcForcedAlignerTests
     {
         var frames = LogProbs(Dominant(A), Dominant(A));
 
-        var result = CtcForcedAligner.Align(frames, frameCount: 2, Width, [A, A], Blank);
+        var result = CtcForcedAligner.Align(frames, frameCount: 2, Width, [A, A], Blank, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
         Assert.Contains("Too many syllables", result.Failure);
@@ -104,7 +130,7 @@ public sealed class CtcForcedAlignerTests
         var frames = LogProbs(intro, intro, intro, intro, intro, intro,
             Dominant(A), Dominant(A), Dominant(A));
 
-        var result = CtcForcedAligner.Align(frames, frameCount: 9, Width, [A], Blank);
+        var result = CtcForcedAligner.Align(frames, frameCount: 9, Width, [A], Blank, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded, result.Failure);
         Assert.Equal(0, result.Tokens[0].StartFrame);
@@ -122,7 +148,7 @@ public sealed class CtcForcedAlignerTests
             Dominant(A), Dominant(A), Dominant(A));
 
         var result = CtcForcedAligner.Align(
-            frames, frameCount: 9, Width, [Star, A], Blank, Star, Math.Log(0.05));
+            frames, frameCount: 9, Width, [Star, A], Blank, Star, Math.Log(0.05), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded, result.Failure);
         Assert.Equal(6, result.Tokens[1].StartFrame);
@@ -151,7 +177,7 @@ public sealed class CtcForcedAlignerTests
             Dominant(A), Dominant(A), Dominant(A));
 
         var result = CtcForcedAligner.Align(
-            frames, frameCount: 9, Width, [Star, A], Blank, Star, starLogProb: 0.0);
+            frames, frameCount: 9, Width, [Star, A], Blank, Star, starLogProb: 0.0, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded, result.Failure);
         Assert.Equal(8, result.Tokens[1].StartFrame);
@@ -169,7 +195,7 @@ public sealed class CtcForcedAlignerTests
             Dominant(A), Dominant(A));
 
         var result = CtcForcedAligner.Align(
-            frames, frameCount: 6, Width, [Star, A], Blank, Star, Math.Log(0.05));
+            frames, frameCount: 6, Width, [Star, A], Blank, Star, Math.Log(0.05), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded, result.Failure);
         Assert.Equal(4, result.Tokens[1].StartFrame);
@@ -187,7 +213,7 @@ public sealed class CtcForcedAlignerTests
         // Every frame screams Z; none of the tokens are ever the best choice.
         var frames = LogProbs(Enumerable.Range(0, 10).Select(_ => Dominant(Z)).ToArray());
 
-        var result = CtcForcedAligner.Align(frames, frameCount: 10, Width, [A, B, A, B], Blank);
+        var result = CtcForcedAligner.Align(frames, frameCount: 10, Width, [A, B, A, B], Blank, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded, result.Failure);
         Assert.All(result.Tokens, span => Assert.True(span.EndFrame >= span.StartFrame,
@@ -201,7 +227,7 @@ public sealed class CtcForcedAlignerTests
             Dominant(A), Dominant(B), Dominant(A), Dominant(Blank),
             Dominant(B), Dominant(A), Dominant(B), Dominant(A));
 
-        var result = CtcForcedAligner.Align(frames, frameCount: 8, Width, [A, B, A, B], Blank);
+        var result = CtcForcedAligner.Align(frames, frameCount: 8, Width, [A, B, A, B], Blank, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded, result.Failure);
         for (var i = 1; i < result.Tokens.Count; i++)
@@ -215,7 +241,7 @@ public sealed class CtcForcedAlignerTests
     [Fact]
     public void AnEmptyTokenSequenceSucceedsWithNoSpans()
     {
-        var result = CtcForcedAligner.Align(LogProbs(Dominant(A)), frameCount: 1, Width, [], Blank);
+        var result = CtcForcedAligner.Align(LogProbs(Dominant(A)), frameCount: 1, Width, [], Blank, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded, result.Failure);
         Assert.Empty(result.Tokens);
@@ -224,7 +250,7 @@ public sealed class CtcForcedAlignerTests
     [Fact]
     public void AudioWithNoFramesIsReportedRatherThanCrashing()
     {
-        var result = CtcForcedAligner.Align([], frameCount: 0, Width, [A], Blank);
+        var result = CtcForcedAligner.Align([], frameCount: 0, Width, [A], Blank, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
         Assert.Contains("no emission frames", result.Failure);
@@ -242,7 +268,7 @@ public sealed class CtcForcedAlignerTests
         var frames = LogProbs(Enumerable.Range(0, 60).Select(i => Dominant(pattern[i % pattern.Length])).ToArray());
         var tokens = Enumerable.Range(0, 15).Select(i => pattern[i % 3 == 0 ? 0 : i % pattern.Length]).ToList();
 
-        var result = CtcForcedAligner.Align(frames, frameCount: 60, Width, tokens, Blank);
+        var result = CtcForcedAligner.Align(frames, frameCount: 60, Width, tokens, Blank, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded, result.Failure);
         Assert.Equal(tokens.Count, result.Tokens.Count);
@@ -256,8 +282,8 @@ public sealed class CtcForcedAlignerTests
         var frames = LogProbs(
             Dominant(A), Dominant(B), Dominant(Z), Dominant(A), Dominant(B), Dominant(A));
 
-        var first = CtcForcedAligner.Align(frames, 6, Width, [A, B, A], Blank);
-        var second = CtcForcedAligner.Align(frames, 6, Width, [A, B, A], Blank);
+        var first = CtcForcedAligner.Align(frames, 6, Width, [A, B, A], Blank, cancellationToken: TestContext.Current.CancellationToken);
+        var second = CtcForcedAligner.Align(frames, 6, Width, [A, B, A], Blank, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(first.Tokens, second.Tokens);
         Assert.Equal(first.TotalLogProb, second.TotalLogProb);

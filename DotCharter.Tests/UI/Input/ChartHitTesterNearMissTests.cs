@@ -116,6 +116,27 @@ public sealed class ChartHitTesterNearMissTests
         Assert.Same(chord, hit);
     }
 
+    /// <summary>
+    ///     #587 row 4: the sustain test sat INSIDE the head's ±16 px X gate, so a
+    ///     click on a chord's sustain tail past the head read as empty highway
+    ///     (and armed the marquee). A one-beat tail at 120 BPM spans x 500..1000.
+    /// </summary>
+    [Fact]
+    public void AClickOnAChordSustainTail_PastTheHead_HitsTheChordExactly()
+    {
+        var chord = new Chord { Position = TimelineMath.PositionFromMs(500, Beats()) };
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 2, Fret = 5, Sustain = new FractionalPosition(1) });
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 3, Fret = 7 });
+
+        var hit = ChartHitTester.HitTestChord(new Point(800, LaneY(2)), [chord], ViewAnchorMs, PixelsPerMs, Width,
+            Height, TopMargin, BottomMargin, StringCount, Beats(), false, out var exact);
+
+        Assert.Same(chord, hit);
+        Assert.True(exact);
+        // The tail is per string: the string without a sustain stays empty there.
+        Assert.Null(HitChord(new Point(800, LaneY(3)), [chord]));
+    }
+
     [Fact]
     public void AChordClickWellClearOfEverything_StillReportsEmpty()
     {

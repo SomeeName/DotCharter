@@ -75,6 +75,64 @@ public sealed class MidiImportViewModelTests : IDisposable
     private static Task Import(MidiImportViewModel vm) => ((IAsyncRelayCommand)vm.ImportCommand).ExecuteAsync(null);
 
     [Fact]
+    public async Task Letter_only_Drop_D_keeps_the_low_D_in_the_imported_draft()
+    {
+        var h = new Harness();
+        h.State.ActiveArrangement!.Tuning = ["D", "A", "D", "G", "B", "E"];
+        var track = MidiTestBytes.Track(
+            MidiTestBytes.NoteOn(0, 0, 38, 100),
+            MidiTestBytes.NoteOff(480, 0, 38),
+            MidiTestBytes.EndOfTrack());
+        var path = Path.Combine(_tempDir, "drop-d.mid");
+        File.WriteAllBytes(path, MidiTestBytes.SmfFile(0, 480, track));
+
+        await h.OpenAsync(path);
+        await Import(h.Vm);
+
+        var applied = Assert.Single(h.Applied);
+        var note = Assert.Single(applied.Draft.Notes).Note;
+        Assert.Equal(0, note.StringIndex);
+        Assert.Equal(0, note.Fret);
+    }
+
+    /// <summary>#595: one note is counted in the singular.</summary>
+    [Fact]
+    public async Task A_single_note_summary_reads_in_the_singular()
+    {
+        var h = new Harness();
+        var track = MidiTestBytes.Track(
+            MidiTestBytes.NoteOn(0, 0, 40, 100),
+            MidiTestBytes.NoteOff(480, 0, 40),
+            MidiTestBytes.EndOfTrack());
+        var path = Path.Combine(_tempDir, "one-note.mid");
+        File.WriteAllBytes(path, MidiTestBytes.SmfFile(0, 480, track));
+
+        await h.OpenAsync(path);
+
+        Assert.True(h.Vm.HasDraft);
+        Assert.Equal("1 note will be charted.", h.Vm.Summary);
+    }
+
+    [Fact]
+    public async Task A_guitar_path_bass_draft_includes_the_reference_octave()
+    {
+        IReadOnlyList<int>? open = null;
+        var h = new Harness((_, options) =>
+        {
+            open = options.OpenStringMidi;
+            return new MidiChartDraft([], []);
+        });
+        var arrangement = h.State.ActiveArrangement!;
+        arrangement.CentOffset = -1200;
+        foreach (var step in new[] { -5, -5, -5, -5, -4, -4 })
+            arrangement.TuningPitches.Add(new TuningOffset(step));
+
+        await h.OpenAsync(WriteFixtureMidiFile());
+
+        Assert.Equal([23, 28, 33, 38, 43, 48], open);
+    }
+
+    [Fact]
     public async Task Opening_raises_and_clears_IsBusy_and_lists_all_tracks_first()
     {
         var h = new Harness();

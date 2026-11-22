@@ -23,7 +23,7 @@ public sealed class RigReampViewModelTests : IDisposable
         Directory.CreateDirectory(_dir);
         for (var i = 0; i < takes; i++)
             WavIo.WriteFloat32(Path.Combine(_dir, $"take {i}.wav"), new AudioBuffer(new float[4800], 48000, 1));
-        return new RigReampViewModel(engine, new DiTakeLibrary(_dir), FakeLocalization.English(),
+        return new RigReampViewModel(engine, new DiTakeLibrary(_dir), FakeLocalization.English(), new FakeConfigurationService(),
             loader: _ => (new float[48000 * 90], 48000),   // a 90 s take
             probe: _ => TimeSpan.FromSeconds(90))
         {
@@ -71,6 +71,51 @@ public sealed class RigReampViewModelTests : IDisposable
         Assert.False(vm.IsActive);
         Assert.Null(engine.LoadedTake); // the live guitar is back
         Assert.Equal("0:00 / 0:00", vm.PositionText);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StopOrDisposeDuringLoad_NeverPlaysThePendingTake(bool duringUpload)
+    {
+        foreach (var dispose in new[] { false, true })
+        {
+            var engine = new FakeReampEngine();
+            using var ready = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            void WaitForStop()
+            {
+                ready.Set();
+                release.Wait(TestContext.Current.CancellationToken);
+            }
+            if (duringUpload) engine.BeforeLoad = WaitForStop;
+            Directory.CreateDirectory(_dir);
+            var path = Path.Combine(_dir, "pending.wav");
+            File.WriteAllText(path, "synthetic take; the loader is injected");
+            using var vm = new RigReampViewModel(engine, new DiTakeLibrary(_dir), FakeLocalization.English(), new FakeConfigurationService(),
+                loader: _ =>
+                {
+                    if (!duringUpload) WaitForStop();
+                    return (new float[480], 48000);
+                }, probe: _ => TimeSpan.FromSeconds(1))
+            {
+                ManualTick = true
+            };
+            var load = vm.ReampTakeCommand.ExecuteAsync(vm.Takes[0]);
+            try
+            {
+                Assert.True(ready.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+                if (dispose) vm.Dispose();
+                else vm.StopCommand.Execute(null);
+            }
+            finally { release.Set(); }
+            await load;
+
+            Assert.False(vm.IsLoading);
+            Assert.False(vm.IsReamping);
+            Assert.False(engine.Playing);
+            Assert.Null(engine.LoadedTake);
+        }
     }
 
     [Fact]
@@ -133,6 +178,24 @@ public sealed class RigReampViewModelTests : IDisposable
     }
 
     [Fact]
+    public void ACaptureRateChange_SavesTheOldRateTakeAndStopsRecording()
+    {
+        var engine = new FakeReampEngine { ReampSampleRate = 44100 };
+        using var vm = NewVm(engine, takes: 0);
+        vm.ToggleRecordCommand.Execute(null);
+        engine.Capture(100);
+        vm.Tick();
+        engine.ReampSampleRate = 48000;
+        engine.Capture(200);
+        vm.Tick();
+
+        Assert.False(vm.IsRecording);
+        var wav = WavIo.Read(Assert.Single(vm.Takes).Take.FilePath);
+        Assert.Equal(44100, wav.SampleRate);
+        Assert.Equal(100, wav.FrameCount);
+    }
+
+    [Fact]
     public void ClosingTheAppMidRecording_SavesTheTake()
     {
         var engine = new FakeReampEngine();
@@ -148,7 +211,7 @@ public sealed class RigReampViewModelTests : IDisposable
     [Fact]
     public void WithoutAnEngine_EveryActionIsDisabled_AndTheReasonIsThere()
     {
-        using var vm = new RigReampViewModel(null, new DiTakeLibrary(_dir), FakeLocalization.English()) { ManualTick = true };
+        using var vm = new RigReampViewModel(null, new DiTakeLibrary(_dir), FakeLocalization.English(), new FakeConfigurationService()) { ManualTick = true };
         Assert.False(vm.IsAvailable);
         Assert.False(vm.ToggleRecordCommand.CanExecute(null));
         Assert.Equal(FakeLocalization.English()["Rig_Reamp_NoEngine"], vm.UnavailableReason);

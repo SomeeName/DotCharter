@@ -123,11 +123,12 @@ public sealed class ResetOnDoubleClickUiPerfSmokeTests
             };
             Assert.NotEqual(EqLimits.DefaultQ, vm.Section.Bands[2].Q, 3);
 
-            var view = new EqModuleView { DataContext = vm, Width = 420 };
+            // wide enough for all three of design D's cards, so the Band card is on screen
+            var view = new EqModuleView { DataContext = vm, Width = 1100 };
             WithStyledWindow(view, window =>
             {
-                // Freq, Gain, Q — the band card's three, in markup order.
-                var q = view.GetVisualDescendants().OfType<Slider>().ElementAt(2);
+                // the Q slider is the one at the Q this case set
+                var q = view.GetVisualDescendants().OfType<Slider>().Single(s => Math.Abs(s.Value - vm.SelectedQNormalized) < 1e-9);
                 DoubleClick(window, Centre(window, q));
 
                 Assert.Equal(EqLimits.DefaultQ, vm.Section.Bands[2].Q, 3);

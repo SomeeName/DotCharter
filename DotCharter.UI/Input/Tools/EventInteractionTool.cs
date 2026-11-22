@@ -1,4 +1,5 @@
-﻿using Avalonia.Input;
+﻿using Avalonia;
+using Avalonia.Input;
 using DotCharter.UI.Controls.Layers;
 using DotCharter.UI.Editing.Linking;
 using DotCharter.UI.Editing.Tracks;
@@ -17,8 +18,8 @@ public enum EventRowType
 }
 
 /// <summary>
-/// Dispatcher for the event-ribbon pointer surface. Owns three mutually
-/// exclusive gestures (beat-drag, lyric-drag, event-point-drag) and the
+/// Dispatcher for the event-ribbon pointer surface. Owns four mutually
+/// exclusive gestures (beat-drag, lyric-drag, event-point-drag, tone-change-drag) and the
 /// double-click bookkeeping for opening dialogs. All actual mutation is
 /// delegated to the gesture classes; this file is intentionally a router.
 /// </summary>
@@ -36,6 +37,7 @@ public class EventInteractionTool : IEditorTool
     private readonly BeatDragGesture _beatDrag;
     private readonly LyricDragGesture _lyricDrag;
     private readonly EventPointDragGesture _eventPointDrag;
+    private readonly ToneChangeDragGesture _toneDrag;
 
     private BeatMarker? _lastClickedBeat;
     private long _lastBeatClickTicks;
@@ -57,6 +59,7 @@ public class EventInteractionTool : IEditorTool
         _beatDrag = new BeatDragGesture(historyManager, configService, logger);
         _lyricDrag = new LyricDragGesture(historyManager, configService, logger);
         _eventPointDrag = new EventPointDragGesture(eventEditingService, logger);
+        _toneDrag = new ToneChangeDragGesture(historyManager, logger);
     }
 
     private IEventGesture? ActiveGesture
@@ -66,8 +69,19 @@ public class EventInteractionTool : IEditorTool
             if (_beatDrag.IsActive) return _beatDrag;
             if (_lyricDrag.IsActive) return _lyricDrag;
             if (_eventPointDrag.IsActive) return _eventPointDrag;
+            if (_toneDrag.IsActive) return _toneDrag;
             return null;
         }
+    }
+
+    /// <summary>A left press on a sticky badge opens the event editor on the marker in effect (the
+    /// badge's own time) of the clicked arrangement. Returns false when the press missed every badge.</summary>
+    internal static bool TryOpenPinnedBadge(PinnedLabelHitRegistry registry, object viewport, Point position,
+        bool leftPressed, Arrangement? arrangement, Action<double, Arrangement?> openEvent)
+    {
+        if (!leftPressed || !registry.TryHit(viewport, position, out var pinned)) return false;
+        openEvent(pinned.TimeMs, arrangement);
+        return true;
     }
 
     public void OnPointerPressed(PointerPressedEventArgs e, ToolContext context)
@@ -81,12 +95,10 @@ public class EventInteractionTool : IEditorTool
         selection.ClearPreviews();
         selection.ClearHovers();
 
-        if (context.Properties.IsLeftButtonPressed &&
-            _pinnedRegistry.TryHit(context.Viewport, context.Position, out var pinned))
+        if (TryOpenPinnedBadge(_pinnedRegistry, context.Viewport, context.Position,
+                context.Properties.IsLeftButtonPressed, track.Arrangement, vm.ShellDialogs.OpenEvent))
         {
-            _logger.Info(AppLogCategory.Events,
-                $"Clicked pinned {pinned.Kind} label; opening event dialog at timeMs={pinned.TimeMs:0.###}.");
-            vm.ShellDialogs.OpenEvent(pinned.TimeMs, track.Arrangement);
+            _logger.Info(AppLogCategory.Events, "Clicked a pinned label; opened the event dialog.");
             context.Viewport.RequestNextFrameRendering();
             return;
         }
@@ -97,7 +109,7 @@ public class EventInteractionTool : IEditorTool
 
         if (rowType == EventRowType.Lyric)
         {
-            HandleLyricPress(context);
+            HandleLyricPress(e, context);
             context.Viewport.RequestNextFrameRendering();
             return;
         }
@@ -218,7 +230,8 @@ public class EventInteractionTool : IEditorTool
             selection.SelectedTones.Clear();
             _logger.Info(AppLogCategory.Events,
                 $"Right-click empty event row {rowType}; opening event dialog at exactMs={context.ExactTimeMs:0.###}, snapped={FormatPosition(context.SnappedPosition, track)}.");
-            vm.ShellDialogs.OpenEvent(context.ExactTimeMs, track.Arrangement);
+            if (rowType == EventRowType.Section) vm.ShellDialogs.AddSectionInPlace(context.Viewport, context.ExactTimeMs, track.Arrangement);
+            else vm.ShellDialogs.OpenEvent(context.ExactTimeMs, track.Arrangement);
             context.Viewport.RequestNextFrameRendering();
         }
     }
@@ -311,6 +324,7 @@ public class EventInteractionTool : IEditorTool
                 vm.ShellDialogs.OpenEvent(hitTone.Position.GetPositionMs(track.Beats), track.Arrangement);
                 _logger.Info(AppLogCategory.Events,
                     $"Double-clicked tone change; opening dialog at {FormatPosition(hitTone.Position, track)}. Tone='{hitTone.ToneName}'.");
+                _toneDrag.Cancel(context);
                 context.Viewport.RequestNextFrameRendering();
                 return;
             }
@@ -334,6 +348,8 @@ public class EventInteractionTool : IEditorTool
 
             _logger.Info(AppLogCategory.Events,
                 $"Selected tone change at {FormatPosition(hitTone.Position, track)}. Tone='{hitTone.ToneName}', selectedCount={selection.SelectedTones.Count}.");
+
+            _toneDrag.Start(track, hitTone, context.ExactTimeMs, context.Position);
         }
         else if (context.Properties.IsRightButtonPressed)
         {
@@ -354,7 +370,7 @@ public class EventInteractionTool : IEditorTool
         context.Viewport.RequestNextFrameRendering();
     }
 
-    private void HandleLyricPress(ToolContext context)
+    private void HandleLyricPress(PointerPressedEventArgs e, ToolContext context)
     {
         var vm = context.ViewModel;
         var selection = vm.ChartEditor.Selection;
@@ -364,7 +380,12 @@ public class EventInteractionTool : IEditorTool
 
         if (context.Properties.IsRightButtonPressed)
         {
-            if (lyric != null && phrase != null)
+            if (lyric == null && !context.Modifiers.HasFlag(KeyModifiers.Shift))
+            {
+                if (vm.ShellDialogs.InlineEdit.Hosts(context.Viewport))
+                    vm.ShellDialogs.InlineEdit.ShowLyric(context.ExactTimeMs, lyric);
+            }
+            else if (lyric != null && phrase != null)
             {
                 _logger.Info(AppLogCategory.Events,
                     $"Right-click delete lyric '{lyric.Text}' at {lyric.Position.GetPositionMs(context.Track.Beats):0.###}ms.");
@@ -386,6 +407,12 @@ public class EventInteractionTool : IEditorTool
         }
 
         SelectLyricAlone(selection, context.Track.Selection, lyric);
+        if (e.ClickCount == 2 && vm.ShellDialogs.InlineEdit.Hosts(context.Viewport))
+        {
+            _lyricDrag.Cancel(context);
+            vm.ShellDialogs.InlineEdit.ShowLyric(context.ExactTimeMs, lyric);
+            return;
+        }
         _logger.Info(AppLogCategory.Events,
             $"Selected lyric '{lyric.Text}' at {lyric.Position.GetPositionMs(context.Track.Beats):0.###}ms.");
 
@@ -414,6 +441,7 @@ public class EventInteractionTool : IEditorTool
         var dragTrack = (active as BeatDragGesture)?.Track
                         ?? (active as LyricDragGesture)?.Track
                         ?? (active as EventPointDragGesture)?.Track
+                        ?? (active as ToneChangeDragGesture)?.Track
                         ?? track;
         dragTrack.Selection.ClearPreviews();
         if (!ReferenceEquals(dragTrack, track)) track.Selection.ClearPreviews();
@@ -473,6 +501,12 @@ public class EventInteractionTool : IEditorTool
     public void OnPointerExited(PointerEventArgs e, ToolContext context)
     {
         if (ActiveGesture == null) ResetVisuals(context);
+    }
+
+    public void Cancel(ToolContext context)
+    {
+        ActiveGesture?.Cancel(context);
+        ResetVisuals(context);
     }
 
     private void ResetVisuals(ToolContext context)

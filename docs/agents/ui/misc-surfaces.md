@@ -30,13 +30,41 @@ on it, and bound THROUGH that property (`{Binding Annotations.AddAnnotationAtPla
 
 | Collaborator (property) | What lives there |
 |---|---|
-| `AnnotationsInspectorViewModel` (`Annotations`) | The Notes tab's charting annotations. Add/remove go through `IHistoryService` (`AddAnnotationAction` / `RemoveAnnotationAction` in `Services/State/AnnotationActions.cs`, pinned by `AnnotationActionsTests`) — annotations are persisted chart content, and until 2026-08-15 both verbs mutated the collection directly, invisible to Ctrl+Z and to the dirty tracker. Behaviour: `AnnotationsInspectorViewModelTests` |
+| `AnnotationsInspectorViewModel` (`Annotations`) | The Notes tab's charting annotations. Add/remove and resolving/reopening go through `IHistoryService` (`AddAnnotationAction` / `RemoveAnnotationAction` / `SetAnnotationResolvedAction` in `Services/State/AnnotationActions.cs`, pinned by `AnnotationActionsTests`). The resolved checkbox reads the model one-way and sends clicks to `ToggleAnnotationResolvedCommand`; undo updates the checkbox through model notifications. Behaviour: `AnnotationsInspectorViewModelTests`; layout and input: `AnnotationResolutionUiPerfSmokeTests` |
 | `ExportReadinessViewModel` (`ExportReadiness`) | The FEHLER tab's pre-export check (`ChartExportValidator` over the whole project), its findings, the three-state verdict and the switch-then-seek jump. Two ties back, both plain calls: `RefreshIfChecked()` from `InspectorIssuesViewModel.RecomputeIssues` (a result once asked for follows edits on the issue debounce) and `Reset()` from the inspector on `ActiveProject`. Behaviour: `ExportReadinessViewModelTests` |
 | `InspectorIssuesViewModel` (`Issues`, #659) | The Issues (FEHLER) tab: `RecomputeIssues` (validation, the easier-level filter, the hand-shape findings published to the timeline), the list (`Items`) and its severity groups (`IssueGroups`, deferred while the tab is hidden), the count/summary/badge tip and the header dot (`TopIssueSeverity`), the refresh / auto-fix / jump commands with the pure `LevelOwning` and `OnEasierLevels`, the easier-levels toggle, the fix menu (`IssueFix`, `IssueFixViewModel`, #618), and the AI row for the same finding (`IssueAi`, `IssueAiViewModel`, #803: Fix with AI only for a finding an AI chart-pass job can fix — the phrase findings D03 I10 I25 I26 through the sections & phrases job on the whole arrangement, #808 — any other one prints why — Fix all N in this phrase (only the findings one job fixes with it), Explain with AI; each is sent to the AI chat through `IAiChatFindingsDoor`, a lazy `Func` so the inspector never builds the chat; see `docs/agents/services/ai-chat-instructions.md` § Findings). The inspector drives it — its debounce calls `RecomputeIssues`, a switch to the tab `EnsureIssueGroupsCurrent` — and it reaches back only through `Inspector/IInspectorIssuesHost` (`IsIssuesTabSelected`, `OnIssuesRecomputed` → the selection memo + the work queue, `SelectProgrammatically` → the jump does not switch tabs). Behaviour: `InspectorIssuesViewModelTests`; layout: `Perf/IssueFixRowUiPerfSmokeTests`, `Perf/IssueAiRowUiPerfSmokeTests`, `Perf/InspectorConstructionUiPerfSmokeTests`; the AI row: `IssueAiViewModelTests` |
-| `HandShapeEditorViewModel` (`HandShapeEditor`) | The Span card (end EXCLUSIVE, typed start/end, fit-to-sounds — each commit one `SetHandShapeSpanAction` undo node), the enclosed/rebind labels (folded once per sync, `UI/InspectorHandShapeCostTests`), and the pure `ResolveHandShapeSpan` / `CountRebindableChords`. Its own `_isSyncing` guards the two span boxes. The inspector routes `SelectedHandShapes.CollectionChanged` into its `SyncHandShapeProperties` and handles its `Synced` event (selection summary, selection-issue memo, card matrix) — a span commit re-syncs, so the inspector hears about that too. Behaviour: `HandShapeEditorViewModelTests` |
+| `HandShapeEditorViewModel` (`HandShapeEditor`) | Fit-to-sounds (one `SetHandShapeSpanAction` undo node; the Shape page's Scope page shows it — the typed start/end boxes are gone, a bar is moved on the timeline), the enclosed/rebind labels (folded once per sync, `UI/InspectorHandShapeCostTests`) and the pure `CountRebindableChords`. The inspector routes `SelectedHandShapes.CollectionChanged` into its `SyncHandShapeProperties` and handles its `Synced` event (selection summary, selection-issue memo, card matrix) — a span commit re-syncs, so the inspector hears about that too. Behaviour: `HandShapeEditorViewModelTests` |
 | `StringMaskViewModel` (`StringMask`) | The two mask verbs (`ToggleStringMaskCommand` for the chord box's rail pips and the Technique section's string chips, `ClearStringMaskCommand` for the scope lines), the chips themselves (`Chips`, #601, synced from `NotifyMaskScopeChanged`) and the keyboard readouts (`PenFretReadout`, `MaskReadout`). The mask itself stays `ProjectState.StringEditMask`; the inspector forwards the two `ProjectState` changes these follow (`NotifyMaskChanged` from `NotifyMaskScopeChanged`, `NotifyPenFretChanged` on `PreviewNoteFret`). Behaviour: `StringMaskViewModelTests` |
+| `InspectorTabActivation` (private, plain class, not DI) | What the tab strip does when it moves (`Activated`, called from `OnSelectedTabIndexChanged`): leaving the Lyrics tab commits its pending draft (`LyricsInspectorViewModel.CommitPendingEdit`); opening Issues, Sound, Song or the Riff Library catches that hidden surface up (issue groups + chart report, work queue, phrase browser, riff catalogue load). Behaviour: `InspectorTabActivationTests` |
 | `SoundSectionsViewModel` (`Sections`, plain sub-VM, not DI) | The Sound tab's rail (#601): which sections each `SelectionKind` offers, the open one remembered per kind, `ShowApplyBar`, `ApplyFamily` (forwarded to the chord panel's ladder) and `HasChordScope` (whether the ladder reaches a technique edit at all). Replaced the #572 `SoundSegmentsViewModel`. Behaviour: `SoundSectionsViewModelTests` |
-| `SoundNextTaskViewModel` (`NextTask`, plain sub-VM over `Queue`) | The Task section with nothing selected (#601): the next task in the shipped order (fingerings, names, export blockers), its sentence and "Fix the next one" (= `Queue.TriageFilter`). Behaviour: `SoundSectionsViewModelTests.TheNextTask_ComesInTheShippedOrder`, `Perf/SoundTabRailUiPerfSmokeTests` |
+| `SoundNextTaskViewModel` (`NextTask`, plain sub-VM over `Queue`) | The Task section with nothing selected (#601): the next task in the shipped order (fingerings, names, export blockers), its sentence and "Show first problem" (= `Queue.TriageFilter`). Behaviour: `SoundSectionsViewModelTests.TheNextTask_ComesInTheShippedOrder`, `Perf/NoteSectionStripUiPerfSmokeTests` |
+
+### Note queue filters
+
+`SoundQueueViewModel` builds one work set for the active level. Its chord filters use
+`Services/Editing/ChordWorkEligibility`; the Next up card and the unnamed-chord row
+read the queue's counts, so they share the same eligibility and navigation targets.
+
+- Missing fingering skips explicit splits, link landings and fully muted chords. It
+  judges the exported grip, including a synthesized template, using the same
+  `IsMissingFinger` rule as `TemplateAndOverlapRule`: Fingerless is intentional,
+  frets at or below the capo are open, and a missing or negative finger above it
+  needs work (thumb zero is valid).
+- Unnamed chord requires a blank name without No name, a sound exported as a chord,
+  and a name offered by `ChordNameSuggester.SuggestFirstChordName` under the current
+  naming style and double-stop preferences. Suppressed double stops and unnameable
+  shapes stay out; the power-chord exception follows Settings.
+  Closing Settings invalidates the queue, refreshing when Sound is selected and
+  deferring otherwise, so its counts follow the saved preferences before navigation.
+- Untemplated skips sounds exported as loose notes and grips the export can
+  synthesize from chord notes. An unresolved empty chord remains in the queue.
+- No anchor coverage reads the `NoteWithoutAnchor` / `NoteOutsideAnchorRange`
+  findings; Has an issue reads finding backreferences; Blocks export uses
+  `InspectorIssueFieldMap.BlocksExport`. These three count sounds on this level,
+  and reuse the findings rather than revalidating each sound.
+
+Behaviour: `SoundQueueViewModelTests`; the filter-menu fixture and capture reuse
+`Perf/NoteSectionStripUiPerfSmokeTests`.
 
 **What stayed, and why.** Each remaining partial was surveyed for the members it
 shares with the root and its siblings (2026-10-03, comments stripped): `.Notes`
@@ -72,10 +100,20 @@ EXTRACTED cluster reads that collaborator's own file instead
 and a lint over BOTH sides of a tie-back reads the set plus that file
 (`UI/InspectorIssueRebuildTests`, `UI/IssueDotSeverityTests`).
 
+`SetHandShapeSpanAction` captures the owning hand-shape collection and delegates
+to `MutateHandShapesAction`, so numeric span edits and fit-to-sounds restore sorted
+order on execute, undo and redo (`HandShapeEditorViewModelTests`).
+
 ## The inspector's issue list — what a recompute costs
 
 - `InspectorIssuesViewModel.RecomputeIssues` runs on the inspector's 150 ms
   debounce after every history step.
+  Headless consumers wait for its worker pass through `HeadlessIssuePass.Settle`;
+  layout passes alone do not wait for validation. The narrow Inspector fixture
+  (`InspectorNarrowWidthUiPerfSmokeTests.WithPane`) settles the pass and requires
+  the seeded song's real anchor-range findings before measuring the Issues badge.
+  `InspectorLayoutSeedTests` pins that fixture: it has no chord templates and its
+  badge does not depend on template-fingering findings.
   `Items` and `IssueGroups` are `BulkObservableCollection`s replaced in ONE
   Reset (they were Clear + N Adds into nested non-virtualizing
   `ItemsControl`s), and the severity GROUPS — bound only by the FEHLER tab —
@@ -125,7 +163,8 @@ and a lint over BOTH sides of a tie-back reads the set plus that file
   `IssueSummary`/`RebuildIssueGroups` for the FEHLER rework) is SPENT.** The
   **0.33 owner-granted exception** added the note-placement fretboard seams —
   `NotePreviewChord`, `NoteStringCount`, `NoteTuningNames`, `NoteSustainLabel`,
-  `HasSingleNoteSelection`, `SetNoteTargetCommand` — all routing through the
+  `HasSingleNoteSelection`, `SetNoteTargetCommand` (since #751 P4 the staged Placement page's
+  `SetTargetCommand`) — all routing through the
   existing `ApplyNoteMutation` / `MutateNotesAction` history path (the tri-state
   `AllSameNullable` projection and every chip binding are untouched). That
   exception is SPENT too.
@@ -169,6 +208,10 @@ and a lint over BOTH sides of a tie-back reads the set plus that file
   fed by `ChordTemplateEditPlanner.ResolveReach`) replaced `ScopeUsageCount` /
   `ScopeAllLabel` / `ScopeAffectsOthers`. No write path moved: every edit still
   goes through `ApplyTemplateEdit` → `ChordTemplateEditPlanner.ApplyEdit`.
+  The panel's No name restore memory is keyed by template instance, so switching
+  targets cannot restore another grip's name. Reloading an arrangement without
+  templates clears the target, draft, dropdown and input rows and disables target
+  actions, including Pin and Save fingering.
 - **#484 (2026-10-09) is an owner-filed redesign of that same decision, not a
   visual pass.** The five mechanisms that spread an edit became one "Apply to"
   ladder: `ApplyRung` + `ChooseApplyRungCommand` + `Ladder` (`ChordApplyLadder`)

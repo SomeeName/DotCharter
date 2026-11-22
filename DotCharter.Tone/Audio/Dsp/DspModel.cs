@@ -27,8 +27,8 @@ public sealed record DspParamInfo(string Id, string DisplayName, float Min, floa
     /// (delay <c>pingPong</c>, freeze <c>capture</c>). Index <c>i</c> names the
     /// value <c>Min + i</c>. Null for a continuous (numeric) param, so the UI
     /// keeps a knob; non-null ⇒ render a labelled selector instead. Loaded once
-    /// with the catalogue; the label STRINGS come from the native ABI and are
-    /// never duplicated into resx.</summary>
+    /// with the catalogue; label identities come from the native ABI, with
+    /// parameter captions and ordinary choices translated at presentation.</summary>
     public IReadOnlyList<string>? ValueLabels { get; init; }
 
     /// <summary>Quantization step for an ORDINAL discrete param (ABI v27) — a

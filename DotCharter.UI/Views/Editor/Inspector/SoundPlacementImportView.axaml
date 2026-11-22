@@ -1,0 +1,35 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundPlacementImportView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Placement page's IMPORT card (#751 P4, design D's "Import"): values an import carried that nothing
+         in the app authors (§6.4). Shown, never edited: invisible would let a charter destroy them unknowingly.
+         NotationDuration stays read-only by owner decision (the sheet palette edits it). -->
+    <StackPanel Spacing="{StaticResource SpaceSm}">
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                   Text="{localization:Loc Inspector_Staged_Imported}" />
+        <TextBlock x:Name="NoteImportNone" Text="{localization:Loc Inspector_Staged_NothingImported}" TextWrapping="Wrap"
+                   IsVisible="{Binding !HasProvenanceBadges}"
+                   FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextMuted}" />
+        <WrapPanel x:Name="NoteImportBadges" Orientation="Horizontal" IsVisible="{Binding HasProvenanceBadges}">
+            <Border Classes="ProvenanceBadge" IsVisible="{Binding HasImportedVibratoDepth}"
+                    ToolTip.Tip="{localization:Loc Inspector_More_VibratoDepthTip}">
+                <TextBlock Text="{Binding VibratoDepthBadge}" />
+            </Border>
+            <Border Classes="ProvenanceBadge" IsVisible="{Binding HasGraceFret}"
+                    ToolTip.Tip="{localization:Loc Inspector_More_GraceTip}">
+                <TextBlock Text="{Binding GraceFretBadge}" />
+            </Border>
+            <Border Classes="ProvenanceBadge" IsVisible="{Binding HasNotationDuration}"
+                    ToolTip.Tip="{localization:Loc Inspector_More_NotationDurationTip}">
+                <TextBlock Text="{Binding NotationDurationBadge}" />
+            </Border>
+            <Border Classes="ProvenanceBadge" IsVisible="{Binding NoteIgnoreIsDerived}"
+                    ToolTip.Tip="{localization:Loc Inspector_More_IgnoreDerivedTip}">
+                <TextBlock Text="{localization:Loc Inspector_More_IgnoreDerived}" />
+            </Border>
+        </WrapPanel>
+    </StackPanel>
+</UserControl>

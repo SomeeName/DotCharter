@@ -23,16 +23,21 @@ public interface IGlobalEditingCoordinator
     PhrasePasteOutcome PastePhrase(PhraseCatalogEntry entry, double currentTimeMs, int gridDivisor);
     void SelectAllEvents();
     void SelectAllNotes();
-    void SelectLikePattern();
+
+    /// <summary>
+    ///     Adds every sound that plays the same thing as the selection to the selection and
+    ///     says what it added, per kind, so the caller can show it.
+    /// </summary>
+    SelectionAddition SelectLikePattern();
 
     /// <summary>
     ///     Runs a user-authored <see cref="MatchPattern" /> over the focused
-    ///     track and ADDS every occurrence to the selection. Returns how many
-    ///     elements it added — the pattern builder shows it, and a pattern that
+    ///     track and ADDS every occurrence to the selection. Returns what it
+    ///     added — the pattern builder shows it, and a pattern that
     ///     reports 0 on a chart full of the thing it describes is how a bad
     ///     definition announces itself.
     /// </summary>
-    int SelectByPattern(MatchPattern pattern);
+    SelectionAddition SelectByPattern(MatchPattern pattern);
 
     /// <summary>
     ///     Moves to the next (<paramref name="direction" /> &gt; 0) or previous
@@ -79,6 +84,9 @@ public interface IGlobalEditingCoordinator
     /// <summary>Splits the hand shape covering each selected sound AT that
     /// sound, so a bar that spans a hand position change becomes two.</summary>
     void SplitHandShapeAtSelection();
+    void GripsFromHeldNotes();
+
+    void HandShapesFromLetRing();
     void DeleteSelected(EditorFocusArea focusArea);
     void DeleteSelectedRelated(EditorFocusArea focusArea);
     void SendSelectionToArrangement(Arrangement target);

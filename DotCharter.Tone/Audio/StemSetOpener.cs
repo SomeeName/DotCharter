@@ -59,6 +59,10 @@ internal static class StemSetOpener
     /// </summary>
     internal static Outcome<T>[] OpenAll<T>(IReadOnlyList<string> paths, Func<string, long> prefetch,
         Func<string, T> open, int maxOpensInFlight) where T : class
+        => OpenAll<string, T>(paths, prefetch, open, maxOpensInFlight);
+
+    internal static Outcome<T>[] OpenAll<TRequest, T>(IReadOnlyList<TRequest> paths, Func<TRequest, long> prefetch,
+        Func<TRequest, T> open, int maxOpensInFlight) where T : class
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(prefetch);

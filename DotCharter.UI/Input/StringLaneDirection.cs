@@ -22,8 +22,8 @@ public static class StringLaneDirection
 {
     /// <summary>
     ///     Does one step toward the TOP of the highway INCREASE the string index?
-    ///     True only when the lanes are flipped (lefty mode, or the invert-strings
-    ///     setting — <c>IChartViewport.FlipStrings</c> is their XOR).
+    ///     True only when InvertStrings flips the timeline lanes, independently
+    ///     of handedness (<c>IChartViewport.FlipStrings</c>).
     /// </summary>
     public static bool TowardTopIncreasesIndex(bool flipStrings) => flipStrings;
 

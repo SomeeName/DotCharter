@@ -62,6 +62,28 @@ The defaults and their semantics are above; this is the delivery mechanism.
     DIFFERENT key drops a stale one. `ActivationKeyUpLatch` is pure so it is
     tested in the DEFAULT gate (`ActivationKeyUpLatchTests`) — the same reason
     `GlobalChordGate` is a separate pure type.
+- **Esc yields to an open inline timeline editor** (FHP / section / lyric card,
+  `Views/Editor/InlineEditOverlayView.ClaimsEscape`, fed into
+  `GlobalChordGate.Context.InlineEditorClaimsEscape`): the card's own tunnel
+  handler cancels the draft, which it never got to do while the window tunnel
+  cleared the selection first (#588). Same shape as `SearchBoxClaimsEscape`.
+  The window still records that first delegated Escape in the common held-key
+  filter, so an OS repeat after clear/cancel cannot fall into shell navigation.
+- **Auto-repeat never re-runs a TOGGLE verb** (#588). Avalonia's `KeyEventArgs`
+  carries no repeat flag, so `ChartKeybindHandler` treats a second press of the
+  same chord with no release in between as a repeat: `IsToggleVerb` labels
+  (`PlayPause`, every `Toggle…`, `BookmarkBase`, `StringMaskBase`,
+  `PenToggleStringBase`, `ClearSelection`, and the three `Open*Popover` verbs) are consumed and NOT run; nudges, fret steps and seeks
+  keep repeating. `GlobalKeyUpPreview` reports every release
+  (`HandleKeyRelease`) and `ClearActivationLatch` (Deactivated) calls
+  `ResetHeldKeys`, so a lost release cannot eat a real press. Pinned by
+  `KeybindAutoRepeatTests`. The window's F11/Alt+Enter, Ctrl+Shift+P, palette
+  activation/dismissal and Escape chain call `HandleToggleKeyPress`, sharing
+  that same hold with registered verbs. This also covers gameplay's Escape
+  pause/resume and every pop-out wired through `WireGlobalKeyRoutes`.
+- **A cleared digit family binds nothing**: every digit slot is
+  `KeyChord.WithDigit`, which returns `KeyChord.None` for an unbound base (it
+  used to register the bare digits with the base's empty modifiers).
 
 
 - **Registrar lookups must read the CURRENT `ProjectState.Keybinds` table.**

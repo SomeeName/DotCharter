@@ -31,8 +31,6 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
     private List<HandShape> _dragOriginalHandShapes = [];
     private List<GuitarNote> _dragOriginalStates = [];
 
-    private Chord? _dragTargetChord;
-    private GuitarNote? _dragTargetNote;
     private TrackEditorContext? _dragTrack;
     private FractionalPosition? _lastClickedPosition;
     private int _lastHoverString = -1;
@@ -80,18 +78,17 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
             vm.ProjectState.TimelineViewAnchorEffectiveMs,
             vm.ProjectState.PixelsPerMs, context.Viewport.ViewportWidth, context.Viewport.ViewportHeight,
             context.Viewport.TopMargin, context.Viewport.BottomMargin, stringCount,
-            track.Beats, context.Viewport.FlipStrings, out var chordExact);
+            track.Beats, context.Viewport.FlipStrings, out var chordExact, out var chordHead);
 
         var hitNote = ChartHitTester.HitTestNote(context.Position, track.Notes,
             vm.ProjectState.TimelineViewAnchorEffectiveMs,
             vm.ProjectState.PixelsPerMs, context.Viewport.ViewportWidth, context.Viewport.ViewportHeight,
             context.Viewport.TopMargin, context.Viewport.BottomMargin, stringCount,
-            track.Beats, context.Viewport.FlipStrings, out var noteExact);
+            track.Beats, context.Viewport.FlipStrings, out var noteExact, out var noteHead);
 
-        // A CHORD outranks a note at every branch below, so a chord found only
-        // by the near-miss ring would beat a note the pointer is provably
-        // INSIDE — see ChartHitTester.ResolveSound.
-        (hitChord, hitNote) = ChartHitTester.ResolveSound(hitChord, chordExact, hitNote, noteExact);
+        // Resolve head, sustain and near-miss priority before any selection,
+        // drag or context-menu branch can prefer the wrong sound class.
+        (hitChord, hitNote) = ChartHitTester.ResolveSound(hitChord, chordExact, hitNote, noteExact, chordHead, noteHead);
 
         if (context.Properties.IsRightButtonPressed)
         {
@@ -212,25 +209,28 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
                 vm.ProjectState.TimelineViewAnchorEffectiveMs,
                 vm.ProjectState.PixelsPerMs, context.Viewport.ViewportWidth, context.Viewport.ViewportHeight,
                 context.Viewport.TopMargin, context.Viewport.BottomMargin, stringCount,
-                track.Beats, context.Viewport.FlipStrings, out var hoverNoteExact);
+                track.Beats, context.Viewport.FlipStrings, out var hoverNoteExact, out var hoverNoteHead);
 
             var hoveredChord = ChartHitTester.HitTestChord(context.Position, track.Chords,
                 vm.ProjectState.TimelineViewAnchorEffectiveMs, vm.ProjectState.PixelsPerMs, context.Viewport.ViewportWidth,
                 context.Viewport.ViewportHeight,
                 context.Viewport.TopMargin, context.Viewport.BottomMargin, stringCount,
-                track.Beats, context.Viewport.FlipStrings, out var hoverChordExact);
+                track.Beats, context.Viewport.FlipStrings, out var hoverChordExact, out var hoverChordHead);
 
             // Same precedence as the press path — the hover highlight has to
             // point at whatever the click would take, or the user aims at a lit
             // gem and edits a different one.
             (hoveredChord, hoveredNote) =
-                ChartHitTester.ResolveSound(hoveredChord, hoverChordExact, hoveredNote, hoverNoteExact);
+                ChartHitTester.ResolveSound(hoveredChord, hoverChordExact, hoveredNote, hoverNoteExact,
+                    hoverChordHead, hoverNoteHead);
 
             if (selection.HoveredNote != hoveredNote) selection.HoveredNote = hoveredNote;
             if (selection.HoveredChord != hoveredChord) selection.HoveredChord = hoveredChord;
 
+            var previewFret = SoundingPitch.SnapToNeck(vm.ProjectState.EditorUi.PreviewNoteFret,
+                Math.Max(0, track.Arrangement.Capo));
             if (_lastHoverTime != context.SnappedPosition || _lastHoverString != context.StringIndex ||
-                !selection.PreviewNotes.Any())
+                !PreviewMatchesFret(selection.PreviewNotes, previewFret))
             {
                 if (selection.PreviewNotes.Count > 0) selection.PreviewNotes.Clear();
                 if (selection.PreviewChords.Count > 0) selection.PreviewChords.Clear();
@@ -240,7 +240,7 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
                     selection.PreviewNotes.Add(new GuitarNote
                     {
                         Position = context.SnappedPosition, StringIndex = context.StringIndex,
-                        Fret = vm.ProjectState.PreviewNoteFret,
+                        Fret = previewFret,
                         Sustain = FractionalPosition.Zero
                     });
                 }
@@ -255,6 +255,9 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
 
         context.Viewport.RequestNextFrameRendering();
     }
+
+    private static bool PreviewMatchesFret(IEnumerable<GuitarNote> notes, int fret) =>
+        notes.Any() && notes.All(note => note.Fret == fret);
 
     public void OnPointerReleased(PointerReleasedEventArgs e, ToolContext context)
     {
@@ -288,14 +291,10 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
             RefreshDragPreviews(_currentDragDelta);
             _lastAppliedDragDelta = _currentDragDelta;
 
-            var targetNotes = _dragTargetNote != null
-                ? selection.SelectedNotes.ToList()
-                : [];
-            var previewNotes = _dragTargetNote != null
-                ? selection.PreviewNotes.ToList()
-                : [];
-            var targetChords = _dragTargetChord != null ? selection.SelectedChords.ToList() : [];
-            var previewChords = _dragTargetChord != null ? selection.PreviewChords.ToList() : [];
+            var targetNotes = selection.SelectedNotes.ToList();
+            var previewNotes = selection.PreviewNotes.ToList();
+            var targetChords = selection.SelectedChords.ToList();
+            var previewChords = selection.PreviewChords.ToList();
 
             var targetHandShapes = selection.SelectedHandShapes.ToList();
             var previewHandShapes = selection.PreviewHandShapes.ToList();
@@ -397,6 +396,9 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
 
     private void HandleLeftClick(ToolContext context, Chord? hitChord, GuitarNote? hitNote)
     {
+        // ResolveSound gives chords precedence but can also return a nearby note.
+        // Only the winning hit may decide whether to preserve the selection.
+        if (hitChord != null) hitNote = null;
         var track = context.Track;
         var selection = track.Selection;
 
@@ -467,8 +469,6 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
                     $"Highway selection updated. Selected notes={selection.SelectedNotes.Count}, chords={selection.SelectedChords.Count}, handshapes={selection.SelectedHandShapes.Count}, anchors={selection.SelectedAnchors.Count}.");
             }
 
-            _dragTargetChord = hitChord;
-            _dragTargetNote = hitNote;
             _dragTrack = track;
 
             // The original-state clones are captured LAZILY, on the first
@@ -532,6 +532,9 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
         var snapped = context.SnappedPosition;
         var stringIndex = context.StringIndex;
 
+        // The command palette's own entries: every row runs the command the menu bar and the key run.
+        var paletteCommands = vm.CommandPalette.CurrentCommands().ToDictionary(c => c.Id);
+
         var actions = new TimelineContextMenuActions(
             DeleteSelection: () => vm.DeleteSelectionCommand.Execute(null),
             DuplicateSelection: () => vm.DuplicateSelectionAt(clickedMs),
@@ -540,9 +543,7 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
             AddHandShape: () => vm.GenerateHandShapeCommand.Execute(null),
             AddFhpAnchor: () =>
             {
-                var anchor = FretAnchorInteractionTool.AddAnchorAt(
-                    snapped, vm.ProjectState.PreviewAnchorFret, track, _history, _logger);
-                if (anchor != null) vm.ShellDialogs.OpenFhp(clickedMs, anchor);
+                vm.ShellDialogs.EditFhpInPlace(viewport, clickedMs, null);
                 viewport.RequestNextFrameRendering();
             },
             AddNoteHere: () =>
@@ -556,17 +557,17 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
                 SelectAllInView(vm, viewport, track);
                 viewport.RequestNextFrameRendering();
             },
-            AddEventAtTime: () => vm.ShellDialogs.OpenEvent(clickedMs, track.Arrangement),
-            ApplyDlcBuilderFixes: () =>
+            AddEventAtTime: () => vm.ShellDialogs.AddSectionInPlace(viewport, clickedMs, track.Arrangement),
+            Run: id =>
             {
-                vm.ApplyDlcBuilderFixesCommand.Execute(null);
+                paletteCommands[id].Execute();
                 viewport.RequestNextFrameRendering();
             },
-            LinkIdentical: () =>
-            {
-                vm.ChartEditor.LinkedMeasures?.LinkIdentical();
-                viewport.RequestNextFrameRendering();
-            });
+            ChordOf: id => paletteCommands.TryGetValue(id, out var command) ? command.Shortcut() : KeyChord.None,
+            CanRun: id => paletteCommands.TryGetValue(id, out var command) && command.CanExecute(),
+            SelectedNotes: track.Selection.SelectedNotes.Count,
+            SelectedChords: track.Selection.SelectedChords.Count,
+            DisabledReason: id => paletteCommands.TryGetValue(id, out var command) ? command.DisabledReason() : null);
 
         var items = hitChord != null || hitNote != null
             ? TimelineContextMenuBuilder.ForSound(actions)
@@ -668,12 +669,9 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
         selection.PreviewHandShapes.Clear();
         selection.PreviewAnchors.Clear();
 
-        var noteCount = _dragTargetNote != null
-            ? Math.Min(selection.SelectedNotes.Count, _dragOriginalStates.Count)
-            : 0;
-        var chordCount = _dragTargetNote == null && _dragTargetChord != null
-            ? Math.Min(selection.SelectedChords.Count, _dragOriginalChordStates.Count)
-            : 0;
+        // The clicked sound anchors the delta; every selected sound moves with it.
+        var noteCount = Math.Min(selection.SelectedNotes.Count, _dragOriginalStates.Count);
+        var chordCount = Math.Min(selection.SelectedChords.Count, _dragOriginalChordStates.Count);
         var handShapeCount = Math.Min(selection.SelectedHandShapes.Count, _dragOriginalHandShapes.Count);
         var anchorCount = Math.Min(selection.SelectedAnchors.Count, _dragOriginalAnchors.Count);
 
@@ -738,6 +736,8 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
         }
     }
 
+    public void Cancel(ToolContext context) => ResetState(context);
+
     private void ResetState(ToolContext context)
     {
         // Defensive marquee teardown for paths that bypass CommitMarquee
@@ -757,8 +757,6 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
 
         var selection = (_dragTrack ?? context.Track).Selection;
         _dragState.Stop();
-        _dragTargetNote = null;
-        _dragTargetChord = null;
         _dragTrack = null;
         _currentDragDelta = FractionalPosition.Zero;
         _lastAppliedDragDelta = null;

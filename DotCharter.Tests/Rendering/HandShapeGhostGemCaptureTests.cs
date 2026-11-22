@@ -2,6 +2,7 @@ using DotCharter.Rendering.Data;
 using DotCharter.Rendering.Text;
 using DotCharter.Rendering.Timeline2D;
 using DotCharter.Services.Editing.ChordShapes;
+using DotCharter.Tests.Services.Editing.HandShapes;
 using DotCharter.UI.Controls.Layers;
 using DotCharter.UI.Controls.Themes;
 using SkiaSharp;
@@ -44,11 +45,93 @@ public sealed class HandShapeGhostGemCaptureTests
         GhostGems.Ghost(arrangement, level, [], [chord], s => s == 2).Action!.Execute();
         GhostGems.TappedHarmonic(arrangement, level, [tapped], 12).Action!.Execute();
 
+        Capture(arrangement, level, beats, Path.Combine(dir!, "ghost_gems_timeline.png"));
+    }
+
+    [Fact]
+    public void Capture_HeldNoteGripsBeforeAndAfter()
+    {
+        var dir = Environment.GetEnvironmentVariable("DOTCHARTER_HELD_GRIPS_CAPTURE");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(dir), "Set DOTCHARTER_HELD_GRIPS_CAPTURE to save the timeline.");
+        var chart = new HeldNoteGripsTests.Fixture();
+        var run = chart.AddRun(0);
+        var beats = chart.Project.Beats.ToList();
+        Capture(chart.Arrangement, chart.Level, beats, Path.Combine(dir!, "timeline-before.png"), 0.32, run);
+        Assert.Equal((5, 5, 0), chart.Apply(run));
+        Capture(chart.Arrangement, chart.Level, beats, Path.Combine(dir!, "timeline-after.png"), 0.32, run);
+    }
+
+    /// <summary>
+    ///     The bend gestures a charter reads, one string each — a plain bend 0→½→Full, a
+    ///     prebend held, a prebend released, a two-step bend (½, hold, Full), a bend tied into a
+    ///     release (Full→½→0) and a bend released after a hold. Writes <c>807-bend-labels.png</c>;
+    ///     the assertions are <c>BendGestureLabelTests</c> and <c>BendLabelPlacementTests</c>.
+    /// </summary>
+    [Fact]
+    public void Capture_BendGestureLabels()
+    {
+        var dir = Environment.GetEnvironmentVariable("DOTCHARTER_CPU_TIMELINE_DUMP");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(dir), "review capture — set DOTCHARTER_CPU_TIMELINE_DUMP to a folder.");
+
+        var beats = Enumerable.Range(0, 16).Select(i => new BeatMarker { Time = i * 250.0, Bpm = 240, IsMeasure = i % 4 == 0 }).ToList();
+        var arrangement = new Arrangement { StringCount = 6, Tuning = ["E", "A", "D", "G", "B", "E"] };
+        var level = new ChartLevel();
+        arrangement.Levels.Add(level);
+        level.Notes.Add(Bent(0, 1, 2, (0, 0), (1, 1), (2, 2)));
+        level.Notes.Add(Bent(1, 1, 2, (0, 2)));
+        level.Notes.Add(Bent(2, 1, 2, (0, 2), (2, 2), (4, 0)));
+        level.Notes.Add(Bent(3, 1, 2, (0, 0), (1, 1), (2, 1), (3, 2)));
+        var tied = Bent(4, 1, 1, (0, 0), (2, 2));
+        tied.LinkNext = true;
+        level.Notes.Add(tied);
+        level.Notes.Add(Bent(4, 2, 1, (0, 2), (1, 1), (2, 0)));
+        level.Notes.Add(Bent(5, 1, 2, (0, 0), (1, 2), (3, 2), (4, 0)));
+
+        Capture(arrangement, level, beats, Path.Combine(dir!, "807-bend-labels.png"), 0.6);
+    }
+
+    /// <summary>A note on <paramref name="stringIndex" /> at <paramref name="beat" />, held <paramref name="beats" />
+    /// beats, its bend points at (quarter beats after the onset, half steps).</summary>
+    private static GuitarNote Bent(int stringIndex, int beat, int beats, params (int Quarter, double Step)[] points)
+    {
+        var note = new GuitarNote
+        {
+            Position = new FractionalPosition(beat), StringIndex = stringIndex, Fret = 7,
+            Sustain = new FractionalPosition(beats)
+        };
+        foreach (var (quarter, step) in points)
+        {
+            note.BendValues.Add(new BendValue(
+                new FractionalPosition(beat + quarter / 4, new Fraction(quarter % 4, 4)), step));
+        }
+
+        return note;
+    }
+
+    [Fact]
+    public void Capture_LetRingHandShapesBeforeAndAfter()
+    {
+        var dir = Environment.GetEnvironmentVariable("DOTCHARTER_LET_RING_CAPTURE");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(dir), "Set DOTCHARTER_LET_RING_CAPTURE to save the timeline.");
+        var chart = LetRingHandShapesTests.OwnerRun();
+        var beats = chart.Project.Beats.ToList();
+        Capture(chart.Arrangement, chart.Level, beats, Path.Combine(dir!, "742-timeline-before.png"), 0.35);
+        Assert.Equal((6, 0), LetRingHandShapesTests.Apply(chart));
+        Capture(chart.Arrangement, chart.Level, beats, Path.Combine(dir!, "742-timeline-after.png"), 0.35);
+    }
+
+    /// <summary>Also the tempo-map review capture's renderer (<c>TempoMapReflowCaptureTests</c>), which
+    /// adds the beat grid with its bar labels.</summary>
+    internal static void Capture(Arrangement arrangement, ChartLevel level, List<BeatMarker> beats, string path,
+        double zoom = 0.5, HandShape[]? selected = null, bool beatGrid = false)
+    {
+        var endMs = Width / zoom - 100;
         var snapshot = new FrameSnapshot();
-        FrameSnapshot.BuildSnapshot(0, Width, 0, snapshot, new SnapshotUpdateContext
+        FrameSnapshot.BuildSnapshot(-100, endMs, 0, snapshot, new SnapshotUpdateContext
         {
             ActiveBeats = beats, ActiveNotes = level.Notes, ActiveChords = level.Chords, ActiveAnchors = level.Anchors,
             ActiveHandShapes = level.HandShapes, ActiveTemplates = arrangement.ChordTemplates,
+            SelectedHandShapes = selected ?? [],
             HandShapeFindings = new HashSet<HandShape>()
         }, []);
         var atlas = new CapturingAtlas();
@@ -58,17 +141,18 @@ public sealed class HandShapeGhostGemCaptureTests
         var batcher = new TimelineBatcher { FontAtlas = atlas };
         var rc = new ChartRenderContext
         {
-            Width = Width, Height = Height, CurrentZoom = 0.5, ViewStartMs = -100, ViewEndMs = 1700,
+            Width = Width, Height = Height, CurrentZoom = zoom, ViewStartMs = -100, ViewEndMs = endMs,
             TopMargin = TopMargin, BottomMargin = 40f, LaneAreaHeight = LaneHeight * 6, LaneHeight = LaneHeight,
             StringCount = 6, DrawLabels = true, Snapshot = snapshot
         };
         new LaneLayer().Render(batcher, rc);
+        if (beatGrid) new BeatGridLayer().Render(batcher, rc);
         new HandShapeLayer().Render(batcher, rc);
         new NoteLayer().Render(batcher, rc);
         batcher.FinalizeFrame();
 
         var pixels = Rasterize(batcher, atlas.Bitmap!);
-        Directory.CreateDirectory(dir!);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         using var bitmap = new SKBitmap(Width, Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
         for (var y = 0; y < Height; y++)
         {
@@ -79,7 +163,7 @@ public sealed class HandShapeGhostGemCaptureTests
             }
         }
 
-        using var file = File.Create(Path.Combine(dir!, "ghost_gems_timeline.png"));
+        using var file = File.Create(path);
         bitmap.Encode(file, SKEncodedImageFormat.Png, 100);
     }
 

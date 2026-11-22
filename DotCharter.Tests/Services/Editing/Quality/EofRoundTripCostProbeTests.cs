@@ -4,7 +4,6 @@ using System.Text;
 using DotCharter.Services.Editing.Quality;
 using DotCharter.Services.Parsing.Eof;
 using DotCharter.Services.Parsing.Rscp;
-using DotCharter.Tests.Presentation.Dialogs;
 
 namespace DotCharter.Tests.Services.Editing.Quality;
 
@@ -131,80 +130,6 @@ public sealed class EofRoundTripCostProbeTests(ITestOutputHelper output)
     ///     spare a landed check gave back after that); the landing rebinds and projects. The check
     ///     itself runs off the UI thread.
     /// </summary>
-    [Fact]
-    public void TheLadderedCharts_LogTheRecheckCost()
-    {
-        Assert.SkipWhen(Environment.GetEnvironmentVariable(ProbeVar) != "1", $"{ProbeVar} is not 1");
-        var root = FindCorpus();
-        Assert.SkipWhen(root == null, "No RsCharter corpus (TestData/ is git-ignored).");
-
-        var reporter = new ChartQualityReporter(new ArrangementValidationService(new FakeAppLogger()));
-        var table = new StringBuilder();
-        table.AppendLine("| Project | Notes+chords | Checks on the UI thread, before #690 (ms) | Open, to the busy row (ms) | Check again, to the busy row (ms) | Copy: clone (ms) | Copy: spare restored (ms) | After paint: assemble + copy, spare (ms) | Check, off the UI thread (ms) | Landing, UI thread (ms) |");
-        table.AppendLine("|---|---|---|---|---|---|---|---|---|---|");
-        foreach (var (song, project) in LoadCorpus(root!).OrderByDescending(p => Notes(p.Project)).Take(5))
-        {
-            var laddered = Laddered(project);
-            var h = new ChartEditHarness();
-            h.State.ActiveProject = laddered;
-            var painted = new List<Action>();
-            Func<QualityReportCheck>? work = null;
-            TaskCompletionSource<QualityReportCheck>? held = null;
-            var checks = new DotCharter.Presentation.Screens.Dialogs.QualityReportChecks(reporter, new TestUiDispatcher())
-            {
-                AfterPaint = painted.Add,
-                OffThread = w =>
-                {
-                    work = w;
-                    return (held = new TaskCompletionSource<QualityReportCheck>()).Task;
-                }
-            };
-            var opened = new List<DotCharter.Presentation.Screens.Dialogs.ChartQualityReportViewModel>();
-            DotCharter.Presentation.Screens.Dialogs.ChartQualityReportViewModel Open() => new(checks, h.Services,
-                RecordingProxy.Create<DotCharter.Presentation.Dialogs.IDialogs>().Proxy,
-                RecordingProxy.Create<DotCharter.Services.Editing.Maintenance.IChartMaintenanceService>().Proxy,
-                new CheckpointsViewModelTests.FakeDocumentService(), h.Transport,
-                new DotCharter.Presentation.Screens.Dialogs.QualityAudioCheck(
-                    RecordingProxy.Create<DotCharter.Services.Editing.Linting.IAudioChartLintService>().Proxy,
-                    new FakeAudioPlaybackService()));
-            var before = Median(() => Collected(() => reporter.Build(laddered)));
-            var open = Median(() => Collected(() => opened.Add(Open())));
-            foreach (var screen in opened) screen.Dispose();
-            var report = Open();
-            var again = Median(() => Collected(() => report.RecheckCommand.Execute(null)));
-            var clone = Median(() => Collected(() => ChartProjectCloner.Clone(laddered)));
-            var copies = new QualityReportCopies();
-            copies.Return(ChartProjectCloner.Clone(laddered));
-            var restore = Median(() =>
-            {
-                ChartProject? copy = null;
-                var ms = Collected(() => copy = copies.Copy(laddered, out _));
-                copies.Return(copy!);
-                return ms;
-            });
-            var check = Median(() => Collected(() => QualityReportSnapshot.Take(laddered, null).Check(reporter, null)));
-
-            // The real steps, one check after another: the first copies by cloning, the rest restore the spare.
-            var afterPaint = new List<double>();
-            var landing = new List<double>();
-            for (var run = 0; run < 6; run++)
-            {
-                painted.Clear();
-                report.RecheckCommand.Execute(null);
-                afterPaint.Add(Collected(() => painted[^1]()));
-                var result = work!();
-                landing.Add(Collected(() => held!.SetResult(result)));
-            }
-
-            report.Dispose();
-            table.AppendLine(string.Create(CultureInfo.InvariantCulture,
-                $"| {song} (20-level ladder) | {Notes(laddered)} | {before:F1} | {open:F1} | {again:F1} | {clone:F1} | {restore:F1} | {MedianOf(afterPaint.Skip(1)):F1} | {check:F1} | {MedianOf(landing.Skip(1)):F1} |"));
-        }
-
-        output.WriteLine(table.ToString());
-        File.WriteAllText(Path.Combine(Path.GetTempPath(), "dotcharter_quality_recheck_cost.md"), table.ToString());
-    }
-
     /// <summary>
     ///     #711: the report over a spare restored from ANOTHER chart is the report over a fresh clone,
     ///     on every corpus project and on the five biggest with a 20-level ladder, and the restored

@@ -1,5 +1,6 @@
 // RigDockUnit: the MIC PLACEMENT - the mic unit's own placement, and a cabinet's mic (the mic unit after it, or the way to add one).
 
+using System.Collections.Specialized;
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Tone.UI.Controls.Dsp;
 
@@ -79,6 +80,33 @@ public sealed partial class RigDockUnit
         rig.AddGearAt(type, rig.Nodes.IndexOf(Node) + 1);
         // the add selects nothing new: the cab stays open, now with its mic
         if (!ReferenceEquals(rig.SelectedNode, Node)) rig.SelectNodeCommand.Execute(Node);
+        RefreshCabMic();
+    }
+
+    /// <summary>Follows the chain's structure for a cabinet: an undo, a remove or a
+    /// move can take its mic away or give it one while this dock is open.
+    /// Weakly held, like the node subscription, since the dock is rebuilt per selection.</summary>
+    private void WatchCabMic(PedalboardViewModel? rig)
+    {
+        if (rig is null || !IsCabinetFamily) return;
+        var nodes = rig.Nodes;
+        var weak = new WeakReference<RigDockUnit>(this);
+        NotifyCollectionChangedEventHandler? changed = null;
+        changed = (_, _) =>
+        {
+            if (weak.TryGetTarget(out var unit)) unit.RefreshCabMic();
+            else nodes.CollectionChanged -= changed;
+        };
+        nodes.CollectionChanged += changed;
+    }
+
+    /// <summary>Re-resolves the cabinet's mic and tells the console when it changed.</summary>
+    private void RefreshCabMic()
+    {
+        if (!_cabMicResolved) return;
+        if (ReferenceEquals(_cabMic?.Node, MicAfterCab(_micRig, Node))) return;
+        _cabMic?.Dispose();
+        _cabMic = null;
         _cabMicResolved = false;
         OnPropertyChanged(nameof(CabMic));
         OnPropertyChanged(nameof(HasCabMic));

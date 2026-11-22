@@ -32,6 +32,8 @@ public sealed class NewProjectSources(IConfigurationService config, IAppLogger l
     public async Task<OnlineResult<LatinNameSuggestion>> FindLatinNamesAsync(
         string artist, string title, string album, Action<LatinNameSuggestion> onArtist)
     {
+        if (!config.LoadAppConfig().OnlineLatinNameLookup)
+            return OnlineResult<LatinNameSuggestion>.Fail(OnlineError.NotConfigured, "Online name lookup is turned off in settings.");
         using var client = new MusicBrainzClient(logger: logger);
         return await client.FindLatinNamesAsync(artist, title, album, CancellationToken.None, onArtist)
             .ConfigureAwait(false);

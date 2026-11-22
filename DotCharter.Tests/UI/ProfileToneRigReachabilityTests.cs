@@ -23,6 +23,16 @@ namespace DotCharter.Tests.UI;
 public sealed class ProfileToneRigReachabilityTests
 {
     [Fact]
+    public void QueuedPresetAppliesReceiveTheSharedProfileScope()
+    {
+        var app = CompositionRootSource();
+        var start = app.IndexOf("new DotCharter.Tone.Audio.Dsp.Presets.DspTonePresetService(", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+        var end = app.IndexOf("));", start, StringComparison.Ordinal);
+        Assert.Contains("GetRequiredService<DotCharter.Tone.Audio.Dsp.IProfileToneRigStore>()", app[start..end]);
+    }
+
+    [Fact]
     public void TheStoreAndTheCoordinatorAreRegistered()
     {
         var app = CompositionRootSource();

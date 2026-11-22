@@ -109,95 +109,69 @@ public sealed class ToneDesignLiveEvalTests
     {
         // Proves the skip is real rather than a comment: with the master switch
         // absent, TryResolve must refuse and name every variable it wanted.
-        var previous = Environment.GetEnvironmentVariable(ToneEvalEnvironment.EnableVariable);
-        try
-        {
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.EnableVariable, null);
-
-            Assert.False(ToneEvalEnvironment.TryResolve(out var environment, out var reason));
-            Assert.Null(environment);
-            Assert.Contains(ToneEvalEnvironment.EnableVariable, reason, StringComparison.Ordinal);
-            Assert.Contains(ToneEvalEnvironment.ProviderVariable, reason, StringComparison.Ordinal);
-            Assert.Contains(ToneEvalEnvironment.ModelVariable, reason, StringComparison.Ordinal);
-            Assert.Contains(ToneEvalEnvironment.BaseUrlVariable, reason, StringComparison.Ordinal);
-            Assert.Contains(ToneEvalEnvironment.KeyVariable, reason, StringComparison.Ordinal);
-            Assert.Contains(ToneEvalEnvironment.AnthropicKeyVariable, reason, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.EnableVariable, previous);
-        }
+        var env = new FakeEnvironment();
+        Assert.False(ToneEvalEnvironment.TryResolve(env.Read, out var environment, out var reason));
+        Assert.Null(environment);
+        Assert.Contains(ToneEvalEnvironment.EnableVariable, reason, StringComparison.Ordinal);
+        Assert.Contains(ToneEvalEnvironment.ProviderVariable, reason, StringComparison.Ordinal);
+        Assert.Contains(ToneEvalEnvironment.ModelVariable, reason, StringComparison.Ordinal);
+        Assert.Contains(ToneEvalEnvironment.BaseUrlVariable, reason, StringComparison.Ordinal);
+        Assert.Contains(ToneEvalEnvironment.KeyVariable, reason, StringComparison.Ordinal);
+        Assert.Contains(ToneEvalEnvironment.AnthropicKeyVariable, reason, StringComparison.Ordinal);
     }
 
     [Fact]
     public void TheGate_RefusesEachHalfConfiguration()
     {
-        var names = new[]
-        {
-            ToneEvalEnvironment.EnableVariable, ToneEvalEnvironment.ProviderVariable,
-            ToneEvalEnvironment.ModelVariable, ToneEvalEnvironment.BaseUrlVariable,
-            ToneEvalEnvironment.KeyVariable, ToneEvalEnvironment.AnthropicKeyVariable,
-            ToneEvalEnvironment.MaxVariable, ToneEvalEnvironment.ShortVariable
-        };
-        var saved = names.ToDictionary(n => n, Environment.GetEnvironmentVariable);
+        var env = new FakeEnvironment();
 
-        try
-        {
-            foreach (var name in names) Environment.SetEnvironmentVariable(name, null);
+        env.Set(ToneEvalEnvironment.EnableVariable, "1");
+        Assert.False(ToneEvalEnvironment.TryResolve(env.Read, out _, out var noProvider));
+        Assert.Contains("must be 'claude' or 'openai'", noProvider, StringComparison.Ordinal);
 
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.EnableVariable, "1");
-            Assert.False(ToneEvalEnvironment.TryResolve(out _, out var noProvider));
-            Assert.Contains("must be 'claude' or 'openai'", noProvider, StringComparison.Ordinal);
+        env.Set(ToneEvalEnvironment.ProviderVariable, "claude");
+        Assert.False(ToneEvalEnvironment.TryResolve(env.Read, out _, out var noModel));
+        Assert.Contains(ToneEvalEnvironment.ModelVariable + " is not set", noModel,
+            StringComparison.Ordinal);
 
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.ProviderVariable, "claude");
-            Assert.False(ToneEvalEnvironment.TryResolve(out _, out var noModel));
-            Assert.Contains(ToneEvalEnvironment.ModelVariable + " is not set", noModel,
-                StringComparison.Ordinal);
+        env.Set(ToneEvalEnvironment.ModelVariable, "claude-opus-5");
+        Assert.False(ToneEvalEnvironment.TryResolve(env.Read, out _, out var noKey));
+        Assert.Contains("no key in", noKey, StringComparison.Ordinal);
 
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.ModelVariable, "claude-opus-5");
-            Assert.False(ToneEvalEnvironment.TryResolve(out _, out var noKey));
-            Assert.Contains("no key in", noKey, StringComparison.Ordinal);
+        // An OpenAI-compatible provider additionally needs a base URL.
+        env.Set(ToneEvalEnvironment.ProviderVariable, "openai");
+        env.Set(ToneEvalEnvironment.KeyVariable, "sk-not-a-real-key");
+        Assert.False(ToneEvalEnvironment.TryResolve(env.Read, out _, out var noUrl));
+        Assert.Contains(ToneEvalEnvironment.BaseUrlVariable, noUrl, StringComparison.Ordinal);
 
-            // An OpenAI-compatible provider additionally needs a base URL.
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.ProviderVariable, "openai");
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.KeyVariable, "sk-not-a-real-key");
-            Assert.False(ToneEvalEnvironment.TryResolve(out _, out var noUrl));
-            Assert.Contains(ToneEvalEnvironment.BaseUrlVariable, noUrl, StringComparison.Ordinal);
+        // …but it does NOT need a key: LM Studio and Ollama want none, which is
+        // ToneDesignModelFactory.Create's own rule, mirrored rather than redecided.
+        env.Set(ToneEvalEnvironment.KeyVariable, null);
+        env.Set(
+            ToneEvalEnvironment.BaseUrlVariable, "http://127.0.0.1:1234/v1");
+        Assert.True(ToneEvalEnvironment.TryResolve(env.Read, out var local, out _));
+        Assert.Null(local!.ApiKey);
+        env.Set(ToneEvalEnvironment.BaseUrlVariable, null);
 
-            // …but it does NOT need a key: LM Studio and Ollama want none, which is
-            // ToneDesignModelFactory.Create's own rule, mirrored rather than redecided.
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.KeyVariable, null);
-            Environment.SetEnvironmentVariable(
-                ToneEvalEnvironment.BaseUrlVariable, "http://127.0.0.1:1234/v1");
-            Assert.True(ToneEvalEnvironment.TryResolve(out var local, out _));
-            Assert.Null(local!.ApiKey);
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.BaseUrlVariable, null);
+        // Fully configured: claude needs no base URL, and the cap defaults to 20.
+        env.Set(ToneEvalEnvironment.ProviderVariable, "claude");
+        env.Set(ToneEvalEnvironment.KeyVariable, "sk-not-a-real-key");
+        Assert.True(ToneEvalEnvironment.TryResolve(env.Read, out var resolved, out _));
+        Assert.NotNull(resolved);
+        Assert.Equal(DotCharter.Tone.Ai.AiProviderKind.Claude, resolved!.Provider);
+        Assert.Equal("claude-opus-5", resolved.ModelId);
+        Assert.Equal(ToneEvalEnvironment.DefaultMaxSongs, resolved.MaxSongs);
+        Assert.False(resolved.IncludeShortPrompt);
 
-            // Fully configured: claude needs no base URL, and the cap defaults to 20.
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.ProviderVariable, "claude");
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.KeyVariable, "sk-not-a-real-key");
-            Assert.True(ToneEvalEnvironment.TryResolve(out var resolved, out _));
-            Assert.NotNull(resolved);
-            Assert.Equal(DotCharter.Tone.Ai.AiProviderKind.Claude, resolved!.Provider);
-            Assert.Equal("claude-opus-5", resolved.ModelId);
-            Assert.Equal(ToneEvalEnvironment.DefaultMaxSongs, resolved.MaxSongs);
-            Assert.False(resolved.IncludeShortPrompt);
-
-            // …and the ANTHROPIC_API_KEY fallback really is a fallback.
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.KeyVariable, null);
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.AnthropicKeyVariable, "sk-env");
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.MaxVariable, "7");
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.ShortVariable, "1");
-            Assert.True(ToneEvalEnvironment.TryResolve(out var viaAnthropic, out _));
-            Assert.Equal("sk-env", viaAnthropic!.ApiKey);
-            Assert.Equal(7, viaAnthropic.MaxSongs);
-            Assert.True(viaAnthropic.IncludeShortPrompt);
-        }
-        finally
-        {
-            // Restored on the FAILURE path too — these are process-wide.
-            foreach (var (name, value) in saved) Environment.SetEnvironmentVariable(name, value);
-        }
+        // …and the ANTHROPIC_API_KEY fallback really is a fallback.
+        env.Set(ToneEvalEnvironment.KeyVariable, null);
+        env.Set(ToneEvalEnvironment.AnthropicKeyVariable, "sk-env");
+        env.Set(ToneEvalEnvironment.MaxVariable, "7");
+        env.Set(ToneEvalEnvironment.ShortVariable, "1");
+        Assert.True(ToneEvalEnvironment.TryResolve(env.Read, out var viaAnthropic, out _));
+        Assert.Equal("sk-env", viaAnthropic!.ApiKey);
+        Assert.Equal(7, viaAnthropic.MaxSongs);
+        Assert.True(viaAnthropic.IncludeShortPrompt);
     }
 
     // ------------------------------------------------- constructing the real thing

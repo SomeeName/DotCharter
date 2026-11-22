@@ -1,4 +1,5 @@
 using DotCharter.Services.Editing.Linting;
+using DotCharter.Services.Editing.Validation.Rules;
 using DotCharter.Services.Export.Validation;
 using DotCharter.Services.Parsing.Eof;
 
@@ -82,6 +83,8 @@ public sealed class ChartQualityReporter(IArrangementValidationService rules)
             }
         }
 
+        findings.AddRange(LyricFindings(project));
+
         for (var i = 0; i < exportFindings.Count; i++)
         {
             if (merged[i]) continue;
@@ -124,6 +127,11 @@ public sealed class ChartQualityReporter(IArrangementValidationService rules)
 
         return new ChartQualityReport(sorted, summaries);
     }
+
+    /// <summary>Lyrics belong to the project, so their style findings are listed once, under no arrangement.</summary>
+    private static IEnumerable<QualityFinding> LyricFindings(ChartProject project) =>
+        LyricStyleRule.Check(project, project.Beats).Select(issue => new QualityFinding(QualityChecks.ChartRules,
+            Severity(issue), issue.Code, null, null, issue.TimeMs, null, issue, null, null));
 
     /// <summary>
     ///     What <see cref="EofExporter" /> would approximate or drop, grouped by

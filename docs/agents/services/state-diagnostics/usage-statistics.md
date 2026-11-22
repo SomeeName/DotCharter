@@ -2,6 +2,13 @@
 
 ## `Diagnostics/UsageStatistics`
 
+- `UsageTrackingService` distinguishes absent history, corrupt JSON and failed
+  reads. Corrupt JSON is moved aside before starting fresh. A failed read or
+  failed quarantine keeps counters in memory for the session and disables
+  publication, preserving the original history even after a transient lock
+  clears. A failed write retains the dirty flag for the next flush. Covered by
+  `UsageTrackingServiceTests`.
+
 - **`Diagnostics/UsageStatistics` counts what gets USED while charting (0.41) —
   aggregates, never an event log.** Counts plus first/last use answer every
   question asked of it ("often", "barely", "not since March"), stay a few KB

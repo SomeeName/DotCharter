@@ -227,6 +227,8 @@ internal sealed class LinkReconciler(IAppLogger logger)
                 sourceIndex = MeasureContentIndex.ForHardestLevel(source.Arrangement!, project.Beats, rule);
         }
 
+        ShareStartPins(run, group, rule);
+
         // Verify: a copy that still does not read as the source is unlinked, never left linked and different.
         run.Indexes.Clear();
         foreach (var target in targets)
@@ -242,6 +244,29 @@ internal sealed class LinkReconciler(IAppLogger logger)
         var reached = targets.Where(t => group.Placements.Contains(t)).Select(t => t.Clone()).ToList();
         if (reached.Count > 0) run.Reports.Add(new LinkPropagationReport(group.Id, group.Letter, group.Name, source.Clone(), reached, run.Policy));
         LinkRuns.DissolveIfAlone(project, group);
+    }
+
+    /// <summary>
+    ///     A copy whose end pin landed on the start of another placement of the group stored an
+    ///     anchor at that placement's first beat; every other placement gets the same start
+    ///     anchor in the same step, so back-to-back copies keep storing identical anchors.
+    /// </summary>
+    private static void ShareStartPins(Run run, LinkGroup group, MeasureContentOptions rule)
+    {
+        var pin = run.Copies
+            .Where(c => c.GroupId == group.Id && c.Copy.EndPin != null)
+            .FirstOrDefault(c => group.Placements.Any(q => q.Position == c.Copy.EndPin!.Position && ReferenceEquals(q.Arrangement, c.Copy.Target)))
+            ?.Copy.EndPin;
+        if (pin == null) return;
+        foreach (var placement in group.Placements)
+        {
+            if (!LinkRuns.IsLive(run.Project, placement)) continue;
+            if (placement.Arrangement!.Levels.MaxBy(l => l.DifficultyIndex) is not { } level) continue;
+            if (LinkedRunCopier.PlanStartAnchor(placement.Arrangement!, level, placement.Position, pin) is not { } copy) continue;
+            var step = new LinkCopyStep(copy, CleanUp(run.Project, rule), group.Id);
+            step.Apply();
+            run.Copies.Add(step);
+        }
     }
 
     /// <summary>

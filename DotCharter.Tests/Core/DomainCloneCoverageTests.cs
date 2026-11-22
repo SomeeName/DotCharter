@@ -39,6 +39,20 @@ namespace DotCharter.Tests.Core;
 /// </summary>
 public sealed class DomainCloneCoverageTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    [InlineData(1 << 2)]
+    public void HandShapeCopiesKeepTheGhostOverride(int? mask)
+    {
+        var source = new HandShape { GhostMask = mask };
+        var destination = new HandShape { GhostMask = 1 << 4 };
+
+        Assert.Equal(mask, source.Clone().GhostMask);
+        destination.CopyFrom(source);
+        Assert.Equal(mask, destination.GhostMask);
+    }
+
     /// <summary>
     ///     Empty on purpose, and that is the finding: every <c>Clone</c>/<c>CopyFrom</c>
     ///     in <c>DotCharter.Core</c> is currently COMPLETE. The list exists so the

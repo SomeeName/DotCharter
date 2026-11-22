@@ -152,7 +152,7 @@ public sealed class PedalboardAuditRegressionTests
     public void Saving_the_live_rig_makes_the_saved_tone_the_active_one()
     {
         var svc = new FakeDspTonePresetService();
-        var vm = new PresetBrowserViewModel(svc, FakeLocalization.English(), () => new DcRigPreset([]), () => { });
+        var vm = new PresetBrowserViewModel(svc, FakeLocalization.English(), () => new DcRigPreset([]), () => { }, new FakeConfigurationService());
 
         vm.ApplyCard(vm.Cards.First(c => c.Name == "Glass Clean"));
         Assert.Equal("Glass Clean", vm.ActivePresetName);
@@ -171,7 +171,7 @@ public sealed class PedalboardAuditRegressionTests
     {
         var svc = new FakeDspTonePresetService();
         var rig = new DcRigPreset([new DcRigModule("amp", new Dictionary<string, float>(), false)]);
-        var vm = new PresetBrowserViewModel(svc, FakeLocalization.English(), () => rig, () => { })
+        var vm = new PresetBrowserViewModel(svc, FakeLocalization.English(), () => rig, () => { }, new FakeConfigurationService())
         {
             SaveName = "Mine"
         };
@@ -198,7 +198,7 @@ public sealed class PedalboardAuditRegressionTests
             new(featured, "Featured", DspToneCategory.Clean, "", new DcRigPreset([]))
         };
         var vm = new PresetBrowserViewModel(
-            new FakeDspTonePresetService(factory), FakeLocalization.English(), () => new DcRigPreset([]), () => { });
+            new FakeDspTonePresetService(factory), FakeLocalization.English(), () => new DcRigPreset([]), () => { }, new FakeConfigurationService());
 
         // The All rail: the featured tone leads even though the catalogue lists it last.
         Assert.Equal(featured, vm.Cards[0].Id);

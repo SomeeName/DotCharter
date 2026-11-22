@@ -102,26 +102,26 @@ public sealed class VstSandboxSharedMemory : IDisposable
         if (frames is <= 0 or > VstSandboxLayout.MaxBlockFrames)
             throw new ArgumentOutOfRangeException(nameof(frames));
 
-        _view.WriteArray(VstSandboxLayout.InputChannelOffset(0), left, 0, frames);
-        _view.WriteArray(VstSandboxLayout.InputChannelOffset(1), right, 0, frames);
-        _view.Write(VstSandboxLayout.OffBlockFrames, (uint)frames);
-        _view.Write(VstSandboxLayout.OffInputChannels, (uint)2);
-        var n = Math.Min(midiCount, VstSandboxLayout.MaxMidiEvents);
-        if (midi != null && n > 0)
-            _view.WriteArray(VstSandboxLayout.OffMidiEvents, midi, 0, n);
-        _view.Write(VstSandboxLayout.OffMidiCount, (uint)(midi != null ? n : 0));
-        // Bridge v3: every slot gets an offset, zero included, so a previous
-        // block's offsets can never leak into this one. Clamped into the
-        // block exactly as the native writer clamps.
-        _view.Write(VstSandboxLayout.OffMidiBlockStartFrame, blockStartFrame);
-        for (var i = 0; i < n; i++)
+        var seq = PostRequest(() =>
         {
-            var offset = midiOffsets != null && i < midiOffsets.Length ? midiOffsets[i] : 0u;
-            _view.Write(VstSandboxLayout.OffMidiOffsets + i * sizeof(uint), Math.Min(offset, (uint)frames - 1));
-        }
-
-        var seq = ++_seq;
-        WriteUIntVolatile(VstSandboxLayout.OffRequestSeq, seq);
+            _view.WriteArray(VstSandboxLayout.InputChannelOffset(0), left, 0, frames);
+            _view.WriteArray(VstSandboxLayout.InputChannelOffset(1), right, 0, frames);
+            _view.Write(VstSandboxLayout.OffBlockFrames, (uint)frames);
+            _view.Write(VstSandboxLayout.OffInputChannels, (uint)2);
+            var n = Math.Min(midiCount, VstSandboxLayout.MaxMidiEvents);
+            if (midi != null && n > 0)
+                _view.WriteArray(VstSandboxLayout.OffMidiEvents, midi, 0, n);
+            _view.Write(VstSandboxLayout.OffMidiCount, (uint)(midi != null ? n : 0));
+            // Bridge v3: every slot gets an offset, zero included, so a previous
+            // block's offsets can never leak into this one. Clamped into the
+            // block exactly as the native writer clamps.
+            _view.Write(VstSandboxLayout.OffMidiBlockStartFrame, blockStartFrame);
+            for (var i = 0; i < n; i++)
+            {
+                var offset = midiOffsets != null && i < midiOffsets.Length ? midiOffsets[i] : 0u;
+                _view.Write(VstSandboxLayout.OffMidiOffsets + i * sizeof(uint), Math.Min(offset, (uint)frames - 1));
+            }
+        });
         _requestEvent.Set();
 
         var deadline = Environment.TickCount64 + timeoutMs;
@@ -140,6 +140,29 @@ public sealed class VstSandboxSharedMemory : IDisposable
             _view.ReadArray(VstSandboxLayout.ChainOutChannelOffset(1), right, 0, frames);
         }
         return true;
+    }
+
+    /// <summary>The request sequence field as the child reads it right now.</summary>
+    internal uint RequestSequence => ReadUInt(VstSandboxLayout.OffRequestSeq);
+
+    /// <summary>
+    /// Post one request with the native parent's sequence lock
+    /// (<c>beginRequestWrite</c> / <c>publishRequest</c> in the bridge header):
+    /// <see cref="VstSandboxLayout.RequestWriting"/> goes into the sequence field
+    /// BEFORE the first payload byte, <paramref name="writePayload"/> writes the
+    /// payload, then the new sequence is published. A child still copying the
+    /// previous request sees the field change and drops that copy. Returns the
+    /// published sequence.
+    /// </summary>
+    internal uint PostRequest(Action writePayload)
+    {
+        WriteUIntVolatile(VstSandboxLayout.OffRequestSeq, VstSandboxLayout.RequestWriting);
+        writePayload();
+
+        var seq = _seq = VstSandboxLayout.NextRequestSeq(_seq);
+        Thread.MemoryBarrier(); // release: every payload byte lands before the sequence
+        WriteUIntVolatile(VstSandboxLayout.OffRequestSeq, seq);
+        return seq;
     }
 
     /// <summary>Read the instrument output region (valid after a round trip

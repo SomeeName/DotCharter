@@ -70,7 +70,7 @@ public sealed record LibraryDoctorSong
     public AudioAvailability Audio { get; init; } = AudioAvailability.Unknown;
 
     /// <summary>Case-insensitive logical identity used for duplicate detection —
-    /// mirrors the shared-leaderboard key (SongKey|Charter|Version), plus the source
+    /// mirrors the library song identity (SongKey|Charter|Version), plus the source
     /// kind (the file's extension), as <c>LibraryDedupe</c> collapses: a <c>.dcsong</c>
     /// beside the <c>.psarc</c> it was exported from is not a duplicate.</summary>
     public string Identity =>

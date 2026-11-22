@@ -84,7 +84,7 @@ public sealed class EofImporter
 
             if (info.Format == EofConstants.TrackFormatProGuitar && trackIdsToImport.Contains(info.Id))
             {
-                var arr = EofProGuitarTrackParser.Parse(reader, info, beatMarkers);
+                var arr = EofProGuitarTrackParser.Parse(reader, info, beatMarkers, result.Metadata.TextEvents);
                 ApplyTextEventsToArrangement(arr, info.Id, result.Metadata, beatMarkers);
                 result.Arrangements.Add(arr);
             }
@@ -121,15 +121,7 @@ public sealed class EofImporter
         {
             if (ev.Track != 0 && ev.Track != trackId) continue;
 
-            double timeMs;
-            if (ev.IsMs)
-                timeMs = ev.BeatPos;
-            else if (ev.BeatPos < (uint)beats.Count)
-                timeMs = beats[(int)ev.BeatPos].Time;
-            else if (beats.Count > 0)
-                timeMs = beats[^1].Time;
-            else
-                continue;
+            if (!TryTextEventTime(ev, beats, out var timeMs)) continue;
 
             var point = new EventPoint
             {
@@ -170,6 +162,28 @@ public sealed class EofImporter
         }
 
         EofMoverPhrases.Resolve(arrangement, movers);
+    }
+
+    internal static bool TryTextEventTime(EofTextEventInfo ev, IList<BeatMarker> beats, out double timeMs)
+    {
+        if (ev.IsMs)
+        {
+            timeMs = ev.BeatPos;
+        }
+        else if (ev.BeatPos < (uint)beats.Count)
+        {
+            timeMs = beats[(int)ev.BeatPos].Time;
+        }
+        else if (beats.Count > 0)
+        {
+            timeMs = beats[^1].Time;
+        }
+        else
+        {
+            timeMs = 0;
+            return false;
+        }
+        return true;
     }
 
     /// <summary>

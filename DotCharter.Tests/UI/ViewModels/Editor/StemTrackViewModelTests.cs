@@ -29,6 +29,18 @@ public sealed class StemTrackViewModelTests
     }
 
     [Fact]
+    public void A_silenced_stem_reopens_silent_and_pushes_zero_to_the_engine()
+    {
+        var audio = new FakeAudioPlaybackService();
+        var stem = new Stem { Name = "vocals", Volume = 0 };
+        var vm = new StemTrackViewModel(audio, stem, FakeLocalization.KeysOnly());
+        vm.ApplyToEngine();
+        Assert.Equal(0, vm.VolumeLinear);
+        Assert.Equal(0, audio.StemVolumes[stem.Name]);
+        Assert.Equal(0, stem.Volume);
+    }
+
+    [Fact]
     public void Stem_constructor_clamps_invalid_volumes()
     {
         var audio = new FakeAudioPlaybackService();

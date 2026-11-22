@@ -22,6 +22,20 @@ namespace DotCharter.Tests.Services.Audio;
 /// </summary>
 public sealed class LyricAcousticModelDisposalTests
 {
+    [Fact]
+    public void GraphPreprocessingIsInsideTheOptionsOwnershipBoundary()
+    {
+        var source = File.ReadAllText(Path.Combine(TestPaths.RepoRoot(),
+            "DotCharter.Services", "Audio", "Lyrics", "LyricAcousticModel.cs"));
+        var load = source.IndexOf("public static LyricAcousticModel Load(", StringComparison.Ordinal);
+        Assert.True(load >= 0, "Load moved; update this ownership guard.");
+        var preprocessing = source.IndexOf("OnnxReshapeAllowZero.StripIfPresent(", load, StringComparison.Ordinal);
+        var ownership = source.IndexOf("BuildOrRelease(", load, StringComparison.Ordinal);
+
+        Assert.True(preprocessing > load, "Preprocessing moved; update this ownership guard.");
+        Assert.True(ownership > load && ownership < preprocessing,
+            "SessionOptions must be owned before preprocessing can throw.");
+    }
     private sealed class Handle : IDisposable
     {
         public int Disposals;
@@ -129,7 +143,7 @@ public sealed class LyricAcousticModelDisposalTests
 
         // The session build and the metadata discovery BOTH go through the
         // ownership helper; a bare `new InferenceSession(` is the pre-fix shape.
-        Assert.Contains("BuildOrRelease(() => new InferenceSession(", body);
+        Assert.Contains("var session = BuildOrRelease(() =>", body);
         Assert.Contains("ResolveIoNames(", body);
 
         var dispose = source.IndexOf("public void Dispose()", StringComparison.Ordinal);

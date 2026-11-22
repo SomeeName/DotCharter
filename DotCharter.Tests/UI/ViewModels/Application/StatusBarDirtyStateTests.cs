@@ -54,7 +54,7 @@ public sealed class StatusBarDirtyStateTests
         var state = new ProjectState();
         var vm = new StatusBarViewModel(new StatusBarService(dispatcher), state,
             new FakeAudioPlaybackService(), dispatcher, new StubProfiles(),
-            new FakeFileStorageService(), FakeLocalization.English());
+            new FakeFileStorageService(), FakeLocalization.English(), new FakeConfigurationService());
         return (vm, state);
     }
 

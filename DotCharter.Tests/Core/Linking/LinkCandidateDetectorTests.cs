@@ -9,6 +9,33 @@ namespace DotCharter.Tests.Core.Linking;
 public sealed class LinkCandidateDetectorTests
 {
     [Fact]
+    public void DistinctMeasures_CannotBypassTheComparisonBudget()
+    {
+        const int count = 100_000;
+        var beats = LinkFixture.Beats(count, seed: 5);
+        var arrangement = new Arrangement { StringCount = 6 };
+        var level = new ChartLevel();
+        arrangement.Levels.Add(level);
+        for (var i = 0; i < count; i++)
+            level.Notes.Add(LinkFixture.Note(LinkFixture.At(i, 0), 0, i + 1, 0));
+        var part = new MeasureContentIndex(arrangement, level, beats);
+        Assert.Equal(count, Enumerable.Range(0, count).Select(i => part.KeyFor(i)).Distinct().Count());
+        var result = LinkCandidateDetector.Detect([part]);
+
+        Assert.True(result.Truncated);
+        Assert.Empty(result.Groups);
+    }
+
+    [Fact]
+    public void EqualRestMeasures_CountTowardThePairBudget()
+    {
+        var result = LinkCandidateDetector.Detect([Part(new string('.', 3000))]);
+
+        Assert.True(result.Truncated);
+        Assert.Empty(result.Groups);
+    }
+
+    [Fact]
     public void TheLongestRepeat_WinsAndCollectsEveryOccurrence()
     {
         var song = Part("ABCABCDABC");

@@ -31,10 +31,10 @@ internal static class GpCapoFrets
     ///     Highest fret an absolute fret number may reach. The chart model's
     ///     fret ceiling: <c>RefretOptions.MaxFret</c>, the GP importers' own
     ///     slide/trill clamps and <c>GpPostProcessor.MaterializeSlideIns</c> all
-    ///     use 24. (The 22 in <c>FretAnchorGenerationService</c> is a ceiling on
+    ///     use 24 (<c>FretLimits.MaxFret</c>). (The anchor ceiling in <c>FretAnchorGenerationService</c> is a ceiling on
     ///     ANCHOR positions, not on notes, and must not be used here.)
     /// </summary>
-    public const int MaxAbsoluteFret = 24;
+    public const int MaxAbsoluteFret = FretLimits.MaxFret;
 
     /// <summary>
     ///     Folds a capo number taken VERBATIM from a source file into the range

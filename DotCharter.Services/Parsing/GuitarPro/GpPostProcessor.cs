@@ -53,13 +53,17 @@ public static class GpPostProcessor
     /// <param name="graceTargets">Import-only set of the hammer or pull targets an on-beat
     /// grace pushed late. <see cref="AdjustSustains"/> keeps the sustain of one written as a
     /// quarter note or longer, however far the grace slot shortened it. Null ⇒ none.</param>
+    /// <param name="lastFret">The track neck ceiling for dead-note slide-outs.</param>
+    /// <param name="deadSlideSounds">Receives placed dead-slide sounds for the import-only gap pass.</param>
+    /// <param name="naming">The chord naming style and the imported score key.</param>
     /// <returns>The slide-in ornaments materialized (<see cref="MaterializeSlideIns"/>).</returns>
     public static int Run(ChartLevel level, Arrangement arrangement,
         GpImportSettings? settings = null, IReadOnlySet<GuitarNote>? onBeatGraces = null,
         IReadOnlySet<IGuitarSound>? tapOriginated = null,
         GpAuthoredFingering? authoredFingers = null,
         GpAuthoredChordNames? authoredChordNames = null,
-        IReadOnlySet<IGuitarSound>? graceTargets = null)
+        IReadOnlySet<IGuitarSound>? graceTargets = null,
+        int lastFret = GpCapoFrets.MaxAbsoluteFret, ISet<IGuitarSound>? deadSlideSounds = null, ChordNamingOptions? naming = null)
     {
         settings ??= GpImportSettings.Default;
         var stringCount = arrangement.StringCount;
@@ -77,10 +81,11 @@ public static class GpPostProcessor
         // downstream pass, so it is resolved before anything reads pairs.
         RemoveDuplicateSounds(level);
         MergeTiedNotes(level, stringCount);
+        GpDeadNoteSlide.Resolve(level, arrangement.Capo, lastFret, deadSlideSounds);
         LinkSlides(level, stringCount);
         CleanDeadChordNotes(level);
         ChordHandShapeBuilder.BuildAndTrim(level, arrangement, authoredFingers, authoredChordNames,
-            settings.PreserveShortRests);
+            settings.PreserveShortRests, naming);
         ClampHandShapes(level);
         // AdjustSustains IS the sub-quarter-note truncation (EOF
         // truncate_short_notes/chords): it drops sustains authored shorter than a
@@ -767,16 +772,19 @@ public static class GpPostProcessor
                     current.Sound.LinkNext = true;
             }
 
-            // Anything still holding a negative slide target has no landing note:
-            // a trailing "slide to next" with no next, or a slide-in sentinel on a
-            // NOTATION-only voice (those run this pass without
-            // MaterializeSlideIns). A negative fret must never reach the chart.
+            // Clear unresolved negative targets without changing the note:
+            // dead-slide directions, a trailing "slide to next", or a slide-in
+            // sentinel on a notation-only voice without MaterializeSlideIns.
             foreach (var sound in stringSounds)
             {
-                if (sound.Sound.SlideTo is < 0)
-                    sound.Sound.SlideTo = null;
+                ClearUnresolvedSlide(sound.Sound);
             }
         }
+    }
+
+    private static void ClearUnresolvedSlide(IGuitarSound sound)
+    {
+        if (sound.SlideTo is < 0) sound.SlideTo = null;
     }
 
     /// <summary>
@@ -892,9 +900,9 @@ public static class GpPostProcessor
                 //       then survived the sub-quarter truncation below with a
                 //       visible tail no notation asked for;
                 //   (b) an UNPITCHED slide (GP "slide off", Slide flags 4/8)
-                //       targets nothing at all — it slides into silence. Its
-                //       SlideTo is a synthetic fret±5 landing invented by
-                //       GpNoteParser.ApplySlideFlags, not a real destination.
+                //       ends the gesture without linking into another sound.
+                //       Its landing is synthesized by the parser or chosen by
+                //       GpDeadNoteSlide; neither makes the next attack legato.
                 var reachesNext = (stringSounds[i].Position + current.Sustain)
                     .CompareTo(stringSounds[i + 1].Position) >= 0;
                 if (reachesNext && !current.UnpitchedSlide && (current.SlideTo is > 0 || current.LinkNext))
@@ -992,6 +1000,8 @@ public static class GpPostProcessor
     ///     different gestures:
     ///     <list type="bullet">
     ///     <item>Neither slides — the ordinary tie.</item>
+    ///     <item>A dead-note slide direction on the first half and a plain continuation;
+    ///     the marker stays on the merged sound until its fret is resolved.</item>
     ///     <item>IDENTICAL slide state on both halves. Guitar Pro copies a
     ///     slide-out onto BOTH sides of a tie, which is what a whole-note chord
     ///     tied across a barline and slid off looks like (owner report,
@@ -1012,6 +1022,7 @@ public static class GpPostProcessor
 
         if (!currentSlides && !nextSlides) return true;
         if (current.SlideTo == next.SlideTo && current.UnpitchedSlide == next.UnpitchedSlide) return true;
+        if (GpDeadNoteSlide.IsPending(current) && !nextSlides) return true;
         return !currentSlides && next.UnpitchedSlide;
     }
 

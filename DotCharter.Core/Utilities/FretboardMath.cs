@@ -9,10 +9,10 @@ public static class FretboardMath
 
     static FretboardMath()
     {
-        FretPositions = new float[25];
+        FretPositions = new float[FretLimits.MaxFret + 1];
         var length = FirstFretDistance;
         FretPositions[0] = 0;
-        for (var i = 1; i <= 24; i++)
+        for (var i = 1; i <= FretLimits.MaxFret; i++)
         {
             FretPositions[i] = FretPositions[i - 1] + length;
             length *= 0.94387f;
@@ -22,14 +22,14 @@ public static class FretboardMath
     public static float GetFretPosition(int fret)
     {
         if (fret <= 0) return FretPositions[0];
-        if (fret >= 24) return FretPositions[24];
+        if (fret >= FretLimits.MaxFret) return FretPositions[FretLimits.MaxFret];
         return FretPositions[fret];
     }
 
     public static float GetFretMiddle(int fret)
     {
         if (fret <= 0) return GetFretPosition(0) / 2f;
-        if (fret > 24) fret = 24;
+        if (fret > FretLimits.MaxFret) fret = FretLimits.MaxFret;
         return (GetFretPosition(fret - 1) + GetFretPosition(fret)) / 2f;
     }
 

@@ -33,6 +33,9 @@ public sealed class DockLayoutController
 
     public IRootDock? Layout => _layout;
 
+    /// <summary>Runs on every float window this controller's layouts create; the shell attaches its key routes, scale and direction.</summary>
+    public Action<Window>? FloatingWindowCreated { get; init; }
+
     /// <summary>The live layout's factory (tests drive its menu verbs directly).</summary>
     internal DotCharterDockFactory? Factory => _factory;
 
@@ -42,7 +45,7 @@ public sealed class DockLayoutController
     public void Rebuild()
     {
         TearDownPreviousLayout();
-        _factory = new DotCharterDockFactory();
+        _factory = new DotCharterDockFactory { HostWindowCreated = FloatingWindowCreated };
 
         _toolDock = new ToolDock
         {
@@ -82,6 +85,17 @@ public sealed class DockLayoutController
         _factory.InitLayout(root);
         _host.Layout = root;
         _layout = root;
+
+        // The teardown unhooked the old factory before closing its float windows, so
+        // nothing told the shell those panes are docked again: its "dock it back" card
+        // stayed over the docked pane. Publish every pane's state from the new layout.
+        PublishFloatingState();
+    }
+
+    private void PublishFloatingState()
+    {
+        foreach (var pane in _panes)
+            pane.SetFloating?.Invoke(IsPaneFloating(pane.Id));
     }
 
     /// <summary>
@@ -215,6 +229,9 @@ public sealed class DockLayoutController
     /// <summary>True while the pane lives in a float window.</summary>
     public bool IsPaneFloating(string id) => GetFloatWindow(id) != null;
 
+    /// <summary>True while the pane is pinned (auto-hidden) to a dock edge.</summary>
+    public bool IsPanePinned(string id) => _layout != null && EnumeratePinned(_layout).Any(d => d.Id == id);
+
     /// <summary>
     ///     Brings a floated pane home: out of its float window, back into this host's tool dock
     ///     as the active tab, and the emptied window closed and removed from the model. The only
@@ -242,10 +259,15 @@ public sealed class DockLayoutController
         return true;
     }
 
-    /// <summary>Pins (auto-hides) a docked pane to its dock edge.</summary>
+    /// <summary>
+    ///     Pins (auto-hides) a docked pane to its dock edge. Idempotent: Dock's PinDockable is a
+    ///     TOGGLE, so a pane that is already pinned is left alone instead of being docked again
+    ///     (restoring a snapshot over a layout that already has it pinned).
+    /// </summary>
     public void PinPane(string id)
     {
         if (_factory == null || _layout == null) return;
+        if (IsPanePinned(id)) return;
         if (FindDockable(_layout, id) is { } dockable)
         {
             try { _factory.PinDockable(dockable); }

@@ -98,10 +98,12 @@ public sealed class Tone3000CaptureSource : INamCaptureSource
                 $"The design asked TONE3000 for \"{text}\", but TONE3000 is not signed in.");
         }
 
+        var generation = _auth.SessionGeneration;
         var search = await _service.SearchAsync(
             new Tone3000SearchQuery(text, Tone3000GearType.Amp, PerPage: 10), ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
-        if (Unauthorized(search.Error)) return SignedOut(text);
+        if (_auth.SessionGeneration != generation) return Superseded(text);
+        if (Unauthorized(search.Error)) return SignedOut(text, generation);
         if (!search.Ok || search.Value is null)
         {
             return NamCaptureSourcing.Failed(
@@ -124,7 +126,8 @@ public sealed class Tone3000CaptureSource : INamCaptureSource
 
         var models = await _service.GetModelsAsync(tone.Id, ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
-        if (Unauthorized(models.Error)) return SignedOut(text);
+        if (_auth.SessionGeneration != generation) return Superseded(text);
+        if (Unauthorized(models.Error)) return SignedOut(text, generation);
         if (!models.Ok || models.Value is not { Count: > 0 })
         {
             return NamCaptureSourcing.Failed(
@@ -137,7 +140,8 @@ public sealed class Tone3000CaptureSource : INamCaptureSource
 
         var download = await _library.DownloadAsync(tone, model, null, ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
-        if (Unauthorized(download.Error)) return SignedOut(text);
+        if (_auth.SessionGeneration != generation) return Superseded(text);
+        if (Unauthorized(download.Error)) return SignedOut(text, generation);
         if (!download.Ok || download.Value is null)
         {
             return NamCaptureSourcing.Failed(
@@ -196,9 +200,12 @@ public sealed class Tone3000CaptureSource : INamCaptureSource
 
     private static bool Unauthorized(OnlineError error) => error == OnlineError.NotSignedIn;
 
-    private NamCaptureSourcing SignedOut(string text)
+    private static NamCaptureSourcing Superseded(string text)
+        => NamCaptureSourcing.Failed($"The TONE3000 search for \"{text}\" failed.");
+
+    private NamCaptureSourcing SignedOut(string text, long generation)
     {
-        _auth.InvalidateSession("an AI capture search came back unauthorized");
+        if (!_auth.InvalidateSession("an AI capture search came back unauthorized", generation)) return Superseded(text);
         return NamCaptureSourcing.Failed(
             $"The design asked TONE3000 for \"{text}\", but the TONE3000 session has expired. Sign in again.");
     }

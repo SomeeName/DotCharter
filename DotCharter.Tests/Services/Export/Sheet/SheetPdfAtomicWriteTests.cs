@@ -46,6 +46,24 @@ public class SheetPdfAtomicWriteTests : IDisposable
     private static string[] StrayTempFiles(string dir) =>
         Directory.GetFiles(dir, "*" + DotCharter.Tone.Infrastructure.Storage.AtomicFile.TempSuffix);
 
+    [Fact]
+    public async Task AnExistingPredictableStage_IsNeverOpenedOrTruncated()
+    {
+        var (project, arr, level, beats) = Fixture();
+        var path = Path.Combine(_dir, "sheet.pdf");
+        var planted = path + AtomicFile.TempSuffix;
+        File.WriteAllText(planted, "someone else's file");
+        using var held = new FileStream(planted, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        await new SheetPdfExporter(FakeLocalization.English()).ExportToFileAsync(
+            project, arr, level, beats, staves: 2, SheetPageFormat.A4, path,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(new FileInfo(path).Length > 0);
+        Assert.Equal("someone else's file", File.ReadAllText(planted));
+        Assert.Equal([planted], StrayTempFiles(_dir));
+    }
+
     /// <summary>
     /// THE regression guard: a failing export must leave the previous file
     /// untouched and no temp beside it. An already-cancelled token fails the

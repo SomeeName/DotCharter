@@ -15,23 +15,24 @@ public interface IChartViewport
     /// <summary>Effective bottom margin (FHP / hand-shape band) in pixels.</summary>
     double BottomMargin { get; }
 
-    /// <summary>v0.34 lefty flip: the horizontal fret-axis mirror; in the 2D
-    /// lanes it also flips the vertical string order (composed with
-    /// <see cref="InvertStrings"/> via <see cref="FlipStrings"/>).</summary>
+    /// <summary>Profile handedness: mirrors only the 3D fret axis,
+    /// leaving every 2D surface's time/fret axes and string order unchanged.</summary>
     bool LeftyFlip { get; }
 
-    /// <summary>Inverted string layout (tab convention): a vertical string flip
-    /// that composes with <see cref="LeftyFlip"/>.</summary>
+    /// <summary>Inverted string layout (tab convention): the only setting that
+    /// changes the timeline's vertical string order.</summary>
     bool InvertStrings { get; }
 
-    /// <summary>THE effective vertical string flip hit-testing must use — lefty
-    /// and inverted-strings compose (XOR). The renderer applies the identical
-    /// combination in <c>ChartRenderContext.LaneTopFor</c>, so clicks and gems
-    /// always agree.</summary>
-    bool FlipStrings => LeftyFlip ^ InvertStrings;
+    /// <summary>The vertical string flip for timeline hit-testing. The renderer
+    /// uses the same <see cref="InvertStrings"/> in <c>ChartRenderContext.LaneTopFor</c>,
+    /// independently of profile handedness.</summary>
+    bool FlipStrings => InvertStrings;
 
     /// <summary>Composable top-ribbon layout for this viewport (per-track row visibility).</summary>
     RibbonLayout TopRibbon { get; }
+
+    /// <summary>The rendered label width in logical pixels, or null when labels are hidden or unavailable.</summary>
+    float? MeasureTimelineLabelWidth(string text) => null;
 
     // Abstracting out Avalonia's rendering invalidation method
     void RequestNextFrameRendering();

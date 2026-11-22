@@ -96,6 +96,16 @@ public sealed partial class MarkerGroupsViewModel : ViewModelBase, IMarkerGroups
     [ObservableProperty] private bool _hasGroups;
     [ObservableProperty] private string _statusLine = "";
 
+    /// <summary>The group filter's pick: 0 = "All groups", else the name at that place of <see cref="GroupFilterOptions" />.</summary>
+    [ObservableProperty] private int _groupFilterIndex;
+
+    private List<MarkerGroupRow> _all = [];
+    private string? _filterName;
+    private bool _readingFilter;
+
+    /// <summary>"All groups" first, then every name: the card's filter (inspector design D).</summary>
+    public ObservableCollection<string> GroupFilterOptions { get; } = [];
+
     public string Title => _localization[_kind == MarkerKind.Section ? "Inspector_Sections" : "Inspector_Tones"];
 
     public string EmptyText => _localization[_kind == MarkerKind.Section ? "Inspector_Sections_None" : "Inspector_Tones_None"];
@@ -110,19 +120,63 @@ public sealed partial class MarkerGroupsViewModel : ViewModelBase, IMarkerGroups
         var project = _project();
         var groups = project == null ? [] : _kind == MarkerKind.Section ? Sections(project) : Tones(project);
         var rows = groups.Select(g => ToRow(g, project!)).ToList();
-        if (!Matches(rows))
-        {
-            Groups.Clear();
-            foreach (var row in rows) Groups.Add(row);
-        }
-
-        HasGroups = Groups.Count > 0;
+        if (!Matches(rows)) _all = rows;
+        HasGroups = _all.Count > 0;
+        ReadFilter();
     }
 
     private bool Matches(List<MarkerGroupRow> rows) =>
-        rows.Count == Groups.Count && rows.Select((row, i) =>
-            row.Name == Groups[i].Name && row.Warning == Groups[i].Warning &&
-            row.Occurrences.Select(o => o.Label).SequenceEqual(Groups[i].Occurrences.Select(o => o.Label))).All(same => same);
+        rows.Count == _all.Count && rows.Select((row, i) =>
+            row.Name == _all[i].Name && row.Warning == _all[i].Warning &&
+            row.Occurrences.Select(o => o.Label).SequenceEqual(_all[i].Occurrences.Select(o => o.Label))).All(same => same);
+
+    /// <summary>Re-reads the filter's choices over the rows; a filtered name that left the song goes back to all.</summary>
+    private void ReadFilter()
+    {
+        var names = _all.Select(r => r.Name).ToList();
+        if (_filterName is not null && !names.Contains(_filterName, StringComparer.Ordinal)) _filterName = null;
+        string[] options = [_localization["Inspector_Markers_AllGroups"], .. names];
+        _readingFilter = true;
+        try
+        {
+            if (!GroupFilterOptions.SequenceEqual(options, StringComparer.Ordinal))
+            {
+                GroupFilterOptions.Clear();
+                foreach (var option in options) GroupFilterOptions.Add(option);
+            }
+
+            GroupFilterIndex = _filterName is null ? 0 : names.IndexOf(_filterName) + 1;
+        }
+        finally
+        {
+            _readingFilter = false;
+        }
+
+        ApplyFilter();
+    }
+
+    partial void OnGroupFilterIndexChanged(int value)
+    {
+        if (_readingFilter) return;
+        // a picker dropping its selection while its list changes is put back on the filter's answer.
+        if (value < 0 || value >= GroupFilterOptions.Count)
+        {
+            ReadFilter();
+            return;
+        }
+
+        _filterName = value == 0 ? null : GroupFilterOptions[value];
+        ApplyFilter();
+    }
+
+    /// <summary>The list shows every row, or only the filtered name's; it is replaced only when that differs.</summary>
+    private void ApplyFilter()
+    {
+        var shown = _filterName is null ? _all : _all.Where(r => r.Name == _filterName).ToList();
+        if (Groups.SequenceEqual(shown)) return;
+        Groups.Clear();
+        foreach (var row in shown) Groups.Add(row);
+    }
 
     private static List<Group> Sections(ChartProject project)
     {
@@ -245,6 +299,7 @@ public sealed partial class MarkerGroupsViewModel : ViewModelBase, IMarkerGroups
             action = new RenameStringFieldAction<EventPoint>(events, (e, v) => e.Section = v, oldName, newName);
         }
 
+        if (_filterName == oldName) _filterName = newName;
         if (!action.HasEffect || !_history.Do(action)) return;
         _logger.Info(AppLogCategory.Project, $"Renamed {_kind} '{oldName}' -> '{newName}'.");
         Refresh();

@@ -32,6 +32,10 @@ public sealed class RscpHostilePositionTests : IDisposable
     [InlineData("-2147483648/-1")]
     [InlineData("0 1/-2147483648")]
     [InlineData("-2147483648 -2147483648/-1")]
+    [InlineData("2147483647 0/1")]
+    [InlineData("-2147483648 0/1")]
+    [InlineData("2147483647 1/1")]
+    [InlineData("-2147483648 -1/2")]
     public void AHostilePositionAttribute_LoadsAsZeroInsteadOfAbortingTheProject(string hostile)
     {
         var ser = new RscpChartSerializer();
@@ -63,5 +67,37 @@ public sealed class RscpHostilePositionTests : IDisposable
         Assert.All(
             project.Arrangements.SelectMany(a => a.Levels).SelectMany(l => l.Notes),
             note => Assert.Equal(FractionalPosition.Zero, note.Position));
+        Assert.All(project.VocalTracks.SelectMany(t => t.Phrases), phrase =>
+        {
+            Assert.Equal(FractionalPosition.Zero, phrase.Position);
+            Assert.InRange(phrase.EndPosition.DoubleValue, 0, 0.125);
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExplicitVocalPhraseBounds_OutsideTheImportRange_KeepDerivedBounds(bool withLyricCounts)
+    {
+        var doc = XDocument.Parse("""
+            <chart>
+              <vocalPaths>
+                <vocals>
+                  <name>Vocals</name>
+                  <vocals><vocal p="2 0/1" ep="3 0/1" lyric="word" flag="PHRASE_END" /></vocals>
+                  <dcPhrases><phrase p="2147483647 0/1" ep="-2147483648 0/1" n="1" /></dcPhrases>
+                </vocals>
+              </vocalPaths>
+            </chart>
+            """);
+        if (!withLyricCounts) doc.Descendants("phrase").Single().Attribute("n")!.Remove();
+        var project = new ChartProject();
+
+        new RscpVocalsParser().ParseVocals(doc, project);
+
+        var phrase = Assert.Single(Assert.Single(project.VocalTracks).Phrases);
+        Assert.Equal(new FractionalPosition(2), phrase.Position);
+        Assert.Equal(new FractionalPosition(3), phrase.EndPosition);
+        Assert.Single(phrase.Lyrics);
     }
 }

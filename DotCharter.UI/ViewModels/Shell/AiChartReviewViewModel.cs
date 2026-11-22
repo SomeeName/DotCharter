@@ -4,7 +4,6 @@
 // current row, Accept all, Reject all, Apply (one undo step) and Discard — and the marks it publishes.
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Services.Ai.Chart;
@@ -133,6 +132,15 @@ public sealed partial class AiChartReviewViewModel : ViewModelBase
         if (CurrentRow is { } row) Decide(row, AiChartDecision.Rejected);
     }
 
+    /// <summary>P: auditions the current row's proposed tone, as its Audition button does. False when the
+    /// current row is no tone row or its tone cannot play (the button's tooltip says why).</summary>
+    public bool AuditionCurrent()
+    {
+        if (CurrentRow?.Tone is not { CanAudition: true } tone) return false;
+        Audition(tone);
+        return true;
+    }
+
     partial void OnCurrentRowChanged(AiChartReviewRowViewModel? oldValue, AiChartReviewRowViewModel? newValue)
     {
         if (oldValue is not null) oldValue.IsCurrent = false;
@@ -156,7 +164,19 @@ public sealed partial class AiChartReviewViewModel : ViewModelBase
         : item.CurrentJson is null ? _loc["AiChartReview_AuditionNeedsBody"]
         : null;
 
-    private void OnReviewChanged(object? sender, EventArgs e) => Load(_run.Review);
+    private void OnReviewChanged(object? sender, EventArgs e)
+    {
+        // Only the queue behind the shown review changed (another arrangement's proposals arrived):
+        // the rows, the audition and the row being looked at stay.
+        if (_review is not null && ReferenceEquals(_run.Review, _review)) Subtitle = SubtitleOf(_review);
+        else Load(_run.Review);
+    }
+
+    private string SubtitleOf(AiChartReview review)
+    {
+        var text = $"{JobText(review.Job)} · {review.Arrangement.Name}";
+        return _run.QueuedReviewCount > 0 ? $"{text} · {_loc.Format("AiChartReview_MoreWaiting", _run.QueuedReviewCount)}" : text;
+    }
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -189,7 +209,7 @@ public sealed partial class AiChartReviewViewModel : ViewModelBase
         }
 
         IsOpen = review is not null;
-        Subtitle = review is null ? string.Empty : $"{JobText(review.Job)} · {review.Arrangement.Name}";
+        Subtitle = review is null ? string.Empty : SubtitleOf(review);
         var failed = review?.Result.Rejected.Count ?? 0;
         HasFailed = failed > 0;
         FailedText = failed == 0 ? string.Empty
@@ -400,5 +420,5 @@ public sealed partial class AiChartReviewRowViewModel : ObservableObject
     public override string ToString() => $"{Title} · {Detail}";
 
     private static string Clock(double ms) =>
-        TimeSpan.FromMilliseconds(Math.Max(0, ms)).ToString(@"m\:ss\.f", CultureInfo.InvariantCulture);
+        ElapsedTimeLabel.Format(ms, 1);
 }

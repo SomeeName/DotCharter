@@ -1,36 +1,11 @@
 namespace DotCharter.Services.Export.Rocksmith;
 
 /// <summary>
-///     How a 7- or 8-string GUITAR arrangement is spelled in a Rocksmith 2014 package
-/// for the owner's <c>rs7string</c> game mod. The mod switches a guitar
-///     arrangement into 7-string mode when its SNG tuning has 7 entries; 8 entries is
-///     the format the generator <c>rs7chart</c> writes for a later 8-string build.
-///     <para>
-///         <b>The string ORDER differs from the chart's.</b> A chart numbers strings
-///         LOWEST first (<c>TuningUtilities.GetStandardMidiPitches</c>: a 7-string is
-///         B E A D G B e, string 0 = low B). The package keeps indices 0..5 as the
-///         six-string E A D G B e and puts the extra strings AFTER them: index 6 = the
-///         7th string (B1, MIDI 35 + offset), index 7 = the 8th (F#1, MIDI 30 +
-///         offset). Every existing chart stays valid that way, which is why the mod
-///         chose it. <see cref="ToSng" /> and <see cref="ToDomain" /> are the one
-///         mapping between the two.
-///     </para>
-///     <para>
-///         The manifest keeps <c>string0</c>..<c>string5</c> and adds
-///         <c>Rs7String6</c> / <c>Rs7String7</c> — never <c>string6</c>, which
-///         overflows the game's six-int song-list reader. Chord templates stay six
-///         wide (a valid six-string projection); the extra strings' template columns
-///         and chord-note techniques go into the SNG's RS7X extension block
-///         (<see cref="Sng.Model.RsExtensionBlock" />, built by <see cref="Rs7BlockBuilder" />). Packages from before the block are still READ: the
-///         <c>chords-ext.json</c> sidecar (<see cref="Rs7ChordSidecar" />) and the
-///         template name's last byte.
-///     </para>
-///     <para>
-///         Only the 7-string guitar is EXPORTED with a block today (<see cref="ExportRefusal" />):
-///         RS7X v1 spells 8 strings but the mod does not play them yet. A bass never gets a
-///         block (RS7X v1 reserves the bass instrument): a 5-/6-string bass keeps the stock
-///         six-slot spelling stock Rocksmith bass charts use. The layout stays general.
-///     </para>
+///     The slot order shared by the internal SNG model and legacy readers. Guitar slots
+///     0..5 are E A D G B e, then low B and F#. Bass slots 0..3 are E A D G, then
+///     low B and high C. Domain strings are lowest first; ToSng and ToDomain bridge
+///     these orders. RS Extended Range serialization writes positional strings from
+///     this model, combining stock chord columns with the extra guitar columns.
 /// </summary>
 internal static class Rs7StringLayout
 {
@@ -40,51 +15,55 @@ internal static class Rs7StringLayout
     /// <summary>The widest guitar the format can spell.</summary>
     public const int MaxStrings = 8;
 
-    /// <summary>What the current <c>rs7string</c> build plays, and so the widest guitar
-    /// the exporter writes.</summary>
-    public const int ModPlayableStrings = 7;
+    /// <summary>The widest bass the format can spell (low B and high C).</summary>
+    public const int MaxBassStrings = 6;
 
     private static readonly int[] OpenMidiBySngIndex = [40, 45, 50, 55, 59, 64, 35, 30];
+
+    private static readonly int[] BassOpenMidiBySngIndex = [28, 33, 38, 43, 23, 48];
 
     /// <summary>MIDI pitch of open package string <paramref name="sngIndex" /> in
     /// standard tuning (E A D G B e, then B1 and F#1).</summary>
     public static int OpenMidi(int sngIndex) =>
         sngIndex >= 0 && sngIndex < OpenMidiBySngIndex.Length ? OpenMidiBySngIndex[sngIndex] : 0;
 
-    /// <summary>The manifest <c>Tuning</c> key for a package string index past five.</summary>
-    public static string ManifestKey(int sngIndex) => $"Rs7String{sngIndex}";
+    /// <summary>MIDI pitch of open package string <paramref name="sngIndex" /> of an extended
+    /// bass: E1 A1 D2 G2, then low B0 (4) and high C3 (5).</summary>
+    public static int BassOpenMidi(int sngIndex) =>
+        sngIndex >= 0 && sngIndex < BassOpenMidiBySngIndex.Length ? BassOpenMidiBySngIndex[sngIndex] : 0;
 
-    /// <summary>Whether this arrangement exports through the rs7string layout.</summary>
+    /// <summary>Whether this guitar needs the extended internal model.</summary>
     public static bool IsExtendedGuitar(Arrangement arrangement) =>
         IsExtendedGuitar(arrangement.ArrangementType, arrangement.StringCount);
 
     public static bool IsExtendedGuitar(ArrangementType type, int stringCount) =>
         type is not (ArrangementType.Bass or ArrangementType.Vocal) && stringCount is > NativeStrings and <= MaxStrings;
 
-    /// <summary>
-    ///     Why this arrangement is NOT exported, or null when it is: an 8-string guitar
-    ///     (RS7X v1 spells it, but the mod plays 7 strings and such a package may crash
-    ///     the game) or a guitar with more strings than any layout spells (a 9-string:
-    ///     <see cref="MaxStrings" /> is eight, and folding the ninth string's notes onto the last
-    ///     one would change the song).
-    /// </summary>
-    public static string? ExportRefusal(Arrangement arrangement)
-    {
-        if (IsExtendedGuitar(arrangement) && arrangement.StringCount > ModPlayableStrings)
-        {
-            return $"{arrangement.StringCount}-string guitar '{arrangement.Name}' is not exported yet: the rs7string " +
-                   "mod plays 7 strings, and the RS7X block for 8 strings waits for a later mod build.";
-        }
+    /// <summary>Whether this arrangement is a five- or six-string bass.</summary>
+    public static bool IsExtendedBass(Arrangement arrangement) =>
+        IsExtendedBass(arrangement.ArrangementType, arrangement.StringCount);
 
-        return HasUnsupportedStringCount(arrangement)
-            ? $"'{arrangement.Name}' has {arrangement.StringCount} strings; a song file spells at most " +
+    public static bool IsExtendedBass(ArrangementType type, int stringCount) =>
+        type is ArrangementType.Bass && stringCount is > 4 and <= MaxBassStrings;
+
+    /// <summary>Whether this arrangement is written as RS Extended Range: seven-/eight-string guitar
+    /// or five-/six-string bass. Every other supported arrangement is stock.</summary>
+    public static bool IsExtended(Arrangement arrangement) => IsExtendedGuitar(arrangement) || IsExtendedBass(arrangement);
+
+    /// <summary>
+    ///     Why this arrangement is NOT exported, or null when it is: a part with more strings than
+    ///     any layout spells (a 9-string guitar, a 7-string bass: <see cref="MaxStringsFor" /> is the
+    ///     limit, and folding the extra string's notes onto the last one would change the song).
+    /// </summary>
+    public static string? ExportRefusal(Arrangement arrangement) =>
+        HasUnsupportedStringCount(arrangement)
+            ? $"'{arrangement.Name}' has {arrangement.StringCount} strings; RS Extended Range supports at most " +
               $"{MaxStringsFor(arrangement.ArrangementType)} for this instrument."
             : null;
-    }
 
     /// <summary>The most strings a package can spell for this kind of part: eight for a guitar,
-    /// the stock six for a bass.</summary>
-    public static int MaxStringsFor(ArrangementType type) => type is ArrangementType.Bass ? NativeStrings : MaxStrings;
+    /// six for a bass.</summary>
+    public static int MaxStringsFor(ArrangementType type) => type is ArrangementType.Bass ? MaxBassStrings : MaxStrings;
 
     /// <summary>A string count past <see cref="MaxStringsFor" />: no layout spells it, and its
     /// notes would fold onto the last string the package has.</summary>
@@ -109,4 +88,18 @@ internal static class Rs7StringLayout
         if (extra <= 0) return sngIndex;
         return sngIndex >= NativeStrings ? NativeStrings - 1 + extra - sngIndex : sngIndex + extra;
     }
+
+    /// <summary>The package string index of chart string <paramref name="domainIndex" /> of an
+    /// instrument of <paramref name="type" />. A 5-/6-string bass (chart order B E A D G [C]) puts
+    /// the low B at package index 4 and the high C at 5; everything else is
+    /// <see cref="ToSng(int, int)" />.</summary>
+    public static int ToSng(int domainIndex, int stringCount, ArrangementType type) =>
+        !IsExtendedBass(type, stringCount) ? ToSng(domainIndex, stringCount)
+        : domainIndex == 0 ? 4 : domainIndex <= 4 ? domainIndex - 1 : domainIndex;
+
+    /// <summary>The chart string index of package string <paramref name="sngIndex" /> (the inverse of
+    /// <see cref="ToSng(int, int, ArrangementType)" />).</summary>
+    public static int ToDomain(int sngIndex, int stringCount, ArrangementType type) =>
+        !IsExtendedBass(type, stringCount) ? ToDomain(sngIndex, stringCount)
+        : sngIndex == 4 ? 0 : sngIndex < 4 ? sngIndex + 1 : sngIndex;
 }

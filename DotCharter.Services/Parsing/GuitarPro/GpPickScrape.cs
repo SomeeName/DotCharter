@@ -6,7 +6,7 @@ namespace DotCharter.Services.Parsing.GuitarPro;
 ///     Guitar Pro's PICK SCRAPE ("pick slide" down/up) as a Rocksmith chart spells
 /// it. Rocksmith has no scrape technique; the charting
 ///     community's convention, confirmed on the owner's charts, is
-///     <b>tap + tremolo + fret-hand mute + an unpitched slide in the scrape's
+///     <b>tap + tremolo + an unpitched slide in the scrape's
 ///     direction + ignore</b> (the ignore keeps the gesture out of scoring). A
 ///     scrape on several strings is ONE chord with <see cref="Chord.SplitIntoNotes" />
 ///     — EOF's "split" status: it selects and edits as one scrape, and every export
@@ -89,16 +89,6 @@ internal static class GpPickScrape
         => sound is GuitarNote { Ignore: true, Hopo: HopoType.Tap, Tremolo: true, UnpitchedSlide: true, SlideTo: not null }
             or ChordNote { Ignore: true, Hopo: HopoType.Tap, Tremolo: true, UnpitchedSlide: true, SlideTo: not null };
 
-    /// <summary>
-    ///     True for a sound charted as a WHOLE scrape: <see cref="IsScrape" /> plus
-    ///     the fret-hand mute <see cref="IsolateScrapes" /> gives every scrape
-    ///     string. The Guitar Pro export writes exactly these back as a pick slide,
-    /// so an export re-imports as the scrape it was; the mute is part of
-    ///     the test because the import mutes every scrape, and an unmuted sound
-    ///     would come back changed.
-    /// </summary>
-    public static bool IsChartedScrape(IGuitarSound sound) => IsScrape(sound) && sound.Mute == MuteType.Full;
-
     /// <summary>True when a scrape travels toward the nut — Guitar Pro's scrape
     /// DOWN (<see cref="DownFlag" />); otherwise it is a scrape up.</summary>
     public static bool IsTowardNut(IGuitarSound scrape) => scrape.SlideTo < scrape.Fret;
@@ -110,7 +100,7 @@ internal static class GpPickScrape
 
     /// <summary>
     ///     Charts <paramref name="note" /> as a pick scrape: tap, tremolo, ignore,
-    ///     fret-hand mute and an unpitched slide in the scrape's direction. Both
+    ///     no string mute and an unpitched slide in the scrape's direction. Both
     ///     bits set reads as a scrape down. The tab's fret stands in for the hand
     ///     position until <see cref="RunImportFhpPass" /> places the scrape on the
     ///     real one; the caller has already made <see cref="IGuitarSound.Fret" />
@@ -121,7 +111,7 @@ internal static class GpPickScrape
         var towardNut = (slideFlags & DownFlag) != 0;
         note.Hopo = HopoType.Tap;
         note.Tremolo = true;
-        note.Mute = MuteType.Full;
+        note.Mute = MuteType.None;
         note.LinkNext = false;
         switch (note)
         {
@@ -195,14 +185,14 @@ internal static class GpPickScrape
     ///     shape is built: the scrape strings of a chord become ONE chord split into
     /// notes and ignored as a whole, or a single note when the scrape has
     ///     one string; strings of the same strum that do not scrape stay a chord, or
-    ///     become a note when one is left. Every scrape string is fret-hand muted
+    ///     become a note when one is left. Every scrape string is unmuted
     ///     here as well, whatever a later mute bit of the tab said.
     /// </summary>
     public static void IsolateScrapes(ChartLevel level)
     {
         foreach (var note in level.Notes)
         {
-            if (IsScrape(note)) note.Mute = MuteType.Full;
+            if (IsScrape(note)) note.Mute = MuteType.None;
         }
 
         List<GuitarNote>? loose = null;
@@ -212,7 +202,7 @@ internal static class GpPickScrape
             var chord = level.Chords[i];
             var scrapes = chord.ChordNotes.Where(IsScrape).ToList();
             if (scrapes.Count == 0) continue;
-            foreach (var cn in scrapes) cn.Mute = MuteType.Full;
+            foreach (var cn in scrapes) cn.Mute = MuteType.None;
 
             if (scrapes.Count == chord.ChordNotes.Count)
             {
@@ -267,7 +257,7 @@ internal static class GpPickScrape
     ///     before any; the capo floor when there is none), on a neck that ends at
     ///     <paramref name="lastFret" /> (see <see cref="LastFret" />). A scrape chord
     ///     then plays a FINGERLESS template of its placed frets (EOF's "fingerless"
-    ///     status: a fret-hand-muted scrape is no grip).
+    ///     status: a split scrape is no grip).
     /// </summary>
     public static void RunImportFhpPass(Arrangement arrangement, ChartLevel level,
         Func<ChordTemplate, bool>? isAuthored, int lastFret = GpCapoFrets.MaxAbsoluteFret)
@@ -294,11 +284,11 @@ internal static class GpPickScrape
         }
     }
 
-    private static void PlaceOnAnchor(Arrangement arrangement, ChartLevel level, IGuitarSound scrape,
+    internal static void PlaceOnAnchor(Arrangement arrangement, ChartLevel level, IGuitarSound scrape,
         FractionalPosition position, Fraction? notationDuration, int lastFret)
     {
-        var anchor = level.Anchors.LastOrDefault(a => a.Position.CompareTo(position) <= 0)
-                     ?? level.Anchors.FirstOrDefault();
+        var anchor = FretAnchorLookup.InEffectAt(level.Anchors, position)
+                     ?? level.Anchors.MinBy(a => a.Position);
         var towardNut = IsTowardNut(scrape);
         var shortScrape = notationDuration is { } d && d < QuarterNote;
         Place(scrape, anchor?.Fret ?? GpCapoFrets.MinFrettedFret(arrangement.Capo), towardNut, shortScrape,
@@ -310,20 +300,22 @@ internal static class GpPickScrape
     ///     arrangement's own when one exists (templates are shared and never
     ///     mutated), else a nameless mint.
     /// </summary>
-    private static ChordTemplate FingerlessTemplate(Arrangement arrangement, Chord chord)
+    internal static ChordTemplate FingerlessTemplate(Arrangement arrangement, Chord chord,
+        ICollection<ChordTemplate>? created = null)
     {
         var frets = ChordTemplateResolver.FretsOf(chord);
-        var existing = arrangement.ChordTemplates.FirstOrDefault(t =>
+        var templates = arrangement.ChordTemplates.Concat(created ?? []).ToList();
+        var existing = templates.FirstOrDefault(t =>
             !t.IsArpeggio && t.Fingers.Count == 0 && t.HasFrets(frets));
         if (existing != null) return existing;
 
         var template = new ChordTemplate
         {
             Name = string.Empty,
-            Id = arrangement.ChordTemplates.Count == 0 ? 0 : arrangement.ChordTemplates.Max(t => t.Id) + 1
+            Id = templates.Count == 0 ? 0 : templates.Max(t => t.Id) + 1
         };
         foreach (var (stringIndex, fret) in frets) template.Frets[stringIndex] = fret;
-        arrangement.ChordTemplates.Add(template);
+        (created ?? arrangement.ChordTemplates).Add(template);
         return template;
     }
 

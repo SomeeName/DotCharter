@@ -622,11 +622,13 @@ public class RemoveElementsAction<T>(
     ObservableCollection<T> collection,
     IEnumerable<T> items,
     Func<T, FractionalPosition> getPosition,
-    Action? onPostExecute = null)
+    Action? onPostExecute = null,
+    ObservableCollection<T>? selection = null)
     : CollectionActionBase<T>(collection, getPosition, onPostExecute), ITemplateUseReporter
     where T : class
 {
-    private readonly List<T> _items = items.ToList();
+    private readonly List<T> _items = items.Distinct<T>(ReferenceEqualityComparer.Instance).ToList();
+    private readonly T[] _selectedItems = selection?.ToArray() ?? [];
 
     /// <summary>What the last Execute actually took out; null until it has run.</summary>
     private List<T>? _removed;
@@ -646,6 +648,13 @@ public class RemoveElementsAction<T>(
     {
         _removed = Present(_items);
         RemoveEach(_removed);
+        if (selection != null)
+        {
+            var removed = _removed.ToHashSet<T>(ReferenceEqualityComparer.Instance);
+            var retained = selection.Where(item => !removed.Contains(item)).ToList();
+            if (retained.Count != selection.Count) SelectionBulkOps.ReplaceWith(selection, retained);
+        }
+
         ExecutePostPass(_removed);
     }
 
@@ -658,6 +667,12 @@ public class RemoveElementsAction<T>(
     public override void Undo()
     {
         InsertEachSorted(_removed ?? _items);
+        if (selection != null)
+        {
+            var restored = (_removed ?? _items).ToHashSet<T>(ReferenceEqualityComparer.Instance);
+            SelectionBulkOps.AddRange(selection, _selectedItems.Where(restored.Contains));
+        }
+
         UndoPostPass();
     }
 }
@@ -982,6 +997,10 @@ public class MutateBeatsAction(
     private readonly IList<BeatMarker> _beats = beats;
     private readonly List<BeatMarker> _newBeats = newBeats.Select(beat => beat.Clone()).ToList();
     private readonly List<BeatMarker> _oldBeats = oldBeats.Select(beat => beat.Clone()).ToList();
+    private SpacingCollateral? _collateral;
+    private BeatSpacingSnapshot? _spacing;
+
+    public long EstimatedBytes => _spacing?.EstimatedBytes ?? 0;
 
     public bool HasEffect
     {
@@ -998,11 +1017,30 @@ public class MutateBeatsAction(
         }
     }
 
-    public void Execute() => Apply(_newBeats);
+    public void Execute()
+    {
+        if (_spacing != null)
+        {
+            Apply(_newBeats, _spacing.RestoreAfter);
+            return;
+        }
 
-    public void Undo() => Apply(_oldBeats);
+        using var spacing = BeatSpacingSnapshot.Begin();
+        using var recorder = SpacingCollateralRecorder.Begin();
+        Apply(_newBeats);
+        spacing.Complete();
+        _collateral = recorder.Build();
+        _spacing = spacing;
+    }
 
-    private void Apply(IReadOnlyList<BeatMarker> states)
+    public void Undo()
+    {
+        Apply(_oldBeats);
+        _collateral?.Restore();
+        _spacing?.Restore();
+    }
+
+    private void Apply(IReadOnlyList<BeatMarker> states, Action? restoreSpacing = null)
     {
         for (var i = 0; i < _beats.Count && i < states.Count; i++)
         {
@@ -1014,6 +1052,9 @@ public class MutateBeatsAction(
             _beats[i].NoteDenominator = states[i].NoteDenominator;
         }
 
+        // Restore generated objects before the callback: enforcement is then idempotent,
+        // and readout listeners still observe the new grid and the live, recorded owners.
+        restoreSpacing?.Invoke();
         onPostExecute?.Invoke();
     }
 }
@@ -1021,8 +1062,9 @@ public class MutateBeatsAction(
 public class AddAnchorsAction(ObservableCollection<FretAnchor> collection, IEnumerable<FretAnchor> items)
     : AddElementsAction<FretAnchor>(collection, items, a => a.Position);
 
-public class RemoveAnchorsAction(ObservableCollection<FretAnchor> collection, IEnumerable<FretAnchor> items)
-    : RemoveElementsAction<FretAnchor>(collection, items, a => a.Position);
+public class RemoveAnchorsAction(ObservableCollection<FretAnchor> collection, IEnumerable<FretAnchor> items,
+    ObservableCollection<FretAnchor>? selection = null)
+    : RemoveElementsAction<FretAnchor>(collection, items, a => a.Position, selection: selection);
 
 /// <summary>
 ///     Changes existing anchors in place. Carries a <paramref name="mergeVerb" />
@@ -1180,6 +1222,7 @@ public static class ChartActionStateComparer
         return a.Position == b.Position &&
                a.EndPosition == b.EndPosition &&
                a.TemplateId == b.TemplateId &&
+               a.GhostMask == b.GhostMask &&
                a.Name == b.Name;
     }
 

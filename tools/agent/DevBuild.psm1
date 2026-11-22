@@ -44,16 +44,62 @@ function Get-DevMainCheckout {
     return Split-Path $common -Parent
 }
 
-# Decide from the machine, pin THIS process (children inherit) and lower its
-# priority (never raise it), print the choice. Returns the plan.
+# Decide from the machine, pin THIS process (children inherit) and put it at
+# BelowNormal, print the choice. Returns the plan. Normal and above are lowered;
+# Idle is RAISED to BelowNormal: a session started at Idle handed Idle to every
+# testhost, and on the pinned half-cores an Idle process gets ~0.5 % of a core
+# while other agents' builds run (a filtered headless run sat at 2 s CPU for
+# 20+ minutes with no output).
 function Set-DevCpuPlan {
     param([switch]$AllCores, [switch]$Quiet)
     $plan = Get-DevCpuPlan -Processors ([int]$env:NUMBER_OF_PROCESSORS) -AllCores:$AllCores
     $self = [Diagnostics.Process]::GetCurrentProcess()
     if ($plan.Mask -ne 0) { $self.ProcessorAffinity = [IntPtr]$plan.Mask }
-    if (@('Idle', 'BelowNormal') -notcontains [string]$self.PriorityClass) { $self.PriorityClass = 'BelowNormal' }
+    if ([string]$self.PriorityClass -ne 'BelowNormal') { $self.PriorityClass = 'BelowNormal' }
     if (-not $Quiet) { Write-Host ("cpus: {0} (mask {1:X}, {2} shards by default) - {3}" -f $plan.Name, $plan.Mask, $plan.Shards, $plan.Reason) }
     return $plan
 }
 
-Export-ModuleMember -Function Enable-IncrementalDevBuild, Get-DevCpuPlan, Get-DevMainCheckout, Set-DevCpuPlan
+# ---- the gate's result folder (#613) --------------------------------------------
+# Pure: where a gate run writes its logs and TRX files. An explicit -ResultsDir is
+# the caller's. Otherwise one folder per CHECKOUT under $TempRoot, keyed by the
+# checkout's canonical path (two worktrees named alike, or two separate clones,
+# never share one), holding one folder per RUN ($RunId), so two runs in one
+# checkout never write over each other's logs and TRX files.
+function Get-GateResultRoot {
+    param(
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [string]$ResultsDir = '',
+        [Parameter(Mandatory)][string]$TempRoot,
+        [Parameter(Mandatory)][string]$RunId
+    )
+    if ($ResultsDir) { return [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $ResultsDir)) }
+    return Join-Path (Get-GateCheckoutRoot -RepoRoot $RepoRoot -TempRoot $TempRoot) $RunId
+}
+
+# Pure: the per-checkout folder the run folders live in.
+function Get-GateCheckoutRoot {
+    param([Parameter(Mandatory)][string]$RepoRoot, [Parameter(Mandatory)][string]$TempRoot)
+    $canonical = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\', '/').ToLowerInvariant()
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($canonical)) } finally { $sha.Dispose() }
+    $hash = -join ($bytes[0..5] | ForEach-Object { $_.ToString('x2') })
+    return Join-Path $TempRoot ("dotcharter-gate-{0}-{1}" -f (Split-Path -Leaf $canonical), $hash)
+}
+
+# Pure: a run id that sorts by start time and is unique per process.
+function New-GateRunId {
+    param([Parameter(Mandatory)][datetime]$Now, [Parameter(Mandatory)][int]$ProcessId)
+    return '{0:yyyyMMdd-HHmmss}-{1}' -f $Now, $ProcessId
+}
+
+# Pure: the run folders to delete, oldest first, keeping the newest $Keep and never $Except (the current run).
+function Select-StaleGateRuns {
+    param([string[]]$Names = @(), [int]$Keep = 10, [string]$Except = '')
+    $others = @($Names | Where-Object { $_ -and $_ -ne $Except } | Sort-Object -Descending)
+    if ($others.Count -le $Keep) { return @() }
+    return @($others[$Keep..($others.Count - 1)] | Sort-Object)
+}
+
+Export-ModuleMember -Function Enable-IncrementalDevBuild, Get-DevCpuPlan, Get-DevMainCheckout, Set-DevCpuPlan,
+    Get-GateResultRoot, Get-GateCheckoutRoot, New-GateRunId, Select-StaleGateRuns

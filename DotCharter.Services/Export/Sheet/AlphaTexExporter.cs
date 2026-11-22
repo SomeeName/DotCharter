@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.Text;
+using DotCharter.Services.Editing.ChordShapes;
 
 namespace DotCharter.Services.Export.Sheet;
 
@@ -143,7 +144,8 @@ public static class AlphaTexExporter
 
         if (sidecars.Count > 0) sb.Append("\\voice ");
 
-        var slots = BuildSlots(arrangement, level.Notes, level.Chords, measures, resolveChordNames: true);
+        var naming = NewChordNames.NamingFor(arrangement, project?.Chart);
+        var slots = BuildSlots(arrangement, level.Notes, level.Chords, measures, naming);
         var state = new EmitState();
         EmitVoiceBars(sb, project, measures, slots, staff, isBass, state, beatMap, measureSpans,
             emitBarMeta: true);
@@ -154,7 +156,7 @@ public static class AlphaTexExporter
             var voiceSlots = BuildSlots(arrangement, voice.Notes, voice.Chords, measures,
                 // Chord names annotate the harmony once — repeating them per
                 // voice would double every label on the staff.
-                resolveChordNames: false);
+                naming: null);
             // Fresh emit/carry state per voice: durations, tie trails and the
             // bar carry never leak between voices. The beat map records ONLY
             // voice 0 — it is the click→domain bridge, and the renderer
@@ -375,7 +377,7 @@ public static class AlphaTexExporter
     }
 
     private static List<Slot> BuildSlots(Arrangement arrangement, IList<GuitarNote> notes, IList<Chord> chords,
-        List<Measure> measures, bool resolveChordNames)
+        List<Measure> measures, ChordNamingOptions? naming)
     {
         var templatesById = BuildTemplateIndex(arrangement);
         var nameCache = new Dictionary<int, string?>();
@@ -431,8 +433,8 @@ public static class AlphaTexExporter
             if (chord != null)
             {
                 slot.Chords.Add(chord);
-                if (resolveChordNames)
-                    slot.ChordName ??= ResolveChordName(chord, arrangement, templatesById, nameCache);
+                if (naming is { } options)
+                    slot.ChordName ??= ResolveChordName(chord, arrangement, options, templatesById, nameCache);
                 // Left-hand fingering lives on the TEMPLATE, not the chord note,
                 // so it has to be resolved here where the template index is in
                 // scope. Emitted per note as `lf N` (see AppendNoteProps).
@@ -847,7 +849,7 @@ public static class AlphaTexExporter
     /// string: Guitar Pro graces a strum by putting one grace note per string on
     /// the grace beat, and alphaTex renders several notes in a single <c>{gr}</c>
     /// beat exactly like any other multi-note beat — parenthesised content with
-    /// <c>{gr}</c> on each note (verified against the bundled AlphaTab 1.8.3
+    /// <c>{gr}</c> on each note (verified against the bundled AlphaTab 1.9.0
     /// parser; a grace beat still consumes no bar time). A string may appear only
     /// once per beat, so the first hint on a string wins.</para>
     /// <para>A slot with no chord grace therefore emits exactly what it always
@@ -1020,7 +1022,7 @@ public static class AlphaTexExporter
             {
                 if (cn.Fret < 0 || !staff.IsOnTheNeck(cn.StringIndex)) continue;
                 AddUnique(list, new PlayedNote(cn.StringIndex, cn.Fret, cn.Mute, cn.Hopo, cn.Harmonic,
-                    cn.SlideTo.HasValue, cn.UnpitchedSlide, cn.Vibrato, cn.VibratoStrength, c.Accent,
+                    cn.SlideTo.HasValue, cn.UnpitchedSlide, cn.Vibrato, cn.VibratoStrength, c.Accent || cn.Accent,
                     cn.LinkNext, BuildBendSequence(cn.BendValues, c.Position),
                     slot.Fingers != null && slot.Fingers.TryGetValue(cn.StringIndex, out var f) ? f : -1));
             }
@@ -1108,8 +1110,8 @@ public static class AlphaTexExporter
             // Ornaments that still matter on a held note stay: vibrato, and a
             // slide OUT of the held note (dropping it detached the slide line).
             var anyProp = false;
-            if (p.Slide) Open(sb, ref anyProp).Append("ss");
-            else if (p.UnpitchedSlide) Open(sb, ref anyProp).Append("sou");
+            if (p.UnpitchedSlide) Open(sb, ref anyProp).Append("sou");
+            else if (p.Slide) Open(sb, ref anyProp).Append("ss");
             if (p.Vibrato) Open(sb, ref anyProp).Append(p.VibratoStrength > 1 ? "vw" : "v");
             if (anyProp) sb.Append('}');
             return;
@@ -1211,8 +1213,8 @@ public static class AlphaTexExporter
         // arc + "sl." label per slide — on a run of slides those arcs stack
         // into the tangled overlapping curves the notation view shipped with.
         // Rocksmith slides are picked slides, so shift is the honest mapping.
-        if (slide) { Open(sb, ref any).Append("ss"); }
-        else if (unpitchedSlide) { Open(sb, ref any).Append("sou"); }
+        if (unpitchedSlide) Open(sb, ref any).Append("sou");
+        else if (slide) Open(sb, ref any).Append("ss");
         switch (harmonic)
         {
             case HarmonicType.Normal: Open(sb, ref any).Append("nh"); break;
@@ -1315,13 +1317,14 @@ public static class AlphaTexExporter
     /// <summary>
     /// Resolves a display chord name for the staff annotation: the template's own
     /// name when set, otherwise a name derived from the chord's fret shape via
-    /// <see cref="ChordNameSuggester"/>. Returns null when nothing sensible can be
+    /// <see cref="NewChordNames"/>. Returns null when nothing sensible can be
     /// derived (so no <c>ch</c> effect is emitted). Results are cached per
     /// template id — a chart repeats a handful of shapes hundreds of times.
     /// </summary>
     private static string? ResolveChordName(
         Chord chord,
         Arrangement arrangement,
+        ChordNamingOptions naming,
         Dictionary<int, ChordTemplate> templatesById,
         Dictionary<int, string?> cache)
     {
@@ -1333,7 +1336,7 @@ public static class AlphaTexExporter
             if (templatesById.TryGetValue(chord.TemplateId, out var tpl))
             {
                 if (!string.IsNullOrWhiteSpace(tpl.Name)) resolved = tpl.Name.Trim();
-                else if (tpl.Frets.Count > 0) resolved = SuggestChordName(arrangement, tpl.Frets);
+                else if (tpl.Frets.Count > 0) resolved = SuggestChordName(arrangement, tpl.Frets, naming);
             }
 
             cache[chord.TemplateId] = resolved;
@@ -1341,12 +1344,12 @@ public static class AlphaTexExporter
         }
 
         var frets = BuildFretsFromChord(chord);
-        return frets.Count > 0 ? SuggestChordName(arrangement, frets) : null;
+        return frets.Count > 0 ? SuggestChordName(arrangement, frets, naming) : null;
     }
 
-    private static string? SuggestChordName(Arrangement arrangement, IReadOnlyDictionary<int, int> frets)
+    private static string? SuggestChordName(Arrangement arrangement, IReadOnlyDictionary<int, int> frets, ChordNamingOptions naming)
     {
-        var name = ChordNameSuggester.SuggestFirstChordName(arrangement, frets);
+        var name = NewChordNames.Suggest(arrangement, frets, naming);
         return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
     }
 

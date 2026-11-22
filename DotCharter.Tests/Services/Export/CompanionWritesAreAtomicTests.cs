@@ -88,7 +88,7 @@ public sealed class CompanionWritesAreAtomicTests
     public void WritingAnRs2Dlc_StillCreatesAMissingFolder()
     {
         using var dir = new TempDir();
-        var path = Path.Combine(dir.Path, "DTRS XML", "Artist_Title.rs2dlc");
+        var path = Path.Combine(dir.Path, "export", "DTRS XML", "Artist_Title.rs2dlc");
 
         Rs2DlcWriter.WriteTo(path, new Rs2DlcProjectDto { DlcKey = "TestKey" });
 

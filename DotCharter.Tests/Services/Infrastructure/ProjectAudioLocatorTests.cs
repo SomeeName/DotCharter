@@ -25,6 +25,23 @@ public sealed class ProjectAudioLocatorTests : IDisposable
         return full;
     }
 
+    [Theory]
+    [InlineData(@"\\server\share\project.dcproj")]
+    [InlineData(@"\\?\C:\project.dcproj")]
+    public void ARelativeAudioName_DoesNotPermitProbingAnUnsafeProjectDirectory(string projectPath)
+    {
+        var probes = new List<string>();
+
+        var resolved = ProjectAudioLocator.TryResolve(projectPath, "song.wav", path =>
+        {
+            probes.Add(path);
+            return true;
+        });
+
+        Assert.Null(resolved);
+        Assert.Empty(probes);
+    }
+
     [Fact]
     public void FindsAudioNextToTheProject()
     {

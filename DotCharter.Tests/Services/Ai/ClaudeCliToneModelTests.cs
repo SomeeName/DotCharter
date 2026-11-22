@@ -479,7 +479,7 @@ public sealed class ClaudeCliToneModelTests
         public bool IsPersistent => true;
         public string? Read(AiProviderKind kind)
             => throw new InvalidOperationException($"the CLI provider must not read a secret (asked for {kind})");
-        public void Write(AiProviderKind kind, string? secret)
+        public bool Write(AiProviderKind kind, string? secret)
             => throw new InvalidOperationException("the CLI provider must not write a secret");
     }
 }

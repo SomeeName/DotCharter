@@ -23,6 +23,26 @@ namespace DotCharter.Tests.Services.Parsing.Eof;
 public sealed class EofSplitFingerlessTests
 {
     [Fact]
+    public void SameVoicing_WithDifferentAuthoredNames_KeepsBothNamesOnImport()
+    {
+        var project = Project();
+        var arrangement = project.Arrangements[0];
+        var first = arrangement.ChordTemplates[0];
+        first.Name = "C6";
+        var second = first.Clone();
+        second.Id = 2;
+        second.Name = "Am7";
+        arrangement.ChordTemplates.Add(second);
+        arrangement.Levels[0].Chords.Single(c => Ms(project, c) == 4000).TemplateId = second.Id;
+
+        var imported = Import(EofExporter.Export(project).Bytes);
+
+        var target = imported.Arrangements[0];
+        Assert.Equal("C6", TemplateOf(target, target.Levels[0].Chords.Single(c => Ms(imported, c) == 2000)).Name);
+        Assert.Equal("Am7", TemplateOf(target, target.Levels[0].Chords.Single(c => Ms(imported, c) == 4000)).Name);
+    }
+
+    [Fact]
     public void TheBits_AreEofsOwn()
     {
         // A wrong bit is invisible in a DotCharter-only round trip and changes what
@@ -127,7 +147,7 @@ public sealed class EofSplitFingerlessTests
     }
 
     /// <summary>The owner's reference lines from #599 (<i>Shinbatsu wo Tadaori</i>
-    /// m197–198, the project's <c>1_Lead_Main_RS2.xml</c>). Copied verbatim.</summary>
+    /// m197–198, the project's <c>1_Lead_Main_RS2.xml</c>). Copied verbatim; output expectations omit the chart mute.</summary>
     private static readonly string[] ReferenceNotes =
     [
         """<note time="198.204" string="1" fret="24" sustain="0.120" tremolo="1" mute="1" tap="1" slideUnpitchTo="18" ignore="1" />""",
@@ -143,8 +163,8 @@ public sealed class EofSplitFingerlessTests
     /// <summary>
     ///     EOF → DotCharter → RS XML for the #599 pick scrape: a <c>.eof</c> whose four
     ///     scrapes are SPLIT chords imports as four split chords, and the RS XML
-    ///     written from it is the owner's eight <c>&lt;note&gt;</c> lines, field for
-    ///     field, with no <c>&lt;chord&gt;</c>. The one known difference is the
+    ///     written from it has eight reference-shaped note lines with mute omitted
+    ///     for the unmuted convention, and no chord. The other difference is the
     ///     owner's hand-trimmed E+A sustain (449 ms against the tab's half note,
     ///     480 ms) — the scene is built from the tab, as in
     ///     <c>GpPickScrapeImportTests.ReferenceScene_ExportsTheOwnersNoteLines_FieldForField</c>.
@@ -160,13 +180,14 @@ public sealed class EofSplitFingerlessTests
         var imported = Import(eof.Bytes);
         var level = Assert.Single(Assert.Single(imported.Arrangements).Levels);
         Assert.Equal(4, level.Chords.Count(c => c.SplitIntoNotes && c.Ignore));
+        Assert.All(level.Chords.Where(c => c.SplitIntoNotes && c.Ignore).SelectMany(c => c.ChordNotes), n => Assert.Equal(MuteType.None, n.Mute));
 
         var doc = new RsXmlSongWriter().Write(imported);
         Assert.Empty(doc.Descendants("chord"));
         Assert.Empty(doc.Descendants("handShape"));
         var written = doc.Descendants("note").Where(n => n.Attribute("ignore")?.Value == "1")
             .Select(Fields).ToArray();
-        var expected = ReferenceNotes.Select(XElement.Parse).Select(Fields)
+        var expected = ReferenceNotes.Select(line => XElement.Parse(line.Replace(" mute=\"1\"", "", StringComparison.Ordinal))).Select(Fields)
             .Select(f => f["time"] == "199.164" ? new SortedDictionary<string, string>(f) { ["sustain"] = "0.480" } : f)
             .ToArray();
 

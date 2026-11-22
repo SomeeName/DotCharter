@@ -328,6 +328,24 @@ function New-SnapshotScratchRepo {
     return $gitDir
 }
 
+# The object store that holds the JuceSharp commits a DotCharter tree points at, or $null when none is
+# reachable from that tree. In order: the superproject's modules/JuceSharp (a dev checkout), the
+# git directory of a JuceSharp checkout inside the tree, and - the public snapshot's own layout -
+# the scratch bare repository `JuceSharp.git` that sits beside the snapshot's DotCharter work tree
+# (the tree there has no .git/modules: JuceSharp is checked out from that bare repository).
+function Resolve-DevJuceSharpGitDir {
+    param([Parameter(Mandatory)][string]$DevRepo, [Parameter(Mandatory)][string]$DevGitCommon)
+    $modules = Join-Path $DevGitCommon 'modules/JuceSharp'
+    if (Test-Path -LiteralPath $modules) { return (Resolve-Path -LiteralPath $modules).Path }
+    $inside = Join-Path $DevRepo 'JuceSharp'
+    if (Test-Path -LiteralPath (Join-Path $inside '.git')) {
+        return Invoke-SnapshotGit -Arguments @('-C', $inside, 'rev-parse', '--path-format=absolute', '--git-common-dir')
+    }
+    $beside = Join-Path (Split-Path -Parent $DevRepo) 'JuceSharp.git'
+    if (Test-Path -LiteralPath $beside) { return (Resolve-Path -LiteralPath $beside).Path }
+    return $null
+}
+
 # The previous public snapshot: the tip of `main` at $Url (a URL or a local repo path),
 # fetched into $Repo - fetch only, nothing is pushed. $null when no URL is given, or
 # when the repo has no `main` yet (a freshly created, empty public repo).
@@ -619,10 +637,49 @@ function Restore-SnapshotBuildOutputs {
     return $restored
 }
 
-Export-ModuleMember -Function Get-PublicRenameMap, Convert-PublicText, Get-PublicExcludedPaths, Test-PublicExcludedPath,
+# Every check the export ran that did not pass, as one line each: the final exit code is
+# non-zero when any is returned, dry run or not. A build or gate that was requested and
+# exited non-zero (or never reported an exit code) fails; so does a gitleaks run that
+# exited non-zero. gitleaks NOT installed is no failure of the dry run (-Push refuses it).
+function Get-SnapshotExportFailures {
+    param(
+        [int]$LeakFindings,
+        [int]$PreflightProblems,
+        [switch]$BuildRequested,
+        [AllowNull()][object]$BuildExit,
+        [AllowNull()][object]$GitleaksExit
+    )
+    if ($LeakFindings -gt 0) { "the leak check has $LeakFindings finding(s)" }
+    if ($PreflightProblems -gt 0) { "the push preflight refused ($PreflightProblems problem(s))" }
+    if ($BuildRequested -and ($null -eq $BuildExit -or [int]$BuildExit -ne 0)) {
+        "the requested build/gate failed (exit $(if ($null -eq $BuildExit) { 'unknown' } else { $BuildExit }))"
+    }
+    if ($null -ne $GitleaksExit -and [int]$GitleaksExit -ne 0) { "gitleaks failed or reported findings (exit $GitleaksExit)" }
+}
+
+# Holds the scratch root for one export: an exclusive handle on '<root>.lock' beside it,
+# so a second export on the same root stops before it deletes or rewrites anything the
+# first one is building or checking. Dispose the returned stream to release it; the OS
+# releases it too when the process dies.
+function Enter-SnapshotScratchLock {
+    param([Parameter(Mandatory)][string]$ScratchRoot)
+    $root = [System.IO.Path]::GetFullPath($ScratchRoot).TrimEnd('\', '/')
+    $lockPath = "$root.lock"
+    $parent = Split-Path -Parent $lockPath
+    if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+    try {
+        return [System.IO.FileStream]::new($lockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    }
+    catch {
+        if ($_.Exception.GetBaseException() -isnot [System.IO.IOException]) { throw }
+        throw "Another export holds the scratch root $root ($lockPath is locked); wait for it or pass another -ScratchRoot."
+    }
+}
+
+Export-ModuleMember -Function Get-SnapshotExportFailures, Enter-SnapshotScratchLock, Get-PublicRenameMap, Convert-PublicText, Get-PublicExcludedPaths, Test-PublicExcludedPath,
     Get-PersonalDataPatterns, Get-PublicLeakRules, Find-PublicLeaksInText, Find-PublicLeaksInPath, Find-PublicTreeLeaks,
     Format-PublicLeakReport, ConvertTo-LeakScanText, Expand-LeakScanGzip, Get-PublicPushPlan, Get-NativeRuntimePendingHash, Add-PublicNativeRuntimeEntry, Get-MsBuildVersion,
     Get-InheritedNativePins, Get-UserPathPlaceholders, Get-UserPathPlaceholderLookahead,
-    Invoke-SnapshotGit, New-SnapshotScratchRepo, Get-PreviousSnapshot, Get-JuceSharpVersionProblem, New-PublicTree, Set-SnapshotIndexText,
+    Invoke-SnapshotGit, New-SnapshotScratchRepo, Resolve-DevJuceSharpGitDir, Get-PreviousSnapshot, Get-JuceSharpVersionProblem, New-PublicTree, Set-SnapshotIndexText,
     Get-SnapshotIndexText, Get-SnapshotMessage, New-SnapshotCommit, Export-SnapshotWorkTree,
     Reset-SnapshotScratchRefs, Get-SnapshotUntrackedPaths, Move-SnapshotBuildOutputs, Assert-SnapshotTracksEverything, Restore-SnapshotBuildOutputs

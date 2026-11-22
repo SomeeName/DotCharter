@@ -283,6 +283,9 @@ public sealed class MutateArrangementSettingsAction(
     Arrangement after,
     Action? onChanged) : IChartAction, ILinkPolicyAction
 {
+    public long EstimatedBytes { get; } =
+        ChartProjectFootprint.EstimateHistoryBytes(before) + ChartProjectFootprint.EstimateHistoryBytes(after);
+
     /// <summary>Linked measures: cannot change linked content in beats (a tuning, capo or string-count change unlinks the placements that cannot share, under every policy).</summary>
     public LinkPolicy LinkPolicy => LinkPolicy.Retain;
 

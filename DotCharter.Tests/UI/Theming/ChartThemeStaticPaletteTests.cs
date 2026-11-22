@@ -51,13 +51,6 @@ public sealed class ChartThemeStaticPaletteTests
         }
     }
 
-    [Fact]
-    public void TheMinimapDrawsPhraseMarkersWithChartThemesOwnBrush()
-    {
-        Assert.True(ReferenceEquals(ChartTheme.GoldBrush, StaticFieldValue<IBrush>("PhraseBrush")),
-            "the phrase marker is a copy of ChartTheme.GoldColor, so a theme change cannot reach it");
-    }
-
     // ── …and the lint that stops the next one ──────────────────────────────
 
     /// <summary>

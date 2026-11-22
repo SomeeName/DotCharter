@@ -1,6 +1,7 @@
 # DotCharter.UI Agent Guide
 
-Avalonia 12 app project and composition root (`App.axaml.cs` builds DI).
+Avalonia 12.1.6 app project and composition root (`App.axaml.cs` builds DI);
+Dock packages use 12.1.5. Versions are pinned in `../Directory.Packages.props`.
 
 This file holds the hard rules, the folder map and ONE routing table. The
 per-area reference lives under `docs/agents/ui/` as plain links (not imports, so
@@ -9,6 +10,11 @@ editing before you edit it** — those files carry each known trap with its guar
 How each rule was learned is in `git log -p DotCharter.UI/AGENTS.md`.
 
 ## Hard rules (read before editing any UI file)
+
+- **Persisted mixer edits notify `ProjectState.NotifyProjectChanged(project)`**:
+  stem gain/mute/solo, original-mix mute, Guitar roles and recovered stems feed
+  the session's dirty tracker. Run mutes, solo-scoped original mute and derived
+  role-strip faders remain transient.
 
 - **Shell chrome is ONE flag.** The activity rail, the title bar and the status
   rail all follow `MainWindowViewModel.IsShellChromeVisible`, which asks the pure
@@ -183,6 +189,11 @@ How each rule was learned is in `git log -p DotCharter.UI/AGENTS.md`.
 
 ## Every new or edited view ships a smoke test
 
+The timeline's `InlineEditOverlayView` hosts FHP, section and lyric drafts through
+`InlineEditViewModel`; reuse it for row editing. Lyric placement, keyboard traversal
+and the tap-queue boundary are described in
+[inspector-editing.md](../docs/agents/ui/misc-surfaces/inspector-editing.md).
+
 XAML faults that build clean and fail only at runtime are listed in the root
 `AGENTS.md`. Here:
 
@@ -201,8 +212,9 @@ XAML faults that build clean and fail only at runtime are listed in the root
   (`Grid.FirePopoverKicker` is the caption ROW; the caption text is
   `TextBlock.FirePopoverKick`).
 - **Every control a user acts on has an accessible name** — `UI/AccessibleNameTests`:
-  - Words inside a PANEL do not name a control (an icon + caption in a
-    `StackPanel` announces as "Avalonia.Controls.StackPanel"). Set
+  - Do not rely on words inside a PANEL to name a control (before Avalonia 12.1.5 an
+    icon + caption in a `StackPanel` announced as "Avalonia.Controls.StackPanel"; now the
+    button reads the caption, but the lint stays strict). Set
     `AutomationProperties.Name` off the caption's key or binding; a list item is
     named by its data's `ToString()`, so row types override it (`LibraryRow`,
     `PlaySongItem`); Dock's pane-header buttons are named in `Styles/Dock.axaml`.

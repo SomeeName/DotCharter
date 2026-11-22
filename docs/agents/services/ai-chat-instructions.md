@@ -35,7 +35,13 @@ the reply's `ToTurn` after, and shows the tokens. Stop cancels the run.
 `Presentation/Editor/AiChatViewModelTests` pins it over a fake `IAiChatChartActions`.
 
 The pane's words follow the Task picker (#640): `Presentation/Screens/Editor/AiChatJobText` is
-the ONE table of the five tasks — label, empty-pane line (`AiChat_Empty_<Task>`: what the
+the ONE table of the eight tasks (#497: the Tools menu's five AI fix rows are tasks here —
+fingering only, FHP + fingering, FHP only, chord names EOF / musical (one entry each, key
+`AiChatChordNamesKey`, the style rides `AiChatInstructionRequest.Style` to
+`AiChartInstructedRun.Style`) — beside sections, ask and tones). A fix task sends with an empty
+box (`AiChatJobText.DefaultInstructionKey`: the old rows ran with no words);
+`AiChatViewModel.StartJobAsync` is what the old rows' palette ids call: show the pane, pick the
+task (never remembered as the default), run it. Each entry's label, empty-pane line (`AiChat_Empty_<Task>`: what the
 task does and what to say) and the box's hint (`AiChat_Hint_<Task>`: an example message).
 A reply that came back with no answer (`Failed` or `Busy`) offers **Retry** on the LAST
 turn only: the same `AiChatInstructionRequest` again, in that reply's place, one run at a
@@ -121,7 +127,7 @@ chunked pass (`DotCharter.Services/Ai/Chart/AiStructure*.cs`):
   a song's form is only visible whole. The prompt (`AiStructurePrompt`) lists every bar
   (start, beats, note/chord counts, fretted span, a REPEAT LETTER shared by bars whose
   sounds are identical, and the beats an anchor starts on as `A@beat`), every section
-  `sN` and phrase `pN` marker with its bar and beat, the scope, and the instruction
+  `sN` and phrase `pN` marker with its bar and beat plus, only where not default, `{status, solo, tone, events, on <arrangements>}` (`AiStructureMarkerNotes`, #486), the scope, and the instruction
   section (`AiChartPrompt.InstructionSection`, shared). Its system prompt carries the
   `RsSectionCatalog.Names` vocabulary. **The FHP / fingering prompts are untouched** —
   pinned byte for byte by hash (`AiStructureTests.The_fhp_and_fingering_prompts_are_unchanged`).
@@ -129,6 +135,14 @@ chunked pass (`DotCharter.Services/Ai/Chart/AiStructure*.cs`):
   `phrase` (`AiStructureOp`, `AiStructureKind`). Positions are bar (+ 1-based beat) on
   `AiStructureGrid` — bars from `BeatMarker.IsMeasure` — so nothing can land between beats,
   and a section's beat must be 1 (the bar line).
+- **`event` = the Edit event / phrase dialog (#481)** (`AiStructureEvents`, op `event`): sets
+  section, status, phrase, solo, tone, the RS event codes and "Apply to arrangements" on the marker
+  at a beat, null = keep, "" = clear. It writes through `EventMarkerEdit.AppendActions` (the dialog's
+  own path) once per named arrangement inside ONE composite, so a multi-arrangement chat request is
+  ONE review row and ONE undo step. Only the FIRST run of such a request is allowed events
+  (`AiChartInstructedRun.EventArrangements`, set by `AiChatInstructionRunner`; the later runs' prompts
+  carry no event block and their replies refuse `event`); the gate judges it like any change (a tone
+  onto a note, an undefined tone: refused). `AiStructureApplier` takes an `AiStructureWorld` to resolve names.
 - **Read strictly, refused whole** (`AiStructureReply.TryRead`): an undeclared field or
   key (`notes`, `fret`, `anchors`), an unknown op or kind (`not-structure`), a section name
   outside `RsSectionCatalog` (`section-name`; stored lower case), a phrase name

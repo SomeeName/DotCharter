@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace DotCharter.UI.Controls.Layers.Helpers;
 
 /// <summary>
@@ -52,11 +50,6 @@ public static class TimeRulerPolicy
     public static string Format(double ms)
     {
         var total = (long)Math.Round(Math.Max(0, ms) / 1000.0);
-        var hours = total / 3600;
-        var minutes = total / 60 % 60;
-        var seconds = total % 60;
-        return hours > 0
-            ? string.Create(CultureInfo.InvariantCulture, $"{hours}:{minutes:00}:{seconds:00}")
-            : string.Create(CultureInfo.InvariantCulture, $"{minutes}:{seconds:00}");
+        return ElapsedTimeLabel.Format(total * 1000.0);
     }
 }

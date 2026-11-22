@@ -54,22 +54,19 @@ public sealed class ToolbarTempoFlyoutTests
     }
 
     /// <summary>
-    ///     One engine value, two places to reach it — the flyout and the Mixer
-    ///     inspector must not drift into two different ranges for the same
-    ///     property, which is how a control ends up able to request a state the
-    ///     other one says is impossible.
+    ///     One engine value, ONE place to reach it: the flyout owns the song pitch (whole semitones, -12..+12)
+    ///     and the Mixer inspector binds no pitch slider any more, so the two cannot drift into two ranges.
     /// </summary>
     [Fact]
-    public void TheFlyoutAndTheMixerAgreeOnTheSongPitchRange()
+    public void TheFlyoutOwnsTheSongPitchRange_AndTheMixerBindsNoSecondSlider()
     {
         var mixer = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor",
             "Inspector", "MixerInspectorView.axaml")));
 
         foreach (var attribute in new[] { "Minimum=\"-12\"", "Maximum=\"12\"", "TickFrequency=\"1\"" })
-        {
             Assert.Contains(attribute, SliderBoundTo(Toolbar(), "Transport.PitchShift"));
-            Assert.Contains(attribute, SliderBoundTo(mixer, "Transport.PitchShift"));
-        }
+
+        Assert.DoesNotContain("Transport.PitchShift", mixer);
     }
 
     /// <summary>The `&lt;Slider …&gt;` element whose Value binds

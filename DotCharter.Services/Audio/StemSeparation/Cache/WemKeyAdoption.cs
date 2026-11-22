@@ -45,7 +45,7 @@ public static class WemKeyAdoption
             }
             catch (Exception ex)
             {
-                logger.Warning(AppLogCategory.Audio, $"Stem cache: the WEM-key adoption pass could not start ({ex.Message}).");
+                logger.Warning(AppLogCategory.Audio, "Stem cache: the WEM-key adoption pass could not start.", ex);
             }
         });
     }
@@ -84,7 +84,7 @@ public static class WemKeyAdoption
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger?.Warning(AppLogCategory.Audio, $"Stem cache: the WEM-key adoption pass failed ({ex.Message}); it runs again next start.");
+            logger?.Warning(AppLogCategory.Audio, "Stem cache: the WEM-key adoption pass failed; it runs again next start.", ex);
             return -1;
         }
     }

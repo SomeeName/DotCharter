@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using DotCharter.Localization;
 using DotCharter.Tone.Audio.Dsp.Presets;
@@ -59,6 +58,7 @@ public sealed class ToneDesignService : IToneDesignService
     private readonly IToneAnchorLibrary? _anchors;
     private readonly Func<NamCaptureCatalog>? _captures;
     private readonly INamCaptureSource? _captureSource;
+    private readonly TimeProvider _time;
 
     /// <summary>Creates the service.</summary>
     /// <param name="config">Live settings source — invoked per call, never cached.</param>
@@ -82,6 +82,7 @@ public sealed class ToneDesignService : IToneDesignService
     /// offers <see cref="ToneDraft.CaptureSearch" />, and a reply that uses it has the
     /// capture downloaded and its <c>namamp</c> pointed at it before validation.
     /// Null means designs choose from the library only, as before.</param>
+    /// <param name="time">Optional clock the elapsed time is measured on; tests inject a fake one.</param>
     public ToneDesignService(
         Func<RigConfig> config,
         IToneDesignModelFactory factory,
@@ -90,7 +91,8 @@ public sealed class ToneDesignService : IToneDesignService
         Func<string?>? namCaptureDirectory = null,
         IToneAnchorLibrary? anchors = null,
         Func<NamCaptureCatalog>? captures = null,
-        INamCaptureSource? captureSource = null)
+        INamCaptureSource? captureSource = null,
+        TimeProvider? time = null)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _factory = factory ?? throw new ArgumentNullException(nameof(factory));
@@ -100,6 +102,7 @@ public sealed class ToneDesignService : IToneDesignService
         _anchors = anchors;
         _captures = captures;
         _captureSource = captureSource;
+        _time = time ?? TimeProvider.System;
     }
 
     /// <summary>The settings this service last PUBLISHED — what
@@ -201,7 +204,7 @@ public sealed class ToneDesignService : IToneDesignService
         ArgumentNullException.ThrowIfNull(request);
         ct.ThrowIfCancellationRequested();
 
-        var total = Stopwatch.StartNew();
+        var total = _time.GetTimestamp();
         status?.Report(_localization["ToneDesign_Status_ReadingReply"]);
 
         var json = ToneDraftJson.ExtractJsonObject(reply) ?? throw new ToneDesignException(
@@ -227,7 +230,7 @@ public sealed class ToneDesignService : IToneDesignService
         IProgress<string>? status,
         CancellationToken ct)
     {
-        var total = Stopwatch.StartNew();
+        var total = _time.GetTimestamp();
         var prepared = await PrepareAsync(settings, request, status, ct).ConfigureAwait(false);
 
         // Provider-specific on purpose: the local CLI says so, because it is the one
@@ -242,7 +245,7 @@ public sealed class ToneDesignService : IToneDesignService
             _ => settings.ModelId
         }));
 
-        var clock = Stopwatch.StartNew();
+        var clock = _time.GetTimestamp();
         ToneDesignModelReply reply;
         try
         {
@@ -266,11 +269,11 @@ public sealed class ToneDesignService : IToneDesignService
                 $"{ex.GetType().Name}: {ex.Message}", ex);
         }
 
-        clock.Stop();
+        var providerElapsed = _time.GetElapsedTime(clock);
         ct.ThrowIfCancellationRequested();
 
         return await ProcessReplyAsync(
-            reply.Json, reply.Usage, prepared.Captures, status, total, clock.ElapsedMilliseconds, ct)
+            reply.Json, reply.Usage, prepared.Captures, status, total, (long)providerElapsed.TotalMilliseconds, ct)
             .ConfigureAwait(false);
     }
 
@@ -331,7 +334,7 @@ public sealed class ToneDesignService : IToneDesignService
         AiUsage usage,
         NamCaptureCatalog captures,
         IProgress<string>? status,
-        Stopwatch total,
+        long total,
         long providerMs,
         CancellationToken ct)
     {
@@ -388,7 +391,7 @@ public sealed class ToneDesignService : IToneDesignService
             warnings,
             json,
             usage,
-            total.Elapsed,
+            _time.GetElapsedTime(total),
             downloaded);
     }
 

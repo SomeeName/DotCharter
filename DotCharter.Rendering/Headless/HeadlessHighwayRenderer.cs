@@ -59,28 +59,6 @@ public sealed class HeadlessHighwayRenderer : IDisposable
     public string DeviceName => _renderer.DeviceName;
 
     /// <summary>
-    ///     Applies the two DEVICE-level graphics settings — MSAA level and render
-    ///     scale — that live on <see cref="IVulkanRenderService" /> rather than on
-    ///     the snapshot, so an offscreen frame can be rendered at the same quality
-    ///     as the live window. Both are clamped by the renderer's own policies and
-    ///     ride the deferred recreation on the next
-    ///     <see cref="Render(FrameSnapshot,int,int,double,int,byte[])" />; the
-    ///     readback size is unaffected (a scaled render is blitted up to the full
-    ///     output image, exactly as it is onto a swapchain image).
-    ///     <para>
-    ///         Bloom and the filmic tonemap are deliberately NOT here: they are
-    ///         per-frame <c>FrameSnapshot.EnableBloom</c> /
-    ///         <c>EnableFilmicTonemap</c> state the engine already forwards.
-    ///     </para>
-    /// </summary>
-    public void ApplyGraphicsSettings(int msaaSamples, int renderScalePercent)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        _renderer.SetMsaaSamples(msaaSamples);
-        _renderer.SetRenderScalePercent(renderScalePercent);
-    }
-
-    /// <summary>
     ///     Renders one deterministic frame of <paramref name="snapshot" /> at
     ///     <paramref name="timeMs" /> song time into a
     ///     <paramref name="width" />×<paramref name="height" /> offscreen image and

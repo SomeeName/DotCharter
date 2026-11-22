@@ -14,14 +14,14 @@ namespace DotCharter.Tests.Services.State.Linking;
 /// </summary>
 internal sealed class LinkHarness
 {
-    public LinkHarness(ChartProject project, AppConfig? config = null)
+    public LinkHarness(ChartProject project, AppConfig? config = null, int maxNodes = HistoryService.DefaultMaxNodes)
     {
         Config = config ?? LinkFixture.Config(MinNoteDistanceMode.MeasureFraction);
         Rule = MeasureContentOptions.Detection with { Spacing = ChartSpacingEnforcer.SpacingGapOf(Config) };
         State.ActiveProject = project;
         State.ActiveArrangement = project.Arrangements[0];
         State.ActiveLevel = Hardest(project.Arrangements[0]);
-        History = new HistoryService(new FakeAppLogger(), new EditingScope(State));
+        History = new HistoryService(new FakeAppLogger(), new EditingScope(State), maxNodes: maxNodes);
     }
 
     public ProjectState State { get; } = new();

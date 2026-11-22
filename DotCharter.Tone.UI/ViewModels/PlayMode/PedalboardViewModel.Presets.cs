@@ -12,7 +12,7 @@ public sealed partial class PedalboardViewModel
 {
     /// <summary>Snapshots the live chain into a <see cref="DcRigPreset"/> for the
     /// browser's save/overwrite actions — it is handed straight to
-    /// <see cref="IDspTonePresetService.SaveUser"/>, with an existing user id for
+    /// <see cref="IDspTonePresetService.SaveUser(string, DspToneCategory, string, DcRigPreset, string?)"/>, with an existing user id for
     /// overwrite. <b>The snapshot LOOP itself is shared</b>
     /// (<see cref="DcRigSnapshot"/>): it existed four times, and the two copies
     /// that dropped the ABI-v22 string params and the ABI-v23 branch tag were the
@@ -31,19 +31,22 @@ public sealed partial class PedalboardViewModel
     /// the pedal cards so the board mirrors the post-apply chain.</summary>
     private void OnPresetApplied()
     {
+        // Capture the incoming preset before Sync applies master bypass.
+        if (IsMasterBypassed) _bypassRestore = RigSceneChainEdits.BypassedNodes(_dsp);
         Sync();
-        // A preset apply is a whole new chain, so the unit the player removed off
-        // the PREVIOUS one has nowhere to go back to — the recorded slot belongs
-        // to a board that is gone.
+        // The removed-unit snapshot belongs to the replaced chain.
         ClearRemovedUnitSnapshot();
-        // A preset apply replaces the sound wholesale, so it is a new starting
-        // point, not a step in the comparison that was running. Re-seeding here
-        // is what keeps the button honest: after picking a tone, "compare" means
-        // "against this tone", never against something the player last heard
-        // three tones ago and has no way to identify.
+        // The incoming chain has no previous comparison trim to strip from its baseline.
+        CompareLevel.Forget();
         SeedCompare();
         // …and a scene asked for while this tone was arriving lands on it now.
         ApplyDeferredScene();
+    }
+
+    private void OnPresetApplyFailed()
+    {
+        _sceneAfterApply = null;
+        Sync();
     }
 
     // ---- A/B compare -----------------------------------------------------------

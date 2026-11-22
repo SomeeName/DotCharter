@@ -67,10 +67,10 @@ public sealed class EditorWorkspaceChromeTests
             }
         }
 
-        // Anti-vacuity: MainWindow, Preview3DView and StemMixerView are the
+        // Anti-vacuity: MainWindow and Preview3DView are the
         // surfaces this grammar exists for (PhraseCatalogView left with its pane
         // header in #601: it is an Inspector tab and the tab strip names it).
-        Assert.True(wearers.Count >= 3,
+        Assert.True(wearers.Count >= 2,
             $"only {wearers.Count} view(s) wear a workspace class — the scan stopped seeing them: " +
             string.Join(", ", wearers));
 

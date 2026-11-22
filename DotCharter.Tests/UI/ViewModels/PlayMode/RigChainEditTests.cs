@@ -29,6 +29,8 @@ public sealed class RigChainEditTests
             new DspParamInfo("drive", "Drive", 0f, 1f, 0.5f),
             new DspParamInfo("level", "Level", 0f, 1f, 0.8f)
         ]),
+        new DspModuleType("ducker", "Ducker", [new DspParamInfo("amount", "Amount", 0f, 1f, 0.5f)])
+            { SupportsSidechain = true },
         new DspModuleType("distortion", "Distortion", [new DspParamInfo("drive", "Drive", 0f, 1f, 0.5f)]),
         new DspModuleType("delay", "Delay", [new DspParamInfo("mix", "Mix", 0f, 1f, 0.3f)]),
         new DspModuleType("amp", "Amp", [new DspParamInfo("gain", "Gain", 0f, 1f, 0.5f)]),
@@ -394,5 +396,52 @@ public sealed class RigChainEditTests
         rig.RemoveCommand.Execute(Add(rig, "overdrive"));
 
         Assert.Contains("Overdrive", rig.UndoRemoveLabel);
+    }
+
+    // ── #399: sidechain source + MIDI control assignments survive copies ─────
+
+    private static PedalNodeViewModel AddKeyedDucker(PedalboardViewModel rig, FakeDspChainService dsp)
+    {
+        var ducker = Add(rig, "ducker");
+        ducker.SidechainSource = JuceSharp.Dsp.JuceDspSidechainSource.SongMix;
+        Assert.True(dsp.SetControlAssignments(ducker.NodeId, [new RigControlAssignment("amount", 2, 0.1f, 0.9f)]));
+        return ducker;
+    }
+
+    private static void AssertKeyedLikeTheOriginal(PedalboardViewModel rig, FakeDspChainService dsp, PedalNodeViewModel copy)
+    {
+        Assert.Equal(JuceSharp.Dsp.JuceDspSidechainSource.SongMix, copy.SidechainSource);
+        var node = dsp.GetNodes().Single(n => n.NodeId == copy.NodeId);
+        Assert.Equal(JuceSharp.Dsp.JuceDspSidechainSource.SongMix, node.Sidechain);
+        var assignment = Assert.Single(node.ControlAssignments);
+        Assert.Equal("amount", assignment.ParameterId);
+        Assert.Equal(2, assignment.MacroIndex);
+    }
+
+    [Fact]
+    public void Duplicate_CarriesTheSidechainSource_AndTheControlAssignments()
+    {
+        var rig = NewRig(out var dsp);
+        var copy = rig.DuplicateNode(AddKeyedDucker(rig, dsp));
+        AssertKeyedLikeTheOriginal(rig, dsp, copy!);
+    }
+
+    [Fact]
+    public void UndoRemove_RestoresTheSidechainSource_AndTheControlAssignments()
+    {
+        var rig = NewRig(out var dsp);
+        rig.RemoveCommand.Execute(AddKeyedDucker(rig, dsp));
+        AssertKeyedLikeTheOriginal(rig, dsp, rig.RestoreLastRemoved()!);
+    }
+
+    [Fact]
+    public void Paste_CarriesTheSidechainSource_AndTheControlAssignments()
+    {
+        var rig = NewRig(out var dsp);
+        var ducker = AddKeyedDucker(rig, dsp);
+        rig.CopyCommand.Execute(ducker);
+        rig.PasteCommand.Execute(null);
+        AssertKeyedLikeTheOriginal(rig, dsp, rig.SelectedNode!);
+        Assert.NotEqual(ducker.NodeId, rig.SelectedNode!.NodeId);
     }
 }

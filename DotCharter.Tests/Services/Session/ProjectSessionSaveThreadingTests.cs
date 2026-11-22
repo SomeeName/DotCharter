@@ -84,6 +84,35 @@ public sealed class ProjectSessionSaveThreadingTests : IDisposable
         Assert.NotSame(project.Arrangements[0], written.Arrangements[0]);
     }
 
+    [Fact]
+    public async Task Save_OverAFileFromANewerBuild_KeepsTheOriginalOnce()
+    {
+        var h = CreateHarness(out var projectPath, out var project);
+        project.NewerWriterVersion = "99.0.0";
+        var original = "<project>newer build bytes</project>"u8.ToArray();
+        File.WriteAllBytes(projectPath, original);
+        var bak = projectPath + ".99.0.0.bak";
+
+        Assert.True(await h.Session.Saver.SaveProjectCoreAsync(projectPath));
+        Assert.Equal(original, File.ReadAllBytes(bak));
+        Assert.Equal("<rscp />", File.ReadAllText(projectPath));
+
+        // A second save must not replace the kept original with this build's output.
+        Assert.True(await h.Session.Saver.SaveProjectCoreAsync(projectPath));
+        Assert.Equal(original, File.ReadAllBytes(bak));
+    }
+
+    [Fact]
+    public async Task Save_OverAnOrdinaryFile_WritesNoBackup()
+    {
+        var h = CreateHarness(out var projectPath, out _);
+        File.WriteAllText(projectPath, "old");
+
+        Assert.True(await h.Session.Saver.SaveProjectCoreAsync(projectPath));
+
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(projectPath)!, "*.bak"));
+    }
+
     // ---- harness --------------------------------------------------------------
 
     /// <summary>

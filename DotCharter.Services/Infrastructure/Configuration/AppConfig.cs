@@ -1,13 +1,8 @@
-﻿namespace DotCharter.Services.Infrastructure.Configuration;
+﻿using DotCharter.Services.Export.Audio;
 
-public enum MinNoteDistanceMode
-{
-    Milliseconds,
-    MeasureFraction,
-    BeatFraction
-}
+namespace DotCharter.Services.Infrastructure.Configuration;
 
-public class AppConfig : RigConfig
+public class AppConfig : FolderConfig
 {
     public string LastProjectPath { get; set; } = string.Empty;
 
@@ -285,6 +280,12 @@ public class AppConfig : RigConfig
     /// hides the strip WITHOUT touching this.</summary>
     public bool ShowMinimap { get; set; } = true;
 
+    /// <summary>Editor session switches (mix, toggles, speed), restored on start.</summary>
+    public EditorSessionConfig EditorSession { get; set; } = new();
+
+    /// <summary>Per-project view memory keyed by project path, capped.</summary>
+    public Dictionary<string, ProjectViewState> ProjectViews { get; set; } = [];
+
     /// <summary>Per-song override of the run's tone source (see
     /// <see cref="SongTonePreference"/>), keyed by the song identity the Live
     /// Play practice profiles use ("lib:&lt;SongKey&gt;" for library songs; read as such from the "psarc:" key earlier builds wrote, the
@@ -319,22 +320,26 @@ public class AppConfig : RigConfig
     // actually negotiated, and keeps polling so external changes (e.g. user changes the
     // buffer in Focusrite Control) are reflected in the UI automatically.
     public bool AutoFollowDeviceAudioSettings { get; set; }
-    public string MidiOutputDeviceName { get; set; } = string.Empty;
 
-    // AutoApplyMeasuredAudioDelay was removed. It promised to copy the measured
-    // output latency into AudioDelayMs on every engine restart — but the playback
-    // service ALREADY subtracts the device's output latency from every position
-    // report (ApplyLatencyCompensation = EstimatedOutputLatencyMs + AudioDelayMs),
-    // live, reading the device's current value. Copying it in again makes the
-    // total 2 × L and pushes the playhead a full output latency BEHIND the audio.
-    // The setting could not be "implemented properly": its premise was the bug.
-    // (It also never did anything — nothing in the app ever read it.)
+    // AutoApplyMeasuredAudioDelay was removed: the playback service already subtracts
+    // the device's output latency from every position report (ApplyLatencyCompensation),
+    // so copying it into AudioDelayMs too would put the playhead 2 x L off. Nothing read it.
 
     // the chart synth plays through the player's own rig instead of the
     // chart's tones (Mixer > MIDI synth > Synth tone). Off = the chart's tones,
     // the default. Read by TransportViewModel; acted on by the editor's
     // ChartTonePreviewController.
     public bool ChartSynthPlaysOwnRig { get; set; }
+
+    // Mixer Sound source: a loaded VST instrument plays the chart instead of the built-in voice.
+    public bool ChartSoundUsesInstrument { get; set; } = true;
+
+    // The instrument goes through the rig; replayed at startup.
+    public bool InstrumentThroughRig { get; set; }
+
+    // Mixer Route instrument: which seats' rigs the chart sound enters.
+    public DotCharter.Tone.Audio.ChartSynth.ChartSoundSeatRoute ChartSoundSeatRoute { get; set; } =
+        DotCharter.Tone.Audio.ChartSynth.ChartSoundRouting.DefaultSeatRoute;
 
     // Last-used VST selections; restored on startup after ScanVstPlugins completes.
     // LastGuitarVstPath is a legacy single-slot field kept for backward-compatibility
@@ -397,19 +402,18 @@ public class AppConfig : RigConfig
     public int TappedHarmonicFretOffset { get; set; } = 12;
 
     /// <summary>
-    ///     After a fingering edit, move the governing FHP anchor so Rocksmith
-    ///     derives the fingers the chart actually authored.
+    ///     After a fingering edit, move the governing FHP anchor so Rocksmith derives the fingers the chart authored.
     ///     <para>
-    ///         OFF by default, and that asymmetry with
-    ///         <see cref="SyncHandShapeToChordTemplate" /> is deliberate: a hand
-    ///         shape describes the same decision as its chord, whereas an anchor
-    ///         says where the player's HAND goes — a much bigger claim, often
-    ///         shared with neighbouring sounds the fingering edit never touched.
-    ///         Inspector rule E04 reports the disagreement either way, so leaving
-    ///         this off costs a warning, not a silent defect.
+    ///         OFF by default, unlike <see cref="SyncHandShapeToChordTemplate" />, on purpose: a hand shape describes
+    ///         the same decision as its chord, whereas an anchor says where the player's HAND goes — a bigger
+    ///         claim, often shared with neighbouring sounds the edit never touched. Rule E04 reports the
+    ///         disagreement either way, so leaving this off costs a warning, not a silent defect.
     ///     </para>
     /// </summary>
     public bool SyncAnchorToChordFingering { get; set; }
+
+    /// <summary>Inspector edits wait as a draft for Apply; off by default.</summary>
+    public bool InspectorApplyStep { get; set; }
 
     /// <summary>
     ///     Leave two-string shapes without an automatic chord name, and strip any
@@ -512,9 +516,10 @@ public class AppConfig : RigConfig
     public double LeadingSilenceSeconds { get; set; } = 10.0;
     public double TrailingSilenceSeconds { get; set; } = 2.0;
 
-    // Configurable normal Ctrl+V paste contents. Each toggle controls whether
-    // that object class is included in a normal paste; everything stays on
-    // the clipboard regardless, so disabled types are simply skipped on apply.
+    // Plain paste and Send selection replace included kinds in their landing range.
+    public bool PasteReplacesExisting { get; set; } = true;
+
+    // Normal paste skips disabled types; their contents stay on the clipboard.
     public bool PasteIncludeNotes { get; set; } = true;
     public bool PasteIncludeChords { get; set; } = true;
     public bool PasteIncludeHandShapes { get; set; } = true;
@@ -931,8 +936,6 @@ public class AppConfig : RigConfig
     // ------ Rocksmith package export -----------------------------------------
     // Last-used export dialog values (the 0.9.0 export presets).
     public string LastExportAppId { get; set; } = "248750";
-    public double ExportAudioVolume { get; set; } = -8.0;
-    public double ExportPreviewVolume { get; set; } = -7.0;
     public bool ExportIncludeVocals { get; set; } = true;
 
     // ------ Save companions --------------------------------------------------
@@ -975,14 +978,11 @@ public class AppConfig : RigConfig
     /// </summary>
     public bool SaveCompanionRs2Dlc { get; set; } = true;
 
-    /// <summary>
-    /// "RS XML for 6-string tools": a 7-/8-string guitar saved as <c>.xml</c> is
-    ///     written as a six-string arrangement (the extra strings' notes dropped), because
-    ///     EOF aborts the import on a <c>string</c> above 5. Off by default, which keeps the
-    ///     spec XML with all strings. The DTRS XML bundle and the <c>.rs2dlc</c> always use
-    ///     the six-string projection (DLC Builder is their consumer).
-    /// </summary>
+    /// <summary>Write saved XML and the DTRS XML bundle as six-string guitar arrangements
+    /// for tools such as EOF that reject string indices above 5. Extra guitar notes are
+    /// dropped. Off by default to retain every string.</summary>
     public bool RsXmlSixStringProjection { get; set; }
+
 
     /// <summary>
     ///     "RS XML phrases between beats as moveR": write a phrase that starts on a note
@@ -1023,7 +1023,8 @@ public class AppConfig : RigConfig
 
     /// <summary>
     ///     Every top-level member of <c>appconfig.json</c> this build does not declare,
-    /// kept as it was read and written back unchanged. A newer build's
+    /// kept as it was read and written back unchanged, except retired settings
+    /// discarded by <see cref="JsonConfigurationService" />. A newer build's
     ///     setting therefore survives this one's saves, so running an older build, a
     ///     downgrade or a rollback deletes nothing. Null when the file held nothing
     ///     unknown. Builds before this one drop such members; nothing can fix those.
@@ -1035,10 +1036,14 @@ public class AppConfig : RigConfig
     /// psarc "Package Author" when a chart has none set.</summary>
     public string DefaultCharterName { get; set; } = "";
 
-    // Where the export dialog's Test export writes (DLC Builder's test folder);
-    // blank = a "test" folder beside the output file. Export-preset members an
-    // older build stored are not read; they ride along in UnknownSettings.
-    public string ExportTestFolder { get; set; } = string.Empty;
+    /// <summary>The default folder for Rocksmith test exports. Blank uses the song's export folder.</summary>
+    public string ExportTestDefaultFolder { get; set; } = string.Empty;
+
+    public int ExportAutoVolumeTargetLufs
+    {
+        get;
+        set => field = RocksmithAutoVolume.ClampTarget(value);
+    } = RocksmithAutoVolume.DefaultTargetLufs;
 
     // User-authored "what does ALIKE mean" patterns for select-like and the
     // pattern search, each carrying its own keybinds. Managed by

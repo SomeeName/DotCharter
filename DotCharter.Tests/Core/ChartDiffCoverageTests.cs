@@ -10,6 +10,70 @@ namespace DotCharter.Tests.Core;
 /// </summary>
 public sealed class ChartDiffCoverageTests
 {
+    private static readonly FieldExclusion[] Exclusions =
+    [
+        new(typeof(GuitarNote), nameof(GuitarNote.IgnoreDerived), "Save-time provenance, not an authored technique."),
+        new(typeof(GuitarNote), nameof(GuitarNote.GraceSlide), "Import-transient hint consumed before the chart is authored."),
+        new(typeof(Chord), nameof(Chord.IgnoreDerived), "Save-time provenance, not an authored technique.")
+    ];
+
+    [Fact]
+    public void EveryExcludedFieldStillExistsAndHasAReason()
+    {
+        foreach (var exclusion in Exclusions)
+        {
+            Assert.NotNull(exclusion.Owner.GetProperty(exclusion.Property));
+            Assert.False(string.IsNullOrWhiteSpace(exclusion.Reason));
+        }
+    }
+
+    [Theory]
+    [InlineData(typeof(GuitarNote))]
+    [InlineData(typeof(Chord))]
+    [InlineData(typeof(ChordNote))]
+    public void EveryAuthoredSoundFieldIsCompared(Type type)
+    {
+        foreach (var property in DomainFieldProbe.SettableProperties(type))
+        {
+            if (Exclusions.Any(e => e.Owner == type && e.Property == property.Name)) continue;
+            var oldSound = DomainFieldProbe.Populated(type);
+            var newSound = DomainFieldProbe.Populated(type);
+            var oldArrangement = ArrangementWith(oldSound);
+            var newArrangement = ArrangementWith(newSound);
+            Assert.True(ChartDiffEngine.Diff(oldArrangement, newArrangement).IsEmpty);
+
+            property.SetValue(newSound, DomainFieldProbe.Alternate(property.PropertyType));
+
+            Assert.False(ChartDiffEngine.Diff(oldArrangement, newArrangement).IsEmpty,
+                $"The diff missed {type.Name}.{property.Name}.");
+        }
+    }
+
+    private static Arrangement ArrangementWith(object sound)
+    {
+        var arrangement = new Arrangement();
+        var level = new ChartLevel();
+        switch (sound)
+        {
+            case GuitarNote note:
+                level.Notes.Add(note);
+                break;
+            case Chord chord:
+                level.Chords.Add(chord);
+                break;
+            case ChordNote chordNote:
+                var strum = new Chord();
+                strum.ChordNotes.Add(chordNote);
+                level.Chords.Add(strum);
+                break;
+            default:
+                throw new ArgumentException("Expected a guitar sound.", nameof(sound));
+        }
+
+        arrangement.Levels.Add(level);
+        return arrangement;
+    }
+
     private static (Arrangement Old, Arrangement New) Pair(Action<GuitarNote> mutate)
     {
         static Arrangement Build()

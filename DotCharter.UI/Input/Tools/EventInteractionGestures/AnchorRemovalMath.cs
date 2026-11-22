@@ -42,16 +42,19 @@ public static class AnchorRemovalMath
 
         var span = newBeats[nextAnchor].Time - newBeats[prevAnchor].Time;
         if (span < minSpanMs) span = minSpanMs;
-        double beatCount = nextAnchor - prevAnchor;
-        var bpm = beatCount * 60000.0 / span;
-        var msPerBeat = 60000.0 / bpm;
+        var quarterNotes = 0.0;
+        for (var i = prevAnchor; i < nextAnchor; i++)
+            quarterNotes += QuarterNoteUnits(newBeats[i]);
+        var bpm = quarterNotes * 60000.0 / span;
         newBeats[prevAnchor].Bpm = bpm;
         for (var i = prevAnchor + 1; i < nextAnchor; i++)
         {
-            newBeats[i].Time = newBeats[i - 1].Time + msPerBeat;
+            newBeats[i].Time = newBeats[i - 1].Time + 60000.0 / bpm * QuarterNoteUnits(newBeats[i - 1]);
             newBeats[i].Bpm = bpm;
         }
 
         return (oldBeats, newBeats);
     }
+
+    private static double QuarterNoteUnits(BeatMarker beat) => 4.0 / (beat.NoteDenominator > 0 ? beat.NoteDenominator : 4);
 }

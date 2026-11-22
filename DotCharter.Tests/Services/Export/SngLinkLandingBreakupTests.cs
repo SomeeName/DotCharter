@@ -102,7 +102,7 @@ public sealed class SngLinkLandingBreakupTests
     /// <summary>
     ///     A chord marked <c>SplitIntoNotes</c> ships as one note per string in the
     ///     game's file too — here the imported pick scrapes of the owner's reference
-    ///     (#599): eight ignored, tapped, tremolo, fret-hand-muted notes with an
+    ///     (#599): eight ignored, tapped, tremolo, unmuted notes with an
     ///     unpitched slide, and no chord.
     /// </summary>
     [Fact]
@@ -118,7 +118,8 @@ public sealed class SngLinkLandingBreakupTests
         Assert.DoesNotContain(notes, n => (n.Mask & RsNoteMask.Chord) != 0);
         var scrapes = notes.Where(n => (n.Mask & RsNoteMask.Ignore) != 0).ToList();
         Assert.Equal(8, scrapes.Count);
-        const uint scrape = RsNoteMask.Tap | RsNoteMask.Tremolo | RsNoteMask.Mute | RsNoteMask.UnpitchedSlide;
+        Assert.All(scrapes, n => Assert.Equal(0u, n.Mask & RsNoteMask.Mute));
+        const uint scrape = RsNoteMask.Tap | RsNoteMask.Tremolo | RsNoteMask.UnpitchedSlide;
         Assert.All(scrapes, n => Assert.Equal(scrape, n.Mask & scrape));
     }
 

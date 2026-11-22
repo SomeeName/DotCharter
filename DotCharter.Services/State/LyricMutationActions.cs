@@ -7,6 +7,10 @@ namespace DotCharter.Services.State;
 /// event-ribbon drag tool when the user grabs a lyric pill and slides it
 /// horizontally; undo restores both the start and end positions so the
 /// original sustain length comes back exactly.
+/// <para>
+/// A hand-placed syllable has been reviewed: the move clears its auto-sync review
+/// reasons in the same undo node, and undo brings them back.
+/// </para>
 /// </summary>
 public class MoveLyricAction : IChartAction, ILinkPolicyAction
 {
@@ -18,11 +22,13 @@ public class MoveLyricAction : IChartAction, ILinkPolicyAction
     private readonly FractionalPosition _oldEnd;
     private readonly FractionalPosition _newPos;
     private readonly FractionalPosition _newEnd;
+    private readonly LyricReviewReason _reviewBefore;
 
     public MoveLyricAction(LyricEvent lyric, FractionalPosition oldPos, FractionalPosition oldEnd,
         FractionalPosition newPos, FractionalPosition newEnd)
     {
         _lyric = lyric;
+        _reviewBefore = lyric.ReviewReasons;
         _oldPos = oldPos;
         _oldEnd = oldEnd;
         _newPos = newPos;
@@ -35,12 +41,14 @@ public class MoveLyricAction : IChartAction, ILinkPolicyAction
     {
         _lyric.Position = _newPos;
         _lyric.EndPosition = _newEnd;
+        _lyric.ReviewReasons = LyricReviewReason.None;
     }
 
     public void Undo()
     {
         _lyric.Position = _oldPos;
         _lyric.EndPosition = _oldEnd;
+        _lyric.ReviewReasons = _reviewBefore;
     }
 }
 
@@ -56,6 +64,10 @@ public class MoveLyricAction : IChartAction, ILinkPolicyAction
 /// stretched by rolling the wheel over it, so the tick count is the user's wrist,
 /// not their intent.
 /// </para>
+/// <para>
+/// Like a move, a resize clears the syllable's auto-sync review reasons and undo
+/// restores them. A merged run keeps the reasons its FIRST tick saw.
+/// </para>
 /// </summary>
 public class ResizeLyricAction : IChartAction, IMergeableAction, ILinkPolicyAction
 {
@@ -64,7 +76,10 @@ public class ResizeLyricAction : IChartAction, IMergeableAction, ILinkPolicyActi
 
     private readonly LyricEvent _lyric;
     private readonly FractionalPosition _oldEnd;
+    private readonly LyricReviewReason _reviewBefore;
     private FractionalPosition _newEnd;
+    private readonly bool _shortenedBefore;
+    private bool _shortenedAfter;
 
     /// <summary>
     ///     An empty <c>mergeVerb</c> (the default) means "never merge" — the same
@@ -72,19 +87,34 @@ public class ResizeLyricAction : IChartAction, IMergeableAction, ILinkPolicyActi
     ///     caller that pushes a single deliberate resize still gets its own node.
     /// </summary>
     public ResizeLyricAction(LyricEvent lyric, FractionalPosition oldEnd, FractionalPosition newEnd,
-        string mergeVerb = "")
+        string mergeVerb = "", bool? shortened = null)
     {
         _lyric = lyric;
         _oldEnd = oldEnd;
         _newEnd = newEnd;
+        _reviewBefore = lyric.ReviewReasons;
         MergeVerb = mergeVerb;
+        _shortenedBefore = lyric.IsSustainShortened;
+        _shortenedAfter = shortened ?? _shortenedBefore;
     }
 
     public string MergeVerb { get; }
 
-    public bool HasEffect => !_oldEnd.Equals(_newEnd);
-    public void Execute() => _lyric.EndPosition = _newEnd;
-    public void Undo() => _lyric.EndPosition = _oldEnd;
+    public bool HasEffect => _oldEnd != _newEnd || _shortenedBefore != _shortenedAfter;
+
+    public void Execute()
+    {
+        _lyric.EndPosition = _newEnd;
+        _lyric.IsSustainShortened = _shortenedAfter;
+        _lyric.ReviewReasons = LyricReviewReason.None;
+    }
+
+    public void Undo()
+    {
+        _lyric.EndPosition = _oldEnd;
+        _lyric.IsSustainShortened = _shortenedBefore;
+        _lyric.ReviewReasons = _reviewBefore;
+    }
 
     /// <summary>Same gesture, same syllable — compared by REFERENCE, because two
     /// equal-looking lyrics at one position can be different objects (rule (c)).</summary>
@@ -93,7 +123,35 @@ public class ResizeLyricAction : IChartAction, IMergeableAction, ILinkPolicyActi
 
     /// <summary>Our <c>_oldEnd</c> stays — it is the run's true starting point —
     /// and only the destination advances.</summary>
-    public void Absorb(IChartAction next) => _newEnd = ((ResizeLyricAction)next)._newEnd;
+    public void Absorb(IChartAction next)
+    {
+        var resize = (ResizeLyricAction)next;
+        _newEnd = resize._newEnd;
+        _shortenedAfter = resize._shortenedAfter;
+    }
+}
+
+/// <summary>
+/// Accepts an auto-synced syllable as it stands: clears its review reasons without
+/// touching its timing, so the row mark and the review stops go away. Undo restores them.
+/// </summary>
+public class MarkLyricReviewedAction : IChartAction, ILinkPolicyAction
+{
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
+    private readonly LyricEvent _lyric;
+    private readonly LyricReviewReason _reviewBefore;
+
+    public MarkLyricReviewedAction(LyricEvent lyric)
+    {
+        _lyric = lyric;
+        _reviewBefore = lyric.ReviewReasons;
+    }
+
+    public bool HasEffect => _reviewBefore != LyricReviewReason.None;
+    public void Execute() => _lyric.ReviewReasons = LyricReviewReason.None;
+    public void Undo() => _lyric.ReviewReasons = _reviewBefore;
 }
 
 /// <summary>
@@ -153,6 +211,9 @@ public class RemoveLyricAction : IChartAction, ILinkPolicyAction
     private int _lyricIndex;
     private int _phraseIndex = -1;
     private bool _droppedPhrase;
+    private LyricEvent? _remainingLast;
+    private bool _remainingLastWasEnd;
+    private bool _remainingLastWasWordPart;
 
     public RemoveLyricAction(ObservableCollection<LyricPhrase> trackPhrases, LyricPhrase phrase, LyricEvent lyric)
     {
@@ -168,6 +229,13 @@ public class RemoveLyricAction : IChartAction, ILinkPolicyAction
         _lyricIndex = _phrase.Lyrics.IndexOf(_lyric);
         if (_lyricIndex < 0) return;
         _phrase.Lyrics.RemoveAt(_lyricIndex);
+        _remainingLast = _phrase.Lyrics.LastOrDefault();
+        if (_remainingLast != null)
+        {
+            _remainingLastWasEnd = _remainingLast.IsPhraseEnd;
+            _remainingLastWasWordPart = _remainingLast.IsWordPart;
+            LyricLineRule.Apply(_remainingLast, _remainingLast.IsWordPart, true);
+        }
         if (_phrase.Lyrics.Count == 0)
         {
             _phraseIndex = _trackPhrases.IndexOf(_phrase);
@@ -181,6 +249,8 @@ public class RemoveLyricAction : IChartAction, ILinkPolicyAction
 
     public void Undo()
     {
+        _remainingLast?.IsPhraseEnd = _remainingLastWasEnd;
+        _remainingLast?.IsWordPart = _remainingLastWasWordPart;
         if (_droppedPhrase && _phraseIndex >= 0)
         {
             var insertAt = Math.Min(_phraseIndex, _trackPhrases.Count);

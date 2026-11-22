@@ -130,13 +130,12 @@ public sealed partial class PedalboardViewModel : ViewModelBase
             openUrl: url => TryOpenUrl(shell, url),
             config: config,
             searchPost: dispatcher != null ? dispatcher.Post : null);
-        // The setlists apply through the browser (so the active tone, the picker and
-        // the apply queue are the ones every other pick uses); built first so the
-        // browser can offer them on its rail. The lambdas run only after both exist.
+        // Setlists share the browser's apply queue and active tone; these lambdas
+        // run after both objects exist.
         Setlists = new RigSetlistsViewModel(presets, config, localization,
             (preset, scene) => Browser!.ApplyPresetOnScene(preset, scene),
             () => Browser?.ActivePreset);
-        Browser = new PresetBrowserViewModel(presets, localization, BuildCurrentRig, OnPresetApplied, namBrowser,
+        Browser = new PresetBrowserViewModel(presets, localization, BuildCurrentRig, OnPresetApplied, config, namBrowser,
             searchPost: dispatcher != null ? dispatcher.Post : null,
             // A card click lands on the seat the picker points at, like every
             // other edit on this surface (and the SCENE strip's compare).
@@ -167,7 +166,8 @@ public sealed partial class PedalboardViewModel : ViewModelBase
             // every design request says what the player's strings are tuned to
             // (read per request: the tuner is built just below)
             currentTuning: () => RigTuner?.DesignTuning,
-            setlists: Setlists);
+            setlists: Setlists,
+            onApplyFailed: OnPresetApplyFailed);
         // The tuner's concert pitch is per install (AppConfig.TunerReferenceHz),
         // so it takes the config service and persists it itself.
         RigTuner = new RigTunerViewModel(audio, localization, routing: null, config: config);
@@ -686,6 +686,7 @@ public sealed partial class PedalboardViewModel : ViewModelBase
         var type = AvailableModules.FirstOrDefault(m => m.Id == node.ModuleTypeId);
         var vm = new PedalNodeViewModel(_dsp, node, type, _loc, _audio, _files, LookupCaptureManifest,
             ListLibraryChoices);
+        foreach (var param in vm.StringParams) param.PickerConfig = _config;
         // A junction bypass / enabledBranches change re-lays the board.
         vm.StructureChanged += RebuildBoardColumns;
         // A capture picked on a NEURAL AMP card loads asynchronously natively — arm

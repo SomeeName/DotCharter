@@ -12,8 +12,8 @@ public sealed class MidiParseException : Exception
 }
 
 /// <summary>
-/// Pure Standard MIDI File parser (formats 0 and 1; format 2 tracks are
-/// parsed independently like format 1). No I/O — bytes in, data out.
+/// Pure Standard MIDI File parser (formats 0/1 share timing; format 2 keeps
+/// independent track timing). No I/O — bytes in, data out.
 ///
 /// Defensive by construction: every length field is validated against the
 /// remaining input before it is honored, all reads are bounds-checked, and
@@ -67,7 +67,17 @@ public static class MidiFileParser
 
             var chunkEnd = reader.Position + (int)chunkLength;
             if (chunkType == "MTrk")
-                tracks.Add(ParseTrack(reader, chunkEnd, tempoEvents, timeSignatures));
+            {
+                var trackTempos = new List<MidiTempoEvent>();
+                var trackSignatures = new List<MidiTimeSignatureEvent>();
+                var track = ParseTrack(reader, chunkEnd, trackTempos, trackSignatures);
+                tracks.Add(new MidiTrackData(track.Name, track.Notes, trackTempos, trackSignatures));
+                if (format != 2)
+                {
+                    tempoEvents.AddRange(trackTempos);
+                    timeSignatures.AddRange(trackSignatures);
+                }
+            }
             // Unknown chunk types are skipped per the SMF spec.
             reader.SeekTo(chunkEnd);
         }

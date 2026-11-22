@@ -9,6 +9,7 @@ public sealed partial class FakeEditorSettingsScreen : ObservableObject, IEditor
     [ObservableProperty] private bool _useFastChartingInput;
     [ObservableProperty] private bool _syncHandShapeToChordTemplate = true;
     [ObservableProperty] private bool _syncAnchorToChordFingering;
+    [ObservableProperty] private bool _inspectorApplyStep;
     [ObservableProperty] private bool _autoNameNewChords = true;
     [ObservableProperty] private bool _suppressDoubleStopChordNames = true;
     [ObservableProperty] private bool _keepPowerChordNames;
@@ -26,6 +27,7 @@ public sealed partial class FakeEditorSettingsScreen : ObservableObject, IEditor
 
     [ObservableProperty] private double _minNoteDistanceMs = 10;
     [ObservableProperty] private int _minNoteDistanceDivisor = 64;
+    [ObservableProperty] private bool _pasteReplacesExisting = true;
     [ObservableProperty] private bool _pasteIncludeNotes = true;
     [ObservableProperty] private bool _pasteIncludeChords = true;
     [ObservableProperty] private bool _pasteIncludeHandShapes = true;
@@ -59,6 +61,7 @@ public sealed partial class FakeEditorSettingsScreen : ObservableObject, IEditor
         SyncHandShapeToChordTemplate = false,
         SuppressDoubleStopChordNames = false,
         LyricSpanWordGap = false,
+        PasteReplacesExisting = false,
         PasteIncludeNotes = false,
         PasteIncludeChords = false,
         PasteIncludeHandShapes = false,
@@ -83,6 +86,7 @@ public sealed partial class FakeEditorSettingsScreen : ObservableObject, IEditor
     {
         UseFastChartingInput = true,
         SyncAnchorToChordFingering = true,
+        InspectorApplyStep = true,
         KeepPowerChordNames = true,
         LyricSpanPhraseGap = true,
         StringOrderIndex = 1,

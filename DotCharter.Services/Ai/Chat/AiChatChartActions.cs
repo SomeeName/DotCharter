@@ -29,6 +29,14 @@ public sealed record AiChatInstructionRequest(
     /// <summary>Fix with AI: the findings the pass must remove (the rule gate rejects a chunk that
     /// leaves one it reaches); null for an ordinary instruction.</summary>
     public IReadOnlyList<AiChartFindingTarget>? Targets { get; init; }
+
+    /// <summary>The naming style of the chord names job (the menu's EOF / musical rows); unused by every other job.</summary>
+    public ChordNamingStyle Style { get; init; } = ChordNamingStyle.Eof;
+
+    /// <summary>The scopes of the OTHER arrangements one request covers: after <see cref="Scope" />, one
+    /// run each, in order; their reviews queue behind the first and show one by one. Empty for a request
+    /// about one arrangement.</summary>
+    public IReadOnlyList<AiChatScope> MoreScopes { get; init; } = [];
 }
 
 /// <summary>
@@ -125,6 +133,55 @@ public sealed class AiChatInstructionRunner : IAiChatChartActions
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Scope);
+        if (request.MoreScopes.Count == 0) return await RunOneAsync(request, false, Set(request.Scope), ct);
+
+        // One run per arrangement, one after the other (the pass runs one at a time); the reply labels each
+        // arrangement's part, and every review but the first queues behind the one showing.
+        var replies = new List<(Arrangement? Arrangement, AiChatInstructionReply Reply)>();
+        var first = request with { MoreScopes = [] };
+        // The event marker edit (the dialog's "Apply to arrangements") is ONE shared edit: only the first run may
+        // propose it, over every chosen arrangement, so the runs after it never make a second copy.
+        var chosen = new[] { request.Scope }.Concat(request.MoreScopes).ToList();
+        foreach (var scope in chosen)
+        {
+            var events = replies.Count == 0 ? Set([.. chosen]) : null;
+            var reply = await RunOneAsync(first with { Scope = scope }, replies.Any(r => r.Reply.Review is not null), events, ct);
+            replies.Add((scope.Arrangement, reply));
+            // Stopped, or another run in flight: the rest would answer the same, so say it once.
+            if (reply.Status is AiChartRunStatus.Cancelled or AiChartRunStatus.Busy) break;
+        }
+
+        return Combine(replies);
+    }
+
+    private AiChatInstructionReply Combine(List<(Arrangement? Arrangement, AiChatInstructionReply Reply)> replies)
+    {
+        var sb = new StringBuilder();
+        foreach (var (arrangement, reply) in replies)
+        {
+            if (sb.Length > 0) sb.Append("\n\n");
+            sb.Append(_localization.Format("AiChat_ArrangementHeader", arrangement?.Name ?? "")).Append('\n').Append(reply.Text);
+        }
+
+        var held = replies.Count(r => r.Reply.Review is not null);
+        if (held > 1) sb.Append("\n\n").Append(_localization.Format("AiChat_QueuedReviews", held));
+        var inputs = replies.Sum(r => r.Reply.Usage?.InputTokens ?? 0);
+        var outputs = replies.Sum(r => r.Reply.Usage?.OutputTokens ?? 0);
+        var status = replies.Select(r => r.Reply.Status).FirstOrDefault(s => s == AiChartRunStatus.Held,
+            replies.Select(r => r.Reply.Status).FirstOrDefault(s => s != AiChartRunStatus.Answered, replies[0].Reply.Status));
+        return new AiChatInstructionReply(status, sb.ToString(), replies.Select(r => r.Reply.Review).FirstOrDefault(r => r is not null),
+            inputs > 0 || outputs > 0 ? new AiChatUsage(inputs, outputs) : null);
+    }
+
+    private static IReadOnlyList<Arrangement>? Set(params AiChatScope[] scopes)
+    {
+        var set = scopes.Select(s => s.Arrangement).OfType<Arrangement>().Distinct().ToList();
+        return set.Count == 0 ? null : set;
+    }
+
+    private async Task<AiChatInstructionReply> RunOneAsync(AiChatInstructionRequest request, bool queueBehindHeld,
+        IReadOnlyList<Arrangement>? eventSet, CancellationToken ct)
+    {
         var text = AiChatExcerpt.Instruction(request.Instruction);
         if (text.Length == 0) throw new ArgumentException("An instruction is required.", nameof(request));
 
@@ -143,7 +200,7 @@ public sealed class AiChatInstructionRunner : IAiChatChartActions
         var instruction = new AiChartInstruction(text, AiChatExcerpt.Of(request.Conversation, request.Instruction));
         var run = new AiChartInstructedRun(request.Job, instruction, request.Scope.Arrangement, request.Scope.From,
             request.Scope.To, request.ModelId, request.Scope.ToneChanges);
-        var outcome = await _run.RunInstructionAsync(run with { Targets = targets }, ct);
+        var outcome = await _run.RunInstructionAsync(run with { Style = request.Style, Targets = targets, QueueBehindHeld = queueBehindHeld, EventArrangements = eventSet }, ct);
         if (outcome.Review is { } held) _own.Add(held.Id);
 
         var usage = outcome.Result is { } r && (r.InputTokens > 0 || r.OutputTokens > 0)

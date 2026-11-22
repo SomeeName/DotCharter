@@ -26,7 +26,7 @@ public sealed record InputJackOption(int Jack, string Label)
 ///         the same three <c>RigConfig</c> fields through these helpers and
 ///         re-applies the engine through <c>ApplyAudioConfiguration</c>, which is
 ///         the single writer of the live seat baseline
-///         (<see cref="LiveInputSeatLayout.FromInputConfig" />) — this type adds
+///         (<see cref="LiveInputSeatLayout.FromInputConfig(RigConfig, int)" />) — this type adds
 ///         no second one.
 ///     </para>
 ///     <para>
@@ -186,7 +186,7 @@ public static class GuitarInputChannels
     ///     The open channel seat 0's capture ring reads under this config — what
     ///     live judging, the tuner and the latency calibration all listen to when
     ///     nothing has re-routed the seat. It is
-    ///     <see cref="LiveInputSeatLayout.FromInputConfig" />'s answer, read
+    ///     <see cref="LiveInputSeatLayout.FromInputConfig(RigConfig)" />'s answer, read
     ///     rather than re-derived.
     /// </summary>
     public static int SeatZeroOpenChannel(RigConfig config) =>

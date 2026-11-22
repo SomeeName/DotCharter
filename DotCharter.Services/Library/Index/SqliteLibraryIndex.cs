@@ -28,7 +28,7 @@ public sealed class SqliteLibraryIndex : ILibraryIndex
     /// rows would deserialize with RouteMask 0 and fall back to the (wrong)
     /// name-based arrangement type until the file's mtime changed.
     /// v3: LibrarySongEntry gained Charter/Version (toolkit.version stamp) for
-    /// the per-CDLC shared-leaderboard identity; v2 rows lack the columns, so
+    /// the per-CDLC library identity; v2 rows lack the columns, so
     /// a rebuild re-reads each archive's toolkit stamp once.
     /// v4: LibraryArrangementEntry gained ToneBase (manifest Tone_Base) for the
     /// in-game-tone base tone; v3 rows deserialize it empty, so a rebuild
@@ -1068,7 +1068,8 @@ public sealed class SqliteLibraryIndex : ILibraryIndex
                     {
                         var path = reader.GetString(0);
                         if (path.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) &&
-                            !present.Contains(path))
+                            !present.Contains(path) &&
+                            IsProvablyGone(path))
                         {
                             stale.Add(path);
                         }
@@ -1117,6 +1118,31 @@ public sealed class SqliteLibraryIndex : ILibraryIndex
             catch (Exception ex)
             {
                 LogFailure(ref _writeFailureWarned, "purge", rootPath, ex);
+            }
+        }
+
+        /// <summary>
+        ///     True only when <paramref name="path" /> is really gone. The scan's enumeration
+        ///     skips a directory it cannot read (<c>IgnoreInaccessible</c>), so "absent from
+        ///     the list" also means "denied", "share dropped mid-scan" or "sync folder
+        ///     offline", and deleting the rating of such a file loses it for good. A path is
+        ///     gone when it does not exist AND its directory is either missing or readable
+        ///     (an unreadable directory proves nothing about what is inside it).
+        /// </summary>
+        private static bool IsProvablyGone(string path)
+        {
+            try
+            {
+                if (File.Exists(path)) return false;
+                var directory = Path.GetDirectoryName(path);
+                if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory)) return true;
+                using var entries = Directory.EnumerateFileSystemEntries(directory).GetEnumerator();
+                entries.MoveNext();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
             }
         }
 

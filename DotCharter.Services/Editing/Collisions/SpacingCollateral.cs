@@ -54,11 +54,14 @@ public sealed class SpacingCollateral
         foreach (var state in _sounds)
         {
             state.Sound.Sustain = state.Sustain;
-            if (state.Bends == null) continue;
-
             var bends = state.Sound.BendValues;
             bends.Clear();
-            foreach (var bend in state.Bends) bends.Add(bend);
+            foreach (var bend in state.Bends)
+            {
+                bend.Target.Position = bend.Position;
+                bend.Target.Step = bend.Step;
+                bends.Add(bend.Target);
+            }
         }
 
         foreach (var state in _shapes) state.Shape.EndPosition = state.EndPosition;
@@ -106,7 +109,9 @@ public sealed class SpacingCollateral
         return new SpacingCollateral(sounds, shapes);
     }
 
-    internal readonly record struct SoundState(IGuitarSound Sound, FractionalPosition Sustain, BendValue[]? Bends);
+    internal readonly record struct BendState(BendValue Target, FractionalPosition Position, double Step);
+
+    internal readonly record struct SoundState(IGuitarSound Sound, FractionalPosition Sustain, BendState[] Bends);
 
     internal readonly record struct ShapeState(HandShape Shape, FractionalPosition EndPosition);
 }
@@ -157,9 +162,7 @@ public sealed class SpacingCollateralRecorder : IDisposable
     internal void CaptureSound(IGuitarSound sound)
     {
         if (!_captured.Add(sound)) return;
-        var bends = sound.BendValues.Count == 0
-            ? null
-            : sound.BendValues.Select(b => b.Clone()).ToArray();
+        var bends = sound.BendValues.Select(b => new SpacingCollateral.BendState(b, b.Position, b.Step)).ToArray();
         _sounds.Add(new SpacingCollateral.SoundState(sound, sound.Sustain, bends));
     }
 
@@ -226,13 +229,15 @@ public sealed class SpacingCollateralRecorder : IDisposable
     {
         var before = state.Bends;
         var now = state.Sound.BendValues;
-        if (before == null) return now.Count != 0;
         if (before.Length != now.Count) return true;
 
         for (var i = 0; i < before.Length; i++)
         {
-            if (before[i].Position != now[i].Position || !before[i].Step.Equals(now[i].Step))
+            if (!ReferenceEquals(before[i].Target, now[i]) || before[i].Position != now[i].Position ||
+                !before[i].Step.Equals(now[i].Step))
+            {
                 return true;
+            }
         }
 
         return false;

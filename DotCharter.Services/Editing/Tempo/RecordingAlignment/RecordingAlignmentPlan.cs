@@ -39,8 +39,9 @@ public sealed class RecordingAlignmentPlan
     public const int FallbackSectionBars = 8;
 
     private RecordingAlignmentPlan(double[] oldTimes, AlignmentBeat[] beats, IReadOnlyList<AlignmentEvent> events,
-        IReadOnlyList<RecordingAlignmentSectionSpan> sections, int anchoredInRange)
+        IReadOnlyList<RecordingAlignmentSectionSpan> sections, int anchoredInRange, int notesInRange)
     {
+        NotesInRange = notesInRange;
         OldTimes = oldTimes;
         Beats = beats;
         Events = events;
@@ -62,6 +63,16 @@ public sealed class RecordingAlignmentPlan
 
     public int FreeBeats => Beats.Count(b => !b.IsFixed);
 
+    /// <summary>The expected sounds that sit on a beat inside the range (anchored or not): what the run can
+    ///     listen for. Zero means there is nothing to match the recording against.</summary>
+    public int NotesInRange { get; }
+
+    /// <summary>Whether the chart has anything the aligner can match: a note or chord on the highest level
+    ///     of an instrumental arrangement (<see cref="ExpectedEvents" />'s rule, without building the list).</summary>
+    public static bool HasNotes(ChartProject project) =>
+        project.Arrangements.Any(a => a.ArrangementType != ArrangementType.Vocal && ChartLevels.Hardest(a) is { } level &&
+                                      (level.Notes.Count > 0 || level.Chords.Count > 0));
+
     public static RecordingAlignmentPlan Build(ChartProject project, RecordingAlignmentRange range, bool keepAnchors)
     {
         var source = project.Beats;
@@ -69,11 +80,12 @@ public sealed class RecordingAlignmentPlan
         var oldTimes = new double[n];
         var beats = new AlignmentBeat[n];
         var bars = Bars(source);
+        var ranged = new bool[n];
         var anchored = 0;
         for (var i = 0; i < n; i++)
         {
             oldTimes[i] = source[i].Time;
-            var inRange = range.Kind switch
+            var inRange = ranged[i] = range.Kind switch
             {
                 RecordingAlignmentRangeKind.FromBar => bars[i] >= range.FromBar,
                 RecordingAlignmentRangeKind.TimeSpan => source[i].Time >= range.StartMs && source[i].Time <= range.EndMs,
@@ -84,7 +96,9 @@ public sealed class RecordingAlignmentPlan
             beats[i] = new AlignmentBeat(source[i].Time, !inRange || locked);
         }
 
-        return new RecordingAlignmentPlan(oldTimes, beats, n < 2 ? [] : ExpectedEvents(project), SectionSpans(project, bars), anchored);
+        var events = n < 2 ? [] : ExpectedEvents(project);
+        var notesInRange = events.Count(e => ranged[Math.Min((int)e.BeatPosition, n - 1)]);
+        return new RecordingAlignmentPlan(oldTimes, beats, events, SectionSpans(project, bars), anchored, notesInRange);
     }
 
     /// <summary>The 1-based bar of every beat (<see cref="BarCount" />'s rule: pickups read as bar 1).</summary>
@@ -111,8 +125,7 @@ public sealed class RecordingAlignmentPlan
         var byPosition = new SortedDictionary<FractionalPosition, (List<int> Midi, double Sustain)>();
         foreach (var arrangement in project.Arrangements)
         {
-            if (arrangement.ArrangementType == ArrangementType.Vocal || arrangement.Levels.Count == 0) continue;
-            var level = arrangement.Levels[^1];
+            if (arrangement.ArrangementType == ArrangementType.Vocal || ChartLevels.Hardest(arrangement) is not { } level) continue;
             foreach (var note in level.Notes)
                 Add(byPosition, note.Position, note.Sustain, PitchOf(arrangement, note));
             foreach (var chord in level.Chords)

@@ -24,6 +24,11 @@ internal sealed class SheetMusicViewInput
     // keyboard pen uses, so "1 then 2 = fret 12" cannot drift between the two
     // surfaces. The sheet keeps its own (shorter) window: see the type's doc.
     private FretDigitAccumulator _fretDigits = FretDigitAccumulator.Empty;
+    private GuitarNote[] _fretNotes = [];
+    private Chord[] _fretChords = [];
+    private ISelectionService? _fretSelection;
+    private ChartLevel? _fretLevel;
+    private StringEditMask _fretMask;
 
     public SheetMusicViewInput(SheetMusicView view, Control surface, Control canvas, HoverOverlay hoverOverlay)
     {
@@ -93,6 +98,7 @@ internal sealed class SheetMusicViewInput
     /// </summary>
     public bool TryHandleKey(KeyEventArgs e)
     {
+        RefreshFretTarget();
         // GP-style +/- halve/double the selected note value. Handled ONLY when a
         // sound is selected, so with an empty selection the keys keep bubbling to
         // the window's global playback-speed binding (OemPlus/OemMinus/Num±).
@@ -103,6 +109,7 @@ internal sealed class SheetMusicViewInput
             TryGetDurationStep(e.Key, out var step) &&
             _view.Selection is { } dsel && (dsel.SelectedNotes.Count > 0 || dsel.SelectedChords.Count > 0))
         {
+            _fretDigits = FretDigitAccumulator.Empty;
             _view.RaiseDurationStep(step);
             e.Handled = true;
             return true;
@@ -112,6 +119,15 @@ internal sealed class SheetMusicViewInput
             TryGetDigit(e.Key, out var digit) &&
             _view.Selection is { } sel && (sel.SelectedNotes.Count > 0 || sel.SelectedChords.Count > 0))
         {
+            if (!_fretDigits.IsAccumulating)
+            {
+                _fretSelection = sel;
+                _fretLevel = _view.ProjectState?.ActiveLevel;
+                _fretMask = _view.ProjectState?.StringEditMask ?? StringEditMask.Empty;
+                _fretNotes = sel.SelectedNotes.ToArray();
+                _fretChords = sel.SelectedChords.ToArray();
+            }
+
             _fretDigits = _fretDigits.Push(digit, Environment.TickCount64,
                 FretDigitAccumulator.SheetWindowMs, FretDigitAccumulator.MaxTypedFret, out var candidate);
             _view.RaiseSetFret(candidate);
@@ -120,6 +136,27 @@ internal sealed class SheetMusicViewInput
         }
 
         return false;
+    }
+
+    internal void RefreshFretTarget()
+    {
+        // Selection notifications arrive in bursts. Only an open digit run has
+        // a target to check, and the first real change ends that run.
+        if (!_fretDigits.IsAccumulating) return;
+        var selection = _view.Selection;
+        var level = _view.ProjectState?.ActiveLevel;
+        var mask = _view.ProjectState?.StringEditMask ?? StringEditMask.Empty;
+        if (selection == null || !ReferenceEquals(selection, _fretSelection) ||
+            !ReferenceEquals(level, _fretLevel) || mask != _fretMask ||
+            !_fretNotes.SequenceEqual(selection.SelectedNotes, ReferenceEqualityComparer.Instance) ||
+            !_fretChords.SequenceEqual(selection.SelectedChords, ReferenceEqualityComparer.Instance))
+        {
+            _fretDigits = FretDigitAccumulator.Empty;
+            _fretSelection = null;
+            _fretLevel = null;
+            _fretNotes = [];
+            _fretChords = [];
+        }
     }
 
     /// <summary>+1 = longer (OemPlus / numpad Add), −1 = shorter (OemMinus /

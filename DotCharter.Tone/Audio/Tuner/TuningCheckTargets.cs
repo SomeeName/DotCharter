@@ -28,7 +28,7 @@ public readonly record struct TuningCheckTarget(
 ///     an <see cref="Arrangement"/>: Rocksmith semantics — per-string
 ///     semitone offsets against standard tuning, resolved by
 ///     <see cref="ArrangementTunerLogic.TryResolveTuningSteps"/> (the
-///     <c>TuningPitches</c>, else the decoded <c>TuningType</c> — the same
+///     authored offsets, else letters, else a named tuning when letters are absent — the same
 ///     resolver Tools ▸ Tuner loads through), bass anchored one octave down, plus capo rules
 ///     (<see cref="TuningCheckCapoMode"/>) and the chart's
 ///     <c>CentOffset</c>. The base open-string math is REUSED from
@@ -69,8 +69,8 @@ public static class TuningCheckTargets
 
     /// <summary>
     ///     The honest half: <c>false</c> when the arrangement states no per-string
-    ///     offsets AND its <c>TuningType</c> is a name
-    ///     <see cref="TuningUtilities.TryGetOffsetsForTuningType" /> does not know
+    ///     offsets, no readable letters, and no resolvable fallback through
+    ///     <see cref="TuningOffsetResolution" />
     ///     — i.e. when nothing in the chart says what any string is tuned to. The
     ///     timeline gutter renders that as <c>?</c> rather than inventing an "E".
     /// </summary>
@@ -111,7 +111,7 @@ public static class TuningCheckTargets
             var midi = logic.Targets[i].Midi + octave + capoShift + transposeSemitones;
             var frequency = PitchMath.ShiftByCents(
                 ArrangementTunerLogic.FrequencyOf(midi), residualCents);
-            targets[i] = new TuningCheckTarget(i, midi, ArrangementTunerLogic.NoteNameOf(midi), frequency);
+            targets[i] = new TuningCheckTarget(i, midi, TuningDisplayNames.Pitch(midi, arrangement, i), frequency);
         }
 
         return targets;

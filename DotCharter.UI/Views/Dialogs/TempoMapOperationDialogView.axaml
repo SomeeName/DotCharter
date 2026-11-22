@@ -7,13 +7,13 @@
              x:DataType="contracts:ITempoMapOperationScreen"
              x:CompileBindings="True">
 
-    <!-- One shared card for every single-number tempo-map operation; the title,
-         subtitle, label, range and format all come from the view model.
+    <!-- One card for the five Start & end operations; the choice picks the
+         subtitle, label, range and format, all from the view model.
          Grammar: Views/Dialogs/DialogStyles.axaml. Hosted by Views/Shell/DialogHost,
          which focuses `ValueInput` on open (FocusOnOpen) — keep the x:Name. -->
     <Grid x:Name="DialogGrid" Classes="DialogFrame">
         <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm">
-            <Grid RowDefinitions="Auto,*,Auto">
+            <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
 
                 <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
                     <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
@@ -25,7 +25,44 @@
                     </StackPanel>
                 </Grid>
 
-                <Grid Theme="{DynamicResource DlgRowGrid}" Grid.Row="1" Classes="DlgRow Last" ColumnDefinitions="*,180">
+                <!-- Which edge operation (#494): five dialogs became this one choice. Hidden
+                     when the dialog serves one verb alone (Insert measures at playhead). -->
+                <Grid Theme="{DynamicResource DlgRowGrid}" Grid.Row="1" Classes="DlgRow" ColumnDefinitions="*,240"
+                      IsVisible="{Binding ShowsChoices}">
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel" Text="{Binding OperationLabel}" />
+                    <ComboBox VerticalAlignment="Center" HorizontalAlignment="Stretch" x:Name="OperationInput" Grid.Column="1"
+                              ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}"
+                              AutomationProperties.Name="{localization:Loc Dialog_TempoMap_Operation_Label}" />
+                </Grid>
+
+                <!-- Insert measures at playhead only: the inserted bars' time signature and
+                     tempo, starting as the playhead bar's. -->
+                <Grid Theme="{DynamicResource DlgRowGrid}" Grid.Row="2" Classes="DlgRow" ColumnDefinitions="*,240"
+                      IsVisible="{Binding ShowsMeasureTempo}">
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                               Text="{localization:Loc Dialog_TempoMap_TimeSignature_Label}" />
+                    <Grid Grid.Column="1" ColumnDefinitions="*,Auto,*" VerticalAlignment="Center">
+                        <NumericUpDown x:Name="BeatsPerMeasureInput" Grid.Column="0" Value="{Binding BeatsPerMeasure}"
+                                       AutomationProperties.Name="{localization:Loc Dialog_TempoMap_BeatsPerMeasure_Label}"
+                                       Minimum="1" Maximum="32" FormatString="0" Increment="1" />
+                        <TextBlock Grid.Column="1" Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="/"
+                                   VerticalAlignment="Center" Margin="8,0" />
+                        <ComboBox x:Name="BeatUnitInput" Grid.Column="2" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding BeatUnits}" SelectedItem="{Binding BeatUnit}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_TempoMap_BeatUnit_Label}" />
+                    </Grid>
+                </Grid>
+
+                <Grid Theme="{DynamicResource DlgRowGrid}" Grid.Row="3" Classes="DlgRow" ColumnDefinitions="*,240"
+                      IsVisible="{Binding ShowsMeasureTempo}">
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                               Text="{localization:Loc Dialog_TempoMap_Tempo_Label}" />
+                    <NumericUpDown VerticalAlignment="Center" x:Name="BpmInput" Grid.Column="1" Value="{Binding Bpm}"
+                                   AutomationProperties.Name="{localization:Loc Dialog_TempoMap_Tempo_Label}"
+                                   Minimum="1" Maximum="999" FormatString="0.###" Increment="1" />
+                </Grid>
+
+                <Grid Theme="{DynamicResource DlgRowGrid}" Grid.Row="4" Classes="DlgRow Last" ColumnDefinitions="*,240">
                     <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel" Text="{Binding Label}" />
                     <!-- The label is DATA (the dialog serves several tempo-map
                          verbs), so the accessible name is the same binding —
@@ -36,7 +73,7 @@
                                    FormatString="{Binding FormatString}" Increment="1" />
                 </Grid>
 
-                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="5" Classes="DialogFooter">
                     <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
                         <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
                                 Command="{Binding CancelCommand}" IsCancel="True" />

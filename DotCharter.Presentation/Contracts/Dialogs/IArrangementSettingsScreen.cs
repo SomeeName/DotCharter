@@ -69,9 +69,32 @@ public interface IArrangementSettingsScreen : IDialogScreen<bool>
     /// <summary>The twenty flags derived from the chart's content.</summary>
     IReadOnlyList<IArrangementFlag> DerivedFlags { get; }
 
+    /// <summary>The A440 check: the audio's measured reference beside the authored offset.</summary>
+    IReferencePitchPanel ReferencePitch { get; }
+
     ICommand SaveCommand { get; }
 
     ICommand CancelCommand { get; }
+}
+
+/// <summary>
+///     Measures the song's reference pitch on demand and offers the corrected cent offset; applying
+///     it only fills the dialog's field, so Save is the one undoable write.
+/// </summary>
+public interface IReferencePitchPanel : INotifyPropertyChanged
+{
+    /// <summary>The measured value next to the authored one, or why there is none.</summary>
+    string StatusText { get; }
+
+    /// <summary>The measurement disagrees with the chart, confidently: the apply button shows.</summary>
+    bool HasSuggestion { get; }
+
+    /// <summary>"Use +15 cents".</summary>
+    string ApplyLabel { get; }
+
+    ICommand MeasureCommand { get; }
+
+    ICommand ApplyCommand { get; }
 }
 
 /// <summary>One tuning preset: a stable key and a label that follows the string count

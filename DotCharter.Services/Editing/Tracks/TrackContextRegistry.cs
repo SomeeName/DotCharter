@@ -6,8 +6,8 @@ namespace DotCharter.Services.Editing.Tracks;
 /// <summary>
 /// Default <see cref="ITrackContextRegistry"/>. Lazily creates one
 /// <see cref="TrackEditorContext"/> per arrangement and follows
-/// <see cref="ProjectState.ActiveArrangement"/> as the focused track until
-/// later phases let the user focus stacked rows independently.
+/// <see cref="ProjectState.ActiveArrangement"/> while allowing stacked rows
+/// to focus their own arrangement independently.
 /// The focused context's <see cref="TrackEditorContext.Level"/> mirrors
 /// <see cref="ProjectState.ActiveLevel"/> so existing tools see the same
 /// data they read directly from <see cref="ProjectState"/>.
@@ -29,9 +29,9 @@ public sealed class TrackContextRegistry : ITrackContextRegistry, IDisposable
         _projectState = projectState;
         _selection = selection;
         _projectState.PropertyChanged += OnProjectStatePropertyChanged;
-        SyncWithActiveArrangement();
         _selectionArrangement = _projectState.ActiveArrangement;
         _selectionLevel = _projectState.ActiveLevel;
+        SyncWithActiveArrangement();
     }
 
     public TrackEditorContext? FocusedTrack { get; private set; }
@@ -58,10 +58,17 @@ public sealed class TrackContextRegistry : ITrackContextRegistry, IDisposable
 
     public void Focus(Arrangement arrangement)
     {
+        // History can still name a closed track while a new project is being
+        // published. Do not recreate its context or discard the live selection.
+        var project = _projectState.ActiveProject;
+        if (project != null && !project.Arrangements.Contains(arrangement)) return;
+
         var ctx = GetOrCreate(arrangement);
         if (ReferenceEquals(FocusedTrack, ctx)) return;
         FocusedTrack = ctx;
         SyncFocusedLevel();
+        DropSelectionOrphanedByTheTrackSwitch();
+        _projectState.StringEditMask = _projectState.StringEditMask.NarrowTo(ctx.StringCount);
         FocusedTrackChanged?.Invoke();
     }
 
@@ -118,8 +125,8 @@ public sealed class TrackContextRegistry : ITrackContextRegistry, IDisposable
     /// </summary>
     private void DropSelectionOrphanedByTheTrackSwitch()
     {
-        var arrangement = _projectState.ActiveArrangement;
-        var level = _projectState.ActiveLevel;
+        var arrangement = FocusedTrack?.Arrangement;
+        var level = FocusedTrack?.Level;
         if (ReferenceEquals(arrangement, _selectionArrangement) && ReferenceEquals(level, _selectionLevel)) return;
 
         _selectionArrangement = arrangement;

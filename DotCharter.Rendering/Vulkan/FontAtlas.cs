@@ -24,10 +24,14 @@ public class FontAtlas : IDisposable
     private readonly HashSet<char> _charsToRender = [];
 
     /// <summary>How many distinct characters a freshly reset sheet holds —
-    /// printable ASCII, which the ctor seeds. Everything past this comes from
+    /// printable ASCII plus the bend labels' two arrows (<see cref="BendArrows" />), which the ctor seeds. Everything past this comes from
     /// the OPEN PROJECT's own text, so <see cref="ResetToSeedCharacters" />
     /// takes it back off on a project switch.</summary>
-    public static int SeedCharacterCount { get; } = '~' - ' ' + 1;
+    public static int SeedCharacterCount { get; } = '~' - ' ' + 1 + BendArrows.Length;
+
+    /// <summary>The up and down arrows of the bend labels (<c>BendGestures.Text</c>), seeded so a
+    /// bend label never waits for a project string to register them.</summary>
+    private const string BendArrows = "↗↘";
 
     /// <summary>Distinct characters the sheet is packed for right now — test seam.</summary>
     public int RegisteredCharacterCount => _charsToRender.Count;
@@ -50,6 +54,7 @@ public class FontAtlas : IDisposable
 
         for (var c = ' '; c <= '~'; c++) _charsToRender.Add(c);
         _charsToRender.Add('?');
+        foreach (var arrow in BendArrows) _charsToRender.Add(arrow);
     }
 
     private bool NeedsRebuild { get; set; } = true;
@@ -90,6 +95,7 @@ public class FontAtlas : IDisposable
         _charsToRender.Clear();
         for (var c = ' '; c <= '~'; c++) _charsToRender.Add(c);
         _charsToRender.Add('?');
+        foreach (var arrow in BendArrows) _charsToRender.Add(arrow);
         NeedsRebuild = true;
         _overflowWarned = false;
         LastOverflowWarning = null;
@@ -287,7 +293,9 @@ public class FontAtlas : IDisposable
                 AdvanceX = width
             };
 
-            if (c != ' ') canvas.DrawText(c.ToString(), x, y + baselineOffset, SKTextAlign.Left, font, paint);
+            if (BendArrowGlyph.IsArrow(c))
+                BendArrowGlyph.Draw(canvas, c, x, y + baselineOffset, BendArrowGlyph.CapHeightOf(fonts.Primary));
+            else if (c != ' ') canvas.DrawText(c.ToString(), x, y + baselineOffset, SKTextAlign.Left, font, paint);
         }
 
         canvas.Flush();
@@ -329,7 +337,9 @@ public class FontAtlas : IDisposable
         foreach (var c in packOrder)
         {
             var font = fonts.For(c);
-            var width = c == ' ' ? spaceWidth : font.MeasureText(c.ToString());
+            var width = c == ' ' ? spaceWidth :
+                BendArrowGlyph.IsArrow(c) ? BendArrowGlyph.Advance(BendArrowGlyph.CapHeightOf(fonts.Primary)) :
+                font.MeasureText(c.ToString());
 
             if (x + width + padding > AtlasWidth)
             {

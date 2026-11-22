@@ -42,10 +42,10 @@ public sealed class PlayerProfile
     public string AvatarFileName { get; set; } = "";
 
     /// <summary>
-    ///     Left-handed mode (v0.34): mirrors the 3D highway (fret axis) and
-    ///     the 2D lanes for this profile on every machine it plays on — the
-    ///     flag lives in profile.json, so the portable export / LAN roaming
-    ///     bundle carries it for free. Default false keeps old registries
+    ///     Left-handed mode: mirrors only the 3D highway's fret axis. All 2D
+    ///     string rows follow the separate string-order setting. The
+    ///     flag lives in profile.json, so the portable profile export
+    ///     carries it for free. Default false keeps old registries
     ///     byte-stable.
     /// </summary>
     public bool LeftyFlip { get; set; }

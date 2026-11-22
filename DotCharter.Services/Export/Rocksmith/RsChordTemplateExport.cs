@@ -1,3 +1,4 @@
+using DotCharter.Services.Editing;
 using DotCharter.Services.Parsing.Xml.Song;
 
 namespace DotCharter.Services.Export.Rocksmith;
@@ -92,11 +93,8 @@ internal sealed class RsChordTemplateExport
                 if (LinkLandingBreakup.IsSplit(chord)) continue;
                 if (export.IndexById.ContainsKey(chord.TemplateId)) continue;
                 if (export.ChordIndexOverrides.ContainsKey(chord)) continue;
-                if (chord.ChordNotes.Count == 0) continue;
-
-                var synthesized = new ChordTemplate { Name = "" };
-                foreach (var chordNote in chord.ChordNotes)
-                    synthesized.Frets[chordNote.StringIndex] = chordNote.Fret;
+                var synthesized = ChordWorkEligibility.SynthesizeTemplate(chord);
+                if (synthesized == null) continue;
 
                 var existingIndex = export.Templates.FindIndex(t => t.Equals(synthesized));
                 if (existingIndex >= 0)

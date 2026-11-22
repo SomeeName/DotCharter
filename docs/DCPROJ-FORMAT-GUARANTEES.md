@@ -90,9 +90,11 @@ Inherited from RsCharter, in its field order:
 DotCharter additive extensions, appended after that order:
 `dcWriterVersion`, `dcJapaneseTitle`, `dcJapaneseArtist`, `dcCharter`,
 `dcGenre`, `dcReleaseDate`, `dcCoverArt`, `dcBeatMapLocked`,
-`dcKeyAccidentals`, `dcKeyIsMinor`, `dcAnnotations`, `dcToneDefinitions`,
+`dcKeyAccidentals`, `dcKeyIsMinor`, `dcKeyLocked`, `dcAnnotations`, `dcToneDefinitions`,
 `dcNotationVoices`, `dcSynthPlayStyle`, `dcProjectId`, `dcProvenance`, `dcVersion`,
-`dcLinkGroups`.
+`dcLinkGroups`, `dcGpSource`, `dcAudioVolume`, `dcPreviewVolume`, `dcAudioVolumeSig`, `dcPreviewVolumeSig`,
+`dcAudioVolumeManual`, `dcPreviewVolumeManual`,
+`dcTitleSort`, `dcAlbumSort`, `dcDlcKey`, `dcPreviewStartMs`.
 <!-- frozen-root-elements: end -->
 
 **The `<project>` root carries NO attributes**, and that is frozen too
@@ -275,6 +277,14 @@ examples, and they are the shape to copy:
 sentinel is the ABSENT attribute, chosen because both readers already default a
 missing attribute to `-1`, so absence and the intended meaning coincide and
 writing `-1` would break RsCharter outright.
+
+## Guitar Pro source bars — `dcGpSource` (#736)
+
+`dcGpSource` v1 records the score's played bars on the imported grid. Each bar
+stores the grid geometry, written bar index, repeat pass, ending mask,
+playback block boundaries, and optional rehearsal mark. The detector uses
+the provenance when the current grid still matches it. Projects without it
+can still detect repeats from their chart content.
 
 ## Linked measures — `dcLinkGroups` (#76)
 

@@ -2,6 +2,12 @@
 
 ## Hidden-surface prewarm — the four cases, and the drain order
 
+The Shapes catalogue keeps its data refresh behind effective visibility. Its
+`ShapesPanelView` sends `IScreenLifecycle` notifications, so tab prewarm can warm
+the surface without publishing a replacement catalogue while it is hidden.
+`ScreenRefreshScheduler` retains one pending refresh until show, including a
+previously queued pass that became hidden. Project reload clears the closed graph.
+
 - **Every drain step waits for QUIET input (0.49.4, `Views/Shell/PrewarmPacer`).**
   On the owner's release build the window was interactive at 1.5 s and the
   three drains then ran for ~9 s more (chrome 0.4 s, menus 0.5 s, popovers

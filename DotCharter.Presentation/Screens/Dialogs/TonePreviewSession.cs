@@ -16,6 +16,7 @@ public sealed class TonePreviewSession(IDspChainService chain, DcRigApplier appl
     private readonly object _gate = new();
     private DcRigPreset? _snapshot;
     private int _version;
+    private int _active;
 
     internal Func<Action, Task> OffThreadRunner { get; set; } = action => Task.Run(action);
 
@@ -23,9 +24,9 @@ public sealed class TonePreviewSession(IDspChainService chain, DcRigApplier appl
 
     public bool IsAvailable => chain is not NullDspChainService;
 
-    public bool IsActive => _snapshot is not null;
+    public bool IsActive => Volatile.Read(ref _active) != 0;
 
-    public DcRigPreset CurrentRig() => _snapshot ?? DcRigSnapshot.FromChain(chain);
+    public DcRigPreset CurrentRig() => Volatile.Read(ref _snapshot) ?? DcRigSnapshot.FromChain(chain);
 
     public string ModuleName(string moduleTypeId)
         => chain.Catalog.FirstOrDefault(t => t.Id == moduleTypeId)?.DisplayName ?? moduleTypeId;
@@ -34,8 +35,7 @@ public sealed class TonePreviewSession(IDspChainService chain, DcRigApplier appl
     public void Apply(RsTone tone)
     {
         if (!IsAvailable) return;
-        // FromChain, not FromNodes: the player's scenes are part of the rig to put back.
-        _snapshot ??= DcRigSnapshot.FromChain(chain);
+        Volatile.Write(ref _active, 1);
         // ConvertFilled: omitted params pinned to defaults, so a reused node never inherits the previous rig's values.
         var preset = _converter.ConvertFilled(tone, out _);
         var version = Interlocked.Increment(ref _version);
@@ -43,7 +43,11 @@ public sealed class TonePreviewSession(IDspChainService chain, DcRigApplier appl
         {
             lock (_gate)
             {
-                if (version == Volatile.Read(ref _version)) applier.Apply(preset);
+                if (version != Volatile.Read(ref _version)) return;
+                // Snapshot and all native mutations share the worker gate. Keep the
+                // original board through an off/on while its restore is pending.
+                _snapshot ??= DcRigSnapshot.FromChain(chain);
+                applier.Apply(preset);
             }
         });
     }
@@ -51,12 +55,16 @@ public sealed class TonePreviewSession(IDspChainService chain, DcRigApplier appl
     /// <summary>Puts the snapshotted rig back; idempotent, and cancels any queued apply first.</summary>
     public bool Stop()
     {
-        Interlocked.Increment(ref _version);
-        if (_snapshot is not { } snapshot) return false;
-        _snapshot = null;
+        if (Interlocked.Exchange(ref _active, 0) == 0) return false;
+        var version = Interlocked.Increment(ref _version);
         LastTask = OffThreadRunner(() =>
         {
-            lock (_gate) applier.Apply(snapshot);
+            lock (_gate)
+            {
+                if (version != Volatile.Read(ref _version)) return;
+                if (_snapshot is { } snapshot) applier.Apply(snapshot);
+                if (version == Volatile.Read(ref _version)) _snapshot = null;
+            }
         });
         return true;
     }

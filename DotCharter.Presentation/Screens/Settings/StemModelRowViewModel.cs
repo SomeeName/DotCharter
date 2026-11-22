@@ -171,7 +171,7 @@ public sealed partial class StemModelRowViewModel : ObservableObject, IStemModel
         }
         catch (Exception ex)
         {
-            _logger?.Error(AppLogCategory.Audio, $"Stem model download failed: {ex.Message}", ex);
+            _logger?.Error(AppLogCategory.Audio, "Stem model download failed", ex);
             ProgressText = _localization.Format("Settings_Ai_MatchModel_Failed", ex.Message);
         }
         finally

@@ -3,6 +3,7 @@
              xmlns:contracts="using:DotCharter.Presentation.Contracts.Editor"
              xmlns:ctl="using:DotCharter.UI.Controls"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
              x:Class="DotCharter.UI.Views.Dialogs.ShapeEditDialogView"
              x:DataType="contracts:IShapeEditScreen"
              x:CompileBindings="True">
@@ -137,7 +138,7 @@
                                     <!-- The name: typed, taken from the suggestion, or No name on purpose. -->
                                     <StackPanel Grid.Column="4" Spacing="6" Margin="10,0,0,0">
                                         <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc ShapeEdit_Name}" />
-                                        <TextBox Text="{Binding NameDraft}" PlaceholderText="{Binding NamePlaceholder}" IsEnabled="{Binding !IsNoName}"
+                                        <TextBox Text="{Binding NameDraft}" dlgv:FocusOnOpen.IsTarget="True" PlaceholderText="{Binding NamePlaceholder}" IsEnabled="{Binding !IsNoName}"
                                                  AutomationProperties.Name="{localization:Loc ShapeEdit_Name}" />
                                         <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc ShapeEdit_NameDesc}"
                                                    TextWrapping="Wrap" />

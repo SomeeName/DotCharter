@@ -20,9 +20,10 @@ internal static class HandShapeRenderer
     {
         var hs = context.Snapshot.HandShapes[index];
         if (hs.Time < context.TimeMs || hs.Time >= context.TimeMs + context.HorizonMs) return;
-        if (hs.TemplateId < 0 || hs.TemplateId >= context.Snapshot.TemplateCount) return;
+        var templateIndex = context.Snapshot.FindTemplateIndex(hs.TemplateId);
+        if (templateIndex < 0) return;
 
-        var template = context.Snapshot.Templates[hs.TemplateId];
+        var template = context.Snapshot.Templates[templateIndex];
         var zStart = context.GetZDepthForTime(hs.Time, context.TimeMs);
         if (zStart > context.FadeEndZ) return;
 

@@ -304,21 +304,11 @@ public sealed partial class PlayModeViewModel
         RestoreBackingTrackMutes();
         if (!MuteMyInstrument || _stemMixer == null) return;
 
-        var candidates = _stemMixer.Tracks
-            .Where(t => !t.IsMasterMix && !t.IsMuted) // never disturb a mute the player set
-            .ToList();
-
-        var isBass = IsBassPart(SelectedFlowArrangement?.Arrangement);
-
-        string target;
-        if (isBass) target = "bass";
-        else if (candidates.Any(t => t.Name.Contains("guitar", StringComparison.OrdinalIgnoreCase)))
-            target = "guitar"; // 6-stem: a real guitar stem exists — mute just that
-        else target = "other"; // 4-stem: guitar is folded into "other"
-
-        foreach (var track in candidates)
+        // Resolve the model's instrument before excluding deliberate mutes:
+        // a muted guitar still means this is a six-stem split.
+        foreach (var track in ResolveInstrumentStems())
         {
-            if (!track.Name.Contains(target, StringComparison.OrdinalIgnoreCase)) continue;
+            if (track.IsMuted) continue;
             track.SetMutedForRun(true);
             _mutedForRun.Add(track);
         }
@@ -494,8 +484,7 @@ public sealed partial class PlayModeViewModel
     ///     highway side effects until <c>EndRunSideEffects</c> undoes them.
     ///     <para>
     ///         It exists because a run CHAIN — Retry from the results screen,
-    ///         Restart from the pause menu, retry-from-section after a fail-out,
-    ///         or re-entering after a refused start — reaches
+    ///         or Restart from the pause menu — reaches
     ///         <c>BeginGameplay</c> again WITHOUT passing through
     ///         <c>EndRunSideEffects</c>. The <c>_preRun*</c> baselines must be
     ///         captured only on the way IN to such a chain, never re-taken from

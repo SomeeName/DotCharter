@@ -123,6 +123,9 @@
     </Style>
     <Style Selector="StackPanel.TbGroup > TextBlock">
         <Setter Property="VerticalAlignment" Value="Center" />
+        <!-- The caption beside a combo reads at the combo's own size (FireSizeCaption on the
+             rail, FireSizeBase when Wide), or its glyphs sit off the value's centre line. -->
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
     </Style>
 
     <!-- Slim separator between controls inside a group; the taller one between
@@ -131,15 +134,18 @@
         <Setter Property="Width" Value="1" />
         <Setter Property="Height" Value="16" />
         <Setter Property="Background" Value="{DynamicResource FireBorder}" />
-        <Setter Property="Margin" Value="{StaticResource FireGapLeftSm}" />
+        <Setter Property="Margin" Value="{StaticResource FireGapHXs}" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="Border.GroupDivider">
         <Setter Property="Width" Value="1" />
         <Setter Property="Height" Value="22" />
         <Setter Property="Background" Value="{DynamicResource FireBorderStrong}" />
-        <Setter Property="Margin" Value="{StaticResource FireGapLeftSm}" />
+        <Setter Property="Margin" Value="{StaticResource FireGapHSm}" />
         <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="StackPanel.TbGroup > Border.GroupDivider">
+        <Setter Property="Margin" Value="{StaticResource FireGapHXs}" />
     </Style>
 
     <!-- ══ Inside a toolbar / status-bar flyout ═══════════════════════════════
@@ -211,6 +217,13 @@
         <Setter Property="Background" Value="{DynamicResource FireBorder}" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <!-- The audio health dot (#495): green while audio is fine, amber while it is not. -->
+    <Style Selector="Ellipse.StatusAudioDot">
+        <Setter Property="Fill" Value="{DynamicResource FireSuccess}" />
+    </Style>
+    <Style Selector="Ellipse.StatusAudioDot.Problem">
+        <Setter Property="Fill" Value="{DynamicResource FireWarning}" />
     </Style>
 
     <!-- ══ THE TOOL RAIL'S GLYPH SIZE ═════════════════════════════════════════

@@ -63,7 +63,7 @@ public static class PsarcWriter
     ///     Now the bytes go to a sibling temp file and only replace the destination once
     ///     they are all safely written.
     /// </remarks>
-    public static void WriteFile(string path, IReadOnlyList<PsarcWriteEntry> entries, bool encryptToc = true)
+    public static void WriteFile(string path, IReadOnlyList<PsarcWriteEntry> entries, bool encryptToc = true, bool extendedRange = false)
     {
         var directory = Path.GetDirectoryName(Path.GetFullPath(path));
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -74,7 +74,7 @@ public static class PsarcWriter
         {
             using (var file = new FileStream(staging, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
             {
-                Write(file, entries, encryptToc);
+                Write(file, entries, encryptToc, extendedRange);
             }
 
             AtomicFile.ReplaceWithRetry(staging, path);
@@ -94,8 +94,10 @@ public static class PsarcWriter
         }
     }
 
-    public static void Write(Stream output, IReadOnlyList<PsarcWriteEntry> entries, bool encryptToc = true)
+    public static void Write(Stream output, IReadOnlyList<PsarcWriteEntry> entries, bool encryptToc = true, bool extendedRange = false)
     {
+        if (extendedRange && encryptToc)
+            throw new ArgumentException("PSXR requires an unencrypted table of contents.", nameof(encryptToc));
         foreach (var entry in entries)
         {
             if (string.IsNullOrEmpty(entry.Name))
@@ -132,7 +134,7 @@ public static class PsarcWriter
 
             var tocLength = HeaderLength + protoEntries.Count * TocEntrySize + zLengths.Count * ZType;
 
-            WriteHeader(output, tocLength, protoEntries.Count, encryptToc);
+            WriteHeader(output, tocLength, protoEntries.Count, encryptToc, extendedRange);
             WriteToc(output, protoEntries, zLengths, (ulong)tocLength, encryptToc);
 
             foreach (var block in blocks)
@@ -220,10 +222,10 @@ public static class PsarcWriter
         return packedTotal;
     }
 
-    private static void WriteHeader(Stream output, int tocLength, int entryCount, bool encryptToc)
+    private static void WriteHeader(Stream output, int tocLength, int entryCount, bool encryptToc, bool extendedRange)
     {
         Span<byte> header = stackalloc byte[HeaderLength];
-        "PSAR"u8.CopyTo(header);
+        (extendedRange ? "PSXR"u8 : "PSAR"u8).CopyTo(header);
         BinaryPrimitives.WriteUInt16BigEndian(header[4..], 1); // VersionMajor
         BinaryPrimitives.WriteUInt16BigEndian(header[6..], 4); // VersionMinor
         "zlib"u8.CopyTo(header[8..]);

@@ -185,13 +185,17 @@ public sealed class GpImportViewModel : DialogViewModel<bool>, IGpImportScreen, 
         {
             var parsed = await Task.Run(() =>
             {
-                var newer = _parse(filePath, ids, settings);
-                var older = mode == GpImportMode.DiffCompare ? _parse(oldFilePath, ids, settings) : null;
+                var importer = new GpImporter();
+                var sourceIds = mode == GpImportMode.DiffCompare ? importer.GetAvailableTracks(filePath).Select(t => t.Id).ToList() : ids;
+                var newer = _parse(filePath, sourceIds, settings);
+                var older = mode == GpImportMode.DiffCompare
+                    ? _parse(oldFilePath, importer.GetAvailableTracks(oldFilePath).Select(t => t.Id).ToList(), settings)
+                    : null;
                 return (Newer: newer, Older: older);
             }, cts.Token);
             cts.Token.ThrowIfCancellationRequested();
 
-            _applier.Apply(mode, filePath, [.. selected.Select(t => new GpTrackTarget(t.Name, TargetOf(t)))],
+            _applier.Apply(mode, filePath, [.. selected.Select(t => new GpTrackTarget(t.Id, t.Name, TargetOf(t)))],
                 parsed.Newer, parsed.Older);
         }
         catch (OperationCanceledException)

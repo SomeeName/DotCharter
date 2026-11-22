@@ -1,0 +1,77 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspector="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
+             xmlns:panels="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundBendsScopeView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Bends page's SCOPE card (#751 P5, design D): what the footer's Apply reaches (a note: only itself; a
+         chord: the "Apply to" rung, chosen here as "Bend scope" or in the footer's picker, with the preview's previous /
+         next target), where the
+         edited sound sits, the plot's range and how many points the curve has. -->
+    <StackPanel x:Name="SoundBendsScope" Spacing="{StaticResource SpaceXs}">
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody" IsVisible="{Binding ShowNoteBends}" Text="{Binding Staged.Bends.NoteScope}"
+                   TextWrapping="Wrap" />
+        <StackPanel x:Name="SoundBendsChordScope" IsVisible="{Binding ShowChordBends}" Spacing="{StaticResource SpaceXs}">
+            <!-- Design D's in-card "Bend scope": the SAME ladder rows and the same rung as the footer's "Apply to" picker
+                 (ApplyRungPickerSync keeps both on Ladder.Effective and forwards a user's pick to ChooseApplyRung). -->
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}">
+                <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel" Text="{localization:Loc Inspector_Bends_ScopePicker}"
+                           VerticalAlignment="Center" />
+                <ComboBox x:Name="SoundBendsScopePicker" Grid.Column="1" Classes="ColumnFlowField" HorizontalAlignment="Right" MinWidth="90"
+                          ItemsSource="{Binding ChordTemplateEditor.Ladder.Rows}"
+                          AutomationProperties.Name="{localization:Loc Inspector_Bends_ScopePicker}"
+                          ToolTip.Tip="{Binding ChordTemplateEditor.Ladder.EffectiveDetail}">
+                    <ComboBox.Styles>
+                        <Style Selector="ComboBoxItem" x:DataType="panels:ChordApplyRungRow">
+                            <Setter Property="IsEnabled" Value="{Binding IsAvailable}" />
+                            <Setter Property="ToolTip.Tip" Value="{Binding ToolTipText}" />
+                            <Setter Property="ToolTip.ShowOnDisabled" Value="True" />
+                            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+                        </Style>
+                    </ComboBox.Styles>
+                    <ComboBox.SelectionBoxItemTemplate>
+                        <DataTemplate x:DataType="panels:ChordApplyRungRow">
+                            <TextBlock Text="{Binding ShortLabel}" />
+                        </DataTemplate>
+                    </ComboBox.SelectionBoxItemTemplate>
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="panels:ChordApplyRungRow">
+                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </Grid>
+            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody" Text="{Binding ChordTemplateEditor.Ladder.EffectiveDetail}" TextWrapping="Wrap" />
+            <WrapPanel ItemSpacing="{StaticResource SpaceXs}" LineSpacing="{StaticResource SpaceXs}">
+                <Button Grid.Column="0" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                        Content="{localization:Loc ChordTemplate_Preview_Previous}" AutomationProperties.Name="{localization:Loc ChordTemplate_Preview_Previous}"
+                        Command="{Binding ChordTemplateEditor.Preview.PreviousTargetCommand}"
+                        IsEnabled="{Binding ChordTemplateEditor.Preview.CanStep}" />
+                <Button Grid.Column="1" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                        Content="{localization:Loc ChordTemplate_Preview_Next}" AutomationProperties.Name="{localization:Loc ChordTemplate_Preview_Next}"
+                        Command="{Binding ChordTemplateEditor.Preview.NextTargetCommand}"
+                        IsEnabled="{Binding ChordTemplateEditor.Preview.CanStep}" />
+            </WrapPanel>
+        </StackPanel>
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}">
+            <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel" Text="{localization:Loc Inspector_Bends_ChartTarget}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowValue" Text="{Binding Staged.Bends.ChartTarget}" HorizontalAlignment="Right"
+                       TextTrimming="CharacterEllipsis" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}">
+            <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel" Text="{localization:Loc Inspector_Bends_Range}" VerticalAlignment="Center" />
+            <ComboBox x:Name="SoundBendsRange" Grid.Column="1" Classes="ColumnFlowField" HorizontalAlignment="Right" MinWidth="90"
+                      ItemsSource="{Binding Staged.Bends.Ranges}" SelectedIndex="{Binding Staged.Bends.RangeIndex}"
+                      AutomationProperties.Name="{localization:Loc Inspector_Bends_Range}" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}">
+            <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel" Text="{localization:Loc Inspector_Bends_Points}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowValue" Text="{Binding Staged.Bends.PointCount}" HorizontalAlignment="Right"
+                       TextTrimming="CharacterEllipsis" />
+        </Grid>
+    </StackPanel>
+</UserControl>

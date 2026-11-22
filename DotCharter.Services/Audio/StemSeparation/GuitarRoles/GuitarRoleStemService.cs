@@ -79,7 +79,7 @@ public sealed class GuitarRoleStemService(IAppLogger? logger = null) : IGuitarRo
         }
         catch (Exception ex)
         {
-            logger?.Warning(AppLogCategory.Audio, $"Guitar roles: could not read '{guitarStemPath}': {ex.Message}");
+            logger?.Warning(AppLogCategory.Audio, $"Guitar roles: could not read '{guitarStemPath}'", ex);
             return Unreadable();
         }
     }
@@ -98,7 +98,7 @@ public sealed class GuitarRoleStemService(IAppLogger? logger = null) : IGuitarRo
         }
         catch (Exception ex)
         {
-            logger?.Warning(AppLogCategory.Audio, $"Guitar roles: could not check '{guitarStemPath}': {ex.Message}");
+            logger?.Warning(AppLogCategory.Audio, $"Guitar roles: could not check '{guitarStemPath}'", ex);
             return null;
         }
     }
@@ -202,8 +202,8 @@ public sealed class GuitarRoleStemService(IAppLogger? logger = null) : IGuitarRo
                 return new GuitarRoleDerivation(assessment, null);
             }
 
-            File.Move(leadTemp, leadPath, overwrite: true);
-            File.Move(rhythmTemp, rhythmPath, overwrite: true);
+            AtomicFile.Publish(leadTemp, leadPath);
+            AtomicFile.Publish(rhythmTemp, rhythmPath);
             var pair = new GuitarRolePair(leadPath, rhythmPath);
             // The sidecar is written LAST: it is what says the pair is complete.
             WriteSidecar(guitarStemPath, signature, assessment, channels, pair);
@@ -270,7 +270,7 @@ public sealed class GuitarRoleStemService(IAppLogger? logger = null) : IGuitarRo
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
-            logger?.Warning(AppLogCategory.Audio, $"Guitar roles: ignoring an unreadable '{path}': {ex.Message}");
+            logger?.Warning(AppLogCategory.Audio, $"Guitar roles: ignoring an unreadable '{path}'", ex);
             return null;
         }
 
@@ -286,9 +286,9 @@ public sealed class GuitarRoleStemService(IAppLogger? logger = null) : IGuitarRo
         if (verdict != GuitarRoleVerdict.Splittable) return new GuitarRoleDerivation(assessment, null);
 
         var folder = Path.GetDirectoryName(path)!;
-        var lead = Path.Combine(folder, sidecar.Lead ?? string.Empty);
-        var rhythm = Path.Combine(folder, sidecar.Rhythm ?? string.Empty);
-        if (!HasSize(lead, sidecar.LeadBytes) || !HasSize(rhythm, sidecar.RhythmBytes))
+        var lead = ProjectRelativePath.TryResolve(folder, sidecar.Lead);
+        var rhythm = ProjectRelativePath.TryResolve(folder, sidecar.Rhythm);
+        if (lead == null || rhythm == null || !HasSize(lead, sidecar.LeadBytes) || !HasSize(rhythm, sidecar.RhythmBytes))
             return new GuitarRoleDerivation(assessment with { Verdict = GuitarRoleVerdict.Plausible }, null);
         return new GuitarRoleDerivation(assessment, new GuitarRolePair(lead, rhythm));
     }

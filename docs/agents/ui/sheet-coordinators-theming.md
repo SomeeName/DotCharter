@@ -22,6 +22,25 @@ their priorities — `PostNormal` is the Normal `Dispatcher.UIThread.Post`),
 
 ## Sheet (`Services/Export/Sheet/`), the coordinators, `Styles/`, `Theming/`
 
+Unpitched slides take precedence over a stored slide target, including on a tied
+destination. Chord-note accents are retained alongside whole-chord accents
+(`AlphaTexNotationEdgeCaseTests`). The GP and sheet-PDF menu exports cancel after
+the save picker if the project, arrangement or level has been replaced
+(`ExportMenuViewModelTests`), before reading the new project's beat map.
+
+The sheet's fret-digit run belongs to the selected sound instances, selection
+service, level and string mask. `SheetMusicViewInput.RefreshFretTarget` resets it
+when those change, including a selection change away and back between digits;
+ordinary edits to the same sound keep the run. Duration keys end fret entry.
+`SoundEntryUiPerfSmokeTests` covers note and chord selection changes and layout.
+
+`StemWaveformCoordinator` stamps each request before waiting for its apply gate.
+Project/audio changes, a new file waveform and mixer resets invalidate pending
+decodes. It checks that generation before taking the file-waveform baseline,
+before caching a decoded stem and before publishing either a mix or an error
+fallback. An old song's completion cannot replace a newer waveform or become
+its original baseline (`StemWaveformFileLatchTests`, #634).
+
 - Sheet (`DotCharter.Services/Export/Sheet/`) — `AlphaTexExporter` (domain → alphaTex; emits chord names via `{ch}`,
   ties held notes across barlines), `SheetMusicRenderer` (AlphaTab + AlphaSkia →
   SKImage chunks; `RenderAsync` = Horizontal strip, `RenderPagedAsync` = Page
@@ -149,6 +168,11 @@ their priorities — `PostNormal` is the Normal `Dispatcher.UIThread.Post`),
   — an imported tab renders as authored and stays synced to chart edits; new or
   edited notes without a hint fall back to the derived rules above.
   `RscpNotationHintTests` + `AlphaTexNotationHintTests` guard the round trip.
+  **The pane's duration palette and stave/zoom controls occupy separate Auto
+  rows, each with a WrapPanel (#531).** They must not share an overlaid Grid cell:
+  a narrow floating pane otherwise paints one set of buttons over the other.
+  `Perf/EditorUiFaultsUiPerfSmokeTests` checks the buttons' actual containment and
+  non-overlap at narrow widths.
   **Duration editing (0.25):** the sheet pane's note-value palette + the GP-style
   +/− keys WRITE these hints. `IHighwayEditingService.SetSelectedNotationDuration`
   (absolute, null clears) and `ScaleSelectedNotationDuration` (×factor, clamped to
@@ -266,7 +290,8 @@ their priorities — `PostNormal` is the Normal `Dispatcher.UIThread.Post`),
     are dropped DELIBERATELY. `isLetRing` is hard-wired false because the domain
     carries no let-ring field — honest, not a bug.
   **`SheetPdfExporter.ExportToFileAsync` is the only way to write the PDF to a
-  PATH, and it is ATOMIC** (renders into a sibling `.tmp`, swaps with
+  PATH, and it is ATOMIC** (renders into a randomly named sibling `.tmp`, opened
+  with `FileMode.CreateNew` and flushed to disk, then swaps with
   `AtomicFile.ReplaceWithRetry`, deletes the temp on any throw). The call site
   used to open the user's chosen path with `FileMode.Create` — which truncates on
   OPEN — and only then start rendering, so a cancelled render, an unrenderable
@@ -304,7 +329,13 @@ their priorities — `PostNormal` is the Normal `Dispatcher.UIThread.Post`),
   on otherwise leaves the pane stuck on "Rendering sheet music…" forever, unlogged),
   and `OnDetachedFromVisualTree` cancels `_renderCts` — stopping the debounce alone
   only prevents the NEXT rebuild, so every float/redock during a rebuild burned a
-  full AlphaTab layout + raster for a dead view.
+  full AlphaTab layout + raster for a dead view. `ScheduleRebuild` cancels
+  `_renderCts` too, at once (#645): an input change supersedes the render in
+  flight before the debounce fires, so an arrangement A render cannot publish its
+  click map while B is shown. The page/strip layout (`_pageMode`, the canvas's and
+  overlays' page scale, zoom and height hint) is applied by `ApplyLayout` only when
+  a render is PUBLISHED, so an abandoned strip render followed by a reused page key
+  leaves the page's layout and hit testing intact.
   **It also SKIPS the layout + raster when nothing it would draw changed
   (0.61).** `Export/Sheet/SheetRenderKey` is the exported AlphaTex folded with the
   geometry — width, height, DPI, zoom, page/strip mode, staves mode — and an
@@ -312,15 +343,25 @@ their priorities — `PostNormal` is the Normal `Dispatcher.UIThread.Post`),
   selection highlights are overlays over those same chunks, so they still
   follow. **The export stays on the UI thread before the first `await`** (it
   reads the live graph) and runs whether or not the render is skipped: it is how
-  the answer is found. Four ordering rules make the skip safe and each was a
-  deliberate move: the measure TIME spans (`_measureSpans`, what the cursor maps
+  the answer is found. The measure TIME spans (`_measureSpans`, what the cursor maps
   song time through) are adopted BEFORE the check, because the AlphaTex carries
-  no beat times and a beat nudged a few ms leaves it byte-identical (#286); the key is recorded ONLY where `SetResult` put chunks on the
-  canvas and cleared on every failure path, the "Rendering…" status is set AFTER
-  the check (there is no dispatcher turn in that stretch, so it could never have
-  been drawn during the export anyway), and `_renderCts.Cancel()` moved BELOW the
-  check so a skipped rebuild cannot kill an in-flight render for the very key it
-  matched. **The theme is deliberately NOT in the key** — the strip always
+  no beat times and a beat nudged a few ms leaves it byte-identical (#286).
+  Reuse also refreshes `BeatMap` and its lookup against the retained `BeatBounds`:
+  identical notation can belong to different domain note/chord instances after
+  an arrangement switch (#581). The key is recorded ONLY where `SetResult` put
+  chunks on the canvas and cleared when nothing usable remains. The "Rendering…"
+  status is set AFTER the check (there is no dispatcher turn in that stretch).
+  Every rebuild cancels the previous request BEFORE the empty-chart return and
+  key check, so a late result cannot restore old notation or overwrite a return
+  to the displayed key. Hidden edits resume through `EffectiveVisibilityWatcher`,
+  including when an ancestor becomes visible. `RenderForViewAsync` owns the first
+  strip pass through refinement; `RebuildAsync` owns the completed result until
+  the canvas takes it. Both dispose untransferred results in `finally`.
+  `SheetMusicRenderer.RenderWithChunks` likewise disposes partial images on every
+  null/exception/cancellation exit before handing a successful result to its caller.
+  Behavioural coverage: `SheetChunkOwnershipTests` (default gate),
+  `Perf/SheetRebuildUiPerfSmokeTests` (attached view, layout and controlled completions).
+  **The theme is deliberately NOT in the key** — the strip always
   renders `SheetMusicRenderer.InkPalette.Screen`; the palette is a parameter of
   the PDF path. If the strip ever takes its ink from the theme, that stamp
   becomes a field. Pinned by `AlphaTexExportStabilityTests`.
@@ -464,6 +505,13 @@ their priorities — `PostNormal` is the Normal `Dispatcher.UIThread.Post`),
       toolbar toggle is DISABLED and its tooltip is the reason
       (`Toolbar_TonePreview_No{Project,Rig,Tones}`). The couch co-op
       `CoopRigApplier` rule applied before the fact.
+    - **Engine attach follows the active tone owner (#530).** The tone session skips
+      the saved player rig while the song owns the board. The playback coordinator
+      subscribes only while driving and replays the last applied preset (the accepted live board after a partial apply)
+      on attach. An unresolved scanner boundary keeps the preceding tone; if no tone
+      was applied, the player's snapshot (including scenes) is restored instead.
+      The original player snapshot still belongs to the matching stop
+      (`SongToneRigPersistenceTests`).
     - **A run's schedule is fixed; the EDITOR's is the thing being authored, so
       it re-arms IN PLACE — never by stop/start.**
       `RefreshPreviewSchedule(bool reapplyCurrentTone = false)` rebuilds only

@@ -203,15 +203,20 @@ public sealed class RsTonePlaybackCoordinatorLevellingTests
     public async Task ThePlayersSavedEdit_IsNeverLevelled()
     {
         var meter = new FakeToneLoudnessMeter { Answer = Loud };
-        var (coord, chain, _) = NewRig(meter, ("clean", "Amp_TW22"));
+        var (coord, chain, state) = NewRig(meter, ("clean", "Amp_TW22"));
         var edit = new DcRigPreset([
             new DcRigModule("amp", new Dictionary<string, float> { ["gain"] = 0.3f }),
             new DcRigModule("gain", new Dictionary<string, float> { ["gainDb"] = 3.5f })
         ]);
         coord.SongTonesSource = _ => new Dictionary<string, DcRigPreset> { ["clean"] = edit };
 
-        coord.PrepareForSong("song.psarc", new Arrangement { ToneBase = "clean" }, "lib:SONG");
+        // The session owns the chart; the singleton coordinator holds only weak identity.
+        state.ActiveArrangement = new Arrangement { ToneBase = "clean" };
+        coord.PrepareForSong("song.psarc", state.ActiveArrangement, "lib:SONG");
         await coord.LevellingCompletion.WaitAsync(Deadline, TestContext.Current.CancellationToken);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
         Assert.True(coord.BeginRun());
         Assert.Equal(3.5f, TrailingGain(chain), 3);
 

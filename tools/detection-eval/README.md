@@ -95,7 +95,3 @@ semitone off 10.1 % → 14.9 %.
 Rendered charts, bass (19,144 sounds): CQT before 53.3 % → 0.57.4 85.5 %; B-standard
 bass 12.4 % → 77.7 %; notes below E1 1.1 % → 63.7 %.
 
-The other direction — the app WRITING a chart from a song's mix (Chart from
-audio), scored against the hand-corrected `TestData/EOF` charts — has its own
-baseline: onset F1 44.7 %, note F1 4.3 % at ±50 ms (2026-10-07, 89
-arrangements). Method and numbers: `docs/agents/testing/autochart-eval.md`.

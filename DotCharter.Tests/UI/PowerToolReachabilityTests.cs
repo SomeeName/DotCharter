@@ -34,6 +34,7 @@ public sealed class PowerToolReachabilityTests
         "edit.patternBuilder",
         "tempo.alignBeatGrid",
         "tempo.alignToRecording",
+        "tempo.estimateBpm",
         "file.exportDcSong"
     ];
 
@@ -51,6 +52,7 @@ public sealed class PowerToolReachabilityTests
     [InlineData("OpenPatternBuilder", "IPatternBuilderScreen", "PatternBuilderViewModel", "Menu_PatternBuilder")]
     [InlineData("OpenAlignBeatGridDialog", "IAlignBeatGridScreen", "AlignBeatGridViewModel", "Menu_AlignBeatGrid")]
     [InlineData("OpenAlignToRecordingDialog", "IAlignToRecordingScreen", "AlignToRecordingViewModel", "Menu_AlignToRecording")]
+    [InlineData("OpenEstimateBpmDialog", "IEstimateBpmScreen", "EstimateBpmViewModel", "Menu_EstimateBpm")]
     [InlineData("OpenDcSongExport", "IDcSongExportScreen", "DcSongExportViewModel", "Menu_ExportDcSong")]
     public void Each_hosted_dialog_power_tool_is_reachable_end_to_end(string shellVerb, string contract,
         string viewModel, string menuKey)

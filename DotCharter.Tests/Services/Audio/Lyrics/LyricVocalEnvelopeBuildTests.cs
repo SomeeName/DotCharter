@@ -5,9 +5,8 @@ using DotCharter.Services.Audio.Lyrics;
 namespace DotCharter.Tests.Services.Audio.Lyrics;
 
 /// <summary>
-///     <see cref="LyricAutoSyncService.BuildPhrases" /> with a vocal envelope: the
-///     end of a syllable follows the voice in both directions, inside the same
-///     bounds the span rule has always had. Pure — synthetic envelopes, no model.
+///     <see cref="LyricAutoSyncService.BuildPhrases" /> with synthetic envelopes.
+///     Phrase-final ends follow the voice. In-phrase ends use chart spacing and keep review findings.
 /// </summary>
 public sealed class LyricVocalEnvelopeBuildTests
 {
@@ -52,7 +51,7 @@ public sealed class LyricVocalEnvelopeBuildTests
     private static double StartMs(LyricEvent lyric) => lyric.Position.GetPositionMs(Beats());
 
     [Fact]
-    public void AnInWordSpanStopsWhereTheVoiceGoesSilent()
+    public void SilenceInsideAPhraseStillLeavesOnlyTheMinimumGap()
     {
         // "i" of "i-tsu": the voice holds to 1.4 s, breathes until 1.95 s, then "tsu".
         var envelope = Voiced(4.0, (1.0, 1.4), (1.95, 2.5));
@@ -60,7 +59,7 @@ public sealed class LyricVocalEnvelopeBuildTests
         var withVoice = Build("i-tsu", envelope, null, (1.0, 1.05), (2.0, 2.1));
         var without = Build("i-tsu", null, null, (1.0, 1.05), (2.0, 2.1));
 
-        Assert.Equal(1400.0, EndMs(withVoice[0].Lyrics[0]), 15.0);
+        Assert.Equal(2000.0 - MinGapMs, EndMs(withVoice[0].Lyrics[0]), 1.0);
         Assert.Equal(2000.0 - MinGapMs, EndMs(without[0].Lyrics[0]), 1.0);
     }
 
@@ -106,8 +105,7 @@ public sealed class LyricVocalEnvelopeBuildTests
     [Fact]
     public void TheExtensionNeverReachesTheNextOnsetMinusTheMinimumGap()
     {
-        // The voice fades only at 3.5 s, but the next phrase starts at 3.0 s: with
-        // the phrase gap spanned the end runs to the bound and no further.
+        // The voice continues past the next phrase's start, which bounds the measured extension.
         var options = LyricAutoSyncOptions.Default with { SpanPhraseEndToNextPhrase = true };
         var envelope = Voiced(8.0, (1.0, 3.5));
 
@@ -117,14 +115,18 @@ public sealed class LyricVocalEnvelopeBuildTests
     }
 
     [Fact]
-    public void TheExtensionNeverPassesMaxSyllableSeconds()
+    public void VoiceAtTheCapContinuesToTheNextOnsetAndKeepsAReviewFinding()
     {
         var options = LyricAutoSyncOptions.Default with { MaxSyllableSeconds = 1.0 };
         var envelope = Voiced(8.0, (1.0, 6.0));
 
         var phrases = Build("i-tsu", envelope, options, (1.0, 1.05), (5.0, 5.1));
+        var withoutVoice = Build("i-tsu", null, options, (1.0, 1.05), (5.0, 5.1));
 
-        Assert.Equal(2000.0, EndMs(phrases[0].Lyrics[0]), 1.0);
+        Assert.Equal(5000.0 - MinGapMs, EndMs(phrases[0].Lyrics[0]), 1.0);
+        Assert.True(phrases[0].Lyrics[0].ReviewReasons.HasFlag(LyricReviewReason.CapHit));
+        Assert.Equal(5000.0 - MinGapMs, EndMs(withoutVoice[0].Lyrics[0]), 1.0);
+        Assert.True(withoutVoice[0].Lyrics[0].ReviewReasons.HasFlag(LyricReviewReason.CapHit));
     }
 
     [Fact]
@@ -142,12 +144,12 @@ public sealed class LyricVocalEnvelopeBuildTests
     }
 
     [Fact]
-    public void ASyllableIsNeverShorterThanItsCtcEnd()
+    public void APhraseFinalSyllableOverSilenceKeepsItsMeasuredCtcEnd()
     {
         // Silence right after the onset, but CTC heard the syllable until 1.3 s.
         var envelope = Voiced(4.0, (1.0, 1.05), (1.95, 2.5));
 
-        var phrases = Build("i-tsu", envelope, null, (1.0, 1.3), (2.0, 2.1));
+        var phrases = Build("i\ntsu", envelope, null, (1.0, 1.3), (2.0, 2.1));
 
         Assert.Equal(1300.0, EndMs(phrases[0].Lyrics[0]), 1.0);
     }

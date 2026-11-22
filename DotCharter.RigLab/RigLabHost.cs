@@ -45,6 +45,8 @@ public sealed class RigLabHost : IDisposable
         Config = config;
         Ui = ui;
         Logger = new AppLogger(config);
+        foreach (var ignored in config.IgnoredSettings)
+            Logger.Warning(AppLogCategory.Application, $"riglab.json: {ignored}");
         StatusBar = new StatusBarService(ui, Logger);
 
         Chains = useNullAudio
@@ -104,7 +106,7 @@ public sealed class RigLabHost : IDisposable
         // DI recorder + re-amp (ABI v37). Takes live in %APPDATA%\DotCharter RigLab\DI Takes
         // (WritablePaths follows the renamed app folder). The null transport has no
         // engine seam, so the panel shows itself disabled with its reason.
-        Reamp = new RigReampViewModel(Audio as IReampEngine, new DiTakeLibrary(), LocalizationService.Instance, Shell, Files, Logger);
+        Reamp = new RigReampViewModel(Audio as IReampEngine, new DiTakeLibrary(), LocalizationService.Instance, config, Shell, Files, Logger);
         Screen = new AmpFxRigViewModel(Rig, NamLibrary, InputChannel)
         {
             DropTune = DropTuneOver(Audio, config),

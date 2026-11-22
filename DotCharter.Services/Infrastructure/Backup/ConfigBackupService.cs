@@ -54,13 +54,12 @@ public sealed class ConfigBackupService : IConfigBackupService
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(ConfigRoot));
         var fullArchivePath = Path.GetFullPath(archivePath);
 
-        Directory.CreateDirectory(Path.GetDirectoryName(fullArchivePath)!);
-        if (File.Exists(fullArchivePath)) File.Delete(fullArchivePath);
-
         var count = 0;
-        try
+        // The sibling .tmp is excluded by ShouldTransfer; the previous archive
+        // stays intact until the whole zip (including its directory) is flushed.
+        AtomicFile.Write(fullArchivePath, stream =>
         {
-            using var zip = ZipFile.Open(fullArchivePath, ZipArchiveMode.Create);
+            using var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
             foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
             {
                 // The archive may be saved inside the config root — never pack ourselves.
@@ -83,12 +82,7 @@ public sealed class ConfigBackupService : IConfigBackupService
             var manifestEntry = zip.CreateEntry(ConfigBackupRules.ManifestEntryName, CompressionLevel.Optimal);
             using var writer = new StreamWriter(manifestEntry.Open());
             writer.Write(ConfigBackupRules.SerializeManifest(manifest));
-        }
-        catch
-        {
-            BestEffortDelete.File(fullArchivePath);
-            throw;
-        }
+        });
 
         return new ConfigBackupResult(count, []);
     }
@@ -175,14 +169,8 @@ public sealed class ConfigBackupService : IConfigBackupService
 
         var manifestEntry = zip.GetEntry(ConfigBackupRules.ManifestEntryName) ?? throw new InvalidDataException(
                 $"Not a DotCharter backup archive (no {ConfigBackupRules.ManifestEntryName}).");
-        ConfigBackupManifest? manifest;
-        using (var reader = new StreamReader(manifestEntry.Open()))
-        {
-            manifest = ConfigBackupRules.TryParseManifest(reader.ReadToEnd());
-        }
-
-        if (manifest == null)
-            throw new InvalidDataException("The backup archive's manifest is unreadable.");
+        var manifest = ReadManifest(manifestEntry) ?? throw new InvalidDataException(
+            "The backup archive's manifest is unreadable.");
         if (manifest.SchemaMajor > ConfigBackupRules.SchemaMajor)
         {
             throw new InvalidDataException(
@@ -392,6 +380,22 @@ public sealed class ConfigBackupService : IConfigBackupService
         }
 
         return failures;
+    }
+
+    // The manifest is only a few fields. Bound actual inflated bytes before
+    // decoding or parsing, independently of the archive's declared entry length.
+    private const int MaxManifestBytes = 64 * 1024;
+
+    private static ConfigBackupManifest? ReadManifest(ZipArchiveEntry entry)
+    {
+        using var stream = entry.Open();
+        var bytes = new byte[MaxManifestBytes + 1];
+        var length = stream.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false);
+        if (length > MaxManifestBytes) return null;
+
+        using var bounded = new MemoryStream(bytes, 0, length);
+        using var reader = new StreamReader(bounded);
+        return ConfigBackupRules.TryParseManifest(reader.ReadToEnd());
     }
 
     private static long SafeLength(string path)

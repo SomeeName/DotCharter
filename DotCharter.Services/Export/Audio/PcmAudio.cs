@@ -34,6 +34,9 @@ public sealed record PcmAudio(short[] Samples, int Channels, int SampleRate)
 /// </remarks>
 public static class PcmAudioLoader
 {
+    /// <summary>Full-level mono duplication on every decode path; part of generated audio cache identity.</summary>
+    public const int DecodePolicyVersion = 2;
+
     public const int RocksmithSampleRate = 48000;
     public const int RocksmithChannels = 2;
 
@@ -47,16 +50,21 @@ public static class PcmAudioLoader
     ///     degraded decision taken along the way.
     /// </summary>
     public static PcmAudio Load(string path, IList<string> warnings, string? configuredFfmpegPath = null)
+        => Load(path, warnings, DecodeNative, ResolveFfmpeg(configuredFfmpegPath));
+
+    /// <summary>Explicit decoder choices: a null tool disables ffmpeg, without consulting the machine.</summary>
+    internal static PcmAudio Load(string path, IList<string> warnings,
+        Func<string, JuceSharp.AudioIo.AudioBuffer?> decodeNative, string? ffmpeg)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (!File.Exists(path)) throw new FileNotFoundException($"Audio file not found: '{path}'.", path);
 
         // The editor's decoder first — see the class remarks.
-        var viaNative = TryLoadWithNativeDecoder(path, warnings, configuredFfmpegPath);
+        var viaNative = ConformNativeDecode(path, warnings, decodeNative, ffmpeg);
         if (viaNative is not null) return viaNative;
 
         // A format the engine cannot read (and so the editor cannot play).
-        var viaFfmpeg = TryLoadWithFfmpeg(path, configuredFfmpegPath);
+        var viaFfmpeg = TryLoadWithFfmpeg(path, ffmpeg, warnings);
         if (viaFfmpeg is not null) return viaFfmpeg;
 
         var extension = Path.GetExtension(path).ToLowerInvariant();
@@ -88,11 +96,21 @@ public static class PcmAudioLoader
         File.Exists,
         OperatingSystem.IsWindows());
 
-    private static PcmAudio? TryLoadWithFfmpeg(string path, string? configuredFfmpegPath)
+    private static PcmAudio? TryLoadWithFfmpeg(string path, string? ffmpeg, IList<string> warnings)
     {
-        var ffmpeg = ResolveFfmpeg(configuredFfmpegPath);
         if (ffmpeg is null) return null;
 
+        var decoded = DecodeWithFfmpeg(path, ffmpeg, []);
+        if (decoded is null) return null;
+        // Preserve the source channel count while decoding. ffmpeg's default mono upmix
+        // attenuates by sqrt(2); our shared conform copies mono at full level instead.
+        if (decoded.Channels <= RocksmithChannels) return Conform(decoded, warnings);
+        // Keep ffmpeg's existing surround downmix matrix for multichannel sources.
+        return DecodeWithFfmpeg(path, ffmpeg, ["-ac", RocksmithChannels.ToString()]);
+    }
+
+    private static PcmAudio? DecodeWithFfmpeg(string path, string ffmpeg, string[] channelArgs)
+    {
         var temp = Path.Combine(Path.GetTempPath(), $"dotcharter_wem_{Guid.NewGuid():N}.wav");
         try
         {
@@ -105,7 +123,7 @@ public static class PcmAudioLoader
                     "-hide_banner", "-loglevel", "error", "-y",
                     "-i", path,
                     .. FfmpegAudioOnly.Args,
-                    "-ac", RocksmithChannels.ToString(),
+                    .. channelArgs,
                     "-ar", RocksmithSampleRate.ToString(),
                     "-c:a", "pcm_s16le",
                     "-f", "wav",
@@ -133,17 +151,20 @@ public static class PcmAudioLoader
 
     /// <summary>Decodes via the native engine's format readers (flac, mp3,
     /// aiff, wav, ogg — whatever JUCE registers, i.e. what the editor plays).
-    /// A 48 kHz stereo decode is used as-is; anything else is resampled by
+    /// Mono is copied to both sides first, at full level, so a 48 kHz mono
+    /// decode never reaches ffmpeg. A 48 kHz stereo decode is used as-is; anything else is resampled by
     /// ffmpeg from the engine's own float PCM when ffmpeg is available, else
     /// linearly (with a warning). Null when the native DLL is unavailable or the
     /// format is unsupported, so callers fall through to the other decoders.</summary>
     internal static PcmAudio? TryLoadWithNativeDecoder(
         string path, IList<string> warnings, string? configuredFfmpegPath = null)
+        => ConformNativeDecode(path, warnings, DecodeNative, ResolveFfmpeg(configuredFfmpegPath));
+
+    private static JuceSharp.AudioIo.AudioBuffer? DecodeNative(string path)
     {
-        JuceSharp.AudioIo.AudioBuffer buf;
         try
         {
-            buf = JuceSharp.AudioIo.JuceAudioDecoder.Decode(path);
+            return JuceSharp.AudioIo.JuceAudioDecoder.Decode(path);
         }
         catch (Exception)
         {
@@ -151,12 +172,23 @@ public static class PcmAudioLoader
             // the NotSupportedException) take it from here.
             return null;
         }
+    }
 
+    private static PcmAudio? ConformNativeDecode(string path, IList<string> warnings,
+        Func<string, JuceSharp.AudioIo.AudioBuffer?> decodeNative, string? ffmpeg)
+    {
+        var buf = decodeNative(path);
+        if (buf is null) return null;
         if (buf.Channels <= 0 || buf.SampleRate <= 0 || buf.FrameCount == 0) return null;
+
+        // Mono is copied to both sides HERE, before ffmpeg sees it: ffmpeg's own
+        // mono -> stereo upmix lowers the level by 3 dB, so the same file came back
+        // at two levels depending on whether an ffmpeg could be found.
+        if (buf.Channels == 1) buf = CopyMonoToStereo(buf);
 
         if (buf.SampleRate != RocksmithSampleRate || buf.Channels != RocksmithChannels)
         {
-            var resampled = TryConformWithFfmpeg(buf, configuredFfmpegPath);
+            var resampled = TryConformWithFfmpeg(buf, ffmpeg);
             if (resampled is not null) return resampled;
         }
 
@@ -167,13 +199,25 @@ public static class PcmAudioLoader
         return Conform(new PcmAudio(samples, buf.Channels, buf.SampleRate), warnings);
     }
 
+    /// <summary>The upmix <see cref="Remix" /> does: the mono sample on both sides, at full level.</summary>
+    private static JuceSharp.AudioIo.AudioBuffer CopyMonoToStereo(JuceSharp.AudioIo.AudioBuffer mono)
+    {
+        var stereo = new float[mono.Interleaved.Length * 2];
+        for (var f = 0; f < mono.Interleaved.Length; f++)
+        {
+            stereo[2 * f] = mono.Interleaved[f];
+            stereo[(2 * f) + 1] = mono.Interleaved[f];
+        }
+
+        return new JuceSharp.AudioIo.AudioBuffer(stereo, mono.SampleRate, 2);
+    }
+
     /// <summary>Resamples / remixes the ENGINE'S decode with ffmpeg, from a 32-bit
     /// float WAV so nothing is quantised twice. ffmpeg's resampler compensates
     /// its own filter delay, so the timing the editor plays survives. Null when
     /// ffmpeg is unavailable or fails.</summary>
-    private static PcmAudio? TryConformWithFfmpeg(JuceSharp.AudioIo.AudioBuffer buf, string? configuredFfmpegPath)
+    private static PcmAudio? TryConformWithFfmpeg(JuceSharp.AudioIo.AudioBuffer buf, string? ffmpeg)
     {
-        var ffmpeg = ResolveFfmpeg(configuredFfmpegPath);
         if (ffmpeg is null) return null;
 
         var source = Path.Combine(Path.GetTempPath(), $"dotcharter_wem_src_{Guid.NewGuid():N}.wav");

@@ -71,7 +71,8 @@ public sealed class SandboxNonBlockingCallTests
         await svc.SendSandboxEditorToggleAsync(child, "slot-2", open: false).WaitAsync(Detector, Ct);
 
         Assert.Contains(logger.Entries, e =>
-            e.Message.Contains("Sandbox editor hide(slot-2) failed: VST sandbox process exited.", StringComparison.Ordinal));
+            e.Message.Contains("Sandbox editor hide(slot-2) failed", StringComparison.Ordinal)
+            && e.Exception is IOException { Message: "VST sandbox process exited." });
     }
 
     [Fact]

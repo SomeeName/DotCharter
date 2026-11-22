@@ -11,6 +11,26 @@ namespace DotCharter.Tests.Services.Editing.Maintenance;
 /// </summary>
 public sealed class PowerChordCapoTests
 {
+    [Fact]
+    public void Letter_only_Drop_D_builds_an_open_D_power_chord()
+    {
+        var h = new ChartPowerToolsTests.Harness();
+        var arrangement = h.State.ActiveArrangement!;
+        arrangement.TuningPitches.Clear();
+        arrangement.Tuning = ["D", "A", "D", "G", "B", "E"];
+        var level = arrangement.Levels[0];
+        level.Notes.Clear();
+        var note = new GuitarNote { Position = new FractionalPosition(0), StringIndex = 0, Fret = 0 };
+        level.Notes.Add(note);
+        h.Selection.SelectedNotes.Add(note);
+
+        h.Maintenance.ConvertSelectedNotesToPowerChord(big: true);
+
+        var chord = Assert.Single(level.Chords);
+        var template = arrangement.ChordTemplates.Single(t => t.Id == chord.TemplateId);
+        Assert.Equal(new Dictionary<int, int> { [0] = 0, [1] = 0, [2] = 0 }, template.Frets);
+    }
+
     /// <summary>
     ///     Capo <c>0</c> — which is nearly every chart — must be byte-identical
     ///     to the capo-blind version.

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using DotCharter.Core.Utilities;
 
 namespace DotCharter.Core.Domain.Events;
 
@@ -20,12 +21,22 @@ public class ChartAnnotation : INotifyPropertyChanged
 {
     private string _text = "";
     private bool _resolved;
+    private ChartAnnotationKind _kind = ChartAnnotationKind.Note;
 
     public double TimeMs { get; set; }
-    public ChartAnnotationKind Kind { get; set; } = ChartAnnotationKind.Note;
+    public ChartAnnotationKind Kind
+    {
+        get => _kind;
+        set
+        {
+            if (_kind == value) return;
+            _kind = value;
+            OnPropertyChanged();
+        }
+    }
 
-    /// <summary>Display label for list panels ("m:ss.fff").</summary>
-    public string TimeLabel => TimeSpan.FromMilliseconds(Math.Max(0, TimeMs)).ToString(@"m\:ss\.fff");
+    /// <summary>Elapsed-time label for list panels, with millisecond precision and hours when needed.</summary>
+    public string TimeLabel => ElapsedTimeLabel.Format(TimeMs, 3);
 
     public string Text
     {

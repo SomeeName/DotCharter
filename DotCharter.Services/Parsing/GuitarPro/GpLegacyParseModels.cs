@@ -30,6 +30,7 @@ internal sealed class GpLegacyMeasureHeader
     /// importer filled it. Empty string = no feel (GP's "none").
     /// </summary>
     public string TripletFeel { get; set; } = "";
+    public string Marker { get; set; } = "";
 
     /// <summary>
     ///     The bar's repeat markers, spelled exactly as
@@ -52,13 +53,6 @@ internal sealed class GpLegacyMeasureHeader
 
     /// <inheritdoc cref="RepeatStart" />
     public int AlternateEndingsMask { get; set; }
-}
-
-internal sealed class GpLegacyChannelInfo
-{
-    public int Patch { get; set; }
-    public int Volume { get; set; }
-    public int Pan { get; set; }
 }
 
 internal sealed class GpLegacyParseResult
@@ -98,3 +92,13 @@ internal readonly record struct GpLegacyBeatContext(
     /// authored fingers and chord names. The sidecar lane is notation only.</summary>
     public bool IsPlayable => Voice == 0;
 }
+
+/// <summary>A binary beat buffered until the next onset is known, so swing can size its sustain.</summary>
+internal sealed record GpLegacyTimedBeat(
+    GpLegacyBeatContext Context,
+    Fraction Duration,
+    bool IsTuplet,
+    List<(int StringIndex, DotCharter.Core.Domain.Guitar.GuitarNote Note)> Notes,
+    (BassPickingType BassPicking, bool isTap, bool hasVibrato, bool hasHarmonic) Effects,
+    GpMarkerImport.BeatTextTechnique? Technique,
+    string? ChordDiagramName);

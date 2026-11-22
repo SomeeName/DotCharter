@@ -139,6 +139,17 @@ public sealed class LiveTakeRecorderTests : IDisposable
     }
 
     [Fact]
+    public void Constructor_HeaderWriteFailure_DisposesOwnedStream()
+    {
+        using var stream = new FailAfterStream(failAfterBytes: 0);
+
+        Assert.Throws<IOException>(() => new LiveTakeRecorder(stream, "unused.wav", 48000,
+            TimeSpan.FromMinutes(1), autoStartWriter: false));
+
+        Assert.False(stream.CanWrite);
+    }
+
+    [Fact]
     public async Task StopAsync_DrainsBacklogLargerThanOneWriterChunk()
     {
         const int samples = 40000; // > the 16384-sample writer chunk

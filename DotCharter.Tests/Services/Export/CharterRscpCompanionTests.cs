@@ -77,6 +77,7 @@ public sealed class CharterRscpCompanionTests : IDisposable
         var full = new RscpChartSerializer().Load(ProjectPath);
         var companion = new RscpChartSerializer().Load(written!);
 
+        full.AudioFileName = "song.ogg";
         Assert.Equal(Chart(full), Chart(companion));
     }
 
@@ -100,6 +101,7 @@ public sealed class CharterRscpCompanionTests : IDisposable
     public void ACharterProjectAtTheCompanionPath_IsLeftAlone()
     {
         var companionPath = CharterRscp.CompanionPath(ProjectPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(companionPath)!);
         const string charterXml = "<?xml version='1.0' encoding='UTF-8'?>\n<project><chartFormatVersion>3</chartFormatVersion></project>";
         File.WriteAllText(companionPath, charterXml);
 

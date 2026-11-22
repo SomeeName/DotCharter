@@ -38,10 +38,10 @@ public sealed class RocksmithAutoVolumeTests
     }
 
     [Theory]
-    [InlineData(48000, 2, 0.3, -14.505317453436, -1.5)]
-    [InlineData(44100, 2, 0.3, -14.508783555295, -1.5)]
-    [InlineData(48000, 1, 0.03, -32.500417127537, 16.5)]
-    public void LoudnessAndVolume_MatchDlcBuilder(int rate, int channels, double amplitude, double loudness, double volume)
+    [InlineData(48000, 2, 0.3, -14.505317453436, 0.5)]
+    [InlineData(44100, 2, 0.3, -14.508783555295, 0.5)]
+    [InlineData(48000, 1, 0.03, -32.500417127537, 18.5)]
+    public void LoudnessMatchesDlcBuilder_AndDefaultVolumeTargetsMinus14(int rate, int channels, double amplitude, double loudness, double volume)
     {
         var samples = Signal(rate, channels, 5.0, amplitude);
 
@@ -50,8 +50,37 @@ public sealed class RocksmithAutoVolumeTests
     }
 
     [Fact]
+    public void QuietSongWithALoudSample_RoundsTheBoostDownToStayBelowFullScale()
+    {
+        var samples = Signal(48000, 2, 5.0, 0.03);
+        samples[^1] = -0.835f;
+
+        Assert.Equal(1.5, RocksmithAutoVolume.FromSamples(samples, 2, 48000));
+    }
+
+    [Fact]
+    public void LoudMaster_IsTurnedDown()
+    {
+        var samples = Signal(48000, 2, 5.0, 0.9);
+        var loudness = RocksmithAutoVolume.MeasureLoudness(samples, 2, 48000);
+
+        Assert.True(loudness > -14);
+        Assert.Equal(Math.Round(-14 - loudness, 1, MidpointRounding.AwayFromZero), RocksmithAutoVolume.FromSamples(samples, 2, 48000));
+    }
+
+    [Fact]
     public void Silence_ReadsZero() =>
         Assert.Equal(0.0, RocksmithAutoVolume.FromSamples(new float[48000 * 2 * 3], 2, 48000));
+
+    [Theory]
+    [InlineData(-20, -5.5)]
+    [InlineData(-10, 4.5)]
+    public void TheTargetRangeEndpoints_SetTheGain(int targetLufs, double expected)
+    {
+        var samples = Signal(48000, 2, 5.0, 0.3);
+
+        Assert.Equal(expected, RocksmithAutoVolume.FromSamples(samples, 2, 48000, targetLufs));
+    }
 
     [Fact]
     public void ADotWem_IsMeasuredThroughTheWavBesideIt_OrRefused()

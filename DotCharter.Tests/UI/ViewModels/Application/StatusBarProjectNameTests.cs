@@ -1,6 +1,8 @@
+using DotCharter.Services.Diagnostics;
 using DotCharter.Tone.Diagnostics;
 using DotCharter.UI.ViewModels.Application;
 using DotCharter.UI.ViewModels.Shell;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DotCharter.Tests.UI.ViewModels.Application;
 
@@ -27,8 +29,46 @@ public sealed class StatusBarProjectNameTests
         var state = new ProjectState();
         var vm = new StatusBarViewModel(new StatusBarService(dispatcher), state,
             new FakeAudioPlaybackService(), dispatcher, new NullProfiles(),
-            new FakeFileStorageService(), FakeLocalization.English());
+            new FakeFileStorageService(), FakeLocalization.English(), new FakeConfigurationService());
         return (vm, state);
+    }
+
+    [Fact]
+    public async Task FailedProfileExport_SurfacesLocalizedError()
+    {
+        var dispatcher = new TestUiDispatcher();
+        var state = new ProjectState();
+        var localization = FakeLocalization.KeysOnly();
+        var prompt = new RecordingPrompt();
+        using var services = new ServiceCollection().AddSingleton<IMessagePrompt>(prompt)
+            .AddSingleton<IConfigurationService>(new FakeConfigurationService()).BuildServiceProvider();
+        using var vm = ActivatorUtilities.CreateInstance<StatusBarViewModel>(services, new StatusBarService(dispatcher), state,
+            new FakeAudioPlaybackService(), dispatcher, new NullProfiles(),
+            new FakeFileStorageService { NextSaveFile = "backup.dcprofile" }, localization);
+
+        await vm.ExportProfileCommand.ExecuteAsync(null);
+
+        Assert.Equal(localization["Profile_Export_Failed"], vm.MainMessage);
+        Assert.True(vm.IsMainMessageError);
+        Assert.Equal(localization["Profile_Export_Title"], prompt.Title);
+        Assert.Equal(localization["Profile_Export_Failed"], prompt.Message);
+        Assert.Equal(MessageDialogKind.Error, prompt.Kind);
+    }
+
+    private sealed class RecordingPrompt : IMessagePrompt
+    {
+        public string? Title { get; private set; }
+        public string? Message { get; private set; }
+        public MessageDialogKind Kind { get; private set; }
+
+        public Task<bool> ShowAsync(string title, string message, MessageDialogKind kind = MessageDialogKind.Info,
+            string? details = null, bool confirmation = false)
+        {
+            Title = title;
+            Message = message;
+            Kind = kind;
+            return Task.FromResult(true);
+        }
     }
 
     [Fact]

@@ -2,7 +2,6 @@ using DotCharter.Services.State;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
 using FretAnchor = DotCharter.Core.Domain.Events.FretAnchor;
 using GuitarNote = DotCharter.Core.Domain.Guitar.GuitarNote;
-using HandShape = DotCharter.Core.Domain.Guitar.HandShape;
 
 namespace DotCharter.Services.Editing.Sync;
 
@@ -122,7 +121,7 @@ public static class ArrangementSoundSync
         {
             foreach (var template in minted)
             {
-                if (!target.ChordTemplates.Contains(template))
+                if (!ChordTemplateCollectionOps.ContainsInstance(target.ChordTemplates, template))
                     target.ChordTemplates.Add(template);
             }
         }
@@ -166,13 +165,9 @@ public static class ArrangementSoundSync
             foreach (var h in doomed) targetLevel.HandShapes.Remove(h);
 
             var resolved = ResolveTemplate(source, target, shape.TemplateId, minted);
-            targetLevel.HandShapes.Add(new HandShape
-            {
-                Position = shape.Position,
-                EndPosition = shape.EndPosition,
-                Name = shape.Name,
-                TemplateId = resolved?.Id ?? -1
-            });
+            var copy = shape.Clone();
+            copy.TemplateId = resolved?.Id ?? -1;
+            targetLevel.HandShapes.Add(copy);
         }
 
         if (apply && copied > 0)
@@ -243,22 +238,23 @@ public static class ArrangementSoundSync
         Arrangement source, Arrangement target, int sourceTemplateId, IList<ChordTemplate> minted)
     {
         if (sourceTemplateId < 0) return null;
-        var sourceTemplate = ChordTemplateResolver.FindById(source, sourceTemplateId);
+        var sourceTemplate = source.FindChordTemplate(sourceTemplateId);
         if (sourceTemplate == null) return null;
 
-        var before = minted.Count;
-        var resolved = ChordTemplateResolver.Resolve(target, sourceTemplate.Frets,
-            ArpeggioFlavour.Of(sourceTemplate), sourceTemplate.Name, minted);
-        // A copy of a shape the charter left unnamed on purpose is unnamed too.
-        if (minted.Count > before && sourceTemplate.Unnamed)
+        // Sync carries the authored grip, not just its frets. Never overwrite a
+        // same-fret target template: its other users are outside this edit.
+        foreach (var candidate in target.ChordTemplates.Concat(minted))
         {
-            resolved.Name = string.Empty;
-            resolved.Unnamed = true;
+            if (sourceTemplate.Equals(candidate) && sourceTemplate.Unnamed == candidate.Unnamed &&
+                sourceTemplate.Pinned == candidate.Pinned && sourceTemplate.FollowedFingering == candidate.FollowedFingering)
+            {
+                return candidate;
+            }
         }
 
-        if (sourceTemplate.Fingers.Count > 0)
-            resolved.Fingers = new Dictionary<int, int>(sourceTemplate.Fingers);
-
+        var resolved = sourceTemplate.Clone();
+        resolved.Id = target.ChordTemplates.Concat(minted).Select(t => t.Id).DefaultIfEmpty(-1).Max() + 1;
+        minted.Add(resolved);
         return resolved;
     }
 

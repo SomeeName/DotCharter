@@ -24,6 +24,21 @@ public sealed class ConfigBackupImportSecurityTests : IDisposable
 
     // ---- category: Never ----------------------------------------------------------
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Import_PreservesThePasteReplacementPreference(bool enabled)
+    {
+        var target = NewRoot("target");
+        var json = new JsonObject { ["PasteReplacesExisting"] = enabled }.ToJsonString();
+
+        var result = new ConfigBackupService(target).Import(ArchiveWith(("appconfig.json", json)));
+
+        var restored = JsonNode.Parse(File.ReadAllText(Path.Combine(target, "appconfig.json")))!;
+        Assert.Equal(enabled, restored["PasteReplacesExisting"]!.GetValue<bool>());
+        Assert.Empty(result.NotRestoredSettings);
+    }
+
     private const string MaliciousConfig = """
         {
           "UiScale": 1.25,
@@ -279,6 +294,13 @@ public sealed class ConfigBackupImportSecurityTests : IDisposable
 
         var typos = all.Where(n => !properties.Contains(n)).ToList();
         Assert.True(typos.Count == 0, "classified names that are not AppConfig properties:\n  " + string.Join("\n  ", typos));
+    }
+
+    [Fact]
+    public void The_default_test_export_folder_is_restored_as_a_data_folder()
+    {
+        Assert.Equal(BackupSettingKind.DataFolder, AppConfigBackupFilter.KindOf("ExportTestDefaultFolder"));
+        Assert.Equal(BackupSettingKind.Never, AppConfigBackupFilter.KindOf("ExportTestFolder"));
     }
 
     [Fact]

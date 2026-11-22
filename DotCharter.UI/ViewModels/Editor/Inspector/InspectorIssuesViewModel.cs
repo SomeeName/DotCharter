@@ -1,7 +1,10 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System.Diagnostics;
+using System.Globalization;
 using DotCharter.Services.Editing.Maintenance;
 using DotCharter.Services.Editing.Quality;
+using DotCharter.Tone.Diagnostics;
 using DotCharter.Tone.UI.ViewModels.Shell;
 
 namespace DotCharter.UI.ViewModels.Editor.Inspector;
@@ -19,7 +22,7 @@ namespace DotCharter.UI.ViewModels.Editor.Inspector;
 ///         field-level findings stay on the inspector: the Sound tab binds them.
 ///     </para>
 /// </summary>
-public sealed partial class InspectorIssuesViewModel : ViewModelBase
+public sealed partial class InspectorIssuesViewModel : ViewModelBase, IDisposable
 {
     private readonly ProjectState _projectState;
     private readonly ChartEditorViewModel _chartEditor;
@@ -29,8 +32,17 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase
     private readonly ILocalizationService _localization;
     private IInspectorIssuesHost? _host;
     private bool _issueGroupsStale;
+    private readonly IUiDispatcher _ui;
+    private readonly IAppLogger _logger;
+    private readonly QualityReportCopies _copies = new();
+    private int _generation;
+    private bool _running;
+    private bool _disposed;
 
-    [ObservableProperty] private int _issueCount;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(HasIssues))] private int _issueCount;
+
+    /// <summary>The Issues tab's count badge shows only when there is something to count.</summary>
+    public bool HasIssues => IssueCount > 0;
 
     /// <summary>
     ///     Severity of the WORST bucket, for the FEHLER header's dot.
@@ -67,19 +79,45 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase
         ExportReadinessViewModel exportReadiness,
         IHistoryService historyService,
         ILocalizationService localization,
-        Func<DotCharter.Presentation.Screens.Editor.IAiChatFindingsDoor?> aiChat)
+        Func<DotCharter.Presentation.Screens.Editor.IAiChatFindingsDoor?> aiChat,
+        IUiDispatcher ui,
+        IAppLogger logger)
     {
+        _ui = ui;
+        _logger = logger;
         _projectState = projectState;
         _chartEditor = chartEditor;
         _validationService = validationService;
         _chartMaintenance = chartMaintenance;
         _exportReadiness = exportReadiness;
         _localization = localization;
+        WeakLanguageSubscription.Subscribe(localization, this, static vm => vm.OnLanguageChanged());
         // the fix menu for the finding last jumped to (E04 / I46).
         IssueFix = new IssueFixViewModel(historyService, localization);
         // Fix / Explain with AI for the same finding, through the AI chat.
         IssueAi = new IssueAiViewModel(projectState, localization, aiChat);
+        AutoFixConfirm = new InspectorPendingAction().ClearOn(projectState, historyService);
+        // design D's flat, virtualized finding rows follow the groups and the finding on the Fixes card
+        FixIssueCommand = new RelayCommand<ArrangementIssue?>(FixIssue);
+        Rows = new InspectorIssueRows(localization, JumpToIssueCommand, FixIssueCommand);
+        IssueGroups.CollectionChanged += (_, _) => Rows.Rebuild(IssueGroups, _projectState.ActiveArrangement, _projectState.Beats);
+        IssueAi.PropertyChanged += (_, _) =>
+        {
+            Rows.MarkShown(IssueAi.Issue);
+            NotifyIssueExplanation();
+        };
+        IssueFix.PropertyChanged += (_, _) => NotifyIssueExplanation();
+        exportReadiness.ProjectFindings.Items.CollectionChanged += (_, _) => NotifyIssueExplanation();
+        exportReadiness.ProjectFindings.JumpToIssue = JumpToIssue;
+        exportReadiness.ProjectFindings.FixIssue = FixIssue;
+        exportReadiness.ProjectFindings.Seek = chartEditor.ExecuteSeek;
     }
+
+    /// <summary>The pass now in flight: completes once its result has landed (or been dropped).</summary>
+    internal Task Pending { get; private set; } = Task.CompletedTask;
+
+    /// <summary>The validation step, off the UI thread; a test replaces it with one it controls.</summary>
+    internal Func<Func<IssuePass>, Task<IssuePass>> OffThread { get; set; } = Task.Run;
 
     /// <summary>The issues listed — the hardest level's and the one on screen, plus the
     /// easier levels' when <see cref="ShowEasierLevelIssues" /> is on.</summary>
@@ -89,6 +127,27 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase
     /// triage surface — each group renders a header + count badge + click-to-jump
     /// rows. Rebuilt from <see cref="Items" /> on every recompute.</summary>
     public BulkObservableCollection<InspectorIssueGroup> IssueGroups { get; } = [];
+
+    /// <summary>The finding on the Fixes card stops the export (the last whole-project check says so), design D's status line.</summary>
+    public bool IssueBlocksExport => IssueAi.Issue is { } issue && _exportReadiness.ProjectFindings.Blocks(issue);
+
+    /// <summary>"Export blocker" or "Needs review".</summary>
+    public string IssueStatus => _localization[IssueBlocksExport ? "Inspector_Issues_ExportBlocker" : "Inspector_Issues_NeedsReview"];
+
+    /// <summary>The offline Explain's remedy line: the fix menu's default fix, or D's "listen first" when it has none.</summary>
+    public string IssueSuggestion => IssueFix.HasFix
+        ? _localization.Format("Inspector_Issues_Suggested", IssueFix.DefaultLabel)
+        : _localization["Inspector_Issues_ListenFirst"];
+
+    private void NotifyIssueExplanation()
+    {
+        OnPropertyChanged(nameof(IssueBlocksExport));
+        OnPropertyChanged(nameof(IssueStatus));
+        OnPropertyChanged(nameof(IssueSuggestion));
+    }
+
+    /// <summary>The finding rows the list shows, with the Difficulty filter.</summary>
+    public InspectorIssueRows Rows { get; }
 
     /// <summary>The Issues tab's fixes for the finding last jumped to.</summary>
     public IssueFixViewModel IssueFix { get; }
@@ -138,7 +197,11 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    public void RefreshIssues() => RecomputeIssues();
+    public void RefreshIssues()
+    {
+        RecomputeIssues();
+        _exportReadiness.RefreshChartReport();
+    }
 
     /// <summary>
     ///     One-click "fix the mechanical ones" from the Issues tab: runs the
@@ -146,8 +209,18 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase
     ///     ChartMaintenanceService.AutoFixChart) and re-validates, so the list
     ///     that remains is the genuine chart-review work.
     /// </summary>
+    /// <remarks>Design D asks first ("Auto-fix 14 visible arrangement findings?", <see cref="AutoFixConfirm" />); Confirm runs it.</remarks>
     [RelayCommand]
-    public void AutoFixIssues()
+    public void AutoFixIssues() => AutoFixConfirm.Ask(
+        _localization.Plural("Inspector_Issues_AutoFixAskOne", "Inspector_Issues_AutoFixAsk", IssueCount), RunAutoFix);
+
+    /// <summary>Each row's Fix (<see cref="FixIssue" />), handed to <see cref="Rows" />.</summary>
+    public IRelayCommand<ArrangementIssue?> FixIssueCommand { get; }
+
+    /// <summary>The Auto-fix question under the findings card's buttons.</summary>
+    public InspectorPendingAction AutoFixConfirm { get; }
+
+    private void RunAutoFix()
     {
         _chartMaintenance.AutoFixChart();
         RecomputeIssues();
@@ -169,7 +242,7 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase
         var owner = LevelOwning(_projectState.ActiveArrangement, issue);
         if (owner != null && !ReferenceEquals(owner, _projectState.ActiveLevel))
             _projectState.ActiveLevel = owner;
-        IssueFix.Offer(issue, _projectState.ActiveArrangement, owner);
+        IssueFix.Offer(issue, _projectState.ActiveArrangement, owner, _projectState.Beats);
         IssueAi.Offer(issue, _projectState.ActiveArrangement, owner, Items);
 
         if (issue.HasTime)
@@ -186,7 +259,33 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase
             _chartEditor.Selection.ClearSelections();
             if (issue.Note != null) _chartEditor.Selection.SelectedNotes.Add(issue.Note);
             else if (issue.Chord != null) _chartEditor.Selection.SelectedChords.Add(issue.Chord);
+            // An anchor finding names its shape only as context: selecting it would let Delete remove it.
+            else if (issue is { HandShape: not null, Anchor: null }) _chartEditor.Selection.SelectedHandShapes.Add(issue.HandShape);
+            else SelectLyric(issue.Lyric);
         }
+    }
+
+    /// <summary>
+    ///     A finding row's Fix (inspector design D): jumps to the finding — so the Fixes card shows it — and applies
+    ///     its default fix, one undo step, as the fix menu's button does. A finding whose fix a guard blocks stays
+    ///     offered with its reason.
+    /// </summary>
+    public void FixIssue(ArrangementIssue? issue)
+    {
+        if (issue == null) return;
+        JumpToIssue(issue);
+        if (IssueFix.ApplyDefaultCommand.CanExecute(null)) IssueFix.ApplyDefaultCommand.Execute(null);
+    }
+
+    /// <summary>A lyric finding (D13): its vocal track becomes the active one, the lyrics row shows
+    /// and the syllable is selected.</summary>
+    private void SelectLyric(LyricPlace? place)
+    {
+        if (place == null || _projectState.ActiveProject is not { } project || place.Find(project) is not var (track, lyric))
+            return;
+        _chartEditor.ActiveVocalTrack = track;
+        if (_chartEditor.ActiveRibbon is { } ribbon) ribbon.ShowLyrics = true;
+        _chartEditor.Selection.SelectedLyric = lyric;
     }
 
     /// <summary>
@@ -229,36 +328,160 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase
         }
     }
 
-    /// <summary>One validation pass over the active arrangement — the inspector's
-    /// debounced refresh, the toggle and the two commands all land here.</summary>
+    /// <summary>
+    ///     One validation pass over the active arrangement — the inspector's debounced refresh, the
+    ///     toggle and the two commands all land here. The rules run OFF the UI thread over a copy of the
+    ///     chart (<see cref="QualityReportSnapshot" />, the pattern the chart quality report uses); only
+    ///     the copy, the empty-grid reset and the landing of the result happen on the UI thread.
+    ///     <para>
+    ///         One pass is in flight at a time: a request that arrives meanwhile only moves
+    ///         <c>_generation</c>, and the pass that finishes sees it, drops its result and starts the
+    ///         next one, so a burst of edits costs one trailing pass. A result is also dropped when the
+    ///         arrangement's revision moved since the copy was taken, so a stale list never replaces
+    ///         a newer one.
+    ///     </para>
+    /// </summary>
     internal void RecomputeIssues()
     {
+        _generation++;
         var arr = _projectState.ActiveArrangement;
-        if (arr == null || _projectState.Beats.Count == 0)
+        var project = _projectState.ActiveProject;
+        var arrangementIndex = project == null || arr == null ? -1 : project.Arrangements.IndexOf(arr);
+        // Without an instrument arrangement, the project-wide lyric checks still run.
+        if (project == null || _projectState.Beats.Count == 0
+            || (arr == null ? project.VocalTracks.Count == 0 : arrangementIndex < 0))
         {
-            Items.ResetWith([]);
-            IssueCount = 0;
-            IssueFix.Offer(null, null, null);
-            IssueAi.Offer(null, null, null, []);
-            _chartEditor.PublishHandShapeFindings(HandShapeFindings.None);
-            RebuildIssueGroups();
+            ShowNoIssues();
             return;
         }
 
-        // The project too: the tone BODIES a tone change needs live there, not on
-        // the arrangement, and without it a chart whose tone changes all play
-        // silently validates completely clean.
-        var results = _validationService.Validate(
-            arr, _projectState.Beats, _projectState.TotalAudioLengthMs, _projectState.ActiveProject);
-        // on a chart with a difficulty ladder most issues repeat the hardest level's on its
-        // thinned copies. Those are listed on request; the hardest level and the one on screen always.
+        if (_running) return;
+        StartPass(project, arr, arrangementIndex);
+    }
+
+    private void ShowNoIssues()
+    {
+        Items.ResetWith([]);
+        IssueCount = 0;
+        IssueFix.Offer(null, null, null);
+        IssueAi.Offer(null, null, null, []);
+        _chartEditor.PublishHandShapeFindings(HandShapeFindings.None);
+        RebuildIssueGroups();
+    }
+
+    private void StartPass(ChartProject project, Arrangement? arr, int arrangementIndex)
+    {
+        _running = true;
+        var generation = _generation;
+        var revision = arr?.GetRevision() ?? 0;
+        var levelIndex = _projectState.ActiveLevel == null || arr == null ? -1 : arr.Levels.IndexOf(_projectState.ActiveLevel);
+        var beats = _projectState.Beats.ToList();
+        var totalAudioLengthMs = _projectState.TotalAudioLengthMs;
+        var done = new TaskCompletionSource();
+        Pending = done.Task;
+        QualityReportSnapshot? snapshot = null;
+        try
+        {
+            var watch = Stopwatch.StartNew();
+            snapshot = QualityReportSnapshot.Take(project, null, _copies);
+            var copied = watch.Elapsed;
+            _ = RunPassAsync(snapshot, copied, generation, revision, arr, arrangementIndex, levelIndex, beats,
+                totalAudioLengthMs, done);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            snapshot?.Release();
+            _running = false;
+            _logger.Error(AppLogCategory.Editing, "The Issues tab could not copy the chart to validate it.", ex);
+            done.TrySetResult();
+        }
+    }
+
+    private async Task RunPassAsync(QualityReportSnapshot snapshot, TimeSpan copied, int generation, long revision,
+        Arrangement? arr, int arrangementIndex, int levelIndex, List<BeatMarker> beats, double totalAudioLengthMs,
+        TaskCompletionSource done)
+    {
+        IssuePass? pass = null;
+        try
+        {
+            pass = await OffThread(() => Validate(snapshot, arrangementIndex, levelIndex, beats, totalAudioLengthMs))
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _logger.Error(AppLogCategory.Editing, "The Issues tab's validation failed.", ex);
+        }
+
+        _ui.Post(() => Land(snapshot, pass, copied, generation, revision, arr, done));
+    }
+
+    /// <summary>The worker's half: the rules over the copy, and which of their issues sit on easier levels.</summary>
+    private IssuePass Validate(QualityReportSnapshot snapshot, int arrangementIndex, int levelIndex,
+        List<BeatMarker> beats, double totalAudioLengthMs)
+    {
+        var watch = Stopwatch.StartNew();
+        HashSet<ArrangementIssue> easier = [];
+        IReadOnlyList<ArrangementIssue> issues = [];
+        var check = snapshot.CheckIssues(copy =>
+        {
+            var lyrics = LyricStyleRule.Check(copy, beats);
+            if (arrangementIndex < 0) return issues = lyrics;
+            var arrangement = copy.Arrangements[arrangementIndex];
+            // The project too: the tone BODIES a tone change needs live there, not on
+            // the arrangement, and without it a chart whose tone changes all play
+            // silently validates completely clean.
+            issues = _validationService.Validate(arrangement, beats, totalAudioLengthMs, copy);
+            // on a chart with a difficulty ladder most issues repeat the hardest level's on its
+            // thinned copies. Those are listed on request; the hardest level and the one on screen always.
+            easier = OnEasierLevels(arrangement, issues,
+                levelIndex < 0 || levelIndex >= arrangement.Levels.Count ? null : arrangement.Levels[levelIndex]);
+            // The project's lyric findings join in time order (OrderBy is stable).
+            if (lyrics.Count > 0) issues = [.. issues.Concat(lyrics).OrderBy(i => i.TimeMs.HasValue).ThenBy(i => i.TimeMs)];
+            return issues;
+        });
+        var onEasier = new bool[issues.Count];
+        for (var i = 0; i < onEasier.Length; i++) onEasier[i] = easier.Contains(issues[i]);
+        return new IssuePass(check, onEasier, watch.Elapsed);
+    }
+
+    /// <summary>The UI half: rebinds the issues to the live chart and shows them, unless a newer pass is due.</summary>
+    private void Land(QualityReportSnapshot snapshot, IssuePass? pass, TimeSpan copied, int generation, long revision,
+        Arrangement? arr, TaskCompletionSource done)
+    {
+        _running = false;
+        try
+        {
+            var rebound = pass == null ? null : snapshot.RebindIssues(pass.Check);
+            snapshot.Release();
+            var moved = generation != _generation
+                || !ReferenceEquals(_projectState.ActiveArrangement, arr)
+                || (arr?.GetRevision() ?? 0) != revision;
+            _logger.Info(AppLogCategory.Performance, string.Create(CultureInfo.InvariantCulture,
+                $"Issues: copied the chart in {copied.TotalMilliseconds:0} ms on the UI thread, validated it off the UI thread in {pass?.Elapsed.TotalMilliseconds ?? 0:0} ms{(moved ? "; dropped, the chart moved on" : "")}."));
+            if (moved || (pass != null && rebound == null))
+            {
+                // A newer request, an edit or a reshaped chart: this result must not land; validate again.
+                RecomputeIssues();
+                return;
+            }
+
+            if (pass != null && rebound != null) ShowIssues(arr, rebound, pass.OnEasierLevels);
+        }
+        finally
+        {
+            done.TrySetResult();
+        }
+    }
+
+    private void ShowIssues(Arrangement? arr, IReadOnlyList<ArrangementIssue> results, bool[] onEasier)
+    {
         // The 2D timeline marks the bars these findings name — from the FULL
-        // list, before the easier-level filter: the timeline draws whichever level
-        // is on screen, and the set is matched by reference against its shapes.
+        // list, before the easier-level filter: the timeline draws whichever level is on
+        // screen, and the set is matched by reference against its shapes.
         _chartEditor.PublishHandShapeFindings(HandShapeFindings.Collect(results));
-        var easier = OnEasierLevels(arr, results, _projectState.ActiveLevel);
-        EasierLevelIssueCount = easier.Count;
-        if (!ShowEasierLevelIssues && easier.Count > 0) results = [.. results.Where(i => !easier.Contains(i))];
+        var easierCount = onEasier.Count(e => e);
+        EasierLevelIssueCount = easierCount;
+        if (!ShowEasierLevelIssues && easierCount > 0) results = [.. results.Where((_, i) => !onEasier[i])];
         // One Reset, not Clear + N Adds:
         // this runs on the 150 ms debounce after every edit and the list is
         // bound in nested non-virtualizing ItemsControls.
@@ -274,6 +497,37 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase
         // follow edits without an extra timer. (No project re-assembly here;
         // the explicit check command does that.)
         _exportReadiness.RefreshIfChecked();
+    }
+
+    /// <summary>Completes when the pass now in flight (and any it triggers) has landed; for tests.</summary>
+    internal async Task SettleAsync()
+    {
+        while (true)
+        {
+            var pending = Pending;
+            await pending.ConfigureAwait(false);
+            if (ReferenceEquals(pending, Pending) && !_running) return;
+        }
+    }
+
+    /// <summary>A validation over the copy: its issues, which of them sit on easier levels, and the time it took.</summary>
+    internal sealed record IssuePass(ArrangementIssueCheck Check, bool[] OnEasierLevels, TimeSpan Elapsed);
+
+    /// <summary>
+    ///     Ends the language subscription's work: the localization service outlives the
+    ///     container, and its weak entry still reaches this view model until it is
+    ///     collected, so a released app's tab would otherwise rebuild its groups (and
+    ///     move the lists of a view nobody shows) on the next app's language load.
+    /// </summary>
+    public void Dispose()
+    {
+        _disposed = true;
+        AutoFixConfirm.Dispose();
+    }
+
+    private void OnLanguageChanged()
+    {
+        if (!_disposed) RebuildIssueGroups();
     }
 
     private void RebuildIssueGroups()

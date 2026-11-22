@@ -67,19 +67,64 @@ public sealed class TonelabInjectHelperTests
         Assert.Contains("not found", failed.LastLine, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    ///     A real child: the timeout is not the subject here, so it is a deadlock detector of minutes
+    ///     a loaded box cannot reach, and the run is asserted to have finished on its own.
+    /// </summary>
     [Fact]
-    public async Task TheHiddenRunner_ReadsExitCodeAndOutput_AndEndsAHelperPastItsTimeout()
+    public async Task TheHiddenRunner_ReadsExitCodeAndOutput()
     {
-        if (!OperatingSystem.IsWindows()) return;
+        Assert.SkipWhen(!OperatingSystem.IsWindows(), "the runner's live case drives cmd.exe.");
         var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
 
-        var run = await HiddenHelperProcessRunner.Instance.RunAsync(cmd, ["/c", "echo err no-process& exit 3"], TimeSpan.FromSeconds(20), Ct);
-        Assert.False(run.TimedOut);
+        var run = await HiddenHelperProcessRunner.Instance.RunAsync(cmd, ["/c", "echo err no-process& exit 3"], TimeSpan.FromMinutes(5), Ct);
+
+        Assert.False(run.TimedOut, "cmd.exe did not exit within five minutes: a hang, or a starved box");
+        Assert.Equal(3, run.ExitCode);
         Assert.Equal(TonelabInjectOutcome.NoProcess, TonelabInjectHelper.Parse(run).Outcome);
         Assert.Equal("no-process", TonelabInjectHelper.Parse(run).Reason);
+    }
+
+    /// <summary>The timeout IS the subject: a helper that would run for half a minute is ended at its deadline.</summary>
+    [Fact]
+    public async Task TheHiddenRunner_EndsAHelperPastItsTimeout()
+    {
+        Assert.SkipWhen(!OperatingSystem.IsWindows(), "the runner's live case drives cmd.exe.");
+        var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
 
         var slow = await HiddenHelperProcessRunner.Instance.RunAsync(cmd, ["/c", "ping -n 30 127.0.0.1 >nul"], TimeSpan.FromMilliseconds(300), Ct);
         Assert.True(slow.TimedOut);
         Assert.Null(slow.ExitCode);
+    }
+
+    [Fact]
+    public async Task TheHiddenRunner_EndsTheHelper_WhenTheCallerCancels()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var helper = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+        var started = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runner = new HiddenHelperProcessRunner { Started = started.SetResult };
+        using var caller = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+
+        // A timeout far past the test's life: only the caller's cancel can end this helper.
+        var run = runner.RunAsync(helper,
+            ["-NoProfile", "-NonInteractive", "-Command", "[Threading.EventWaitHandle]::new($false, [Threading.EventResetMode]::ManualReset).WaitOne()"],
+            TimeSpan.FromMinutes(10), caller.Token);
+        var pid = await started.Task.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+        using var process = System.Diagnostics.Process.GetProcessById(pid);
+        try
+        {
+            caller.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+            Assert.True(process.HasExited, "Caller cancellation returned while the helper was still alive.");
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync(CancellationToken.None);
+            }
+        }
     }
 }

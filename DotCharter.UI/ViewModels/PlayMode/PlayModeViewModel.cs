@@ -62,8 +62,6 @@ public sealed partial class PlayModeViewModel : ObservableObject, IPlayModeSetti
     private bool _runAppliedSongTranspose;
     private int _guidedTuningTranspose;
 
-    private const int SongEndGraceMs = 150;
-
     private readonly IPlayerProfileService _profiles;
     private readonly IGameplayStatsService _stats;
 
@@ -209,6 +207,7 @@ public sealed partial class PlayModeViewModel : ObservableObject, IPlayModeSetti
         };
         _livePlay = livePlay;
         _transport = transport;
+        _transport?.PlaybackStarted += OnGameplayPlaybackStarted;
         _projectSession = projectSession;
         _stemMixer = stemMixer;
         _logger = logger;
@@ -216,6 +215,7 @@ public sealed partial class PlayModeViewModel : ObservableObject, IPlayModeSetti
         _rsToneCoordinator = rsToneCoordinator;
         _tonePresets = tonePresets;
         ToneRig = toneRig ?? PlayModeToneRigViewModel.Detached(projectState, transport, livePlay, audio);
+        ToneRig.ToneSetApplied += RefreshInGameToneState;
         _latencyPrompt = latencyPrompt;
         ToneRig.SongContextSource = () => (FlowSongTitle, FlowSongArtist);
         ToneRig.OpenSettingsRequested += () => OpenSettingsRequested?.Invoke();
@@ -228,6 +228,7 @@ public sealed partial class PlayModeViewModel : ObservableObject, IPlayModeSetti
 
         _profiles.ActiveProfileChanged += _ =>
         {
+            ListenBack.Reset();
             OnPropertyChanged(nameof(ActiveProfileName));
             TuningMatch.ReloadProfile();
             SongSelect.RefreshSongStats();

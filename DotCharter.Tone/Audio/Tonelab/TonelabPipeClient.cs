@@ -24,12 +24,22 @@ public sealed record TonelabTimeouts(TimeSpan Connect, TimeSpan Command, TimeSpa
 ///         otherwise be read as the answer to the next command. The next call connects again,
 ///         which is also how the client finds a game that restarted under the same pid name.
 ///     </para>
+///     <para>
+///         <see cref="Dispose" /> may run on another thread while a command is in flight (the session's
+///         exit watch lets go of a game that closed mid-reply). A command therefore works on the
+///         pipe it connected, never on the fields a dispose clears. A dispose also cancels a pending
+///         connect or reply, and a command queued behind it never connects: each answers
+///         <see cref="TonelabOutcome.NotConnected" />, never a timeout.
+///     </para>
 /// </summary>
-public sealed class TonelabPipeClient(string pipeName, TonelabTimeouts? timeouts = null) : IDisposable
+public sealed class TonelabPipeClient(string pipeName, TonelabTimeouts? timeouts = null, TimeProvider? time = null) : IDisposable
 {
     private static readonly UTF8Encoding Utf8 = new(false);
     private readonly TonelabTimeouts _timeouts = timeouts ?? TonelabTimeouts.Default;
     private readonly SemaphoreSlim _oneAtATime = new(1, 1);
+    private readonly Lock _connection = new();
+    private readonly CancellationTokenSource _disposing = new();
+    private int _connectAttempts;
     private NamedPipeClientStream? _pipe;
     private StreamReader? _reader;
     private bool _disposed;
@@ -37,6 +47,12 @@ public sealed class TonelabPipeClient(string pipeName, TonelabTimeouts? timeouts
     public string PipeName { get; } = pipeName;
 
     public bool IsConnected => _pipe is { IsConnected: true };
+
+    /// <summary>Test seam: awaited after the connect and before the command is written.</summary>
+    internal Func<CancellationToken, Task>? BeforeSendAsync { get; init; }
+
+    /// <summary>How many times a command started connecting a pipe; tests read it to prove a disposed client stays idle.</summary>
+    internal int ConnectAttempts => Volatile.Read(ref _connectAttempts);
 
     public async Task<TonelabStatus> StatusAsync(CancellationToken ct = default)
     {
@@ -75,7 +91,8 @@ public sealed class TonelabPipeClient(string pipeName, TonelabTimeouts? timeouts
 
     public void Dispose()
     {
-        _disposed = true;
+        lock (_connection) _disposed = true;
+        _disposing.Cancel();
         Drop();
     }
 
@@ -92,16 +109,19 @@ public sealed class TonelabPipeClient(string pipeName, TonelabTimeouts? timeouts
         await _oneAtATime.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (!await EnsureConnectedAsync(ct).ConfigureAwait(false)) return (null, TonelabResult.NotConnected("no pipe " + PipeName));
+            if (_disposed) return (null, TonelabResult.NotConnected("the client was disposed"));
+            if (await EnsureConnectedAsync(ct).ConfigureAwait(false) is not (var pipe, var reader)) return (null, TonelabResult.NotConnected("no pipe " + PipeName));
 
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            deadline.CancelAfter(timeout);
+            // The reply deadline runs on the injected clock (tests drive it); the caller's token and a dispose still cancel it.
+            using var deadline = new CancellationTokenSource(timeout, time ?? TimeProvider.System);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _disposing.Token, deadline.Token);
             try
             {
+                if (BeforeSendAsync is { } beforeSend) await beforeSend(linked.Token).ConfigureAwait(false);
                 var bytes = Utf8.GetBytes(command + "\n");
-                await _pipe!.WriteAsync(bytes, deadline.Token).ConfigureAwait(false);
-                await _pipe.FlushAsync(deadline.Token).ConfigureAwait(false);
-                var line = await _reader!.ReadLineAsync(deadline.Token).ConfigureAwait(false);
+                await pipe.WriteAsync(bytes, linked.Token).ConfigureAwait(false);
+                await pipe.FlushAsync(linked.Token).ConfigureAwait(false);
+                var line = await reader.ReadLineAsync(linked.Token).ConfigureAwait(false);
                 if (line is null)
                 {
                     Drop();
@@ -112,8 +132,9 @@ public sealed class TonelabPipeClient(string pipeName, TonelabTimeouts? timeouts
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
+                // Closing the pipe under pending I/O also surfaces as a cancellation: that is a dispose, not a slow game.
                 Drop();
-                return (null, TonelabResult.Timeout(command));
+                return (null, _disposed ? TonelabResult.NotConnected("the pipe was closed") : TonelabResult.Timeout(command));
             }
             catch (OperationCanceledException)
             {
@@ -137,31 +158,67 @@ public sealed class TonelabPipeClient(string pipeName, TonelabTimeouts? timeouts
         }
     }
 
-    private async Task<bool> EnsureConnectedAsync(CancellationToken ct)
+    /// <summary>The live pipe and its reader, connecting first if needed; null when no game answers or the client is disposed.</summary>
+    private async Task<(NamedPipeClientStream Pipe, StreamReader Reader)?> EnsureConnectedAsync(CancellationToken ct)
     {
-        if (IsConnected) return true;
+        lock (_connection)
+        {
+            if (_pipe is { IsConnected: true } live && _reader is { } current) return (live, current);
+        }
+
         Drop();
+        Interlocked.Increment(ref _connectAttempts);
         var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        using var deadline = new CancellationTokenSource(_timeouts.Connect, time ?? TimeProvider.System);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _disposing.Token, deadline.Token);
         try
         {
-            await pipe.ConnectAsync(_timeouts.Connect, ct).ConfigureAwait(false);
+            await pipe.ConnectAsync(linked.Token).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException
+                                   || ex is OperationCanceledException && !ct.IsCancellationRequested)
         {
             await pipe.DisposeAsync().ConfigureAwait(false);
-            return false;
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            await pipe.DisposeAsync().ConfigureAwait(false);
+            throw;
         }
 
-        _pipe = pipe;
-        _reader = new StreamReader(pipe, Utf8, false, 1024, leaveOpen: true);
-        return true;
+        return Attach(pipe);
     }
 
+    /// <summary>Makes a freshly connected pipe the client's, unless a dispose won the race: then it is closed again.</summary>
+    private (NamedPipeClientStream Pipe, StreamReader Reader)? Attach(NamedPipeClientStream pipe)
+    {
+        lock (_connection)
+        {
+            if (!_disposed)
+            {
+                _pipe = pipe;
+                _reader = new StreamReader(pipe, Utf8, false, 1024, leaveOpen: true);
+                return (pipe, _reader);
+            }
+        }
+
+        pipe.Dispose();
+        return null;
+    }
+
+    /// <summary>Clears the fields under the lock and closes what they held; a command still using that pipe fails over to NotConnected.</summary>
     private void Drop()
     {
-        _reader?.Dispose();
-        _reader = null;
-        _pipe?.Dispose();
-        _pipe = null;
+        StreamReader? reader;
+        NamedPipeClientStream? pipe;
+        lock (_connection)
+        {
+            (reader, pipe) = (_reader, _pipe);
+            (_reader, _pipe) = (null, null);
+        }
+
+        reader?.Dispose();
+        pipe?.Dispose();
     }
 }

@@ -38,7 +38,7 @@ internal static class GuideChartFrames
 
             var ribbon = renderer.TopRibbon;
             var stringCount = StringDigitTargeting.StringCountOf(editor.ActiveArrangement);
-            var layout = TimelineGutterLayout.For(height, ribbon, stringCount, renderer.LeftyFlip ^ renderer.InvertStrings,
+            var layout = TimelineGutterLayout.For(height, ribbon, stringCount, renderer.InvertStrings,
                 renderer.BottomMargin, renderer.DrawLabels);
             var rc = new ChartRenderContext
             {

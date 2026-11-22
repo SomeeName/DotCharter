@@ -1,5 +1,8 @@
 using DotCharter.Localization;
 using DotCharter.Analysis.Lyrics;
+using DotCharter.Analysis.Lyrics.Syllables;
+using DotCharter.Services.Editing.Lyrics;
+using DotCharter.Services.Audio.StemSeparation;
 using JuceSharp.StemSeparation.Onnx;
 
 namespace DotCharter.Services.Audio.Lyrics;
@@ -7,6 +10,14 @@ namespace DotCharter.Services.Audio.Lyrics;
 public sealed record LyricAutoSyncOptions
 {
     public static LyricAutoSyncOptions Default { get; } = new();
+
+    /// <summary>Project stem references captured by the editor. A nonempty list is authoritative.</summary>
+    public IReadOnlyList<Stem>? ProjectStems { get; init; }
+
+    /// <summary>The captured project path and audio reference used by the mixer's resolver.</summary>
+    public string? ProjectPath { get; init; }
+
+    public string? ProjectAudioFileName { get; init; }
 
     /// <summary>Shifts every onset. Negative is earlier. See <see cref="LyricAlignmentOptions" />.</summary>
     public double OnsetBiasSeconds { get; init; }
@@ -20,9 +31,8 @@ public sealed record LyricAutoSyncOptions
     public OnnxExecutionProvider Provider { get; init; } = OnnxExecutionProvider.Auto;
 
     /// <summary>
-    ///     Longest a single syllable may be held, in seconds. Only bites where
-    ///     the aligner has parked a syllable across a long instrumental — a real
-    ///     sustained note is bounded by the next syllable anyway.
+    ///     Duration cap without further voice evidence. A stem can support a longer
+    ///     hold bounded by the next onset; reaching the cap remains a review finding.
     /// </summary>
     public double MaxSyllableSeconds { get; init; } = 4.0;
 
@@ -46,9 +56,10 @@ public sealed record LyricAutoSyncOptions
 
     /// <summary>
     ///     Thresholds for following the vocal envelope (only used when the sync
-    ///     listened to a vocal stem). A syllable's end moves with the voice in both
+    ///     listened to a vocal stem). A measured end moves with the voice in both
     ///     directions: it holds on while the voice sounds and stops where the voice
-    ///     falls silent, inside a word as well. See <see cref="VocalEndRefiner" />.
+    ///     falls silent. See <see cref="VocalEndRefiner" />. The chart then applies
+    ///     in-phrase spacing to those measured ends.
     /// </summary>
     public VocalEndOptions VocalEnd { get; init; } = VocalEndOptions.Default;
 
@@ -76,7 +87,8 @@ public sealed record LyricAutoSyncOptions
 
     /// <summary>
     ///     Projects the chart-free half down to <see cref="LyricSyncOptions" /> —
-    ///     the options the SEAM takes.
+    ///     the options the SEAM takes. Resolves captured stem references on the sync
+    ///     worker; callers must not perform this filesystem work on the UI thread.
     ///     <para>
     ///         <b>One-way, deliberately.</b> Everything dropped here (the span
     ///         rules, <see cref="MaxSyllableSeconds" />, the spacing config) is
@@ -85,12 +97,25 @@ public sealed record LyricAutoSyncOptions
     ///         the standalone consumer starts needing an <see cref="AppConfig" />.
     ///     </para>
     /// </summary>
-    public LyricSyncOptions ToSyncOptions() => new()
+    public LyricSyncOptions ToSyncOptions()
     {
-        OnsetBiasSeconds = OnsetBiasSeconds,
-        StarLogProb = StarLogProb,
-        Provider = Provider
-    };
+        var declared = ProjectStems is { Count: > 0 };
+        var warnings = new List<string>();
+        var audio = ProjectAudioLocator.TryResolve(ProjectPath, ProjectAudioFileName);
+        var stem = declared
+            ? VocalStemLocator.TryLocate(Path.GetDirectoryName(ProjectPath ?? "") ?? "",
+                Path.GetDirectoryName(audio ?? "") ?? "", ProjectStems!, warnings)
+            : VocalStemLocator.TryLocate(audio, Path.GetDirectoryName(ProjectPath ?? ""));
+        return new LyricSyncOptions
+        {
+            OnsetBiasSeconds = OnsetBiasSeconds,
+            StarLogProb = StarLogProb,
+            Provider = Provider,
+            VocalStemPath = stem,
+            DiscoverVocalStem = !declared,
+            StemWarnings = warnings
+        };
+    }
 }
 
 /// <summary>What one auto-sync run produced.</summary>
@@ -113,6 +138,10 @@ public sealed record LyricAutoSyncOutcome(
     int LowConfidenceCount,
     string AudioSource)
 {
+    public string AudioPath { get; init; } = "";
+
+    public IReadOnlyList<string> Warnings { get; init; } = [];
+
     public static LyricAutoSyncOutcome Failed(string error) => new(false, error, [], 0, 0, 0, "");
 }
 
@@ -229,7 +258,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
     ///         <c>LocalOnly_LyricAlignmentProbe</c>, which prints this table.
     ///     </para>
     /// </summary>
-    internal const double LowConfidenceThreshold = 0.05;
+    internal const double LowConfidenceThreshold = LyricAlignmentReview.LowConfidenceThreshold;
 
     private readonly IAppLogger? _logger;
     private readonly Func<string, string?> _vocalStem;
@@ -245,7 +274,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
     /// <param name="modelDirectoryOverride">Test hook: use this exact folder.</param>
     /// <param name="vocalStemLocator">
     ///     Test hook: resolves a mix path to an already-separated vocal stem.
-    ///     Defaults to <see cref="VocalStemLocator.TryLocate" />.
+    ///     Defaults to <see cref="VocalStemLocator.TryLocate(string)" />.
     /// </param>
     /// <param name="sessionOpener">
     ///     Test hook: opens the acoustic head. Defaults to
@@ -349,7 +378,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
         if (beats.Count == 0) return LyricAutoSyncOutcome.Failed("no-beats");
 
         var result = Align(lyricsText, audioPath, options.ToSyncOptions(), progress, ct);
-        if (!result.Ran) return LyricAutoSyncOutcome.Failed(result.Error!);
+        if (!result.Ran) return LyricAutoSyncOutcome.Failed(result.Error!) with { Warnings = result.Warnings };
 
         var phrases = BuildPhrases(result.Sheet, result.Aligned, beats, options, result.Envelope);
 
@@ -358,7 +387,11 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
             $"folded onto {beats.Count} beats.");
 
         return new LyricAutoSyncOutcome(true, null, phrases, result.Sheet.Syllables.Count,
-            result.InterpolatedCount, result.LowConfidenceCount, result.AudioSource);
+            result.InterpolatedCount, result.LowConfidenceCount, result.AudioSource)
+        {
+            AudioPath = result.AudioPath,
+            Warnings = result.Warnings
+        };
     }
 
     /// <inheritdoc />
@@ -367,6 +400,15 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
         IProgress<string>? status = null, CancellationToken cancellationToken = default)
         => Task.Run(() => Align(lyricsText, audioPath, options ?? LyricSyncOptions.Default,
             status, cancellationToken), cancellationToken);
+
+    private static LyricSheet ParseSheet(string lyricsText, LyricSyncOptions options)
+    {
+        var sheet = LyricSheetParser.Parse(lyricsText);
+        if (!options.SplitUnhyphenatedWords) return sheet;
+        return LyricSheetSyllabifier.DetectLanguage(sheet) is { } language
+            ? LyricSheetSyllabifier.Apply(sheet, language)
+            : LyricSheetSyllabifier.ApplyJapanese(sheet);
+    }
 
     /// <summary>
     ///     The SEAM: text + audio in, syllable seconds out. Synchronous because
@@ -384,10 +426,11 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
             return LyricSyncResult.Failed("no-audio");
         if (!IsModelInstalled) return LyricSyncResult.Failed("no-model");
 
-        var sheet = LyricSheetParser.Parse(lyricsText);
+        var sheet = ParseSheet(lyricsText, options);
         if (sheet.Syllables.Count == 0) return LyricSyncResult.Failed("no-lyrics");
 
-        var warnings = new List<string>();
+        var warnings = new List<string>(options.StemWarnings);
+        foreach (var warning in warnings) _logger?.Warning(AppLogCategory.Audio, warning);
 
         // Prefer a vocal stem that ALREADY exists (see the class summary for the
         // A/B). Never separate one: the user asked for lyrics to be timed, not for
@@ -412,7 +455,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
         }
         else
         {
-            stemPath = SafeLocateVocalStem(audioPath);
+            stemPath = options.DiscoverVocalStem ? SafeLocateVocalStem(audioPath) : null;
         }
 
         var listenPath = stemPath ?? audioPath;
@@ -429,11 +472,13 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
             float[] audio;
             try
             {
-                audio = _loadAudio(listenPath, warnings);
+                audio = LoadCheckedAudio(audioPath, ref stemPath, warnings);
+                listenPath = stemPath ?? audioPath;
+                sourceLabel = stemPath != null ? "vocal stem" : "mix";
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger?.Error(AppLogCategory.Audio, $"Lyric auto-sync could not decode '{listenPath}'.", ex);
+                _logger?.Error(AppLogCategory.Audio, $"Lyric auto-sync could not decode mix '{audioPath}' or stem '{stemPath}'.", ex);
                 return LyricSyncResult.Failed(
                     $"{ILyricSyncCore.DecodeFailedPrefix}{ex.Message}", warnings);
             }
@@ -455,7 +500,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
             var chosen = selection.Primary;
 
             progress?.Report(_localization["Progress_ListeningVocal"]);
-            using var model = OpenSession(chosen, options.Provider);
+            using var model = OpenSession(chosen, options.Provider, warnings, progress);
 
             var emissions = model.Encode(audio, ct);
             ct.ThrowIfCancellationRequested();
@@ -469,33 +514,31 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
                 progress?.Report(_localization["Progress_ListeningAgain"]);
                 emissions = BlendOptionalSecondary(emissions, primary =>
                     {
-                        using var other = OpenSession(secondary, options.Provider);
+                        using var other = OpenSession(secondary, options.Provider, warnings, progress);
 
                         return CtcEmissionBlender.Blend(
                             primary, other.Encode(audio, ct),
                             model.Vocabulary, other.Vocabulary, selection.PrimaryWeight);
                     },
-                    ex =>
-                    {
-                        _logger?.Warning(AppLogCategory.Audio,
-                            $"Lyric auto-sync: the optional '{secondary.Id}' model could not be used " +
-                            $"({ex.Message}); aligning with '{chosen.Id}' alone.");
-                        warnings.Add(
-                            $"The optional '{secondary.Id}' model could not be used ({ex.Message}); " +
-                            $"aligned with '{chosen.Id}' alone.");
-                    });
+                    ex => selection = UsePrimaryAlone(chosen, secondary, ex, warnings));
                 ct.ThrowIfCancellationRequested();
+
+                emissions = WithoutPooledForRomaji(emissions, sheet);
             }
 
             progress?.Report(_localization["Progress_AligningLyrics"]);
             var totalBias = options.OnsetBiasSeconds + selection.OnsetBiasSeconds;
-            var alignment = AlignSheet(sheet, model.Vocabulary, emissions, options, selection, totalBias);
+            var alignment = AlignSheet(sheet, model.Vocabulary, emissions, options, selection, totalBias, ct, envelope);
+            ct.ThrowIfCancellationRequested();
 
             if (!alignment.Succeeded) return LyricSyncResult.Failed(alignment.Failure!, warnings);
 
+            if (stemPath != null) alignment = SnapToStemOnsets(alignment, sheet, audio, options.OnsetSnap);
+            ct.ThrowIfCancellationRequested();
+
             var interpolated = alignment.Syllables.Count(s => s.IsInterpolated);
             var lowConfidence = alignment.Syllables.Count(
-                s => !s.IsInterpolated && s.Confidence < LowConfidenceThreshold);
+                s => !s.IsInterpolated && (s.Confidence < LowConfidenceThreshold || s.ReviewReasons.HasFlag(LyricReviewReason.LowScore)));
 
             _logger?.Info(AppLogCategory.Audio,
                 $"Lyric auto-sync: {sheet.Syllables.Count} syllables from the " +
@@ -521,13 +564,58 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
         }
     }
 
+    private LyricModelSelection UsePrimaryAlone(LyricModel primary, LyricModel secondary, Exception failure, List<string> warnings)
+    {
+        _logger?.Warning(AppLogCategory.Audio,
+            $"Lyric auto-sync: the optional '{secondary.Id}' model could not be used " +
+            $"({failure.Message}); aligning with '{primary.Id}' alone.");
+        warnings.Add(
+            $"The optional '{secondary.Id}' model could not be used ({failure.Message}); " +
+            $"aligned with '{primary.Id}' alone.");
+        return new LyricModelSelection(primary, null, 1.0, primary.OnsetBiasSeconds,
+            primary.Id == LyricModelCatalog.MultilingualId ? LyricModelCatalog.MultilingualVowelInitialBias : 0.0);
+    }
+
+    /// <summary>Checks every stem against its owning mix before handing samples to the model.
+    /// The mix decode is reused when a stem is rejected.</summary>
+    private float[] LoadCheckedAudio(string mixPath, ref string? stemPath, IList<string> warnings)
+    {
+        var mix = _loadAudio(mixPath, warnings);
+        if (stemPath == null) return mix;
+        var stem = _loadAudio(stemPath, warnings);
+        var rate = LyricAcousticModel.RequiredSampleRate;
+        var stemSeconds = (double)stem.Length / rate;
+        var mixSeconds = (double)mix.Length / rate;
+        if (StemTimeBase.Matches(stemSeconds, mixSeconds)) return stem;
+
+        var warning = StemTimeBase.DescribeMismatch(stemPath, stemSeconds, mixPath, mixSeconds);
+        warnings.Add(warning);
+        _logger?.Warning(AppLogCategory.Audio, warning);
+        stemPath = null;
+        return mix;
+    }
+
+    /// <summary>
+    ///     Moves each onset to the vocal stem's own onset near it (<see cref="LyricOnsetSnap" />):
+    ///     the stem shows where each syllable's first sound begins, CTC only roughly.
+    /// </summary>
+    private static LyricAlignmentResult SnapToStemOnsets(
+        LyricAlignmentResult alignment, LyricSheet sheet, float[] stem, LyricOnsetSnapOptions? snap)
+    {
+        if (snap == null || !LyricOnsetSnap.AppliesTo(sheet)) return alignment;
+
+        var onsets = alignment.Syllables.Select(s => s.StartSeconds).ToList();
+        var features = VocalOnsetFeatures.FromSamples(stem, LyricAcousticModel.RequiredSampleRate, onsets, snap.ReachSeconds);
+        return alignment with { Syllables = LyricOnsetSnap.Apply(alignment.Syllables, sheet, features, snap) };
+    }
+
     /// <summary>
     ///     The trellis over the (possibly blended) emissions, with the model's own
     ///     onset corrections added to the caller's.
     /// </summary>
     private static LyricAlignmentResult AlignSheet(
         LyricSheet sheet, LyricVocabulary vocabulary, CtcEmissions emissions,
-        LyricSyncOptions options, LyricModelSelection selection, double totalBias)
+        LyricSyncOptions options, LyricModelSelection selection, double totalBias, CancellationToken ct, VocalEnvelope? envelope)
         => LyricAligner.Align(sheet, vocabulary, emissions,
             new LyricAlignmentOptions
             {
@@ -537,18 +625,25 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
                 OnsetBiasSeconds = totalBias,
                 VowelInitialOnsetBiasSeconds = selection.VowelInitialOnsetBiasSeconds,
                 StarLogProb = options.StarLogProb
-            });
+            }, ct, envelope);
 
     /// <summary>
     ///     Opens one head so that a failed GPU run is answered on the CPU
     ///     (<see cref="LyricProviderFallbackSession" />). Every head goes through
     ///     here, the optional second one included: each is remembered on its own.
     /// </summary>
-    private ILyricAcousticSession OpenSession(LyricModel model, OnnxExecutionProvider provider) =>
+    private ILyricAcousticSession OpenSession(
+        LyricModel model, OnnxExecutionProvider provider, List<string> warnings, IProgress<string>? progress) =>
         new LyricProviderFallbackSession(
             model, provider, _openSession, _providerMemory,
             m => _logger?.Info(AppLogCategory.Audio, m),
-            m => _logger?.Warning(AppLogCategory.Audio, m));
+            (m, ex) =>
+            {
+                _logger?.Warning(AppLogCategory.Audio, m, ex);
+                var notice = _localization["Progress_LyricGpuFailedCpu"];
+                warnings.Add(notice);
+                progress?.Report(notice);
+            });
 
     /// <summary>
     ///     Zips the sheet's structure back onto the aligner's times. The two are
@@ -566,11 +661,21 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
             var a = aligned[i];
             syllables.Add(new LyricSyncSyllable(
                 i, s.Text, s.ContinuesWord, s.EndsLine, s.LineIndex,
-                a.StartSeconds, a.EndSeconds, a.Confidence, a.IsInterpolated));
+                a.StartSeconds, a.EndSeconds, a.Confidence, a.IsInterpolated)
+            {
+                ReviewReasons = a.ReviewReasons
+            });
         }
 
         return syllables;
     }
+
+    /// <summary>
+    ///     The pooled path recovers words only one head heard; on romaji the English head's
+    ///     letters are guesses at Japanese syllables, so it only adds noise there.
+    /// </summary>
+    internal static CtcEmissions WithoutPooledForRomaji(CtcEmissions emissions, LyricSheet sheet) =>
+        LyricScriptDetector.IsLikelyRomaji(sheet) ? emissions with { Pooled = null } : emissions;
 
     /// <summary>
     ///     Folds the OPTIONAL second head into the primary's emissions, and
@@ -620,8 +725,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
             if (string.IsNullOrWhiteSpace(stem) || !File.Exists(stem)) return null;
 
             _logger?.Info(AppLogCategory.Audio,
-                $"Lyric auto-sync is listening to the separated vocal stem " +
-                $"'{Path.GetFileName(stem)}' instead of the mix.");
+                $"Lyric auto-sync found separated vocal stem '{stem}'; checking its duration against the mix.");
             return stem;
         }
         catch (Exception ex)
@@ -635,28 +739,26 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
     /// <summary>
     ///     Folds aligned syllables onto the beat grid, one phrase per line.
     ///     <para>
-    ///         A syllable ends where CTC stopped hearing it, but never later than
-    ///         the next syllable starts — the aligner's spans are already
+    ///         The initial end comes from where CTC stopped hearing the syllable,
+    ///         bounded by the next onset. The aligner's spans are already
     ///         non-overlapping in frames, and this keeps them non-overlapping
     ///         after the onset bias has moved them.
     ///     </para>
     ///     <para>
-    ///         The CTC end is then a FLOOR, not the answer: the model stops at
-    ///         the last frame it could still hear the syllable, which leaves
-    ///         short pills with dead gaps. Where spanning is enabled for the
-    ///         boundary (always within a word; word/phrase boundaries per
-    ///         <see cref="LyricAutoSyncOptions" />), the end EXTENDS to the next
-    ///         syllable's start minus the note-style minimum gap
-    ///         (<see cref="ChartSpacingEnforcer.GetMinDistance" />) — never
-    ///         shortening what was heard, and never past
-    ///         <see cref="LyricAutoSyncOptions.MaxSyllableSeconds" />.
+    ///         Inside a phrase, an enabled span ends at the next syllable's start
+    ///         minus the note-style minimum gap (<see cref="ChartSpacingEnforcer.GetMinDistance" />).
+    ///         This closes gaps where CTC stopped hearing a syllable early and trims
+    ///         overlaps while keeping the aligned starts. Within a word it always spans.
+    ///         With word spanning off, word endings keep their measured end up to
+    ///         the same spacing limit. Reaching <see cref="LyricAutoSyncOptions.MaxSyllableSeconds" />
+    ///         in measurement needs review, and a vocal stem can support a longer hold.
     ///     </para>
     ///     <para>
-    ///         With a vocal <paramref name="envelope" /> the end follows the voice
-    ///         instead of the span rule alone (<see cref="VocalEndRefiner" />): a
-    ///         spanned end stops where the voice falls silent, even inside a
-    ///         word, and an unspanned end — a phrase-final held vowel — extends
-    ///         until the voice fades. Both stay inside the same bounds.
+    ///         With a vocal <paramref name="envelope" /> the measured end follows the voice
+    ///         (<see cref="VocalEndRefiner" />). A phrase-final held vowel extends
+    ///         until the voice fades, bounded by the next onset or the envelope end.
+    ///         <see cref="LyricAutoSyncOptions.SpanPhraseEndToNextPhrase" /> allows
+    ///         spanning across a phrase boundary through these measurement rules.
     ///     </para>
     /// </summary>
     internal static List<LyricPhrase> BuildPhrases(
@@ -666,11 +768,12 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
         var phrases = new List<LyricPhrase>();
         LyricPhrase? phrase = null;
         var spacingConfig = options.SpacingConfig ?? DefaultSpacingConfig;
-        var ends = LyricSyllableEnds.Compute(
+        var endResult = LyricSyllableEnds.ComputeWithReview(
             [.. sheet.Syllables.Select((syllable, i) => new LyricEndSyllable(
                 aligned[i].StartSeconds, aligned[i].EndSeconds, syllable.LineIndex, ShouldSpanToNext(syllable, options)))],
             (start, nextStart) => SpanTargetSeconds(start, nextStart, beats, spacingConfig),
             options.MaxSyllableSeconds, envelope, options.VocalEnd);
+        var review = LyricAlignmentReview.Evaluate(sheet, aligned, envelope);
 
         for (var i = 0; i < sheet.Syllables.Count; i++)
         {
@@ -683,21 +786,23 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
                 phrases.Add(phrase);
             }
 
-            var end = ends[i];
+            var end = endResult.Ends[i];
 
             // The hyphen is INPUT SYNTAX, never stored text. In this model the
             // continuation lives in IsWordPart, and the writers append the '-'
             // themselves at export (RsXmlVocalsWriter) or emit a WORD_PART flag
             // (RscpWriter) — which is also what the Ctrl+Space tap path does.
             // Storing it here put a visible '-' on every syllable in the editor.
-            phrase.Lyrics.Add(new LyricEvent
+            var lyric = new LyricEvent
             {
                 Position = Position(placement.StartSeconds, beats),
                 EndPosition = Position(end, beats),
                 Text = syllable.Text,
-                IsWordPart = syllable.ContinuesWord,
-                IsPhraseEnd = syllable.EndsLine
-            });
+                AlignmentConfidence = placement.Confidence,
+                ReviewReasons = review[i] | (endResult.CapHits[i] ? LyricReviewReason.CapHit : LyricReviewReason.None)
+            };
+            LyricLineRule.Apply(lyric, syllable.ContinuesWord, syllable.EndsLine);
+            phrase.Lyrics.Add(lyric);
 
             if (syllable.EndsLine)
             {
@@ -710,6 +815,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
         if (phrase is { Lyrics.Count: > 0 })
             phrase.EndPosition = phrase.Lyrics[^1].EndPosition;
 
+        LyricPhraseSpacing.CloseGaps(phrases, beats, spacingConfig, options.SpanWordEndToNextWord);
         return phrases;
     }
 
@@ -741,8 +847,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
     {
         var startPos = Position(startSeconds, beats);
         var nextPos = Position(nextStartSeconds, beats);
-        var minGap = ChartSpacingEnforcer.GetMinDistance(startPos, beats, config);
-        var targetPos = FractionalPosition.Max(startPos, nextPos - minGap);
+        var targetPos = FractionalPosition.Max(startPos, LyricPhraseSpacing.EndLimit(startPos, nextPos, beats, config));
         return targetPos.GetPositionMs(beats) / 1000.0;
     }
 

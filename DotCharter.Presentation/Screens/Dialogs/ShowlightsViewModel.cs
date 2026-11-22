@@ -276,7 +276,23 @@ public sealed class ShowlightsViewModel : DialogViewModel<bool>, IShowlightsScre
     private IReadOnlyList<string> Options(ShowlightLane lane, IReadOnlyList<ShowlightDefinition> definitions)
     {
         _laneTypes[Array.IndexOf(Lanes, lane)] = [null, .. definitions.Select(d => d.Type)];
-        return [_edit.Localization["Dialog_Showlights_None"], .. definitions.Select(d => d.DisplayName)];
+        return [_edit.Localization["Dialog_Showlights_None"], .. definitions.Select(d => OptionLabel(d.DisplayName))];
+    }
+
+    /// <summary>A cue's name in the UI language: the 3D preview chip's colour words, a plus beam with its "+".</summary>
+    private string OptionLabel(string name) => name switch
+    {
+        "On" => _edit.Localization["Dialog_Showlights_On"],
+        "Off" => _edit.Localization["Dialog_Showlights_Off"],
+        _ when name.EndsWith('+') => Colour(name[..^1]) + "+",
+        _ => Colour(name)
+    };
+
+    private string Colour(string name)
+    {
+        var key = "Preview3D_ShowlightColor_" + name.Replace(" ", "", StringComparison.Ordinal);
+        var text = _edit.Localization[key];
+        return text == key ? name : text;
     }
 
     private string LaneLabel(ShowlightLane lane) => lane switch

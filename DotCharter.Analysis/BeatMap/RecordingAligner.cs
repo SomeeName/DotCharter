@@ -374,7 +374,7 @@ public sealed class RecordingAligner
         var lastPeak = int.MinValue;
         for (var k = k0; k <= k1; k++)
         {
-            if (onset[k] < PeakLevel || onset[k] < onset[k - 1] || onset[k] < onset[k + 1] || k - lastPeak < minGap) continue;
+            if (onset[k] < PeakLevel || onset[k] < onset[k - 1] || onset[k] < onset[k + 1] || (long)k - lastPeak < minGap) continue;
             lastPeak = k;
             peaks++;
             var t = features.FineFrameTimeMs(k);

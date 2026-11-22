@@ -1,3 +1,4 @@
+using DotCharter.Presentation.Screens.Settings;
 using DotCharter.Services.Audio.StemSeparation;
 using DotCharter.Tone.Infrastructure.Storage;
 
@@ -24,6 +25,73 @@ public sealed class StemModelManagerTests : IDisposable
     {
         cfg ??= new FakeConfigurationService();
         return new StemModelManager(cfg, logger: null, modelsDirectoryOverride: _tmpDir);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Converted_checkpoint_publication_refreshes_installed_rows_only_after_success(bool publicationFails)
+    {
+        var manager = Build();
+        var url = $"https://example.invalid/{Guid.NewGuid():N}/converted.onnx";
+        var stage = Path.Combine(_tmpDir, "converted-stage.onnx");
+        if (!publicationFails) File.WriteAllBytes(stage, [1, 2, 3]);
+        var rows = new List<StemModelRowViewModel>();
+        manager.ModelsChanged += (_, _) =>
+        {
+            var descriptor = Assert.Single(manager.Catalog, d => d.DownloadUrl == url);
+            rows.Add(new StemModelRowViewModel(manager, descriptor, FakeLocalization.KeysOnly()));
+        };
+        StemModelDescriptor? imported = null;
+        try
+        {
+            var error = Record.Exception(() =>
+            {
+                var publish = typeof(StemModelManager).GetMethod("PublishConvertedCheckpoint",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                if (publish != null)
+                {
+                    imported = (StemModelDescriptor)publish.Invoke(manager, [url, stage, "converted", 4])!;
+                    return;
+                }
+
+                // The pre-extraction checkpoint pipeline's existing two operations.
+                imported = manager.ImportFromUrl(url, "converted", 4);
+                AtomicFile.Publish(stage, manager.GetLocalPath(imported));
+            });
+
+            if (publicationFails)
+            {
+                Assert.NotNull(error);
+                Assert.Empty(rows);
+            }
+            else
+            {
+                Assert.Null(error);
+                var row = Assert.Single(rows);
+                Assert.True(row.IsInstalled);
+                Assert.True(row.CanSetActive);
+                Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(manager.GetLocalPath(imported!)));
+            }
+        }
+        finally
+        {
+            // The catalogue is process-wide: a row left registered reaches every later test.
+            foreach (var leftover in StemModelCatalog.All.Where(d => d.DownloadUrl == url))
+                StemModelCatalog.UnregisterCustom(leftover.Id);
+        }
+
+        Assert.DoesNotContain(StemModelCatalog.All, d => d.DownloadUrl == url);
+    }
+
+    [Fact]
+    public void Checkpoint_conversion_uses_the_publication_and_notification_seam()
+    {
+        var source = File.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "DotCharter.Services", "Audio", "StemSeparation", "StemModelManager.cs"));
+        var start = source.IndexOf("public async Task<StemModelDescriptor> ImportCheckpointAsync", StringComparison.Ordinal);
+        var end = source.IndexOf("private async Task DownloadToAsync", start, StringComparison.Ordinal);
+        Assert.Contains("PublishConvertedCheckpoint(fauxUrl, onnxPath", source[start..end], StringComparison.Ordinal);
+        Assert.DoesNotContain("var desc = ImportFromUrl(", source[start..end], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -293,6 +361,84 @@ public sealed class StemModelManagerTests : IDisposable
         Assert.Throws<ArgumentException>(() => mgr.ImportFromUrl("not a url"));
         // URL without a recognisable filename (no extension):
         Assert.Throws<ArgumentException>(() => mgr.ImportFromUrl("https://example.com/foo/bar"));
+    }
+
+    [Fact]
+    public void Custom_models_with_the_same_filename_have_distinct_stable_paths_and_deletes()
+    {
+        var mgr = Build();
+        var owner = "test-" + Guid.NewGuid().ToString("N");
+        var first = mgr.ImportFromUrl($"https://huggingface.co/{owner}/first/resolve/main/model.onnx");
+        var second = mgr.ImportFromUrl($"https://huggingface.co/{owner}/second/resolve/main/model.onnx");
+        try
+        {
+            Assert.NotEqual(first.Id, second.Id);
+            var firstPath = mgr.GetLocalPath(first);
+            var secondPath = mgr.GetLocalPath(second);
+            Assert.NotEqual(firstPath, secondPath);
+            Assert.Equal(firstPath, StemModelDownloadPlan.FileRequestFor(first, _tmpDir).DestinationPath);
+            Assert.Equal(secondPath, StemModelDownloadPlan.FileRequestFor(second, _tmpDir).DestinationPath);
+            Assert.Equal(secondPath, Build().GetLocalPath(second));
+            File.WriteAllText(firstPath, "first model");
+            File.WriteAllText(secondPath, "second model");
+            mgr.ActiveModelId = second.Id;
+            Assert.Equal(secondPath, mgr.ResolveActiveModelPath());
+            mgr.RemoveCustom(first.Id);
+            Assert.Equal("second model", File.ReadAllText(secondPath));
+            Assert.True(mgr.IsInstalled(second.Id));
+        }
+        finally
+        {
+            mgr.RemoveCustom(first.Id);
+            mgr.RemoveCustom(second.Id);
+        }
+    }
+
+    [Fact]
+    public void A_unique_legacy_custom_model_is_moved_into_its_identity_path()
+    {
+        var id = "legacy-" + Guid.NewGuid().ToString("N");
+        var descriptor = new StemModelDescriptor
+        {
+            Id = id, DisplayName = id, Description = "legacy model",
+            DownloadUrl = "https://example.com/" + id + ".onnx", FileName = id + ".onnx",
+            Kind = StemModelKind.MdxNetOnnx
+        };
+        new CustomStemModelStore(_tmpDir).Save([descriptor]);
+        var oldPath = Path.Combine(_tmpDir, descriptor.FileName);
+        File.WriteAllText(oldPath, "legacy bytes");
+        var mgr = Build();
+        try
+        {
+            Assert.True(mgr.IsInstalled(id));
+            Assert.NotEqual(oldPath, mgr.GetLocalPath(descriptor));
+            Assert.False(File.Exists(oldPath));
+            Assert.Equal("legacy bytes", File.ReadAllText(mgr.GetLocalPath(descriptor)));
+        }
+        finally
+        {
+            mgr.RemoveCustom(id);
+        }
+    }
+
+    [Fact]
+    public async Task Missing_active_roformer_resolves_the_installed_model_with_its_own_kind()
+    {
+        var mgr = Build();
+        var roformer = mgr.Catalog.First(m => m.Kind == StemModelKind.BsRoformerOnnx);
+        var demucs = mgr.Catalog.First(m => m.Kind == StemModelKind.HtdemucsOnnx);
+        File.WriteAllText(mgr.GetLocalPath(demucs), "installed demucs");
+        mgr.ActiveModelId = roformer.Id;
+        var backend = new DotCharter.Services.Audio.StemSeparation.Onnx.OnnxStemSeparationService(mgr);
+
+        var resolve = backend.GetType().GetMethod("ResolveActiveDescriptorAsync",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var task = (Task<(string? Path, StemModelKind Kind, bool Promoted)>)resolve.Invoke(backend,
+            [false, TestContext.Current.CancellationToken, null])!;
+        var resolved = await task;
+
+        Assert.Equal(mgr.GetLocalPath(demucs), resolved.Path);
+        Assert.Equal(StemModelKind.HtdemucsOnnx, resolved.Kind);
     }
 
     [Fact]

@@ -178,6 +178,18 @@ public class DroppedFileRoutingTests
         Assert.Contains("vm.Project.LoadFile(", code, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ProjectOpenRequest_IsWiredToTheNormalEditorSurface()
+    {
+        var shell = SourceText.StripComments(Read("DotCharter.UI", "ViewModels", "Shell", "MainWindowViewModel.cs"));
+        var destinations = SourceText.StripComments(Read("DotCharter.UI", "ViewModels", "Shell", "MainWindowViewModel.Destinations.cs"));
+
+        Assert.Contains("Project.ProjectOpened += OnProjectOpened", shell, StringComparison.Ordinal);
+        Assert.Contains("Project.ProjectOpened -= OnProjectOpened", shell, StringComparison.Ordinal);
+        Assert.Matches(@"private void OnProjectOpened\(\)\s*\{\s*PlayMode.EndForProjectOpen\(\);\s*ShowEditor\(\);\s*\}", destinations);
+        Assert.Matches(@"private void ShowEditor\(\)\s*\{\s*IsGameplayPresentation = false;\s*SelectedMainTabIndex = ChartEditorTabIndex;\s*\}", destinations);
+    }
+
     /// <summary>
     ///     Every importer arm hands the dropped FILE to its dialog's path-taking
     ///     seam. The Guitar Pro arm used to open the dialog's PICKER at the file's

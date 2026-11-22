@@ -53,21 +53,17 @@ public sealed partial class Rs7PackageExportTests
         var notice = Assert.Single(findings, f => f.MessageKey == ChartExportValidator.KeyExtendedRangeGuitar);
         Assert.Equal(ExportFindingSeverity.Warning, notice.Severity);
         Assert.Equal("7", notice.Detail);
-        Assert.DoesNotContain(findings, f => f.MessageKey == ChartExportValidator.KeyEightStringMod);
+        Assert.DoesNotContain(findings, f => f.MessageKey == ChartExportValidator.KeyExtendedRangeBass);
     }
 
     [Fact]
-    public async Task Eight_string_guitar_is_refused_by_the_validator_and_the_builder()
+    public void Eight_string_guitar_is_a_warning_naming_the_mod_not_an_error()
     {
-        var project = CreateProject(8);
-        var findings = new ChartExportValidator().Validate(project);
-        Assert.Equal(ExportFindingSeverity.Error,
-            Assert.Single(findings, f => f.MessageKey == ChartExportValidator.KeyEightStringMod).Severity);
-        Assert.DoesNotContain(findings, f => f.MessageKey == ChartExportValidator.KeyExtendedRangeGuitar);
-
-        var ex = await Assert.ThrowsAnyAsync<Exception>(() => BuildAsync(project, "rs7eight_p.psarc", plain: null));
-        Assert.Contains("8-string guitar", ex.ToString(), StringComparison.Ordinal);
-        Assert.Contains("not exported yet", ex.ToString(), StringComparison.Ordinal);
+        var findings = new ChartExportValidator().Validate(CreateProject(8));
+        Assert.DoesNotContain(findings, f => f.Severity == ExportFindingSeverity.Error);
+        var notice = Assert.Single(findings, f => f.MessageKey == ChartExportValidator.KeyExtendedRangeGuitar);
+        Assert.Equal(ExportFindingSeverity.Warning, notice.Severity);
+        Assert.Equal("8", notice.Detail);
     }
 
     [Fact]

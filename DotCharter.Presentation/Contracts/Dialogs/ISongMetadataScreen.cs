@@ -9,22 +9,15 @@ namespace DotCharter.Presentation.Contracts.Dialogs;
 ///     It opens only over an open project — the shell says so otherwise.
 ///     <see cref="IDialogScreen{TResult}.Result" /> is true when closed with Save.
 /// </summary>
-public interface ISongMetadataScreen : IDialogScreen<bool>
+public interface ISongMetadataScreen : IDialogScreen<bool>, ISongNamesFields
 {
     string Artist { get; set; }
 
     string SongName { get; set; }
 
-    /// <summary>The artist in its original script, which Rocksmith carries beside the Latin one.</summary>
-    string JapaneseArtist { get; set; }
-
-    string JapaneseTitle { get; set; }
-
     string AlbumName { get; set; }
 
     string AlbumYear { get; set; }
-
-    string Charter { get; set; }
 
     string Genre { get; set; }
 
@@ -49,6 +42,17 @@ public interface ISongMetadataScreen : IDialogScreen<bool>
 
     /// <summary>The key the signature spells: "A minor", "Cb major".</summary>
     string KeySignatureLabel { get; }
+
+    /// <summary>The key above is the song's key: chord names are always spelled in it.</summary>
+    bool KeyLocked { get; set; }
+
+    /// <summary>The estimated key, its runner-up and confidence; or why there is none.</summary>
+    string KeyEstimateLabel { get; }
+
+    bool HasKeyEstimate { get; }
+
+    /// <summary>Adopts the estimated key as the locked key.</summary>
+    ICommand UseKeyEstimateCommand { get; }
 
     ICommand SaveCommand { get; }
 

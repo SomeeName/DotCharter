@@ -64,7 +64,7 @@ internal static class SelectedNoteMutationCommands
 {
     /// <summary>Model ceiling — <c>ChartExportValidator.KeyFretOutOfRange</c>
     /// and the inspector's numeric editors use the same 0..24 range.</summary>
-    private const int MaxFret = 24;
+    private const int MaxFret = FretLimits.MaxFret;
 
     public static IHighwayEditCommand MoveStringUp(SelectedSoundMutationTargets t, int maxStrings)
     {
@@ -99,14 +99,15 @@ internal static class SelectedNoteMutationCommands
         return new SelectedNoteMutationCommand(t,
             n =>
             {
-                if (TryRefret(arrangement, n.StringIndex, n.Fret, delta, maxStrings, out var to, out var fret))
+                if (TryRefretSound(arrangement, n, delta, maxStrings, out var to, out var fret, out var slideTo))
                 {
                     n.StringIndex = to;
                     n.Fret = fret;
+                    n.SlideTo = slideTo;
                 }
             },
             c => ShiftChordStringsPreservingPitch(arrangement, c, delta, maxStrings),
-            MergeVerbs.String);
+            MergeVerbs.String, followStringMoveAnchors: true);
     }
 
     /// <summary>
@@ -133,23 +134,35 @@ internal static class SelectedNoteMutationCommands
         if (chord.ChordNotes.Count == 0) return;
 
         // All or nothing: resolve every string first, then commit.
-        var moved = new List<(ChordNote Note, int String, int Fret)>(chord.ChordNotes.Count);
+        var moved = new List<(ChordNote Note, int String, int Fret, int? SlideTo)>(chord.ChordNotes.Count);
         foreach (var chordNote in chord.ChordNotes)
         {
-            if (!TryRefret(arrangement, chordNote.StringIndex, chordNote.Fret, delta, maxStrings,
-                    out var to, out var fret))
+            if (!TryRefretSound(arrangement, chordNote, delta, maxStrings,
+                    out var to, out var fret, out var slideTo))
             {
                 return;
             }
 
-            moved.Add((chordNote, to, fret));
+            moved.Add((chordNote, to, fret, slideTo));
         }
 
-        foreach (var (chordNote, stringIndex, fret) in moved)
+        foreach (var (chordNote, stringIndex, fret, slideTo) in moved)
         {
             chordNote.StringIndex = stringIndex;
             chordNote.Fret = fret;
+            chordNote.SlideTo = slideTo;
         }
+    }
+
+    private static bool TryRefretSound(Arrangement? arrangement, IGuitarSound sound, int delta, int maxStrings,
+        out int to, out int fret, out int? slideTo)
+    {
+        slideTo = sound.SlideTo;
+        if (!TryRefret(arrangement, sound.StringIndex, sound.Fret, delta, maxStrings, out to, out fret)) return false;
+        if (sound.UnpitchedSlide || sound.SlideTo is not { } target) return true;
+        if (!TryRefret(arrangement, sound.StringIndex, target, delta, maxStrings, out _, out var targetFret)) return false;
+        slideTo = targetFret;
+        return true;
     }
 
     public static IHighwayEditCommand MoveStringDown(SelectedSoundMutationTargets t)
@@ -182,6 +195,14 @@ internal static class SelectedNoteMutationCommands
         var capo = CapoOf(t);
         var direction = Math.Sign(delta);
         return PerString(t, s => s.Fret = SoundingPitch.SnapToNeck(s.Fret + delta, capo, direction, MaxFret),
+            MergeVerbs.Fret);
+    }
+
+    /// <summary>The inspector's Selection "Move" by frets: each sound moves whole with its slide ends, or stays (<see cref="WholeFretMove" />).</summary>
+    public static IHighwayEditCommand MoveFretWhole(SelectedSoundMutationTargets t, int delta)
+    {
+        var capo = CapoOf(t);
+        return new SelectedNoteMutationCommand(t, n => WholeFretMove.Apply(n, delta, capo), c => WholeFretMove.Apply(c, delta, capo),
             MergeVerbs.Fret);
     }
 

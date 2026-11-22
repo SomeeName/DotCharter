@@ -15,6 +15,8 @@ public class GpImportMetadata
     public int KeyAccidentals { get; set; }
     public bool KeyIsMinor { get; set; }
 
+    internal ChartData ChordNamingChart() => new() { KeyAccidentals = KeyAccidentals, KeyIsMinor = KeyIsMinor };
+
     // Score-level song metadata (gpif <Score>, GP3-5 song-attributes header).
     // Both GP importers fill these; the import dialog copies a NON-EMPTY value
     // onto the project's ChartData (SongName/Artist/AlbumName/Charter — all
@@ -40,6 +42,11 @@ public class GpBarInfo
 
     /// <summary>Which pass of its repeat this bar is (1 = the first time through).</summary>
     public int RepeatPass { get; set; } = 1;
+
+    public int EndingMask { get; set; }
+    public bool StartsBlock { get; set; }
+    public bool EndsBlock { get; set; }
+    public string Marker { get; set; } = "";
 }
 
 public class GpTempoPoint
@@ -54,7 +61,10 @@ public class GpTempoPoint
 public class GpImportResult
 {
     public List<Arrangement> Arrangements { get; } = [];
+    /// <summary>Source track ids survive filtering and duplicate display names.</summary>
+    public Dictionary<int, Arrangement> ArrangementsByTrackId { get; } = [];
     public GpImportMetadata Metadata { get; } = new();
+    internal HashSet<IGuitarSound> DeadSlideSounds { get; } = [];
 
     /// <summary>
     ///     Per arrangement, how many slide-in ornaments became real slides — a short

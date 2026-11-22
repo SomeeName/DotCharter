@@ -46,6 +46,8 @@ public sealed class PluralStringTests
         // "1 Probleme gefunden" for a single finding, which is the tab a
         // charter sees most often once a chart is nearly clean.
         ("Inspector_Issues_CountOne", "Inspector_Issues_Count"),
+        ("Inspector_Issues_AutoFixAskOne", "Inspector_Issues_AutoFixAsk"),
+        ("Mixer_Stems_ResetLevelsAskOne", "Mixer_Stems_ResetLevelsAsk"),
         // 0.52: the Edit-history footer's meta line ("4 STATES · NO BRANCHES").
         ("History_Summary_StatesOne", "History_Summary_StatesFmt"),
         ("History_Summary_BranchesOne", "History_Summary_BranchesFmt"),
@@ -72,6 +74,8 @@ public sealed class PluralStringTests
         ("Inspector_Task_BlockersOne", "Inspector_Task_Blockers"),
         ("Inspector_Span_EnclosesOne", "Inspector_Span_Encloses"),
         ("Inspector_Shape_RebindsWarningOne", "Inspector_Shape_RebindsWarning"),
+        ("GripInspector_RebindOne", "GripInspector_Rebind"),
+        ("GripInspector_ApplyIdenticalOne", "GripInspector_ApplyIdentical"),
         ("Settings_SearchResultCountOne", "Settings_SearchResultCount"),
         ("Nam_SearchResultCountOne", "Nam_SearchResultCount"),
         ("PlayMode_InGameTones_SummaryOne", "PlayMode_InGameTones_Summary"),
@@ -82,10 +86,20 @@ public sealed class PluralStringTests
         // lookup lint never saw them.
         ("Status_AutoFixAppliedOne", "Status_AutoFixApplied"),
         ("Status_ImproveChartAppliedOne", "Status_ImproveChartApplied"),
+        // #497: Fix chart (one dialog over Improve chart and Auto-fix arrangements).
+        ("Status_FixChartAppliedOne", "Status_FixChartApplied"),
+        ("Dialog_FixChart_TotalOne", "Dialog_FixChart_Total"),
+        ("Dialog_FixChart_GroupTotalOne", "Dialog_FixChart_GroupTotal"),
         // #952: Apply DLC Builder fixes' status; #184: the export findings' Fix.
         ("Status_DlcBuilderFixesAppliedOne", "Status_DlcBuilderFixesApplied"),
         ("Status_ExportFixAppliedOne", "Status_ExportFixApplied"),
+        ("Status_ToneDefinitionsCreatedOne", "Status_ToneDefinitionsCreated"),
         ("Dialog_QualityReport_EasierLevelsOne", "Dialog_QualityReport_EasierLevels"),
+        // #497: the Issues tab's "Whole project" block (the verdict and the counts, per arrangement).
+        ("Dialog_QualityReport_BlockedOne", "Dialog_QualityReport_Blocked"),
+        ("Dialog_QualityReport_ErrorsOne", "Dialog_QualityReport_Errors"),
+        ("Dialog_QualityReport_ImportantOne", "Dialog_QualityReport_Important"),
+        ("Dialog_QualityReport_WarningsOne", "Dialog_QualityReport_Warnings"),
         // 0.58: the decoded-PSARC-audio cache row. Both reach 1 in the ordinary
         // case — the cache is CAPPED, so the first song opened after a Clear (or
         // after a sweep on a machine with one huge archive) is exactly one song.
@@ -110,6 +124,7 @@ public sealed class PluralStringTests
         ("Status_RsXmlImportedVocalsOne", "Status_RsXmlImportedVocals"),
         ("Status_RsXmlImportedShowlightsOne", "Status_RsXmlImportedShowlights"),
         ("Rig_Gear_ControlsOne", "Rig_Gear_Controls"),
+        ("Rig_Gear_ModuleCountOne", "Rig_Gear_ModuleCount"),
         ("PlayMode_Results_Timing_SectionHitsOne", "PlayMode_Results_Timing_SectionHits"),
         // …and the phrase catalogue summary, which was ONE string carrying
         // FIVE counts ("3 notes, 1 chords, 1 hand shapes, 1 anchors — 4 beats
@@ -118,6 +133,8 @@ public sealed class PluralStringTests
         ("PhraseCatalog_Entry_NotesOne", "PhraseCatalog_Entry_NotesFmt"),
         ("PhraseCatalog_Entry_ChordsOne", "PhraseCatalog_Entry_ChordsFmt"),
         ("PhraseCatalog_Entry_ShapesOne", "PhraseCatalog_Entry_ShapesFmt"),
+        ("PhraseCatalog_RowLengthOne", "PhraseCatalog_RowLengthFmt"),
+        ("PhraseCatalog_SelectionOne", "PhraseCatalog_SelectionFmt"),
         ("PhraseCatalog_Entry_AnchorsOne", "PhraseCatalog_Entry_AnchorsFmt"),
         ("PhraseCatalog_Entry_LengthOne", "PhraseCatalog_Entry_LengthFmt"),
         // 2026-09-04: the Pattern Builder's rail summary, which was thirty-odd
@@ -137,6 +154,9 @@ public sealed class PluralStringTests
         ("Status_DoubleStopNamesClearedOne", "Status_DoubleStopNamesCleared"),
         ("Status_HandShapesGeneratedOne", "Status_HandShapesGenerated"),
         ("Status_SuggestedHandShapesAcceptedOne", "Status_SuggestedHandShapesAccepted"),
+        ("Status_HeldGripsChangedOne", "Status_HeldGripsChanged"),
+        ("Status_LetRingShapesCreatedOne", "Status_LetRingShapesCreated"),
+        ("Status_LetRingShapesSkippedOne", "Status_LetRingShapesSkipped"),
         ("Status_OctaveFingeringSetOne", "Status_OctaveFingeringSet"),
         ("Status_PowerChordFingeringSetOne", "Status_PowerChordFingeringSet"),
         ("Status_MutedStrums_ConvertedOne", "Status_MutedStrums_Converted"),
@@ -178,6 +198,11 @@ public sealed class PluralStringTests
         ("Progress_LoadingGuitarVstChainOne", "Progress_LoadingGuitarVstChain"),
         // #483: what the chord panel's scope switch reaches — "1 chord · 1 hand shape" is the common case.
         ("ChordTemplate_Reach_ChordsOne", "ChordTemplate_Reach_Chords"),
+        ("Inspector_Staged_ApplyOne", "Inspector_Staged_Apply"),
+        ("Inspector_Staged_ElsewhereOne", "Inspector_Staged_Elsewhere"),
+        ("Inspector_Staged_AppliedNotesOne", "Inspector_Staged_AppliedNotes"),
+        ("Inspector_Staged_AppliedSoundsOne", "Inspector_Staged_AppliedSounds"),
+        ("Inspector_Library_UsesOne", "Inspector_Library_Uses"),
         ("ChordTemplate_Preview_MarkedOne", "ChordTemplate_Preview_Marked"),
         ("ChordTemplate_Reach_HandShapesOne", "ChordTemplate_Reach_HandShapes"),
         // #477: the chord-shape palette reshaping the selection ("Reshaped 3 selected sounds to G.").
@@ -191,6 +216,10 @@ public sealed class PluralStringTests
         ("AiChat_Proposed_One", "AiChat_Proposed_Many"),
         // #232: the EOF import dialog's vocal track row ("PART VOCALS (42 lyrics)").
         ("Dialog_EofImport_VocalTrack_One", "Dialog_EofImport_VocalTrack_Many"),
+        ("Dialog_EofImport_Track_One", "Dialog_EofImport_Track_Many"),
+        ("Dialog_MidiImport_SummaryOne", "Dialog_MidiImport_Summary"),
+        ("AiChat_Count_NotesOne", "AiChat_Count_Notes"),
+        ("AiChat_Count_ChordsOne", "AiChat_Count_Chords"),
         // #561: the chat's reply to a sections & phrases instruction, and the changes the checks refused.
         ("AiChat_StructureProposed_One", "AiChat_StructureProposed_Many"),
         ("AiStructure_FailedOne", "AiStructure_Failed"),
@@ -204,11 +233,6 @@ public sealed class PluralStringTests
         ("LivePlay_Monitor_StringConfidenceOne", "LivePlay_Monitor_StringConfidence"),
         // #618: the Issues tab's fix menu ("Re-finger 1-3, as 4 other chords play it").
         ("Inspector_IssueFix_RefingerOne", "Inspector_IssueFix_Refinger"),
-        // #647: Chart from audio's merge — the dialog's held/occupied lines and the merge card's counts.
-        ("ChartFromAudio_MergeHeldOne", "ChartFromAudio_MergeHeld"),
-        ("ChartFromAudio_MergeAllOccupiedOne", "ChartFromAudio_MergeAllOccupied"),
-        ("DraftMerge_CountOne", "DraftMerge_Count"),
-        ("DraftMerge_OccupiedOne", "DraftMerge_Occupied"),
         // #707: the song-package export's stems line.
         ("Dialog_DcSong_Stems_DescOne", "Dialog_DcSong_Stems_Desc"),
         // #646: a Play Mode setlist's song count on Song Select.
@@ -220,6 +244,7 @@ public sealed class PluralStringTests
         ("LinkToast_ChangedOne", "LinkToast_ChangedFmt"),
         ("LinkBanner_AppliesOne", "LinkBanner_AppliesFmt"),
         ("LinkIdentical_DoneOne", "LinkIdentical_DoneFmt"),
+        ("Status_MeasuresInsertedAtPlayheadOne", "Status_MeasuresInsertedAtPlayhead"),
         // Linked measures: the import summary, the manager's suggestion rows and the Link all status.
         ("LinkSuggest_GroupsOne", "LinkSuggest_Groups"),
         ("LinkGroups_MeasuresOne", "LinkGroups_Measures"),
@@ -227,7 +252,11 @@ public sealed class PluralStringTests
         // Clean up shapes: the dialog's summary, its Apply caption and the status after Apply.
         ("ShapeCleanup_SummaryDuplicatesOne", "ShapeCleanup_SummaryDuplicates"),
         ("ShapeCleanup_ApplyOne", "ShapeCleanup_Apply"),
-        ("ShapeCleanup_Status_AppliedOne", "ShapeCleanup_Status_Applied")
+        ("ShapeCleanup_Status_AppliedOne", "ShapeCleanup_Status_Applied"),
+        ("Status_SelectAddedAnchor", "Status_SelectAddedAnchors"),
+        ("Status_SelectAddedChord", "Status_SelectAddedChords"),
+        ("Status_SelectAddedHandShape", "Status_SelectAddedHandShapes"),
+        ("Status_SelectAddedNote", "Status_SelectAddedNotes")
     ];
 
     public static TheoryData<string, string> Pairs

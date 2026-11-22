@@ -599,6 +599,32 @@ public sealed class ChartNoteEventBuilderTests
         }
     }
 
+    /// <summary>#571 row 6: the string count, the tuning letters (the offset fallback)
+    /// and a beat's note denominator change the upload without moving a note time.</summary>
+    [Fact]
+    public void TheFingerprint_MovesOnStringCountTuningLettersAndBeatDenominator()
+    {
+        var arr = new Arrangement();
+        var notes = new List<GuitarNote> { Note(2, 0, 3), Note(4, 1, 5) };
+        var beats = Beats();
+        long Fp() => ChartNoteEventBuilder.Fingerprint(arr, notes, [], beats, null, 120);
+        var baseline = Fp();
+
+        var edits = new (string What, Action Do, Action Undo)[]
+        {
+            ("string count", () => arr.StringCount = 7, () => arr.StringCount = 6),
+            ("tuning letters", () => arr.Tuning = ["D", "A", "D", "G", "B", "e"], () => arr.Tuning = ["E", "A", "D", "G", "B", "e"]),
+            ("beat denominator", () => beats[3].NoteDenominator = 8, () => beats[3].NoteDenominator = 4),
+        };
+        foreach (var (what, @do, undo) in edits)
+        {
+            @do();
+            Assert.True(baseline != Fp(), $"the {what} edit did not move the fingerprint");
+            undo();
+            Assert.True(baseline == Fp(), $"undoing the {what} edit did not restore the fingerprint");
+        }
+    }
+
     [Fact]
     public void NoBeats_IsAnEmptyUpload()
     {

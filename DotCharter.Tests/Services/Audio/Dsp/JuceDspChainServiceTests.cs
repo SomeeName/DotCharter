@@ -441,39 +441,24 @@ public sealed class JuceDspChainServiceTests
         // then already happened, which is exactly what we want to catch). Both
         // arms terminate on a STATE, not a duration — nothing here asserts or
         // depends on how long anything takes.
-        Thread? detachThread = null;
-        using var detachReached = new ManualResetEventSlim(false);
-        var detach = Task.Run(() =>
+        //
+        // The detach runs on a thread of its own (ParkedCall) and the knob is
+        // released only once that thread is SEEN parked on AttachEngine's
+        // `lock (_gate)` — a Monitor wait, hence WaitSleepJoin — or has returned,
+        // which is the unguarded case. #607: the old hand-rolled loop ended at its
+        // cap without asserting either, so a starved box released the knob first
+        // and a serialized schedule passed; now the handover itself is asserted.
+        var detach = ParkedCall.Start(() => svc.AttachEngine(nint.Zero));
+        try
         {
-            detachThread = Thread.CurrentThread;
-            detachReached.Set();
-            svc.AttachEngine(nint.Zero);
-        }, ct);
-        Assert.True(detachReached.Wait(Rendezvous, ct), "the detaching thread never started");
-
-        // Hand the detaching thread the floor until it is genuinely parked on
-        // AttachEngine's `lock (_gate)` — a Monitor wait, hence WaitSleepJoin — or
-        // has finished, which is the unguarded case. This used to be a fixed
-        // 10,000 SpinOnce budget: on a saturated box that expires before the
-        // thread has even reached the lock, and the test then releases the knob
-        // first and can no longer observe the violation it exists for. A STATE
-        // with a deadlock-detector cap cannot go vacuous that way.
-        // (fully qualified: `using System.Diagnostics` would make the
-        // System.Threading.ThreadState below ambiguous with the Diagnostics one.)
-        var handover = System.Diagnostics.Stopwatch.StartNew();
-        while (handover.Elapsed < Rendezvous)
+            await detach.WaitUntilParkedOrReturnedAsync("AttachEngine(0)", Rendezvous, ct);
+        }
+        finally
         {
-            if (detach.IsCompleted) break;
-            if (detachThread!.ThreadState.HasFlag(ThreadState.WaitSleepJoin)) break;
-            // Yield on the fast path (that is the handover), then back off — a
-            // detector cap must never license a 60-second hot spin on a box that
-            // is already starved.
-            if (handover.ElapsedMilliseconds < 50) Thread.Yield();
-            else Thread.Sleep(1);
+            native.Release.Set();
         }
 
-        native.Release.Set();
-        await detach.WaitAsync(Rendezvous, ct);
+        await detach.Returned.WaitAsync(Rendezvous, ct);
         Assert.True(await knob);
 
         // THE assertion: the knob write left native BEFORE the detach wrote the

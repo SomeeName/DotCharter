@@ -1,4 +1,5 @@
 // ChartMaintenanceService root: the IChartMaintenanceService contract, the injected services, the constructor and the shared snapshot-undo actions.
+using DotCharter.Services.Editing.Tempo;
 using DotCharter.Services.Editing.Sync;
 using DotCharter.Services.Editing.Fixing;
 using DotCharter.Services.Editing.Phrases;
@@ -14,7 +15,15 @@ namespace DotCharter.Services.Editing.Maintenance;
 
 public interface IChartMaintenanceService
 {
-    void ImproveChart();
+
+    /// <summary>
+    ///     "Fix chart…": runs the checked groups (<see cref="FixChartGroups.Errors" /> = Auto-fix arrangements,
+    ///     <see cref="FixChartGroups.Polish" /> = Improve chart) on the live chart as ONE undo step.
+    /// </summary>
+    void FixChart(FixChartGroups groups);
+
+    /// <summary>What <see cref="FixChart" /> would change, counted per kind, from a run on a copy; the project is not touched.</summary>
+    Task<FixChartPreview> PreviewFixChartAsync(FixChartGroups groups);
     void RemoveDoubleStopChordNames();
 
     /// <summary>
@@ -44,11 +53,9 @@ public interface IChartMaintenanceService
     void SquashLevels();
 
     /// <summary>
-    /// "Apply DLC Builder fixes" (the chart's context menu): runs exactly what every Rocksmith
-    ///     export runs on its copy — DLC Builder's fixes, then dynamic difficulty for an arrangement
-    ///     with one level (<see cref="Export.DynamicDifficulty.DlcBuilderBuildSteps" />) — on
-    ///     <paramref name="arrangements" /> (default: the active one) IN the project, as ONE undo
-    ///     node. The number of arrangements it changed; the status line says what happened.
+    /// "Apply DLC Builder fixes": what every Rocksmith export runs on its copy (DLC Builder's fixes, then
+    ///     dynamic difficulty for a one-level arrangement) on <paramref name="arrangements" /> (default: the
+    ///     active one) IN the project, as ONE undo node. How many it changed.
     /// </summary>
     int ApplyDlcBuilderFixes(IReadOnlyList<Arrangement>? arrangements = null);
 
@@ -59,6 +66,12 @@ public interface IChartMaintenanceService
     /// <summary>Applies <see cref="Tones.ToneKeyRepair" />'s rename for <paramref name="undefinedKey" /> as ONE
     /// undo node. Null, and nothing changed, when the project leaves the repair in doubt.</summary>
     Tones.ToneKeyRepairProposal? RepairUndefinedToneKey(string undefinedKey);
+
+    /// <summary>Export fix: stores the generated show lights (one undo node); the count added.</summary>
+    int GenerateShowlights();
+
+    /// <summary>Export fix: defines the tone names <paramref name="arrangement" /> lacks (one undo node); the count.</summary>
+    int CreateMissingToneDefinitions(Arrangement arrangement);
 
     // Charting power tools — see ChartMaintenanceService.PowerTools.cs.
     bool GenerateLevels(int levelCount);
@@ -90,23 +103,28 @@ public interface IChartMaintenanceService
     void GenerateFhp();
     void GenerateFhpForSelection();
 
-    /// <summary>Covers every chord no hand shape covers, on every level of the active
-    /// arrangement, as one undo step.</summary>
+    /// <summary>Covers every chord no hand shape covers, on every level of the active arrangement: one undo step.</summary>
     void GenerateHandShapesForArrangement();
     void ApplyHandShapeTemplateToSelectedChords();
     void SetDefaultStartSilence(double seconds);
     Task AddSilenceAtBeginningAsync(double seconds);
     Task AddSilenceAtEndAsync(double seconds);
-    /// <summary>Prepends whole measures before the first beat and shifts the
-    /// chart. Measures, not beats: this moves EVERYTHING, so a partial bar puts
-    /// every downbeat in the song on an off-beat.</summary>
+    /// <summary>Prepends whole measures before the first beat and shifts the chart; whole measures, so no downbeat goes off-beat.</summary>
     void AddMeasuresAtStart(int measureCount);
 
-    /// <summary>Appends whole measures after the last beat so the RS END
-    /// phrase has a bar of its own. Shifts nothing.</summary>
+    /// <summary>Appends whole measures after the last beat so the RS END phrase has a bar; shifts nothing.</summary>
     void AddMeasuresAtEnd(int measureCount);
     void InsertBeatAtPlayhead();
     void RemoveBeatAtPlayhead();
+
+    /// <summary>Inserts whole measures before the measure that holds the playhead, at
+    /// <paramref name="tempo" /> (null: that measure's time signature and tempo), and shifts
+    /// everything after it, as one undo step.</summary>
+    void InsertMeasuresAtPlayhead(int measureCount, MeasureInsertTempo? tempo = null);
+
+    /// <summary>The time signature and tempo of the measure that holds the playhead, the
+    /// default of <see cref="InsertMeasuresAtPlayhead" />; null with no bar there.</summary>
+    MeasureInsertTempo? PlayheadBarTempo();
 
     /// <summary>Tempo map ▸ Align beat grid to notes: moves every beat by
     /// <paramref name="offsetMs" /> while every timed element keeps its absolute
@@ -124,11 +142,7 @@ public interface IChartMaintenanceService
     void ToggleSelectedChordPassOtherNotes();
     void ConvertSelectedNotesToPowerChord(bool big);
 
-    /// <summary>
-    ///     Switches every two-fret octave shape of the ACTIVE arrangement between
-    /// <c>1·4</c> and <c>1·3</c> (<see cref="TwoFretPairFingering" />) as
-    ///     one undo node, and reports how many chords changed.
-    /// </summary>
+    /// <summary>Switches every two-fret octave shape of the ACTIVE arrangement between <c>1·4</c> and <c>1·3</c> (<see cref="TwoFretPairFingering" />), ONE undo node.</summary>
     void ToggleTwoFretOctaveFingering();
 
     /// <summary>
@@ -138,12 +152,7 @@ public interface IChartMaintenanceService
     /// </summary>
     void TogglePowerChordFingering();
     void MergeSelectedNotesIntoChords();
-    /// <summary>
-    /// "Muted strums → muted chord": every fret-hand-muted single note after a chord, on
-    ///     that chord's strings, becomes a muted copy of the chord on its template, and the chord's
-    ///     hand shape grows over them (<see cref="ChordShapes.MutedStrumChords" />) — ONE undo node.
-    ///     The selection, or with nothing selected the phrase under the playhead.
-    /// </summary>
+    /// <summary>"Muted strums → muted chord" on the selection (or the playhead's phrase): ONE undo node (<see cref="ChordShapes.MutedStrumChords" />).</summary>
     void ConvertMutedStrumsToChords();
     void SplitSelectedChordsIntoNotes();
 
@@ -180,6 +189,7 @@ public sealed partial class ChartMaintenanceService : IChartMaintenanceService
 
     /// <summary>Generate FHP for the arrangement and for the selection.</summary>
     private readonly FhpGenerationCommands _fhpGeneration;
+    private readonly ExportQuickFixCommands _exportQuickFixes;
 
     public ChartMaintenanceService(
         IConfigurationService configService,
@@ -213,6 +223,7 @@ public sealed partial class ChartMaintenanceService : IChartMaintenanceService
         _refretService = refretService;
         _localization = localization;
         _chordConversion = new ChordConversionCommands(projectState, chartEditor, historyService, localization, logger);
+        _exportQuickFixes = new ExportQuickFixCommands(projectState, chartEditor, historyService, localization, logger);
         _fhpGeneration = new FhpGenerationCommands(projectState, chartEditor, historyService, localization, logger,
             fretAnchorGenerationService);
         _silencePadder = new ProjectSilencePadder(projectState, projectSession, historyService, logger, localization,
@@ -361,11 +372,8 @@ public sealed partial class ChartMaintenanceService : IChartMaintenanceService
         _chartEditor.RequestRedraw();
     }
 
-    // Snapshotting for undo lives in the shared cloner — it also serves the
-    // save pipeline, and keeping one copy means new project collections
-    // can't silently vanish from undo history (Annotations and
-    // PhraseIterations both did exactly that while this class had its own).
-    private static ChartProject CloneProject(ChartProject source) => ChartProjectCloner.Clone(source);
+    // History clones retain identities; field copying stays shared with the save pipeline.
+    private static ChartProject CloneProject(ChartProject source) => ChartProjectCloner.Clone(source, retainIdentities: true);
 
     private string L(string key) => _localization[key];
 
@@ -383,11 +391,9 @@ public sealed partial class ChartMaintenanceService : IChartMaintenanceService
     /// user (<see cref="LevelTemplateOrphans" /> holds the rule and the renumbering).
     ///     <para>
     ///         <see cref="LevelTemplateOrphans.Apply" /> writes the final ids into
-    ///         <paramref name="after" /> and PARKS each declared orphan in its slot; the live
-    ///         instances it returns are removed after the restore, by instance
-    ///         (<see cref="RemoveChordTemplatesAction" />), and come back to their own slots on
-    ///         undo — never pulled out of the snapshot, whose index-wise reconcile would shift
-    ///         every later template's values into a different live instance.
+    ///         <paramref name="after" /> and parks each declared orphan in its slot. The live
+    ///         instances are removed after restore by <see cref="RemoveChordTemplatesAction" />
+    ///         and return on undo.
     ///     </para>
     /// </summary>
     private IChartAction LevelOperationAction(Arrangement live, int arrangementIndex, Arrangement before,
@@ -420,7 +426,7 @@ public sealed partial class ChartMaintenanceService : IChartMaintenanceService
         public bool HasEffect => true;
 
         public long EstimatedBytes { get; } =
-            ChartProjectFootprint.EstimateBytes(oldArrangement) + ChartProjectFootprint.EstimateBytes(newArrangement);
+            ChartProjectFootprint.EstimateHistoryBytes(oldArrangement) + ChartProjectFootprint.EstimateHistoryBytes(newArrangement);
 
         public void Execute() =>
             service.RestoreArrangementSnapshot(newArrangement, arrangementIndex, levelIndex, vocalTrackIndex);
@@ -444,10 +450,17 @@ public sealed partial class ChartMaintenanceService : IChartMaintenanceService
 
         /// <summary>Both clones stay alive for as long as the step is in the history.</summary>
         public long EstimatedBytes { get; } =
-            ChartProjectFootprint.EstimateBytes(oldProject) + ChartProjectFootprint.EstimateBytes(newProject);
+            ChartProjectFootprint.EstimateHistoryBytes(oldProject) + ChartProjectFootprint.EstimateHistoryBytes(newProject);
 
-        public void Execute() => service.RestoreProjectSnapshot(newProject, arrangementIndex, levelIndex, vocalTrackIndex);
+        public void Execute() => Restore(newProject);
 
-        public void Undo() => service.RestoreProjectSnapshot(oldProject, arrangementIndex, levelIndex, vocalTrackIndex);
+        public void Undo() => Restore(oldProject);
+
+        private void Restore(ChartProject snapshot)
+        {
+            var external = new ProjectSnapshotExternalState(service._projectState.ActiveProject, oldProject, newProject);
+            service.RestoreProjectSnapshot(snapshot, arrangementIndex, levelIndex, vocalTrackIndex);
+            external.Restore(service._projectState.ActiveProject!);
+        }
     }
 }

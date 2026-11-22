@@ -36,7 +36,7 @@ public sealed class RefretOptions
     public static readonly RefretOptions Default = new();
 
     /// <summary>Hard fret ceiling for any candidate (Rocksmith fretboard).</summary>
-    public int MaxFret { get; init; } = 24;
+    public int MaxFret { get; init; } = FretLimits.MaxFret;
 
     /// <summary>Max fret span (highest − lowest fretted fret) a chord shape may cover.</summary>
     public int MaxChordSpan { get; init; } = 4;

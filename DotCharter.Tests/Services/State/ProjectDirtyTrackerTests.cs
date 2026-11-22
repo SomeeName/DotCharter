@@ -4,6 +4,34 @@ namespace DotCharter.Tests.Services.State;
 
 public class ProjectDirtyTrackerTests
 {
+    [Fact]
+    public void AMergedTickAfterABackup_ChangesTheStampWithoutAddingAnUndoNode()
+    {
+        var clock = new FakeClock();
+        var history = new HistoryService(new FakeAppLogger(), clock: clock.Read);
+        using var tracker = new ProjectDirtyTracker(history);
+        var chord = ChordWithSustain();
+        var collection = new ObservableCollection<Chord> { chord };
+        history.Do(SustainTick(collection, chord, 0, 1));
+        var backedUpStamp = tracker.ChangeStamp;
+        var node = history.CurrentNodeId;
+
+        clock.Advance(TimeSpan.FromMilliseconds(50));
+        history.Do(SustainTick(collection, chord, 1, 2));
+
+        Assert.Equal(node, history.CurrentNodeId);
+        Assert.Single(history.GetUndoSteps());
+        Assert.NotEqual(backedUpStamp, tracker.ChangeStamp);
+        var now = DateTimeOffset.UnixEpoch + TimeSpan.FromMinutes(10);
+        Assert.Equal(DotCharter.Services.Editing.AutoBackupGate.Verdict.Run,
+            DotCharter.Services.Editing.AutoBackupGate.Decide(true, false, tracker.IsDirty, tracker.ChangeStamp,
+                backedUpStamp, now, DateTimeOffset.UnixEpoch, TimeSpan.FromMinutes(5)));
+        var finalStamp = tracker.ChangeStamp;
+        history.Undo();
+        history.Redo();
+        Assert.Equal(finalStamp, tracker.ChangeStamp);
+    }
+
     /// <summary>
     ///     <c>ChangeStamp</c> answers "has anything changed since X", which
     ///     "dirty" cannot: a project stays dirty while it sits untouched, so a

@@ -24,6 +24,27 @@ namespace DotCharter.Tests.Services.Editing.Highway;
 public sealed class ChordCollapsePlacementTests
 {
     [Fact]
+    public void RightClickingTheFinalChordStringRemovesItAndUndoRestoresTheSameChord()
+    {
+        var h = new PlacementTemplateRepointTests.Harness();
+        h.AddTemplate(0, (3, 5));
+        var chord = h.AddChord(2, 0, (3, 5));
+        h.Selection.SelectedChords.Add(chord);
+
+        h.Service.HandleRightClickChord(chord, 3);
+
+        Assert.Empty(h.State.PlacedChords);
+        Assert.Empty(h.State.PlacedNotes);
+        Assert.Empty(h.Selection.SelectedChords);
+        h.History.Undo();
+        Assert.Same(chord, Assert.Single(h.State.PlacedChords));
+        Assert.Equal(5, Assert.Single(chord.ChordNotes).Fret);
+        Assert.False(h.History.CanUndo);
+        h.History.Redo();
+        Assert.Empty(h.State.PlacedChords);
+    }
+
+    [Fact]
     public void PlacingOnTheOnlyStringOfAOneNoteChordRemovesItInsteadOfThrowing()
     {
         var h = new PlacementTemplateRepointTests.Harness();

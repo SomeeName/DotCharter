@@ -67,7 +67,7 @@ public sealed class RsXmlRs7StringOrderTests
     }
 
     [Fact]
-    public void A_seven_string_chart_is_written_in_the_spec_order()
+    public void A_seven_string_chart_is_written_in_positional_order()
     {
         var project = Chart(7);
         project.Arrangements[0].TuningPitches[0] = new TuningOffset(-2); // drop-A on the B string
@@ -76,19 +76,19 @@ public sealed class RsXmlRs7StringOrderTests
 
         var tuning = song.Element("tuning")!;
         Assert.Equal("7", (string?)tuning.Attribute("strings"));
-        Assert.Equal("-2", (string?)tuning.Attribute("string6"));
-        Assert.Equal("0", (string?)tuning.Attribute("string0"));
+        Assert.Equal("-2", (string?)tuning.Attribute("string0"));
+        Assert.Equal("0", (string?)tuning.Attribute("string1"));
         Assert.Equal("0", (string?)song.Element("arrangementProperties")!.Attribute("standardTuning"));
 
         var notes = Notes(song);
-        Assert.Contains((6, 3, 4000), notes); // the chart's string 0 (low B)
-        Assert.Contains((0, 5, 6000), notes); // the chart's string 1 (low E)
+        Assert.Contains((0, 3, 4000), notes); // the chart's string 0 (low B)
+        Assert.Contains((1, 5, 6000), notes); // the chart's string 1 (low E)
 
         var template = Assert.Single(song.Element("chordTemplates")!.Elements("chordTemplate"));
-        Assert.Equal("2", (string?)template.Attribute("fret6"));
-        Assert.Equal("4", (string?)template.Attribute("fret0"));
-        Assert.Equal("1", (string?)template.Attribute("finger6"));
-        Assert.Equal([0, 1, 6], song.Descendants("chordNote").Select(c => (int)c.Attribute("string")!).Order());
+        Assert.Equal("2", (string?)template.Attribute("fret0"));
+        Assert.Equal("4", (string?)template.Attribute("fret1"));
+        Assert.Equal("1", (string?)template.Attribute("finger0"));
+        Assert.Equal([0, 1, 2], song.Descendants("chordNote").Select(c => (int)c.Attribute("string")!).Order());
     }
 
     [Theory]
@@ -124,7 +124,7 @@ public sealed class RsXmlRs7StringOrderTests
         // The same song on a 6-string guitar (the stock strings only) and on a 7-string
         // one that adds low-B notes: the six-wide reader's view of both is identical.
         var six = new RsXmlSongWriter().Write(Chart(6)).Root!;
-        var seven = new RsXmlSongWriter().Write(Chart(7)).Root!;
+        var seven = new RsXmlSongWriter { SixStringProjection = true }.Write(Chart(7)).Root!;
 
         Assert.Equal(
             Notes(six).Where(n => n.String <= 5).Order(),
@@ -192,6 +192,7 @@ public sealed class RsXmlRs7StringOrderTests
         var bassSong = new RsXmlSongWriter().Write(bassProject).Root!;
 
         Assert.Equal("5", (string?)bassSong.Element("tuning")!.Attribute("strings"));
+        // The XML spells a 5-string bass in the package order: chart G (4) is package 3.
         Assert.Contains((4, 2, 4000), Notes(bassSong));
         var read = new RsXmlSongReader().ReadDocument(new XDocument(bassSong), "bass.xml").Arrangements[0];
         Assert.Equal(4, read.Levels[0].Notes[0].StringIndex);
@@ -206,7 +207,7 @@ public sealed class RsXmlRs7StringOrderTests
     private static byte[] SngBytes(Arrangement arrangement, IList<BeatMarker> beats, DateTime when)
     {
         var sng = SngFromDomainMapper.BuildInstrumental(arrangement, beats, 20_000, when).Sng;
-        return RocksmithSngWriter.WriteUnpacked(sng);
+        return sng.Extension == null ? RocksmithSngWriter.WriteUnpacked(sng) : RsxrSngWriter.WriteUnpacked(sng);
     }
 
     /// <summary>A guitar of <paramref name="strings" /> strings in the chart's lowest-first order:

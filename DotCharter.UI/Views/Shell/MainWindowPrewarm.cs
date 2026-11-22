@@ -442,7 +442,7 @@ internal sealed class MainWindowPrewarm(
                     $"Prewarm: realized {realized}/{total} hidden surfaces off the first-switch path.");
                 _hiddenSurfacesDrained.TrySetResult();
             }, ex => _logger()?.Warning(AppLogCategory.Performance,
-                $"Prewarm: the hidden-surface listing failed and the drain stopped early: {ex.Message}"), LogLongStep);
+                "Prewarm: the hidden-surface listing failed and the drain stopped early", ex), LogLongStep);
     }
 
     /// <summary>The drain turns at or over this are logged: a click that lands
@@ -528,7 +528,7 @@ internal sealed class MainWindowPrewarm(
             catch (Exception ex)
             {
                 _logger()?.Warning(AppLogCategory.Performance,
-                    $"Prewarm: {owner.GetType().Name} could not list its hidden surfaces: {ex.Message}");
+                    $"Prewarm: {owner.GetType().Name} could not list its hidden surfaces", ex);
             }
         }
     }
@@ -766,9 +766,10 @@ internal sealed class MainWindowPrewarm(
         if (_window.FindControl<AiChartReviewView>("AiChartReviewOverlay") is { } aiReview)
             yield return aiReview;
 
-        // …and Chart from audio's merge card beside it, hidden until a draft is held.
-        if (_window.FindControl<DraftMergeReviewView>("DraftMergeOverlay") is { } draftMerge)
-            yield return draftMerge;
+        // The in-place fret-hand position and section editors over the timeline: hidden until a
+        // right-click or the Edit FHP key shows one, so their first show must cost no first layout.
+        if (_window.FindControl<InlineEditOverlayView>("InlineEditOverlay") is { } inlineEdit)
+            yield return inlineEdit;
 
         // The inspector is a DOCK pane — the app ViewLocator materializes it
         // inside BottomDock, so it is named in no markup this window can

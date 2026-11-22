@@ -75,12 +75,16 @@ public sealed class ToneSessionService : IDisposable
     private System.Threading.Timer? _timer;
     private string _lastPersistedSignature = string.Empty;
     private bool _restoring;
+    private RigPersistenceAuthority _authority = new(false, RigLiveRig.Empty, false, RigReadAuthority.Live);
+    private UserTonePresetDto? _recoveryRig;
+    private long _boardScopeGeneration;
     // Ticks on every entry to AND exit from a restore. PersistIfChanged captures
     // it before it snapshots the chain and re-checks it before it writes, so a
     // snapshot taken across a restore is discarded rather than saved as the
     // player's board. Guarded by _gate; see PersistIfChanged for why a plain
     // "_restoring right now?" re-check is not enough.
     private long _restoreGeneration;
+    private long _persistGeneration;
     private bool _restorePending;
 
     /// <summary>Whether the DEFERRED restore must clear a seat the profile stores
@@ -129,8 +133,11 @@ public sealed class ToneSessionService : IDisposable
         {
             if (_disposed || _timer is not null) return;
             _chain.EngineAttached += OnEngineAttached;
+            _presets.PresetApplied += OnPresetApplied;
             _timer = new System.Threading.Timer(_ => PersistIfChanged(), null, _pollInterval, _pollInterval);
         }
+
+        _boardScopeGeneration = _rigStore.ScopeGeneration;
 
         // BOTH halves are required (the subscription above AND the inline call
         // below); without either the app applies no tone rig at all.
@@ -153,7 +160,23 @@ public sealed class ToneSessionService : IDisposable
         // overlap, a swallowed genuine EngineAttached is never retried — the
         // board would stay empty for the whole session. So a pending attach
         // re-runs instead of being dropped (see OnEngineAttached).
-        if (_chain.HasEngine && _chain.GetNodes().Count == 0) OnEngineAttached();
+        if (_chain.HasEngine)
+        {
+            if (_chain.GetNodes().Count == 0)
+            {
+                OnEngineAttached();
+            }
+            else
+            {
+                var stored = _rigStore.ReadRig(Player);
+                _boardScopeGeneration = stored.Generation;
+                lock (_gate)
+                {
+                    _authority = new(false, RigLiveRig.Changed, !stored.IsPersisted,
+                        stored.IsAuthoritative ? RigReadAuthority.Live : RigReadAuthority.Unreadable);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -186,6 +209,7 @@ public sealed class ToneSessionService : IDisposable
         }
 
         try { _chain.EngineAttached -= OnEngineAttached; } catch { /* ignored */ }
+        try { _presets.PresetApplied -= OnPresetApplied; } catch { /* ignored */ }
 
         // Timer.Dispose() — the parameterless overload — does NOT wait for a
         // callback that is already executing, so the final flush below could
@@ -245,7 +269,31 @@ public sealed class ToneSessionService : IDisposable
     ///         the gate rather than deadlocking against it.
     ///     </para>
     /// </summary>
-    private void OnEngineAttached() => Restore(clearWhenNothingStored: false);
+    private void OnEngineAttached()
+    {
+        RigPersistenceAction action;
+        lock (_gate) action = AdvanceAuthority(RigPersistenceEvent.Rebuild);
+        if (action.HasFlag(RigPersistenceAction.Restore)) Restore(clearWhenNothingStored: false);
+    }
+
+    private RigPersistenceAction AdvanceAuthority(RigPersistenceEvent input)
+    {
+        var decision = _authority.Decide(input);
+        _authority = decision.State;
+        return decision.Action;
+    }
+
+    private void OnPresetApplied(int player, long generation)
+    {
+        lock (_gate)
+        {
+            if (_disposed || _restoring || player != Player || generation != _boardScopeGeneration || IsBoardDisplaced) return;
+            AdvanceAuthority(_chain.GetNodes().Count == 0 ? RigPersistenceEvent.ObserveEmpty : RigPersistenceEvent.Edit);
+            var action = AdvanceAuthority(RigPersistenceEvent.ExplicitPresetReplacement);
+            if (action.HasFlag(RigPersistenceAction.PreserveRecovery))
+                _recoveryRig ??= _rigStore.ReadRig(Player).Rig;
+        }
+    }
 
     /// <summary>
     ///     Re-applies THIS seat's rig for the profile the store is scoped to NOW.
@@ -274,11 +322,15 @@ public sealed class ToneSessionService : IDisposable
     /// </summary>
     public void ReloadForActiveProfile()
     {
+        RigPersistenceAction action;
         lock (_gate)
         {
             if (_disposed) return;
+            action = AdvanceAuthority(RigPersistenceEvent.ProfileSeatSwitch);
+            _recoveryRig = null;
         }
 
+        if (!action.HasFlag(RigPersistenceAction.Restore)) return;
         if (!_chain.HasEngine)
         {
             // Re-arm the persist compare so the first poll after the engine
@@ -369,12 +421,22 @@ public sealed class ToneSessionService : IDisposable
 
     private void RestoreOnce(bool clearWhenNothingStored)
     {
+        // A song owns this board until its matching stop restores the player.
+        // Its coordinator replays the current tone on engine attach instead.
+        if (IsBoardDisplaced) return;
         try
         {
-            var preset = ResolveStartupTone();
+            lock (_gate) AdvanceAuthority(RigPersistenceEvent.StoreUnreadable);
+            var stored = _rigStore.ReadRig(Player);
+            var preset = ResolveStartupTone(stored.Rig);
             if (preset is null)
             {
-                if (!clearWhenNothingStored) return;
+                if (!clearWhenNothingStored)
+                {
+                    RecordRestoreAuthority(stored, failedOps: 0);
+                    _boardScopeGeneration = stored.Generation;
+                    return;
+                }
                 preset = EmptyRig;
             }
 
@@ -406,12 +468,36 @@ public sealed class ToneSessionService : IDisposable
             // trailing gain, so the chain that comes back is legitimately not the
             // preset that went in. Seeding from the preset would make the very
             // next poll see a "change" and rewrite config for nothing.
-            _lastPersistedSignature = SignatureOfLiveChain();
+            RecordRestoreAuthority(stored, result.FailedOps);
+            _boardScopeGeneration = stored.Generation;
         }
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Tone session: restoring the saved rig failed; the board stays empty. {ex.GetType().Name}: {ex.Message}");
+                "Tone session: restoring the saved rig failed; the board stays empty", ex);
+        }
+    }
+
+    private void RecordRestoreAuthority(ProfileToneRigRead stored, int failedOps)
+    {
+        lock (_gate)
+        {
+            AdvanceAuthority(_chain.GetNodes().Count == 0 ? RigPersistenceEvent.ObserveEmpty : RigPersistenceEvent.Edit);
+            if (!stored.IsAuthoritative)
+            {
+                AdvanceAuthority(RigPersistenceEvent.StoreUnreadable);
+            }
+            else if (failedOps > 0)
+            {
+                AdvanceAuthority(RigPersistenceEvent.RestoreFailedOps);
+                _recoveryRig = stored.Rig?.Clone();
+            }
+            else
+            {
+                AdvanceAuthority(stored.IsPersisted ? RigPersistenceEvent.RestoreSucceeded : RigPersistenceEvent.RestoreUnpublished);
+                _recoveryRig = null;
+            }
+            _lastPersistedSignature = _authority.HasPersistedSignature ? SignatureOfLiveChain() : string.Empty;
         }
     }
 
@@ -422,11 +508,11 @@ public sealed class ToneSessionService : IDisposable
     ///     no default configured) — the pre-0.37 empty board, still reachable by
     ///     clearing <c>DefaultTonePresetId</c>.
     /// </summary>
-    private DspTonePreset? ResolveStartupTone()
+    private DspTonePreset? ResolveStartupTone(UserTonePresetDto? stored)
     {
         var config = _config.LoadRigConfig();
 
-        if (config.RestoreToneOnStartup && StoredRig() is { Modules.Count: > 0 } stored)
+        if (config.RestoreToneOnStartup && stored is { Modules.Count: > 0 })
             return stored.ToPreset();
 
         // The first-run DEFAULT is seat 0's only. It exists so a fresh install
@@ -453,13 +539,6 @@ public sealed class ToneSessionService : IDisposable
 
         return preset;
     }
-
-    /// <summary>
-    ///     This seat's stored rig, under the ACTIVE PROFILE. A seat with no entry
-    ///     returns null so it falls through to the first-run default preset rather
-    ///     than inheriting player 1's board — or the previous PROFILE's board.
-    /// </summary>
-    private UserTonePresetDto? StoredRig() => _rigStore.GetRig(Player);
 
     /// <summary>
     ///     The "no rig" rig. Applying it to a live chain is what CLEARS a board —
@@ -502,18 +581,31 @@ public sealed class ToneSessionService : IDisposable
     private void PersistIfChanged()
     {
         long generation;
+        long publication;
         lock (_gate)
         {
             if (_disposed && _timer is not null) return;
             if (_restoring) return;
             generation = _restoreGeneration;
+            publication = ++_persistGeneration;
         }
-
-        // A song's tone is on the board: it is not the player's to save.
-        if (IsBoardDisplaced) return;
 
         try
         {
+            RigPersistenceAction action;
+            lock (_gate)
+            {
+                if (_boardScopeGeneration != _rigStore.ScopeGeneration) AdvanceAuthority(RigPersistenceEvent.ProfileSeatSwitch);
+                action = AdvanceAuthority(_disposed ? RigPersistenceEvent.Shutdown : RigPersistenceEvent.Flush);
+            }
+            if (action.HasFlag(RigPersistenceAction.FlushPending)) _rigStore.FlushPending();
+            if (IsBoardDisplaced) return;
+            if (action.HasFlag(RigPersistenceAction.RetryRead))
+            {
+                if (_rigStore.ReadRig(Player).IsAuthoritative) Restore(clearWhenNothingStored: true);
+                return;
+            }
+            if (!action.HasFlag(RigPersistenceAction.Snapshot)) return;
             var rig = SnapshotLiveRig();
             var modules = rig.Modules;
             // An empty chain is NOT persisted. It is indistinguishable from the
@@ -521,7 +613,11 @@ public sealed class ToneSessionService : IDisposable
             // with nothing — on a device change, say — would lose the very thing
             // this service exists to keep. Clearing the board is not a state worth
             // remembering anyway.
-            if (modules.Count == 0) return;
+            if (modules.Count == 0)
+            {
+                lock (_gate) AdvanceAuthority(RigPersistenceEvent.ObserveEmpty);
+                return;
+            }
 
             var signature = Signature(rig);
 
@@ -531,8 +627,9 @@ public sealed class ToneSessionService : IDisposable
                 // snapshotting: the list above is a partial board. Drop it — the
                 // next poll reads the finished rig, and its signature will differ
                 // from whatever is stored, so nothing is lost by waiting.
-                if (_restoring || _restoreGeneration != generation) return;
-                if (signature == _lastPersistedSignature) return;
+                if (_restoring || _restoreGeneration != generation || _persistGeneration != publication) return;
+                AdvanceAuthority(signature == _lastPersistedSignature ? RigPersistenceEvent.ObserveUnchanged : RigPersistenceEvent.Edit);
+                if (!AdvanceAuthority(RigPersistenceEvent.Persist).HasFlag(RigPersistenceAction.Publish)) return;
                 // …and again AFTER the snapshot: a song tone that took the board
                 // over while we were reading it sets the flag before its first
                 // apply, so a snapshot that saw any of it sees the flag here.
@@ -548,7 +645,10 @@ public sealed class ToneSessionService : IDisposable
                 // Inside the lock so a restore cannot start between the check and
                 // the write. Lock order is ToneSessionService._gate ->
                 // ProfileToneRigStore._gate and nothing takes them the other way.
-                _rigStore.SetRig(Player, dto);
+                var published = _rigStore.SetRigWithRecovery(Player, dto, _recoveryRig, _boardScopeGeneration);
+                AdvanceAuthority(published ? RigPersistenceEvent.PublishSucceeded : RigPersistenceEvent.PublishFailed);
+                if (!published) return;
+                _recoveryRig = null;
                 // …and the signature is written under the same lock it is read
                 // under at ReloadForActiveProfile, which it was not before.
                 _lastPersistedSignature = signature;
@@ -557,7 +657,7 @@ public sealed class ToneSessionService : IDisposable
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Tone session: persisting the live rig failed. {ex.GetType().Name}: {ex.Message}");
+                "Tone session: persisting the live rig failed", ex);
         }
     }
 
@@ -585,7 +685,7 @@ public sealed class ToneSessionService : IDisposable
     ///     A cheap value-identity of a rig, used only to decide whether a write is
     ///     needed. Everything that round-trips through
     ///     <see cref="UserTonePresetDto" /> is in it — module order, params,
-    ///     bypass, string params and branch tags — so a change this misses is a
+    ///     bypass, string params, branch tags and sidechain routing — so a change this misses is a
     ///     change that would not have been persisted anyway. Params are ordered
     ///     because a dictionary's enumeration order is not a contract.
     /// </summary>
@@ -595,6 +695,7 @@ public sealed class ToneSessionService : IDisposable
         foreach (var m in modules)
         {
             sb.Append(m.ModuleTypeId).Append(m.Bypassed ? "!" : "").Append('@').Append(m.Branch).Append('{');
+            sb.Append("sidechain:").Append((int)m.Sidechain).Append(';');
             foreach (var p in m.Params.OrderBy(p => p.Key, StringComparer.Ordinal))
                 sb.Append(p.Key).Append('=').Append(p.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)).Append(',');
             if (m.StringParams is { Count: > 0 } strings)

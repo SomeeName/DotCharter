@@ -28,6 +28,28 @@ composition-mode consequences for popups are in
     viewport, never disposed; a cached failure makes every later viewport
     fail fast into the same error state. Per-viewport resources (pool,
     framebuffers, vertex streams, atlas) cycle on attach/detach (pop-out).
+  - **A device lost mid-session fails the backend too (#582).** A refused
+    `TryBeginFrame` is back-pressure (the previous frame still in flight)
+    UNLESS the renderer reports `IsDeviceLost`; then
+    `VulkanTimelineBackend` latches one failure before `Fail` detaches and shows
+    the same error state instead of requesting frames forever. The animation
+    callback guards the entire frame (glyph/atlas rebuild, resize/pool recreation,
+    fences, vertex allocation/map/upload, recording, submit and frame-ready dispatch).
+    The present pump routes export/import, keyed-mutex and completion errors into
+    that same latch; every queued present attempts exactly one completion from
+    `finally`. Teardown attempts pump, renderer, visual and surface release even
+    if another release throws; failure notification cannot unwind the dispatcher.
+    The failed viewport stays on its localized error surface until detached and
+    reattached (pop-out/redock or reopening); a new backend retries then. Actual
+    loss of the shared device can require restarting the app. Injected boundaries
+    and teardown failures are covered by `UI/TimelineFrameFailureTests`
+    (`ClassifyFrameStart`, pinned by `UI/VulkanTimelineBackendFrameStartTests`).
+    A constructor that fails part-way (`Timeline2DFrameResources`,
+    `VulkanResourceManager.LoadTexture`, a composed pool slot's bind) releases
+    what it built before rethrowing through `NativeResourceSet.CompleteOrRollback`.
+    `Rendering/VulkanPartialBuildCleanupTests` injects failure at each construction
+    stage and verifies rollback and temporary-resource release; native handle wiring
+    is source-checked because creating those handles requires a Vulkan/D3D device.
   - `Timeline2DVulkanCore` — single-attachment BGRA8 pass + solid (6-float
     vertex) / general (9-float) pipelines, shared per device.
     The general fragment shader branches on the vertex `type` (1 disc, 2 ring,
@@ -84,3 +106,7 @@ composition-mode consequences for popups are in
   path consumes: `TimelineBatcher` (solid + general vertex streams, the
   insertion-ordered draw-command list; formerly `OpenGl/OpenGlBatcher`) +
   `PolylineRibbonMath` (pure, unit-tested).
+
+Anchor projection in `FrameSnapshot.Events.cs` and UI pointer hit testing share
+`DotCharter.Core/Graphics/AnchorSpan.EndTimeMs`. Pinned fret badges use that finite span;
+unlabelled stacked rows edit their start marker instead of a pinned badge.

@@ -31,6 +31,19 @@ namespace DotCharter.UI.Controls;
 /// </summary>
 internal static class ChartTextPreRegistration
 {
+    /// <summary>Annotations are edited in place without changing the chart-text
+    /// latch or visible-snapshot signature. Scan them before BeginFrame rebuilds
+    /// the atlas, rather than discovering their glyphs during a layer draw.</summary>
+    public static void RegisterAnnotations(ChartFontAtlas atlas, IList<ChartAnnotation> annotations)
+    {
+        for (var i = 0; i < annotations.Count; i++)
+        {
+            var annotation = annotations[i];
+            if (!annotation.Resolved && annotation.Text.Length is > 0 and <= 32)
+                atlas.RegisterCharacters(annotation.Text);
+        }
+    }
+
     public static void Register(ChartFontAtlas atlas,
         IList<LyricPhrase> lyricPhrases, IList<EventPoint> eventPoints, IList<ToneChange> tones)
     {

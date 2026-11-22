@@ -28,6 +28,13 @@ public sealed record ShowlightChipLabels(
         return string.Format(CultureInfo.InvariantCulture, Format, fog, beams, lasers);
     }
 
+    /// <summary>The chip shows only while a show-light is ACTIVE at the playhead (any fog colour, beams not off,
+    /// lasers on) or the Showlights editor is open; on a song with no show-lights it stays out of the corner.</summary>
+    public static bool ShouldShow(bool editorOpen, int? fogNote, int? beamNote, int? laserNote) =>
+        editorOpen || fogNote is not null
+        || (beamNote is { } b && b != ShowlightPalette.BeamsOff)
+        || laserNote == ShowlightPalette.LasersOn;
+
     private string Name(int note) => Names.TryGetValue(note, out var n) ? n : None;
 }
 

@@ -21,6 +21,9 @@ namespace DotCharter.Tone.Audio.Reamp;
 ///         the take keeps its timing, and <see cref="GapFrames" /> counts them. A
 ///         stream that jumps BACKWARDS (an engine rebuild restarted it) is
 ///         re-anchored and counted in <see cref="Restarts" />.
+///         A capture sample-rate change ends the take: no new-rate samples may
+///         enter a WAV whose header names the original rate. The owner saves it
+///         with <see cref="Stop" /> when <see cref="CaptureRateChanged" /> is set.
 ///     </para>
 ///     <para>
 ///         Not thread-safe: one owner calls <see cref="Start" />,
@@ -57,6 +60,9 @@ public sealed class DiTakeRecorder : IDisposable
     /// <summary>The take's rate (the engine's rate when recording started).</summary>
     public int SampleRate { get; private set; }
 
+    /// <summary>The capture rate changed; no more samples can join this WAV.</summary>
+    public bool CaptureRateChanged { get; private set; }
+
     /// <summary>Frames written so far, gaps included.</summary>
     public long Frames { get; private set; }
 
@@ -89,6 +95,7 @@ public sealed class DiTakeRecorder : IDisposable
         _tempPath = targetPath + ".recording";
         _writer = new WavWriter(_tempPath, rate, 1);
         SampleRate = rate;
+        CaptureRateChanged = false;
         _cursor = total;
         _maxFrames = (long)(MaxSeconds * rate);
         Frames = 0;
@@ -107,7 +114,11 @@ public sealed class DiTakeRecorder : IDisposable
         var peak = 0f;
         while (Frames < _maxFrames)
         {
+            CaptureRateChanged |= _engine.ReampSampleRate != SampleRate;
+            if (CaptureRateChanged) break;
             var n = _engine.ReadCaptureFrom(Player, _cursor, _buf, out var first);
+            CaptureRateChanged |= _engine.ReampSampleRate != SampleRate;
+            if (CaptureRateChanged) break;
             if (first < _cursor)
             {
                 // The stream went BACKWARDS: a rebuilt engine started a new ring.

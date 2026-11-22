@@ -38,6 +38,27 @@ namespace DotCharter.Services.Editing;
 public static class ChordTemplateResolver
 {
     /// <summary>
+    ///     Transfers an authored template without guessing its name, fingers or flags. Unlike a
+    ///     reshape, a paste or catalog capture must preserve even deliberately empty values.
+    /// </summary>
+    public static ChordTemplate ResolveAuthored(Arrangement arrangement, ChordTemplate source, IList<ChordTemplate> created)
+    {
+        foreach (var candidate in arrangement.ChordTemplates.Concat(created))
+        {
+            if (MatchesAuthoredState(candidate, source)) return candidate;
+        }
+
+        var template = source.Clone();
+        template.Id = NextId(arrangement, created);
+        created.Add(template);
+        return template;
+    }
+
+    public static bool MatchesAuthoredState(ChordTemplate candidate, ChordTemplate source) =>
+        candidate.Equals(source) && candidate.Pinned == source.Pinned && candidate.Unnamed == source.Unnamed &&
+        candidate.FollowedFingering == source.FollowedFingering;
+
+    /// <summary>
     ///     Returns a template of <paramref name="arrangement" /> whose shape is
     ///     <paramref name="frets" />, creating one if none exists. A created
     ///     template is appended to <paramref name="created" /> and NOT added to
@@ -72,6 +93,16 @@ public static class ChordTemplateResolver
                 return pending;
         }
 
+        var template = SuggestGrip(arrangement, frets, arpeggio, preferredName);
+        template.Id = NextId(arrangement, created);
+
+        created.Add(template);
+        return template;
+    }
+
+    internal static ChordTemplate SuggestGrip(Arrangement arrangement, IReadOnlyDictionary<int, int> frets,
+        ArpeggioFlavour arpeggio = default, string? preferredName = null)
+    {
         var template = new ChordTemplate();
         arpeggio.ApplyTo(template);
         foreach (var (stringIndex, fret) in frets) template.Frets[stringIndex] = fret;
@@ -81,9 +112,6 @@ public static class ChordTemplateResolver
         template.Name = string.IsNullOrWhiteSpace(preferredName)
             ? NewChordNames.For(arrangement, template.Frets)
             : preferredName;
-        template.Id = NextId(arrangement, created);
-
-        created.Add(template);
         return template;
     }
 
@@ -148,7 +176,8 @@ public static class ChordTemplateResolver
         ArgumentNullException.ThrowIfNull(chord);
         // Keep the arpeggio flavour of whatever the chord pointed at, so
         // re-shaping an arpeggio chord stays an arpeggio — in BOTH spellings.
-        var current = FindById(arrangement, chord.TemplateId);
+        var current = arrangement.FindChordTemplate(chord.TemplateId)
+                      ?? created.FirstOrDefault(t => t.Id == chord.TemplateId);
         // A PINNED template that still describes the chord stays its template: the
         // frets-only key would hand the chord the FIRST value-equal grip instead, and an
         // authored fingering would be replaced by whichever template came earlier.
@@ -194,22 +223,8 @@ public static class ChordTemplateResolver
         return null;
     }
 
-    /// <summary>Id lookup with NO index fallback — a dangling id is dangling.</summary>
-    public static ChordTemplate? FindById(Arrangement arrangement, int templateId)
-    {
-        ArgumentNullException.ThrowIfNull(arrangement);
-        if (templateId < 0) return null;
-        foreach (var template in arrangement.ChordTemplates)
-        {
-            if (template.Id == templateId)
-                return template;
-        }
-
-        return null;
-    }
-
     /// <summary>
-    ///     <see cref="FindById" /> for a whole pass, answered in O(1): the FIRST
+    ///     <see cref="ArrangementChordTemplateExtensions.FindChordTemplate" /> for a whole pass, answered in O(1): the FIRST
     ///     template with each id wins, a negative id is never indexed, and there is
     ///     no list-index fallback. A pass that resolves every chord must use this,
     ///     never <c>templates[chord.TemplateId]</c> — ids are not positions.

@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using DotCharter.UI.Controls;
 using DotCharter.UI.ViewModels.Editor;
 using DotCharter.UI.Views.Editor.Inspector;
 
@@ -17,8 +18,8 @@ namespace DotCharter.Tests.Perf;
 public sealed class SongInspectorMarkerGroupsUiPerfSmokeTests
 {
     [Theory]
-    [InlineData("SongSectionsBody", "song-tab-sections.png")]
-    [InlineData("SongTonesBody", "song-tab-tones.png")]
+    [InlineData("SongSectionsCard", "song-tab-sections.png")]
+    [InlineData("SongTonesCard", "song-tab-tones.png")]
     public Task EachList_LaysOutEveryControl_AndApplyWaitsForAChange(string body, string capture) =>
         HeadlessSessionFixture.Dispatch(() =>
         {
@@ -27,7 +28,7 @@ public sealed class SongInspectorMarkerGroupsUiPerfSmokeTests
             var vm = new SongOverviewViewModel(state, new HistoryService(logger), logger, FakeLocalization.English(),
             DotCharter.Tests.Presentation.Dialogs.RecordingProxy.Create<DotCharter.Services.Editing.IChartEditorSurface>().Proxy);
             var tab = new SongInspectorView { DataContext = vm };
-            tab.Rail.Choose(body);
+            tab.ShowCard(body);
             var scope = new UserControl { Content = tab };
             scope.Styles.Add(new Avalonia.Markup.Xaml.Styling.StyleInclude(new Uri("avares://DotCharter/"))
             {
@@ -43,7 +44,7 @@ public sealed class SongInspectorMarkerGroupsUiPerfSmokeTests
             {
                 state.ActiveProject = Song();
                 Settle(window);
-                var list = tab.GetVisualDescendants().OfType<MarkerGroupsView>().Single(v => v.IsEffectivelyVisible);
+                var list = tab.GetVisualDescendants().OfType<MarkerGroupsView>().Single(v => tab.Cards.ShownCards.Contains(v.FindAncestorOfType<ColumnFlowCard>()!));
                 foreach (var name in new[] { "MarkerGroupExpand", "MarkerRenameBox", "MarkerDelete", "MarkerJump" })
                 {
                     var control = list.GetVisualDescendants().OfType<Control>().First(c => c.Name == name);

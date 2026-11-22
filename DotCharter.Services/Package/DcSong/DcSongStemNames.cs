@@ -5,8 +5,8 @@ namespace DotCharter.Services.Package.DcSong;
 /// <summary>
 ///     A project's stem names as package member names (<c>[a-z0-9_-]{1,32}</c>,
 ///     <see cref="DcSongFormat.IsValidStemName" />): lower-cased, every other character a
-///     dash, cut to 32, and a repeat numbered. A name that is already valid is kept, so
-///     the packaged chart keeps that stem's mixer state.
+///     dash, cut to 32, and a repeat numbered. The export carries the original stem
+///     alongside this name so renaming preserves its mixer state.
 /// </summary>
 public static class DcSongStemNames
 {

@@ -55,7 +55,7 @@ public sealed class DcSongPackage : IDisposable
 
     public DcSongManifest Manifest { get; }
 
-    /// <summary>True for a FLAC package. Chart-from-audio and stem separation need
+    /// <summary>True for a FLAC package. Stem separation needs
     /// this; an Opus package is playback-only.</summary>
     public bool IsLossless => Manifest.Audio.Lossless;
 

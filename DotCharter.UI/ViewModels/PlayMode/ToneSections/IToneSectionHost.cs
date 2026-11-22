@@ -55,6 +55,9 @@ public interface IToneSectionHost
     /// <param name="chainSummary">Its chain, already summarised.</param>
     void PublishResult(ToneDesignResult result, string chainSummary);
 
+    /// <summary>Clears the shared result last published by this section flow.</summary>
+    void ClearResult();
+
     /// <summary>The drawer's save seam — the same
     /// <c>IDspTonePresetService.SaveUser</c> path "Save as tone" commits, so a
     /// section's tone lands in My Tones visibly rather than merely on disk.</summary>

@@ -21,7 +21,7 @@ public sealed record LiveTakeResult(string FilePath, long SamplesWritten, long D
 ///     run to a 16-bit mono WAV file — the "take". Designed as a TEE off the
 ///     existing 30 Hz capture pump, which is allocation-free:
 ///     <list type="bullet">
-///     <item><see cref="Write"/> copies into a fixed single-producer /
+///     <item><see cref="Write(ReadOnlySpan{float})"/> copies into a fixed single-producer /
 ///     single-consumer ring and NEVER blocks, locks or allocates. When the
 ///     ring is full the samples are dropped and counted
 ///     (<see cref="DroppedSamples"/>) — recording quality degrades, the pump
@@ -88,9 +88,17 @@ public sealed class LiveTakeRecorder : IDisposable
             : long.MaxValue;
 
         _stream = stream;
-        _stream.Write(stackalloc byte[WavHeaderBytes]); // placeholder, patched on stop
-
-        _writerTask = autoStartWriter ? Task.Run(WriterLoopAsync) : Task.CompletedTask;
+        try
+        {
+            _stream.Write(stackalloc byte[WavHeaderBytes]); // placeholder, patched on stop
+            _writerTask = autoStartWriter ? Task.Run(WriterLoopAsync) : Task.CompletedTask;
+        }
+        catch
+        {
+            _stream.Dispose();
+            _stop.Dispose();
+            throw;
+        }
     }
 
     private static FileStream OpenTakeFile(string filePath)
@@ -114,11 +122,18 @@ public sealed class LiveTakeRecorder : IDisposable
     /// <summary>True once the duration cap stopped acceptance.</summary>
     public bool WasCapped => _capped;
 
+    /// <summary>A take has one fixed WAV rate. A device rate change permanently
+    /// stops acceptance; the samples already captured remain finalizable.</summary>
+    public void Write(ReadOnlySpan<float> samples, int sampleRate)
+    {
+        if (sampleRate != SampleRate) _stopAccepting = true;
+        Write(samples);
+    }
+
     /// <summary>
-    ///     Tee entry point, called from the capture pump with each drained
-    ///     block. Single producer only. Never blocks, never allocates; excess
-    ///     samples beyond the ring's free space or the duration cap are
-    ///     dropped (counted) rather than stalling the caller.
+    ///     Tee entry point for samples already known to have this take's rate.
+    ///     Single producer only. Never blocks, never allocates; excess samples
+    ///     beyond the ring's free space or duration cap are dropped (counted).
     /// </summary>
     public void Write(ReadOnlySpan<float> samples)
     {

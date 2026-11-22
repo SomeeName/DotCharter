@@ -7,20 +7,20 @@ using DotCharter.Tone.Infrastructure.Storage;
 namespace DotCharter.Tests.Services.Export;
 
 /// <summary>
-///     #782: the Rocksmith package per platform. The PC package must come out byte for byte
-///     what it was before the Mac package existed: every random id, the SNG IV and the
-///     keys (the synthetic ones) are pinned, and the SHA-256 of the whole file is pinned
-///     to the value the pre-#782 builder wrote. The Mac package differs from it in exactly
+///     #782: the Rocksmith package per platform. Adding the Mac package preserves the
+///     PC package bytes: every random id, the SNG IV and the synthetic keys are pinned.
+///     The pre-#782 package hashes advanced for #565 row 2's shared song-length policy.
+///     The Mac package differs from it in exactly
 ///     what Rocksmith2014.NET's <c>Platform.fs</c> / <c>GraphItem.fs</c> and official PC/Mac
 ///     pairs differ in: the SNG folder and key, the audio folder and the graph's platform tags.
 /// </summary>
 public sealed partial class RocksmithPlatformPackageTests : IDisposable
 {
-    /// <summary>SHA-256 of the pinned encrypted PC package, as the builder wrote it before #782.</summary>
-    private const string PinnedEncryptedPcSha256 = "7681013b900a89f0f27f8b9c81cc5fe6f7eef53f78c9fce22dfbfa9a37d99757";
+    /// <summary>Encrypted PC package pin, advanced for #875 (generated show lights replace the fixed fallback).</summary>
+    private const string PinnedEncryptedPcSha256 = "b23f444e08caac184f1916f6dc6562f6b36898f08e6cc4cafd77c46e8aa58ccd";
 
-    /// <summary>SHA-256 of the pinned PLAIN PC package, as the builder wrote it before #782.</summary>
-    private const string PinnedPlainPcSha256 = "fc7e2d4760c43e15b94362bbb49d2a38a47328a0f6adbd65427fc5325f8ae605";
+    /// <summary>Plain PC package pin, advanced for #875 (generated show lights replace the fixed fallback).</summary>
+    private const string PinnedPlainPcSha256 = "9de1596ce9f1961f480f26884cc21e51d1b200ace85af58dbc5d05ef29b0e327";
 
     private readonly string _tempDir = Directory.CreateTempSubdirectory("dotcharter-platform-").FullName;
 
@@ -47,6 +47,8 @@ public sealed partial class RocksmithPlatformPackageTests : IDisposable
     internal static RocksmithBuildIdentity PinnedIdentity() => new()
     {
         ConversionTime = new DateTime(2026, 10, 13, 12, 34, 0, DateTimeKind.Unspecified),
+        // Pinned too: the package carries the tool version, which would otherwise follow every version bump.
+        ToolVersion = "1.3.0",
         Arrangements =
         [
             new RsArrangementIdentity(Guid.Parse("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"), 1_234_567),

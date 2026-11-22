@@ -9,6 +9,19 @@ namespace DotCharter.Tests.UI.Rendering;
 /// </summary>
 public class RenderStringCacheTests
 {
+    [Theory]
+    [InlineData(3_599_999, "59:59.99")]
+    [InlineData(3_600_000, "1:00:00.00")]
+    [InlineData(90_061_456, "25:01:01.45")]
+    public void MmSsFf_PreservesElapsedHoursAndCachesTheLabel(double ms, string expected)
+    {
+        var first = RenderStringCache.MmSsFf(ms);
+        RenderStringCache.MmSsFf(42_000);
+
+        Assert.Equal(expected, first);
+        Assert.Same(first, RenderStringCache.MmSsFf(ms));
+    }
+
     [Fact]
     public void MeasureLabel_SameInputs_ReturnsSameInstance()
     {

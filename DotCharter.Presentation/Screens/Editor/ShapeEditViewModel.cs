@@ -9,7 +9,6 @@ using DotCharter.Presentation.Dialogs;
 using DotCharter.Presentation.Screens.Dialogs;
 using DotCharter.Services.Audio.LivePlay;
 using DotCharter.Services.Editing.ChordShapes;
-using DotCharter.Tone.Audio.Tuning;
 
 namespace DotCharter.Presentation.Screens.Editor;
 
@@ -31,6 +30,7 @@ public sealed class ShapeEditViewModel : DialogViewModel<bool>, IShapeEditScreen
     private readonly RelayCommand _apply;
     private readonly RelayCommand _useMatch;
     private ShapeEditInput? _input;
+    private ChordNamingOptions _naming;
     private ShapeEditScopeViewModel _selected;
     private ShapeEditPlan? _plan;
     private ChordTemplate _after = new();
@@ -145,8 +145,6 @@ public sealed class ShapeEditViewModel : DialogViewModel<bool>, IShapeEditScreen
 
     internal ShapeEditScope SelectedScope => _kinds[_scopes.IndexOf(_selected)];
 
-    internal void ChooseScope(ShapeEditScope scope) => Select(_scopes[_kinds.IndexOf(scope)]);
-
     public void Configure(ShapeEditRequest request)
     {
         var arrangement = _edit.Editor.ActiveArrangement
@@ -156,7 +154,9 @@ public sealed class ShapeEditViewModel : DialogViewModel<bool>, IShapeEditScreen
             [.. selection.SelectedChords], [.. selection.SelectedHandShapes], request.Together);
         _configuring = true;
         if (_input.Group.Count > 1) UseTogetherScopes(_input.Group.Count);
-        _keepInSync = _edit.Config.LoadAppConfig().SyncHandShapeToChordTemplate;
+        var config = _edit.Config.LoadAppConfig();
+        _keepInSync = config.SyncHandShapeToChordTemplate;
+        _naming = ChordNamingOptions.For(config.ChordNamingStyle, arrangement, _edit.State.ActiveProject?.Chart);
         var count = Math.Max(1, arrangement.StringCount);
         BeforeDiagram = request.Shape.Clone();
         BeforeChord = ChordOf(request.Shape);
@@ -256,7 +256,7 @@ public sealed class ShapeEditViewModel : DialogViewModel<bool>, IShapeEditScreen
         _after = ShapeEditPlanner.Apply(input.Shape, draft);
         AfterChord = ChordOf(_after);
         var name = ChordShapeNames.DisplayName(input.Shape, count);
-        SuggestedName = NewChordNames.For(input.Arrangement, _after.Frets);
+        SuggestedName = NewChordNames.For(input.Arrangement, _after.Frets, _naming);
         NamePlaceholder = ChordShapeNames.FretPattern(_after, count);
         PreviewText = _words.Preview(plan, name);
         var matchName = plan.Match is { } match ? ChordShapeNames.DisplayName(match, count) : "";
@@ -329,12 +329,10 @@ public sealed class ShapeEditViewModel : DialogViewModel<bool>, IShapeEditScreen
 
     internal static string StringName(Arrangement arrangement, int stringIndex)
     {
-        if (SoundingPitch.OpenStringMidi(arrangement, stringIndex) is not { } midi) return "";
-        var name = ArrangementTunerLogic.NoteNameOf(midi).TrimEnd('-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9');
-        // The chord panel prints the arrangement's own tuning names (the high string is "e"): use them while they agree.
-        var tuning = arrangement.Tuning;
-        return stringIndex < tuning.Length && string.Equals(tuning[stringIndex], name, StringComparison.OrdinalIgnoreCase)
-            ? tuning[stringIndex]
-            : name;
+        var names = TuningDisplayNames.For(arrangement)!;
+        if (stringIndex < 0 || stringIndex >= names.Length) return "";
+        var name = names[stringIndex];
+        return stringIndex < arrangement.Tuning.Length && string.Equals(arrangement.Tuning[stringIndex], name, StringComparison.OrdinalIgnoreCase)
+            ? arrangement.Tuning[stringIndex] : name;
     }
 }

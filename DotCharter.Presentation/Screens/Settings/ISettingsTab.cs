@@ -14,6 +14,9 @@ public interface ISettingsTab : INotifyPropertyChanged
 
     void Save();
 
+    /// <summary>A failed save keeps the page open so its pending input can be retried.</summary>
+    bool HasSaveError => false;
+
     void Revert();
 
     void Reset();

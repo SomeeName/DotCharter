@@ -40,11 +40,13 @@ namespace DotCharter.Tests.Services.Parsing.GuitarPro;
 // HammerOrigin sets NOTE-effects fx1 bit 0x02 — the slur's ORIGIN note (flag-only);
 // the destination is the next note on the same string.
 // PalmMute sets NOTE-effects fx2 bit 0x02 — flag-only like Staccato, GP4+ only.
+// Bend writes NOTE-effects fx1 bit 0x01 and a bend chunk with these (offset 0-60,
+// raw value: 50 per step) points; Ghost sets the note HEADER bit 0x04 (flag-only).
 internal readonly record struct FxNote(int StringIndex, int Fret, int? GraceFret = null, bool Tied = false,
     bool Accent = false, bool LetRing = false, int? Slide = null, bool GraceSlide = false,
     bool GraceOnBeat = false, bool TremoloPicking = false, int? TrillUpperFret = null,
     int? LeftFinger = null, bool Staccato = false, bool Dead = false, bool PalmMute = false,
-    bool HammerOrigin = false);
+    bool HammerOrigin = false, (int Offset, int Value)[]? Bend = null, bool Ghost = false);
 
 internal sealed class FxBeat
 {
@@ -87,6 +89,7 @@ internal sealed class FxMeasure
 {
     public int Num = 4;
     public int Den = 4;
+    public string? Marker;
 
     /// <summary>GP5's per-measure-header triplet-feel byte: 0 none, 1 eighth,
     /// 2 sixteenth. Ignored for GP3/GP4, which carry ONE song-wide shuffle
@@ -138,6 +141,7 @@ internal sealed class LegacyGpFixtureBuilder
 
     // The track header's tuning, highest pitch first (null = 6-string E standard).
     private int[]? _tuningHighFirst;
+    private IReadOnlyDictionary<int, int>? _directions;
 
     private LegacyGpFixtureBuilder(int major, int minor)
     {
@@ -156,7 +160,7 @@ internal sealed class LegacyGpFixtureBuilder
     public static string WriteFile(string version, IReadOnlyList<FxMeasure> measures,
         string trackName = "Guitar", int stringCount = 6, int capo = 0, bool globalShuffle = false,
         string title = "", string artist = "", string album = "", string tab = "", int frets = 24,
-        int[]? tuningHighFirst = null)
+        int[]? tuningHighFirst = null, IReadOnlyDictionary<int, int>? directions = null)
     {
         var dot = version.IndexOf('.');
         var major = int.Parse(version[..dot]);
@@ -168,7 +172,8 @@ internal sealed class LegacyGpFixtureBuilder
             _album = album,
             _tab = tab,
             _frets = frets,
-            _tuningHighFirst = tuningHighFirst
+            _tuningHighFirst = tuningHighFirst,
+            _directions = directions
         };
         var bytes = builder.Build(version, measures, trackName, stringCount, capo, globalShuffle,
             extraTracks: null);
@@ -267,7 +272,7 @@ internal sealed class LegacyGpFixtureBuilder
 
         if (IsV5)
         {
-            for (var i = 0; i < 38; i++) W8(0); // musical directions
+            for (var i = 0; i < 19; i++) W16(_directions?.GetValueOrDefault(i) ?? -1);
             W32(0); // master reverb / unknown
         }
 
@@ -303,6 +308,7 @@ internal sealed class LegacyGpFixtureBuilder
             if (m.RepeatStart) bitmask |= 0x04;
             if (m.RepeatTotalPasses > 0) bitmask |= 0x08;
             if (m.AlternateEndingsMask != 0) bitmask |= 0x10;
+            if (m.Marker != null) bitmask |= 0x20;
             W8(bitmask);
             if (sigChanged)
             {
@@ -318,18 +324,25 @@ internal sealed class LegacyGpFixtureBuilder
 
             if (_major < 5)
             {
-                // 0x20 (marker) and 0x40 (key) stay unset here.
                 if ((bitmask & 0x10) != 0) W8(m.AlternateEndingsMask);
+                WriteMarker(m.Marker);
             }
             else
             {
-                // 0x20 (marker) and 0x40 (key) stay unset here.
+                WriteMarker(m.Marker);
                 if ((bitmask & 0x10) != 0) W8(m.AlternateEndingsMask); // volta
                 if ((bitmask & 0x03) != 0) for (var k = 0; k < 4; k++) W8(0); // unknown-4 on sig change
                 if ((bitmask & 0x10) == 0) W8(0); // padding when no volta
                 W8(m.TripletFeel); // triple feel (0 none, 1 eighth, 2 sixteenth)
             }
         }
+    }
+
+    private void WriteMarker(string? marker)
+    {
+        if (marker == null) return;
+        WStringInt(marker);
+        W32(0); // marker color
     }
 
     private void WriteTrack(string trackName, int stringCount, int capo, int trackIndex = 0)
@@ -455,9 +468,10 @@ internal sealed class LegacyGpFixtureBuilder
     {
         var hasEffects = note.GraceFret.HasValue || note.LetRing || note.Slide.HasValue ||
                          note.TremoloPicking || note.TrillUpperFret.HasValue || note.Staccato || note.PalmMute ||
-                         note.HammerOrigin;
+                         note.HammerOrigin || note.Bend != null;
         var bitmask = 0x20 | (hasEffects ? 0x08 : 0); // 0x20 => note type + fret present
         if (note.Accent) bitmask |= 0x40;             // flag-only accent bit
+        if (note.Ghost) bitmask |= 0x04;              // flag-only ghost-note bit
         if (note.LeftFinger.HasValue) bitmask |= 0x80; // fingering block present
         W8(bitmask);
 
@@ -500,7 +514,8 @@ internal sealed class LegacyGpFixtureBuilder
 
     private void WriteNoteEffects(FxNote note)
     {
-        var fx1 = (note.GraceFret.HasValue ? 0x10 : 0) | (note.LetRing ? 0x08 : 0) | (note.HammerOrigin ? 0x02 : 0);
+        var fx1 = (note.GraceFret.HasValue ? 0x10 : 0) | (note.LetRing ? 0x08 : 0) | (note.HammerOrigin ? 0x02 : 0) |
+                  (note.Bend != null ? 0x01 : 0);
         // The slide VALUE lives behind fx2 bit 0x08 and only exists from GP4 on
         // (GP3 has a flag-only slide in fx1 and no value byte at all). Tremolo
         // PICKING (0x04) and the trill (0x20) are GP4+ only for the same reason.
@@ -516,6 +531,19 @@ internal sealed class LegacyGpFixtureBuilder
 
         W8(fx1);
         if (_major >= 4) W8(fx2);
+
+        if (note.Bend is { } bend)
+        {
+            W8(1);  // bend type
+            W32(0); // bend height
+            W32(bend.Length);
+            foreach (var (offset, value) in bend)
+            {
+                W32(offset);
+                W32(value);
+                W8(0);
+            }
+        }
 
         if ((fx1 & 0x10) != 0)
         {

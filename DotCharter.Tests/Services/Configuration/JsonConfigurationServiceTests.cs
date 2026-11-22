@@ -60,6 +60,21 @@ public class JsonConfigurationServiceTests : IDisposable
         BestEffortDelete.Directory(_tempDir);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PasteReplacement_RoundTripsThroughDisk(bool enabled)
+    {
+        var writer = NewService();
+        var config = writer.LoadAppConfig();
+        Assert.True(config.PasteReplacesExisting);
+        config.PasteReplacesExisting = enabled;
+        writer.SaveAppConfig(config);
+        writer.Flush();
+
+        Assert.Equal(enabled, NewService().LoadAppConfig().PasteReplacesExisting);
+    }
+
     [Fact]
     public void LoadAppConfig_NoFile_ReturnsDefaults_AndLogsTraceAfterLoggerAttached()
     {
@@ -165,6 +180,21 @@ public class JsonConfigurationServiceTests : IDisposable
     }
 
     [Fact]
+    public void AFailedQuarantineMoveKeepsTheOriginalSource()
+    {
+        // A legal source component whose quarantine name exceeds the filesystem's
+        // component limit: renaming fails, while deleting the source is permitted.
+        var path = Path.Combine(_tempDir, new string('c', 240) + ".json");
+        const string original = "{ broken config";
+        File.WriteAllText(path, original);
+        var method = typeof(JsonConfigurationService).GetMethod("TryQuarantineCorruptConfig",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+
+        Assert.False((bool)method.Invoke(NewService(), [path, "test corruption", "App config"])!);
+        Assert.Equal(original, File.ReadAllText(path));
+    }
+
+    [Fact]
     public void SaveAppConfig_ThenLoad_RoundTripsAllFields()
     {
         var svc = NewService();
@@ -216,6 +246,7 @@ public class JsonConfigurationServiceTests : IDisposable
         File.WriteAllText(path, """
             {
               "LanguageCulture": "de-DE",
+              "ExtendedRangeFormat": { "ignored": [1, true] },
               "LanDisplayName": "Stage PC",
               "LanPeerId": "0f6d1c7e-2b43-4a0c-9d5e-1f2a3b4c5d6e",
               "AllowPeersDownloadSongs": true,
@@ -792,5 +823,60 @@ public class JsonConfigurationServiceTests : IDisposable
     {
         Assert.True(new AppConfig().LivePlayUseCqtVerifier);
         Assert.True(NewService().LoadAppConfig().LivePlayUseCqtVerifier);
+    }
+
+    [Fact]
+    public void UnknownEnumAndWrongType_ResetOnlyThoseSettings_NoQuarantine()
+    {
+        var path = Path.Combine(_tempDir, "appconfig.json");
+        File.WriteAllText(path, """
+            { "LanguageCulture": "de-DE", "StartupScreen": "Dashboard", "AsioOutputDevice": "loud", "WasapiInputDevice": 7 }
+            """);
+
+        var svc = NewService();
+        var logger = new FakeAppLogger();
+        svc.Logger = logger;
+        var loaded = svc.LoadAppConfig();
+
+        Assert.Equal("de-DE", loaded.LanguageCulture);
+        Assert.Equal(7, loaded.WasapiInputDevice);
+        Assert.Equal(new AppConfig().StartupScreen, loaded.StartupScreen);
+        Assert.Equal(0, loaded.AsioOutputDevice);
+        Assert.Empty(Directory.GetFiles(_tempDir, "appconfig.corrupt-*.json"));
+        Assert.Contains(logger.Entries, e => e.Level == "WARN" && e.Message.Contains("StartupScreen"));
+        Assert.Contains(logger.Entries, e => e.Level == "WARN" && e.Message.Contains("AsioOutputDevice"));
+    }
+
+    [Fact]
+    public void TrulyBrokenJson_IsStillQuarantined()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "appconfig.json"), "{ \"LanguageCulture\": ");
+
+        NewService().LoadAppConfig();
+
+        Assert.Single(Directory.GetFiles(_tempDir, "appconfig.corrupt-*.json"));
+    }
+
+    [Fact]
+    public void EveryEnumSetting_FallsBackToItsOwnDefault_WhenUnknown_KeepingTheRest()
+    {
+        var enumProps = typeof(AppConfig).GetProperties()
+            .Where(p => p.PropertyType.IsEnum && p.CanWrite)
+            .ToList();
+        Assert.Contains(enumProps, p => p.Name == nameof(AppConfig.MinimumLogLevel));
+        Assert.Contains(enumProps, p => p.Name == nameof(AppConfig.StartupScreen));
+
+        foreach (var prop in enumProps)
+        {
+            var path = Path.Combine(_tempDir, "appconfig.json");
+            foreach (var stale in Directory.GetFiles(_tempDir, "appconfig*")) File.Delete(stale);
+            File.WriteAllText(path, $$"""{ "LanguageCulture": "de-DE", "{{prop.Name}}": "FromANewerBuild" }""");
+
+            var loaded = NewService().LoadAppConfig();
+
+            Assert.Equal("de-DE", loaded.LanguageCulture);
+            Assert.Equal(prop.GetValue(new AppConfig()), prop.GetValue(loaded));
+            Assert.Empty(Directory.GetFiles(_tempDir, "appconfig.corrupt-*.json"));
+        }
     }
 }

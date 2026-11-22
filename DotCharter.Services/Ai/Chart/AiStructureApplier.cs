@@ -35,10 +35,12 @@ public static class AiStructureApplier
     /// <param name="changes">Accepted changes.</param>
     /// <param name="applied">How many changes the action carries (stale ones are left out).</param>
     /// <param name="stale">How many were stale.</param>
+    /// <param name="world">The project an event change resolves its arrangements against; without one an
+    /// event change is stale.</param>
     public static IChartAction? Build(Arrangement arrangement, IReadOnlyList<AiStructureChange> changes, out int applied,
-        out int stale)
+        out int stale, AiStructureWorld? world = null)
     {
-        var composition = Compose(arrangement, changes);
+        var composition = Compose(arrangement, changes, world);
         applied = composition.Applied;
         stale = composition.Stale;
         var composite = new CompositeAction(composition.Actions) { LabelKey = AiChartApplier.HistoryLabelKey };
@@ -48,18 +50,20 @@ public static class AiStructureApplier
     /// <summary>What <see cref="Build" /> would change, read off the same composition: the review's
     /// marks. Nothing is built or executed.</summary>
     public static AiStructureApplyTargets Preview(Arrangement arrangement, IReadOnlyList<AiStructureChange> changes,
-        out int applied)
+        out int applied, AiStructureWorld? world = null)
     {
-        var composition = Compose(arrangement, changes);
+        var composition = Compose(arrangement, changes, world);
         applied = composition.Applied;
         return composition.Targets;
     }
 
-    private static Composition Compose(Arrangement arrangement, IReadOnlyList<AiStructureChange> changes)
+    private static Composition Compose(Arrangement arrangement, IReadOnlyList<AiStructureChange> all, AiStructureWorld? world)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
-        ArgumentNullException.ThrowIfNull(changes);
+        ArgumentNullException.ThrowIfNull(all);
 
+        // Event changes are the dialog's own edit, over every arrangement they name: they never go through Work.
+        var changes = all.Where(c => c.Op != AiStructureOp.Event).ToList();
         var work = new Work(arrangement.EventPoints, changes);
         work.ClaimSources();
         work.AssignNames();
@@ -72,7 +76,14 @@ public static class AiStructureApplier
         }
 
         var applied = work.Ok.Count(x => x);
-        return new Composition(actions, applied, changes.Count - applied,
+        foreach (var change in all.Where(c => c.Op == AiStructureOp.Event))
+        {
+            if (!AiStructureEvents.Append(change, world, actions)) continue;
+            applied++;
+            if (AiStructureEvents.Shown(change) is { } shown) proposed.Add(shown);
+        }
+
+        return new Composition(actions, applied, all.Count - applied,
             new AiStructureApplyTargets(replacedSections, replacedPhrases, proposed, anchorMarks));
     }
 

@@ -89,6 +89,50 @@ public class AnchorRemovalMathTests
     }
 
     [Fact]
+    public void Compute_SixEightUsesQuarterNoteBpm()
+    {
+        var beats = Enumerable.Range(0, 7).Select(i => new BeatMarker
+        {
+            Time = i * 250,
+            Bpm = 120,
+            BeatsInMeasure = 6,
+            NoteDenominator = 8,
+            IsAnchor = i is 0 or 3 or 6
+        }).ToList();
+        beats[3].Time = 900;
+
+        var (_, plan) = AnchorRemovalMath.Compute(beats, 3)!.Value;
+
+        for (var i = 0; i < plan.Count; i++)
+        {
+            Assert.Equal(i * 250.0, plan[i].Time, 6);
+            Assert.Equal(120.0, plan[i].Bpm, 6);
+            Assert.Equal(8, plan[i].NoteDenominator);
+        }
+
+        Assert.False(plan[3].IsAnchor);
+        Assert.Equal(900.0, beats[3].Time);
+        Assert.True(beats[3].IsAnchor);
+    }
+
+    [Fact]
+    public void Compute_MixedDenominatorsWeightEachInterval()
+    {
+        var beats = MakeBeats((0, true, 120), (400, false, 120), (700, true, 120),
+            (1100, false, 120), (1500, true, 90));
+        beats[1].NoteDenominator = 8;
+        beats[2].NoteDenominator = 8;
+
+        var (_, plan) = AnchorRemovalMath.Compute(beats, 2)!.Value;
+
+        Assert.Equal(new[] { 0.0, 500.0, 750.0, 1000.0, 1500.0 }, plan.Select(b => b.Time).ToArray());
+        Assert.All(plan.Take(4), b => Assert.Equal(120.0, b.Bpm, 6));
+        Assert.Equal(90.0, plan[4].Bpm);
+        Assert.Equal(8, plan[1].NoteDenominator);
+        Assert.Equal(8, plan[2].NoteDenominator);
+    }
+
+    [Fact]
     public void Compute_DegenerateSpan_ClampsToMinSpan()
     {
         // Two surrounding anchors at the same time → span clamped, no NaN/Infinity.

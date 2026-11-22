@@ -28,7 +28,13 @@
 /// </summary>
 public sealed class LinkNextRule : IArrangementRule
 {
-    private const int LinkNextToleranceMs = 10;
+    /// <summary>
+    ///     DLC Builder's own tolerance (<c>InstrumentalChecker.checkLinkNext</c>: more than 1 ms
+    ///     between the sustain end and the next note is I08), applied to WHOLE milliseconds because
+    ///     that is what the export writes: a sound's start and its sustain end are each rounded to a
+    ///     millisecond, so the fractional gap of a link the file spells exactly can never trip it.
+    /// </summary>
+    private const int LinkNextToleranceMs = 1;
 
     public void Validate(ArrangementValidationContext context, ICollection<ArrangementIssue> issues)
     {
@@ -95,16 +101,16 @@ public sealed class LinkNextRule : IArrangementRule
         if (next == null)
         {
             issues.Add(source.Issue(ArrangementIssueType.LinkNextMissingTargetNote, timeMs,
-                "Sound has Link-Next but there's no following note on the same string."));
+                "Validation_LinkNextMissingTargetNote"));
             return;
         }
 
         var endMs = source.EndPosition.GetPositionMs(beats);
         var nextTimeMs = next.Position.GetPositionMs(beats);
-        if (Math.Abs(nextTimeMs - endMs) > LinkNextToleranceMs)
+        if (Math.Abs(TimelineMath.ToWholeMs(nextTimeMs) - TimelineMath.ToWholeMs(endMs)) > LinkNextToleranceMs)
         {
             issues.Add(source.Issue(ArrangementIssueType.IncorrectLinkNext, timeMs,
-                "Link-Next target note doesn't start where this sound's sustain ends."));
+                "Validation_IncorrectLinkNext"));
             return;
         }
 
@@ -115,13 +121,13 @@ public sealed class LinkNextRule : IArrangementRule
                 if (slideTo != next.Fret)
                 {
                     issues.Add(source.Issue(ArrangementIssueType.LinkNextSlideMismatch, timeMs,
-                        $"Link-Next slide ends on fret {slideTo} but next note is on fret {next.Fret}."));
+                        "Validation_LinkNextSlideMismatch", [slideTo, next.Fret]));
                 }
             }
             else
             {
                 issues.Add(source.Issue(ArrangementIssueType.LinkNextFretMismatch, nextTimeMs,
-                    $"Link-Next target fret ({next.Fret}) doesn't match the source's fret ({source.Fret})."));
+                    "Validation_LinkNextFretMismatch", [next.Fret, source.Fret]));
             }
         }
 
@@ -135,7 +141,7 @@ public sealed class LinkNextRule : IArrangementRule
             if (Math.Abs(lastStep - nextFirstStep) > 0.0001)
             {
                 issues.Add(source.Issue(ArrangementIssueType.LinkNextBendMismatch, nextTimeMs,
-                    $"Link-Next bend mismatch: source ends at {lastStep} steps, target starts at {nextFirstStep}."));
+                    "Validation_LinkNextBendMismatch", [lastStep, nextFirstStep]));
             }
         }
     }
@@ -167,7 +173,8 @@ public sealed class LinkNextRule : IArrangementRule
                     Position = chord.Position,
                     StringIndex = chordNote.StringIndex,
                     Fret = chordNote.Fret,
-                    Sustain = chordNote.Sustain
+                    Sustain = chordNote.Sustain,
+                    BendValues = new(chordNote.BendValues.Select(b => b.Clone()).ToList())
                 };
             }
         }
@@ -200,9 +207,9 @@ public sealed class LinkNextRule : IArrangementRule
             chord.Position, chordNote.Sustain, chordNote.StringIndex, chordNote.Fret, chordNote.SlideTo,
             chordNote.BendValues, null, chord);
 
-        public ArrangementIssue Issue(ArrangementIssueType type, double timeMs, string message) =>
+        public ArrangementIssue Issue(ArrangementIssueType type, double timeMs, string key, object[]? args = null) =>
             Note != null
-                ? ArrangementIssues.Note(type, Note, timeMs, message)
-                : ArrangementIssues.Chord(type, Chord!, timeMs, message, StringIndex);
+                ? ArrangementIssues.Note(type, Note, timeMs, key, args: args)
+                : ArrangementIssues.Chord(type, Chord!, timeMs, key, StringIndex, args);
     }
 }

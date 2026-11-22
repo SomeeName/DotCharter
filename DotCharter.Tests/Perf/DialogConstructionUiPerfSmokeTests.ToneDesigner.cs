@@ -246,13 +246,19 @@ public sealed partial class DialogConstructionUiPerfSmokeTests
                     Assert.Same(vm.ImportToneFileCommand, chip.Command);
 
                     var before = vm.ProjectTones.Count;
-                    // The command resumes on this dispatcher after reading the file: pump it, never block it.
+                    // The command resumes on this dispatcher after reading the file: pump it until the
+                    // command's own task ends, never block it. The minute is a deadlock detector.
                     chip.Command!.Execute(null);
-                    for (var i = 0; i < 500 && vm.ProjectTones.Count == before; i++)
+                    var import = ((CommunityToolkit.Mvvm.Input.IAsyncRelayCommand)vm.ImportToneFileCommand).ExecutionTask;
+                    Assert.NotNull(import);
+                    var deadlock = System.Diagnostics.Stopwatch.StartNew();
+                    while (!import.IsCompleted && deadlock.Elapsed < TimeSpan.FromSeconds(60))
                     {
                         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-                        Thread.Sleep(10);
+                        Thread.Sleep(1);
                     }
+                    Assert.True(import.IsCompleted, "the tone-file import never finished (or the box was starved for a minute)");
+                    Assert.True(import.IsCompletedSuccessfully, $"the tone-file import failed: {import.Exception}");
                     Assert.Equal(before + 1, vm.ProjectTones.Count);
                     Assert.Equal("Test", vm.SelectedTone?.Key);
                 });

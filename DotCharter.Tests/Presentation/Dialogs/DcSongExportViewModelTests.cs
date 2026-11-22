@@ -22,6 +22,35 @@ public sealed class DcSongExportViewModelTests : IDisposable
     public void Dispose() => BestEffortDelete.Directory(_dir);
 
     [Fact]
+    public async Task TheProbeUsesTheSameParentFolderAudioAsTheProjectLoader()
+    {
+        var h = new Harness(_dir);
+        File.Delete(Path.Combine(h.ProjectDir, "song.wav"));
+        var audio = Path.Combine(_dir, "song.wav");
+        File.WriteAllBytes(audio, [1]);
+
+        using var vm = h.Open(new DcSongExporter(new FakeAppLogger(), () => null, () => true));
+        await vm.ProbeTask;
+
+        Assert.False(vm.IsExportBlocked);
+    }
+
+    [Fact]
+    public async Task ADeviceAudioReferenceCannotEnableExport()
+    {
+        var h = new Harness(_dir);
+        var folder = Directory.CreateDirectory(Path.Combine(_dir, "outside")).FullName;
+        var audio = Path.Combine(folder, "foreign.wav");
+        File.WriteAllBytes(audio, [1]);
+        h.State.CurrentAudioFileName = @"\\?\" + audio;
+
+        using var vm = h.Open(new DcSongExporter(new FakeAppLogger(), () => null, () => true));
+        await vm.ProbeTask;
+
+        Assert.Equal(_loc["Dialog_DcSong_AudioMissing"], vm.ExportBlockedReason);
+    }
+
+    [Fact]
     public void Opens_on_Opus_with_every_arrangement_ticked_stems_offered_but_off_and_the_file_in_the_Library()
     {
         var h = new Harness(_dir);
@@ -41,9 +70,9 @@ public sealed class DcSongExportViewModelTests : IDisposable
         Assert.Equal("Polkadot Stingray — Sakasama", vm.SongLine);
         Assert.False(vm.IsExportBlocked);
         Assert.True(vm.ExportCommand.CanExecute(null));
-        // The probe was asked about the project's own stems and its audio, resolved against the project folder.
+        // The probe receives the declared audio reference and resolves it on its worker.
         var probe = Assert.Single(h.Exporter.ProbeRequests);
-        Assert.Equal(Path.Combine(h.ProjectDir, "song.wav"), probe.AudioPath);
+        Assert.Equal("song.wav", probe.AudioPath);
         Assert.Equal(h.ProjectDir, probe.ProjectDirectory);
     }
 
@@ -128,7 +157,9 @@ public sealed class DcSongExportViewModelTests : IDisposable
     public async Task Export_writes_what_was_chosen_and_says_where_it_went()
     {
         var h = new Harness(_dir);
-        h.Exporter.Probe = h.Exporter.Probe with { Stems = [Stem("drums"), Stem("vocals")] };
+        var original = new Stem { Name = "Drums", Volume = 0.25, Offset = 123, Muted = true, Solo = true };
+        h.State.ActiveProject!.Stems.Add(original);
+        h.Exporter.Probe = h.Exporter.Probe with { Stems = [Stem("drums") with { Original = original }, Stem("vocals")] };
         h.Exporter.Write = (request, _, _) => Task.FromResult(
             FakeDcSongExporter.Written(request, 27_600_000, DcSongWriteWarning.LossySourceInLosslessPackage));
         var vm = h.Open();
@@ -142,9 +173,11 @@ public sealed class DcSongExportViewModelTests : IDisposable
 
         var request = Assert.Single(h.Exporter.WriteRequests);
         Assert.Same(h.State.ActiveProject, request.Project);
+        Assert.Equal(Path.Combine(h.ProjectDir, "song.wav"), request.AudioPath);
         Assert.Equal([0, 2], request.ArrangementIndexes);
         Assert.True(request.Lossless);
         Assert.Equal(["drums", "vocals"], request.Stems.Select(s => s.Name));
+        Assert.Same(original, request.Stems[0].Original);
         Assert.Null(request.CoverPath);
         Assert.Equal(@"D:\Art\banner.jpg", request.BannerPath);
         Assert.Equal(Path.Combine(h.Library, "mine.dcsong"), request.OutputPath);
@@ -247,7 +280,7 @@ public sealed class DcSongExportViewModelTests : IDisposable
 
         var vm = h.Open();
 
-        Assert.Equal(Path.Combine(h.ProjectDir, "Polkadot Stingray - Sakasama.dcsong"), vm.OutputPath);
+        Assert.Equal(Path.Combine(h.ProjectDir, "export"), Path.GetDirectoryName(vm.OutputPath));
         Assert.Equal(_loc["Dialog_DcSong_Output_NoLibraryDesc"], vm.OutputNote);
     }
 
@@ -283,6 +316,7 @@ public sealed class DcSongExportViewModelTests : IDisposable
         public Harness(string root)
         {
             ProjectDir = Directory.CreateDirectory(Path.Combine(root, "project")).FullName;
+            File.WriteAllBytes(Path.Combine(ProjectDir, "song.wav"), [1]);
             Library = Directory.CreateDirectory(Path.Combine(root, "library")).FullName;
             Config.AppConfig.PsarcLibraryPath = Library;
             var project = new ChartProject();
@@ -294,6 +328,7 @@ public sealed class DcSongExportViewModelTests : IDisposable
             State.CurrentProjectPath = Path.Combine(ProjectDir, "song.rscp");
             State.CurrentAudioFileName = "song.wav";
             State.TotalAudioLengthMs = 180_000;
+            Exporter.Probe = Exporter.Probe with { AudioPath = Path.Combine(ProjectDir, "song.wav") };
         }
 
         public string ProjectDir { get; }
@@ -302,14 +337,14 @@ public sealed class DcSongExportViewModelTests : IDisposable
         public FakeConfigurationService Config { get; } = new();
         public FakeDcSongExporter Exporter { get; } = new();
 
-        public DcSongExportViewModel Open()
+        public DcSongExportViewModel Open(IDcSongExporter? exporter = null)
         {
             var logger = new FakeAppLogger();
             var edit = new ChartEditDialogServices(RecordingProxy.Create<IChartEditorSurface>().Proxy,
                 new HistoryService(logger), State, Config, FakeLocalization.English(), logger);
             var io = new DcSongExportServices(RecordingProxy.Create<IEditorTransport>().Proxy,
                 RecordingProxy.Create<IProjectDocumentService>().Proxy, new FakeFileStorageService(), new ExportTargetWriter(),
-                RecordingProxy.Create<IShellLauncher>().Proxy, Exporter);
+                RecordingProxy.Create<IShellLauncher>().Proxy, exporter ?? Exporter);
             return new DcSongExportViewModel(edit, io);
         }
     }

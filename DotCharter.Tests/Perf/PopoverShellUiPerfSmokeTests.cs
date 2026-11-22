@@ -46,7 +46,7 @@ public sealed class PopoverShellUiPerfSmokeTests
         WithRealizedPopovers(() => new ToolbarView(), popovers =>
         {
             // Mix · Tempo · Tools · Tracks · Undo · Redo · Overflow (0.59)
-            Assert.Equal(7, popovers.Count);
+            Assert.Equal(9, popovers.Count);
 
             foreach (var popover in popovers)
             {
@@ -109,7 +109,7 @@ public sealed class PopoverShellUiPerfSmokeTests
         WithRealizedPopovers(() => new ToolbarView(), popovers =>
         {
             var withFooter = popovers.Where(p => p.HasFooter).ToList();
-            Assert.Equal(7, withFooter.Count);
+            Assert.Equal(9, withFooter.Count);
 
             foreach (var popover in withFooter)
             {

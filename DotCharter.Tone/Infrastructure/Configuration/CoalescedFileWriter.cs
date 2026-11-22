@@ -62,6 +62,7 @@ internal sealed class CoalescedFileWriter<TPayload> : IDisposable where TPayload
 
     private CancellationTokenSource? _armed;
     private bool _disposed;
+    private long _failedWrites;
     private Task _drain = Task.CompletedTask;
 
     /// <param name="write">Performs the actual serialize + atomic write. Runs on
@@ -142,21 +143,42 @@ internal sealed class CoalescedFileWriter<TPayload> : IDisposable where TPayload
     }
 
     /// <summary>Performs any pending write NOW and waits for it. Must not be
-    /// called while holding a lock the write callback also takes.</summary>
-    public void Flush()
-    {
-        while (true)
-        {
-            Task drain;
-            lock (_sync)
-            {
-                if (_pending.Count == 0 && _drain.IsCompleted) return;
-                _armed?.Cancel(); // pull the debounce window forward
-                drain = _drain;
-            }
+    /// called while holding a lock the write callback also takes.
+    /// <para>The write happens on the CALLING thread, not on the drain: the drain
+    /// is a thread-pool work item, and a starved pool (a full test gate, a
+    /// loaded machine) can leave it unscheduled for longer than the exit-path
+    /// timeout, and a Flush that waited on it returned with nothing written and
+    /// nothing reported. Taking <c>_writeGate</c> still waits out a write that
+    /// is already in flight (bounded by the same timeout, so a stalled network
+    /// drive cannot hang a quit) and keeps the order: the newest payload lands
+    /// last.</para></summary>
+    public void Flush() => TryFlush();
 
-            if (!drain.Wait(FlushTimeout)) return;
+    /// <summary>Writes that threw since construction. A caller that must know whether ITS
+    /// payload reached the disk reads this before queueing it and compares after
+    /// <see cref="TryFlush" />.</summary>
+    public long FailedWrites => Interlocked.Read(ref _failedWrites);
+
+    /// <summary><see cref="Flush" />, reporting whether it ran: false when a write already in
+    /// flight outlasted the timeout, so the pending payload may still be unwritten.</summary>
+    public bool TryFlush()
+    {
+        lock (_sync)
+        {
+            if (_pending.Count == 0 && _drain.IsCompleted) return true;
+            _armed?.Cancel(); // pull the debounce window forward
         }
+
+        if (!Monitor.TryEnter(_writeGate, FlushTimeout)) return false;
+        try
+        {
+            WritePending();
+        }
+        finally
+        {
+            Monitor.Exit(_writeGate);
+        }
+        return true;
     }
 
     private async Task DrainAsync(CancellationTokenSource cts)
@@ -221,6 +243,7 @@ internal sealed class CoalescedFileWriter<TPayload> : IDisposable where TPayload
         }
         catch (Exception ex)
         {
+            Interlocked.Increment(ref _failedWrites);
             _onError?.Invoke(ex);
         }
     }

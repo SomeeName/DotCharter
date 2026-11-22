@@ -109,10 +109,13 @@ public sealed class AudioDisposalLifetimeTests : IDisposable
     public void ASandboxCrashClearsTheSlotTableImmediately()
     {
         var body = MethodBody("DotCharter.Tone/Audio/JuceAudioPlaybackService.Sandbox.cs",
-            "private void NotifySlotsUnloadedAfterCrash()");
+            "private void NotifySlotsUnloadedAfterCrash(VstSandboxSeat seat)");
 
-        Assert.Contains("_sandboxSlots.Clear();", body, StringComparison.Ordinal);
-        Assert.Contains("_sandboxInstrumentLoaded = false;", body, StringComparison.Ordinal);
+        Assert.Contains("seat.ClearLive()", body, StringComparison.Ordinal);
+        var clear = MethodBody("DotCharter.Tone/Audio/Vst/Sandbox/VstSandboxSeat.cs",
+            "public (List<Guid> Slots, bool Instrument) ClearLive()");
+        Assert.Contains("Slots.Clear();", clear, StringComparison.Ordinal);
+        Assert.Contains("InstrumentLoaded = false;", clear, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -124,10 +127,10 @@ public sealed class AudioDisposalLifetimeTests : IDisposable
     [Fact]
     public void TheSandboxHealthTimerStopsWithTheSandbox()
     {
-        var body = MethodBody("DotCharter.Tone/Audio/JuceAudioPlaybackService.Sandbox.cs",
-            "private async Task ShutdownSandboxLockedAsync(bool disarmBridge)");
+        var body = MethodBody("DotCharter.Tone/Audio/Vst/Sandbox/VstSandboxSeat.cs",
+            "public IVstSandboxHost? TakeHostForShutdown(bool disarmBridge)");
 
-        Assert.Contains("StopSandboxHealthTimer();", body, StringComparison.Ordinal);
+        Assert.Contains("Recovery.StopHealthTimer();", body, StringComparison.Ordinal);
     }
 
     // ----- helpers -----------------------------------------------------------

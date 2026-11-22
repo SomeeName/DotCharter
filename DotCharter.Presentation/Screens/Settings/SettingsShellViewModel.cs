@@ -183,6 +183,13 @@ public sealed partial class SettingsShellViewModel : ObservableObject, ISettings
     {
         if (!HasUnsavedChanges) return;
         foreach (var tab in _tabs) tab.Save();
+        if (_tabs.FirstOrDefault(t => t.HasSaveError) is { } failed)
+        {
+            Select(failed.Key);
+            Recount();
+            return;
+        }
+
         foreach (var source in _changes) source.Rebaseline();
         Recount();
         Close();

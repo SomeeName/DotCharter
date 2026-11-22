@@ -49,19 +49,21 @@ public sealed class MainMenuLabelsTests
 
     /// <summary>An item that opens something to fill in says so with "…" (the desktop rule the
     /// rest of the menu follows). "Showlights editor" opened a dialog without one. Commands that
-    /// go to a SCREEN (Play mode, Settings) are places, not dialogs, and take none.</summary>
+    /// go to a SCREEN, PANEL or TAB (Play mode, Settings, the AI chat panel, the Inspector's Issues tab) are places, not dialogs, and take none.</summary>
     [Fact]
     public void EveryDialogOpener_EndsInAnEllipsis()
     {
         var menu = MainMenuSource.ReadAllText();
         var resx = UiSourceTree.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "DotCharter.Localization", "Resources.resx"));
-        string[] screens = ["OpenPlayModeCommand", "OpenSettingsCommand"];
+        string[] screens = ["OpenPlayModeCommand", "OpenSettingsCommand", "ShowAiChatCommand"];
+        string[] tabs = ["OpenQualityReportCommand"]; // opens the Inspector's Issues tab
         var openers = Regex.Matches(menu, @"<MenuItem\s+Header=""\{localization:Loc (?<key>\w+)\}""\s+Command=""\{Binding (?:\w+\.)?(?<cmd>Open\w+|Show\w+)\}""")
             .Select(m => (Key: m.Groups["key"].Value, Command: m.Groups["cmd"].Value))
-            .Where(p => !screens.Contains(p.Command))
+            .Where(p => !screens.Contains(p.Command) && !tabs.Contains(p.Command))
             .ToList();
         Assert.True(openers.Count > 20, $"only {openers.Count} dialog openers matched — the pattern no longer fits the menu");
         foreach (var screen in screens) Assert.Contains($"{{Binding {screen}}}", menu);
+        foreach (var tab in tabs) Assert.Contains($"{{Binding ShellDialogs.{tab}}}", menu);
 
         var bare = openers
             .Select(p => (p.Key, Value: System.Net.WebUtility.HtmlDecode(Regex.Match(resx,

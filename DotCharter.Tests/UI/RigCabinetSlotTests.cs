@@ -6,6 +6,36 @@ namespace DotCharter.Tests.UI;
 public sealed class RigCabinetSlotTests
 {
     [Fact]
+    public void IrSubscriptions_UpdateAcrossGc_AndDoNotKeepTheDockAlive()
+    {
+        var type = CabinetType();
+        var chain = new FakeDspChainService([type]);
+        var node = new PedalNodeViewModel(chain, chain.AddNode("cab")!, type, FakeLocalization.English());
+        var weak = ExerciseCollectableDock(node);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        Assert.False(weak.TryGetTarget(out _));
+        node.StringParams[0].Value = "after.wav";
+        GC.KeepAlive(node);
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static WeakReference<RigDockUnit> ExerciseCollectableDock(PedalNodeViewModel node)
+    {
+        var dock = new RigDockUnit(node);
+        var changes = new List<string?>();
+        dock.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        node.StringParams[0].Value = "alive.wav";
+        Assert.True(dock.HasAnyImpulseResponse);
+        Assert.Contains(nameof(RigDockUnit.HasAnyImpulseResponse), changes);
+        return new WeakReference<RigDockUnit>(dock);
+    }
+
+    [Fact]
     public void SlotBControlsFollowItsFileWhileSlotARemainsActiveWithBuiltInIr()
     {
         var type = CabinetType();
@@ -27,6 +57,27 @@ public sealed class RigCabinetSlotTests
         Assert.False(b.CanControl);
         Assert.Equal(emptyStatus, b.StatusText);
         Assert.True(a.CanControl);
+    }
+
+    [Fact]
+    public void UseBuiltInCabinet_FollowsAnIrLoadedOrClearedInEitherSlot()
+    {
+        var type = CabinetType();
+        var chain = new FakeDspChainService([type]);
+        var node = new PedalNodeViewModel(chain, chain.AddNode("cab")!, type, FakeLocalization.English());
+        var dock = new RigDockUnit(node);
+        var changes = new List<string?>();
+        dock.PropertyChanged += (_, args) => changes.Add(args.PropertyName);
+        Assert.False(dock.HasAnyImpulseResponse);
+
+        dock.CabinetSlots[1].File!.Value = "room-b.wav";
+        Assert.True(dock.HasAnyImpulseResponse);
+        Assert.Contains(nameof(RigDockUnit.HasAnyImpulseResponse), changes);
+
+        changes.Clear();
+        dock.ClearImpulseResponsesCommand.Execute(null);
+        Assert.False(dock.HasAnyImpulseResponse);
+        Assert.Contains(nameof(RigDockUnit.HasAnyImpulseResponse), changes);
     }
 
     [Fact]

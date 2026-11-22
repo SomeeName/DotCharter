@@ -67,5 +67,5 @@ public static class RenderingConstants
     public const float FingeringVerticalOffset = 0.3f;
 
     // Fret anchor rendering
-    public const double AnchorTailMaxMs = 5000.0;
+    public const double AnchorTailMaxMs = DotCharter.Core.Graphics.AnchorSpan.TailMaxMs;
 }

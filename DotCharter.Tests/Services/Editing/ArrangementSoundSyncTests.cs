@@ -21,6 +21,101 @@ namespace DotCharter.Tests.Services.Editing;
 /// </summary>
 public sealed class ArrangementSoundSyncTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CopyingAFingering_MintsOneGripWithoutRewritingOtherTargetUsers(bool fingerless)
+    {
+        var source = Arr("Lead");
+        var target = Arr("Rhythm");
+        var authored = Template(source, 7, (0, 5), (1, 7));
+        authored.Fingerless = fingerless;
+        if (!fingerless)
+        {
+            authored.Fingers[0] = 1;
+            authored.Fingers[1] = 4;
+        }
+
+        var incumbent = Template(target, 2, (0, 5), (1, 7));
+        incumbent.Fingers[0] = 2;
+        incumbent.Fingers[1] = 3;
+        var before = incumbent.Clone();
+        foreach (var beat in new[] { 4, 8 })
+        {
+            AddChord(source, beat, (0, 5), (1, 7)).TemplateId = authored.Id;
+            AddChord(target, beat, (0, 5), (1, 7)).TemplateId = incumbent.Id;
+        }
+
+        source.Levels[0].HandShapes.Add(new HandShape
+        {
+            Position = new FractionalPosition(4), EndPosition = new FractionalPosition(5), TemplateId = authored.Id
+        });
+        var outside = AddChord(target, 20, (0, 5), (1, 7));
+        outside.TemplateId = incumbent.Id;
+        target.Levels[0].HandShapes.Add(new HandShape
+        {
+            Position = new FractionalPosition(20), EndPosition = new FractionalPosition(22), TemplateId = incumbent.Id
+        });
+
+        var summary = ArrangementSoundSync.Apply(source, target);
+
+        Assert.Equal(before, incumbent);
+        Assert.Equal(incumbent.Id, outside.TemplateId);
+        var copied = target.FindChordTemplate(target.Levels[0].Chords[0].TemplateId);
+        Assert.NotNull(copied);
+        Assert.NotSame(incumbent, copied);
+        Assert.Equal(authored, copied);
+        Assert.Equal(1, summary.Templates);
+        Assert.All(target.Levels[0].Chords.Take(2), c => Assert.Equal(copied.Id, c.TemplateId));
+        Assert.Equal(copied.Id, target.Levels[0].HandShapes[0].TemplateId);
+        Assert.Equal(incumbent.Id, target.Levels[0].HandShapes[1].TemplateId);
+    }
+
+    [Fact]
+    public void ATemplateWithAnIdenticalGripAndIntent_IsReused()
+    {
+        var source = Arr("Lead");
+        var target = Arr("Rhythm");
+        var authored = Template(source, 7, (0, 5), (1, 7));
+        authored.Fingers[0] = 1;
+        authored.Fingers[1] = 4;
+        var compatible = authored.Clone();
+        compatible.Id = 2;
+        target.ChordTemplates.Add(compatible);
+        AddChord(source, 4, (0, 5), (1, 7)).TemplateId = authored.Id;
+        var twin = AddChord(target, 4, (0, 5), (1, 7));
+
+        var summary = ArrangementSoundSync.Apply(source, target);
+
+        Assert.Equal(0, summary.Templates);
+        Assert.Same(compatible, Assert.Single(target.ChordTemplates));
+        Assert.Equal(compatible.Id, twin.TemplateId);
+    }
+
+    [Fact]
+    public void CopyingAPinnedGrip_AddsItsCloneEvenWhenAnUnpinnedValueEqualGripExists()
+    {
+        var source = Arr("Lead");
+        var target = Arr("Rhythm");
+        var authored = Template(source, 7, (0, 5), (1, 7));
+        authored.Pinned = true;
+        var incumbent = authored.Clone();
+        incumbent.Id = 2;
+        incumbent.Pinned = false;
+        target.ChordTemplates.Add(incumbent);
+        AddChord(source, 4, (0, 5), (1, 7)).TemplateId = authored.Id;
+        var twin = AddChord(target, 4, (0, 5), (1, 7));
+
+        ArrangementSoundSync.Apply(source, target);
+
+        Assert.Equal(2, target.ChordTemplates.Count);
+        var copied = target.FindChordTemplate(twin.TemplateId);
+        Assert.NotNull(copied);
+        Assert.True(copied.Pinned);
+        Assert.False(incumbent.Pinned);
+        Assert.NotEqual(incumbent.Id, copied.Id);
+    }
+
     [Fact]
     public void ASharedNote_TakesTheSourcesExpression()
     {
@@ -102,13 +197,14 @@ public sealed class ArrangementSoundSyncTests
         AddNote(target, 4, 0, 7);
         AddNote(target, 5, 1, 9);
 
-        var grip = Template(source, 0, (0, 7), (1, 9));
+        var grip = Template(source, 0, (0, 7), (1, 9), (2, 9));
         grip.Fingers[0] = 1;
         grip.Fingers[1] = 3;
         grip.Name = "Bmin";
         source.Levels[0].HandShapes.Add(new HandShape
         {
-            Position = new FractionalPosition(4), EndPosition = new FractionalPosition(6), TemplateId = 0
+            Position = new FractionalPosition(4), EndPosition = new FractionalPosition(6), TemplateId = 0,
+            GhostMask = 1 << 2
         });
 
         var summary = ArrangementSoundSync.Apply(source, target);
@@ -119,6 +215,7 @@ public sealed class ArrangementSoundSyncTests
         Assert.Equal(grip.Frets, targetGrip.Frets);
         Assert.Equal(grip.Fingers, targetGrip.Fingers); // the fingering is the point
         Assert.Equal("Bmin", targetGrip.Name);
+        Assert.Equal(1 << 2, copied.GhostMask);
     }
 
     /// <summary>

@@ -35,14 +35,14 @@ public sealed class InspectorNarrowWidthUiPerfSmokeTests
         await HeadlessSessionFixture.Dispatch(() => WithPane(width, view =>
         {
             var sound = view.GetVisualDescendants().OfType<SoundInspectorView>().Single();
-            var bar = sound.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "SoundNavRow");
-            var row = Assert.IsAssignableFrom<Panel>(bar.Child);
+            // the navigation half of the pinned footer (inspector design D, #751)
+            var row = sound.GetVisualDescendants().OfType<StackPanel>().Single(b => b.Name == "NoteFooterNav");
             var parts = row.Children.Where(c => c.IsVisible).ToList();
             Assert.True(parts.Count >= 5, $"the navigation row holds {parts.Count} visible parts — repoint this test");
             Assert.All(parts, part => Assert.True(part.Bounds is { Width: > 1, Height: > 1 },
                 $"a navigation-row part ({part.GetType().Name}) laid out as {part.Bounds} at {width} px"));
 
-            var filter = sound.GetVisualDescendants().OfType<Button>().First(c => c.Name == "SoundNavFilter");
+            var filter = sound.GetVisualDescendants().OfType<Button>().First(c => c.Name == "NoteFooterFilter");
             var (filterLeft, filterRight) = NarrowWidthLayout.Span(filter, row);
             Console.WriteLine($"[narrow-width] navigation row @{width}: row {row.Bounds.Width:0.#}x{row.Bounds.Height:0.#}, " +
                               $"filter {filterLeft:0.#}..{filterRight:0.#}; parts " +
@@ -82,6 +82,9 @@ public sealed class InspectorNarrowWidthUiPerfSmokeTests
             var view = new InspectorView { DataContext = vm };
             window = NarrowWidthLayout.NewWindow(width, PaneHeight, view);
             window.Show();
+            NarrowWidthLayout.Settle(window);
+            HeadlessIssuePass.Settle(vm.Issues);
+            Assert.Contains(vm.Issues.Items, issue => issue.Type == ArrangementIssueType.NoteOutsideAnchorRange);
             NarrowWidthLayout.Settle(window);
             NarrowWidthLayout.Capture(window, $"inspector-{width}");
             body(view);

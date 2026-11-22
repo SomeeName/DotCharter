@@ -14,6 +14,43 @@ namespace DotCharter.Tests.Presentation.Dialogs;
 /// </summary>
 public sealed class RsXmlImportViewModelTests : IDisposable
 {
+    [Theory]
+    [InlineData("<song><arrangement>Lead</arrangement><ebeats><ebeat time=\"0\" measure=\"0\" /><ebeat time=\"0.5\" /></ebeats></song>")]
+    [InlineData("<vocals count=\"1\"><vocal time=\"0.5\" length=\"0.5\" note=\"60\" lyric=\"word\" /></vocals>")]
+    [InlineData("<showlights count=\"1\"><showlight time=\"0.5\" note=\"24\" /></showlights>")]
+    public async Task Every_import_is_one_dirty_undo_step_and_redo_reuses_the_imported_objects(string xml)
+    {
+        var edit = new ChartEditHarness();
+        edit.Project.Beats.Clear();
+        var originalArrangement = edit.Project.Arrangements[0];
+        var path = Path.Combine(_tempDir, "import.xml");
+        File.WriteAllText(path, xml);
+        using var dirty = new ProjectDirtyTracker(edit.History);
+        var vm = HistoryTestActivation.Create<RsXmlImportViewModel>(edit.History, edit.State, edit.Editor, FakeLocalization.English(), new FakeAppLogger());
+
+        vm.Configure(new RsXmlImportRequest(path));
+        await vm.Import;
+
+        Assert.True(ChartEditHarness.Answer(vm.Result));
+        Assert.True(dirty.IsDirty);
+        Assert.Single(edit.History.GetUndoSteps());
+        var arrangements = edit.Project.Arrangements.ToArray();
+        var vocals = edit.Project.VocalTracks.ToArray();
+        var lights = edit.Project.Showlights.ToArray();
+        var beats = edit.Project.Beats.ToArray();
+        edit.History.Undo();
+        Assert.False(dirty.IsDirty);
+        Assert.Same(originalArrangement, Assert.Single(edit.Project.Arrangements));
+        Assert.Empty(edit.Project.VocalTracks);
+        Assert.Empty(edit.Project.Showlights);
+        Assert.Empty(edit.Project.Beats);
+        edit.History.Redo();
+        Assert.Equal(arrangements, edit.Project.Arrangements);
+        Assert.Equal(vocals, edit.Project.VocalTracks);
+        Assert.Equal(lights, edit.Project.Showlights);
+        Assert.Equal(beats, edit.Project.Beats);
+    }
+
     private readonly string _tempDir = Directory.CreateTempSubdirectory("dotcharter-rsxmlvm-").FullName;
 
     public void Dispose() => BestEffortDelete.Directory(_tempDir);
@@ -30,7 +67,8 @@ public sealed class RsXmlImportViewModelTests : IDisposable
     }
 
     private static RsXmlImportViewModel NewCard(ProjectState state) =>
-        new(state, new ChartEditHarness().Editor, FakeLocalization.English(), new FakeAppLogger());
+        HistoryTestActivation.Create<RsXmlImportViewModel>(new HistoryService(new FakeAppLogger()), state,
+            new ChartEditHarness().Editor, FakeLocalization.English(), new FakeAppLogger());
 
     private string WriteShowlightsXml()
     {

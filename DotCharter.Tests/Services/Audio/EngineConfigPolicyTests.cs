@@ -178,6 +178,19 @@ public sealed class EngineConfigPolicyTests
 
     // ----- helpers -----------------------------------------------------------
 
+    [Theory]
+    [InlineData("private void RequestNeuralAmpSampleRate()")]
+    [InlineData("private bool RequestExternalInsertSampleRate(int sampleRate)")]
+    public void RateRequests_ReadTheActiveDeviceUnderTheConfigurationGate(string signature)
+    {
+        var body = MethodBody(signature);
+        var locked = body.IndexOf("lock (_engineConfigGate)", StringComparison.Ordinal);
+        var read = body.IndexOf("var active = _activeEngineConfig", StringComparison.Ordinal);
+        Assert.True(locked >= 0 && read > locked,
+            "A rate request must derive its configuration from the active device after taking the configuration gate.");
+        Assert.DoesNotContain("lock (_neuralRateGate)", body, StringComparison.Ordinal);
+    }
+
     private static JuceEngineConfig With(
         JuceEngineConfig c,
         int? bufferFrames = null, int? outputChannels = null, int? inputChannels = null,

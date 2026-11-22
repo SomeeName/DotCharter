@@ -113,10 +113,7 @@ public static class ToneDesignServiceLocator
         public string? Read(AiProviderKind kind) => _key;
 
         /// <inheritdoc />
-        public void Write(AiProviderKind kind, string? secret)
-        {
-            // The eval never persists a key.
-        }
+        public bool Write(AiProviderKind kind, string? secret) => false;
 
         /// <inheritdoc />
         /// <remarks>False, and honestly so: the key lives in this object for the

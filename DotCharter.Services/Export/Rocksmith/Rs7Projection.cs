@@ -12,41 +12,36 @@ namespace DotCharter.Services.Export.Rocksmith;
 ///         <item>The breakup the mapper applies (<see cref="LinkLandingBreakup" />:
 ///         "split notes" chords and chords a link lands on) runs FIRST, so a chord
 ///         that ships as single notes keeps its extra strings as single notes.</item>
-///         <item>A chord that sounds ONLY on extra strings has no six-string column
-///         (RS7X: a template keeps at least one), so it ships as single notes — never
-///         dropped — and a template without a six-string column is left out with the
-///         hand shapes naming it.</item>
+///         <item>A chord that sounds ONLY on extra strings (two or more notes) stays ONE
+///         chord: its stock columns are unused and the extra columns go in CHDT/CHNT. One
+///         extra note alone is a single note. A template that cannot be a chord is left
+///         out with the hand shapes naming it.</item>
 ///         <item>Every other chord stays ONE chord with all its strings: the mapper writes
 ///         the six stock columns and <see cref="Rs7BlockBuilder" /> the rest into the
-///         SNG's RS7X block (<see cref="Rs7ChordMode.Projection" />, the default).</item>
-/// <item>With <see cref="Rs7ChordMode.Split" /> such a chord instead keeps
-///         its native columns as a chord — or a single note when only one is left — and
-///         every extra string becomes a simultaneous single note, as <c>rs7chart</c>'s
-///         split mode writes it, for an rs7string build that predates the block. No
-///         template keeps an extra column then, so the block's <c>CHDT</c> is all -1.</item>
-///         <item>Chord names become printable ASCII of at most 30 characters (RS7X §4).</item>
+///         internal extension model. The RS Extended Range writer combines these columns; a 5-/6-string bass keeps its low B and high C as the
+///         stock columns 4/5.</item>
+///         <item>Chord names become printable ASCII of at most 30 characters (the shared template rule).</item>
 /// <item>With <c>sixStringOnly</c> the copy is a plain SIX-string arrangement for
 ///         tools that cannot read the extra strings (EOF aborts on a <c>string</c> above 5,
-///         DLC Builder's SNG build indexes six-wide arrays): the split rules above run, then
+///         DLC Builder's SNG build indexes six-wide arrays): the chords break up into single notes (the split rules below), then
 ///         every note on an extra string is dropped, no template keeps an extra column and the
 ///         tuning is the six stock entries. <see cref="Loss" /> says what was dropped.</item>
 ///     </list>
 /// </summary>
 internal sealed class Rs7Projection
 {
-    /// <summary>The longest chord name RS7X allows (the 32-byte field keeps its last byte 0).</summary>
+    /// <summary>The longest chord name the shared model allows (the 32-byte field keeps its last byte 0).</summary>
     public const int MaxChordNameLength = 30;
 
-    private readonly Rs7ChordMode _mode;
     private readonly bool _sixStringOnly;
     private int _droppedChords;
     private int _trimmedChords;
 
-    private Rs7Projection(Arrangement source, Rs7ChordMode mode, bool sixStringOnly)
+    private Rs7Projection(Arrangement source, bool sixStringOnly)
     {
         _sixStringOnly = sixStringOnly;
-        // The six-string copy breaks a chord up exactly as split mode does.
-        _mode = sixStringOnly ? Rs7ChordMode.Split : mode;
+        // Only the six-string copy breaks a chord up; every other export keeps a chord whole (a 5-/6-string
+        // bass too: its low B and high C are columns 4/5 of the stock six-wide slots).
         StringCount = source.StringCount;
         Arrangement = ChartProjectCloner.CloneArrangement(source);
         Renumber(source);
@@ -54,7 +49,7 @@ internal sealed class Rs7Projection
         foreach (var level in Arrangement.Levels) Project(level, splitTemplates);
         DropSplitOnlyTemplates(splitTemplates);
         DropTemplatesWithoutStockColumn();
-        if (_mode == Rs7ChordMode.Split) StripExtraColumns();
+        if (_sixStringOnly) StripExtraColumns();
         if (sixStringOnly) DropExtraStrings();
     }
 
@@ -67,11 +62,17 @@ internal sealed class Rs7Projection
     /// <summary>What the six-string copy dropped; null for every other projection.</summary>
     public SixStringLoss? Loss { get; private set; }
 
-    public static Rs7Projection? TryCreate(Arrangement source, Rs7ChordMode mode = Rs7ChordMode.Projection,
-        bool sixStringOnly = false) =>
-        Rs7StringLayout.IsExtendedGuitar(source) ? new Rs7Projection(source, mode, sixStringOnly) : null;
+    public static Rs7Projection? TryCreate(Arrangement source, bool sixStringOnly = false) =>
+        Rs7StringLayout.IsExtendedGuitar(source) ? new Rs7Projection(source, sixStringOnly) : null;
 
-    /// <summary>A chord name as RS7X allows it: printable ASCII, at most 30 characters.</summary>
+    /// <summary>The copy the SNG mapper writes: <see cref="TryCreate" />'s for a 7-/8-string guitar,
+    /// and for a 5-/6-string bass the same copy in package order (low B at string 4, high C at 5,
+    /// offsets measured from the package open strings). The XML writer and DLC Builder tuning
+    /// vector use the same extended-bass projection.</summary>
+    public static Rs7Projection? TryCreateForSng(Arrangement source) =>
+        Rs7StringLayout.IsExtended(source) ? new Rs7Projection(source, false) : null;
+
+    /// <summary>A chord name for the shared model: printable ASCII, at most 30 characters.</summary>
     public static string AsciiChordName(string name)
     {
         var ascii = new string([.. name.Where(c => c is >= ' ' and <= '~')]);
@@ -85,8 +86,8 @@ internal sealed class Rs7Projection
         var names = new string[count];
         for (var d = 0; d < count; d++)
         {
-            var s = Rs7StringLayout.ToSng(d, count);
-            offsets[s] = TuningOffsetResolution.For(source, d);
+            var s = ToSng(d);
+            offsets[s] = Rs7StringLayout.IsExtendedBass(source) ? BassPackageOffset(source, d, s) : TuningOffsetResolution.For(source, d);
             names[s] = d < source.Tuning.Length ? source.Tuning[d] : "";
         }
 
@@ -120,13 +121,22 @@ internal sealed class Rs7Projection
         }
     }
 
+    /// <summary>The offset of an extended bass string against its PACKAGE open string (B0 23, C3 48):
+    /// the chart measures from E1 A1 D2 G2 B2 E3 (<see cref="StandardOpenStrings" />), so the
+    /// sounding pitch is kept, not the number.</summary>
+    private int BassPackageOffset(Arrangement source, int domainIndex, int sngIndex) =>
+        StandardOpenStrings.BassLowEMidi + StandardOpenStrings.SemitonesAboveLowE(StringCount, domainIndex) +
+        TuningOffsetResolution.For(source, domainIndex) - Rs7StringLayout.BassOpenMidi(sngIndex);
+
     private Dictionary<int, int> Renumbered(Dictionary<int, int> byString) =>
         byString.ToDictionary(kv => ToSng(kv.Key), kv => kv.Value);
 
     /// <summary>A string outside the arrangement keeps its index: the validator
     /// reports it as an error, and the mapper's clamp is the last resort.</summary>
     private int ToSng(int domainIndex) =>
-        domainIndex >= 0 && domainIndex < StringCount ? Rs7StringLayout.ToSng(domainIndex, StringCount) : domainIndex;
+        domainIndex >= 0 && domainIndex < StringCount
+            ? Rs7StringLayout.ToSng(domainIndex, StringCount, Arrangement.ArrangementType)
+            : domainIndex;
 
     private void Project(ChartLevel level, HashSet<int> splitTemplates)
     {
@@ -134,7 +144,7 @@ internal sealed class Rs7Projection
         // when it reaches an extra string, or those strings would be cut silently.
         foreach (var chord in level.Chords.Where(c => c.ChordNotes.Count == 0))
         {
-            var template = Arrangement.ChordTemplates.FirstOrDefault(t => t.Id == chord.TemplateId);
+            var template = Arrangement.FindChordTemplate(chord.TemplateId);
             if (template == null || !template.Frets.Keys.Any(IsExtra)) continue;
             foreach (var (stringIndex, fret) in template.Frets.OrderBy(kv => kv.Key))
                 chord.ChordNotes.Add(new ChordNote { StringIndex = stringIndex, Fret = fret });
@@ -146,7 +156,7 @@ internal sealed class Rs7Projection
         foreach (var chord in projectedChords)
         {
             var extra = chord.ChordNotes.Where(cn => IsExtra(cn.StringIndex)).ToList();
-            if (extra.Count == 0 || (_mode == Rs7ChordMode.Projection && extra.Count < chord.ChordNotes.Count))
+            if (extra.Count == 0 || (!_sixStringOnly && extra.Count < chord.ChordNotes.Count))
             {
                 chords.Add(chord);
                 continue;
@@ -154,9 +164,15 @@ internal sealed class Rs7Projection
 
             if (extra.Count == chord.ChordNotes.Count)
             {
+                if (!_sixStringOnly && extra.Count >= 2)
+                {
+                    chords.Add(chord);
+                    continue;
+                }
+
                 _droppedChords++;
                 notes.AddRange(extra.Select(cn => LinkLandingBreakup.ToLooseNote(chord, cn)));
-                if (_mode == Rs7ChordMode.Split) splitTemplates.Add(chord.TemplateId);
+                if (_sixStringOnly) splitTemplates.Add(chord.TemplateId);
                 continue;
             }
 
@@ -183,7 +199,7 @@ internal sealed class Rs7Projection
     }
 
     /// <summary>
-    ///     Split mode: a template that only chords now shipped as single notes played
+    ///     Six-string copy: a template that only chords now shipped as single notes played
     ///     is left out of the SNG, as <c>rs7chart</c> leaves it out and as the export
     ///     already drops a template only "split notes" chords play
     ///     (<see cref="RsChordTemplateExport" />). One a remaining chord or a hand shape
@@ -203,14 +219,16 @@ internal sealed class Rs7Projection
     }
 
     /// <summary>
-    ///     RS7X: a chord template keeps at least one stock column. One on the extra
-    ///     strings only is left out with the hand shapes naming it; a chord that still
-    ///     points at it has six-string notes (its extra-only chords became single notes
-    ///     above), and the export synthesizes its template from those notes.
+    ///     A template on the extra strings only stays a chord template when it holds two
+    ///     or more columns (projection mode). One that cannot be a chord (a single extra
+    ///     column, or any extra-only template in the six-string copy) is left out with the hand
+    ///     shapes naming it; a chord that still points at it has six-string notes, and
+    ///     the export synthesizes its template from those notes.
     /// </summary>
     private void DropTemplatesWithoutStockColumn()
     {
-        var dropped = Arrangement.ChordTemplates.Where(t => t.Frets.Count > 0 && t.Frets.Keys.All(IsExtra)).ToList();
+        var dropped = Arrangement.ChordTemplates.Where(t =>
+            t.Frets.Count > 0 && t.Frets.Keys.All(IsExtra) && (_sixStringOnly || t.Frets.Count < 2)).ToList();
         if (dropped.Count == 0) return;
         var ids = dropped.Select(t => t.Id).ToHashSet();
         foreach (var template in dropped) Arrangement.ChordTemplates.Remove(template);
@@ -221,9 +239,9 @@ internal sealed class Rs7Projection
         }
     }
 
-    /// <summary>Split mode: no chord plays an extra string any more (they all became
-    /// single notes), so no template may claim one — the RS7X block's <c>CHDT</c> stays
-    /// -1, as <c>rs7chart</c>'s split writes it.</summary>
+    /// <summary>Six-string copy: no chord plays an extra string any more (they all became
+    /// single notes), so no template may claim one — the internal model's template rows stays
+    /// -1.</summary>
     private void StripExtraColumns()
     {
         var templates = _sixStringOnly
@@ -259,5 +277,6 @@ internal sealed class Rs7Projection
         Arrangement.TuningPitches = [.. Arrangement.TuningPitches.Take(Rs7StringLayout.NativeStrings)];
     }
 
+    /// <summary>An "extra" string: past the sixth. A bass has none (its low B and high C are stock slots 4/5).</summary>
     private static bool IsExtra(int sngIndex) => sngIndex >= Rs7StringLayout.NativeStrings;
 }

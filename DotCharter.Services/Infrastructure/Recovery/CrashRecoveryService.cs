@@ -182,11 +182,10 @@ public sealed class CrashRecoveryService : ICrashRecoveryService
                 {
                     recoverable.Add(session);
                 }
-                else
+                else if (_store.DeleteIfSuperseded(session))
                 {
                     // Superseded: the original was saved after this snapshot
                     // was written, so it holds nothing the project file lacks.
-                    _store.DeleteSession(session);
                     _logger.Info(AppLogCategory.Project,
                         $"Crash recovery: deleted superseded snapshot '{session.SnapshotPath}' (original is newer).");
                 }
@@ -237,7 +236,7 @@ public sealed class CrashRecoveryService : ICrashRecoveryService
         catch (Exception ex)
         {
             _logger.Warning(AppLogCategory.Project,
-                $"Crash recovery: could not clear snapshot after save. Message='{ex.Message}'.");
+                "Crash recovery: could not clear snapshot after save.", ex);
         }
     }
 
@@ -255,7 +254,7 @@ public sealed class CrashRecoveryService : ICrashRecoveryService
         catch (Exception ex)
         {
             _logger.Warning(AppLogCategory.Project,
-                $"Crash recovery: could not clear snapshot on project switch. Message='{ex.Message}'.");
+                "Crash recovery: could not clear snapshot on project switch.", ex);
         }
         finally
         {
@@ -290,7 +289,7 @@ public sealed class CrashRecoveryService : ICrashRecoveryService
         catch (Exception ex)
         {
             _logger.Warning(AppLogCategory.Project,
-                $"Crash recovery: could not clear snapshot on clean shutdown. Message='{ex.Message}'.");
+                "Crash recovery: could not clear snapshot on clean shutdown.", ex);
         }
         finally
         {
@@ -428,33 +427,8 @@ public sealed class CrashRecoveryService : ICrashRecoveryService
 
     /// <summary>
     ///     Same walk-up resolution the project loader uses: try the project
-    ///     directory, then its parents. Falls back to the name unchanged.
+    ///     directory, then its parents. Missing or unsafe audio stays unavailable.
     /// </summary>
-    private static string ResolveAudioAbsolute(string projectPath, string? audioFileName)
-    {
-        if (string.IsNullOrWhiteSpace(audioFileName)) return string.Empty;
-        if (Path.IsPathRooted(audioFileName)) return audioFileName;
-
-        try
-        {
-            var startDir = string.IsNullOrWhiteSpace(projectPath)
-                ? Directory.GetCurrentDirectory()
-                : Path.GetDirectoryName(Path.GetFullPath(projectPath));
-
-            var directory = string.IsNullOrWhiteSpace(startDir) ? null : new DirectoryInfo(startDir);
-            while (directory != null)
-            {
-                var candidate = Path.Combine(directory.FullName, audioFileName);
-                if (File.Exists(candidate)) return candidate;
-                directory = directory.Parent;
-            }
-        }
-        catch
-        {
-            // resolution is best-effort; an unresolved name just means the
-            // recovered session opens without audio, like a moved project.
-        }
-
-        return audioFileName;
-    }
+    private static string ResolveAudioAbsolute(string projectPath, string? audioFileName) =>
+        ProjectAudioLocator.TryResolve(projectPath, audioFileName) ?? string.Empty;
 }

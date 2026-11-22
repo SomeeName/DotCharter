@@ -89,8 +89,8 @@ public static class LivePitchAcceptance
     /// <summary>
     ///     Sounding MIDI note for a chart position (capo raises open strings).
     ///     The derivation live judging uses — the v0.29 audio lint
-    ///     (`AudioChartLintService`) and the chart-from-audio wizard's string map
-    ///     both call it too, so nothing that LISTENS to real audio can disagree
+    ///     (`AudioChartLintService`)
+    ///     calls it too, so nothing that LISTENS to real audio can disagree
     ///     with live judging about what a charted note sounds like.
     ///     <para>
     ///     <b>A bass sounds an OCTAVE below where it is charted</b>, exactly as
@@ -127,14 +127,5 @@ public static class LivePitchAcceptance
     ///     </para>
     /// </summary>
     public static int? SoundingMidi(Arrangement arrangement, int stringIndex, int fret)
-    {
-        if (stringIndex < 0) return null;
-        // StandardOpenStrings: a 7-string's string 0 is B1, not E2.
-        var open = StandardOpenStrings.SemitonesAboveLowE(arrangement.StringCount, stringIndex);
-        var tuning = TuningOffsetResolution.For(arrangement, stringIndex);
-        var soundingFret = fret == 0 && arrangement.Capo > 0 ? arrangement.Capo : fret;
-        var bassDrop = arrangement.ArrangementType == ArrangementType.Bass ? -12 : 0;
-        var referenceOctave = ArrangementInstrument.ReferenceOctaveSemitones(arrangement.CentOffset);
-        return StandardOpenStrings.GuitarLowEMidi + open + tuning + soundingFret + bassDrop + referenceOctave;
-    }
+        => SoundingPitch.SoundingMidiFor(arrangement, stringIndex, fret);
 }

@@ -82,6 +82,24 @@ public sealed partial class PinnedDownloadMirrorTests : IDisposable
     }
 
     /// <summary>
+    ///     Another run downloading the same file at the same moment owns its own
+    ///     stage: this run never deletes, hashes or moves it, and still publishes
+    ///     its own verified bytes.
+    /// </summary>
+    [Fact]
+    public void A_concurrent_downloads_half_written_stage_is_left_alone()
+    {
+        const string theirs = "another run's half-written bytes";
+        var result = Run("""{ "https://a.invalid/x": "<html>wrong</html>", "https://b.invalid/x": "the pinned bytes" }""",
+            ["https://a.invalid/x", "https://b.invalid/x"], foreignPartial: theirs);
+
+        Assert.Equal("https://b.invalid/x", result.GetProperty("served").GetString());
+        Assert.Equal("the pinned bytes", result.GetProperty("content").GetString());
+        Assert.Equal(["file.tar.gz", "file.tar.gz.partial"], Strings(result, "files").Order(StringComparer.Ordinal));
+        Assert.Equal(theirs, File.ReadAllText(Path.Combine(_scratch, "cache", "file.tar.gz.partial")));
+    }
+
+    /// <summary>
     ///     The build script downloads ONLY through the mirror loop, and LAME tries
     ///     Debian's byte-identical tarball before SourceForge.
     /// </summary>
@@ -110,12 +128,13 @@ public sealed partial class PinnedDownloadMirrorTests : IDisposable
     ///     of "the pinned bytes". <paramref name="servedJson" /> maps each URL to the text
     ///     the fake downloader writes, or <c>!404</c> to throw. Returns what happened.
     /// </summary>
-    private JsonElement Run(string servedJson, string[] urls, string? cached = null)
+    private JsonElement Run(string servedJson, string[] urls, string? cached = null, string? foreignPartial = null)
     {
         var cache = Path.Combine(_scratch, "cache");
         Directory.CreateDirectory(cache);
         var dest = Path.Combine(cache, "file.tar.gz");
         if (cached is not null) File.WriteAllText(dest, cached);
+        if (foreignPartial is not null) File.WriteAllText(dest + ".partial", foreignPartial);
         var resultFile = Path.Combine(_scratch, "result.json");
 
         var module = Path.Combine(TestPaths.RepoRoot(), "tools", "release", "PinnedDownload.psm1");
@@ -146,34 +165,19 @@ public sealed partial class PinnedDownloadMirrorTests : IDisposable
         var file = Path.Combine(_scratch, "case-" + Guid.NewGuid().ToString("N") + ".ps1");
         File.WriteAllText(file, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
-        var info = new ProcessStartInfo("pwsh")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var info = new ProcessStartInfo("pwsh");
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-File", file })
             info.ArgumentList.Add(argument);
 
-        Process? process;
-        try
-        {
-            process = Process.Start(info);
-        }
-        catch (System.ComponentModel.Win32Exception)
+        // #608: both pipes drain concurrently under one cap (a deadlock detector for a hung child, never a budget).
+        var result = BoundedProcess.TryRun(info, TimeSpan.FromMinutes(2), "pwsh (PinnedDownload.psm1)");
+        if (result is null)
         {
             Assert.Skip("pwsh (PowerShell 7+) is not on PATH, so PinnedDownload.psm1 cannot be executed here.");
             return default;
         }
 
-        Assert.NotNull(process);
-        var stdoutTask = process!.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
-        var stderr = process.StandardError.ReadToEnd();
-        // A deadlock detector for a hung child, never a budget.
-        Assert.True(process.WaitForExit(120_000), "pwsh did not finish within 120 s.");
-        var stdout = stdoutTask.GetAwaiter().GetResult();
-        Assert.True(process.ExitCode == 0, $"pwsh exited {process.ExitCode}.{Environment.NewLine}{stderr}{Environment.NewLine}{stdout}");
+        Assert.True(result.ExitCode == 0, $"pwsh exited {result.ExitCode}.{Environment.NewLine}{result.StandardError}{Environment.NewLine}{result.StandardOutput}");
 
         using var document = JsonDocument.Parse(File.ReadAllText(resultFile));
         return document.RootElement.Clone();

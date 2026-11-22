@@ -53,6 +53,7 @@ public sealed partial class SoundSectionsViewModel : ObservableObject
 {
     private readonly Dictionary<SoundSelectionKind, SoundSection> _chosen = [];
     private SoundSelectionKind _kind;
+    private bool _hasChords;
 
     /// <summary>What is selected — the inspector forwards <c>InspectorViewModel.SelectionKind</c>.</summary>
     public SoundSelectionKind Kind
@@ -62,6 +63,23 @@ public sealed partial class SoundSectionsViewModel : ObservableObject
         {
             if (_kind == value) return;
             _kind = value;
+            NotifyLayout();
+        }
+    }
+
+    /// <summary>
+    ///     At least one chord is selected — the inspector forwards it beside <see cref="Kind" />. A
+    ///     multi-selection's kind does not say whether it holds chords (two chords are
+    ///     <see cref="SoundSelectionKind.MultiSame" /> like two notes), and the Technique section has
+    ///     to show the card whose edits reach them.
+    /// </summary>
+    public bool HasChords
+    {
+        get => _hasChords;
+        set
+        {
+            if (_hasChords == value) return;
+            _hasChords = value;
             NotifyLayout();
         }
     }
@@ -151,11 +169,27 @@ public sealed partial class SoundSectionsViewModel : ObservableObject
 
     public bool IsFindings => Section == SoundSection.Findings;
 
-    /// <summary>Technique for a chord: the per-string set behind the string mask, then the whole-chord flags.</summary>
-    public bool ShowChordTechnique => IsTechnique && HasChordScope;
+    /// <summary>
+    ///     Technique for a chord: the per-string set behind the string mask, then the whole-chord
+    ///     flags. A multi-selection holding chords shows it too; its edits write the selected chords
+    ///     (the note card's write only the selected notes, so over chords alone it did nothing).
+    /// </summary>
+    public bool ShowChordTechnique => IsTechnique && (HasChordScope || MultiWithChords);
 
-    /// <summary>Technique for one note or a multi-selection without a chord's scope.</summary>
-    public bool ShowNoteTechnique => IsTechnique && !HasChordScope;
+    /// <summary>
+    ///     Technique for one note or a multi-selection holding notes. A mixed selection shows both
+    ///     cards, each writing its own sound type.
+    /// </summary>
+    public bool ShowNoteTechnique => IsTechnique && !HasChordScope &&
+                                     !(MultiWithChords && _kind == SoundSelectionKind.MultiSame);
+
+    /// <summary>
+    ///     The chord Technique's string card: a chord's (or chords') own, not over a mixed selection, where the note
+    ///     cards edit the notes and the whole-chord card offers to edit the chords alone.
+    /// </summary>
+    public bool ShowChordStrings => ShowChordTechnique && !ShowNoteTechnique;
+
+    private bool MultiWithChords => _hasChords && _kind is SoundSelectionKind.MultiSame or SoundSelectionKind.MultiMixed;
 
     /// <summary>
     ///     A click on a rail entry. Re-announces the flags even when the section did not change: a
@@ -198,5 +232,6 @@ public sealed partial class SoundSectionsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFindings));
         OnPropertyChanged(nameof(ShowChordTechnique));
         OnPropertyChanged(nameof(ShowNoteTechnique));
+        OnPropertyChanged(nameof(ShowChordStrings));
     }
 }

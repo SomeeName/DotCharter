@@ -125,6 +125,27 @@ public sealed class PhraseCatalogPasteTests : IDisposable
             i => i.LocalizationKey == PhrasePasteCompatibility.KeyFretBelowCapo);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AStoredPhraseWithASubCapoSlideOrAnchor_IsBlockedBeforeCommit(bool anchor)
+    {
+        var h = new Harness(_dir);
+        var note = Note(10, 5, 5);
+        if (!anchor) note.SlideTo = 2;
+        var entry = h.Capture("Riff", note);
+        if (anchor) entry.Payload.Anchors.Add(new FretAnchor { Fret = 1 });
+        h.Arrangement.Capo = 3;
+        var before = h.History.CurrentNodeId;
+
+        var outcome = h.Clipboard.PastePhrase(h.Track(h.Arrangement), entry, 4000, 4);
+
+        Assert.Equal(PhrasePasteResult.Blocked, outcome.Result);
+        Assert.Empty(h.Level.Notes);
+        Assert.Empty(h.Level.Anchors);
+        Assert.Equal(before, h.History.CurrentNodeId);
+    }
+
     [Fact]
     public void APhraseThatWillNotSoundTheSamePastesAndSaysSo()
     {

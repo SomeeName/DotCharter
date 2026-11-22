@@ -175,13 +175,7 @@ public sealed class SoftwareVulkanLaneTests : IDisposable
 
     private (int Exit, string Output) RunScript(string? archive, string destination, string sha256, string? url = null)
     {
-        var info = new ProcessStartInfo("powershell.exe")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var info = new ProcessStartInfo("powershell.exe");
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ScriptPath() })
             info.ArgumentList.Add(argument);
         info.ArgumentList.Add("-Destination");
@@ -200,22 +194,14 @@ public sealed class SoftwareVulkanLaneTests : IDisposable
             info.ArgumentList.Add(url);
         }
 
-        Process? process;
-        try
-        {
-            process = Process.Start(info);
-        }
-        catch (System.ComponentModel.Win32Exception)
+        // #608: both pipes drain concurrently under one cap (a deadlock detector for a hung child, never a budget).
+        var result = BoundedProcess.TryRun(info, TimeSpan.FromMinutes(2), "powershell (Get-SoftwareVulkan.ps1)");
+        if (result is null)
         {
             Assert.Skip("Windows PowerShell is not available, so Get-SoftwareVulkan.ps1 cannot be executed here.");
             return (-1, "");
         }
 
-        Assert.NotNull(process);
-        var stdoutTask = process!.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
-        var stderr = process.StandardError.ReadToEnd();
-        // A deadlock detector for a hung child, never a budget.
-        Assert.True(process.WaitForExit(120_000), "powershell did not finish within 120 s.");
-        return (process.ExitCode, stdoutTask.GetAwaiter().GetResult() + stderr);
+        return (result.ExitCode, result.StandardOutput + result.StandardError);
     }
 }

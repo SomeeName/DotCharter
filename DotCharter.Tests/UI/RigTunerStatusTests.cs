@@ -66,6 +66,30 @@ public sealed class RigTunerStatusTests
         Assert.Equal(FakeLocalization.English()["Tuner_Listening"], tuner.StatusHint);
     }
 
+    /// <summary>The input going away mid-reading drops the reading, so the footer
+    /// shows why the needle stopped instead of the last note (#580).</summary>
+    [Fact]
+    public void LosingTheInput_ClearsTheLastReadingAndSaysWhy()
+    {
+        const int sampleRate = 48000;
+        var sine = new float[4096];
+        for (var i = 0; i < sine.Length; i++)
+            sine[i] = 0.35f * MathF.Sin((float)(2.0 * Math.PI * 440.0 * i / sampleRate));
+        var audio = new FakeAudioPlaybackService { InputSampleRate = sampleRate, InputCaptureWindow = sine };
+        var tuner = new RigTunerViewModel(audio, FakeLocalization.English());
+        tuner.Tick();
+        Assert.True(tuner.HasReading);
+
+        audio.InputSampleRate = 0;
+        tuner.Tick();
+
+        Assert.False(tuner.HasInput);
+        Assert.False(tuner.HasReading);
+        Assert.False(tuner.IsInTune);
+        Assert.Equal("–", tuner.NoteText);
+        Assert.Equal(FakeLocalization.English()["Tuner_NoInput"], tuner.StatusHint);
+    }
+
     /// <summary>
     ///     THE MISSING HALF. The view model has worded these states all along;
     ///     what was absent was a <c>TextBlock</c>. Pinned as markup, and paired

@@ -31,12 +31,15 @@ public enum RibbonLaneHiddenReason
 ///         phrase and a tone together and opens from a right-click on an event row,
 ///         so with no section, no phrase and no tone CHANGE the Sections row stays,
 ///         empty, or the first event could never be added from the timeline.
+///         LYRICS hides when empty like PHRASES; the first syllable is placed with the
+///         "insert vocal at playhead" command (palette <c>vocals.insert</c>).
 ///     </para>
 /// </summary>
 public static class RibbonLaneRules
 {
     /// <summary>The lanes that get a row.</summary>
-    public static RibbonLanes Visible(RibbonLanes toggles, bool autoHideEmpty, RibbonContent content)
+    public static RibbonLanes Visible(RibbonLanes toggles, bool autoHideEmpty, RibbonContent content,
+        RibbonLanes forced = RibbonLanes.None)
     {
         // LINKS has nothing to click while there are no groups (groups are made from a
         // selection), so it never keeps an empty row, whatever the auto-hide setting.
@@ -50,19 +53,26 @@ public static class RibbonLaneRules
         if (!content.HasSections && hasEventContent) lanes &= ~RibbonLanes.Sections;
         if (!content.HasPhrases) lanes &= ~RibbonLanes.Phrases;
         if (!content.HasLyrics) lanes &= ~RibbonLanes.Lyrics;
+        // A toggle the user just switched on keeps its (empty) row until it is switched off.
+        lanes |= toggles & forced;
         return lanes;
     }
 
-    /// <summary>The layout a track with <paramref name="visibility" />'s settings draws.</summary>
-    public static RibbonLayout Compose(RibbonVisibility visibility, RibbonContent content) =>
-        new(Visible(visibility.Lanes(), visibility.AutoHideEmpty, content), visibility.Density());
+    /// <summary>The layout a track draws; stacked rows exclude song-wide lyrics regardless of the saved toggle.</summary>
+    public static RibbonLayout Compose(RibbonVisibility visibility, RibbonContent content, bool isStacked = false)
+    {
+        var lanes = Visible(visibility.Lanes(), visibility.AutoHideEmpty, content, visibility.ForcedLanes());
+        if (isStacked) lanes &= ~RibbonLanes.Lyrics;
+        return new RibbonLayout(lanes, visibility.Density());
+    }
 
     /// <summary>Why <paramref name="lane" /> has no row (or <see cref="RibbonLaneHiddenReason.Shown" />).</summary>
     public static RibbonLaneHiddenReason HiddenReason(
-        RibbonLanes lane, RibbonLanes toggles, bool autoHideEmpty, RibbonContent content)
+        RibbonLanes lane, RibbonLanes toggles, bool autoHideEmpty, RibbonContent content,
+        RibbonLanes forced = RibbonLanes.None)
     {
         if ((toggles & lane) == 0) return RibbonLaneHiddenReason.Off;
-        if ((Visible(toggles, autoHideEmpty, content) & lane) != 0) return RibbonLaneHiddenReason.Shown;
+        if ((Visible(toggles, autoHideEmpty, content, forced) & lane) != 0) return RibbonLaneHiddenReason.Shown;
         return lane == RibbonLanes.Tones && content.DistinctTones == 1
             ? RibbonLaneHiddenReason.OneTone
             : RibbonLaneHiddenReason.Empty;

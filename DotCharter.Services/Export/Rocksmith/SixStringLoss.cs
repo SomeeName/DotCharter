@@ -10,6 +10,9 @@ internal sealed record SixStringLoss(int Notes, int Chords, int TrimmedChords)
 {
     public bool IsEmpty => Notes == 0 && Chords == 0 && TrimmedChords == 0;
 
+    /// <summary>The export dialog's finding payload: strings|notes|chords|trimmed, split by <c>ExportFindingFormatter</c>.</summary>
+    public string Detail(Arrangement arrangement) => string.Join('|', arrangement.StringCount, Notes, Chords, TrimmedChords);
+
     /// <summary>The one warning line the log carries for an arrangement.</summary>
     public string Describe(Arrangement arrangement) =>
         $"'{arrangement.Name}' is a {arrangement.StringCount}-string guitar: the six-string projection for " +

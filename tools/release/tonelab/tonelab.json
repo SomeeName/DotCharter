@@ -1,8 +1,8 @@
 {
-  "commit": "6f54373",
+  "commit": "0c62d5e",
   "files": {
-    "tonelab.dll": "e6366d9b65940593a71d0a6433db27e72e035dac80be40118540c5afcb17d07c",
+    "tonelab.dll": "3a7c8048ae3ee2b99021e552cd2768cef249678006be8090cbabe7dcd399a64a",
     "tonelab-launch.exe": "f6688d41d0f41b07afda168ca7b82f90ca05fea4328ee02935aecd2cdd9b4c37",
-    "tonelab.ini": "d802938345ff7d9e8540c58c9495937dadfd24e0fdc3eb44883c6877417311b5"
+    "tonelab.ini": "f284239d38ac0526034b72eae4ba7740c886d85091ca2b8b9ab1ffc5b7e7a933"
   }
 }

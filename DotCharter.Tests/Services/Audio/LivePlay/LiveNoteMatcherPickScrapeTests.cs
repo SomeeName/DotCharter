@@ -24,6 +24,7 @@ public sealed class LiveNoteMatcherPickScrapeTests
         var level = Assert.Single(arrangement.Levels);
         // The scrapes really are chords here: four split chords, two strings each.
         Assert.Equal(4, level.Chords.Count(c => c is { SplitIntoNotes: true, ChordNotes.Count: 2 }));
+        Assert.All(level.Chords.SelectMany(c => c.ChordNotes), n => Assert.Equal(MuteType.None, n.Mute));
         var matcher = new LiveNoteMatcher();
 
         matcher.Load(arrangement, level, Beats());

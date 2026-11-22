@@ -6,6 +6,7 @@ using DotCharter.Core.Domain.Project;
 using DotCharter.Core.Utilities;
 using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Dialogs;
+using DotCharter.Services.Audio.Tuning;
 using DotCharter.Services.Editing.Arrangements;
 using DotCharter.Tone.Infrastructure.Configuration;
 
@@ -41,9 +42,11 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
     private bool _pickedBass;
     private bool _overrideDerivedFlags;
 
-    public ArrangementSettingsViewModel(ChartEditDialogServices edit)
+    public ArrangementSettingsViewModel(ChartEditDialogServices edit, IReferencePitchService referencePitch)
     {
         _edit = edit;
+        ReferencePitch = new ReferencePitchPanelViewModel(referencePitch, edit.Localization, edit.Logger,
+            () => IsBass, () => CentOffset, value => CentOffset = value);
         PathOptions = [.. ArrangementSettingsEdit.Paths.Select(p => new PathOption(edit.Localization[p.LabelKey], p.RouteMask))];
         AuthoredFlags = [.. ArrangementSettingsEdit.AuthoredFlags.Select(f => new FlagItem(edit.Localization[f.LabelKey]))];
         DerivedFlags = [.. ArrangementSettingsEdit.DerivedFlags.Select(f => new FlagItem(edit.Localization[f.LabelKey]))];
@@ -70,6 +73,7 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
             OnPropertyChanged(nameof(IsBass));
             if (followsPreset) ApplyPresetOffsets();
             LabelTuningPresets();
+            RefreshTuningNotes();
         }
     }
 
@@ -93,7 +97,10 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
     public double CentOffset
     {
         get => _centOffset;
-        set => SetProperty(ref _centOffset, value);
+        set
+        {
+            if (SetProperty(ref _centOffset, value)) RefreshTuningNotes();
+        }
     }
 
     public int Strings
@@ -103,7 +110,7 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
         {
             var followsPreset = !_seedingTuningPreset && OffsetsFollowPreset();
             if (!SetProperty(ref _strings, value)) return;
-            while (_tuningOffsets.Count < value) _tuningOffsets.Add(new TuningStep(0));
+            while (_tuningOffsets.Count < value) _tuningOffsets.Add(new TuningStep(0, RefreshTuningNotes));
             while (_tuningOffsets.Count > value) _tuningOffsets.RemoveAt(_tuningOffsets.Count - 1);
             // A row that was the preset stays the preset at the new count: an added string
             // otherwise arrives at 0 and turns Eb Standard into a mixed tuning.
@@ -175,6 +182,8 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
 
     public IReadOnlyList<IArrangementFlag> DerivedFlags { get; }
 
+    public IReferencePitchPanel ReferencePitch { get; }
+
     public ICommand SaveCommand { get; }
 
     public ICommand CancelCommand { get; }
@@ -196,9 +205,9 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
         Capo = _target.Capo;
         CentOffset = _target.CentOffset;
         _tuningOffsets.Clear();
-        foreach (var t in _target.TuningPitches) _tuningOffsets.Add(new TuningStep(t.Step));
+        foreach (var t in _target.TuningPitches) _tuningOffsets.Add(new TuningStep(t.Step, RefreshTuningNotes));
         Strings = _isNew ? 6 : _target.StringCount;
-        while (_tuningOffsets.Count < Strings) _tuningOffsets.Add(new TuningStep(0));
+        while (_tuningOffsets.Count < Strings) _tuningOffsets.Add(new TuningStep(0, RefreshTuningNotes));
         LabelTuningRow();
 
         // The type it ARRIVED with is remembered so an untouched picker writes it back (see Apply).
@@ -259,9 +268,9 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
         {
             // Snapshot BEFORE the write; the cloner is the one sanctioned snapshot path. The
             // write has already happened when the node is recorded, so it is pushed, not done.
-            var before = ChartProjectCloner.CloneArrangement(_target);
+            var before = ChartProjectCloner.CloneArrangement(_target, retainIdentities: true);
             ArrangementSettingsEdit.Apply(_target, fields);
-            var after = ChartProjectCloner.CloneArrangement(_target);
+            var after = ChartProjectCloner.CloneArrangement(_target, retainIdentities: true);
             _edit.History.PushAction(
                 new MutateArrangementSettingsAction(_target, before, after, editor.RepublishActiveArrangement));
             editor.RepublishActiveArrangement();
@@ -277,11 +286,19 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
         for (var i = 0; i < _tuningOffsets.Count; i++)
         {
             var number = _tuningOffsets.Count - i;
-            _tuningOffsets[i].Place(i, _tuningOffsets.Count, labels[i],
+            _tuningOffsets[i].Place(labels[i],
                 _edit.Localization.Format("Dialog_TuningStringName", number, labels[i]));
         }
 
+        RefreshTuningNotes();
         LabelTuningPresets();
+    }
+
+    private void RefreshTuningNotes()
+    {
+        var bassSpelling = IsBass || (ArrangementInstrument.IsGuitarPath(Type) && ArrangementInstrument.IsOctaveDownReference(CentOffset));
+        var notes = TuningDisplayNames.For(_tuningOffsets.Count, _tuningOffsets.Select(t => t.Step).ToArray(), bassSpelling);
+        for (var i = 0; i < notes.Length; i++) _tuningOffsets[i].ResultingNote = notes[i];
     }
 
     /// <summary>Names every preset for this instrument ("7-String Drop A", "5-String Bass Standard")
@@ -291,7 +308,8 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
         var count = _strings;
         foreach (var option in _tuningPresets)
         {
-            var notes = string.Join(" ", ArrangementSettingsEdit.PresetNotes(option.Key, count, IsBass));
+            var offsets = ArrangementSettingsEdit.PresetOffsets(option.Key, count, IsBass);
+            var notes = offsets == null ? "" : string.Join(" ", TuningDisplayNames.For(count, offsets, IsBass));
             option.Label = ArrangementSettingsEdit.PresetName(option.Key, count, IsBass) is { } name
                 ? _edit.Localization.Format("Dialog_TuningPreset_WithNotes", name, notes)
                 : notes.Length > 0 ? notes : _edit.Localization["Dialog_TuningPreset_Custom"];
@@ -311,31 +329,32 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
         }
     }
 
-    private sealed class TuningStep(int step) : ObservableObject, ITuningStep
+    private sealed class TuningStep(int step, Action changed) : ObservableObject, ITuningStep
     {
         private int _step = step;
-        private int _index;
-        private int _count;
+        private string _resultingNote = "";
 
         public int Step
         {
             get => _step;
             set
             {
-                if (SetProperty(ref _step, value)) OnPropertyChanged(nameof(ResultingNote));
+                if (SetProperty(ref _step, value)) changed();
             }
         }
 
         public string StringLabel { get; private set; } = "";
 
-        public string ResultingNote => TuningUtilities.GetResultingNote(_count, _index, _step);
+        public string ResultingNote
+        {
+            get => _resultingNote;
+            set => SetProperty(ref _resultingNote, value);
+        }
 
         public string AccessibleName { get; private set; } = "";
 
-        public void Place(int index, int count, string label, string accessibleName)
+        public void Place(string label, string accessibleName)
         {
-            _index = index;
-            _count = count;
             StringLabel = label;
             AccessibleName = accessibleName;
             OnPropertyChanged(nameof(StringLabel));

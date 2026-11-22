@@ -3,7 +3,7 @@
 Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](../misc-surfaces.md).
 
 
-- **`Views/Editor/InspectorStyles.axaml` is the FOURTH converted grammar (0.50)** — the same Fire-ladders-only lint as `DialogStyles`/`SettingsStyles`/`ShellChromeStyles`, and re-pointing it converted all eight tabs at once. It is included by `InspectorView`, `MixerInspectorView`, `PhraseCatalogView` and `StemMixerView`. Two differences from the other three: it may carry a **`Cursor`** setter (nothing constructs an inspector view platform-free — the settings-search ban does not reach here, and `FireStyleClassTests` asserts BOTH halves so the difference stays deliberate), and it deliberately **restates the app classes this pane leans on** (`Button.Subtle`, `ToggleButton.Seg`/`Chip`, `TextBlock.Label`/`Caption`/`HelpText`, `PathIcon.SectionIcon`, `Border.PaneHeader`) because ~150 controls in these tabs wear them. The tab strip is the shared `ToggleButton.FireSegmentItem` component; its captions go through the new `{localization:Loc Key, Upper=True}` flag on `LocExtension`, because the same keys also title the tab they open.
+- **`Views/Editor/InspectorStyles.axaml` is the FOURTH converted grammar (0.50)** — the same Fire-ladders-only lint as `DialogStyles`/`SettingsStyles`/`ShellChromeStyles`, and re-pointing it converted all eight tabs at once. It is included by `InspectorView`, `MixerInspectorView`, `PhraseCatalogView` and `StemMixerView`. Two differences from the other three: it may carry a **`Cursor`** setter (nothing constructs an inspector view platform-free — the settings-search ban does not reach here, and `FireStyleClassTests` asserts BOTH halves so the difference stays deliberate), and it deliberately **restates the app classes this pane leans on** (`Button.Subtle`, `ToggleButton.Seg`/`Chip`, `TextBlock.Label`/`Caption`/`HelpText`, `Border.PaneHeader`; `PathIcon.SectionIcon` went with #751 P9) because ~150 controls in these tabs wear them. The tab strip is the shared `ToggleButton.FireSegmentItem` component; its captions go through the new `{localization:Loc Key, Upper=True}` flag on `LocExtension`, because the same keys also title the tab they open.
 - **The Mixer tab's EQ is its OWN view (0.56):
   `Views/Editor/Inspector/EqModuleView` +
   `ViewModels/Editor/Inspector/EqModuleViewModel`, over the six-band ABI v29
@@ -19,7 +19,7 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
     width/height sweep that verifies it would not exist.
   - **`EqSection` is the single source of truth.** The engine push, the drawn
     curve, the handles, the chip row and the "n/6" badge all read ONE object;
-    `Controls/EqPlotControl` binds that section directly (never a projection)
+    `Controls/ColumnFlowEqPlot` binds that section directly (never a projection)
     and owns no band state and no maths — every mapping goes through the pure
     `EqCurve`, which is the only reason the DRAG VERB has tests at all.
   - **The badge's number comes from the ENGINE**
@@ -43,7 +43,7 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
     without a live frame, so a stopped transport gave a bare grid and the zone
     tints and string ticks had nothing to sit on. `EqSpectrum.Preview` is the
     mockup's own average curve, drawn dimmer and TAGGED, and
-    `EqPlotControl.SpectrumKind` makes which one is up a value rather than an
+    `ColumnFlowEqPlot.SpectrumKind` makes which one is up a value rather than an
     inference. Honesty lives in the marking, not in the absence.
   - **HEIGHT: the plot has to ASK for one.** A ScrollViewer measures its
     content with INFINITE height, so the plot's Grid `*` row is worth exactly
@@ -51,7 +51,7 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
     "whatever the child asked for". Asking for nothing collapsed the row to the
     well's `MinHeight` and shipped a 58 px curve against the mockup's 104
     ("so squished together in height that it isn't even readable").
-    `EqPlotControl.DefaultPreferredHeight` (102 px inside the well's 1 px
+    `ColumnFlowEqPlot.DefaultPreferredHeight` (102 px inside the well's 1 px
     frame) is that ask, and it is a preference rather than a floor — a taller
     pane still grows the curve, and below the module's natural height the
     `ScrollViewer` scrolls (without it a 250 px dock drew the plot straight

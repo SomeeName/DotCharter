@@ -8,10 +8,10 @@ namespace DotCharter.Services.Parsing.Xml.Vocals;
 /// </summary>
 internal sealed class RsXmlVocalsReader
 {
-    public ChartProject Read(string filePath)
+    public ChartProject Read(string filePath, IList<BeatMarker>? externalBeats = null)
     {
         var doc = SafeXml.LoadFromFile(filePath);
-        return ReadDocument(doc, filePath);
+        return ReadDocument(doc, filePath, externalBeats);
     }
 
     public ChartProject ReadDocument(XDocument doc, string filePath)
@@ -25,10 +25,16 @@ internal sealed class RsXmlVocalsReader
         var root = doc.Root;
         if (root == null) return project;
 
-        // When external beats are provided, position vocals against them so the
-        // result can be merged into a host project. Otherwise vocals collapse
-        // to position-zero (legacy behaviour: vocals XML has no beat map).
-        var beats = externalBeats ?? project.Beats;
+        // A standalone vocals file has no tempo map. Give it a neutral seconds
+        // grid so its absolute timestamps survive editing and saving. Imports
+        // into an existing chart instead use that chart's grid.
+        if (externalBeats == null || externalBeats.Count == 0)
+        {
+            project.Bpm = 60;
+            project.Beats.Add(new BeatMarker { Time = 0, Bpm = 60, IsMeasure = true });
+        }
+
+        var beats = externalBeats is { Count: > 0 } ? externalBeats : project.Beats;
 
         var track = new VocalTrack { Name = "Vocals" };
         project.VocalTracks.Add(track);
@@ -44,9 +50,7 @@ internal sealed class RsXmlVocalsReader
                 vEl.Attribute("lyric")?.Value ?? "", Fmt.AttrInt(vEl, "note", 255));
         });
 
-        var phrases = RsVocalPhraseBuilder.Build(syllables, ms => beats.Count > 0
-            ? TimelineMath.PositionFromImportedMs(ms, beats)
-            : FractionalPosition.Zero);
+        var phrases = RsVocalPhraseBuilder.Build(syllables, ms => TimelineMath.PositionFromImportedMs(ms, beats));
         foreach (var phrase in phrases) track.Phrases.Add(phrase);
 
         return project;

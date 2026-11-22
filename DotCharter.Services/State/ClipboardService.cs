@@ -1,3 +1,4 @@
+using DotCharter.Services.Editing;
 using DotCharter.Services.Editing.Catalog;
 
 namespace DotCharter.Services.State;
@@ -56,13 +57,13 @@ public class ClipboardPayload
             Notes = Notes.Select(n =>
             {
                 var clone = n.Clone();
-                clone.Position += offset;
+                SoundTimeMove.MoveTo(clone, clone.Position + offset);
                 return clone;
             }).ToList(),
             Chords = Chords.Select(c =>
             {
                 var clone = c.Clone();
-                clone.Position += offset;
+                SoundTimeMove.MoveTo(clone, clone.Position + offset);
                 return clone;
             }).ToList(),
             HandShapes = HandShapes.Select(h =>
@@ -73,7 +74,10 @@ public class ClipboardPayload
                 return clone;
             }).ToList(),
             EventPoints = EventPoints.Select(e => new EventPoint
-            { Position = e.Position + offset, Phrase = e.Phrase, Section = e.Section }).ToList(),
+            {
+                Position = e.Position + offset, Phrase = e.Phrase, Section = e.Section,
+                Events = e.Events, Status = e.Status
+            }).ToList(),
             ToneChanges = ToneChanges.Select(t => new ToneChange
             { Position = t.Position + offset, ToneName = t.ToneName }).ToList(),
             Anchors = Anchors.Select(a =>
@@ -135,7 +139,10 @@ public class ClipboardService : IClipboardService
             Chords = chordList.Select(c => c.Clone()).ToList(),
             HandShapes = hsList.Select(h => h.Clone()).ToList(),
             EventPoints = epList.Select(e => new EventPoint
-            { Position = e.Position, Phrase = e.Phrase, Section = e.Section }).ToList(),
+            {
+                Position = e.Position, Phrase = e.Phrase, Section = e.Section,
+                Events = e.Events, Status = e.Status
+            }).ToList(),
             ToneChanges = toneList.Select(t => new ToneChange
             { Position = t.Position, ToneName = t.ToneName }).ToList(),
             Anchors = anchorList.Select(a => a.Clone()).ToList(),

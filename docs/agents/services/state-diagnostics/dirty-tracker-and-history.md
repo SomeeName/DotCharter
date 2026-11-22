@@ -2,11 +2,25 @@
 
 ## `State/ProjectDirtyTracker`
 
+Non-history mixer edits publish `ProjectState.ProjectChanged`; the session
+forwards it to `MarkProjectDirty`, including the recovery notification and
+change stamp that `MarkDirty` already supplies. Notifications name the active
+project so a stale project cannot dirty its replacement. A mixer rebuild that
+only replays existing state emits no edit.
+
   `State/ProjectDirtyTracker` derives the unsaved-changes flag from the undo
   history (`IHistoryService.CurrentNodeId` vs. a save/load baseline — undo back
   to the saved node reads clean; a pruned baseline stays dirty until the next
   save). Consumed by the UI's `ProjectSessionService` for the title-bar `*` and
   the window-close prompt; don't add parallel mutation tracking.
+
+  `ChangeStamp` uses `IHistoryService.CurrentContentId`, folded with the out-of-band
+  counter. A merged tick gets a fresh content id even though its history node stays the
+  same; undo/redo restores the destination node's content id. Auto-backup can therefore
+  distinguish later ticks from a state already backed up during that gesture.
+  `ProjectDirtyTrackerTests.AMergedTickAfterABackup_ChangesTheStampWithoutAddingAnUndoNode`
+  covers the stamp and the backup gate together. Dirtiness still compares node ids;
+  saving ends the open gesture before establishing its baseline.
 
 - **`MarkClean()` ENDS THE OPEN GESTURE, and that is load-bearing, not tidiness.**
   Deriving dirty from `CurrentNodeId` has one blind spot: a merged gesture tick
@@ -35,6 +49,16 @@
   work. `ProjectDirtyTrackerTests
   .AComposite_ThatThrowsMidApply_RevertsWhatItDid_LeavesTheHistoryAlone_AndReadsDIRTY`
   and `.AnUndo_ThatThrowsMidRevert_LeavesTheProjectDIRTY`.
+- **Replacement prompts retain session identity through Save.** A successful Save
+  can migrate `.rscp` or give an untitled project its first path. Open and checkpoint
+  restore validate the same project object after confirmation, then capture the new
+  path/audio identity for later parse and media guards. A different project object
+  still cancels the pending operation (`ProjectSessionAttachAudioTests`).
+- **An attachment commits dirty before measuring volume.** Its accepted reference
+  may already be saved while measurement awaits; losing the active session later
+  cannot turn that result into a refusal that authorizes download deletion.
+  Derived volume measurement runs on a detached copy and applies only to the same
+  current attachment; manual values are preserved (`ProjectSessionAttachAudioTests`).
 - **`DirtyMarked` fires on EVERY `MarkDirty`, unlike the edge-triggered
   `IsDirtyChanged` — and crash recovery is why (0.61).**
   `CrashRecoveryService` armed its snapshot off `HistoryChanged` alone, so
@@ -90,22 +114,24 @@
   ~10 s retry while the work stays unsaved, not a spin.
   `CrashRecoverySnapshotGateTests.ASnapshotWriteThatThrew_IsRetriedOnTheNextDebounce`
   + `.ASnapshotThatSucceeded_DoesNotWriteAgainWithoutAnEdit`.
-- **`RecoverySnapshotStore.WriteSnapshot` writes the SIDECAR before it renames
-  the snapshot into place, and that order is load-bearing (0.62).** The file name
-  is a one-way hash of the project path (`ComputeKey`), so `<key>.rscp.json` is
-  the ONLY record of which project a `<key>.rscp` belongs to — and of the
-  original, usually RELATIVE, audio reference, since the snapshot's own
-  `AudioFileName` is rewritten absolute so it stays playable from the recovery
-  folder. The sidecar used to be written second, so a crash between the two
-  renames — the exact moment a crash snapshot exists for — left a visible
-  snapshot with no metadata. `ListSessions` then surfaces it as UNTITLED
-  (correctly: it has no path to show), the recovery dialog restores a titled
-  project with Save pointing at nothing and the audio baked absolute, and
-  `IsRecoverable` can never gate an untitled session, so it re-offers itself on
-  every launch until it is discarded by hand. A failed sidecar sweeps the staged
-  `.tmp` and rethrows, leaving the PREVIOUS (still described) snapshot standing.
+- **Recovery publishes matching chart/metadata generations.** The sidecar is
+  written before the snapshot swap and carries the SHA-256 of the staged bytes
+  plus the committed predecessor's digest and metadata. `ListSessions` selects
+  the candidate matching the visible snapshot, so an interrupted swap cannot
+  restore an old chart with a new audio reference. A failed write sweeps its
+  stage and preserves the previous matching generation; the next write can retry.
+  Missing or unreadable legacy sidecars still surface work as untitled, and
+  legacy sidecars without a digest remain readable. A hashed sidecar whose
+  candidates match neither snapshot is refused, and a stale listed generation
+  is no longer recoverable after its snapshot changes.
+  A refusal is not deletion authority: `CrashRecoveryService` asks the store's
+  `DeleteIfSuperseded` operation to recheck readability, the listed generation's hash
+  and the original's timestamp under the store's write lock. Both files must parse
+  with the same project identity. Unreadable, changed, corrupt or foreign generations
+  are retained; neither failed hashing nor a missing legacy digest authorizes deletion.
   `RecoverySnapshotStoreTests.WriteSnapshot_WhoseSidecarFails_LeavesNoUnnamedSnapshot`
-  + `.WriteSnapshot_ProducesASidecarThatNamesTheProject`.
+  + `.WriteSnapshot_ProducesASidecarThatNamesTheProject` cover initial publication;
+  `.An_interrupted_snapshot_swap_keeps_the_previous_generations_metadata` covers replacement.
 
 ## `State/HistoryService` — the undo TREE and the merge window
 
@@ -115,6 +141,11 @@
   dangles, and `GetTree()` keeps exactly one root with no orphan parents.
   `NavigateTo` walks to the common ancestor and back down either branch.
   Verified, unchanged.
+- Link follow-up snapshots retain group and placement owners through the central
+  CloneLinkGroups/RestoreLinkGroups boundary. Each node's byte charge includes the
+  follow-up as well as its action, including merged ticks, cold-leaf pruning and
+  root promotion (`SnapshotMaterializationIdentityTests`).
+
 - **There is a BYTE budget beside the node cap (#328),** `DefaultMaxBytes` =
   256 MiB, fed by `IChartAction.EstimatedBytes` (0 for an ordinary edit; a
   whole-project `ProjectSnapshotAction` reports its two clones through

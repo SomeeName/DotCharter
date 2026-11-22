@@ -46,7 +46,7 @@ Each row: the feature id, then everything that goes when the switch is off.
 
 | Feature id | Menu rows (`Menu_*` key) | Palette ids | Components | Source |
 |---|---|---|---|---|
-| `youtube-import` | `Menu_AttachYoutubeAudio` (File ▸ Import ▸ Audio from YouTube…) | `file.attachYoutubeAudio` | `tool-yt-dlp` | `DotCharter.Services/Import/Youtube/YtDlpAudioDownloader.cs`, `DotCharter.Services/Import/Youtube/YoutubeUrl.cs`, `DotCharter.Presentation/Screens/Dialogs/YoutubeAudioViewModel.cs`, `DotCharter.Presentation/Screens/Dialogs/YoutubeAudioLauncher.cs`, `DotCharter.UI/Views/Dialogs/YoutubeAudioDialogView.axaml` |
+| `youtube-import` | `Menu_AttachYoutubeAudio` (File ▸ Audio ▸ Audio from YouTube…) | `file.attachYoutubeAudio` | `tool-yt-dlp` | `DotCharter.Services/Import/Youtube/YtDlpAudioDownloader.cs`, `DotCharter.Services/Import/Youtube/YoutubeUrl.cs`, `DotCharter.Presentation/Screens/Dialogs/YoutubeAudioViewModel.cs`, `DotCharter.Presentation/Screens/Dialogs/YoutubeAudioLauncher.cs`, `DotCharter.UI/Views/Dialogs/YoutubeAudioDialogView.axaml` |
 
 Registered services (all in `ContestedFeaturesModule`): `IYtDlpAudioDownloader`,
 `YoutubeAudioDownload`, `YoutubeAudioLauncher`, `IYoutubeAudioScreen`. The Songsterr

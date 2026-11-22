@@ -53,6 +53,8 @@ public sealed class PopoverSliderResetTests
         var transport = new TransportViewModel(new FakeAudioPlaybackService(), new ProjectState(), new FakeConfigurationService(), FakeLocalization.KeysOnly());
         var readers = new Dictionary<string, (Action Move, Func<bool> AtDefault)>
         {
+            ["MasterSlider"] = (() => transport.Volume = 0.3, () => transport.Volume == 1.0),
+            ["TrackPanSlider"] = (() => transport.Pan = 0.5, () => transport.Pan == 0.0),
             ["SongGainSlider"] = (() => transport.SongVolume = 0.3, () => transport.SongVolume == 1.0),
             ["InputGainSlider"] = (() => transport.InputVolume = 0.3, () => transport.InputVolume == 1.0),
             ["MidiInstSlider"] = (() => transport.MidiVolume = 0.3, () => transport.MidiVolume == 1.0),

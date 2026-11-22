@@ -13,8 +13,64 @@ namespace DotCharter.Tests.Services.Editing.Catalog;
 /// </summary>
 public class PhraseCatalogFragmentTests : IDisposable
 {
+    [Fact]
+    public void Capture_PreservesEveryTemplateField_AndKeepsAuthoredVariantsDistinct()
+    {
+        var id = new FieldExclusion(typeof(ChordTemplate), nameof(ChordTemplate.Id),
+            "Template ids belong to the fragment and are remapped on capture.");
+        Assert.NotNull(id.Owner.GetProperty(id.Property));
+        foreach (var property in DomainFieldProbe.SettableProperties(typeof(ChordTemplate)))
+        {
+            if (property.Name == id.Property) continue;
+            var source = SourceArrangement();
+            var first = DomainFieldProbe.Populated<ChordTemplate>();
+            first.Id = 7;
+            var second = first.Clone();
+            property.SetValue(second, DomainFieldProbe.Alternate(property.PropertyType));
+            second.Id = 8;
+            source.ChordTemplates.Add(first);
+            source.ChordTemplates.Add(second);
+            var bars = new[]
+            {
+                new HandShape { TemplateId = 7, EndPosition = new FractionalPosition(1) },
+                new HandShape { TemplateId = 8, Position = new FractionalPosition(2), EndPosition = new FractionalPosition(3) }
+            };
+
+            var fragment = PhraseCatalogFragment.Build("Variants", source, [], [], bars, [])!;
+
+            var captured = fragment.Arrangements[0];
+            Assert.Equal(2, captured.ChordTemplates.Count);
+            var ignored = new HashSet<string> { "Template.Id" };
+            for (var i = 0; i < bars.Length; i++)
+            {
+                var actual = captured.ChordTemplates.Single(t => t.Id == captured.Levels[0].HandShapes[i].TemplateId);
+                var expected = i == 0 ? first : second;
+                Assert.Empty(DeepCompare.Diff("Template", expected, actual, ignored));
+            }
+        }
+    }
+
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "dc-phrase-" + Guid.NewGuid().ToString("N"));
     private readonly RscpChartSerializer _serializer = new();
+
+    [Fact]
+    public void AuthoredTemplateFlags_SurviveTheCatalogFileRoundTrip()
+    {
+        var source = SourceArrangement();
+        var authored = new ChordTemplate
+        {
+            Id = 7, Name = string.Empty, Fingerless = true, GhostMask = 1,
+            Pinned = true, Unnamed = true, NopInRs = true,
+            Frets = new() { [0] = 3, [1] = 5 }
+        };
+        source.ChordTemplates.Add(authored);
+        var bar = new HandShape { TemplateId = 7, EndPosition = new FractionalPosition(2) };
+
+        var entry = RoundTrip(PhraseCatalogFragment.Build("Authored", source, [], [], [bar], [])!);
+
+        var actual = entry.Payload.ChordTemplates[Assert.Single(entry.Payload.HandShapes).TemplateId];
+        Assert.Empty(DeepCompare.Diff("Template", authored, actual, new HashSet<string> { "Template.Id" }));
+    }
 
     public void Dispose()
     {
@@ -212,6 +268,35 @@ public class PhraseCatalogFragmentTests : IDisposable
         Assert.Equal(0, readAnchor.Position.BeatId);
         Assert.Equal(7, readAnchor.Fret);
         Assert.Equal(5, readAnchor.Width);
+    }
+
+    [Fact]
+    public void AHandShapeThatAdoptsItsChordsGrip_InheritsThatGripsGhostMask()
+    {
+        var source = SourceArrangement();
+        source.ChordTemplates.Add(new ChordTemplate
+        {
+            Id = 7, GhostMask = 1 << 4, Frets = new() { [4] = 5, [5] = 7 }
+        });
+        var chord = new Chord { Position = new FractionalPosition(4), TemplateId = 7 };
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 5, Fret = 7 });
+        var shape = new HandShape
+        {
+            Position = new FractionalPosition(4), EndPosition = new FractionalPosition(6),
+            TemplateId = -1, GhostMask = 1 << 5
+        };
+
+        var fragment = PhraseCatalogFragment.Build("Grip", source, [], [chord], [shape], [])!;
+
+        var captured = Assert.Single(fragment.Arrangements);
+        var level = Assert.Single(captured.Levels);
+        var capturedShape = Assert.Single(level.HandShapes);
+        var grip = Assert.Single(captured.ChordTemplates);
+        Assert.Equal(Assert.Single(level.Chords).TemplateId, capturedShape.TemplateId);
+        Assert.Equal(grip.Id, capturedShape.TemplateId);
+        Assert.Null(capturedShape.GhostMask);
+        Assert.Equal(1 << 4, capturedShape.GetGhostMask(grip));
+        Assert.Equal(1 << 5, shape.GhostMask);
     }
 
     [Fact]

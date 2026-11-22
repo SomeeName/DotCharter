@@ -20,7 +20,7 @@ public sealed class FakeDspTonePresetService : IDspTonePresetService
     /// <summary>Ids passed to <see cref="Apply"/> in call order.</summary>
     public List<string> Applied { get; } = [];
 
-    /// <summary>Rigs saved via <see cref="SaveUser"/> with the overwrite id used
+    /// <summary>Rigs saved via <see cref="SaveUser(string, DspToneCategory, string, DcRigPreset, string?)"/> with the overwrite id used
     /// (null = create).</summary>
     public List<(string Name, DspToneCategory Category, DcRigPreset Rig, string? OverwriteId)> Saves { get; } = [];
 
@@ -70,6 +70,31 @@ public sealed class FakeDspTonePresetService : IDspTonePresetService
     {
         var p = FindById(id);
         return p is null ? null : ApplyToPlayer(player, p);
+    }
+
+    /// <summary>Saves still land in memory but answer "not written", as a failed disk write does.</summary>
+    public bool FailWrites { get; set; }
+
+    /// <summary>Disk writes the browser has run (the <see cref="StageUser" /> halves called).</summary>
+    public int WritesRun { get; private set; }
+
+    public DspTonePreset StageUser(
+        string name, DspToneCategory category, string description, DcRigPreset rig, string? overwriteId, out Func<bool> write)
+    {
+        var failing = FailWrites;
+        write = () =>
+        {
+            WritesRun++;
+            return !failing;
+        };
+        return SaveUser(name, category, description, rig, overwriteId);
+    }
+
+    public DspTonePreset SaveUser(
+        string name, DspToneCategory category, string description, DcRigPreset rig, string? overwriteId, out bool written)
+    {
+        written = !FailWrites;
+        return SaveUser(name, category, description, rig, overwriteId);
     }
 
     public DspTonePreset SaveUser(

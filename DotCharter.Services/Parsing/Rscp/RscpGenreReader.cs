@@ -6,7 +6,7 @@ namespace DotCharter.Services.Parsing.Rscp;
 ///     Reads the authored genre (<c>dcGenre</c>) out of a <c>.dcproj</c> project
 ///     HEADER without materialising the chart.
 ///     <para>
-///         This exists because the practice planner's genre preference has
+///         This exists because the genre shown in Song Select has
 ///         exactly one real backing source in this app: the user's own charts,
 ///         where <c>SongMetadataViewModel</c> authors the field and
 ///         <see cref="RscpWriter" /> persists it as <c>dcGenre</c>. A Rocksmith

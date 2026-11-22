@@ -33,7 +33,15 @@ public enum LinkCreateRefusal
 public static class LinkGroupCreator
 {
     public static LinkCreateRefusal TryBuild(ChartProject project, IReadOnlyList<LinkRunRequest> runs, string name,
-        MeasureContentOptions rule, out IChartAction? action)
+        MeasureContentOptions rule, out IChartAction? action) =>
+        Build(project, runs, name, rule, normaliseEdges: true, out action);
+
+    internal static LinkCreateRefusal TryBuildWithoutEdgeEdits(ChartProject project, IReadOnlyList<LinkRunRequest> runs,
+        string name, MeasureContentOptions rule, out IChartAction? action) =>
+        Build(project, runs, name, rule, normaliseEdges: false, out action);
+
+    private static LinkCreateRefusal Build(ChartProject project, IReadOnlyList<LinkRunRequest> runs, string name,
+        MeasureContentOptions rule, bool normaliseEdges, out IChartAction? action)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(runs);
@@ -68,7 +76,7 @@ public static class LinkGroupCreator
         if (keys.Values.Select(k => k!.Canonical).Distinct(StringComparer.Ordinal).Count() > 1)
             return LinkCreateRefusal.DifferentContent;
 
-        action = new CreateLinkGroupAction(project, group, LinkRunEdges.Plan(placements));
+        action = new CreateLinkGroupAction(project, group, normaliseEdges ? LinkRunEdges.Plan(placements) : []);
         return LinkCreateRefusal.None;
     }
 

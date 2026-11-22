@@ -34,10 +34,13 @@ checkboxes into editor state.
   returns to "all".
 - **`MaxStrings` is 9 because there are nine digit KEYS — it is not a claim
   about the arrangement.** Every digit-addressed string verb is bounded by
-  `DotCharter.UI/Input/StringDigitTargeting` (the ACTIVE arrangement's
+  `DotCharter.UI/Input/StringDigitTargeting` (the FOCUSED edit arrangement's
   `Tuning.Length`, which is what the renderer, the hit tester and the lane
   headers all lay out from — *not* `Arrangement.StringCount`, an independent
-  field that can disagree). Three keyboard families used to be bounded by
+  field that can disagree). `AppKeybindRegistrar.EditArrangement` resolves the
+  focused track at keypress time, falling back to the active arrangement when
+  none is focused. Focusing a stacked row also narrows the existing mask to its
+  lanes. Three keyboard families used to be bounded by
   something else and each produced state nothing on screen can show: `Ctrl+7`
   on a 4-string bass set a mask bit with no lane header to draw it on, which
   silently made every per-string verb a no-op; a bare `6` created a
@@ -79,6 +82,22 @@ checkboxes into editor state.
   own a second selector, `ChordStringTargets`, with the OPPOSITE default — so a
   mask set here did nothing to a technique chip. Deleted; see
   `docs/agents/ui/misc-surfaces/inspector-editing.md`. **Do not add a third.**
+
+## Moving strings at the same pitch (`Alt+Up` / `Alt+Down`)
+
+`SelectedNoteMutationCommands.MoveStringPreservingPitch` edits the focused level's
+selected sounds through the string mask. A sound that cannot keep its pitch stays
+put; a chord moves whole or not at all. Hand shapes follow through
+`ChordHandShapeSync` while its sync setting is on. Fret-hand positions follow in
+the same undo node: a span whose sounds all moved by one fret delta shifts its
+anchor by that delta, keeping width and respecting the capo floor and the neck
+limit for that width.
+A mixed span (unselected or unreachable sounds, or differing string deltas) uses
+`IFretAnchorGenerationService` to regenerate its anchors from all its sounds.
+Matching fret/width anchors at the changed boundaries are removed unless they
+start a phrase or supply its opening anchor coverage. Undo restores a removed
+anchor's selection; redo removes it from selection again. A level with no anchors
+gains none. Plain string moves and fret verbs keep their own semantics.
 
 ## Splitting a hand shape (`Ctrl+Shift+K`)
 
@@ -122,6 +141,10 @@ An untemplated chord (`TemplateId -1`) stays untemplated: it has nothing to
 disagree with. This is the same shape `EditChordStringCommand.BuildReshapeAction`
 and `CommitHighwayDragDropCommand` already use — follow it, don't invent a
 fourth.
+
+Wheel preview stepping uses the focused edit target's capo, including the open-string
+transition. Pointer ghosts instead clamp the armed fret against the hovered
+track's capo without moving focus; press transfers focus before placement.
 
 Frets stay **ABSOLUTE**. **They are NOT capo-agnostic, and this file said they
 were until 0.50.1.** Fret `0` is the open (capo'd) string, but a NON-ZERO fret

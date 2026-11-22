@@ -116,7 +116,7 @@ public sealed partial class JuceAudioPlaybackService
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Audio device watchdog tick failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Audio device watchdog tick failed", ex);
         }
         finally
         {
@@ -265,7 +265,7 @@ public sealed partial class JuceAudioPlaybackService
         try { DeviceLost?.Invoke(this, EventArgs.Empty); }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"DeviceLost subscriber threw: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "DeviceLost subscriber threw", ex);
         }
     }
 
@@ -303,7 +303,7 @@ public sealed partial class JuceAudioPlaybackService
             try { DeviceReconnected?.Invoke(this, new AudioDeviceReconnectedEventArgs(name ?? string.Empty, sr, buf)); }
             catch (Exception ex)
             {
-                _logger?.Warning(AppLogCategory.Audio, $"DeviceReconnected subscriber threw: {ex.Message}");
+                _logger?.Warning(AppLogCategory.Audio, "DeviceReconnected subscriber threw", ex);
             }
         }
         else

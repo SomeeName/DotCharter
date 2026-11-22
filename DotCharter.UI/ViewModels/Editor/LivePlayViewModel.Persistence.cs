@@ -43,13 +43,14 @@ public partial class LivePlayViewModel
 
     private PracticeArrangementProfile LoadProfile(Arrangement arrangement)
     {
+        _runIdentity = RunArchive.BeginRun();
         // Project path first (own charts), then the stable PSARC identity
         // set by the song browser — PSARC loads have no path, and keying
         // them all as "untitled" would merge every library song's bests.
         _profileSongKey = ProfileSongKey(
             _projectState.CurrentProjectPath, _projectState.CurrentSongIdentity);
         _profileArrangement = ProfileArrangementKey(arrangement);
-        var profile = _profiles.GetProfile(_profileSongKey, _profileArrangement);
+        var profile = _profiles.GetProfile(_profileSongKey, _profileArrangement, _runIdentity);
         PublishProfile(profile);
         return profile;
     }
@@ -59,7 +60,7 @@ public partial class LivePlayViewModel
         if (result.Hits + result.Misses == 0 || string.IsNullOrEmpty(_profileSongKey)) return false;
         PublishProfile(_profiles.Record(_profileSongKey, _profileArrangement, result, SongDisplayName(),
             _session.LastPhraseOutcomes, sections, _session.LastTechniqueTallies, _chartDifficulty,
-            failed: Meters.RunFailed));
+            failed: Meters.RunFailed, run: _runIdentity));
         return true;
     }
 
@@ -84,12 +85,4 @@ public partial class LivePlayViewModel
         OnPropertyChanged(nameof(ProfileSessions));
         ProfileVersion++;
     }
-
-    private static LiveChordVoicingStrictness ParseChordStrictness(string? value)
-        => value?.Trim().ToLowerInvariant() switch
-        {
-            "lenient" => LiveChordVoicingStrictness.Lenient,
-            "strict" => LiveChordVoicingStrictness.Strict,
-            _ => LiveChordVoicingStrictness.Standard
-        };
 }

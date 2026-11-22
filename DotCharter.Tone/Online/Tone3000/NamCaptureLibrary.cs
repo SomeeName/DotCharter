@@ -147,7 +147,7 @@ public sealed class NamCaptureLibrary : INamCaptureLibrary
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Application,
-                $"NAM capture library scan failed: {ex.GetType().Name}: {ex.Message}");
+                "NAM capture library scan failed", ex);
             return [];
         }
     }
@@ -256,7 +256,7 @@ public sealed class NamCaptureLibrary : INamCaptureLibrary
         {
             BestEffortDelete.File(partialPath);
             _logger?.Warning(AppLogCategory.Application,
-                $"NAM capture download failed: {ex.GetType().Name}: {ex.Message}");
+                "NAM capture download failed", ex);
             return OnlineResult<NamCaptureEntry>.Fail(OnlineError.Network, ex.Message);
         }
     }
@@ -268,7 +268,7 @@ public sealed class NamCaptureLibrary : INamCaptureLibrary
         var fileName = string.IsNullOrWhiteSpace(meta.FileName)
             ? Path.GetFileName(sourceFilePath)
             : meta.FileName;
-        if (string.IsNullOrWhiteSpace(fileName)) return false;
+        if (!FileReferencePolicy.IsBareFileName(fileName)) return false;
 
         var destPath = Path.Combine(RootDirectory, fileName);
         var manifestPath = Path.Combine(RootDirectory, NamCaptureIndex.ManifestFileName(fileName));
@@ -326,7 +326,7 @@ public sealed class NamCaptureLibrary : INamCaptureLibrary
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Application,
-                $"Bundled NAM capture import failed for '{fileName}': {ex.GetType().Name}: {ex.Message}");
+                $"Bundled NAM capture import failed for '{fileName}'", ex);
             return false;
         }
     }
@@ -354,7 +354,7 @@ public sealed class NamCaptureLibrary : INamCaptureLibrary
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Application,
-                $"NAM capture delete failed: {ex.GetType().Name}: {ex.Message}");
+                "NAM capture delete failed", ex);
             return false;
         }
     }
@@ -434,7 +434,7 @@ public sealed class NamCaptureLibrary : INamCaptureLibrary
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Application,
-                $"NAM capture extension migration failed: {ex.GetType().Name}: {ex.Message}");
+                "NAM capture extension migration failed", ex);
         }
 
         return repaired;
@@ -482,7 +482,7 @@ public sealed class NamCaptureLibrary : INamCaptureLibrary
         {
             var manifest = JsonSerializer.Deserialize<NamCaptureManifest>(
                 AtomicFile.ReadAllText(path), ManifestJson);
-            return manifest is { FileName.Length: > 0 } ? manifest : null;
+            return manifest != null && FileReferencePolicy.IsBareFileName(manifest.FileName) ? manifest : null;
         }
         catch (Exception ex)
         {

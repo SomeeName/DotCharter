@@ -1,6 +1,7 @@
 using DotCharter.Services.Editing;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.UI.ViewModels.Application;
+using DotCharter.UI.ViewModels.Editor;
 using DotCharter.UI.ViewModels.Editor.Inspector;
 
 namespace DotCharter.Tests.UI.ViewModels.Application;
@@ -14,7 +15,6 @@ public sealed class EditStateReadoutsTests
 {
     // The English formats, read from the resx itself so this is not a copy of
     // them: sentence case, the figure in the middle or at the end.
-    private static readonly string SnapFormat = English("StatusBar_Snap");
     private static readonly string SelectionFormat = English("StatusBar_Selection");
     private static readonly string ZoomFormat = English("StatusBar_Zoom");
 
@@ -31,17 +31,30 @@ public sealed class EditStateReadoutsTests
     }
 
     /// <summary>
-    ///     The rail shows the picker's own label, so it follows it: the divisor,
-    ///     spelled as EOF spells it. It read "Snap 1/64T" for divisor 96 until
-    ///     0.61 — see <c>GridSnapOptionTests</c> for why that went.
+    ///     "Snap 1/4" left the rail because the toolbar's Grid snap shows the same value: the picker
+    ///     binds <c>Transport.SelectedGridSnapOption</c> and every divisor has its label there.
     /// </summary>
     [Theory]
-    [InlineData(4, "Snap 1/4")]
-    [InlineData(12, "Snap 1/12")]
-    [InlineData(24, "Snap 1/24")]
-    [InlineData(96, "Snap 1/96")]
-    public void Snap_UsesTheGridSnapLabel(int divisor, string expected)
-        => Assert.Equal(expected, EditStateReadouts.Snap(divisor, SnapFormat));
+    [InlineData(4, "1/4")]
+    [InlineData(12, "1/12")]
+    [InlineData(24, "1/24")]
+    [InlineData(96, "1/96")]
+    public void Snap_IsShownByTheToolbarPickerNotTheRail(int divisor, string expected)
+    {
+        Assert.Equal(expected, GridSnapOption.LabelFor(divisor));
+        var toolbar = File.ReadAllText(Path.Combine(RepoRoot(), "DotCharter.UI", "Views", "Shell", "ToolbarView.axaml"));
+        Assert.Contains("SelectedItem=\"{Binding Transport.SelectedGridSnapOption}\"", toolbar);
+        var rail = File.ReadAllText(Path.Combine(RepoRoot(), "DotCharter.UI", "Views", "Shell", "StatusBar.axaml"));
+        Assert.DoesNotContain("SnapLabel", rail);
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir != null && !File.Exists(Path.Combine(dir, "DotCharter.sln")))
+            dir = Path.GetDirectoryName(dir);
+        return dir!;
+    }
 
     [Fact]
     public void Selection_CountsAllSixObjectClasses()

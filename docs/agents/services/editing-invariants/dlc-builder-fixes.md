@@ -5,9 +5,9 @@
 **Every Rocksmith export already applies DLC Builder's build steps to its COPY**
 (`Export/DynamicDifficulty/DlcBuilderBuildSteps`, the rules in
 [../export-companions.md](../export-companions.md) § DLC Builder's build steps).
-The chart's context menu (empty highway ▸ "Apply DLC Builder fixes to the chart",
-`Input/TimelineContextMenu`, palette id `tools.applyDlcBuilderFixes`) is the ONE way
-to put that result into the PROJECT, for a charter who wants to keep editing it:
+Tools ▸ Fix & clean up ▸ "Apply DLC Builder fixes to the chart" (#491; palette id
+`tools.applyDlcBuilderFixes`; it left the chart's right-click menu in #490) is the ONE verb that
+puts that result into the PROJECT, for a charter who wants to keep editing it:
 `ChartMaintenanceService.ApplyDlcBuilderFixes` (`ChartMaintenanceService.Rocksmith.cs`)
 clones the live project, generates the COUNT/p0…/END structure when there is none
 (as the export does), runs `DlcBuilderBuildSteps.Apply` with the fixes AND dynamic
@@ -54,10 +54,19 @@ ambiguous (two "Lead"s) offers no Fix. Every chart kind has a fixture in
 `ApplyDlcBuilderFixesTests.EachFix_ClearsItsFinding_AsOneUndoStep`, and
 `EveryChartFix_HasAFixture` fails when a new mapping lacks one.
 
-## Improve chart vs Auto-fix arrangements
+## Polish chart vs Fix chart errors
 
-Neither is a subset of the other, so both stay (each now has a tooltip saying
-so). Auto-fix REPAIRS faults per arrangement (sorting, duplicates, note lengths,
+Neither is a subset of the other, so both operations stay. They are one dialog,
+Tools > Fix & clean up > Fix chart (`IFixChartScreen`, #497): "Errors" is
+Auto-fix, "Polish" is Improve, both palette ids open it with their group ticked,
+and Apply runs the ticked groups as ONE undo step through
+`IChartMaintenanceService.FixChart`. The dialog LISTS the changes first:
+`PreviewFixChartAsync` runs the two operations (`FixChartRunner`) on a
+`ChartProjectCloner` snapshot and counts per kind (a run on a copy, because
+neither operation can report without applying); the Polish list is counted
+after Errors when Errors is ticked, as Apply runs them. Each operation label
+has a `FixChart_Change_<Label>` resource (`FixChartTests` fails on a label with
+none). Auto-fix REPAIRS faults per arrangement (sorting, duplicates, note lengths,
 slides, capo frets, phrase-start anchors, template fingers, declared tones);
 Improve POLISHES a valid chart (spacing enforcer, trim to audio, extra beats,
 END phrase, phrase- AND section-start anchors, chord sustains, link-nexts,

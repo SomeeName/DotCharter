@@ -96,7 +96,6 @@ public partial class PhrasesInspectorViewModel : ViewModelBase, IPhrasesScreen
 
     public ObservableCollection<PhraseGroupRow> Phrases { get; } = [];
     IReadOnlyList<IPhraseGroupRow> IPhrasesScreen.Phrases => Phrases;
-    ICommand IPhrasesScreen.RefreshCommand => RefreshCommand;
     ICommand IPhrasesScreen.RenamePhraseCommand => RenamePhraseCommand;
     ICommand IPhrasesScreen.CancelRenameCommand => CancelRenameCommand;
     ICommand IPhrasesScreen.DeletePhraseCommand => DeletePhraseCommand;
@@ -118,8 +117,7 @@ public partial class PhrasesInspectorViewModel : ViewModelBase, IPhrasesScreen
     private int? _builtFrom;
 
     /// <summary>Rebuilds the browser from the active arrangement (called on
-    /// tab activation and by the refresh button — never per tick).</summary>
-    [RelayCommand]
+    /// tab activation and by the Song tab's Refresh — never per tick).</summary>
     public void Refresh()
     {
         RebuildRows();

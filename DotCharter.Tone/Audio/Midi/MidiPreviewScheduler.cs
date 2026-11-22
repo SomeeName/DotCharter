@@ -237,6 +237,22 @@ internal sealed class MidiPreviewScheduler
     /// <summary>An instrument was attached: its channels hold nothing yet.</summary>
     public void ForgetChannelNotes() => Array.Fill(_channelNote, -1);
 
+    /// <summary>A new engine has a new frame domain and no parked or sounding notes.</summary>
+    public void ResetForEngine()
+    {
+        _active.Clear();
+        _expired.Clear();
+        _trackedCount = 0;
+        Array.Fill(_channelNote, -1);
+        Array.Clear(_channelOnFrame);
+        Array.Fill(_lastOffFrame, long.MinValue);
+        _anchor = default;
+        _lastNowMs = double.NaN;
+        _resumeAtMs = null;
+        _scannedToMs = 0;
+        IsSampleAccurate = false;
+    }
+
     private void FlushCore(IMidiEventSink sink)
     {
         foreach (var key in _active.Keys) SendOff(sink, key.Channel, key.Note, -1);

@@ -137,7 +137,7 @@ public static class BundledNamCaptureInstaller
         catch (Exception ex)
         {
             logger?.Warning(AppLogCategory.Application,
-                $"Bundled NAM capture install failed: {ex.GetType().Name}: {ex.Message}");
+                "Bundled NAM capture install failed", ex);
             return 0;
         }
     }

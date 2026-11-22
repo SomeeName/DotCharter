@@ -31,30 +31,38 @@ public sealed class HttpListenerOAuthCallbackListenerTests
     ///     faults the returned task before it yields and the next port is tried; the
     ///     scan starts at a random offset so concurrent processes rarely meet.
     /// </summary>
-    private static (string Prefix, Task<string?> Wait) Listen(Func<string, bool> accept, TimeSpan timeout)
+    private static (string Prefix, Task<string?> Wait) Listen(Func<string, bool> accept, TimeSpan timeout, StepTimeProvider time)
     {
         var count = LastPort - FirstPort + 1;
         var offset = Random.Shared.Next(count);
+        HttpListenerException? bindFailure = null;
         for (var i = 0; i < count; i++)
         {
             var port = FirstPort + (offset + i) % count;
             if (port == Tone3000OAuth.CallbackPort) continue;
 
             var prefix = $"http://localhost:{port}/tone3000/callback/";
-            var wait = new HttpListenerOAuthCallbackListener().WaitForCallbackAsync(prefix, accept, timeout, Ct);
-            if (wait.IsFaulted && wait.Exception!.InnerException is HttpListenerException) continue;
+            var wait = new HttpListenerOAuthCallbackListener(time).WaitForCallbackAsync(prefix, accept, timeout, Ct);
+            if (wait.IsFaulted && wait.Exception!.InnerException is HttpListenerException ex)
+            {
+                bindFailure = ex;
+                continue;
+            }
+            // Binding and arming the clock both happen before the listener's first await.
+            Assert.Equal(1, time.PendingTimers);
             return (prefix, wait);
         }
 
-        throw new InvalidOperationException($"no free loopback port in {FirstPort}-{LastPort}");
+        throw new InvalidOperationException($"no free loopback port in {FirstPort}-{LastPort}", bindFailure);
     }
 
     [Fact]
     public async Task AStrayRequestDoesNotEndTheWait_TheRightOneDoes()
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+        var time = new StepTimeProvider();
         var (prefix, wait) = Listen(
-            query => query.Contains("state=GOOD", StringComparison.Ordinal), TimeSpan.FromSeconds(30));
+            query => query.Contains("state=GOOD", StringComparison.Ordinal), TimeSpan.FromSeconds(30), time);
 
         // A wrong state, the right state on another path, and a bare knock: none ends the wait.
         Assert.Equal(HttpStatusCode.NotFound, await GetAsync(http, prefix + "?error=access_denied&state=EVIL"));
@@ -72,10 +80,15 @@ public sealed class HttpListenerOAuthCallbackListenerTests
     public async Task OnlyStrayRequests_RunToTheTimeoutAndAnswerNull()
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+        var time = new StepTimeProvider();
+        var timeout = TimeSpan.FromSeconds(2);
         var (prefix, wait) = Listen(
-            query => query.Contains("state=GOOD", StringComparison.Ordinal), TimeSpan.FromSeconds(2));
+            query => query.Contains("state=GOOD", StringComparison.Ordinal), timeout, time);
 
         Assert.Equal(HttpStatusCode.NotFound, await GetAsync(http, prefix + "?code=c&state=EVIL"));
+        time.Advance(timeout - TimeSpan.FromTicks(1));
+        Assert.False(wait.IsCompleted, "a stray request ended the wait before the timeout");
+        time.Advance(TimeSpan.FromTicks(1));
 
         Assert.Null(await wait.WaitAsync(TimeSpan.FromSeconds(60), Ct));
     }

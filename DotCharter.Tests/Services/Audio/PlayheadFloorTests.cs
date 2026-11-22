@@ -131,7 +131,9 @@ public sealed class PlayheadFloorTests
         Assert.Contains("_playhead.TryTick(nativeMs, nowTicks, speed, epoch, out var reportMs)", service);
 
         var getter = Read("JuceAudioPlaybackService.Playhead.cs");
-        Assert.Contains("_lastKnownPosition.Clamp(lat, epoch)", getter);
+        Assert.Contains("Engine.PlayheadReadback.Read(_source, _playhead, _lastKnownPosition", getter);
+        var readback = Read(Path.Combine("Engine", "PlayheadReadback.cs"));
+        Assert.Contains("floor.Clamp(lat, epoch)", readback);
 
         foreach (var file in PlaybackServiceSourceFiles.All())
         {

@@ -1,10 +1,14 @@
 # DotCharter.Presentation.Fakes Agent Guide
 
-Services-free fakes of the `DotCharter.Presentation` contracts, for the gallery
+Fakes of the `DotCharter.Presentation` contracts, for the gallery
 (`DotCharter.UI.Gallery`) and the tests. **`DotCharter.UI` may never reference
 this project** — a fake in the product assembly is one `DataContext` typo away
 from shipping (`Infrastructure/AssemblyLayeringTests` checks the emitted
 references and the csproj).
+
+Pure static catalogs such as `ExportAudioFormats` may be shared through the declared
+Services reference; fakes still resolve no runtime services. The Rocksmith export
+fake uses the catalog's display text for `MainAudioWatermark`.
 
 ## Shape
 

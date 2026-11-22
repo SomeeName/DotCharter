@@ -174,6 +174,40 @@ public sealed class DspTonePresetLibraryTests
         new(chain, config ?? new FakeConfigurationService());
 
     [Fact]
+    public void SaveUser_whose_write_fails_answers_not_written()
+    {
+        var config = new FakeConfigurationService { FailWrites = true };
+
+        var saved = NewService(FullChain(), config)
+            .SaveUser("Unsaved", DspToneCategory.Clean, "", new DcRigPreset([]), null, out var written);
+
+        Assert.False(written);
+        Assert.Equal("Unsaved", saved.Name);
+    }
+
+    [Fact]
+    public void StageUser_saves_in_memory_and_leaves_the_disk_write_to_its_caller()
+    {
+        var config = new FakeConfigurationService { FailWrites = true };
+        var service = NewService(FullChain(), config);
+
+        var saved = service.StageUser("Later", DspToneCategory.Clean, "", new DcRigPreset([]), null, out var write);
+
+        Assert.Equal(0, config.UpdateAndWriteCount);
+        Assert.Contains(service.UserPresets, p => p.Id == saved.Id);
+        Assert.False(write());
+        Assert.Equal(1, config.UpdateAndWriteCount);
+    }
+
+    [Fact]
+    public void SaveUser_whose_write_lands_answers_written()
+    {
+        NewService(FullChain()).SaveUser("Saved", DspToneCategory.Clean, "", new DcRigPreset([]), null, out var written);
+
+        Assert.True(written);
+    }
+
+    [Fact]
     public void Service_ExposesFactoryAndUserSets()
     {
         var service = NewService(FullChain());

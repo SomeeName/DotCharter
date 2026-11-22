@@ -63,6 +63,22 @@ public sealed class AudioLintStaleResultTests
         return (vm, svc, current);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(59)]
+    public async Task Finding_labels_and_descriptions_preserve_elapsed_hours(int? observedMidi)
+    {
+        var (vm, svc, _) = Rig();
+        var run = vm.RunCommand.ExecuteAsync(null);
+        svc.Gate.SetResult(new AudioChartLintOutcome(true, null, 1, 0,
+            [new ChartAudioFinding(3_723_456, 60, 0.9f, observedMidi, 0.8f)]));
+        await run;
+
+        var row = Assert.Single(vm.AudioFindings);
+        Assert.Equal("1:02:03.4", row.TimeLabel);
+        Assert.Contains("1:02:03.4", row.Description, StringComparison.Ordinal);
+    }
+
     /// <summary>The ordinary path, so the guards below cannot pass by refusing
     /// every result.</summary>
     [Fact]

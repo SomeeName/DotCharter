@@ -1,4 +1,3 @@
-using System.Globalization;
 using DotCharter.Services.Audio.LivePlay;
 
 namespace DotCharter.UI.ViewModels.Editor;
@@ -13,7 +12,7 @@ internal static class MarkerOccurrenceLabel
 {
     public static string Format(ILocalizationService localization, int ordinal, IList<BeatMarker> beats, double timeMs)
     {
-        var time = TimeSpan.FromMilliseconds(Math.Max(0, timeMs)).ToString(@"m\:ss\.f", CultureInfo.InvariantCulture);
+        var time = ElapsedTimeLabel.Format(timeMs, 1);
         return LiveBarNumbers.BarAt(beats, timeMs) is { } bar
             ? localization.Format("Inspector_Markers_OccurrenceFmt", ordinal, bar, time)
             : localization.Format("Inspector_Markers_OccurrenceNoBarFmt", ordinal, time);

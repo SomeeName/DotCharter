@@ -1,101 +1,11 @@
-// InspectorViewModel: the multi-selection verbs - fret/string steps, reset flags, apply the current values to every selected sound, and set a finger on the masked strings.
+// InspectorViewModel: the multi-selection verbs - apply the current values to every selected sound, and set a finger on the masked strings.
 
-using System.Globalization;
 using CommunityToolkit.Mvvm.Input;
 
 namespace DotCharter.UI.ViewModels.Editor;
 
 public partial class InspectorViewModel
 {
-    // ---- the bulk verbs (§4.4) ---------------------------------------------
-    //
-    // These are NOT new commands: they are the existing SelectedNoteMutation
-    // verbs that until now existed ONLY as keybinds, appearing in no menu and no
-    // palette. A user who never opens the Keybinds tab could not discover that
-    // they exist. Surfacing them on the multi-selection card is the cheapest
-    // possible fix, and it is the ONLY state where per-field editors are
-    // meaningless anyway.
-
-    /// <summary>Fret ±1 / ±12. The octave step is twelve single moves, exactly
-    /// as the keybind does it, so the clamping and template repointing stay one
-    /// implementation.</summary>
-    /// <remarks>
-    ///     The parameter is a STRING because it comes from a XAML
-    ///     <c>CommandParameter="1"</c> literal, which is a string. Declaring it
-    ///     <c>int</c> makes CommunityToolkit generate a <c>RelayCommand&lt;int&gt;</c>
-    ///     whose <c>CanExecute</c> THROWS <see cref="ArgumentException" /> the moment
-    ///     the Button attaches to the logical tree — an unhandled crash during
-    ///     layout, not a binding warning. `SheetMusicPaneViewModel.ApplyDurationValue`
-    ///     already takes a string for exactly this reason; keep them consistent.
-    /// </remarks>
-    [RelayCommand]
-    private void BulkFret(string? deltaText)
-    {
-        if (!int.TryParse(deltaText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var delta)) return;
-        var steps = Math.Abs(delta);
-        for (var i = 0; i < steps; i++)
-        {
-            if (delta > 0) _highwayEditingService.MoveSelectedFretUp();
-            else _highwayEditingService.MoveSelectedFretDown();
-        }
-    }
-
-    /// <summary>String ±1. On a chord this moves the WHOLE shape or none of it —
-    /// clamping per string would stack two chord notes on one lane, which the
-    /// model, the renderers and the SNG's fixed-size arrays cannot express.</summary>
-    /// <remarks>
-    ///     The parameter is a STRING because it comes from a XAML
-    ///     <c>CommandParameter="1"</c> literal, which is a string. Declaring it
-    ///     <c>int</c> makes CommunityToolkit generate a <c>RelayCommand&lt;int&gt;</c>
-    ///     whose <c>CanExecute</c> THROWS <see cref="ArgumentException" /> the moment
-    ///     the Button attaches to the logical tree — an unhandled crash during
-    ///     layout, not a binding warning. `SheetMusicPaneViewModel.ApplyDurationValue`
-    ///     already takes a string for exactly this reason; keep them consistent.
-    /// </remarks>
-    [RelayCommand]
-    private void BulkString(string? deltaText)
-    {
-        if (!int.TryParse(deltaText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var delta)) return;
-        if (delta > 0) _highwayEditingService.MoveSelectedStringUp(NoteStringCount);
-        else _highwayEditingService.MoveSelectedStringDown();
-    }
-
-    // ----- Bottom-action-bar commands (UX7) -----
-
-    // "Reset" wipes all binary flags on every selected note/chord back to
-    // their default (false). Doesn't touch fret/string/sustain/technique
-    // ints — those have meaningful "unset" representations elsewhere.
-
-    [RelayCommand]
-    private void ResetNoteFlags()
-    {
-        if (_isSyncing || !SelectedNotes.Any()) return;
-        ApplyNoteMutation(n =>
-        {
-            n.Accent = false;
-            SetVibrato(n, false);
-            n.LinkNext = false;
-            n.PassOtherNotes = false;
-            n.Ignore = false;
-            n.Tremolo = false;
-            n.UnpitchedSlide = false;
-        });
-    }
-
-    [RelayCommand]
-    private void ResetChordFlags()
-    {
-        if (_isSyncing || !SelectedChords.Any()) return;
-        ApplyChordMutation(c =>
-        {
-            c.Accent = false;
-            c.SplitIntoNotes = false;
-            c.ForceNoNotes = false;
-            c.PassOtherNotes = false;
-            c.Ignore = false;
-        });
-    }
-
     // "Apply current values to all selected" — re-issues the current
     // chip/combo state of the inspector to every note in SelectedNotes,
     // even when the chip is indeterminate (in which case we treat the

@@ -701,6 +701,34 @@ public class ChartSpacingEnforcerTests
 
     // ── anchors ──────────────────────────────────────────────────────────────
 
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(1)]
+    public void AnAnchorExactlyOnASoundStaysThereAcrossRepeatedEnforcement(int neighbourDirection)
+    {
+        var arr = new Arrangement { Name = "Lead", StringCount = 6 };
+        var level = new ChartLevel();
+        var position = Pos(4);
+        level.Notes.Add(new GuitarNote { Position = position, StringIndex = 0, Fret = 5 });
+        var chord = new Chord
+        {
+            Position = position + new FractionalPosition(new Fraction(neighbourDirection, 200))
+        };
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 5 });
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 2, Fret = 7 });
+        level.Chords.Add(chord);
+        level.Anchors.Add(new FretAnchor(position, 5));
+        arr.Levels.Add(level);
+        var beats = BuildBeats(12);
+
+        for (var i = 0; i < 3; i++)
+        {
+            ChartSpacingEnforcer.EnforceArrangement(arr, beats, DefaultConfig());
+
+            Assert.Equal(position, Assert.Single(level.Anchors).Position);
+        }
+    }
+
     [Fact]
     public void TwoAnchorsSnappingOntoOneSound_CollapseToASingleAnchor()
     {

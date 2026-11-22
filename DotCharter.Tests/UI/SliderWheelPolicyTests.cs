@@ -46,11 +46,11 @@ public sealed class SliderWheelPolicyTests
     [Fact]
     public void TheEqPlotOnlyTakesTheWheelWithCtrl()
     {
-        Assert.True(typeof(IWheelAdjustable).IsAssignableFrom(typeof(EqPlotControl)),
+        Assert.True(typeof(IWheelAdjustable).IsAssignableFrom(typeof(ColumnFlowEqPlot)),
             "the EQ plot edits Q on the wheel, so the scroll-host policy must know it is wheel-adjustable.");
-        Assert.False(EqPlotControl.IsQWheel(KeyModifiers.None));
-        Assert.False(EqPlotControl.IsQWheel(KeyModifiers.Shift));
-        Assert.True(EqPlotControl.IsQWheel(KeyModifiers.Control));
+        Assert.False(ColumnFlowEqPlot.IsQWheel(KeyModifiers.None));
+        Assert.False(ColumnFlowEqPlot.IsQWheel(KeyModifiers.Shift));
+        Assert.True(ColumnFlowEqPlot.IsQWheel(KeyModifiers.Control));
     }
 
     /// <summary>

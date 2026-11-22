@@ -11,6 +11,23 @@
   `Cursor`, no `Transitions`). Regions and marks live in `Fire.axaml`:
   `Border.FireMenuBar` (38) / `Border.FireToolbar` / `Border.FireStatusBar` (30),
   and `MenuItem.FireMenuTop` for a top-level header.
+  - **The toolbar's SHAPE (#492), left to right.** PLAYBACK (`TbGroup`): ONE
+    Play/Pause button (`PlayPauseButton`: `Transport.TogglePlayPauseCommand`;
+    the glyph, accessible name and tooltip follow `Transport.IsPlaying` through
+    `PlayPauseLabel` / `PlayPauseTip`), Stop, loop, metronome, claps, the
+    chart-sound toggle, the speed chip (`TempoFlyoutButton`, its `TempoLabel`
+    prints `Transport.PlaybackSpeed`, opens the Playback speed popover), then
+    Mix and Practice tools. EDIT: grid snap, undo, redo, save. VIEW: zoom,
+    follow playhead, Tracks (arrangement name + level badge). The right-pinned
+    `ToolbarQuickGroup`: the overflow button, the tone preview as ONE split
+    button (`TonePreviewButton` toggles with the last-used target and wears the
+    headphones or gamepad glyph for it; `TonePreviewTargetButton`'s popup picks
+    DotCharter rig / Rocksmith), the tuner, a `GroupDivider`, the four panel
+    toggles, a `GroupDivider`, and the Export button (`ExportFlyoutButton`).
+    Nothing was removed; `UI/ToolbarClusterTests` pins the order and the
+    commands, `Perf/ToolbarClusterUiPerfSmokeTests` the layout at 1280 / 1600 /
+    1920 and the popups. The split is two buttons joined by a negative margin,
+    not Fluent's `SplitButton` (it would bring its own, unthemed template).
   - **A DROPDOWN'S CHROME CANNOT BE SET BY A STYLE SELECTOR, and the app shipped
     that mistake for several releases.** Avalonia's `MenuItem`/`ComboBox`
     templates set their popup Border's Background / BorderBrush /
@@ -58,9 +75,27 @@
     `Panels` are the new submenus, and Arrangements / Vocals / Help stay flat
     because 4-5 items do not need a level. The rules are pinned by
     `UI/MainMenuLocalizationTests`: ≤ 14 direct entries per top-level menu, and
-    **no submenu may hold fewer than three rows** (the two Tools groups that
-    hold two are named exceptions — they group by TARGET, and the pair is the
-    group). A new group header is a resx key in BOTH files.
+    **no submenu may hold fewer than three rows** (no exceptions since #491
+    folded the three two-row groups). A new group header is a resx key in ALL
+    THREE files.
+  - **Tools is in the order a chart is made (#491):** `Generate`, `Fix & clean
+    up`, `AI`, `Repeats`, `Tones`, then the Showlights editor and the two review
+    rows (Compare with the saved version, Check every chart in the library); nothing under Tools
+    is deeper than one submenu. Chord verbs are Edit ▸ Chord, next to
+    Technique, and double/half time sit in Edit ▸ Move & resize, which keeps
+    Edit at the 14-entry cap. A new tool goes into the group of the STEP it
+    serves, not a group named after its object. Order, group contents and
+    "every command the old menu reached still has a menu row and its palette
+    id" are `UI/ToolsMenuWorkflowOrderTests`; Edit's shape is
+    `UI/EditMenuStructureTests`.
+  - **One row, two scopes:** Tools ▸ Generate ▸ Fret hand positions runs on the
+    selection when it holds a note or chord, else on the arrangement, and its
+    text says which. The header is BOUND (`EditingAvailability.GenerateFhpLabel`,
+    the one bound header in the bar); the same predicate picks the generator
+    (`EditingAvailability.GenerateFhp`, run by `ViewModels/Shell/FhpGenerationViewModel`,
+    which owns the three FHP commands), so the row cannot say one scope and
+    run the other. The palette keeps one id per scope. Use this shape, not two
+    rows, for a verb that differs only in scope.
   - **One file per top-level menu (#653).** `MainMenuView.axaml` is the bar
     alone: the `EditorMenu` and eight elements, `<menus:FileMenu />` …
     `<menus:HelpMenu />`. Each menu — its `FireMenuTop` header and every row —
@@ -79,8 +114,8 @@
   - **Tools has no "Prepare for Rocksmith" any more (#952)**: every export applies
     DLC Builder's fixes and levels to its copy, and the chart's context menu
     ("Apply DLC Builder fixes to the chart", palette id `tools.applyDlcBuilderFixes`)
-    puts them into the project. Improve chart and Auto-fix arrangements each carry
-    a tooltip saying how they differ.
+    puts them into the project. Polish chart and Fix chart errors are the two groups of the one Fix chart
+    dialog (a Tools row; both palette ids stay).
 
 ## The status rail's editing-state readouts
 
@@ -164,8 +199,13 @@
   200 px minimum outranks `Width`). Pinned by
   `Perf/StatusRailNarrowWidthUiPerfSmokeTests` (1280 / 1920, with and without
   a task; also the Library footer's load status vs. the Load button).
+- **The audio readout is ONE health dot** (`StatusAudioHealth` on `StatusBar.axaml`) with the detail text as
+  its tooltip; the text prints beside it, in the warning colour, only while `HasAudioProblem` (no device, a
+  lost device, or a dropout in the last 30 s: the pure `AudioRailHealth`, fed by `IAudioDeviceControl.IsDeviceLost`
+  and `DropoutCount`). The grid snap is NOT on the rail (it is the toolbar's Grid snap picker).
+  `UI/ViewModels/Application/StatusBarAudioHealthTests`.
 - **The audio readout and the "+N more" task suffix are resx keys**
-  (`StatusBar_Audio_NotReady`, `StatusBar_Audio_Fmt`, `StatusBar_Task_MoreFmt`)
+  (`StatusBar_Audio_NotReady`, `StatusBar_Audio_Fmt`, `StatusBar_Audio_Dropouts`, `StatusBar_Audio_DeviceLost`, `StatusBar_Task_MoreFmt`)
   formatted through the injected `ILocalizationService`; pinned by
   `UI/ViewModels/Application/StatusBarLocalizedReadoutTests`.
 

@@ -77,7 +77,7 @@ public sealed class EofImportViewModel : DialogViewModel<EofImportSelection?>, I
         AvailableTracks = request.Tracks.Where(t => t.NoteCount > 0)
             .Select(IEofTrackOption (t) => new TrackOption(t.Id, t.IsVocals
                 ? _localization.Plural("Dialog_EofImport_VocalTrack_One", "Dialog_EofImport_VocalTrack_Many", t.NoteCount, t.Name)
-                : $"{t.Name} ({t.NoteCount} notes)"))
+                : _localization.Plural("Dialog_EofImport_Track_One", "Dialog_EofImport_Track_Many", t.NoteCount, t.Name)))
             .ToList();
         _logger.Info(AppLogCategory.Import,
             $"Editor on Fire track list loaded from '{_filePath}'. Tracks={AvailableTracks.Count}: " +

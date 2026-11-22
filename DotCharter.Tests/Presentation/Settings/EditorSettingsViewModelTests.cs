@@ -3,6 +3,7 @@ using System.Reflection;
 using DotCharter.Presentation.Contracts.Settings;
 using DotCharter.Presentation.Screens.Settings;
 using DotCharter.Services.Editing;
+using DotCharter.Tests.Presentation.Dialogs;
 
 namespace DotCharter.Tests.Presentation.Settings;
 
@@ -13,6 +14,74 @@ namespace DotCharter.Tests.Presentation.Settings;
 /// </summary>
 public sealed class EditorSettingsViewModelTests
 {
+    [Fact]
+    public void PasteReplacement_LoadsTracksSavesAndReverts()
+    {
+        var rig = NewRig();
+        Assert.True(rig.Vm.PasteReplacesExisting);
+        rig.Vm.PasteReplacesExisting = false;
+        Assert.Single(rig.Vm.UnsavedSettings);
+        rig.Vm.Save();
+        Assert.False(rig.Config.AppConfig.PasteReplacesExisting);
+        rig.Vm.Load();
+        Assert.False(rig.Vm.PasteReplacesExisting);
+        rig.Vm.PasteReplacesExisting = true;
+        rig.Vm.Revert();
+        Assert.False(rig.Vm.PasteReplacesExisting);
+        Assert.Empty(rig.Vm.UnsavedSettings);
+        Assert.Contains(rig.Vm.SearchGroups.SelectMany(g => g.Rows), r => r.Key == "editor.pasteReplacesExisting");
+    }
+
+    [Fact]
+    public void Saving_spacing_is_one_dirty_edit_and_undo_restores_the_chart()
+    {
+        var rig = NewRig();
+        var history = new HistoryService(new FakeAppLogger());
+        var vm = HistoryTestActivation.Create<EditorSettingsViewModel>(history, rig.Config, FakeLocalization.English(), rig.State,
+            RecordingProxy.Create<IChartEditorSurface>().Proxy, rig.Device, new FakeAppLogger());
+        vm.Load();
+        var project = new ChartProject();
+        for (var i = 0; i < 8; i++) project.Beats.Add(new BeatMarker { Time = i * 500, Bpm = 120, IsMeasure = i % 4 == 0 });
+        var arrangement = new Arrangement();
+        var level = new ChartLevel();
+        var note = new GuitarNote { Position = new FractionalPosition(0), Sustain = new FractionalPosition(1), Fret = 5 };
+        level.Notes.Add(note);
+        level.Notes.Add(new GuitarNote { Position = new FractionalPosition(1), Fret = 5 });
+        var firstAnchor = new FretAnchor(new FractionalPosition(0), 5);
+        var removedAnchor = new FretAnchor(new FractionalPosition(1), 5);
+        level.Anchors.Add(firstAnchor);
+        level.Anchors.Add(removedAnchor);
+        var template = new ChordTemplate { Id = 0, Name = "C-arp" };
+        arrangement.ChordTemplates.Add(template);
+        arrangement.Levels.Add(level);
+        project.Arrangements.Add(arrangement);
+        rig.State.ActiveProject = project;
+        using var dirty = new ProjectDirtyTracker(history);
+        vm.MinNoteDistanceModeIndex = 0;
+        vm.MinNoteDistanceMs = 250;
+
+        vm.Save();
+
+        Assert.Equal(new FractionalPosition(0, new Fraction(1, 2)), note.Sustain);
+        Assert.True(dirty.IsDirty);
+        Assert.Single(history.GetUndoSteps());
+        Assert.Single(level.Anchors);
+        Assert.Equal("C", template.Name);
+        Assert.True(template.ForceArpeggioInRs);
+        vm.Save();
+        Assert.Single(history.GetUndoSteps());
+        history.Undo();
+        Assert.Equal(new FractionalPosition(1), note.Sustain);
+        Assert.False(dirty.IsDirty);
+        Assert.Same(note, level.Notes[0]);
+        Assert.Same(firstAnchor, level.Anchors[0]);
+        Assert.Same(removedAnchor, level.Anchors[1]);
+        Assert.Equal("C-arp", template.Name);
+        Assert.False(template.ForceArpeggioInRs);
+        history.Redo();
+        Assert.Equal(new FractionalPosition(0, new Fraction(1, 2)), note.Sustain);
+    }
+
     private sealed record Rig(EditorSettingsViewModel Vm, FakeConfigurationService Config, ProjectState State, RedrawCounter Editor, FakeDevice Device);
 
     private static Rig NewRig(Action<AppConfig>? seed = null)
@@ -22,7 +91,8 @@ public sealed class EditorSettingsViewModelTests
         var state = new ProjectState();
         var editor = DispatchProxy.Create<IChartEditorSurface, RedrawCounter>();
         var device = new FakeDevice();
-        var vm = new EditorSettingsViewModel(config, FakeLocalization.English(), state, editor, device, new FakeAppLogger());
+        var vm = HistoryTestActivation.Create<EditorSettingsViewModel>(new HistoryService(new FakeAppLogger()),
+            config, FakeLocalization.English(), state, editor, device, new FakeAppLogger());
         vm.Load();
         return new Rig(vm, config, state, (RedrawCounter)(object)editor, device);
     }
@@ -210,6 +280,33 @@ public sealed class EditorSettingsViewModelTests
 
         rig.Vm.ApplySearch("");
         Assert.Empty(rig.Vm.HiddenKeys);
+    }
+
+    /// <summary>#805: the inspector's Apply step is off by default, persists, and a save reaches the live state the
+    /// inspector reads (no restart).</summary>
+    [Fact]
+    public void TheInspectorApplyStep_IsOffByDefault_PersistsAndReachesTheLiveStateOnSave()
+    {
+        Assert.False(new AppConfig().InspectorApplyStep);
+        var rig = NewRig();
+        Assert.False(rig.Vm.InspectorApplyStep);
+        Assert.False(rig.State.InspectorApplyStep);
+
+        rig.Vm.InspectorApplyStep = true;
+        Assert.Single(rig.Vm.UnsavedSettings);
+        rig.Vm.Save();
+
+        Assert.True(rig.Config.AppConfig.InspectorApplyStep);
+        Assert.True(rig.State.InspectorApplyStep);
+        rig.Vm.InspectorApplyStep = false;
+        rig.Vm.Load();
+        Assert.True(rig.Vm.InspectorApplyStep);
+        Assert.Contains(rig.Vm.SearchGroups.SelectMany(g => g.Rows), r => r.Key == "editor.inspectorApplyStep");
+
+        rig.Vm.InspectorApplyStep = false;
+        rig.Vm.Save();
+        Assert.False(rig.Config.AppConfig.InspectorApplyStep);
+        Assert.False(rig.State.InspectorApplyStep);
     }
 
     [Fact]

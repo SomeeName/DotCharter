@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace DotCharter.Services.Audio.LivePlay;
 
 /// <summary>
@@ -34,6 +32,7 @@ public sealed class LivePlayDetectionPump : IDisposable
     private readonly Action _tick;
     private readonly int _cadenceMs;
     private readonly string _threadName;
+    private readonly TimeProvider _time;
     private readonly object _lifecycle = new();
     private Run? _run;
 
@@ -67,13 +66,15 @@ public sealed class LivePlayDetectionPump : IDisposable
         public volatile bool DisposeWakeOnExit;
     }
 
-    public LivePlayDetectionPump(Action tick, int cadenceMs = 33, string threadName = "LivePlay Detection Pump")
+    public LivePlayDetectionPump(Action tick, int cadenceMs = 33, string threadName = "LivePlay Detection Pump",
+        TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(tick);
         ArgumentOutOfRangeException.ThrowIfLessThan(cadenceMs, 1);
         _tick = tick;
         _cadenceMs = cadenceMs;
         _threadName = threadName;
+        _time = timeProvider ?? TimeProvider.System;
     }
 
     /// <summary>True while the worker thread is running (between Start and Stop).</summary>
@@ -147,6 +148,17 @@ public sealed class LivePlayDetectionPump : IDisposable
 
     public void Dispose() => Stop();
 
+    /// <summary>True when the stop signal arrived before the tick was due.</summary>
+    private bool WaitForTickOrStop(Run run, long waitMs)
+    {
+        if (ReferenceEquals(_time, TimeProvider.System)) return run.Wake.Wait((int)Math.Min(waitMs, int.MaxValue));
+        // An injected clock (tests) paces through its own timers, so a test decides when a tick is due.
+        // Not disposed: a timer callback may still run after this returns and would hit a disposed event.
+        var due = new ManualResetEventSlim(false);
+        using var timer = _time.CreateTimer(_ => due.Set(), null, TimeSpan.FromMilliseconds(waitMs), Timeout.InfiniteTimeSpan);
+        return WaitHandle.WaitAny([run.Wake.WaitHandle, due.WaitHandle]) == 0;
+    }
+
     private void Worker(Run run)
     {
         try
@@ -156,21 +168,21 @@ public sealed class LivePlayDetectionPump : IDisposable
             var predecessor = run.Predecessor;
             if (predecessor != null && predecessor.Thread != Thread.CurrentThread) predecessor.Thread.Join();
 
-            var clock = Stopwatch.StartNew();
+            var clockStart = _time.GetTimestamp();
             long tickIndex = 0;
             while (!run.StopRequested)
             {
                 tickIndex++;
                 var targetMs = tickIndex * _cadenceMs;
-                var waitMs = targetMs - clock.ElapsedMilliseconds;
+                var waitMs = targetMs - (long)_time.GetElapsedTime(clockStart).TotalMilliseconds;
                 if (waitMs > 0)
                 {
-                    if (run.Wake.Wait((int)Math.Min(waitMs, int.MaxValue))) break; // woken = stop
+                    if (WaitForTickOrStop(run, waitMs)) break; // woken = stop
                 }
                 else if (waitMs < -4L * _cadenceMs)
                 {
                     // Far behind schedule: realign rather than burst catch-up ticks.
-                    tickIndex = clock.ElapsedMilliseconds / _cadenceMs;
+                    tickIndex = (long)_time.GetElapsedTime(clockStart).TotalMilliseconds / _cadenceMs;
                 }
 
                 if (run.StopRequested) break;

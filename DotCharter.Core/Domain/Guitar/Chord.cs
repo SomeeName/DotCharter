@@ -118,12 +118,25 @@ public class Chord : ITimedElement
 
     public Chord Clone()
     {
+        using var identities = ChartSnapshotIdentities.BeginCapture();
         var clone = new Chord();
-        clone.CopyFrom(this);
+        ChartProjectRestorer.RestoreChord(clone, this);
         return clone;
     }
 
     public void CopyFrom(Chord other)
+    {
+        using var identities = ChartSnapshotIdentities.BeginCapture(snapshotDestinations: false);
+        ChartProjectRestorer.RestoreChord(this, other);
+    }
+
+    public void CopyChordNotesFrom(Chord other)
+    {
+        using var identities = ChartSnapshotIdentities.BeginCapture(snapshotDestinations: false);
+        ChartProjectRestorer.RestoreChordNotes(this, other);
+    }
+
+    internal void CopyFieldsFrom(Chord other)
     {
         Position = other.Position;
         TemplateId = other.TemplateId;
@@ -135,8 +148,5 @@ public class Chord : ITimedElement
         Ignore = other.Ignore;
         IgnoreDerived = other.IgnoreDerived;
         PassOtherNotes = other.PassOtherNotes;
-
-        ChordNotes.Clear();
-        foreach (var note in other.ChordNotes) ChordNotes.Add(note.Clone());
     }
 }

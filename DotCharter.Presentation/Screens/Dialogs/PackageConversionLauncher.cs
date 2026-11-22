@@ -72,12 +72,15 @@ public sealed class PackageConversionLauncher(
         if (!beside)
         {
             outputDirectory = await storage.OpenFolderPickerAsync(
-                _localization["Picker_ConvertOutputFolder"], Path.GetDirectoryName(files[0]));
+                _localization["Picker_ConvertOutputFolder"],
+                config.StartDirectory(c => c.LastConversionOutputDir) ?? Path.GetDirectoryName(files[0]));
             if (string.IsNullOrEmpty(outputDirectory))
             {
                 _logger.Info(AppLogCategory.Import, "Package conversion output folder picker canceled.");
                 return null;
             }
+
+            config.RememberPickedFolder(outputDirectory, (c, d) => c.LastConversionOutputDir = d);
         }
 
         PackageConversionReport report;

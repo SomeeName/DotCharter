@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Rendering.SceneGraph;
 using Avalonia.Threading;
 using DotCharter.Services.Export.Sheet;
+using DotCharter.Tone.UI.Controls;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotCharter.UI.Controls.Sheet;
@@ -70,7 +71,7 @@ public sealed class SheetMusicView : UserControl
     public const double MinUserScale = 0.6;
     public const double MaxUserScale = 2.5;
 
-    private readonly SheetMusicRenderer _renderer = new();
+    private readonly ISheetMusicRenderer _renderer;
     private readonly SheetCanvas _canvas;
     private readonly CursorOverlay _cursorOverlay;
     private readonly SelectionOverlay _selectionOverlay;
@@ -119,8 +120,9 @@ public sealed class SheetMusicView : UserControl
     // Editing surface state: the exporter's per-beat map, AlphaTab's per-beat
     // bounds and the tab staff's string-line lattice — together they turn a
     // click on a glyph into the exact domain note (and a double-click into an
-    // insertion point). Swapped atomically with the render result.
+    // insertion point). Reuse refreshes domain beats against retained bounds.
     private IReadOnlyList<AlphaTexExporter.SheetBeat> _beatMap = Array.Empty<AlphaTexExporter.SheetBeat>();
+    private IReadOnlyList<SheetMusicRenderer.BeatBound> _beatBounds = Array.Empty<SheetMusicRenderer.BeatBound>();
     private Dictionary<int, List<(SheetMusicRenderer.BeatBound Bound, AlphaTexExporter.SheetBeat Beat)>> _beatsByBar = [];
     private IReadOnlyList<SheetMusicRenderer.StringLine> _stringLattice = Array.Empty<SheetMusicRenderer.StringLine>();
 
@@ -164,8 +166,11 @@ public sealed class SheetMusicView : UserControl
     /// the keys fall through to the global playback-speed binding.</summary>
     public event Action<int>? DurationStepRequested;
 
-    public SheetMusicView()
+    public SheetMusicView() : this(new SheetMusicRenderer()) { }
+
+    internal SheetMusicView(ISheetMusicRenderer renderer)
     {
+        _renderer = renderer;
         // The strip is an editing surface: it takes focus on click so digit
         // keys type frets here, while unhandled keys (Entf, arrows) keep
         // bubbling to the window's global keybind routes.
@@ -241,6 +246,10 @@ public sealed class SheetMusicView : UserControl
 
         _debounce = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(250) };
         _debounce.Tick += (_, _) => { _debounce.Stop(); _ = RebuildAsync(); };
+        _ = new EffectiveVisibilityWatcher(this, visible =>
+        {
+            if (visible && _rebuildPendingWhileHidden) ScheduleRebuild();
+        });
 
         // Ctrl+wheel zooms the sheet; a plain wheel keeps scrolling.
         AddHandler(PointerWheelChangedEvent, (_, e) =>
@@ -340,6 +349,7 @@ public sealed class SheetMusicView : UserControl
         base.OnPropertyChanged(change);
         if (change.Property == ProjectStateProperty)
         {
+            _input.RefreshFretTarget();
             if (change.OldValue is ProjectState oldState)
                 oldState.PropertyChanged -= OnStateChanged;
             if (change.NewValue is ProjectState newState)
@@ -348,6 +358,7 @@ public sealed class SheetMusicView : UserControl
         }
         else if (change.Property == SelectionProperty)
         {
+            _input.RefreshFretTarget();
             if (change.OldValue is ISelectionService oldSel)
                 oldSel.SelectionChanged -= OnSelectionChanged;
             if (change.NewValue is ISelectionService newSel && _attached)
@@ -373,13 +384,6 @@ public sealed class SheetMusicView : UserControl
             // strip height, so a resized strip needs a re-render to stay at
             // 1:1 device pixels instead of stretching the old bitmaps.
             if (Math.Abs(Bounds.Width - _lastWidth) > 16 || Math.Abs(Bounds.Height - _lastHeight) > 24)
-                ScheduleRebuild();
-        }
-        else if (change.Property == IsVisibleProperty && change.GetNewValue<bool>())
-        {
-            // The strip stays in the tree when toggled off; catch up on any
-            // chart edits that arrived while it was hidden.
-            if (_rebuildPendingWhileHidden)
                 ScheduleRebuild();
         }
         else if (change.Property == StavesModeProperty)
@@ -422,6 +426,11 @@ public sealed class SheetMusicView : UserControl
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(ProjectState.ActiveArrangement) or nameof(ProjectState.ActiveLevel)
+            or nameof(ProjectState.StringEditMask))
+        {
+            _input.RefreshFretTarget();
+        }
         switch (e.PropertyName)
         {
             case nameof(ProjectState.CurrentTimeMs):
@@ -454,6 +463,7 @@ public sealed class SheetMusicView : UserControl
 
     private void OnSelectionChanged(object? sender, EventArgs e)
     {
+        _input.RefreshFretTarget();
         if (!IsEffectivelyVisible) return;
         // Coalesce like the cursor path: selection can change in bursts (e.g. a
         // rubber-band select in the 2D timeline). Only one render-priority job
@@ -465,6 +475,10 @@ public sealed class SheetMusicView : UserControl
 
     private void ScheduleRebuild()
     {
+        // An input changed: whatever is rendering now renders the OLD inputs, so it is
+        // superseded at once, not when the debounce fires. Left running, it could
+        // publish A's score and click map while B is shown.
+        _renderCts?.Cancel();
         // Rendering a full sheet is expensive (AlphaTab layout + AlphaSkia
         // raster); don't pay for it while the strip is toggled off.
         if (!IsEffectivelyVisible)
@@ -479,26 +493,26 @@ public sealed class SheetMusicView : UserControl
 
     private async Task RebuildAsync()
     {
-        var state = ProjectState;
-        if (state?.ActiveArrangement == null || state.ActiveLevel == null || state.Beats.Count == 0)
-        {
-            _canvas.SetResult(null);
-            // Nothing is on the canvas any more, so the next rebuild may not be
-            // skipped however familiar its key looks.
-            _lastRenderedKey = null;
-            _statusText.IsVisible = true;
-            _statusText.Text = LocalizationService.Instance["SheetMusic_Status_NoArrangement"];
-            return;
-        }
-
-        var width = Math.Max(640, Bounds.Width);
-        _lastWidth = width;
-        _lastHeight = Bounds.Height;
-
-        CancellationTokenSource cts;
-
+        var cts = new CancellationTokenSource();
+        SheetMusicRenderer.RenderResult? result = null;
         try
         {
+            // Empty charts and reused pixels also supersede outstanding work.
+            _renderCts?.Cancel();
+            _renderCts = cts;
+            var state = ProjectState;
+            if (state?.ActiveArrangement == null || state.ActiveLevel == null || state.Beats.Count == 0)
+            {
+                ClearResult();
+                _statusText.IsVisible = true;
+                _statusText.Text = LocalizationService.Instance["SheetMusic_Status_NoArrangement"];
+                return;
+            }
+
+            var width = Math.Max(640, Bounds.Width);
+            _lastWidth = width;
+            _lastHeight = Bounds.Height;
+
             // Inside the try: a chart the exporter chokes on must not throw out of
             // this fire-and-forget task (RebuildAsync is `_ = `-discarded), leaving
             // the pane stuck on "Rendering sheet music…" forever with nothing logged.
@@ -507,8 +521,8 @@ public sealed class SheetMusicView : UserControl
             // the live chart graph and an edit landing under a worker would tear
             // it. It is also the only way to find out whether anything the
             // notation shows actually changed.
-            var export = AlphaTexExporter.Export(
-                state.ActiveProject, state.ActiveArrangement, state.ActiveLevel, state.Beats);
+            var export = DotCharter.Services.Diagnostics.UiWorkTiming.Measure("Sheet export", () => AlphaTexExporter.Export(
+                state.ActiveProject, state.ActiveArrangement, state.ActiveLevel, state.Beats));
 
             // Device pixels per unit drive the render resolution in both layouts — the window's
             // scaling AND the interface scale's layout transform (VisualPixelScale). With the
@@ -538,6 +552,9 @@ public sealed class SheetMusicView : UserControl
             var key = new SheetRenderKey(export.AlphaTex, width, stripHeight, dpi, zoom, pageMode, staves);
             if (!SheetRenderKey.ShouldRerender(_lastRenderedKey, key))
             {
+                _beatMap = export.BeatMap;
+                _beatsByBar = SheetHitIndex.BuildBeatLookup(_beatMap, _beatBounds);
+                _hoverOverlay.SetHover(null);
                 // Byte-identical AlphaTex at the same geometry: the AlphaTab
                 // layout and the AlphaSkia raster would land on the pixels
                 // already on the canvas. A technique toggle with no glyph, a
@@ -557,38 +574,82 @@ public sealed class SheetMusicView : UserControl
             _statusText.IsVisible = true;
             _statusText.Text = LocalizationService.Instance["SheetMusic_Status_Rendering"];
 
-            // Only now: cancelling here rather than before the key check means a
-            // skipped rebuild cannot kill a render that is already in flight for
-            // the very key it matched.
-            _renderCts?.Cancel();
-            _renderCts?.Dispose();
-            cts = _renderCts = new CancellationTokenSource();
+            result = await RenderForViewAsync(key, cts.Token);
+            if (cts.IsCancellationRequested) return;
 
-            _pageMode = pageMode;
-            ApplyScrollBarPolicy();
+            if (result == null || result.Chunks.Count == 0)
+            {
+                ClearResult();
+                _statusText.Text = LocalizationService.Instance["SheetMusic_Status_Unavailable"];
+                return;
+            }
 
-            SheetMusicRenderer.RenderResult? result;
+            // The layout changes WITH the result it belongs to: a render abandoned for a
+            // newer request, or for the key already on screen, leaves the shown one intact.
+            ApplyLayout(key);
+            _measureBounds = result.MeasureBounds;
+            _beatMap = export.BeatMap;
+            _beatBounds = result.BeatBounds;
+            _stringLattice = result.StringLattice;
+            _systemLattices = result.SystemLattices;
+            _measureBoundByIndex = SheetHitIndex.BuildMeasureBoundIndex(result.MeasureBounds);
+            _sourceHeight = result.Height;
+            _beatsByBar = SheetHitIndex.BuildBeatLookup(_beatMap, _beatBounds);
+            _cursorOverlay.SetMetrics(result.Width, result.Height);
+            _selectionOverlay.SetMetrics(result.Width, result.Height);
+            _hoverOverlay.SetMetrics(result.Width, result.Height);
+            _canvas.SetResult(result);
+            result = null; // the canvas now owns the reference
+            _hoverOverlay.SetHover(null); // the score changed; drop any stale hover cell
+            _statusText.IsVisible = false;
+            // Recorded only on the path that actually put chunks on the canvas.
+            _lastRenderedKey = key;
+            UpdateCursor();
+            UpdateSelectionHighlights();
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer rebuild, or the strip was detached.
+        }
+        catch (Exception ex)
+        {
+            if (cts.IsCancellationRequested) return;
+            _lastRenderedKey = null;
+            _statusText.IsVisible = true;
+            _statusText.Text = LocalizationService.Instance.Format("SheetMusic_Status_ErrorFmt", ex.Message);
+            App.Services?.GetService<IAppLogger>()?.Error(AppLogCategory.Rendering,
+                "Sheet music rebuild failed (export or render); the strip shows an error instead of the score.", ex);
+        }
+        finally
+        {
+            // Anything not transferred to the canvas still belongs to this request.
+            result?.Dispose();
+            if (ReferenceEquals(_renderCts, cts)) _renderCts = null;
+            cts.Dispose();
+        }
+    }
 
+    private async Task<SheetMusicRenderer.RenderResult?> RenderForViewAsync(SheetRenderKey key, CancellationToken ct)
+    {
+        var width = key.Width;
+        var dpi = key.Dpi;
+        var zoom = key.Zoom;
+        var stripHeight = key.Height;
+        var pageMode = key.PageMode;
+        var staves = key.Staves;
+        SheetMusicRenderer.RenderResult? result = null;
+        try
+        {
             if (pageMode)
             {
                 // PAGE layout: bars wrap to a fixed page width (the viewport),
                 // zoom drives glyph size (zooming in re-wraps to more, taller
                 // systems). Displayed at 1 device px → 1 DIP so the page fills the
                 // viewport width and scrolls vertically; no fit-to-height pass.
-                var pageDisplayScale = dpi > 0 ? 1.0 / dpi : 1.0;
                 var glyphScale = 1.3 * dpi * zoom;
-                _canvas.SetPageMode(true, pageDisplayScale);
-                _cursorOverlay.SetPageMode(true, pageDisplayScale);
-                _selectionOverlay.SetPageMode(true, pageDisplayScale);
-                _hoverOverlay.SetPageMode(true, pageDisplayScale);
-
                 result = await _renderer.RenderPagedAsync(
-                    export.AlphaTex, width * dpi, glyphScale, staves, cts.Token);
-                if (cts.IsCancellationRequested)
-                {
-                    result?.Dispose();
-                    return;
-                }
+                    key.AlphaTex, width * dpi, glyphScale, staves, ct);
+                ct.ThrowIfCancellationRequested();
             }
             else
             {
@@ -597,26 +658,8 @@ public sealed class SheetMusicView : UserControl
                 // stripHeight × DPI blits 1:1 device pixels — the crispest the
                 // strip can show. A fixed scale wasted the strip or blurred HiDPI.
                 var baseScale = 1.3 * dpi * zoom;
-                _canvas.SetPageMode(false, 0);
-                _cursorOverlay.SetPageMode(false, 0);
-                _selectionOverlay.SetPageMode(false, 0);
-                _hoverOverlay.SetPageMode(false, 0);
-
-                _canvas.ZoomFactor = zoom;
-                _canvas.ViewportHeightHint = stripHeight;
-                _cursorOverlay.ZoomFactor = zoom;
-                _cursorOverlay.ViewportHeightHint = stripHeight;
-                _selectionOverlay.ZoomFactor = zoom;
-                _selectionOverlay.ViewportHeightHint = stripHeight;
-                _hoverOverlay.ZoomFactor = zoom;
-                _hoverOverlay.ViewportHeightHint = stripHeight;
-
-                result = await _renderer.RenderAsync(export.AlphaTex, width * dpi, baseScale, staves, cts.Token);
-                if (cts.IsCancellationRequested)
-                {
-                    result?.Dispose();
-                    return;
-                }
+                result = await _renderer.RenderAsync(key.AlphaTex, width * dpi, baseScale, staves, ct);
+                ct.ThrowIfCancellationRequested();
 
                 if (result is { Height: > 0 } && stripHeight > 60)
                 {
@@ -629,12 +672,11 @@ public sealed class SheetMusicView : UserControl
                     if (fit is < 0.95 or > 1.08)
                     {
                         var corrected = Math.Clamp(baseScale * fit, 0.8, 4.0);
-                        var refined = await _renderer.RenderAsync(export.AlphaTex, width * dpi, corrected, staves, cts.Token);
-                        if (cts.IsCancellationRequested)
+                        var refined = await _renderer.RenderAsync(key.AlphaTex, width * dpi, corrected, staves, ct);
+                        if (ct.IsCancellationRequested)
                         {
                             refined?.Dispose();
-                            result.Dispose();
-                            return;
+                            ct.ThrowIfCancellationRequested();
                         }
 
                         if (refined is { Height: > 0 })
@@ -650,53 +692,68 @@ public sealed class SheetMusicView : UserControl
                 }
             }
 
-            if (result == null || result.Chunks.Count == 0)
-            {
-                _canvas.SetResult(null);
-                // A failed render leaves nothing to reuse.
-                _lastRenderedKey = null;
-                _measureBounds = Array.Empty<SheetMusicRenderer.MeasureBound>();
-                _beatMap = Array.Empty<AlphaTexExporter.SheetBeat>();
-                _beatsByBar = [];
-                _stringLattice = Array.Empty<SheetMusicRenderer.StringLine>();
-                _systemLattices = Array.Empty<SheetMusicRenderer.SystemStringLattice>();
-                _measureBoundByIndex = [];
-                _sourceHeight = 0;
-                _hoverOverlay.SetHover(null);
-                _statusText.Text = LocalizationService.Instance["SheetMusic_Status_Unavailable"];
-                return;
-            }
+            var completed = result;
+            result = null;
+            return completed;
+        }
+        finally
+        {
+            // A first pass stays ours until refinement succeeds or is abandoned.
+            result?.Dispose();
+        }
+    }
 
-            _measureBounds = result.MeasureBounds;
-            _beatMap = export.BeatMap;
-            _stringLattice = result.StringLattice;
-            _systemLattices = result.SystemLattices;
-            _measureBoundByIndex = SheetHitIndex.BuildMeasureBoundIndex(result.MeasureBounds);
-            _sourceHeight = result.Height;
-            _beatsByBar = SheetHitIndex.BuildBeatLookup(export.BeatMap, result.BeatBounds);
-            _canvas.SetResult(result);
-            _cursorOverlay.SetMetrics(result.Width, result.Height);
-            _selectionOverlay.SetMetrics(result.Width, result.Height);
-            _hoverOverlay.SetMetrics(result.Width, result.Height);
-            _hoverOverlay.SetHover(null); // the score changed; drop any stale hover cell
-            _statusText.IsVisible = false;
-            // Recorded only on the path that actually put chunks on the canvas.
-            _lastRenderedKey = key;
-            UpdateCursor();
-            UpdateSelectionHighlights();
-        }
-        catch (OperationCanceledException)
+    /// <summary>
+    ///     Puts the canvas and its overlays into the layout <paramref name="key" /> was rendered
+    ///     for: page or strip, the page's 1 device px → 1 DIP scale, the strip's zoom and height.
+    ///     Only a PUBLISHED render calls it, so the hit testing and the drawing always match the
+    ///     score on the canvas.
+    /// </summary>
+    private void ApplyLayout(SheetRenderKey key)
+    {
+        _pageMode = key.PageMode;
+        ApplyScrollBarPolicy();
+        if (key.PageMode)
         {
-            // Superseded by a newer rebuild, or the strip was detached.
+            var pageDisplayScale = key.Dpi > 0 ? 1.0 / key.Dpi : 1.0;
+            _canvas.SetPageMode(true, pageDisplayScale);
+            _cursorOverlay.SetPageMode(true, pageDisplayScale);
+            _selectionOverlay.SetPageMode(true, pageDisplayScale);
+            _hoverOverlay.SetPageMode(true, pageDisplayScale);
+            return;
         }
-        catch (Exception ex)
-        {
-            _lastRenderedKey = null;
-            _statusText.IsVisible = true;
-            _statusText.Text = LocalizationService.Instance.Format("SheetMusic_Status_ErrorFmt", ex.Message);
-            App.Services?.GetService<IAppLogger>()?.Error(AppLogCategory.Rendering,
-                "Sheet music rebuild failed (export or render); the strip shows an error instead of the score.", ex);
-        }
+
+        _canvas.SetPageMode(false, 0);
+        _cursorOverlay.SetPageMode(false, 0);
+        _selectionOverlay.SetPageMode(false, 0);
+        _hoverOverlay.SetPageMode(false, 0);
+        _canvas.ZoomFactor = key.Zoom;
+        _canvas.ViewportHeightHint = key.Height;
+        _cursorOverlay.ZoomFactor = key.Zoom;
+        _cursorOverlay.ViewportHeightHint = key.Height;
+        _selectionOverlay.ZoomFactor = key.Zoom;
+        _selectionOverlay.ViewportHeightHint = key.Height;
+        _hoverOverlay.ZoomFactor = key.Zoom;
+        _hoverOverlay.ViewportHeightHint = key.Height;
+    }
+
+    private void ClearResult()
+    {
+        _canvas.SetResult(null);
+        _lastRenderedKey = null;
+        _measureSpans = Array.Empty<AlphaTexExporter.MeasureSpan>();
+        _measureBounds = Array.Empty<SheetMusicRenderer.MeasureBound>();
+        _beatMap = Array.Empty<AlphaTexExporter.SheetBeat>();
+        _beatBounds = Array.Empty<SheetMusicRenderer.BeatBound>();
+        _beatsByBar = [];
+        _stringLattice = Array.Empty<SheetMusicRenderer.StringLine>();
+        _systemLattices = Array.Empty<SheetMusicRenderer.SystemStringLattice>();
+        _measureBoundByIndex = [];
+        _sourceHeight = 0;
+        _cursorOverlay.SetMetrics(0, 0);
+        _selectionOverlay.SetMetrics(0, 0);
+        _hoverOverlay.SetMetrics(0, 0);
+        _hoverOverlay.SetHover(null);
     }
 
     private void UpdateCursor()

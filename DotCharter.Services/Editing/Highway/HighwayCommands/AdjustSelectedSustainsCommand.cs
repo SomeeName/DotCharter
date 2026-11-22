@@ -47,6 +47,33 @@ internal sealed class AdjustSelectedSustainsCommand : IHighwayEditCommand
         return action != null && history.Do(action);
     }
 
+    /// <summary>What the step would do to each selected sound, writing nothing (the inspector's plan).</summary>
+    public IReadOnlyList<SustainStepOutcome> Preview()
+    {
+        var outcomes = new List<SustainStepOutcome>(_selectedNotes.Count + _selectedChords.Count);
+        foreach (var note in _selectedNotes)
+        {
+            var (sustain, limit) = AdjustSustain(note.Position, note.Sustain, note.LinkNext, note.PassOtherNotes);
+            outcomes.Add(new SustainStepOutcome(note, sustain != note.Sustain, limit));
+        }
+
+        foreach (var chord in _selectedChords)
+        {
+            var changes = false;
+            var limit = SustainStepLimit.None;
+            foreach (var chordNote in chord.ChordNotes)
+            {
+                var (sustain, cut) = AdjustSustain(chord.Position, chordNote.Sustain, chordNote.LinkNext, chord.PassOtherNotes);
+                changes |= sustain != chordNote.Sustain;
+                if (limit == SustainStepLimit.None) limit = cut;
+            }
+
+            outcomes.Add(new SustainStepOutcome(chord, changes, limit));
+        }
+
+        return outcomes;
+    }
+
     private IChartAction? BuildAction()
     {
         var actions = new List<IChartAction>(2);
@@ -81,7 +108,7 @@ internal sealed class AdjustSelectedSustainsCommand : IHighwayEditCommand
                 newState.Position,
                 newState.Sustain,
                 newState.LinkNext,
-                newState.PassOtherNotes);
+                newState.PassOtherNotes).Sustain;
 
             if (newState.Sustain == oldState.Sustain) continue;
 
@@ -119,7 +146,7 @@ internal sealed class AdjustSelectedSustainsCommand : IHighwayEditCommand
                     newState.Position,
                     chordNote.Sustain,
                     chordNote.LinkNext,
-                    newState.PassOtherNotes);
+                    newState.PassOtherNotes).Sustain;
                 // Move each string's bend points with its sustain (see BuildNoteAction).
                 BendMath.RescaleToSustain(
                     chordNote.BendValues, newState.Position, priorSustain, chordNote.Sustain);
@@ -138,23 +165,28 @@ internal sealed class AdjustSelectedSustainsCommand : IHighwayEditCommand
                 MergeVerbs.Sustain);
     }
 
-    private FractionalPosition AdjustSustain(
+    /// <summary>The stepped sustain, and what cut the step short (<see cref="SustainStepLimit.None" /> when nothing did).</summary>
+    private (FractionalPosition Sustain, SustainStepLimit Limit) AdjustSustain(
         FractionalPosition position,
         FractionalPosition sustain,
         bool linkNext,
         bool passOtherNotes)
     {
-        if (linkNext) return sustain;
+        if (linkNext) return (sustain, SustainStepLimit.Linked);
 
         var maxSustain = TimelineMath.PositionFromMs(_totalAudioLengthMs, _beats) - position;
+        var ceiling = SustainStepLimit.AudioEnd;
         if (!passOtherNotes && FindNextSoundPosition(position) is { } nextPosition)
+        {
             maxSustain = nextPosition - position - ChartSpacingEnforcer.GetMinDistance(position, _beats, _config);
+            ceiling = SustainStepLimit.NextSound;
+        }
+
         maxSustain = FractionalPosition.Max(FractionalPosition.Zero, maxSustain);
 
         var adjustedSustain = sustain + _delta;
-        if (adjustedSustain < FractionalPosition.Zero) adjustedSustain = FractionalPosition.Zero;
-        if (adjustedSustain > maxSustain) adjustedSustain = maxSustain;
-        return adjustedSustain;
+        if (adjustedSustain < FractionalPosition.Zero) return (FractionalPosition.Zero, SustainStepLimit.Zero);
+        return adjustedSustain > maxSustain ? (maxSustain, ceiling) : (adjustedSustain, SustainStepLimit.None);
     }
 
     private FractionalPosition? FindNextSoundPosition(FractionalPosition position)

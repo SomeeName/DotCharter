@@ -1,3 +1,4 @@
+using System.Globalization;
 using DotCharter.Services.Diagnostics;
 
 namespace DotCharter.Tests.Services.Diagnostics;
@@ -12,6 +13,48 @@ namespace DotCharter.Tests.Services.Diagnostics;
 /// </summary>
 public sealed class SensitiveTextRedactorTests
 {
+    [Theory]
+    [InlineData(FakeSecrets.OpenAiProjectKey, "sk")]
+    [InlineData(FakeSecrets.OpenAiProjectKey, "FAKEexample")]
+    [InlineData(FakeSecrets.AnthropicKey, "sk")]
+    [InlineData(FakeSecrets.AnthropicKey, "api03")]
+    public void ProviderTokens_AreRedactedBeforeOverlappingUserNames(string secret, string userName)
+    {
+        var redacted = SensitiveTextRedactor.Redact($"{userName} used {secret}", userName);
+
+        Assert.Equal("<user> used <redacted-token>", redacted);
+        Assert.Equal(redacted, SensitiveTextRedactor.Redact(redacted, userName));
+    }
+
+    [Theory]
+    [InlineData("tr-TR")]
+    [InlineData("en-US")]
+    public void Redact_ScrubsUserNameWithInvariantCasing(string culture)
+    {
+        var previous = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
+
+            Assert.Equal("Welcome <user>!", SensitiveTextRedactor.Redact("Welcome IRIS!", "iris"));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
+    }
+
+    [Theory]
+    [InlineData(FakeSecrets.OpenAiProjectKey)]
+    [InlineData(FakeSecrets.AnthropicKey)]
+    public void Redact_ScrubsTheEntireProviderKeyIncludingSeparators(string secret)
+    {
+        var result = SensitiveTextRedactor.Redact($"using {secret} now");
+
+        Assert.Equal("using <redacted-token> now", result);
+        Assert.Equal(result, SensitiveTextRedactor.Redact(result));
+    }
+
     [Fact]
     public void Redact_ReplacesWindowsUserPathSegment()
     {

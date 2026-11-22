@@ -141,37 +141,36 @@ public sealed class MixBalanceTargetsTheSongTests
     {
         var markup = UiSourceTree.ReadAllText(RepoPath("DotCharter.UI/Views/Shell/Popovers/MixPopoverView.axaml"));
 
-        Assert.Contains("Transport.SongVolume", markup, StringComparison.Ordinal);
-        Assert.DoesNotContain("Transport.Volume", markup, StringComparison.Ordinal);
+        // the row labelled Song binds the SONG level, the row labelled Master binds the master bus
+        Assert.Matches(@"AutomationProperties\.Name=""\{localization:Loc Toolbar_Mix_Song\}""\s+Value=""\{Binding Transport\.SongVolume\}""", markup);
+        Assert.Matches(@"AutomationProperties\.Name=""\{localization:Loc Toolbar_Master\}""\s+Value=""\{Binding Transport\.Volume\}""", markup);
     }
 
     /// <summary>
-    ///     The three levels read as a percentage of their normal level. They read "1,00" each while
-    ///     their thumbs sat in three different places — the sliders' ranges differ on purpose (the
-    ///     song cannot be boosted, the guitar can double) — and a bare multiplier said nothing to a
-    ///     player (2026-09-23). "100 %" beside a thumb at half travel says the guitar can go higher.
+    ///     The levels read as a percentage of their normal level. They read "1,00" each while
+    ///     their thumbs sat in different places — the sliders' ranges differ on purpose (the
+    ///     guitar can double) — and a bare multiplier said nothing to a player (2026-09-23).
+    ///     "100 %" beside a thumb at half travel says the guitar can go higher. The pan is the one
+    ///     number that is not a level: it reads as a signed position.
     /// </summary>
     [Fact]
     public void EveryLevelInTheMixPopover_ReadsAsAPercentage()
     {
         var markup = UiSourceTree.ReadAllText(RepoPath("DotCharter.UI/Views/Shell/Popovers/MixPopoverView.axaml"));
 
-        foreach (var level in new[] { "SongVolume", "InputVolume", "MidiVolume" })
+        foreach (var level in new[] { "Volume", "SongVolume", "InputVolume", "MidiVolume" })
             Assert.Contains("Text=\"{Binding Transport." + level + @", StringFormat=\{0:P0\}}""", markup, StringComparison.Ordinal);
-        Assert.DoesNotContain("0:0.00", markup, StringComparison.Ordinal);
+        Assert.Contains(@"Text=""{Binding Transport.Pan, StringFormat=\{0:0.00\}}""", markup, StringComparison.Ordinal);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(markup, @"0:0\.00"));
     }
 
-    /// <summary>
-    ///     The Mixer tab shows the same levels, and read "1,00" four times while its sliders sat at
-    ///     four different places (each has its own range). Same rule as the popover (2026-09-24).
-    /// </summary>
+    /// <summary>The speed, the other level the Mixer tab used to show, reads the same way in the Tempo popover.</summary>
     [Fact]
-    public void EveryLevelInTheMixerTab_ReadsAsAPercentage()
+    public void ThePlaybackSpeedInTheTempoPopover_ReadsAsAPercentage()
     {
-        var markup = UiSourceTree.ReadAllText(RepoPath("DotCharter.UI/Views/Editor/Inspector/MixerInspectorView.axaml"));
+        var markup = UiSourceTree.ReadAllText(RepoPath("DotCharter.UI/Views/Shell/Popovers/TempoPopoverView.axaml"));
 
-        foreach (var level in new[] { "Volume", "SongVolume", "InputVolume", "MidiVolume", "PlaybackSpeed" })
-            Assert.Contains("Text=\"{Binding Transport." + level + @", StringFormat=\{0:P0\}}""", markup, StringComparison.Ordinal);
+        Assert.Contains(@"Text=""{Binding Transport.PlaybackSpeed, StringFormat=\{0:P0\}}""", markup, StringComparison.Ordinal);
     }
 
     private static string RepoPath(string relative) =>

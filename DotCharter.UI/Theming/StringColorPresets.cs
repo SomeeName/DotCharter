@@ -8,19 +8,29 @@ namespace DotCharter.UI.Theming;
 ///     both the 2D timeline and the 3D fretboard (which read the same tokens via
 ///     <c>ChartTheme</c>) pick it up. The <see cref="StringColorPresets.DefaultId" /> preset carries
 ///     no overrides — the theme's own string colours are used.
+///     <para>
+///         <see cref="Id" /> is the stable identifier <c>AppConfig.StringColorPresetId</c> persists;
+///         <see cref="NameKey" /> is the resx key of its caption. The catalogue's own entries carry
+///         the key as <see cref="DisplayName" />: a picker shows <see cref="Localize" />'d copies.
+///     </para>
 /// </summary>
 public sealed class StringColorPreset
 {
-    public StringColorPreset(string id, string displayName, IReadOnlyDictionary<string, Color> colors)
+    public StringColorPreset(string id, string nameKey, IReadOnlyDictionary<string, Color> colors, string? displayName = null)
     {
         Id = id;
-        DisplayName = displayName;
+        NameKey = nameKey;
         Colors = colors;
+        DisplayName = displayName ?? nameKey;
     }
 
     public string Id { get; }
+    public string NameKey { get; }
     public string DisplayName { get; }
     public IReadOnlyDictionary<string, Color> Colors { get; }
+
+    /// <summary>This preset with its caption in the UI language of <paramref name="localization" />.</summary>
+    public StringColorPreset Localize(ILocalizationService localization) => new(Id, NameKey, Colors, localization[NameKey]);
 }
 
 /// <summary>
@@ -47,20 +57,24 @@ public static class StringColorPresets
     {
         All =
         [
-            new StringColorPreset(DefaultId, "Default (theme)", new Dictionary<string, Color>()),
+            new StringColorPreset(DefaultId, "StringPalette_Default", new Dictionary<string, Color>()),
             // Okabe & Ito (2008) — the canonical universal colour-blind-safe
             // qualitative palette; distinguishable under deutan/protan/tritan.
-            MakePreset("okabe-ito", "Okabe–Ito (color-blind safe)",
+            MakePreset("okabe-ito", "StringPalette_OkabeIto",
                 "#D55E00", "#F0E442", "#56B4E9", "#E69F00", "#009E73", "#CC79A7", "#999999"),
             // IBM Carbon design colour-blind-safe palette (5 core hues) padded
             // with a teal + neutral grey for the 6th/extra strings.
-            MakePreset("ibm", "IBM (color-blind safe)",
+            MakePreset("ibm", "StringPalette_Ibm",
                 "#648FFF", "#FFB000", "#DC267F", "#FE6100", "#785EF0", "#009E73", "#A0A0A0")
         ];
         ById = All.ToDictionary(p => p.Id, StringComparer.OrdinalIgnoreCase);
     }
 
     public static IReadOnlyList<StringColorPreset> All { get; }
+
+    /// <summary>Every preset, captioned in the UI language of <paramref name="localization" />, in catalogue order.</summary>
+    public static IReadOnlyList<StringColorPreset> Localized(ILocalizationService localization) =>
+        [.. All.Select(p => p.Localize(localization))];
 
     public static StringColorPreset GetById(string? id) => !string.IsNullOrWhiteSpace(id) && ById.TryGetValue(id, out var p) ? p : ById[DefaultId];
 
@@ -80,11 +94,11 @@ public static class StringColorPresets
         return map;
     }
 
-    private static StringColorPreset MakePreset(string id, string name, params string[] hex)
+    private static StringColorPreset MakePreset(string id, string nameKey, params string[] hex)
     {
         var colors = new Dictionary<string, Color>(StringComparer.Ordinal);
         for (var i = 0; i < StringTokens.Length && i < hex.Length; i++)
             colors[StringTokens[i]] = Color.Parse(hex[i]);
-        return new StringColorPreset(id, name, colors);
+        return new StringColorPreset(id, nameKey, colors);
     }
 }

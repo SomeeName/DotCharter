@@ -23,7 +23,11 @@ public sealed class EditingScope : IEditingScope
 
     public EditingScope(ProjectState projectState) => _projectState = projectState;
 
-    public void SetResolver(Func<EditingTarget?> resolver) => _resolver = resolver;
+    public void SetResolver(Func<EditingTarget?> resolver)
+    {
+        _resolver = resolver;
+        _projectState.SetPreviewArrangementResolver(() => Arrangement);
+    }
 
     public ChartProject? Project => _projectState.ActiveProject;
     public Arrangement? Arrangement => Resolve()?.Arrangement ?? _projectState.ActiveArrangement;

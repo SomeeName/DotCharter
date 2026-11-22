@@ -32,6 +32,8 @@ public sealed class SandboxBlockingWaitLintTests
             "JuceAudioPlaybackService.Dispose is synchronous and must not return with the child " +
             "still attached; the wait is bounded (10 s, then Kill) and every await under " +
             "VstSandboxHost.StopAsync is ConfigureAwait(false), so it cannot deadlock a UI context."),
+        ("VstSandboxCalls.cs", "public static bool WaitForDispose(",
+            "The complete child group uses one synchronous wait with a shared 10-second bound before killing unfinished stops."),
     ];
 
     // Task waits only. A kernel-event WaitOne with a millisecond slice (the

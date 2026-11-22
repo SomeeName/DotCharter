@@ -27,10 +27,16 @@ internal static class FakeSecrets
     /// <summary>OpenAI-style key shape: <c>sk-</c> + 20 or more alphanumerics.</summary>
     public const string OpenAiKey = "sk" + "-" + "FAKEexampleFAKEexample0000";
 
+    /// <summary>Project-scoped OpenAI key with internal and trailing separators.</summary>
+    public const string OpenAiProjectKey = "sk" + "-proj-" + "FAKEexampleFAKEexample0000_tail-";
+
+    /// <summary>Anthropic key with internal and trailing separators.</summary>
+    public const string AnthropicKey = "sk" + "-ant-api03-" + "FAKEexampleFAKEexample0000_tail_";
+
     /// <summary>Three-part JWT shape: <c>eyJ…</c>.<c>…</c>.<c>…</c>.</summary>
     public const string Jwt = "ey" + "J" + "FAKEheader" + "." + "FAKEpayload" + "." + "FAKEsignature";
 
     /// <summary>Every value above, for the "stays obviously fake" lint.</summary>
     public static readonly string[] All =
-        [GitHubPat, GitHubFineGrainedPat, SlackToken, AwsAccessKeyId, OpenAiKey, Jwt];
+        [GitHubPat, GitHubFineGrainedPat, SlackToken, AwsAccessKeyId, OpenAiKey, OpenAiProjectKey, AnthropicKey, Jwt];
 }

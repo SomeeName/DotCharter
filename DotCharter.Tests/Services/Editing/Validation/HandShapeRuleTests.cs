@@ -9,7 +9,7 @@ namespace DotCharter.Tests.Services.Editing.Validation;
 ///         <b>The two rules disagreed about a NEGATIVE template id.</b>
 ///         <c>HandShapeRule</c> asked the raw id index with no guard, while
 ///         <c>HandShapeContentRule</c> asked
-///         <c>ChordTemplateResolver.FindById</c>, which is null for any negative
+///         <c>Arrangement.FindChordTemplate</c>, which is null for any negative
 ///         id. <c>HandShape.TemplateId</c> defaults to <c>-1</c> and
 ///         <c>ChordTemplate.Id</c> does too — so on an untemplated shape E05 went
 ///         silent while I46 judged it against whichever UNNUMBERED template

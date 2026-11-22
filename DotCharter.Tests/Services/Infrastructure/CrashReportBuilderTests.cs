@@ -1,9 +1,27 @@
 using DotCharter.Services.Infrastructure.CrashReporting;
+using DotCharter.Tests.Services.Diagnostics;
 
 namespace DotCharter.Tests.Services.Infrastructure;
 
 public sealed class CrashReportBuilderTests
 {
+    [Theory]
+    [InlineData(FakeSecrets.OpenAiProjectKey)]
+    [InlineData(FakeSecrets.AnthropicKey)]
+    public void Build_ScrubsProviderKeysFromExceptionAndLog(string secret)
+    {
+        var input = SampleInput() with
+        {
+            ExceptionMessage = $"using {secret} now",
+            RecentLogLines = [$"connecting with {secret} now"]
+        };
+
+        var report = CrashReportBuilder.Build(input);
+
+        Assert.Contains("using <redacted-token> now", report);
+        Assert.Contains("connecting with <redacted-token> now", report);
+    }
+
     private static CrashReportInput SampleInput() => new()
     {
         Source = "AppDomain",

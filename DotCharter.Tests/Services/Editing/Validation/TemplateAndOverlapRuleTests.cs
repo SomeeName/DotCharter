@@ -17,6 +17,13 @@ namespace DotCharter.Tests.Services.Editing.Validation;
 /// </summary>
 public sealed class TemplateAndOverlapRuleTests
 {
+    private static readonly ArrangementIssueType[] FingeringTypes =
+    [
+        ArrangementIssueType.FingerSetForOpenString,
+        ArrangementIssueType.FingerMissingOnFrettedString,
+        ArrangementIssueType.FirstFingerNotOnLowestFret
+    ];
+
     private static List<BeatMarker> Beats(int count, double bpm = 120)
     {
         var ms = 60000.0 / bpm;
@@ -28,6 +35,133 @@ public sealed class TemplateAndOverlapRuleTests
         var issues = new List<ArrangementIssue>();
         new TemplateAndOverlapRule().Validate(ArrangementValidationContext.Build(arr, beats, null), issues);
         return issues;
+    }
+
+    [Fact]
+    public void LinkedLandingDoesNotUseItsTemplateFingering()
+    {
+        var arr = new Arrangement();
+        var level = new ChartLevel();
+        arr.Levels.Add(level);
+        arr.ChordTemplates.Add(new ChordTemplate
+        {
+            Id = 0, Frets = new Dictionary<int, int> { [0] = 3, [1] = 5 }
+        });
+        level.Notes.Add(new GuitarNote
+        {
+            StringIndex = 0, Position = FractionalPosition.Zero, Sustain = new FractionalPosition(1), LinkNext = true
+        });
+        var chord = new Chord { Position = new FractionalPosition(1), TemplateId = 0 };
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 0, Fret = 3 });
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 5 });
+        level.Chords.Add(chord);
+
+        Assert.DoesNotContain(Run(arr, Beats(4)), issue => issue.Type == ArrangementIssueType.FingerMissingOnFrettedString);
+    }
+
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 0)]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
+    [InlineData(false, 2)]
+    [InlineData(true, 2)]
+    public void LinkLandingsSkipAllThreeFingeringFindingsButOtherUsesKeepThem(bool chordSource, int otherUse)
+    {
+        var (arrangement, landing) = LinkedFingeringFaults(chordSource);
+        var level = arrangement.Levels[0];
+        Chord? ordinary = null;
+        HandShape? shape = null;
+        if (otherUse == 1)
+        {
+            ordinary = landing.Clone();
+            ordinary.Position = new FractionalPosition(2);
+            level.Chords.Add(ordinary);
+        }
+        else if (otherUse == 2)
+        {
+            shape = new HandShape { Position = landing.Position, EndPosition = new FractionalPosition(2), TemplateId = 0 };
+            level.HandShapes.Add(shape);
+        }
+
+        var issues = Run(arrangement, Beats(4));
+        if (otherUse == 0)
+        {
+            Assert.Empty(issues);
+            return;
+        }
+
+        Assert.Equal(FingeringTypes, issues.Select(issue => issue.Type));
+        Assert.All(issues, issue =>
+        {
+            Assert.Same(ordinary, issue.Chord);
+            Assert.Same(shape, issue.HandShape);
+            Assert.Equal((ordinary?.Position ?? shape!.Position).GetPositionMs(Beats(4)), issue.TimeMs);
+        });
+    }
+
+    [Fact]
+    public void ALinkLandingStillReportsStructuralOverlap()
+    {
+        var (arrangement, landing) = LinkedFingeringFaults(chordSource: false);
+        arrangement.Levels[0].Notes.Add(new GuitarNote { Position = landing.Position, StringIndex = 1, Fret = 5 });
+
+        var issue = Assert.Single(Run(arrangement, Beats(4)));
+        Assert.Equal(ArrangementIssueType.OverlappingNotes, issue.Type);
+        Assert.Same(landing, issue.Chord);
+    }
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(3, false)]
+    [InlineData(0, true)]
+    [InlineData(3, true)]
+    public void OrdinaryAndFingerlessGripsKeepTheSameCapoAwareFindings(int capo, bool fingerless)
+    {
+        var (arrangement, ordinary) = LinkedFingeringFaults(chordSource: false);
+        arrangement.Levels[0].Notes.Clear();
+        arrangement.Capo = capo;
+        arrangement.ChordTemplates[0].Frets[0] = capo;
+        ordinary.ChordNotes[0].Fret = capo;
+        arrangement.ChordTemplates[0].Fingerless = fingerless;
+
+        var issues = Run(arrangement, Beats(4));
+        if (fingerless) Assert.Empty(issues);
+        else Assert.Equal(FingeringTypes, issues.Select(issue => issue.Type));
+    }
+
+    private static (Arrangement Arrangement, Chord Landing) LinkedFingeringFaults(bool chordSource)
+    {
+        var arrangement = new Arrangement();
+        var level = new ChartLevel();
+        arrangement.Levels.Add(level);
+        var template = new ChordTemplate
+        {
+            Id = 0, Frets = new Dictionary<int, int> { [0] = 0, [1] = 5, [2] = 7 },
+            Fingers = new Dictionary<int, int> { [0] = 1, [2] = 1 }
+        };
+        arrangement.ChordTemplates.Add(template);
+        var landing = new Chord { TemplateId = 0, Position = new FractionalPosition(1) };
+        foreach (var (s, fret) in template.Frets) landing.ChordNotes.Add(new ChordNote { StringIndex = s, Fret = fret });
+        level.Chords.Add(landing);
+        if (chordSource)
+        {
+            var source = new Chord { TemplateId = 1 };
+            source.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 5, Sustain = new FractionalPosition(1), LinkNext = true });
+            source.ChordNotes.Add(new ChordNote { StringIndex = 2, Fret = 7 });
+            arrangement.ChordTemplates.Add(new ChordTemplate
+            {
+                Id = 1, Frets = new Dictionary<int, int> { [1] = 5, [2] = 7 },
+                Fingers = new Dictionary<int, int> { [1] = 1, [2] = 3 }
+            });
+            level.Chords.Add(source);
+        }
+        else
+        {
+            level.Notes.Add(new GuitarNote { StringIndex = 1, Fret = 5, Sustain = new FractionalPosition(1), LinkNext = true });
+        }
+
+        return (arrangement, landing);
     }
 
     /// <summary>A finger on an OPEN string (L06) and nothing else, so a single

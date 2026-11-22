@@ -1,5 +1,8 @@
 using Avalonia;
+using DotCharter.Core.Graphics;
 using DotCharter.UI.Constants;
+using DotCharter.UI.Controls.Layers;
+using DotCharter.UI.Controls.Layers.Helpers;
 
 namespace DotCharter.UI.Input;
 
@@ -20,7 +23,8 @@ public static class ChartHitTester
     }
 
     /// <summary>Lane-center Y for a string. <paramref name="leftyFlip" /> must
-    /// carry the SAME flag the renderer draws with
+    /// is the legacy parameter name for the timeline's InvertStrings value,
+    /// independent of profile handedness. It must carry the SAME flag the renderer draws with
     /// (<c>ChartRenderContext.LaneTopFor</c>) or clicks land on the wrong
     /// string — that is why it is not defaulted.</summary>
     public static double GetLaneY(double boundsHeight, double topMargin, double bottomMargin, int stringCount,
@@ -73,8 +77,16 @@ public static class ChartHitTester
     public static GuitarNote? HitTestNote(Point p, IList<GuitarNote>? notes, double viewAnchorMs, double pixelsPerMs,
         double boundsWidth, double boundsHeight, double topMargin, double bottomMargin, int stringCount,
         IList<BeatMarker> beats, bool leftyFlip, out bool exact)
+        => HitTestNote(p, notes, viewAnchorMs, pixelsPerMs, boundsWidth, boundsHeight, topMargin, bottomMargin,
+            stringCount, beats, leftyFlip, out exact, out _);
+
+    /// <summary>Reports head hits separately so every head outranks an overlapping sustain.</summary>
+    public static GuitarNote? HitTestNote(Point p, IList<GuitarNote>? notes, double viewAnchorMs, double pixelsPerMs,
+        double boundsWidth, double boundsHeight, double topMargin, double bottomMargin, int stringCount,
+        IList<BeatMarker> beats, bool leftyFlip, out bool exact, out bool head)
     {
         exact = false;
+        head = false;
         if (notes == null || notes.Count == 0 || p.Y < topMargin || p.Y > boundsHeight - bottomMargin) return null;
 
         var bounds = GetViewportBounds(viewAnchorMs, pixelsPerMs, boundsWidth);
@@ -84,6 +96,7 @@ public static class ChartHitTester
 
         if (end < 0) return null;
 
+        GuitarNote? tail = null;
         for (var i = end; i >= start; i--)
         {
             var note = notes[i];
@@ -95,6 +108,7 @@ public static class ChartHitTester
             if (NoteHeadRect(startX, y).Contains(p))
             {
                 exact = true;
+                head = true;
                 return note;
             }
 
@@ -102,11 +116,14 @@ public static class ChartHitTester
             {
                 var width = (note.EndPosition.GetPositionMs(beats) - note.Position.GetPositionMs(beats)) * pixelsPerMs;
                 if (SustainRect(startX, y, width).Contains(p))
-                {
-                    exact = true;
-                    return note;
-                }
+                    tail ??= note;
             }
+        }
+
+        if (tail != null)
+        {
+            exact = true;
+            return tail;
         }
 
         // NEAR MISS. Nothing was hit exactly, so take the closest head within
@@ -155,8 +172,16 @@ public static class ChartHitTester
     public static Chord? HitTestChord(Point p, IList<Chord>? chords, double viewAnchorMs, double pixelsPerMs,
         double boundsWidth, double boundsHeight, double topMargin, double bottomMargin, int stringCount,
         IList<BeatMarker> beats, bool leftyFlip, out bool exact)
+        => HitTestChord(p, chords, viewAnchorMs, pixelsPerMs, boundsWidth, boundsHeight, topMargin, bottomMargin,
+            stringCount, beats, leftyFlip, out exact, out _);
+
+    /// <summary>Reports head hits separately so every head outranks an overlapping sustain.</summary>
+    public static Chord? HitTestChord(Point p, IList<Chord>? chords, double viewAnchorMs, double pixelsPerMs,
+        double boundsWidth, double boundsHeight, double topMargin, double bottomMargin, int stringCount,
+        IList<BeatMarker> beats, bool leftyFlip, out bool exact, out bool head)
     {
         exact = false;
+        head = false;
         if (chords == null || chords.Count == 0 || p.Y < topMargin || p.Y > boundsHeight - bottomMargin) return null;
 
         var bounds = GetViewportBounds(viewAnchorMs, pixelsPerMs, boundsWidth);
@@ -166,39 +191,45 @@ public static class ChartHitTester
 
         if (end < 0) return null;
 
+        Chord? tail = null;
         for (var i = end; i >= start; i--)
         {
             var chord = chords[i];
             var startX = (chord.Position.GetPositionMs(beats) - bounds.StartMs) * pixelsPerMs;
 
-            if (p.X >= startX - ChartEditorConstants.ChordXHitTolerance &&
-                p.X <= startX + ChartEditorConstants.ChordXHitTolerance)
+            // The X tolerance gates the HEADS only. A sustain tail runs far past
+            // it, and nesting the tail test inside it made every chord tail
+            // unclickable beyond the first 16 px.
+            var nearHead = p.X >= startX - ChartEditorConstants.ChordXHitTolerance &&
+                           p.X <= startX + ChartEditorConstants.ChordXHitTolerance;
+            for (var j = 0; j < chord.ChordNotes.Count; j++)
             {
-                for (var j = 0; j < chord.ChordNotes.Count; j++)
+                var cn = chord.ChordNotes[j];
+                if (cn.StringIndex < 0 || cn.StringIndex >= stringCount) continue;
+
+                var y = GetLaneY(boundsHeight, topMargin, bottomMargin, stringCount, cn.StringIndex, leftyFlip);
+
+                if (nearHead && ChordHeadRect(startX, y).Contains(p))
                 {
-                    var cn = chord.ChordNotes[j];
-                    if (cn.StringIndex < 0 || cn.StringIndex >= stringCount) continue;
+                    exact = true;
+                    head = true;
+                    return chord;
+                }
 
-                    var y = GetLaneY(boundsHeight, topMargin, bottomMargin, stringCount, cn.StringIndex, leftyFlip);
-
-                    if (ChordHeadRect(startX, y).Contains(p))
-                    {
-                        exact = true;
-                        return chord;
-                    }
-
-                    if (cn.Sustain.Fraction.Numerator > 0 || cn.Sustain.BeatId > 0)
-                    {
-                        var width = ((chord.Position + cn.Sustain).GetPositionMs(beats) -
-                                     chord.Position.GetPositionMs(beats)) * pixelsPerMs;
-                        if (SustainRect(startX, y, width).Contains(p))
-                        {
-                            exact = true;
-                            return chord;
-                        }
-                    }
+                if (cn.Sustain.Fraction.Numerator > 0 || cn.Sustain.BeatId > 0)
+                {
+                    var width = ((chord.Position + cn.Sustain).GetPositionMs(beats) -
+                                 chord.Position.GetPositionMs(beats)) * pixelsPerMs;
+                    if (SustainRect(startX, y, width).Contains(p))
+                        tail ??= chord;
                 }
             }
+        }
+
+        if (tail != null)
+        {
+            exact = true;
+            return tail;
         }
 
         // NEAR MISS — same rule as HitTestNote. A chord head is 24x16 and the
@@ -260,8 +291,39 @@ public static class ChartHitTester
         return null;
     }
 
+    /// <summary>
+    ///     Finds a drawn fret badge or an unlabelled row's marker. Tails remain selectable through
+    ///     <see cref="HitTestAnchor" />; a null text measurement means labels are hidden.
+    /// </summary>
+    public static FretAnchor? HitTestAnchorHead(Point p, IList<FretAnchor>? anchors, double viewAnchorMs,
+        double pixelsPerMs, double boundsWidth, double fhpY, IList<BeatMarker> beats,
+        Func<string, float?> measureTextWidth, double currentTimeMs = 0)
+    {
+        if (anchors == null || anchors.Count == 0) return null;
+        if (p.Y < fhpY || p.Y > fhpY + ChartEditorConstants.RenderMetrics.AnchorTailHeight) return null;
+
+        var bounds = GetViewportBounds(viewAnchorMs, pixelsPerMs, boundsWidth);
+        TimelineMath.GetVisibleRange(anchors, bounds.StartMs, bounds.EndMs, beats,
+            ChartEditorConstants.VisibleRangeBufferMs, out var start, out var end);
+        start = Math.Max(0, start - 1);
+        for (var i = end; i >= start; i--)
+        {
+            var anchor = anchors[i];
+            var textWidth = measureTextWidth(RenderStringCache.Fret(anchor.Fret));
+            var timeMs = anchor.Position.GetPositionMs(beats);
+            var endMs = AnchorSpan.EndTimeMs(timeMs,
+                i + 1 < anchors.Count ? anchors[i + 1].Position.GetPositionMs(beats) : null, currentTimeMs);
+            var x = (float)((timeMs - bounds.StartMs) * pixelsPerMs);
+            var endX = (float)((endMs - bounds.StartMs) * pixelsPerMs);
+            var head = FretAnchorLayer.GetHeadBounds(x, endX, (float)fhpY, textWidth);
+            if (head.Contains(p)) return anchor;
+        }
+
+        return null;
+    }
+
     public static FretAnchor? HitTestAnchor(Point p, IList<FretAnchor>? anchors, double viewAnchorMs,
-        double pixelsPerMs, double boundsWidth, double fhpY, IList<BeatMarker> beats)
+        double pixelsPerMs, double boundsWidth, double fhpY, IList<BeatMarker> beats, double currentTimeMs = 0)
     {
         if (anchors == null || anchors.Count == 0) return null;
         if (p.Y < fhpY || p.Y > fhpY + ChartEditorConstants.RenderMetrics.AnchorTailHeight) return null;
@@ -276,12 +338,10 @@ public static class ChartHitTester
         {
             var a = anchors[i];
             var startX = (a.Position.GetPositionMs(beats) - bounds.StartMs) * pixelsPerMs;
-            var endTimeMs = i + 1 < anchors.Count
-                ? anchors[i + 1].Position.GetPositionMs(beats)
-                : Math.Max(bounds.EndMs,
-                    a.Position.GetPositionMs(beats) + ChartEditorConstants.RenderMetrics.AnchorTailMaxMs);
+            var endTimeMs = AnchorSpan.EndTimeMs(a.Position.GetPositionMs(beats),
+                i + 1 < anchors.Count ? anchors[i + 1].Position.GetPositionMs(beats) : null, currentTimeMs);
             var endX = (endTimeMs - bounds.StartMs) * pixelsPerMs;
-            var w = Math.Max(endX - startX, 15f);
+            var w = Math.Max(endX - startX, FretAnchorLayer.MinHitWidth);
 
             var rect = new Rect(startX, fhpY, w, ChartEditorConstants.RenderMetrics.AnchorTailHeight);
             if (rect.Contains(p)) return a;
@@ -291,29 +351,17 @@ public static class ChartHitTester
     }
 
     /// <summary>
-    ///     Resolves the note and chord testers' two answers the way a press has
-    ///     to: an EXACT hit outranks a NEAR MISS whichever class it is in.
-    ///     <para>
-    ///         Every caller runs the chord tester first and lets a chord win
-    ///         unconditionally, which is right for two exact candidates (the
-    ///         chord IS the sound at that column) and wrong the moment the
-    ///         chord's answer came from the 6 px near-miss ring: a gem is 26 px
-    ///         across while the lane pitch is the lane area over the string
-    ///         count, so in any short viewport — a stacked track row, a
-    ///         six-string chart in a small pane — the gems are taller than their
-    ///         lanes and a neighbouring chord note is always inside the ring.
-    ///         Clicking a single note dead centre then selected the chord above
-    ///         it, and every verb (drag, delete, the context menu) followed the
-    ///         wrong sound.
-    ///     </para>
-    ///     <para>
-    ///         The near-miss pass keeps its whole purpose — deciding between two
-    ///         INEXACT candidates — because that is the only case this changes.
-    ///     </para>
+    ///     Resolves the two sound classes for both press and hover: heads beat
+    ///     sustains, and exact hits beat near misses. Chords retain precedence
+    ///     between equally ranked candidates.
     /// </summary>
     public static (Chord? Chord, GuitarNote? Note) ResolveSound(
-        Chord? chord, bool chordExact, GuitarNote? note, bool noteExact)
-        => chord != null && !chordExact && noteExact ? (null, note) : (chord, note);
+        Chord? chord, bool chordExact, GuitarNote? note, bool noteExact, bool chordHead = false, bool noteHead = false)
+    {
+        if (noteHead && !chordHead) return (null, note);
+        if (chordHead && !noteHead) return (chord, null);
+        return chord != null && !chordExact && noteExact ? (null, note) : (chord, note);
+    }
 
     public static int GetLaneIndexAtY(double y, double boundsHeight, double topMargin, double bottomMargin,
         int stringCount, bool leftyFlip)

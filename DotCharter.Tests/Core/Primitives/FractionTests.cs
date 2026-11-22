@@ -2,6 +2,33 @@ namespace DotCharter.Tests.Core.Primitives;
 
 public class FractionTests
 {
+    [Theory]
+    [InlineData(long.MinValue, 1)]
+    [InlineData(long.MinValue, -1)]
+    [InlineData(1, long.MinValue)]
+    [InlineData(long.MaxValue, long.MinValue)]
+    public void TryCreate_UnrepresentableLongExtremes_ReturnsFalse(long numerator, long denominator)
+    {
+        Assert.False(Fraction.TryCreate(numerator, denominator, out var result));
+        Assert.Equal(Fraction.Zero, result);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Fraction(numerator, denominator));
+    }
+
+    [Theory]
+    [InlineData(long.MinValue, long.MinValue, 1, 1)]
+    [InlineData(0, long.MinValue, 0, 1)]
+    [InlineData(long.MinValue, 4611686018427387904L, -2, 1)]
+    [InlineData(4611686018427387904L, long.MinValue, -1, 2)]
+    [InlineData(long.MinValue, -4611686018427387904L, 2, 1)]
+    public void TryCreate_ReducibleLongExtremes_PreservesCanonicalValue(
+        long numerator, long denominator, int expectedNumerator, int expectedDenominator)
+    {
+        Assert.True(Fraction.TryCreate(numerator, denominator, out var result));
+        Assert.Equal(expectedNumerator, result.Numerator);
+        Assert.Equal(expectedDenominator, result.Denominator);
+        Assert.Equal(result, new Fraction(numerator, denominator));
+    }
+
     [Fact]
     public void Constructor_ReducesToCanonicalForm()
     {
@@ -132,6 +159,30 @@ public class FractionTests
         var f = new Fraction(3, 4).Negate();
         Assert.Equal(-3, f.Numerator);
         Assert.True(f.IsNegative);
+    }
+
+    [Fact]
+    public void Negate_MinimumNumerator_ThrowsWhenThePositiveValueDoesNotFit() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Fraction(int.MinValue, 1).Negate());
+
+    [Fact]
+    public void UnaryMinus_MinimumNumerator_ThrowsWhenThePositiveValueDoesNotFit() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => -new Fraction(int.MinValue, 3));
+
+    [Fact]
+    public void Absolute_MinimumNumerator_ThrowsWhenThePositiveValueDoesNotFit() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Fraction(int.MinValue, 3).Absolute());
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(int.MaxValue)]
+    public void Subtraction_MinimumNumerators_CancelsWithoutAnOutOfRangeIntermediate(int denominator)
+    {
+        var fraction = new Fraction(int.MinValue, denominator);
+
+        Assert.Equal(Fraction.Zero, fraction - fraction);
+        Assert.Equal(new Fraction(-1, denominator), fraction - new Fraction(int.MinValue + 1, denominator));
     }
 
     [Fact]

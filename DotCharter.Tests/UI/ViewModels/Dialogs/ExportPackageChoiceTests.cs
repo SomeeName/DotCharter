@@ -3,8 +3,8 @@ using DotCharter.Presentation.Screens.Dialogs;
 namespace DotCharter.Tests.UI.ViewModels.Dialogs;
 
 /// <summary>
-///     #804: the export's Package choice is Encrypted unless Plain is picked, and without keys
-///     only Plain is possible and the picker says so.
+///     Stock package choices are Encrypted and Plain. Without keys the disabled picker
+///     shows Plain; extended content fixes that state through its selection policy.
 /// </summary>
 public sealed class ExportPackageChoiceTests
 {
@@ -28,13 +28,13 @@ public sealed class ExportPackageChoiceTests
         using var keys = TestRocksmithKeys.UseSynthetic();
         var vm = Create();
 
-        vm.SelectedPackageOption = vm.PackageOptions.Single(o => o.Plain);
+        vm.SelectedPackageOption = vm.PackageOptions.First(o => o.Plain);
 
         Assert.True(vm.WritesPlain);
     }
 
     [Fact]
-    public void WithoutKeys_OnlyPlainIsPossible_AndThePickerIsDisabled()
+    public void WithoutKeys_PlainIsTheOnlyChoice_AndThePickerIsDisabled()
     {
         using var keys = TestRocksmithKeys.UseNoKeys();
         var vm = Create();
@@ -42,9 +42,10 @@ public sealed class ExportPackageChoiceTests
         Assert.True(vm.SelectedPackageOption.Plain);
         Assert.True(vm.WritesPlain);
         Assert.False(vm.CanChoosePackage);
+        Assert.Single(vm.PackageOptions);
+        Assert.All(vm.PackageOptions, o => Assert.True(o.Plain));
 
-        // Even a preset that says Encrypted cannot write it.
-        vm.SelectedPackageOption = vm.PackageOptions.Single(o => !o.Plain);
+        vm.SelectedPackageOption = new ExportPackageChoice(false, "Encrypted");
         Assert.True(vm.WritesPlain);
     }
 }

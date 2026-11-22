@@ -6,17 +6,17 @@ namespace DotCharter.Tests.Services.Audio.VstSandbox;
 /// Pins the managed mirror of the shared-memory bridge layout to the exact
 /// numbers the native side asserts in
 /// <c>JuceSharp/src/JuceSharp.Native/include/dotcharter_vst_bridge.h</c>
-/// (bridge version 3). If any of these fail, the native header changed
+/// (bridge version 4). If any of these fail, the native header changed
 /// without bumping the bridge version — the two processes would read each
 /// other's memory at the wrong offsets.
 /// </summary>
 public class VstSandboxLayoutTests
 {
     [Fact]
-    public void HeaderLayoutIsPinnedToBridgeVersion3()
+    public void HeaderLayoutIsPinnedToBridgeVersion4()
     {
         Assert.Equal(0x44435642u, VstSandboxLayout.Magic); // 'DCVB'
-        Assert.Equal(3u, VstSandboxLayout.BridgeVersion);
+        Assert.Equal(4u, VstSandboxLayout.BridgeVersion);
         Assert.Equal(2, VstSandboxLayout.MaxChannels);
         Assert.Equal(8192, VstSandboxLayout.MaxBlockFrames);
         Assert.Equal(128, VstSandboxLayout.MaxMidiEvents);
@@ -67,7 +67,8 @@ public class VstSandboxLayoutTests
         Assert.Equal(66112, VstSandboxLayout.ChainOutOffset);
         Assert.Equal(131648, VstSandboxLayout.InstrOutOffset);
         Assert.Equal(197184, VstSandboxLayout.OffMidiTiming);   // v3
-        Assert.Equal(197704, VstSandboxLayout.TotalBytes);      // v3: + 520-byte MIDI-timing block
+        Assert.Equal(197704, VstSandboxLayout.OffSeatRouting);  // v4
+        Assert.Equal(197712, VstSandboxLayout.TotalBytes);      // v4: + 8-byte seat-routing block
     }
 
     /// <summary>
@@ -84,8 +85,25 @@ public class VstSandboxLayoutTests
         Assert.Equal(VstSandboxLayout.OffMidiTiming + 8, VstSandboxLayout.OffMidiOffsets);
         Assert.Equal(520, VstSandboxLayout.MidiTimingBytes);
         Assert.Equal(VstSandboxLayout.OffMidiOffsets + VstSandboxLayout.MaxMidiEvents * sizeof(uint),
-                     VstSandboxLayout.TotalBytes);
+                     VstSandboxLayout.OffSeatRouting);
         Assert.Equal(0, VstSandboxLayout.OffMidiTiming % 8); // the int64 is naturally aligned
+    }
+
+    /// <summary>
+    /// v4 (#646) APPENDED the seat-routing block after the MIDI-timing block, so
+    /// no v3 offset moved. Mirrors <c>static_assert(sizeof(SeatRouting) == 8)</c>:
+    /// the parent's request seat, then the child's mask of seats with a chain.
+    /// </summary>
+    [Fact]
+    public void TheV4SeatRoutingBlockIsAppendedAfterTheMidiTimingBlock()
+    {
+        Assert.Equal(VstSandboxLayout.OffMidiTiming + VstSandboxLayout.MidiTimingBytes, VstSandboxLayout.OffSeatRouting);
+        Assert.Equal(VstSandboxLayout.OffSeatRouting, VstSandboxLayout.OffRequestSeat);
+        Assert.Equal(VstSandboxLayout.OffSeatRouting + 4, VstSandboxLayout.OffSeatChainMask);
+        Assert.Equal(8, VstSandboxLayout.SeatRoutingBytes);
+        Assert.Equal(VstSandboxLayout.OffSeatRouting + VstSandboxLayout.SeatRoutingBytes, VstSandboxLayout.TotalBytes);
+        Assert.Equal(4, VstSandboxLayout.MaxSeats);
+        Assert.Equal(0, VstSandboxLayout.OffSeatChainMask % 4); // the shared atomic is naturally aligned
     }
 
     [Fact]

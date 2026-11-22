@@ -13,10 +13,65 @@ namespace DotCharter.Tests.Services.Diagnostics;
 /// </summary>
 public sealed class DiagnosticsBundleExporterTests : IDisposable
 {
+    [Theory]
+    [InlineData(FakeSecrets.OpenAiProjectKey, "sk")]
+    [InlineData(FakeSecrets.AnthropicKey, "api03")]
+    public void BundleTokens_SurviveNoOverlappingUserNameScrub(string secret, string userName)
+    {
+        Directory.CreateDirectory(_workDir);
+        var source = Path.Combine(_workDir, "overlap.log");
+        File.WriteAllText(source, $"{userName} used {secret}");
+        using var stream = new MemoryStream();
+        new DiagnosticsBundleExporter(userName: userName).WriteBundle(stream, new DiagnosticsBundleRequest([
+            new DiagnosticsBundleEntry { EntryName = "system-info.txt", InlineText = $"{userName} used {secret}" },
+            new DiagnosticsBundleEntry { EntryName = "logs/overlap.log", SourceFilePath = source }
+        ]));
+
+        Assert.Equal("<user> used <redacted-token>", ReadEntry(stream, "system-info.txt"));
+        Assert.Equal("<user> used <redacted-token>", ReadEntry(stream, "logs/overlap.log"));
+    }
+
+    [Theory]
+    [InlineData(FakeSecrets.OpenAiProjectKey)]
+    [InlineData(FakeSecrets.AnthropicKey)]
+    public void WriteBundle_ScrubsProviderKeysFromEveryTextSource(string secret)
+    {
+        Directory.CreateDirectory(_workDir);
+        var source = Path.Combine(_workDir, "dotcharter.log");
+        File.WriteAllText(source, $"using {secret} now");
+        using var stream = new MemoryStream();
+        new DiagnosticsBundleExporter().WriteBundle(stream, new DiagnosticsBundleRequest([
+            new DiagnosticsBundleEntry { EntryName = "system-info.txt", InlineText = $"using {secret} now" },
+            new DiagnosticsBundleEntry { EntryName = "logs/dotcharter.log", SourceFilePath = source }
+        ]));
+
+        Assert.Equal("using <redacted-token> now", ReadEntry(stream, "system-info.txt"));
+        Assert.Equal("using <redacted-token> now", ReadEntry(stream, "logs/dotcharter.log"));
+    }
+
     private readonly string _workDir = Path.Combine(
         Path.GetTempPath(), "dc-diag-tests-" + Guid.NewGuid().ToString("N"));
 
     public void Dispose() => BestEffortDelete.Directory(_workDir);
+
+    [Fact]
+    public void Export_ReplacesDestinationWithoutOpeningItForWrite()
+    {
+        Directory.CreateDirectory(_workDir);
+        var path = Path.Combine(_workDir, "bundle.zip");
+        File.WriteAllText(path, "previous");
+        using var previous = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        var exporter = new DiagnosticsBundleExporter(_workDir, _workDir, "test-user");
+
+        var result = exporter.Export(path, "system details");
+
+        Assert.Equal(1, result.EntryCount);
+        using var reader = new StreamReader(previous);
+        Assert.Equal("previous", reader.ReadToEnd());
+        using var zip = ZipFile.OpenRead(path);
+        Assert.Equal("system details", ReadZipEntry(zip, DiagnosticsBundleExporter.SystemInfoEntryName));
+        Assert.Empty(Directory.GetFiles(_workDir, "*.tmp"));
+    }
 
     // ---- redaction ---------------------------------------------------------
     //

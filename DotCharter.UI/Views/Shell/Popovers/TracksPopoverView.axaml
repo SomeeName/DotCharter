@@ -134,10 +134,6 @@
                                   Content="{localization:Loc Toolbar_Tracks_Mute}"
                                   ToolTip.Tip="{localization:Loc Toolbar_Tracks_Mute_Tip}"
                                   IsChecked="{Binding Transport.IsMidiMuted, Mode=TwoWay}" />
-                    <Button Theme="{StaticResource FirePopoverChipButton}" Classes="FirePopoverChip"
-                            Content="{localization:Loc Toolbar_Tracks_Settings}"
-                            ToolTip.Tip="{localization:Loc Toolbar_Tracks_Manage}"
-                            Command="{Binding ShellDialogs.OpenArrangementSettingsCommand}" />
                 </WrapPanel>
             </StackPanel>
 

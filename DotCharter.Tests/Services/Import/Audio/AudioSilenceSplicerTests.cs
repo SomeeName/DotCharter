@@ -1,3 +1,4 @@
+using DotCharter.Services.Audio.StemSeparation.Cache;
 using DotCharter.Services.Import.Audio;
 using DotCharter.Tone.Infrastructure.Storage;
 
@@ -20,6 +21,59 @@ public sealed class AudioSilenceSplicerTests : IDisposable
         var path = Path.Combine(_dir, relative);
         File.WriteAllBytes(path, bytes);
         return path;
+    }
+
+    [Fact]
+    public async Task Padded_audio_with_a_sample_collision_is_cached_without_touching_the_previous_archive()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var store = new StemCacheStore(new CopyStemEncoder(), rootOverride: Path.Combine(_dir, "cache"));
+        var audioBytes = new byte[4 * 1024 * 1024];
+        var song = Write("source.mp3", [1]);
+        var stem = Write(Path.Combine("stems", "guitar.flac"), [2]);
+        var splicer = new AudioSilenceSplicer(null, store, null, () => "fake-ffmpeg", (_, args) =>
+        {
+            File.WriteAllBytes(args[^1], args[^1].EndsWith(".ogg", StringComparison.Ordinal) ? audioBytes : Wav(50));
+            return true;
+        });
+        var request = new SilenceSpliceRequest(song, [new SilenceSpliceFile("guitar", stem)], _dir, 1, 0);
+        var first = await splicer.SpliceAsync(request, ct);
+        Assert.True(first.Succeeded);
+        var archive = Assert.Single(Directory.GetFiles(store.Root, "*.dcstems"));
+        var original = File.ReadAllBytes(archive);
+        audioBytes[1024 * 1024] = 1;
+
+        var second = await splicer.SpliceAsync(request, ct);
+
+        Assert.True(second.Succeeded);
+        Assert.Equal(StemAudioSignature.ComputeFile(first.AudioPath!), StemAudioSignature.ComputeFile(second.AudioPath!));
+        Assert.Equal(2, Directory.GetFiles(store.Root, "*.dcstems").Length);
+        var coordinator = new StemCacheCoordinator(store);
+        foreach (var path in new[] { first.AudioPath!, second.AudioPath! })
+        {
+            var identity = StemCacheIdentity.ForAudioFile(path);
+            Assert.NotNull(await coordinator.TryLoadCachedAsync(identity, path, Path.Combine(_dir, Path.GetFileName(path) + "-play"), ct));
+        }
+
+        Assert.Equal(original, File.ReadAllBytes(archive));
+    }
+
+    private sealed class CopyStemEncoder : IStemEncoder
+    {
+        public StemCodec PreferredCodec => StemCodec.Wav;
+        public bool IsExternalEncoderAvailable => false;
+        public Task<string> EncodeAsync(string wavPath, string destPathWithoutExtension, StemCodec target, CancellationToken ct = default)
+        {
+            var path = destPathWithoutExtension + ".wav";
+            File.Copy(wavPath, path);
+            return Task.FromResult(path);
+        }
+
+        public Task<string> DecodeToWavAsync(string encodedPath, StemCodec codec, string destWavPath, CancellationToken ct = default)
+        {
+            File.Copy(encodedPath, destWavPath, overwrite: true);
+            return Task.FromResult(destWavPath);
+        }
     }
 
     private static byte[] Wav(int frames) =>

@@ -59,23 +59,22 @@
               InputGesture="{Binding ProjectState.Keybinds.SaveProjectAs, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
     <Separator />
 
-    <!-- AUDIO. Two verbs, deliberately NOT a submenu: one level for two
-         items is an extra click for nothing (the rule the Tools pass set
-         and this one follows). -->
-    <MenuItem Header="{localization:Loc Menu_AttachAudio}" Command="{Binding Project.AttachAudioCommand}"
-              ToolTip.Tip="{localization:Loc Menu_AttachAudio_Tip}">
+    <!-- AUDIO (#494). Every way to give the song its audio in one group:
+         a file, a YouTube link, a stem split of what is attached. -->
+    <MenuItem Header="{localization:Loc Menu_GroupAudio}">
         <MenuItem.Icon>
             <PathIcon
                 Data="M12,3V13.55C11.41,13.21 10.73,13 10,13A3,3 0 0,0 7,16A3,3 0 0,0 10,19A3,3 0 0,0 13,16V7H17V5H12V3Z"
                 Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
         </MenuItem.Icon>
-    </MenuItem>
-    <MenuItem Header="{localization:Loc Menu_ChartFromAudio}"
-              Command="{Binding ShellDialogs.OpenChartFromAudioCommand}">
-        <MenuItem.Icon>
-            <PathIcon Data="{DynamicResource IconSparkles}"
-                      Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
-        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_AttachAudio}" Command="{Binding Project.AttachAudioCommand}"
+                  ToolTip.Tip="{localization:Loc Menu_AttachAudio_Tip}" />
+        <!-- #820: the downloader is a contested feature, so this row is REMOVED (not
+             greyed) when the public-build switch is off (ContestedMenu.Prune). -->
+        <MenuItem Header="{localization:Loc Menu_AttachYoutubeAudio}" menus:ContestedMenu.Feature="youtube-import"
+                  Command="{Binding Imports.AttachYoutubeAudioCommand}"
+                  ToolTip.Tip="{localization:Loc Menu_AttachYoutubeAudio_Tip}" />
+        <MenuItem Header="{localization:Loc Menu_SeparateStems}" Command="{Binding StemSeparation.SeparateStemsCommand}" />
     </MenuItem>
     <Separator />
 
@@ -95,11 +94,6 @@
         <!-- Reads a game package, so FileMenu removes it (ContestedMenu.Prune) when no plugin does. -->
         <MenuItem Header="{localization:Loc Menu_ConvertPackages}" menus:ContestedMenu.Feature="game-packages"
                   Command="{Binding Imports.ConvertPackagesCommand}" />
-        <!-- #820: the downloader is a contested feature, so this row is REMOVED (not
-             greyed) when the public-build switch is off (ContestedMenu.Prune). -->
-        <MenuItem Header="{localization:Loc Menu_AttachYoutubeAudio}" menus:ContestedMenu.Feature="youtube-import"
-                  Command="{Binding Imports.AttachYoutubeAudioCommand}"
-                  ToolTip.Tip="{localization:Loc Menu_AttachYoutubeAudio_Tip}" />
     </MenuItem>
     <MenuItem Header="{localization:Loc Menu_GroupExport}">
         <MenuItem.Icon>
@@ -125,6 +119,14 @@
                   Command="{Binding Export.ExportSheetPdfCommand}">
             <MenuItem.Icon>
                 <PathIcon Data="{DynamicResource IconSheetMusic}"
+                          Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_Screenshot}" Command="{Binding Export.CaptureHighwayScreenshotCommand}"
+                  InputGesture="F12"
+                  ToolTip.Tip="{localization:Loc Menu_Screenshot_Tip}">
+            <MenuItem.Icon>
+                <PathIcon Data="{DynamicResource IconCamera}"
                           Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
             </MenuItem.Icon>
         </MenuItem>

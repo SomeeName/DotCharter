@@ -38,6 +38,22 @@ public sealed class RigTunerTuningTests
     }
 
     [Fact]
+    public void TheChipAndPicker_KeepTheSpellingOfAnUnchangedExtendedString()
+    {
+        var tuning = new TunerTuning("mixed", false, [0, -1, -1, -1, -1, -1, -1, -1]);
+
+        var localization = FakeLocalization.English();
+        var tuner = new RigTunerViewModel(new FakeAudioPlaybackService(), localization)
+        {
+            SelectedTuning = new RigTunerTuningChoice(tuning, localization)
+        };
+
+        Assert.Equal("F#", TunerTuningNotes.Of(tuning).First());
+        Assert.Equal("F#", tuner.Strings[0].Note);
+        Assert.Equal(TunerTuningNotes.Of(tuning), tuner.Strings.Select(chip => chip.Note));
+    }
+
+    [Fact]
     public void DropD_JudgesTheLowEAgainstD2_AndMarksTheStringsHeardInTune()
     {
         var audio = new FakeAudioPlaybackService { InputSampleRate = SampleRate, InputCaptureWindow = Sine(82.41) };

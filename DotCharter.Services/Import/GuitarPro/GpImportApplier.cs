@@ -21,7 +21,7 @@ public enum GpImportMode
 }
 
 /// <summary>One chosen track, and the arrangement it merges into (technique-only and diff-compare).</summary>
-public sealed record GpTrackTarget(string Name, Arrangement? Target);
+public sealed record GpTrackTarget(int SourceTrackId, string Name, Arrangement? Target);
 
 /// <summary>What an add-new import created: its arrangements, and per measure of the score's grid the
 /// written bar it plays (null when the beat map was not replaced, so the measures are not the score's).</summary>
@@ -58,6 +58,7 @@ public sealed class GpImportApplier(
     {
         var appConfig = config.LoadAppConfig();
         _lastImport = null;
+        if (mode == GpImportMode.DiffCompare) ValidateDiffPairs(tracks, parsed, older);
         maintenance.RunAsSingleUndoStep(() =>
         {
             switch (mode)
@@ -73,6 +74,18 @@ public sealed class GpImportApplier(
                     break;
             }
         });
+    }
+
+    private void ValidateDiffPairs(IReadOnlyList<GpTrackTarget> tracks, GpImportResult newer, GpImportResult? older)
+    {
+        foreach (var track in tracks)
+        {
+            var source = newer.ArrangementsByTrackId.GetValueOrDefault(track.SourceTrackId);
+            if (source == null || older == null || PreviousTrack(source, track.SourceTrackId, newer, older) == null)
+            {
+                throw new InvalidDataException(localization.Format("Status_GpImport_UnpairedTrack", track.Name));
+            }
+        }
     }
 
     private void ApplyAsNewArrangements(string filePath, GpImportResult result, AppConfig appConfig)
@@ -94,6 +107,7 @@ public sealed class GpImportApplier(
 
         var project = state.ActiveProject;
         if (project == null) return;
+        if (gridReplaced) project.GpSourceBars = [.. GpSourceMap.Capture(result.Metadata, project.Beats)];
         RemoveDefaultEmptyArrangement(project);
         foreach (var arrangement in imported) project.Arrangements.Add(arrangement);
         _lastImport = new GpImportedScore([.. imported],
@@ -113,9 +127,9 @@ public sealed class GpImportApplier(
         var (updated, scanned, unmatched, fields) = (0, 0, 0, 0);
         foreach (var track in tracks)
         {
-            var source = ByName(newer, track.Name);
-            var old = older == null ? null : ByName(older, track.Name);
-            if (source == null || track.Target is not { } target)
+            newer.ArrangementsByTrackId.TryGetValue(track.SourceTrackId, out var source);
+            var old = source != null && older != null ? PreviousTrack(source, track.SourceTrackId, newer, older) : null;
+            if (source == null || track.Target is not { } target || (diff && old == null))
             {
                 logger.Warning(AppLogCategory.Import,
                     $"GP {(diff ? "diff-compare" : "technique-only")}: skipped track '{track.Name}' (src={source?.Name ?? "null"}, old={old?.Name ?? "n/a"}, dst={track.Target?.Name ?? "null"}).");
@@ -140,9 +154,22 @@ public sealed class GpImportApplier(
             : localization.Format("Status_GpImport_TechniqueApplied", updated, scanned, unmatched, fields));
     }
 
-    private static Arrangement? ByName(GpImportResult result, string name) =>
-        result.Arrangements.FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase))
-        ?? result.Arrangements.FirstOrDefault();
+    private static Arrangement? PreviousTrack(Arrangement source, int id, GpImportResult newer, GpImportResult older)
+    {
+        bool SameName(Arrangement arrangement) => string.Equals(arrangement.Name, source.Name, StringComparison.OrdinalIgnoreCase);
+        var matches = older.Arrangements.Where(SameName).ToList();
+        if (matches.Count == 1 && newer.Arrangements.Count(SameName) == 1) return matches[0];
+
+        // Duplicate names need the unchanged file-local order. A differing
+        // layout cannot establish correspondence safely without explicit pairs.
+        if (newer.ArrangementsByTrackId.Count != older.ArrangementsByTrackId.Count ||
+            newer.ArrangementsByTrackId.Any(pair => !older.ArrangementsByTrackId.TryGetValue(pair.Key, out var previous) ||
+                !string.Equals(pair.Value.Name, previous.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return null;
+        }
+        return older.ArrangementsByTrackId.GetValueOrDefault(id);
+    }
 
     /// <summary>A fresh project's one untouched stub arrangement goes, rather than sitting beside the imports.</summary>
     private void RemoveDefaultEmptyArrangement(ChartProject project)
@@ -224,12 +251,6 @@ public sealed class GpImportApplier(
         {
             project.Chart.AlbumName = meta.Album;
             applied.Add($"album='{meta.Album}'");
-        }
-
-        if (!string.IsNullOrWhiteSpace(meta.Tabber))
-        {
-            project.Chart.Charter = meta.Tabber;
-            applied.Add($"charter='{meta.Tabber}'");
         }
 
         if (applied.Count > 0)

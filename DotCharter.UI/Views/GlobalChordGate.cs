@@ -36,6 +36,9 @@ internal static class GlobalChordGate
     /// <param name="SearchBoxClaimsEscape">A marked search box
     /// (<c>Input/SearchBoxKeys.ClearOnEscape</c>) owns the keyboard AND has text
     /// in it, so Escape means "empty the box", not "leave the screen".</param>
+    /// <param name="InlineEditorClaimsEscape">Focus is inside an open inline timeline
+    /// editor (FHP, section, lyric: <c>Views/Editor/InlineEditOverlayView</c>), so
+    /// Escape means "cancel this edit", not "clear the selection".</param>
     internal readonly record struct Context(
         bool TextInputFocused,
         bool KeybindCaptureFocused,
@@ -44,7 +47,8 @@ internal static class GlobalChordGate
         bool ChartEditorVisible,
         bool LaunchScreenVisible = false,
         bool ActivatableFocused = false,
-        bool SearchBoxClaimsEscape = false);
+        bool SearchBoxClaimsEscape = false,
+        bool InlineEditorClaimsEscape = false);
 
     /// <summary>
     /// True while a keybind capture box owns the keyboard. NOTHING may be
@@ -97,8 +101,14 @@ internal static class GlobalChordGate
     /// only while it has something to clear, so Esc on an EMPTY box still runs the
     /// one chain and leaves the screen.
     /// </para>
+    /// <para>
+    /// An open INLINE EDITOR on the timeline gets the same first refusal: its card's
+    /// own tunnel handler cancels the draft, and it never ran because this branch
+    /// cleared the selection and marked the key handled first.
+    /// </para>
     /// </summary>
-    internal static bool AllowsEscape(in Context c) => !IsRebinding(c) && !c.SearchBoxClaimsEscape;
+    internal static bool AllowsEscape(in Context c) =>
+        !IsRebinding(c) && !c.SearchBoxClaimsEscape && !c.InlineEditorClaimsEscape;
 
     /// <summary>F11 / Alt+Enter. Alt+Enter inserts a newline in a multi-line
     /// TextBox, so a focused text input keeps it.</summary>

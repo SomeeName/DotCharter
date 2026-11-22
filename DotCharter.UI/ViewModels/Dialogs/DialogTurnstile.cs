@@ -18,11 +18,11 @@ namespace DotCharter.UI.ViewModels.Dialogs;
 ///         with <c>false</c> (a cancel, the safe answer for every confirmation
 ///         in the app) — and takes the turn without waiting further. Turns are
 ///         identified by token so a displaced holder that eventually wakes
-///         cannot release a turn it does not own. Pure: no dispatcher, no
-///         clock of its own beyond the timeout.
+///         cannot release a turn it does not own. Pure: no dispatcher, and the
+///         timeout runs on the <see cref="TimeProvider" /> it is handed.
 ///     </para>
 /// </summary>
-internal sealed class DialogTurnstile(TimeSpan stuckTimeout)
+internal sealed class DialogTurnstile(TimeSpan stuckTimeout, TimeProvider time)
 {
     /// <summary>A dialog the user has genuinely been reading for this long is
     /// rare; a dialog that CANNOT be dismissed is stuck forever. Generous, so
@@ -49,15 +49,28 @@ internal sealed class DialogTurnstile(TimeSpan stuckTimeout)
         CancellationToken cancellationToken = default)
     {
         var token = new object();
-        if (await _queue.WaitAsync(StuckTimeout, cancellationToken).ConfigureAwait(false))
+        using var stuck = new CancellationTokenSource(StuckTimeout, time);
+        using var wait = CancellationTokenSource.CreateLinkedTokenSource(stuck.Token, cancellationToken);
+        try
         {
+            await _queue.WaitAsync(wait.Token).ConfigureAwait(false);
             lock (_gate) _holder = token;
             return (token, false);
         }
+        catch (OperationCanceledException) when (stuck.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            // The wait ran out on the turnstile's clock, not on the caller's token.
+            return Displace(token, displaceHolder);
+        }
+    }
 
-        // The holder is stuck. Take its turn: the semaphore count stays where
-        // it is, and the identity check in Exit keeps the books straight — the
-        // stuck holder's eventual Exit is a no-op, ours releases.
+    /// <summary>
+    ///     The holder is stuck. Take its turn: the semaphore count stays where
+    ///     it is, and the identity check in Exit keeps the books straight — the
+    ///     stuck holder's eventual Exit is a no-op, ours releases.
+    /// </summary>
+    private (object Token, bool Displaced) Displace(object token, Action displaceHolder)
+    {
         lock (_gate) _holder = token;
         Interlocked.Increment(ref _displacements);
         displaceHolder();

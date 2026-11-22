@@ -24,8 +24,8 @@ public sealed partial class PlayModeViewModel
         if (_livePlay == null || _transport == null) return;
 
         // ── The pre-run baselines, captured ONCE per run CHAIN ────────────────
-        // Retry (results), Restart (pause), retry-from-section and a REFUSED run
-        // all start a new run without ever reaching EndRunSideEffects, so the
+        // Retry, Restart and a refused start retain the prepared settings until
+        // EndRunSideEffects runs on leaving preparation or the run chain. The
         // previous run's transport speed, drop-tuner shift and highway scroll
         // speed are still APPLIED when we get here. Re-snapshotting them would
         // record the run's own values as the "before" state, and the eventual
@@ -47,8 +47,8 @@ public sealed partial class PlayModeViewModel
         // Full-difficulty run: the matcher already defaults to fully-leveled
         // charts; point the highway at the top level so what the player sees
         // matches what is judged.
-        if (_projectState.ActiveArrangement is { Levels.Count: > 0 } arr)
-            _projectState.ActiveLevel = arr.Levels[^1];
+        if (ChartLevels.Hardest(_projectState.ActiveArrangement) is { } level)
+            _projectState.ActiveLevel = level;
 
         // Down only (RigDropTuneViewModel): a song tuned ABOVE standard is left
         // alone rather than "applied" as a shift the engine silently ignores.
@@ -66,8 +66,8 @@ public sealed partial class PlayModeViewModel
         // source's, or the stem group's shared one) — the same native path the practice
         // speed rides, replayed on an engine rebuild — and judging expects the charted frets
         // that much higher. The drop tuner is the other answer to the same question, so the
-        // two never stack. Sticky for the chain, like the drop-tuner shift: a refused run
-        // lands back on Get Ready, where the switch can be turned off before the next Start.
+        // two never stack. A refused run keeps the prepared shifts on Get Ready;
+        // leaving preparation restores them, even if the switch changed meanwhile.
         var transpose = DropTuner.IsOn ? 0 : TuningMatch.EffectiveSemitones;
         _livePlay.TransposeSemitones = transpose;
         if (transpose != 0)
@@ -198,7 +198,7 @@ public sealed partial class PlayModeViewModel
         // the run (LivePlayViewModel.Stop) and by the Riff Repeater.
         _livePlay.ArmCrowdMeter();
 
-        // A run may lead in with an audible count-in (off/4/8 beats).
+        // A run may lead in with an audible count-in (off/2/4/8 beats).
         var countInBeats = CountInPlan.Sanitize(_configService.LoadAppConfig().GameplayCountInBeats);
 
         // Pre-first-note count-in: on a long noteless intro the run-start pre-roll
@@ -344,11 +344,12 @@ public sealed partial class PlayModeViewModel
         var total = _projectState.TotalAudioLengthMs;
 
         if (total <= 0) return;
-        if (_projectState.CurrentTimeMs < total - SongEndGraceMs) return;
+        if (_projectState.CurrentTimeMs < total && _audio.CurrentTimeMs < total) return;
 
         // Song ran out: stop the session; SessionCompleted drives the results.
+        _livePlay!.CompleteSong(total);
+        if (_livePlay.IsActive) return;
         _endWatchTimer.Stop();
-        _livePlay!.IsActive = false;
         _transport!.StopCommand.Execute(null);
     }
 }

@@ -1,7 +1,6 @@
 // RigDockUnit root: RigEditorFace and its pure fold, the dock's wrapper over one PedalNodeViewModel (constructor, unit actions, editor family, captures) and its row types.
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using DotCharter.Tone.Online.Tone3000;
 using DotCharter.Tone.UI.Controls.Dsp;
 using DotCharter.Tone.UI.Controls.Fire;
@@ -90,6 +89,7 @@ public sealed partial class RigDockUnit : ObservableObject
         _library = library;
         Face = RigEditorFaces.For(node.Skin);
         Family = EditorFamilyFor(node.ModuleTypeId);
+        WatchCabMic(rig);
         // Presentation groups retain the live catalogue parameter instances.
         PrimaryKnobs = node.KnobParams.Where(p =>
             (!IsAmpFace || p.Id is not ("resonance" or "inputDb" or "outputDb")) &&
@@ -102,6 +102,7 @@ public sealed partial class RigDockUnit : ObservableObject
                 node.StringParams.FirstOrDefault(p => p.Id == (letter == "A" ? "irPath" : "irPathB")),
                 SecondaryKnobs.Where(p => p.Id == "gain" + letter + "Db" || p.Id == "delay" + letter + "Ms").ToArray(),
                 node.ModelSelectors.FirstOrDefault(p => p.ParamId == "invert" + letter), _loc)).Where(slot => slot.File != null).ToArray();
+            WatchImpulseResponses();
         }
 
         // The amp face's model rail: the voicing picker when the module has one,
@@ -126,9 +127,14 @@ public sealed partial class RigDockUnit : ObservableObject
         if (FileParam is { } file)
             LoadCaptures(file);
 
+        WatchUnitState(node);
+    }
+
+    /// <summary>Isolates weak handlers from constructor selectors that capture this dock.</summary>
+    private void WatchUnitState(PedalNodeViewModel node)
+    {
         // The enclosure's LED and footswitch label follow the unit's bypass.
-        // Weakly held: the dock unit is rebuilt per selection and must not pin
-        // the node (the same shape RigCabinetSlot uses).
+        // Weakly held: the node outlives its selection's dock, like RigCabinetSlot.
         var weak = new WeakReference<RigDockUnit>(this);
         System.ComponentModel.PropertyChangedEventHandler? onNodeChanged = null;
         onNodeChanged = (_, e) =>
@@ -436,42 +442,6 @@ public sealed class RigReplaceOption
     public RigModuleReplacement Request { get; }
 
     public System.Windows.Input.ICommand Command { get; }
-}
-
-/// <summary>
-///     One capture in the amp face's CAPTURE column. Clicking it pushes the
-///     file into the SAME string param the Browse… button writes, so a capture
-///     loaded from here and one picked off disk take one code path.
-/// </summary>
-public sealed partial class RigCaptureRow : ObservableObject
-{
-    private readonly PedalStringParamViewModel _target;
-
-    public RigCaptureRow(NamCaptureEntry entry, PedalStringParamViewModel target)
-    {
-        _target = target;
-        FilePath = entry.FilePath;
-        Title = entry.Manifest.Title is { Length: > 0 } t ? t : Path.GetFileNameWithoutExtension(entry.FilePath);
-        // Proper nouns off the manifest ("NAM", "AIDA-X"), deliberately not
-        // localized — the same call the faceplate's format chip already makes.
-        FormatLabel = entry.Manifest.Format.ToUpperInvariant();
-    }
-
-    public string FilePath { get; }
-    public string Title { get; }
-    public string FormatLabel { get; }
-
-    /// <summary>True when this capture is the one the unit is currently
-    /// playing — the column's selection mark.</summary>
-    public bool IsActive =>
-        string.Equals(_target.Value, FilePath, StringComparison.OrdinalIgnoreCase);
-
-    [RelayCommand]
-    private void Load()
-    {
-        _target.LoadFile(FilePath);
-        OnPropertyChanged(nameof(IsActive));
-    }
 }
 
 public sealed class RigCabinetSlot : ObservableObject

@@ -93,7 +93,6 @@ public sealed class FakePhrasesScreen : ObservableObject, IPhrasesScreen
     public bool HasPhrases => Phrases.Count > 0;
     public string StatusLine { get; }
     public string ExportNote { get; }
-    public ICommand RefreshCommand { get; } = new RelayCommand(() => { });
     public ICommand RenamePhraseCommand { get; } = new RelayCommand<object?>(_ => { });
     public ICommand CancelRenameCommand { get; } = new RelayCommand<IPhraseGroupRow?>(row => row?.EditName = row.Name);
     public ICommand DeletePhraseCommand { get; } = new RelayCommand<object?>(_ => { });

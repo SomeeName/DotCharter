@@ -1,5 +1,6 @@
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using DotCharter.Core.Domain.Project;
 using DotCharter.Core.Utilities;
 using DotCharter.Presentation.Contracts.Dialogs;
@@ -31,7 +32,7 @@ public sealed class FakeArrangementSettingsScreen : FakeDialog<bool>, IArrangeme
         TuningPresets = PresetsFor(steps.Length, type == ArrangementType.Bass);
         var labels = TuningUtilities.GetStringLabels(steps.Length);
         TuningOffsets = [.. steps.Select((s, i) => new TuningRow(s, labels[i],
-            TuningUtilities.GetResultingNote(steps.Length, i, s), $"String {steps.Length - i} ({labels[i]}), half steps"))];
+            () => DisplayNote(i), $"String {steps.Length - i} ({labels[i]}), half steps", RefreshNotes))];
         PathOptions = [new Path("Automatic (from the type)"), new Path("Lead"), new Path("Rhythm"), new Path("Any"), new Path("Bass")];
         SelectedPath = PathOptions[0];
         HasScrollSpeed = hasScrollSpeed;
@@ -116,17 +117,53 @@ public sealed class FakeArrangementSettingsScreen : FakeDialog<bool>, IArrangeme
 
     public IReadOnlyList<IArrangementFlag> DerivedFlags { get; }
 
+    public IReferencePitchPanel ReferencePitch { get; } = new FakeReferencePitch();
+
     public ICommand SaveCommand { get; }
 
     public ICommand CancelCommand { get; }
 
-    private sealed class TuningRow(int step, string label, string note, string accessibleName) : ObservableObject, ITuningStep
+    private string DisplayNote(int index) =>
+        TuningDisplayNames.For(TuningOffsets.Count, TuningOffsets.Select(row => row.Step).ToArray(), IsBass)[index];
+
+    private void RefreshNotes()
     {
-        public int Step { get; set; } = step;
+        foreach (var row in TuningOffsets.OfType<TuningRow>()) row.RefreshNote();
+    }
+
+    /// <summary>A measured song 15 cents sharp of a chart at A440, with the correction offered.</summary>
+    private sealed class FakeReferencePitch : ObservableObject, IReferencePitchPanel
+    {
+        public string StatusText =>
+            "Measured 443.8 Hz, 15 cents sharp of A440 (confidence 92%)";
+
+        public bool HasSuggestion => true;
+
+        public string ApplyLabel => "Correct by 15 cents";
+
+        public ICommand MeasureCommand { get; } = new RelayCommand(() => { });
+
+        public ICommand ApplyCommand { get; } = new RelayCommand(() => { });
+    }
+
+    private sealed class TuningRow(int step, string label, Func<string> note, string accessibleName, Action changed) : ObservableObject, ITuningStep
+    {
+        private int _step = step;
+
+        public int Step
+        {
+            get => _step;
+            set
+            {
+                if (SetProperty(ref _step, value)) changed();
+            }
+        }
+
+        public void RefreshNote() => OnPropertyChanged(nameof(ResultingNote));
 
         public string StringLabel { get; } = label;
 
-        public string ResultingNote { get; } = note;
+        public string ResultingNote => note();
 
         public string AccessibleName { get; } = accessibleName;
     }
@@ -152,7 +189,7 @@ public sealed class FakeArrangementSettingsScreen : FakeDialog<bool>, IArrangeme
         {
             var offsets = ExtendedRangeTunings.StandardOffsets(strings, bass).Select(step => step + rule.Shift).ToArray();
             offsets[0] += rule.Drop;
-            var notes = string.Join(" ", TuningUtilities.GetTuningNames(strings, offsets));
+            var notes = string.Join(" ", TuningDisplayNames.For(strings, offsets, bass));
             var name = TuningNameResolver.ResolveFromOffsets(strings, offsets);
             return (ITuningPresetOption)new PresetOption(rule.Key, name is null ? notes : $"{name} ({notes})");
         });

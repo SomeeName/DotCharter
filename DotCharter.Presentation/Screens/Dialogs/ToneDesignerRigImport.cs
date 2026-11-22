@@ -65,7 +65,7 @@ internal sealed class ToneDesignerRigImport(ChartEditDialogServices edit, TonePr
         }
         catch (DotCharter.Services.Ai.Generate.RsToneCatalogException ex)
         {
-            edit.Logger.Warning(AppLogCategory.Project, $"Tone from the rig refused by the catalogue gate: {ex.Message}");
+            edit.Logger.Warning(AppLogCategory.Project, "Tone from the rig refused by the catalogue gate", ex);
             host.Status(loc.Format("Dialog_Tones_ImportFailed", ex.Message));
         }
     }

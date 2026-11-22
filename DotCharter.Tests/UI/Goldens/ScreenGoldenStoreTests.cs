@@ -93,7 +93,7 @@ public sealed class ScreenGoldenStoreTests
         var gate = Script("tools", "agent", "Invoke-Gate.ps1");
         Assert.Contains("$HeadlessFilter = @('--filter-class', '*UiPerfSmokeTests', '--filter-not-class', $GoldenClass)", gate, StringComparison.Ordinal);
         // Both ways the headless suite starts (alone, or alongside the gate) use that filter.
-        Assert.Matches(new Regex(@"if \(\$Headless\)[^\n]*Invoke-HeadlessShardedRun 'headless' \$HeadlessFilter"), gate);
+        Assert.Matches(new Regex(@"if \(\$lanes -contains 'headless'\)[^\n]*Invoke-HeadlessShardedRun 'headless' \$HeadlessFilter"), gate);
         Assert.Contains("Start-HeadlessShardedRun 'headless' $HeadlessFilter", gate, StringComparison.Ordinal);
         Assert.Contains($"$GoldenClass = '{ScreenGoldenUiPerfSmokeTests.FullName}'", gate, StringComparison.Ordinal);
         Assert.Matches(new Regex(@"if \(\$Goldens\) \{.*?Invoke-TestRun 'goldens' @\('--filter-class', \$GoldenClass\)", RegexOptions.Singleline), gate);

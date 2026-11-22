@@ -1,3 +1,5 @@
+using DotCharter.Presentation.Contracts.Editor;
+
 namespace DotCharter.Presentation.Fakes.Editor;
 
 /// <summary>The words the fake chat pane shows: a short chat about a verse riff, its German and Japanese twins, and a long session.</summary>
@@ -16,6 +18,12 @@ internal static class FakeAiChatData
          ReviewLine, "e.g. Finger the power chords 1·3·4"),
         ("Say where the hand should sit and how to finger the chords. The notes stay as they are. " + ReviewLine,
             "e.g. Keep the hand in 5th position in the verse"),
+        ("Say where the hand should sit, in your own words, or send with an empty box. The model changes the hand positions only; chord fingerings that are still suggestions follow them. The notes stay as they are. " + ReviewLine,
+            "e.g. Keep the hand in 5th position in the verse"),
+        ("Say how the chords should be named, in your own words, or send with an empty box to name them all. The notes stay as they are. " + ReviewLine,
+            "e.g. Call the power chords 5 chords"),
+        ("Say how the chords should be named, in your own words, or send with an empty box to name them all. The notes stay as they are. " + ReviewLine,
+            "e.g. Call the power chords 5 chords"),
         ("Say where the sections go and how to split the phrases: names, bars, lengths. The notes stay as they are. " +
          ReviewLine, "e.g. Intro, verse, chorus, solo; phrases of 4 bars"),
         ("Ask a question about this chart: why a hand position or a fingering, what the quality report flags, what is " +
@@ -54,12 +62,16 @@ internal static class FakeAiChatData
             "algorithm's hand positions are as good as any model's (95.7 % vs 92.4–96.6 %), so they stay."),
         new("Hand positions & fingering",
             "Hand positions from the model too: measured on guitar, no clear gain over the algorithm (models 92.4–96.6 % vs 95.7 %)."),
+        new("Hand positions (fingering follows)", ""),
+        new("Chord names (EOF style)", ""),
+        new("Chord names (musical)", ""),
         new("Sections & phrases", ""),
         new("Ask / explain", ""),
         new("Tones", "")
     ];
 
-    public static IReadOnlyList<FakeAiChatOption> Arrangements() => [new("Lead"), new("Rhythm"), new("Bass")];
+    /// <summary>The picker's rows: "All arrangements", then the three, the first checked.</summary>
+    public static IReadOnlyList<IAiChatArrangementChoice> ArrangementChoices() => FakeAiChatArrangementChoice.Build(["Lead", "Rhythm", "Bass"]);
 
     public static IReadOnlyList<FakeAiChatTurn> Conversation() =>
     [

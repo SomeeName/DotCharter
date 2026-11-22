@@ -247,7 +247,16 @@ public sealed class AiChatDockUiPerfSmokeTests
                 state.CurrentProjectPath = previousPath;
                 BestEffortDelete.Directory(folder);
             }
-        }, CancellationToken.None);
+        }, CancellationToken.None, collection => collection.AddSingleton<IAiChatHistory>(services =>
+            new AiChatHistory(new ProjectStateAiChatChartSource(services.GetRequiredService<ProjectState>()),
+                TimeProvider.System, services.GetService<DotCharter.Tone.Logging.IAppLogger>(), RecycleConversationForFixture)));
+
+    private static void RecycleConversationForFixture(string path)
+    {
+        var archive = Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(path)!, ".recycled"));
+        if (OperatingSystem.IsWindows()) archive.Attributes |= FileAttributes.Hidden;
+        File.Move(path, Path.Combine(archive.FullName, Guid.NewGuid().ToString("N") + ".recycled"));
+    }
 
     private static void RefreshTheChatProvider(IServiceProvider services) =>
         services.GetRequiredService<MainWindowViewModel>().AiChatPane?.Chat.RefreshProvider();

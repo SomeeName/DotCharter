@@ -126,6 +126,12 @@ public sealed class StatusRailNarrowWidthUiPerfSmokeTests
                     "the rail shows a progress bar with no name (#213).");
                 Assert.Equal(LongTaskLabel, ToolTip.GetTip(chip));
 
+                // once the task ends the chip carries no tooltip at all, so hovering where it
+                // was cannot open an empty box.
+                statusBar.CompleteTask("narrow-width-test");
+                NarrowWidthLayout.Settle(window);
+                Assert.Null(ToolTip.GetTip(chip));
+
                 // Where the rail has room for both (a 1920 px window), both show.
                 if (chipLeft - messageLeft > 200)
                     Assert.True(message.Bounds.Width > 100, $"at {width} px the message shrank to {message.Bounds.Width:0.#} px beside the chip");

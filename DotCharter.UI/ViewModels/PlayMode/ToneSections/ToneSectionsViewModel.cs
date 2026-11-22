@@ -59,6 +59,13 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
     private Func<IToneNarrator?> _narrator = static () => null;
     private Func<double> _playheadMs = static () => 0.0;
     private Func<IReadOnlyList<ToneSetEntry>, int?>? _placeToneChanges;
+    private Func<object?> _resultOwner = static () => null;
+    private Func<object?> _project = static () => null;
+    private Func<string?> _songAudio = static () => null;
+    private Func<long> _audioRevision = static () => 0;
+    private ToneSectionOwner? _owner;
+    private long _ownerEpoch;
+    private long _publishedEpoch = -1;
 
     private CancellationTokenSource? _cts;
     private int _nextId;
@@ -108,13 +115,29 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
     /// how many it placed — or NULL when the project has no arrangement to place
     /// them in, which is what makes "presets only, and say so" a different
     /// outcome from "placed none".</param>
+    /// <param name="resultOwner">The active arrangement; the project is supplied
+    /// separately. Sections and results are published only while the owner epoch
+    /// is current. Song identity is the audio file or, before its first attachment,
+    /// the project (see <see cref="RefreshOwner" />).</param>
+    /// <param name="project">The active project instance, used when it has no audio yet.</param>
+    /// <param name="songAudio">The logical song audio; never the transport's temporary media.</param>
+    /// <param name="audioRevision">The host's committed replacement revision, unchanged on reload/notification.</param>
     public void Configure(
         Func<IToneSectionProposer?> proposer,
         Func<IToneSetMatcher?> setMatcher,
         Func<IToneNarrator?>? narrator = null,
         Func<double>? playheadMs = null,
-        Func<IReadOnlyList<ToneSetEntry>, int?>? placeToneChanges = null)
+        Func<IReadOnlyList<ToneSetEntry>, int?>? placeToneChanges = null,
+        Func<object?>? resultOwner = null,
+        Func<object?>? project = null,
+        Func<string?>? songAudio = null,
+        Func<long>? audioRevision = null)
     {
+        if (resultOwner != null) _resultOwner = resultOwner;
+        if (project != null) _project = project;
+        if (songAudio != null) _songAudio = songAudio;
+        if (audioRevision != null) _audioRevision = audioRevision;
+        RefreshOwner();
         _proposer = proposer;
         _setMatcher = setMatcher;
         if (narrator != null) _narrator = narrator;
@@ -186,6 +209,13 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(NeedsASection))]
     private bool _isBusy;
 
+    /// <summary>Every row's Explain follows the panel's one run: proposing, matching and
+    /// narrating share one token and one Stop, so a second run may not start beside it.</summary>
+    partial void OnIsBusyChanged(bool value)
+    {
+        foreach (var row in Sections) row.ExplainCommand.NotifyCanExecuteChanged();
+    }
+
     /// <summary>The flow's progress line. Deliberately not the panel's
     /// <c>Status</c> or its <c>MatchStatus</c>: all three can be on screen at
     /// once and they mean different things.</summary>
@@ -223,6 +253,8 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
 
     private ToneSectionRowViewModel Add(string label, string stem, TimeSpan from, TimeSpan to)
     {
+        RefreshOwner();
+        var epoch = _ownerEpoch;
         var row = new ToneSectionRowViewModel(
             $"section-{++_nextId}",
             label,
@@ -231,10 +263,10 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
             to,
             Stems,
             _playheadMs,
-            RemoveSection,
-            ExplainAsync,
-            PublishSelected,
-            () => CanNarrate,
+            row => RemoveSection(row, epoch),
+            row => ExplainAsync(row, epoch),
+            row => PublishSelected(row, epoch),
+            () => CanNarrate && !IsBusy,
             _loc);
 
         Sections.Add(row);
@@ -245,8 +277,9 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
         return row;
     }
 
-    private void RemoveSection(ToneSectionRowViewModel row)
+    private void RemoveSection(ToneSectionRowViewModel row, long epoch)
     {
+        if (!OwnsRow(row, epoch)) return;
         Sections.Remove(row);
         OnPropertyChanged(nameof(HasSections));
         OnPropertyChanged(nameof(NeedsASection));
@@ -256,9 +289,17 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
 
     /// <summary>A chosen candidate goes to the PANEL's result block, which is
     /// what hands it to Hear it / Save as tone / Discard unchanged.</summary>
-    private void PublishSelected(ToneSectionRowViewModel row)
+    private void PublishSelected(ToneSectionRowViewModel row, long epoch)
     {
+        if (!OwnsRow(row, epoch) ||
+            row.SelectedCandidate is { } selected && !row.Candidates.Contains(selected))
+        {
+            row.SelectedCandidate = null;
+            ApplyCommand.NotifyCanExecuteChanged();
+            return;
+        }
         if (row.SelectedCandidate is not { } candidate) return;
+        _publishedEpoch = epoch;
         _host.PublishResult(candidate.AsDesignResult, candidate.ChainSummary);
     }
 
@@ -284,6 +325,8 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRunPropose))]
     private async Task ProposeAsync()
     {
+        RefreshOwner();
+        var epoch = _ownerEpoch;
         var source = _host.ResolveMatchSource();
         var proposer = _proposer();
         var chart = ChartSections(source);
@@ -298,7 +341,7 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
 
             ShowProposals(chart
                 .Select(s => new ToneSectionProposal(s, 1.0, ToneSectionOrigins.Chart))
-                .ToList());
+                .ToList(), epoch);
             return;
         }
 
@@ -314,35 +357,43 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
         try
         {
             Status = _loc["ToneSections_Proposing"];
-            var progress = new InlineProgress(line => _post(() => Status = line));
+            var progress = ProgressFor(epoch);
             var proposals = await proposer
                 .ProposeAsync(source.AudioPath!, DefaultStem.Id, chart, progress, cts.Token)
                 .ConfigureAwait(true);
 
-            ShowProposals(proposals);
+            if (!IsCurrent(epoch)) return;
+            ShowProposals(proposals, epoch);
         }
         catch (OperationCanceledException)
         {
+            if (!IsCurrent(epoch)) return;
             Status = _loc["ToneSections_Cancelled"];
             ErrorText = string.Empty;
         }
         catch (Exception ex)
         {
+            if (!IsCurrent(epoch)) return;
             Fail("ToneSections_Fault_Failed", ex);
         }
         finally
         {
-            EndRun(cts);
+            EndRun(cts, epoch);
         }
     }
 
     private bool CanRunPropose => !IsBusy && CanPropose;
 
-    private void ShowProposals(IReadOnlyList<ToneSectionProposal> proposals)
+    private void ShowProposals(IReadOnlyList<ToneSectionProposal> proposals, long epoch)
     {
+        if (!IsCurrent(epoch)) return;
         Proposals.Clear();
         foreach (var proposal in proposals.OrderBy(p => p.Section.From))
-            Proposals.Add(new ToneSectionProposalViewModel(proposal, Accept, Reject, _loc));
+        {
+            if (!IsCurrent(epoch)) return;
+            Proposals.Add(new ToneSectionProposalViewModel(proposal,
+                p => Accept(p, epoch), p => Reject(p, epoch), _loc));
+        }
 
         OnPropertyChanged(nameof(HasProposals));
 
@@ -355,16 +406,19 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
         Status = _loc.Format("ToneSections_Proposed", Proposals.Count);
     }
 
-    private void Accept(ToneSectionProposalViewModel proposal)
+    private void Accept(ToneSectionProposalViewModel proposal, long epoch)
     {
+        if (!IsCurrent(epoch) || !Proposals.Contains(proposal)) return;
+
         var section = proposal.Proposal.Section;
         var label = string.IsNullOrWhiteSpace(section.Label) ? NextLabel() : section.Label;
         Add(label, section.Stem, section.From, section.To);
-        Reject(proposal);
+        Reject(proposal, epoch);
     }
 
-    private void Reject(ToneSectionProposalViewModel proposal)
+    private void Reject(ToneSectionProposalViewModel proposal, long epoch)
     {
+        if (!IsCurrent(epoch) || !Proposals.Contains(proposal)) return;
         Proposals.Remove(proposal);
         OnPropertyChanged(nameof(HasProposals));
     }
@@ -412,6 +466,8 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRunMatchAll))]
     private async Task MatchAllAsync()
     {
+        if (RefreshOwner()) return;
+        var epoch = _ownerEpoch;
         var matcher = _setMatcher();
         if (matcher is null)
         {
@@ -439,6 +495,7 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
         try
         {
             var di = await _host.EnsureReferenceDiAsync(cts.Token).ConfigureAwait(true);
+            if (!IsCurrent(epoch)) return;
             if (di is null)
             {
                 Fail("ToneSections_Fault_NoReferenceDi");
@@ -452,7 +509,7 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
             }
 
             Status = _loc["ToneSections_Matching"];
-            var progress = new InlineProgress(line => _post(() => Status = line));
+            var progress = ProgressFor(epoch);
             var (title, artist) = _host.SongContext();
 
             var result = await matcher
@@ -467,31 +524,36 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
                     cts.Token)
                 .ConfigureAwait(true);
 
-            PublishSet(result);
+            if (!IsCurrent(epoch)) return;
+            _publishedEpoch = epoch;
+            PublishSet(result, epoch);
         }
         catch (OperationCanceledException)
         {
+            if (!IsCurrent(epoch)) return;
             Status = _loc["ToneSections_Cancelled"];
             ErrorText = string.Empty;
             foreach (var row in rows.Where(r => !r.HasCandidates)) row.StatusText = string.Empty;
         }
         catch (Exception ex)
         {
+            if (!IsCurrent(epoch)) return;
             Fail("ToneSections_Fault_Failed", ex);
         }
         finally
         {
-            EndRun(cts);
+            EndRun(cts, epoch);
         }
     }
 
     private bool CanRunMatchAll => !IsBusy && CanMatchAll && Sections.Any(r => r.IsValid);
 
-    private void PublishSet(ToneSetMatchResult result)
+    private void PublishSet(ToneSetMatchResult result, long epoch)
     {
         var matched = 0;
         foreach (var section in result.Sections)
         {
+            if (!IsCurrent(epoch)) return;
             var row = Sections.FirstOrDefault(r => r.Id == section.Section.Id);
             // A matcher that answered for a section this list does not have is
             // not an error — the player may have removed a row mid-run — but it
@@ -501,6 +563,7 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
             if (section.Match is { } match && match.Candidates.Count > 0)
             {
                 row.PublishCandidates(match, _host);
+                if (!IsCurrent(epoch)) return;
                 row.StatusText = _loc.Format("ToneSections_StatusMatched", row.Candidates.Count);
                 row.IsFailed = false;
                 matched++;
@@ -522,9 +585,11 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
 
     // ---- explain ---------------------------------------------------------------
 
-    private async Task ExplainAsync(ToneSectionRowViewModel row)
+    private async Task ExplainAsync(ToneSectionRowViewModel row, long epoch)
     {
+        if (!OwnsRow(row, epoch)) return;
         var narrator = _narrator();
+        if (IsBusy) return;
         if (narrator is not { IsAvailable: true } || row.SelectedCandidate is not { } candidate)
         {
             Fail("ToneSections_Fault_NoNarrator");
@@ -543,6 +608,8 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
                 .NarrateAsync(candidate.Tone.Rig, row.ToSection(), title, artist, cts.Token)
                 .ConfigureAwait(true);
 
+            if (!OwnsRow(row, epoch)) return;
+
             // A narrator that answers null is one with no provider configured —
             // not a failure, and not an empty box either.
             row.Explanation = narration is null
@@ -552,16 +619,18 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
+            if (!IsCurrent(epoch)) return;
             Status = _loc["ToneSections_Cancelled"];
         }
         catch (Exception ex)
         {
+            if (!IsCurrent(epoch)) return;
             Fail("ToneSections_Fault_Failed", ex);
         }
         finally
         {
-            row.IsExplaining = false;
-            EndRun(cts);
+            if (IsCurrent(epoch)) row.IsExplaining = false;
+            EndRun(cts, epoch);
         }
     }
 
@@ -584,8 +653,11 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanApply))]
     private void Apply()
     {
+        var epoch = _publishedEpoch;
+        if (!IsCurrent(epoch)) return;
+
         var chosen = Sections
-            .Where(r => r.IsValid && r.SelectedCandidate != null)
+            .Where(r => r.IsValid && r.SelectedCandidate is { } candidate && r.Candidates.Contains(candidate))
             .OrderBy(r => r.From)
             .ToList();
 
@@ -599,22 +671,90 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
         var entries = new List<ToneSetEntry>(chosen.Count);
         foreach (var row in chosen)
         {
+            if (!OwnsRow(row, epoch)) return;
             var candidate = row.SelectedCandidate!;
             var saved = _host.SaveTone(
                 row.Label,
                 candidate.Tone.Category,
                 candidate.Tone.Description,
                 candidate.Tone.Rig);
+            if (!IsCurrent(epoch)) return;
             entries.Add(new ToneSetEntry(row.ToSection(), saved));
         }
 
         var placed = _placeToneChanges?.Invoke(entries);
+        if (!IsCurrent(epoch)) return;
         Status = placed is null
             ? _loc.Format("ToneSections_AppliedPresetsOnly", entries.Count)
             : _loc.Format("ToneSections_Applied", entries.Count, placed.Value);
     }
 
-    private bool CanApply => !IsBusy && Sections.Any(r => r.IsValid && r.SelectedCandidate != null);
+    private bool CanApply => !IsBusy && _publishedEpoch == _ownerEpoch &&
+        Sections.Any(r => r.IsValid && r.SelectedCandidate is { } candidate && r.Candidates.Contains(candidate));
+
+    private void DropCandidates()
+    {
+        foreach (var row in Sections)
+        {
+            row.PublishCandidates(null, _host);
+            row.IsExplaining = false;
+            row.StatusText = string.Empty;
+            row.IsFailed = false;
+        }
+        _publishedEpoch = -1;
+        ApplyCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>Called immediately by the host on project, arrangement and audio changes.</summary>
+    public bool RefreshOwner()
+    {
+        var current = CaptureOwner();
+        var previous = _owner;
+        _owner = current;
+        if (previous is null) return false;
+        var sameSong = previous.SameSong(current);
+        if (sameSong && previous.SameArrangement(current)) return false;
+
+        _ownerEpoch++;
+        Cancel();
+        _cts = null;
+        IsBusy = false;
+        DropCandidates();
+        ClearSections();
+        _host.ClearResult();
+        Fail(sameSong ? "ToneSections_Fault_ArrangementChanged" : "ToneSections_Fault_SongChanged");
+        return true;
+    }
+
+    private ToneSectionOwner CaptureOwner() =>
+        new(_project(), _songAudio(), _resultOwner(), _audioRevision());
+
+    internal long OwnerEpoch => _ownerEpoch;
+
+    internal bool IsCurrent(long epoch)
+    {
+        RefreshOwner();
+        return epoch == _ownerEpoch;
+    }
+
+    private bool OwnsRow(ToneSectionRowViewModel row, long epoch) =>
+        IsCurrent(epoch) && Sections.Contains(row);
+
+    private IProgress<string> ProgressFor(long epoch) => new InlineProgress(line => _post(() =>
+    {
+        if (IsCurrent(epoch)) Status = line;
+    }));
+
+    private void ClearSections()
+    {
+        Sections.Clear();
+        Proposals.Clear();
+        OnPropertyChanged(nameof(HasSections));
+        OnPropertyChanged(nameof(NeedsASection));
+        OnPropertyChanged(nameof(HasProposals));
+        ApplyCommand.NotifyCanExecuteChanged();
+        MatchAllCommand.NotifyCanExecuteChanged();
+    }
 
     // ---- plumbing --------------------------------------------------------------
 
@@ -629,10 +769,13 @@ public sealed partial class ToneSectionsViewModel : ObservableObject
         catch (ObjectDisposedException) { /* the run's finally already disposed it */ }
     }
 
-    private void EndRun(CancellationTokenSource cts)
+    private void EndRun(CancellationTokenSource cts, long epoch)
     {
-        IsBusy = false;
-        if (ReferenceEquals(_cts, cts)) _cts = null;
+        if (IsCurrent(epoch) && ReferenceEquals(_cts, cts))
+        {
+            IsBusy = false;
+            _cts = null;
+        }
         cts.Dispose();
     }
 

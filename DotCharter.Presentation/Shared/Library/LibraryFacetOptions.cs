@@ -43,7 +43,7 @@ public static class LibraryFacetOptions
         => WithUnknown(songs.Select(LibraryFacets.TuningKeyOf)
             .Where(key => key.Length > 0)
             .Distinct(StringComparer.Ordinal)
-            .Select(key => (Value: key, Label: TuningNameResolver.Describe(key)))
+            .Select(key => (Value: key, Label: TuningDisplayNames.Describe(key)))
             .OrderBy(option => option.Label, StringComparer.CurrentCultureIgnoreCase)
             .ThenBy(option => option.Value, StringComparer.Ordinal)
             .Select(option => (option.Value, option.Label)),

@@ -127,4 +127,17 @@ public sealed class RunBestComparisonTests
         Assert.Equal(-3000, report.Comparison.ScoreDelta);
         Assert.False(report.IsNewBestScore);
     }
+
+    [Fact]
+    public void SlowedRun_NeverReadsAsNewBest_BecauseTheStoreRefusesIt()
+    {
+        var slow = RunBestComparison.Evaluate(9000, 1.0, 1.0, Best(4000, 0.5), hadPriorRun: true, runSpeedPercent: 50);
+        var full = RunBestComparison.Evaluate(9000, 1.0, 1.0, Best(4000, 0.5), hadPriorRun: true, runSpeedPercent: 100);
+
+        Assert.False(slow.IsNewBest);
+        Assert.True(slow.StoredBestStands);
+        Assert.False(slow.ImprovedAccuracy);
+        Assert.True(full.IsNewBest);
+        Assert.True(full.ImprovedAccuracy);
+    }
 }

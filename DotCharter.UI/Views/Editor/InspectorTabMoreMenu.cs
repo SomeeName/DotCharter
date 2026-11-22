@@ -2,13 +2,15 @@ using System.Globalization;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Layout;
 using DotCharter.UI.Controls;
 
 namespace DotCharter.UI.Views.Editor;
 
 /// <summary>
 /// The Inspector tab strip's "More ▾" menu: one row per tab, in strip order, each with
-///     the tab's own glyph and name (both BOUND to the tab, so a language switch reaches the menu).
+///     the tab's own glyph, name and badges (all BOUND to the tab, so a language switch or a new count reaches the
+///     menu).
 ///     Opening the menu shows only the rows of the tabs <see cref="OverflowTabStrip" /> put in the
 ///     overflow; picking one selects that tab, and because the active tab always stands in the
 ///     strip, it comes out of the menu and into the row. The More button stays lit while its menu
@@ -30,7 +32,7 @@ public static class InspectorTabMoreMenu
         {
             var row = new MenuItem
             {
-                [!HeaderedSelectingItemsControl.HeaderProperty] = tab[!AutomationProperties.NameProperty],
+                Header = Header(tab),
                 [!AutomationProperties.NameProperty] = tab[!AutomationProperties.NameProperty],
                 Tag = tab.Tag,
                 Icon = Glyph(tab),
@@ -49,6 +51,23 @@ public static class InspectorTabMoreMenu
             more.IsChecked = true;
         };
         menu.Closed += (_, _) => more.IsChecked = false;
+    }
+
+    /// <summary>The row's words: the tab's name, then a live copy of every badge the tab carries beside its
+    /// caption (the Issues count, the Bends dot, the Findings count), so a tab in More says what it says in the
+    /// strip.</summary>
+    private static StackPanel Header(ToggleButton tab)
+    {
+        var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        header.Children.Add(new TextBlock { [!TextBlock.TextProperty] = tab[!AutomationProperties.NameProperty], VerticalAlignment = VerticalAlignment.Center });
+        if (tab.Content is not Panel content) return header;
+        var caption = content.Children.OfType<TextBlock>().FirstOrDefault();
+        foreach (var badge in content.Children.Where(c => c != caption && c is not PathIcon))
+        {
+            if (TabBadgeMirror.Of(badge) is { } mirror) header.Children.Add(mirror);
+        }
+
+        return header;
     }
 
     private static PathIcon? Glyph(ToggleButton tab) =>

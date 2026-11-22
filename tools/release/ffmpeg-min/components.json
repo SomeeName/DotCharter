@@ -50,10 +50,10 @@
       "filters": [ "aresample" ]
     },
     {
-      "file": "DotCharter.Services/Export/SaveCompanionService.cs",
-      "job": "EOF companion: transcode the song to Ogg Vorbis q5.",
-      "encoders": [ "libvorbis" ],
-      "muxers": [ "ogg" ]
+      "file": "DotCharter.Services/Export/ExportCompanionMedia.cs",
+      "job": "Editor companions: transcode the song and preview to Ogg Vorbis q5 and convert cover art to PNG.",
+      "encoders": [ "libvorbis", "png" ],
+      "muxers": [ "ogg", "image2" ]
     },
     {
       "file": "DotCharter.Services/Import/Audio/ImportAudioPreparer.cs",

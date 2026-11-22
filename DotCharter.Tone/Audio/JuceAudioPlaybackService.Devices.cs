@@ -42,7 +42,7 @@ public sealed partial class JuceAudioPlaybackService
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"DeviceBufferFramesChanged subscriber threw: {ex.Message}");
+                "DeviceBufferFramesChanged subscriber threw", ex);
         }
     }
 
@@ -69,7 +69,7 @@ public sealed partial class JuceAudioPlaybackService
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Could not set the process priority to {desired}: {ex.Message}");
+                $"Could not set the process priority to {desired}", ex);
         }
     }
 

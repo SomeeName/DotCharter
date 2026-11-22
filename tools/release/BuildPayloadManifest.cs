@@ -70,18 +70,14 @@ static int BuildManifest(string publishDir, string version, string outJson)
         return 1;
     }
 
-    // A split payload must still be one a v0.62 updater accepts, or no install
-    // older than this layout can ever reach it (LegacyUpdaterShim).
+    // A split payload carries no pre-0.63 updater shim at its top.
     if (manifest.IsSplit)
     {
-        var legacy = LegacyUpdaterShim.CheckLegacyUpdaterAccepts(
-            name => manifest.Files.Any(f => string.Equals(f.Path, name, StringComparison.OrdinalIgnoreCase)),
-            File.Exists(Path.Combine(publishDir, AppPayload.RuntimeConfigName))
-                ? File.ReadAllText(Path.Combine(publishDir, AppPayload.RuntimeConfigName))
-                : null);
-        if (legacy != null)
+        var shim = SplitInstallCleanup.FindShimAtTop(
+            name => manifest.Files.Any(f => string.Equals(f.Path, name, StringComparison.OrdinalIgnoreCase)));
+        if (shim != null)
         {
-            Console.Error.WriteLine($"ERROR: the split payload is not one a v0.62 updater accepts: {legacy}.");
+            Console.Error.WriteLine($"ERROR: the split payload carries {shim} at its top; the legacy updater shim was dropped.");
             return 1;
         }
 

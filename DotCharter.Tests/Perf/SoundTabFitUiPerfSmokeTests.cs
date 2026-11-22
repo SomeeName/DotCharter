@@ -10,6 +10,7 @@ using DotCharter.Services.Editing.Selection;
 using DotCharter.UI;
 using DotCharter.UI.ViewModels.Editor;
 using DotCharter.UI.ViewModels.Editor.Inspector;
+using DotCharter.UI.ViewModels.Panels;
 using DotCharter.UI.Views.Editor;
 using DotCharter.UI.Views.Editor.Inspector;
 using Microsoft.Extensions.DependencyInjection;
@@ -68,7 +69,7 @@ public sealed class SoundTabFitUiPerfSmokeTests
 
     /// <summary>
     ///     Bends is a section of its own since #601 (it was a disclosure that opened by itself for a
-    ///     bent note, #118). The rail must not switch sections by itself, so it MARKS a bent sound
+    ///     bent note, #118). The section strip must not switch sections by itself, so it MARKS a bent sound
     ///     instead: the Bends entry wears a dot for a bent note and none for a plain one.
     /// </summary>
     [Fact]
@@ -80,7 +81,7 @@ public sealed class SoundTabFitUiPerfSmokeTests
             bent.BendValues.Add(new BendValue(bent.Position, 1.0));
 
             var sound = pane.View.GetVisualDescendants().OfType<SoundInspectorView>().Single();
-            var dot = Named<Control>(sound, "SoundRailBendsDot");
+            var dot = Named<Control>(sound, "NoteSectionBendsDot");
 
             Select(pane, plain);
             Assert.False(dot.IsEffectivelyVisible, "the Bends entry is marked for a note with no bend.");
@@ -153,16 +154,15 @@ public sealed class SoundTabFitUiPerfSmokeTests
         }), CancellationToken.None);
 
     /// <summary>
-    ///     #530, end to end through the real view: a chord where only one string
-    ///     slides reads as MIXED (blank field, each string spelled out, the line
-    ///     laid out), a typed target moves each string by the same offset, a
-    ///     target that would push a string off the fretboard is refused with a
-    ///     visible reason and the field put back, and the string-edit mask
-    ///     narrows both the readout and the write to one string. The pure rule
-    ///     is pinned in the default gate by <c>ChordSlideScopeTests</c>.
+    ///     #530 on the staged Technique page (#751 P4), end to end through the real view: each string reads its OWN
+    ///     slide (a chord where only one string slides shows it on that string's key and none on the other), "Copy to
+    ///     strings" moves every string by the edited string's interval, a target that would push a string off the
+    ///     fretboard is passed by and NAMED in the review (the chord keeps its slides, a chord's strings slide
+    ///     together) and the string-edit mask narrows the write to one string. The pure rule is pinned in the
+    ///     default gate by <c>ChordSlideScopeTests</c> and <c>ChordCopyTechniquesTests</c>.
     /// </summary>
     [Fact]
-    public async Task APartialChordSlide_ReadsPerString_AndATypedTargetMovesEachString() =>
+    public async Task APartialChordSlide_ReadsPerString_AndCopyMovesEachString() =>
         await HeadlessSessionFixture.Dispatch(() => WithPane(pane =>
         {
             var state = App.Services!.GetRequiredService<ProjectState>();
@@ -172,10 +172,13 @@ public sealed class SoundTabFitUiPerfSmokeTests
             chord.ChordNotes.Add(new ChordNote { StringIndex = 2, Fret = 8 });
             var low = () => chord.ChordNotes.Single(n => n.StringIndex == 1);
             var high = () => chord.ChordNotes.Single(n => n.StringIndex == 2);
+            var page = pane.Vm.Staged.ChordTechnique;
+            var footer = pane.Vm.Staged.Footer;
 
             try
             {
                 Select(pane, chord);
+                pane.Vm.ChordTemplateEditor.ChooseApplyRungCommand.Execute(ChordApplyRung.ThisChord);
                 // #601: the slide field lives in the chord's Technique section.
                 pane.Vm.Sections.ChooseCommand.Execute(SoundSection.Technique);
                 Settle(pane.Window);
@@ -183,51 +186,74 @@ public sealed class SoundTabFitUiPerfSmokeTests
 
                 var sound = pane.View.GetVisualDescendants().OfType<SoundInspectorView>().Single();
                 var field = Named<NumericUpDown>(sound, "ChordSlideToField");
-                var summary = Named<TextBlock>(sound, "ChordSlideMixedSummary");
-                var refusal = Named<Border>(sound, "ChordSlideRefusalBar");
+                var copy = Named<Button>(sound, "ChordCopyToStrings");
+                var apply = Named<Button>(sound, "NoteFooterApplyButton");
+                Assert.True(field.Bounds is { Width: > 1, Height: > 1 }, $"the slide field laid out as {field.Bounds}.");
 
-                Assert.True(pane.Vm.ChordSlideIsMixed, "a chord whose 5 slides and whose 8 holds read as one agreed slide.");
+                page.SelectStringCommand.Execute(1);
+                Settle(pane.Window);
+                Assert.Equal(6m, field.Value);
+                page.SelectStringCommand.Execute(2);
+                Settle(pane.Window);
                 Assert.Null(field.Value);
-                Assert.True(summary.IsEffectivelyVisible, "the per-string slide line is hidden for a partial slide.");
-                Assert.True(summary.Bounds is { Width: > 1, Height: > 1 }, $"the per-string slide line laid out as {summary.Bounds}.");
-                Assert.Contains("5→6", summary.Text);
-                Assert.Contains("8", summary.Text);
 
-                // Typed on both strings: the 5's target, and the 8 moves by the same +2.
+                // Typed on the 5 and copied: the 8 moves by the same +2.
+                page.SelectStringCommand.Execute(1);
+                Settle(pane.Window);
                 field.Value = 7;
                 Settle(pane.Window);
+                copy.Command!.Execute(null);
+                Settle(pane.Window);
+                Assert.Equal(6, low().SlideTo);
+                Click(pane, apply);
                 Assert.Equal(7, low().SlideTo);
                 Assert.Equal(10, high().SlideTo);
-                Assert.False(pane.Vm.ChordSlideIsMixed);
-                Assert.Equal(7m, field.Value);
-                Assert.False(summary.IsEffectivelyVisible);
 
-                // 22 would put the 8 on fret 25: nothing changes, and the panel says why.
+                // 22 would put the 8 on fret 25: the review names the chord, and Confirm keeps its slides.
                 field.Value = 22;
                 Settle(pane.Window);
+                copy.Command!.Execute(null);
+                Settle(pane.Window);
+                Click(pane, apply);
                 Capture(pane, "chord-slide-refused-694x534");
+                Assert.True(footer.IsReviewing, "an off-board slide asked nothing before writing.");
+                var ask = Named<TextBlock>(sound, "NoteFooterAskText");
+                Assert.True(ask.IsEffectivelyVisible && ask.Bounds is { Width: > 1, Height: > 1 }, $"the review laid out as {ask.Bounds}.");
+                footer.ConfirmCommand.Execute(null);
+                Settle(pane.Window);
                 Assert.Equal(7, low().SlideTo);
                 Assert.Equal(10, high().SlideTo);
-                Assert.True(refusal.IsEffectivelyVisible, "a refused slide target left no visible reason.");
-                Assert.True(refusal.Bounds is { Width: > 1, Height: > 1 }, $"the refusal laid out as {refusal.Bounds}.");
-                Assert.Equal(7m, field.Value);
+                // The footer's Discard belongs to the leave question (#751 P4 review): drop the refused draft directly.
+                pane.Vm.Staged.Engine.Discard(StagedPage.Technique);
+                pane.Vm.Staged.Refresh();
+                Settle(pane.Window);
 
-                // The mask narrows it to the 8 alone: its own target reads, and a
-                // typed one moves only it.
+                // The mask narrows it to the 8 alone: its own target reads, and a typed one moves only it.
                 state.StringEditMask = StringEditMask.FromStrings(2);
+                page.SelectStringCommand.Execute(2);
                 Settle(pane.Window);
                 Assert.Equal(10m, field.Value);
-                Assert.False(refusal.IsEffectivelyVisible, "a stale refusal outlived a re-read of the chord.");
+                Assert.False(copy.IsEnabled, "Copy offers strings the mask leaves out.");
                 field.Value = 9;
                 Settle(pane.Window);
+                Click(pane, apply);
                 Assert.Equal(7, low().SlideTo);
                 Assert.Equal(9, high().SlideTo);
             }
             finally
             {
                 state.StringEditMask = StringEditMask.Empty;
+                pane.Vm.Staged.Engine.DiscardAll();
+                pane.Vm.ChordTemplateEditor.ChooseApplyRungCommand.Execute(ChordApplyRung.Selected);
             }
         }), CancellationToken.None);
+
+    private static void Click(Pane pane, Button button)
+    {
+        Assert.True(button.IsEffectivelyVisible && button.IsEnabled, $"'{button.Name}' is not on screen or not enabled.");
+        button.Command!.Execute(button.CommandParameter);
+        Settle(pane.Window);
+    }
 
     /// <summary>
     ///     #564, through the real view: a selected chord shows ONE line saying whether it ships as
@@ -279,12 +305,16 @@ public sealed class SoundTabFitUiPerfSmokeTests
         var previousProject = state.ActiveProject;
         var previousArrangement = state.ActiveArrangement;
         var previousTab = vm.SelectedTabIndex;
+        var applyStep = state.InspectorApplyStep;
         Window? window = null;
         try
         {
+            // These cases pin the staged pages (#751): Settings ▸ Editor's Apply step ON (#805 made it off by default).
+            state.InspectorApplyStep = true;
             var level = Seed(state);
             vm.SelectedTabIndex = 0;
             vm.Issues.RefreshIssues();
+            HeadlessIssuePass.Settle(vm.Issues);
 
             var view = new InspectorView { DataContext = vm };
             window = new Window { Width = PaneWidth, Height = PaneHeight, Content = view };
@@ -295,6 +325,7 @@ public sealed class SoundTabFitUiPerfSmokeTests
         }
         finally
         {
+            state.InspectorApplyStep = applyStep;
             selection.ClearSelections();
             vm.SelectedTabIndex = previousTab;
             window?.Close();

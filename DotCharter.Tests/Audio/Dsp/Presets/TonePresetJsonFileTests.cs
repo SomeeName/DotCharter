@@ -23,6 +23,67 @@ public sealed class TonePresetJsonFileTests
     private static DcRigModule Module(string id, params (string Param, float Value)[] values) =>
         new(id, values.ToDictionary(v => v.Param, v => v.Value, StringComparer.Ordinal));
 
+    [Theory]
+    [InlineData(@"\\server\share\cab.wav")]
+    [InlineData("//server/share/cab.wav")]
+    [InlineData(@"\\?\C:\cab.wav")]
+    [InlineData(@"\\.\C:\cab.wav")]
+    [InlineData(@"C:cab.wav")]
+    [InlineData(@"\cab.wav")]
+    [InlineData("cab.wav:stream")]
+    [InlineData("../cab.wav")]
+    [InlineData(@"IRs\..\cab.wav")]
+    [InlineData("NUL.wav")]
+    public void ImportedFileParams_RefuseUnsafeReferencesBeforeTheyCanBeApplied(string reference)
+    {
+        foreach (var (module, key) in new[] { ("cab", "irPath"), ("acousticsim", "irPath"), ("namamp", "modelPath"), ("cab", "irPathB"), ("convreverb", "irFile") })
+        {
+            var tone = Tone(new DcRigModule(module, new Dictionary<string, float>())
+            {
+                StringParams = new Dictionary<string, string> { [key] = reference }
+            });
+
+            var parsed = TonePresetJsonFile.Parse(TonePresetJsonFile.Serialize(tone));
+
+            Assert.False(parsed.Ok);
+            Assert.Equal(TonePresetImportFault.Malformed, parsed.Fault);
+        }
+    }
+
+    [Theory]
+    [InlineData("capture.nam")]
+    [InlineData("Amps/capture.nam")]
+    [InlineData(@"Amps\capture.nam")]
+    [InlineData(@"C:\captures\capture.nam")]
+    [InlineData("")]
+    public void ImportedFileParams_KeepLocalAndConfinedLibraryReferences(string reference)
+    {
+        var tone = Tone(new DcRigModule("namamp", new Dictionary<string, float>())
+        {
+            StringParams = new Dictionary<string, string> { ["modelPath"] = reference }
+        });
+
+        var parsed = TonePresetJsonFile.Parse(TonePresetJsonFile.Serialize(tone));
+
+        Assert.True(parsed.Ok);
+        Assert.Equal(reference, Assert.Single(parsed.Preset!.Rig.Modules).StringParams!["modelPath"]);
+    }
+
+    [Fact]
+    public void NonFileStringParams_KeepTheirTextVerbatim()
+    {
+        const string text = @"\\server\share\lyrics are text, not a file reference";
+        var tone = Tone(new DcRigModule("miku", new Dictionary<string, float>())
+        {
+            StringParams = new Dictionary<string, string> { ["phrases"] = text }
+        });
+
+        var parsed = TonePresetJsonFile.Parse(TonePresetJsonFile.Serialize(tone));
+
+        Assert.True(parsed.Ok);
+        Assert.Equal(text, Assert.Single(parsed.Preset!.Rig.Modules).StringParams!["phrases"]);
+    }
+
     [Fact]
     public void ATone_RoundTripsThroughTheFile_WithItsStringsAndBranches()
     {

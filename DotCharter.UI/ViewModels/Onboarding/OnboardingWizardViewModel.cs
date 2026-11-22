@@ -187,6 +187,9 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
     /// <see cref="IsPlayer"/>; exactly one is true.</summary>
     [ObservableProperty] private bool _isCharter;
 
+    /// <summary>The author a charter's new projects carry (<c>DefaultCharterName</c>); Settings edits the same value.</summary>
+    [ObservableProperty] private string _charterName = "";
+
     public bool IsPlayer
     {
         get => !IsCharter;
@@ -346,6 +349,7 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
         _machine.Reset();
         _audioPagesOpened = false;
         CancelScan();
+        InputFinder.Stop();
 
         IsCharter = !StartupRouting.BootsIntoPlayMode(config);
         // Remembered so CommitWelcome can tell "the user picked System" from
@@ -353,6 +357,7 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
         // LanguageIndexOf fell back to System".
         SelectedLanguageIndex = _seededLanguageIndex = LanguageIndexOf(config.LanguageCulture);
         UpdateCheckOnStartup = config.UpdateCheckOnStartup;
+        CharterName = config.DefaultCharterName;
         IsTabStringOrder = config.InvertStrings;
         LibraryPath = config.PsarcLibraryPath ?? string.Empty;
         LibrarySongCount = -1;
@@ -438,6 +443,7 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
     {
         if (!IsOpen) return;
         CancelScan();
+        InputFinder.Stop();
         MarkCompleted(dismissed: true);
         IsOpen = false;
     }
@@ -470,6 +476,7 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
     /// every page but the last, via <see cref="PrimaryCommand"/>).</summary>
     public void Next()
     {
+        InputFinder.Stop();
         CommitStep(_machine.Current);
         if (_machine.Next()) MoveTo(_machine.Current);
     }
@@ -478,12 +485,14 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
     [RelayCommand]
     private void Skip()
     {
+        InputFinder.Stop();
         if (_machine.Skip()) MoveTo(_machine.Current);
     }
 
     [RelayCommand]
     private void Back()
     {
+        InputFinder.Stop();
         if (_machine.Back()) MoveTo(_machine.Current);
     }
 
@@ -569,6 +578,7 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
             c.UpdateCheckOnStartup = UpdateCheckOnStartup;
             if (culture != null) c.LanguageCulture = culture;
             c.InvertStrings = IsTabStringOrder;
+            c.DefaultCharterName = CharterName.Trim();
         });
         // The timeline turns now, not at the next launch.
         _state.InvertStrings = IsTabStringOrder;
@@ -628,7 +638,7 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
         {
             LibrarySongCount = 0;
             LibraryStatus = LocF("Onboarding_Library_Failed", ex.Message);
-            _logger.Warning(AppLogCategory.Application, $"Onboarding library scan failed: {ex.Message}");
+            _logger.Warning(AppLogCategory.Application, "Onboarding library scan failed", ex);
         }
         finally
         {
@@ -689,7 +699,7 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
         {
             AudioTestFailed = true;
             AudioTestStatus = LocF("Onboarding_Audio_TestFailed", ex.Message);
-            _logger.Warning(AppLogCategory.Audio, $"Onboarding audio test failed: {ex.Message}");
+            _logger.Warning(AppLogCategory.Audio, "Onboarding audio test failed", ex);
         }
     }
 
@@ -736,13 +746,15 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
     /// <summary>
     ///     A new jack (or Mono) on the Input page is applied at once, so the meter
     ///     below follows the pick without a second click. Not while the finder
-    ///     drives the picker: it applies each input itself.
+    ///     drives the picker: it applies each input itself. Not once the wizard is
+    ///     closed either: Settings edits the same audio page, and its picks belong to
+    ///     Settings' own Save and Cancel, never to an instant save from here.
     /// </summary>
     private void OnAudioInputChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(AudioSettingsViewModel.InputJackOptions) or nameof(AudioSettingsViewModel.SelectedInputJackIndex))
             InputFinder.Refresh();
-        if (!IsInput || InputFinder.IsRunning || !_audioPagesOpened) return;
+        if (!IsOpen || !IsInput || InputFinder.IsRunning || !_audioPagesOpened) return;
         if (e.PropertyName is nameof(AudioSettingsViewModel.SelectedInputJackIndex) or nameof(AudioSettingsViewModel.AsioInputMono))
             ApplyInput();
     }
@@ -750,7 +762,17 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
     IReadOnlyList<InputJackOption> IGuitarJackScanTarget.Jacks =>
         _audio.EnableInput ? _audio.InputJackOptions : [];
 
-    int IGuitarJackScanTarget.CurrentJack => _audio.AsioInputChannelLeft;
+    GuitarInputRouting IGuitarJackScanTarget.CurrentRouting => new(
+        _audio.AsioInputChannelLeft, _audio.AsioInputChannelRight, _audio.AsioInputMono, _audio.InputChannelsAreSeparateGuitars);
+
+    void IGuitarJackScanTarget.Restore(GuitarInputRouting routing)
+    {
+        _audio.AsioInputMono = routing.Mono;
+        _audio.AsioInputChannelLeft = routing.Left;
+        _audio.AsioInputChannelRight = routing.Right;
+        _audio.InputChannelsAreSeparateGuitars = routing.SeparateGuitars;
+        ApplyInput();
+    }
 
     void IGuitarJackScanTarget.ListenOn(int jack)
     {

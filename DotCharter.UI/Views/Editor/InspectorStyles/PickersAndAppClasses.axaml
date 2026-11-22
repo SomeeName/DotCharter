@@ -353,17 +353,6 @@
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="Margin" Value="{StaticResource FireGapTopSm}" />
     </Style>
-    <!-- The leading glyph on a header or a disclosure. It is the ONE accent
-         mark in a section lockup — the caption beside it is plain text, so a
-         column of cards no longer reads as a column of alerts. -->
-    <Style Selector="PathIcon.SectionIcon">
-        <Setter Property="Width" Value="13" />
-        <Setter Property="Height" Value="13" />
-        <Setter Property="Margin" Value="0,0,6,0" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
-    </Style>
-
     <!-- The 22 px dock-pane header the Riff Library and the Stem Mixer carry.
          Its HEIGHT is load-bearing — it is what lines the fixed 3D preview up
          with its dockable siblings — so only the surface and the type move. -->

@@ -28,6 +28,20 @@ namespace DotCharter.Tests.UI.ViewModels.PlayMode;
 public sealed class ResultsScreenUnmeasuredRunTests
 {
     [Fact]
+    public void Result_section_times_preserve_elapsed_hours()
+    {
+        var board = new RunResultsViewModel(FakeLocalization.English(), new NoLeaderboard());
+        var report = Report(1, 0) with
+        {
+            Sections = [new SectionResult("solo", 3_723_456, 3_724_456, 1, 1, 0)]
+        };
+
+        board.Show(report);
+
+        Assert.Equal("1:02:03", Assert.Single(board.ResultSections).TimeLabel);
+    }
+
+    [Fact]
     public void ARunThatJudgedNothing_IsNotMeasuredAndIsNotGraded()
     {
         var report = Report(hits: 0, misses: 0);

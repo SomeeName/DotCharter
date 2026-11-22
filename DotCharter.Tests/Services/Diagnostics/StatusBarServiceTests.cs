@@ -72,7 +72,9 @@ public sealed class StatusBarServiceTests
     {
         private readonly Queue<Action> _pending = new();
 
-        public bool CheckAccess() => false;
+        /// <summary>True while the caller plays the UI thread: the service then runs its mutation inline.</summary>
+        public bool OnUiThread { get; set; }
+        public bool CheckAccess() => OnUiThread;
         public void Post(Action action) { lock (_pending) _pending.Enqueue(action); }
         public void PostNormal(Action action) => Post(action);
         public Task InvokeAsync(Action action) { Post(action); return Task.CompletedTask; }
@@ -146,5 +148,35 @@ public sealed class StatusBarServiceTests
         var single = Assert.Single(svc.ActiveTasks);
         Assert.Same(second, single);
         Assert.Equal("Second", single.Label);
+    }
+
+    [Fact]
+    public void APostedCompletion_RemovesOnlyItsOwnTask_NotAReplacementInsertedOnTheUiThread()
+    {
+        var dispatcher = new DeferredDispatcher();
+        var svc = new StatusBarService(dispatcher);
+        svc.BeginTask("vst", "First", indeterminate: true);
+        dispatcher.Drain();
+
+        svc.CompleteTask("vst"); // from a worker: the removal waits for the UI thread
+        dispatcher.OnUiThread = true;
+        var second = svc.BeginTask("vst", "Second", indeterminate: true); // inline, before that removal
+        dispatcher.Drain();
+
+        Assert.Same(second, Assert.Single(svc.ActiveTasks));
+    }
+
+    [Fact]
+    public void ACompletionBeforeTheTasksPostedInsert_LeavesNoGhostTask()
+    {
+        var dispatcher = new DeferredDispatcher();
+        var svc = new StatusBarService(dispatcher);
+        svc.BeginTask("engine", "Loading", indeterminate: true); // from a worker: the insert is posted
+
+        dispatcher.OnUiThread = true;
+        svc.CompleteTask("engine"); // inline, before that insert
+        dispatcher.Drain();
+
+        Assert.Empty(svc.ActiveTasks);
     }
 }

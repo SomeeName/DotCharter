@@ -1,4 +1,10 @@
+using DotCharter.Core.Utilities;
 using DotCharter.Presentation.Contracts.Editor;
+using DotCharter.Presentation.Dialogs;
+using DotCharter.Services.Audio.Coordination;
+using DotCharter.Services.Editing.ChordShapes;
+using DotCharter.Services.Infrastructure.Configuration;
+using DotCharter.Services.State;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotCharter.Presentation.Screens.Editor;
@@ -8,7 +14,12 @@ public static class EditorModule
 {
     public static void Register(IServiceCollection services)
     {
-        services.AddSingleton<ShapesPanelParts>();
+        services.AddSingleton<ShapesPanelParts>(sp => new ShapesPanelParts(sp.GetRequiredService<IChordShapePlacementService>(),
+            sp.GetRequiredService<IEditorTransport>(), sp.GetRequiredService<IDialogs>())
+        {
+            Naming = arrangement => ChordNamingOptions.For(sp.GetRequiredService<IConfigurationService>().LoadAppConfig().ChordNamingStyle,
+                arrangement, sp.GetRequiredService<ProjectState>().ActiveProject?.Chart)
+        });
         services.AddSingleton<IShapePanelScreen, ShapesPanelViewModel>();
         services.AddSingleton<AiChatServices>();
         services.AddSingleton<AiChatViewModel>();

@@ -75,7 +75,7 @@ public sealed class StemIsolatorTests : IDisposable
         }
     }
 
-    private sealed class CopyEncoder : IStemEncoder
+    private sealed class CopyEncoder(bool failDecode = false) : IStemEncoder
     {
         public StemCodec PreferredCodec => StemCodec.Wav;
 
@@ -90,6 +90,7 @@ public sealed class StemIsolatorTests : IDisposable
 
         public Task<string> DecodeToWavAsync(string encodedPath, StemCodec c, string destWavPath, CancellationToken ct = default)
         {
+            if (failDecode) throw new IOException("decoder unavailable");
             File.Copy(encodedPath, destWavPath, overwrite: true);
             return Task.FromResult(destWavPath);
         }
@@ -107,6 +108,76 @@ public sealed class StemIsolatorTests : IDisposable
         Assert.Equal(48_000, audio.SampleRate);
         Assert.Equal(2.0, audio.Duration.TotalSeconds, 2);
         Assert.Contains(audio.Samples, s => Math.Abs(s) > 0.1f);
+    }
+
+    [Theory]
+    [InlineData("guitar")]
+    [InlineData("bass")]
+    public async Task Tone_matching_caches_a_sample_collision_once_through_its_actual_save_path(string stem)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var song = NewSong();
+        WriteWav(song, Tone(440, 24), 48_000);
+        var original = File.ReadAllBytes(song);
+        var signature = StemAudioSignature.ComputeFile(song);
+        var separator = new FakeSeparator("guitar", "bass");
+        await NewIsolator(separator).IsolateAsync(song, stem, TimeSpan.Zero, TimeSpan.FromSeconds(1), null, ct);
+        var cache = Path.Combine(_root, "cache");
+        var first = Assert.Single(Directory.GetFiles(cache, "*.dcstems"));
+        var firstBytes = File.ReadAllBytes(first);
+        var changed = (byte[])original.Clone();
+        changed[1024 * 1024] ^= 1;
+        File.WriteAllBytes(song, changed);
+        File.SetLastWriteTimeUtc(song, File.GetLastWriteTimeUtc(song).AddSeconds(5));
+        Assert.Equal(signature, StemAudioSignature.ComputeFile(song));
+
+        await NewIsolator(separator).IsolateAsync(song, stem, TimeSpan.Zero, TimeSpan.FromSeconds(1), null, ct);
+        await NewIsolator(separator).IsolateAsync(song, stem, TimeSpan.Zero, TimeSpan.FromSeconds(1), null, ct);
+
+        Assert.Equal(2, separator.Separations); // one for each audio, across fresh callers
+        var archives = Directory.GetFiles(cache, "*.dcstems").ToDictionary(p => p, File.ReadAllBytes);
+        Assert.Equal(2, archives.Count);
+        Assert.Equal(firstBytes, File.ReadAllBytes(first));
+        File.WriteAllBytes(song, original);
+        File.SetLastWriteTimeUtc(song, File.GetLastWriteTimeUtc(song).AddSeconds(10));
+        await NewIsolator(separator).IsolateAsync(song, stem, TimeSpan.Zero, TimeSpan.FromSeconds(1), null, ct);
+        Assert.Equal(2, separator.Separations);
+        Assert.All(archives, entry => Assert.Equal(entry.Value, File.ReadAllBytes(entry.Key)));
+    }
+
+    [Fact]
+    public async Task A_retained_archive_that_cannot_decode_never_starts_a_second_separation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var separator = new FakeSeparator("guitar");
+        var store = new StemCacheStore(new CopyEncoder(failDecode: true), rootOverride: Path.Combine(_root, "cache"));
+        var isolator = new StemIsolator(separator, store, FakeLocalization.English());
+        var song = NewSong();
+        await isolator.ResolveGuitarStemAsync(song, null, ct);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => isolator.ResolveGuitarStemAsync(song, null, ct));
+
+        Assert.Equal(1, separator.Separations);
+        Assert.Single(Directory.GetFiles(store.Root, "*.dcstems"));
+    }
+
+    [Fact]
+    public void Every_stem_saver_uses_the_store_aware_source()
+    {
+        var root = TestPaths.RepoRoot();
+        foreach (var path in new[]
+                 {
+                     "DotCharter.Services/Ai/Match/StemIsolator.cs",
+                     "DotCharter.Services/Import/Audio/AudioSilenceSplicer.cs",
+                     "DotCharter.UI/ViewModels/Shell/StemSeparationViewModel.cs"
+                 })
+        {
+            var source = File.ReadAllText(Path.Combine(root, path));
+            var save = source.LastIndexOf(".SaveAsync(", StringComparison.Ordinal);
+            var resolve = source.LastIndexOf("StemCacheSource.ResolveForStore(", save, StringComparison.Ordinal);
+            Assert.True(save >= 0 && resolve >= 0, path + " must resolve the store-aware source before saving");
+            Assert.DoesNotContain("SaveAsync(key,", source, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

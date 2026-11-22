@@ -105,7 +105,7 @@ public partial class DialogContainerView : UserControl, IPrewarmableSurfaces, IP
     ///     on the first row click or the first Next.
     /// </summary>
     internal static readonly string[] NestedDialogBodyNames =
-        ["ToneEditor", "PatternEditorBody", "OnboardingAudioStep", "OnboardingInputStep"];
+        ["ToneEditor", "PatternEditorBody", "OnboardingAudioStep", "OnboardingInputStep", "ExportFindingsFrame"];
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {

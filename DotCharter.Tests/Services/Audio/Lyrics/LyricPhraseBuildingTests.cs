@@ -82,25 +82,15 @@ public sealed class LyricPhraseBuildingTests
         });
     }
 
-    /// <summary>
-    ///     A syllable may not run into the next one. The aligner's frame spans
-    ///     never overlap, but the onset bias moves onsets after the fact, so the
-    ///     clamp has to exist here too.
-    ///     <para>
-    ///         Since the spanning rule this is ALSO the floor case: the span
-    ///         target (next start − min gap) sits EARLIER than the truncated CTC
-    ///         end, and spanning never shortens what was heard — so the end
-    ///         stays at the next syllable's start, not at the gapped target.
-    ///     </para>
-    /// </summary>
+    /// <summary>The chart keeps the minimum gap even when the measured syllables overlap.</summary>
     [Fact]
-    public void ASyllableIsTruncatedWhereTheNextOneBegins()
+    public void AnOverlappingSyllableIsTruncatedBeforeTheMinimumGap()
     {
         var beats = Beats();
         var phrases = Build("a b", (1.0, 5.0), (2.0, 2.5));
 
         var first = phrases[0].Lyrics[0];
-        Assert.Equal(2000.0, first.EndPosition.GetPositionMs(beats), 1.0);
+        Assert.Equal(2000.0 - MinGapMs, first.EndPosition.GetPositionMs(beats), 1.0);
     }
 
     /// <summary>
@@ -130,14 +120,16 @@ public sealed class LyricPhraseBuildingTests
         Assert.Equal(3000.0 - MinGapMs, phrases[0].Lyrics[0].EndPosition.GetPositionMs(beats), 1.0);
     }
 
-    [Fact]
-    public void WordSpanningOffKeepsTheCtcEndAtAWordBoundary()
+    [Theory]
+    [InlineData(1.2, 1200.0)]
+    [InlineData(3.1, 3000.0 - MinGapMs)]
+    public void WordSpanningOffKeepsTheMeasuredEndWithinTheSpacingLimit(double measuredEnd, double expectedMs)
     {
         var beats = Beats();
         var options = LyricAutoSyncOptions.Default with { SpanWordEndToNextWord = false };
-        var phrases = Build("a b", options, (1.0, 1.2), (3.0, 3.2));
+        var phrases = Build("a b", options, (1.0, measuredEnd), (3.0, 3.2));
 
-        Assert.Equal(1200.0, phrases[0].Lyrics[0].EndPosition.GetPositionMs(beats), 1.0);
+        Assert.Equal(expectedMs, phrases[0].Lyrics[0].EndPosition.GetPositionMs(beats), 1.0);
     }
 
     /// <summary>…but a syllable INSIDE a word still spans with word-boundary
@@ -166,27 +158,24 @@ public sealed class LyricPhraseBuildingTests
     }
 
     [Fact]
-    public void PhraseSpanningOnSpansTheLastSyllableIntoTheGapBeforeTheNextPhrase()
+    public void PhraseSpanningOnExtendsThePhraseFinalSyllableToTheSpacingLimit()
     {
         var beats = Beats();
         var options = LyricAutoSyncOptions.Default with { SpanPhraseEndToNextPhrase = true };
         var phrases = Build("a\nb", options, (1.0, 1.2), (3.0, 3.2));
 
         Assert.Equal(3000.0 - MinGapMs, phrases[0].Lyrics[0].EndPosition.GetPositionMs(beats), 1.0);
-        // The phrase's own end follows its spanned last syllable.
         Assert.Equal(3000.0 - MinGapMs, phrases[0].EndPosition.GetPositionMs(beats), 1.0);
     }
 
-    /// <summary>The maximum-hold cap applies to a SPANNED end exactly as it does
-    /// to a heard one — a 7 s word gap must not become a 7 s sustain.</summary>
+    /// <summary>The measured hold cap remains a review signal for a long in-phrase span.</summary>
     [Fact]
-    public void ASpannedSyllableIsStillCappedAtTheMaximumHold()
+    public void ASpannedSyllableClosesTheGapEvenBeyondTheMeasuredHoldCap()
     {
         var beats = Beats();
         var phrases = Build("a b", (1.0, 1.2), (8.0, 8.2));
 
-        Assert.Equal(1000.0 + LyricAutoSyncOptions.Default.MaxSyllableSeconds * 1000.0,
-            phrases[0].Lyrics[0].EndPosition.GetPositionMs(beats), 1.0);
+        Assert.Equal(8000.0 - MinGapMs, phrases[0].Lyrics[0].EndPosition.GetPositionMs(beats), 1.0);
     }
 
     /// <summary>The minimum gap follows <c>AppConfig</c>'s note-spacing rules —

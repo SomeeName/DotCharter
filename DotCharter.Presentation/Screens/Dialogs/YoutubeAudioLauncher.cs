@@ -19,7 +19,8 @@ public sealed class YoutubeAudioLauncher(
     ProjectState state,
     IProjectSessionService session,
     ILocalizationService localization,
-    IAppLogger logger)
+    IAppLogger logger,
+    ReferencePitchOffer? referencePitchOffer = null)
 {
     /// <summary>True when the download was attached to the open project.</summary>
     public async Task<bool> OpenAsync()
@@ -37,7 +38,14 @@ public sealed class YoutubeAudioLauncher(
             return false;
         }
 
-        if (await session.AttachAudioAsync(path)) return true;
+        if (await session.AttachAudioAsync(path))
+        {
+            // The same A440 offer as File > Attach audio; nothing changes without the click.
+            if (referencePitchOffer != null) await referencePitchOffer.OfferAsync();
+            return true;
+        }
+
+
         logger.Info(AppLogCategory.Import, $"The YouTube download was not attached; deleting '{path}'.");
         YoutubeAudioDownload.Discard(path);
         return false;

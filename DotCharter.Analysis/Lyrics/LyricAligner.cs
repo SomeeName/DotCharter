@@ -1,3 +1,5 @@
+using DotCharter.Core.Domain.Vocals;
+
 namespace DotCharter.Analysis.Lyrics;
 
 /// <summary>A frames × symbols block of CTC log-probabilities over a whole song.</summary>
@@ -12,7 +14,14 @@ namespace DotCharter.Analysis.Lyrics;
 ///     the audio; dividing the real duration by the real frame count absorbs all
 ///     of it and cannot drift over a four-minute song.
 /// </param>
-public sealed record CtcEmissions(float[] LogProbs, int FrameCount, int Width, double SecondsPerFrame);
+public sealed record CtcEmissions(float[] LogProbs, int FrameCount, int Width, double SecondsPerFrame)
+{
+    /// <summary>
+    ///     For a two-head blend, the same frames as a linear opinion pool (a mixture of the two
+    ///     heads' probabilities, see <see cref="CtcEmissionBlender" />); null for one head.
+    /// </summary>
+    public CtcEmissions? Pooled { get; init; }
+}
 
 /// <summary>Tuning knobs for the fold from token spans up to syllable times.</summary>
 public sealed record LyricAlignmentOptions
@@ -99,7 +108,11 @@ public readonly record struct AlignedSyllable(
     double StartSeconds,
     double EndSeconds,
     double Confidence,
-    bool IsInterpolated);
+    bool IsInterpolated)
+{
+    /// <summary>Findings from the original path remain even if a local repair improves its score.</summary>
+    public LyricReviewReason ReviewReasons { get; init; }
+}
 
 /// <summary>Result of aligning a whole sheet against a whole song.</summary>
 public sealed record LyricAlignmentResult(
@@ -124,16 +137,20 @@ public static class LyricAligner
         LyricSheet sheet,
         LyricVocabulary vocabulary,
         CtcEmissions emissions,
-        LyricAlignmentOptions? options = null)
+        LyricAlignmentOptions? options = null,
+        CancellationToken cancellationToken = default,
+        VocalEnvelope? envelope = null)
     {
         ArgumentNullException.ThrowIfNull(sheet);
         ArgumentNullException.ThrowIfNull(vocabulary);
         ArgumentNullException.ThrowIfNull(emissions);
+        cancellationToken.ThrowIfCancellationRequested();
         options ??= LyricAlignmentOptions.Default;
 
         if (sheet.Syllables.Count == 0) return LyricAlignmentResult.Failed("There are no lyrics to align.");
 
         var tokenization = RomanizedLyricTokenizer.Tokenize(sheet, vocabulary, options.InsertWordDelimiters);
+        cancellationToken.ThrowIfCancellationRequested();
         if (tokenization.Tokens.Count == 0)
             return LyricAlignmentResult.Failed("None of the lyric text can be aligned.");
 
@@ -147,9 +164,17 @@ public static class LyricAligner
                 "or as ordinary text (for English).");
         }
 
-        var alignment = CtcForcedAligner.Align(
-            emissions.LogProbs.AsSpan(), emissions.FrameCount, emissions.Width,
-            tokenization.Tokens, vocabulary.BlankId, vocabulary.StarId, options.StarLogProb);
+        var endFrame = AnchoredCtcAligner.VoiceEndFrame(emissions, envelope);
+        var anchors = LyricAnchors.Find(emissions, sheet, tokenization, vocabulary, cancellationToken);
+        var alignment = AnchoredCtcAligner.Align(emissions, tokenization, vocabulary, anchors, options.StarLogProb,
+            endFrame, cancellationToken);
+        if (alignment.Succeeded && emissions.Pooled is { } pooled)
+        {
+            var pooledAnchors = LyricAnchors.Find(pooled, sheet, tokenization, vocabulary, cancellationToken);
+            var pooledPath = AnchoredCtcAligner.Align(pooled, tokenization, vocabulary, pooledAnchors, options.StarLogProb,
+                Math.Min(endFrame, pooled.FrameCount), cancellationToken);
+            alignment = LyricPooledPath.Merge(alignment, pooledPath, tokenization, emissions.SecondsPerFrame);
+        }
 
         if (!alignment.Succeeded)
             return LyricAlignmentResult.Failed(alignment.Failure!);
@@ -159,9 +184,11 @@ public static class LyricAligner
         var placed = new AlignedSyllable[sheet.Syllables.Count];
         var measured = new bool[sheet.Syllables.Count];
         var previousStart = 0.0;
+        var vowels = LyricRepairPass.VowelTokens(vocabulary);
 
         foreach (var syllable in tokenization.Syllables)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (syllable.TokenCount == 0) continue;
 
             var first = alignment.Tokens[syllable.TokenStart];
@@ -175,7 +202,8 @@ public static class LyricAligner
             var startBias = SyllableOnsetClassifier.Classify(sheet.Syllables[syllable.SyllableIndex].Text) == SyllableOnsetClass.Vowel
                 ? bias + options.VowelInitialOnsetBiasSeconds
                 : bias;
-            var start = Math.Max(previousStart, Math.Max(0.0, first.StartFrame * spf + startBias));
+            var startFrame = LyricSyllableVowelSnap.VowelFrame(sheet, tokenization, alignment.Tokens, vowels, syllable) ?? first.StartFrame;
+            var start = Math.Max(previousStart, Math.Max(0.0, startFrame * spf + startBias));
             previousStart = start;
 
             placed[syllable.SyllableIndex] = new AlignedSyllable(
@@ -187,9 +215,14 @@ public static class LyricAligner
             measured[syllable.SyllableIndex] = true;
         }
 
-        FillInterpolated(placed, measured, spf);
+        FillInterpolated(placed, measured, spf, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        return new LyricAlignmentResult(placed, tokenization.DroppedCharacters, null);
+        var reasons = LyricAlignmentReview.Evaluate(sheet, placed, envelope);
+        for (var i = 0; i < placed.Length; i++) placed[i] = placed[i] with { ReviewReasons = reasons[i] };
+        var repaired = envelope == null ? placed : LyricLocalRepair.Repair(
+            sheet, vocabulary, emissions, placed, envelope, options, cancellationToken);
+        return new LyricAlignmentResult(repaired, tokenization.DroppedCharacters, null);
     }
 
     /// <summary>
@@ -197,26 +230,35 @@ public static class LyricAligner
     ///     of leaving it at zero, where it would land before the song starts and
     ///     read as a wildly wrong alignment rather than as a gap. Such a
     ///     syllable is squeezed into the space after its nearest measured
-    ///     predecessor; runs of them share that space evenly.
+    ///     predecessor; runs of them share that space evenly. If an onset bias
+    ///     makes the measured spans overlap, clamp that space between the two
+    ///     measured STARTS so interpolation cannot reverse the syllable order.
     /// </summary>
-    private static void FillInterpolated(AlignedSyllable[] placed, bool[] measured, double secondsPerFrame)
+    private static void FillInterpolated(AlignedSyllable[] placed, bool[] measured, double secondsPerFrame, CancellationToken ct)
     {
         for (var i = 0; i < placed.Length; i++)
         {
+            ct.ThrowIfCancellationRequested();
             if (measured[i]) continue;
 
             var runEnd = i;
-            while (runEnd < placed.Length && !measured[runEnd]) runEnd++;
+            while (runEnd < placed.Length && !measured[runEnd])
+            {
+                ct.ThrowIfCancellationRequested();
+                runEnd++;
+            }
 
-            var before = i > 0 ? placed[i - 1].EndSeconds : 0.0;
-            var after = runEnd < placed.Length ? placed[runEnd].StartSeconds : before + secondsPerFrame;
-            if (after < before) after = before;
+            var previousStart = i > 0 ? placed[i - 1].StartSeconds : 0.0;
+            var previousEnd = i > 0 ? placed[i - 1].EndSeconds : 0.0;
+            var after = runEnd < placed.Length ? placed[runEnd].StartSeconds : previousEnd + secondsPerFrame;
+            var before = Math.Clamp(previousEnd, previousStart, after);
 
             var count = runEnd - i;
             var step = (after - before) / (count + 1);
 
             for (var k = 0; k < count; k++)
             {
+                ct.ThrowIfCancellationRequested();
                 var start = before + step * k;
                 placed[i + k] = new AlignedSyllable(
                     i + k, start, start + step, Confidence: 0.0, IsInterpolated: true);

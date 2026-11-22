@@ -38,6 +38,9 @@ public sealed partial class LatencyWizardViewModel
     /// <summary>Builds the onset detector for a sample rate; a test hands in a threshold detector.</summary>
     internal Func<int, ILiveInputDetector>? DetectorFactory { get; set; }
 
+    /// <summary>The host clock the metronome and the taps read; a test hands in a synthetic one.</summary>
+    internal Func<long> Clock { get; set; } = Stopwatch.GetTimestamp;
+
     public bool IsMeasuringJudging
     {
         get => _isMeasuringJudging;
@@ -61,6 +64,8 @@ public sealed partial class LatencyWizardViewModel
     internal int? HeardOnChannel { get; private set; }
 
     internal void PumpLoopbackForTests(long nowTicks) => PumpLoopback(nowTicks);
+
+    internal void PumpMetronomeForTests(long nowTicks) => PumpMetronome(nowTicks);
 
     private void MeasureJudging()
     {
@@ -185,7 +190,7 @@ public sealed partial class LatencyWizardViewModel
         _beatsEmitted = 0;
         _lastPresentedRefTicks = 0;
         _periodTicks = MsToTicks(BeatPeriodMs);
-        _nextBeatTicks = Stopwatch.GetTimestamp() + _periodTicks;
+        _nextBeatTicks = Clock() + _periodTicks;
         VisualPulse = 0;
         UpdateTapReadout();
         _metronomeActive = true;
@@ -228,7 +233,7 @@ public sealed partial class LatencyWizardViewModel
     private void Tap()
     {
         if (!IsTapStep || _beatRefs.Count == 0 || _beatsEmitted <= WarmupBeats) return;
-        var now = Stopwatch.GetTimestamp();
+        var now = Clock();
         var nearest = _beatRefs.MinBy(r => Math.Abs(now - r));
         var asyncMs = TicksToMs(now - nearest);
         // Between beats is a double tap or a lost pulse, not an attempt at this beat.
@@ -254,14 +259,14 @@ public sealed partial class LatencyWizardViewModel
     {
         try
         {
-            var now = Stopwatch.GetTimestamp();
+            var now = Clock();
             if (IsMeasuringJudging) PumpLoopback(now);
             if (_metronomeActive) PumpMetronome(now);
             if (!IsMeasuringJudging && !_metronomeActive) StopTick();
         }
         catch (Exception ex)
         {
-            _logger.Warning(AppLogCategory.Audio, $"Latency wizard tick failed: {ex.Message}");
+            _logger.Warning(AppLogCategory.Audio, "Latency wizard tick failed", ex);
         }
     }
 

@@ -13,7 +13,7 @@ namespace DotCharter.Tests.Audio.Tonelab;
 [SupportedOSPlatform("windows")]
 public sealed class TonelabOfflineRendererTests
 {
-    private static readonly string ToneFiles = Path.Combine(Path.GetTempPath(), "dotcharter-tonelab-render-tests");
+    private static readonly string ToneFiles = Path.Combine(Path.GetTempPath(), "dotcharter-tonelab-render-tests-" + Guid.NewGuid().ToString("N"));
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -102,7 +102,7 @@ public sealed class TonelabOfflineRendererTests
     {
         using var game = new TonelabGameMock();
         var insert = new TonelabSessionTests.FakeInsert();
-        using var session = new TonelabSession(() => [game.ProcessId], insert, null, TonelabSessionTests.Quick);
+        using var session = new TonelabSession(() => [game.ProcessId], insert, null, TonelabSessionTests.Quick, time: TonelabSessionTests.ReplyClock);
         Assert.Equal(TonelabSessionState.Ready, await session.ProbeAsync(Ct));
         var preview = new object();
 

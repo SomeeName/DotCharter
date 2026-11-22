@@ -302,15 +302,12 @@ public sealed class RigLibrary
     /// <see cref="RigLibraryBuilder" /> can go on appending to.</summary>
     public void Save(string path, int declaredCount)
     {
-        var tmp = path + ".tmp";
-        using (var fs = File.Create(tmp))
-        using (var w = new BinaryWriter(fs))
+        AtomicFile.Write(path, fs =>
         {
+            using var w = new BinaryWriter(fs, System.Text.Encoding.UTF8, leaveOpen: true);
             WriteHeader(w, ExtractorId, declaredCount, Seed, DiFingerprint);
             foreach (var e in Entries) WriteRow(w, e);
-        }
-
-        File.Move(tmp, path, overwrite: true);
+        });
     }
 
     internal static void WriteHeader(BinaryWriter w, string extractorId, int declaredCount, int seed, string di)

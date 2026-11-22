@@ -44,6 +44,29 @@ public sealed class EofProjectCreatorTests : IDisposable
         return new EofImportSelection(eofPath, result, audio);
     }
 
+    [Theory]
+    [InlineData(-7)]
+    [InlineData(-3)]
+    [InlineData(0)]
+    [InlineData(4)]
+    [InlineData(7)]
+    public async Task The_imported_key_signature_is_in_the_created_project(int accidentals)
+    {
+        var h = new CreatorHarness();
+        var songDir = Directory.CreateDirectory(Path.Combine(_tempDir, "key")).FullName;
+        var project = EofExportTestCharts.BuildRepresentativeProject();
+        project.Chart.KeyAccidentals = accidentals;
+        var path = Path.Combine(songDir, "key.eof");
+        File.WriteAllBytes(path, EofExporter.Export(project).Bytes);
+        WriteCompanionAudio(songDir);
+        h.Storage.NextFolder = Directory.CreateDirectory(Path.Combine(_tempDir, "out-key")).FullName;
+
+        await h.Creator.CreateAsync(Parse(path));
+
+        Assert.NotEmpty(h.Documents.SavedPaths);
+        Assert.Equal(accidentals, h.State.ActiveProject!.Chart.KeyAccidentals);
+    }
+
     [Fact]
     public async Task When_the_audio_fails_to_decode_it_does_not_claim_a_plain_success()
     {
@@ -217,7 +240,8 @@ internal sealed class CreatorHarness
         public Task<bool> AttachAudioAsync(string sourcePath) => Task.FromResult(true);
         public Task LoadSilentTransportAsync(double projectLengthMs) => Task.CompletedTask;
         public Task OpenProject() => Task.CompletedTask;
-        public Task<bool> SaveProjectAsync() => Task.FromResult(true);
+        public bool HasUnsavedWork() => IsProjectDirty;
+        public Task<bool> SaveProjectAsync(SaveInitiator initiator) => Task.FromResult(true);
         public Task<bool> SaveProjectAsAsync() => Task.FromResult(true);
         public IReadOnlyList<RecentProjectEntry> GetRecentProjects() => [];
         public event Action? RecentProjectsChanged { add { } remove { } }

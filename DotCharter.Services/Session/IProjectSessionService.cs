@@ -9,6 +9,10 @@ public interface IProjectSessionService : IDisposable
     /// so undoing back to the last-saved state reads clean again.</summary>
     bool IsProjectDirty { get; }
 
+    /// <summary>The close and replace gate: applies a draft an editor still holds (a text box
+    /// keeps its focus through Alt+F4 or a menu shortcut), then answers <see cref="IsProjectDirty" />.</summary>
+    bool HasUnsavedWork();
+
     /// <summary>Raised when <see cref="IsProjectDirty" /> flips.</summary>
     event Action? ProjectDirtyChanged;
 
@@ -75,6 +79,12 @@ public interface IProjectSessionService : IDisposable
     void LoadAppConfig();
     void SaveAppConfig();
     void FreeAudio();
+    /// <summary>Drains queued save companions without disposing the audio engine.</summary>
+    void DrainSaveCompanions() { }
+
+    /// <summary>Reloads playback and waveform for the active project's declared audio, including the silent fallback.</summary>
+    Task ReloadProjectAudioAsync() => throw new NotSupportedException();
+
     Task LoadFile(string filePath);
     Task LoadAudioFile(string filePath, bool generateBeats = true, bool preferMemoryPlayback = false);
 
@@ -104,8 +114,11 @@ public interface IProjectSessionService : IDisposable
     /// <summary>Saves to the session's project path; a session without one
     /// (fresh/default project, PSARC import) routes through the Save As picker
     /// instead of silently writing a relative "project.dcproj". Returns false
-    /// when the user canceled the picker or the save failed.</summary>
-    Task<bool> SaveProjectAsync();
+    /// when the user canceled the picker, the save failed, the project was replaced,
+    /// or newer edits remain unsaved. Close/replace callers must stop on false.
+    /// <paramref name="initiator" /> decides whether a pending editor draft is committed first
+    /// (<see cref="SaveInitiator" />).</summary>
+    Task<bool> SaveProjectAsync(SaveInitiator initiator);
 
     /// <summary>Always shows the save-file picker and remembers the chosen
     /// path as the session's project path. Returns false on cancel/failure.</summary>
@@ -143,4 +156,13 @@ public interface IProjectSessionService : IDisposable
     /// <summary>Raised (on whatever thread recorded the entry) after the
     /// recent-projects list changed.</summary>
     event Action? RecentProjectsChanged;
+
+    /// <summary>Raised once a <c>.dcsong</c> package has been unpacked and opened as a NEW project, so
+    /// audio that arrives with it can be checked like any other first attach. Nothing is raised when
+    /// the open was cancelled or superseded.</summary>
+    event Action? SongPackageOpened
+    {
+        add { }
+        remove { }
+    }
 }

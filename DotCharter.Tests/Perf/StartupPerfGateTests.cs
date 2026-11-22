@@ -31,17 +31,16 @@ public sealed class StartupPerfGateTests
             ? b
             : DefaultBudgetMs;
 
-        var launchedAt = DateTime.Now.AddSeconds(-1); // log-clock skew slack
-        using var process = Process.Start(new ProcessStartInfo(exe)
-        {
-            WorkingDirectory = Path.GetDirectoryName(exe)!,
-            UseShellExecute = false
-        });
+        // The child gets a data root of its own and only ITS log is read (#606): the
+        // gate used to run the app on the user's real data and to accept the newest
+        // StartupPhases line in the shared log folder, whoever had written it.
+        using var launch = new StartupGateLaunch();
+        using var process = Process.Start(launch.StartInfo(exe));
         Assert.NotNull(process);
 
         try
         {
-            var line = WaitForStartupPhasesLine(launchedAt, TimeSpan.FromSeconds(60));
+            var line = WaitForStartupPhasesLine(launch, TimeSpan.FromSeconds(60));
             var interactiveMs = ParseKey(line, "interactive");
 
             Assert.True(interactiveMs <= budgetMs,
@@ -52,8 +51,10 @@ public sealed class StartupPerfGateTests
             try
             {
                 process!.Kill(entireProcessTree: true);
+                // Reaped before the data root is removed: the app holds its log open.
+                process.WaitForExit(TimeSpan.FromSeconds(30));
             }
-            catch
+            catch (InvalidOperationException)
             {
                 // Already exited.
             }
@@ -84,43 +85,19 @@ public sealed class StartupPerfGateTests
     }
 
     /// <summary>
-    ///     Polls the app's log directory (a bin build is not a portable
-    ///     install, so logs land under %APPDATA%/DotCharter/logs) for a
-    ///     StartupPhases line stamped after launch. The log file is open in
-    ///     the app, so read with full sharing.
+    ///     Polls the child's OWN log folder for its StartupPhases line. The cap is the
+    ///     gate's deadlock detector for an app that never reaches first render.
     /// </summary>
-    private static string WaitForStartupPhasesLine(DateTime launchedAt, TimeSpan timeout)
+    private static string WaitForStartupPhasesLine(StartupGateLaunch launch, TimeSpan timeout)
     {
-        var logsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "DotCharter", "logs");
-        var deadline = DateTime.UtcNow + timeout;
-
-        while (DateTime.UtcNow < deadline)
+        var waited = Stopwatch.StartNew();
+        while (waited.Elapsed < timeout)
         {
-            var newest = new DirectoryInfo(logsDir).GetFiles("*.log")
-                .OrderByDescending(f => f.LastWriteTimeUtc).FirstOrDefault();
-            if (newest != null)
-            {
-                using var stream = new FileStream(newest.FullName, FileMode.Open, FileAccess.Read,
-                    FileShare.ReadWrite | FileShare.Delete);
-                using var reader = new StreamReader(stream);
-                while (reader.ReadLine() is { } line)
-                {
-                    var idx = line.IndexOf("StartupPhases:", StringComparison.Ordinal);
-                    if (idx < 0) continue;
-                    if (DateTime.TryParseExact(line.AsSpan(0, Math.Min(23, line.Length)), "yyyy-MM-dd HH:mm:ss.fff",
-                            CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var stamp) &&
-                        stamp >= launchedAt)
-                    {
-                        return line[idx..];
-                    }
-                }
-            }
-
+            if (launch.FindStartupPhasesLine() is { } line) return line;
             Thread.Sleep(250);
         }
 
-        Assert.Fail($"No StartupPhases line appeared within {timeout.TotalSeconds:F0} s — " +
+        Assert.Fail($"No StartupPhases line appeared in '{launch.LogsDirectory}' within {timeout.TotalSeconds:F0} s: " +
                     "did the app crash before first render?");
         return null!; // unreachable
     }

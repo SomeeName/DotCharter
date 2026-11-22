@@ -323,7 +323,7 @@ public partial class MainWindow : Window
                         case nameof(MainWindowViewModel.IsPreviewVisible):
                             // Toggling the 3D preview off closes its pop-out
                             // window too (the Closed handler re-docks the view).
-                            if (!vm.IsPreviewVisible) _preview3DWindow?.Close();
+                            if (!vm.IsPreviewVisible) PopOuts.ClosePreview3DWindow();
                             break;
                         case nameof(MainWindowViewModel.IsGameplayPresentation):
                             // The flags are back by now; put each pane back where
@@ -352,7 +352,7 @@ public partial class MainWindow : Window
                 _layoutResetHandler = () => ResetLayoutToDefaults(vm);
                 vm.LayoutResetRequested += _layoutResetHandler;
 
-                _timelinePopOutHandler = PopOutTimeline;
+                _timelinePopOutHandler = PopOutTimelineWindow;
                 vm.TimelinePopOutRequested += _timelinePopOutHandler;
 
                 // File ▸ Exit goes through Close() so OnClosing's
@@ -407,7 +407,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             ResolveService<IAppLogger>()?.Warning(AppLogCategory.Application,
-                $"[Shutdown] {what} failed: {ex.Message}");
+                $"[Shutdown] {what} failed", ex);
         }
     }
 
@@ -419,7 +419,7 @@ public partial class MainWindow : Window
         // _shuttingDown first exactly as the real close does.
         if (_isolatedTeardown)
         {
-            TryOnClose("Closing pop-out windows", MarkShuttingDownAndClosePopOuts);
+            TryOnClose("Closing pop-out windows", PopOuts.MarkShuttingDownAndClosePopOuts);
             base.OnClosing(e);
             return;
         }
@@ -428,7 +428,7 @@ public partial class MainWindow : Window
         // Save / Discard / Cancel prompt. This must run before ANY of the
         // teardown below — the terminate path kills the process with zero
         // further dispatching, so a prompt after it could never be shown.
-        if (!_closeConfirmed && DataContext is MainWindowViewModel vm && vm.IsProjectDirty)
+        if (!_closeConfirmed && DataContext is MainWindowViewModel vm && vm.Project.HasUnsavedWork())
         {
             e.Cancel = true;
             _ = ConfirmCloseWithUnsavedChangesAsync(vm);
@@ -451,7 +451,7 @@ public partial class MainWindow : Window
         // windows are owned by this one, so they close with it, and their
         // Closed handlers would otherwise re-parent the single 3D-preview /
         // timeline instance into a window that is tearing down. See
-        // MainWindow.Docking's _shuttingDown.
+        // MainWindowPopOuts' _shuttingDown.
         // The two process-lifetime subscriptions this window takes out in its
         // ctor. Neither survives a TerminateNow (the process is gone), but the
         // CLEAN path below leaves through the normal CRT path — and the 250 ms
@@ -459,7 +459,7 @@ public partial class MainWindow : Window
         // STATIC UiScaleController.ScaleChanged would keep this whole window
         // (and its visual tree) alive for whatever comes after.
         TryOnClose("Shell teardown", StopShellTimersAndSubscriptions);
-        TryOnClose("Closing pop-out windows", MarkShuttingDownAndClosePopOuts);
+        TryOnClose("Closing pop-out windows", PopOuts.MarkShuttingDownAndClosePopOuts);
         TryOnClose("Persist dock state", PersistDockLayout);
         TryOnClose("Persist layout", _layout.PersistOnClose);
         // The live tone rig is the ONE piece of state the comment above does not
@@ -667,7 +667,10 @@ public partial class MainWindow : Window
             overlay.IsVisible = visible;
     }
 
-    private void RequestRendererRedraw()
+    private void RequestRendererRedraw() => DotCharter.Services.Diagnostics.UiWorkTiming.Measure(
+        "Timeline and minimap invalidation", RequestRendererRedrawCore);
+
+    private void RequestRendererRedrawCore()
     {
         this.FindControl<ChartRenderer>("MainChartRenderer")?.RequestNextFrameRendering();
         if (this.FindControl<MinimapOverviewControl>("MinimapOverview") is { } minimap)

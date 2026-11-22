@@ -87,9 +87,14 @@ public class Fretboard3DEngine : IDisposable
     ///     life of the process — and the fixed 2048² sheet eventually stops fitting,
     ///     at which point glyphs render blank. Driven from the UI's
     ///     <c>ActiveProject</c> notification (<c>Preview3DRenderDriver</c>), the same
-    ///     hook every other project-scoped cache prunes on.
+    ///     hook every other project-scoped cache prunes on. Call only on the
+    ///     render owner thread, before pre-registration and rendering.
     /// </summary>
-    public void ResetTextRegistrations() => _resources.FontAtlas?.ResetToSeedCharacters();
+    public void ResetTextRegistrations()
+    {
+        _resources.FontAtlas?.ResetToSeedCharacters();
+        _lastRegisterSig = long.MinValue;
+    }
 
     public void Dispose()
     {
@@ -843,7 +848,7 @@ public class Fretboard3DEngine : IDisposable
         if (minFret <= 0) minFret = 1;
         if (maxFret <= 0) maxFret = 4;
         if (maxFret - minFret < 3) maxFret = minFret + 3;
-        maxFret = Math.Min(24, maxFret);
+        maxFret = Math.Min(FretLimits.MaxFret, maxFret);
 
         var focusSpeed = 1.0f - (float)Math.Pow(1.0 - 0.7f, frameTime);
         var middleFhpPosition = (FretboardConstants.GetLinearFretPosition(maxFret) +

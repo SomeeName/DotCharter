@@ -25,7 +25,7 @@ public sealed class RocksmithExportPlainWarningTests : IDisposable
     private static ExportTargetViewModel Target() => new(FakeLocalization.English());
 
     private static void Pick(ExportTargetViewModel target, bool plain) =>
-        target.SelectedPackageOption = target.PackageOptions.Single(o => o.Plain == plain);
+        target.SelectedPackageOption = target.PackageOptions.First(o => o.Plain == plain);
 
     private static void Pick(ExportTargetViewModel target, ExportPlatform platform) =>
         target.SelectedPlatformOption = target.PlatformOptions.Single(o => o.Value == platform);
@@ -50,7 +50,9 @@ public sealed class RocksmithExportPlainWarningTests : IDisposable
         var target = Target();
 
         Assert.True(target.WritesPlainPackage);
-        Pick(target, plain: false);
+        target.SelectedPackageOption = new ExportPackageChoice(false, "Encrypted");
+        Assert.True(target.WritesPlainPackage);
+        target.SelectedPackageOption = target.PackageOptions[^1];
         Assert.True(target.WritesPlainPackage);
     }
 
@@ -111,7 +113,7 @@ public sealed class RocksmithExportPlainWarningTests : IDisposable
         Assert.NotEmpty(Directory.GetFiles(Path.Combine(folder, DlcBuilderBundle.DirectoryName), "*.xml"));
         var text = File.ReadAllText(projectFile);
         Assert.Contains("Lead", text);
-        Assert.Contains("audio.wem", text);
+        Assert.DoesNotContain("audio.wem", text);
         Assert.DoesNotContain(folder.Replace("\\", "\\\\", StringComparison.Ordinal), text);
         Assert.True(vm.HasDlcBuilderProjectMessage);
         Assert.Contains(projectFile, vm.DlcBuilderProjectMessage);

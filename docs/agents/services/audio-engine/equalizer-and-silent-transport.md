@@ -100,7 +100,9 @@
 - `Session/SilentTransportSession` is the session's half: it owns the loaded
   length, the growth check's re-entrancy guard and the watch on the ACTIVE
   project's beat grid (re-attached per load), and regenerates a longer track
-  when the chart outgrows the current one. `ProjectSessionService` builds it,
+  when the chart outgrows the current one. A request during a load triggers another
+  check after it lands; `HistoryChanged` also checks in-place beat-time edits (#571).
+  `ProjectSessionService` builds it,
   forwards `LoadSilentTransportAsync` to it and `Stop()`s it whenever real audio
   loads and on dispose. Pinned by `Services/Session/SilentTransportSessionTests`
   and, through the session, `SilentTransportGrowthTests`.

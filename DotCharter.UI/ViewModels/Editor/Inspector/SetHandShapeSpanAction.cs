@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+
 namespace DotCharter.UI.ViewModels.Editor.Inspector;
 
 /// <summary>
@@ -16,34 +18,24 @@ public sealed class SetHandShapeSpanAction : IChartAction, ILinkPolicyAction
     /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
     public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
 
-    private readonly HandShape _handShape;
-    private readonly FractionalPosition _oldStart;
-    private readonly FractionalPosition _oldEnd;
-    private readonly FractionalPosition _newStart;
-    private readonly FractionalPosition _newEnd;
+    private readonly MutateHandShapesAction _mutation;
 
-    public SetHandShapeSpanAction(HandShape handShape,
+    public SetHandShapeSpanAction(ObservableCollection<HandShape> handShapes, HandShape handShape,
         FractionalPosition oldStart, FractionalPosition oldEnd,
         FractionalPosition newStart, FractionalPosition newEnd)
     {
-        _handShape = handShape;
-        _oldStart = oldStart;
-        _oldEnd = oldEnd;
-        _newStart = newStart;
-        _newEnd = newEnd;
+        var oldState = handShape.Clone();
+        oldState.Position = oldStart;
+        oldState.EndPosition = oldEnd;
+        var newState = handShape.Clone();
+        newState.Position = newStart;
+        newState.EndPosition = newEnd;
+        _mutation = new MutateHandShapesAction(handShapes, [handShape], [oldState], [newState]);
     }
 
-    public bool HasEffect => _oldStart != _newStart || _oldEnd != _newEnd;
+    public bool HasEffect => _mutation.HasEffect;
 
-    public void Execute()
-    {
-        _handShape.Position = _newStart;
-        _handShape.EndPosition = _newEnd;
-    }
+    public void Execute() => _mutation.Execute();
 
-    public void Undo()
-    {
-        _handShape.Position = _oldStart;
-        _handShape.EndPosition = _oldEnd;
-    }
+    public void Undo() => _mutation.Undo();
 }

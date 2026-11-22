@@ -73,9 +73,10 @@ public class HistoryService : IHistoryService
 
     private DateTime _mergeAnchorUtc;
     private int _nextId;
+    private int _nextContentId;
     private Node _root;
 
-    /// <summary>The sum of <see cref="IChartAction.EstimatedBytes" /> over every node's action.</summary>
+    /// <summary>The sum of each node's action and retained link follow-up snapshot costs.</summary>
     private long _bytes;
 
     public HistoryService(IAppLogger logger, IEditingScope? scope = null, int maxNodes = DefaultMaxNodes,
@@ -97,7 +98,101 @@ public class HistoryService : IHistoryService
     public event Action? HistoryChanged;
     public event Action<Arrangement?>? FocusRequested;
     public event Action? ActionFailed;
+    public event Action<bool>? StepEnded;
     public event Action<IReadOnlyList<LinkPropagationReport>>? LinksPropagated;
+
+    /// <summary>How many steps are being applied right now: a jump holds one around the undo/redo steps it walks.</summary>
+    private int _stepDepth;
+
+    public bool IsApplyingStep => _stepDepth > 0;
+
+    /// <summary>
+    ///     Runs an undo/redo step (or a whole jump) from its first focus request to its last state change
+    ///     with <see cref="IsApplyingStep" /> set, and leaves it in a <c>finally</c>: a throwing apply (after
+    ///     <see cref="ActionFailed" />) or link rebuild must not leave every later <see cref="Do" /> refused.
+    ///     A depth, not a flag, so a step inside a jump cannot clear it early. It is clear again before
+    ///     <see cref="HistoryChanged" /> is raised, so its handlers may act.
+    /// </summary>
+    private void ApplyStep(Action step)
+    {
+        _stepDepth++;
+        try
+        {
+            step();
+        }
+        finally
+        {
+            _stepDepth--;
+        }
+    }
+
+    /// <summary>Tells the listeners once the outermost step is over; a step inside a jump stays internal.</summary>
+    private void RaiseHistoryChanged()
+    {
+        if (_stepDepth == 0) HistoryChanged?.Invoke();
+    }
+
+    /// <summary>
+    ///     Runs an undo/redo step or a jump through <see cref="ApplyStep" />, then <paramref name="notify" />
+    ///     on success or <paramref name="onFailure" /> before the exception leaves. The outermost one raises
+    ///     <see cref="StepEnded" /> from its <c>finally</c>, with the depth already back to 0.
+    /// </summary>
+    private void RunStep(Action step, Action notify, Action onFailure)
+    {
+        var outermost = _stepDepth == 0;
+        var completed = false;
+        try
+        {
+            try
+            {
+                ApplyStep(step);
+            }
+            catch
+            {
+                onFailure();
+                throw;
+            }
+
+            completed = true;
+            notify();
+        }
+        finally
+        {
+            if (outermost) RaiseStepEnded(completed);
+        }
+    }
+
+    /// <summary>A listener that throws after a failed step is logged: the step's own exception is the one that surfaces.</summary>
+    private void RaiseStepEnded(bool completed)
+    {
+        if (completed)
+        {
+            StepEnded?.Invoke(true);
+            return;
+        }
+
+        try
+        {
+            StepEnded?.Invoke(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(AppLogCategory.History, "A StepEnded listener threw after a failed step.", ex);
+        }
+    }
+
+    /// <summary>Notifies after a failed step; a throwing listener is logged so the step's own exception surfaces.</summary>
+    private void RaiseHistoryChangedAfterFailure()
+    {
+        try
+        {
+            RaiseHistoryChanged();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(AppLogCategory.History, "A HistoryChanged listener threw after a failed jump.", ex);
+        }
+    }
 
     /// <summary>
     ///     Runs one apply/revert and, if it throws, tells the world the chart and
@@ -130,6 +225,7 @@ public class HistoryService : IHistoryService
     public bool CanUndo => _current != _root;
     public bool CanRedo => NextRedoChild() != null;
     public int CurrentNodeId => _current.Id;
+    public int CurrentContentId => _current.ContentId;
 
     public void Clear()
     {
@@ -145,26 +241,39 @@ public class HistoryService : IHistoryService
 
     public void EndGesture() => _mergeAnchor = null;
 
-    public bool Do(IChartAction action)
+    public virtual bool Do(IChartAction action)
     {
         if (!action.HasEffect) return false;
+        if (RefusedDuringStep(action, "Refused")) return false;
 
         // The link reconciler compares each linked copy with how it was BEFORE the action.
         _links.EnsureBaseline(_scope?.Project);
         RunOrReportFailure(action.Execute, $"Do {DescribeAction(action)}");
-        PushAction(action);
+        Record(action);
         HistoryChanged?.Invoke();
         return true;
     }
 
-    public bool PushAction(IChartAction action)
+    public bool PushAction(IChartAction action) =>
+        action.HasEffect && !RefusedDuringStep(action, "Refused to push") && Record(action);
+
+    private bool RefusedDuringStep(IChartAction action, string verb)
     {
-        if (!action.HasEffect) return false;
+        if (!IsApplyingStep) return false;
+        _logger.Warning(AppLogCategory.History,
+            $"{verb} {DescribeAction(action)}: an undo/redo step is being applied. Defer it to StepEnded.");
+        return true;
+    }
+
+    /// <summary>Records an applied action as a new node, or folds it into the open gesture.</summary>
+    private bool Record(IChartAction action)
+    {
         // Do has applied it, and a direct push comes after the caller applied it: either way the
         // chart moved, merged into the open gesture or not.
         MarkEdited(action);
         // Linked measures: propagate or unlink by the action's policy, inside THIS step.
         var links = _links.Reconcile(_scope?.Project, action);
+        var previousBytes = _current.EstimatedBytes;
         if (TryMergeIntoOpenGesture(action))
         {
             if (links != null)
@@ -173,19 +282,21 @@ public class HistoryService : IHistoryService
                 else _current.Links.Absorb(links);
             }
 
+            _bytes += _current.EstimatedBytes - previousBytes;
+            EnforceBudget();
             RaiseLinksPropagated(links, _current.Links);
             return true;
         }
 
         // Tag the action with whichever arrangement the editing scope is
         // currently pointing at so undo/redo can refocus the right panel.
-        var node = new Node(_nextId++, action, _scope?.Arrangement, DescribeAction(action), _now())
+        var node = new Node(_nextId++, _nextContentId++, action, _scope?.Arrangement, DescribeAction(action), _now())
         {
             Parent = _current,
             Links = links
         };
         _nodes[node.Id] = node;
-        _bytes += action.EstimatedBytes;
+        _bytes += node.EstimatedBytes;
         _current.Children.Add(node);
         // Redo follows the most recent branch by default.
         _current.PreferredChild = node;
@@ -209,8 +320,10 @@ public class HistoryService : IHistoryService
     public bool OnlyHere(LinkPropagationReport report)
     {
         ArgumentNullException.ThrowIfNull(report);
-        if (_current.Links is not { } links || !links.Reports.Any(r => r.GroupId == report.GroupId)) return false;
-        var current = links.Reports.First(r => r.GroupId == report.GroupId);
+        // By INSTANCE: a report belongs to the step that raised it. Matching the group alone let
+        // the toast of an undone step take back an earlier step of the same group.
+        if (_current.Links is not { } links || links.Reports.FirstOrDefault(r => ReferenceEquals(r, report)) is not { } current)
+            return false;
         if (links.OnlyHere(current) is not { } action) return false;
         EndGesture();
         _logger.Info(AppLogCategory.History, $"Linked measures: only here (group {current.Letter}, {current.Targets.Count} placement(s) restored).");
@@ -249,6 +362,7 @@ public class HistoryService : IHistoryService
         if (!head.CanAbsorb(action)) return false;
 
         head.Absorb(action);
+        _current.ContentId = _nextContentId++;
         _mergeAnchorUtc = _now();
         _current.MergedTicks++;
         _session?.CountGestureTick();
@@ -296,22 +410,27 @@ public class HistoryService : IHistoryService
         var node = _current;
         EndGesture();
         _session?.CountUndo();
-        FocusRequested?.Invoke(node.Target);
-        RunOrReportFailure(() =>
+        RunStep(() =>
         {
-            // The step's link follow-up came after its action, so it is reverted first.
-            node.Links?.Undo();
-            node.Action!.Undo();
-        }, $"Undo {node.Description}");
-        MarkEdited(node.Action);
-        _links.Rebuild(_scope?.Project);
-        // Plain Redo right after this Undo must return to the same node, even
-        // if a sibling branch was taken more recently in the past.
-        node.Parent!.PreferredChild = node;
-        _current = node.Parent;
-        _logger.Info(AppLogCategory.History,
-            $"Undo {node.Action!.GetType().Name} (target={node.Target?.Name ?? "<none>"}). Node {node.Id} -> {_current.Id}.");
-        HistoryChanged?.Invoke();
+            FocusRequested?.Invoke(node.Target);
+            RunOrReportFailure(() =>
+            {
+                // The step's link follow-up came after its action, so it is reverted first.
+                node.Links?.Undo();
+                node.Action!.Undo();
+            }, $"Undo {node.Description}");
+            MarkEdited(node.Action);
+            _links.Rebuild(_scope?.Project);
+            // Plain Redo right after this Undo must return to the same node, even
+            // if a sibling branch was taken more recently in the past.
+            node.Parent!.PreferredChild = node;
+            _current = node.Parent;
+        }, () =>
+        {
+            _logger.Info(AppLogCategory.History,
+                $"Undo {node.Action!.GetType().Name} (target={node.Target?.Name ?? "<none>"}). Node {node.Id} -> {_current.Id}.");
+            RaiseHistoryChanged();
+        }, () => { });
     }
 
     public void Redo()
@@ -325,18 +444,23 @@ public class HistoryService : IHistoryService
 
         EndGesture();
         _session?.CountRedo();
-        FocusRequested?.Invoke(next.Target);
-        RunOrReportFailure(() =>
+        RunStep(() =>
         {
-            next.Action!.Execute();
-            next.Links?.Execute();
-        }, $"Redo {next.Description}");
-        MarkEdited(next.Action);
-        _links.Rebuild(_scope?.Project);
-        _current = next;
-        _logger.Info(AppLogCategory.History,
-            $"Redo {next.Action!.GetType().Name} (target={next.Target?.Name ?? "<none>"}). Current={next.Id}.");
-        HistoryChanged?.Invoke();
+            FocusRequested?.Invoke(next.Target);
+            RunOrReportFailure(() =>
+            {
+                next.Action!.Execute();
+                next.Links?.Execute();
+            }, $"Redo {next.Description}");
+            MarkEdited(next.Action);
+            _links.Rebuild(_scope?.Project);
+            _current = next;
+        }, () =>
+        {
+            _logger.Info(AppLogCategory.History,
+                $"Redo {next.Action!.GetType().Name} (target={next.Target?.Name ?? "<none>"}). Current={next.Id}.");
+            RaiseHistoryChanged();
+        }, () => { });
     }
 
     public IReadOnlyList<HistoryNodeSnapshot> GetTree()
@@ -378,6 +502,18 @@ public class HistoryService : IHistoryService
         _logger.Info(AppLogCategory.History,
             $"Navigate to history node {nodeId} via ancestor {ancestor.Id}: {undoSteps} undo step(s).");
 
+        // ONE step for everyone outside: no Do between the walk's steps, one notification at the end.
+        var start = _current;
+        // A failed step stops the walk; whatever moved is still told once.
+        RunStep(() => Walk(target, ancestor, undoSteps), RaiseHistoryChanged, () =>
+        {
+            if (_current != start) RaiseHistoryChangedAfterFailure();
+        });
+        return true;
+    }
+
+    private void Walk(Node target, Node ancestor, int undoSteps)
+    {
         // Walk up first (Undo rewrites PreferredChild along the way), THEN
         // point every fork on the descent path at the branch to take.
         for (var i = 0; i < undoSteps; i++) Undo();
@@ -390,7 +526,6 @@ public class HistoryService : IHistoryService
         }
 
         for (var i = 0; i < redoSteps; i++) Redo();
-        return true;
     }
 
     /// <summary>Bumps <see cref="Arrangement.GetRevision" /> on every arrangement <paramref name="action" /> can
@@ -399,7 +534,7 @@ public class HistoryService : IHistoryService
 
     private Node CreateRoot()
     {
-        var root = new Node(_nextId++, null, null, string.Empty, _now());
+        var root = new Node(_nextId++, _nextContentId++, null, null, string.Empty, _now());
         _nodes[root.Id] = root;
         return root;
     }
@@ -466,7 +601,7 @@ public class HistoryService : IHistoryService
     }
 
     /// <summary>Over the byte budget with bytes held somewhere other than the current step.</summary>
-    private bool OverByteBudget() => _bytes > _maxBytes && _bytes - (_current.Action?.EstimatedBytes ?? 0) > 0;
+    private bool OverByteBudget() => _bytes > _maxBytes && _bytes - _current.EstimatedBytes > 0;
 
     private Node? FindColdestPrunableLeaf(bool holdingBytes)
     {
@@ -477,7 +612,7 @@ public class HistoryService : IHistoryService
         foreach (var n in _nodes.Values)
         {
             if (n.Children.Count != 0 || onPath.Contains(n)) continue;
-            if (holdingBytes && (n.Action?.EstimatedBytes ?? 0) <= 0) continue;
+            if (holdingBytes && n.EstimatedBytes <= 0) continue;
             if (best == null || n.Id < best.Id) best = n;
         }
 
@@ -491,7 +626,7 @@ public class HistoryService : IHistoryService
         if (parent.PreferredChild == leaf)
             parent.PreferredChild = parent.Children.Count > 0 ? parent.Children[^1] : null;
         _nodes.Remove(leaf.Id);
-        _bytes -= leaf.Action?.EstimatedBytes ?? 0;
+        _bytes -= leaf.EstimatedBytes;
         _logger.Trace(AppLogCategory.History,
             $"Pruned cold history node {leaf.Id} ({leaf.Description}). Nodes={_nodes.Count - 1}.");
     }
@@ -505,7 +640,7 @@ public class HistoryService : IHistoryService
         var first = _root.Children[0];
         _nodes.Remove(_root.Id);
         first.Parent = null;
-        _bytes -= first.Action?.EstimatedBytes ?? 0;
+        _bytes -= first.EstimatedBytes;
         first.Action = null;
         first.Links = null;
         first.Target = null;
@@ -515,14 +650,16 @@ public class HistoryService : IHistoryService
     }
 
     private sealed class Node(
-        int id, IChartAction? action, Arrangement? target, string description, DateTime timestampUtc)
+        int id, int contentId, IChartAction? action, Arrangement? target, string description, DateTime timestampUtc)
     {
         public readonly List<Node> Children = [];
         public int Id { get; } = id;
+        public int ContentId { get; set; } = contentId;
         public IChartAction? Action { get; set; } = action; // null only for the root sentinel
 
         /// <summary>What linked measures did after <see cref="Action" />, in the same step (null: nothing).</summary>
         public LinkFollowUpAction? Links { get; set; }
+        public long EstimatedBytes => (Action?.EstimatedBytes ?? 0) + (Links?.EstimatedBytes ?? 0);
         public Arrangement? Target { get; set; } = target;
         public string Description { get; } = description;
 

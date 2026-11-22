@@ -10,6 +10,33 @@ public sealed class RocksmithTestExportTests
     private static string[] Files(params string[] names) => [.. names.Select(n => Path.Combine(Folder, n))];
 
     [Fact]
+    public void Cleanup_OnlySchedulesExactGeneratedPackageNames()
+    {
+        var ours = Files("dotcsong.psarc", "DOTCSONG_P.PSARC", "dotcsong_m.psarc", "dotcsong_v12_p.psarc");
+        var unrelated = Files("dotcsong2_p.psarc", "dotcsong-notes.txt", "dotcsong_extra_p.psarc",
+            "dotcsong_v3_notes.txt", "dotcsong_v2_p.psarc.bak", "dotcsong_v2other_p.psarc");
+
+        var plan = RocksmithTestExport.Plan("DotcSong", ours.Concat(unrelated), gameRunning: false);
+
+        Assert.Equal(ours, plan.Superseded);
+    }
+
+    [Fact]
+    public void Versioning_IgnoresOtherKeysAndUnrecognizedSuffixes()
+    {
+        var plan = RocksmithTestExport.Plan("DotcSong",
+            Files("dotcsong_v2_p.psarc", "dotcsong2_v99_p.psarc", "dotcsong_v88_notes.txt"), gameRunning: true);
+
+        Assert.Equal("v3", plan.VersionTag);
+    }
+
+    [Theory]
+    [InlineData("DotcSong", "DOTCSONG_V7_P.PSARC", "v8")]
+    [InlineData("song_v99", "song_v99_v2_p.psarc", "v3")]
+    public void Versioning_ReadsOnlyTheGeneratedSuffix(string key, string fileName, string expected)
+        => Assert.Equal(expected, RocksmithTestExport.Plan(key, Files(fileName), gameRunning: true).VersionTag);
+
+    [Fact]
     public void WithoutTheGame_ThePlainNameIsReused_AndEarlierTestBuildsAreDeleted()
     {
         var existing = Files("dotcsong_p.psarc", "dotcsong_v2_p.psarc", "dotcsong_m.psarc", "other_p.psarc");

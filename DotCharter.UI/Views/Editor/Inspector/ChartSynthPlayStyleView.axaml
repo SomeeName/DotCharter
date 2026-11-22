@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DotCharter.UI.ViewModels.Editor.Inspector"
+             xmlns:inspector="using:DotCharter.UI.Views.Editor.Inspector"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              x:Class="DotCharter.UI.Views.Editor.Inspector.ChartSynthPlayStyleView"
              x:CompileBindings="True"
@@ -13,29 +14,27 @@
     <StackPanel x:Name="ChartSynthPlayStyleRoot" Spacing="{StaticResource FireSpaceXs}"
                 Grid.IsSharedSizeScope="True">
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
-            <TextBlock x:Name="ChartSynthStyleHeading" Grid.Column="0" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+            <TextBlock x:Name="ChartSynthStyleHeading" Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" VerticalAlignment="Center"
                        Text="{localization:Loc Mixer_ChartSynth_Style}"
                        ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Style_Tip}" />
-            <Border Grid.Column="1" Theme="{StaticResource FireSegmentBorder}" Classes="FireSegment" IsVisible="{Binding HasProject}">
-                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXxs}">
-                    <RadioButton x:Name="ChartSynthStyleGuitar" Classes="FireSegmentItem Dense"
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource FireSpaceXxs}" IsVisible="{Binding HasProject}">
+                    <RadioButton x:Name="ChartSynthStyleGuitar" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
                                  GroupName="ChartSynthPlayStyleFamily"
                                  IsChecked="{Binding EditingGuitar}"
                                  Content="{localization:Loc Mixer_ChartSynth_Guitar}"
                                  AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_Guitar}" />
-                    <RadioButton x:Name="ChartSynthStyleBass" Classes="FireSegmentItem Dense"
+                    <RadioButton x:Name="ChartSynthStyleBass" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
                                  GroupName="ChartSynthPlayStyleFamily"
                                  IsChecked="{Binding EditingBass}"
                                  Content="{localization:Loc Mixer_ChartSynth_Bass}"
                                  AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_Bass}" />
-                </StackPanel>
-            </Border>
+            </StackPanel>
         </Grid>
-        <TextBlock x:Name="ChartSynthStyleNoProject" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+        <TextBlock x:Name="ChartSynthStyleNoProject" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
                    Text="{Binding NoProjectText}" IsVisible="{Binding !HasProject}" />
         <StackPanel x:Name="ChartSynthStyleRows" Spacing="{StaticResource FireSpaceXs}"
                     IsVisible="{Binding HasProject}">
-            <CheckBox x:Name="ChartSynthStyleShapesRing"
+            <CheckBox x:Name="ChartSynthStyleShapesRing" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle" HorizontalAlignment="Left"
                       IsChecked="{Binding HandShapesRing}"
                       Content="{localization:Loc Mixer_ChartSynth_Style_ShapesRing}"
                       ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Style_ShapesRing_Tip}"
@@ -47,12 +46,12 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" SharedSizeGroup="ChartSynthStyleGap" />
                 </Grid.ColumnDefinitions>
-                <CheckBox x:Name="ChartSynthStyleHoldNotes" Grid.Column="0"
+                <CheckBox x:Name="ChartSynthStyleHoldNotes" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle" HorizontalAlignment="Left" Grid.Column="0"
                           IsChecked="{Binding HoldSingleNoteGaps}"
                           Content="{localization:Loc Mixer_ChartSynth_Style_HoldNotes}"
                           ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Style_HoldNotes_Tip}"
                           AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_Style_HoldNotes}" />
-                <ComboBox x:Name="ChartSynthStyleNoteGap" Grid.Column="1" MinWidth="0"
+                <ComboBox x:Name="ChartSynthStyleNoteGap" Grid.Column="1" Classes="ColumnFlowField" MinWidth="0"
                           VerticalAlignment="Center"
                           ItemsSource="{Binding GapChoices}"
                           SelectedItem="{Binding SingleNoteGap}"
@@ -65,12 +64,12 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" SharedSizeGroup="ChartSynthStyleGap" />
                 </Grid.ColumnDefinitions>
-                <CheckBox x:Name="ChartSynthStyleHoldChords" Grid.Column="0"
+                <CheckBox x:Name="ChartSynthStyleHoldChords" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle" HorizontalAlignment="Left" Grid.Column="0"
                           IsChecked="{Binding HoldChordGaps}"
                           Content="{localization:Loc Mixer_ChartSynth_Style_HoldChords}"
                           ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Style_HoldChords_Tip}"
                           AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_Style_HoldChords}" />
-                <ComboBox x:Name="ChartSynthStyleChordGap" Grid.Column="1" MinWidth="0"
+                <ComboBox x:Name="ChartSynthStyleChordGap" Grid.Column="1" Classes="ColumnFlowField" MinWidth="0"
                           VerticalAlignment="Center"
                           ItemsSource="{Binding GapChoices}"
                           SelectedItem="{Binding ChordGap}"
@@ -78,13 +77,14 @@
                           ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Style_Gap_Tip}"
                           AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_Style_ChordGap}" />
             </Grid>
-            <Button x:Name="ChartSynthStyleReset" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
-                    HorizontalAlignment="Left"
+            <Button x:Name="ChartSynthStyleReset" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                    HorizontalAlignment="Stretch"
                     IsEnabled="{Binding CanReset}"
                     Command="{Binding ResetToDefaultsCommand}"
                     Content="{localization:Loc Mixer_ChartSynth_Style_Reset}"
                     ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Style_Reset_Tip}"
                     AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_Style_Reset}" />
         </StackPanel>
+        <inspector:InspectorConfirmRow x:Name="ChartSynthStyleResetConfirm" DataContext="{Binding ResetConfirm}" />
     </StackPanel>
 </UserControl>

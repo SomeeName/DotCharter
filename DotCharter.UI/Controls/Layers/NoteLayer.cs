@@ -157,7 +157,7 @@ public class NoteLayer : ITimelineRenderLayer
         {
             var n = rc.Snapshot.Notes[i];
             var data = new NoteDrawData(n.Time, n.Sustain, n.StringIndex, n.Fret, n.Mute, n.Hopo, n.Harmonic, n.SlideTo,
-                n.Flags, false, n.BendOffset, n.BendCount, n.BassPicking);
+                n.Flags, false, n.BendOffset, n.BendCount, n.BassPicking, bendCarry: n.BendCarry);
             HighwayNoteHeadRenderer.Draw(batcher, rc, in data, _deferredLabels, _noteNextX[i]);
         }
 
@@ -172,7 +172,8 @@ public class NoteLayer : ITimelineRenderLayer
                 var flags = cn.Flags;
                 if (chordAccent) flags |= NoteFlags.Accent;
                 var data = new NoteDrawData(chord.Time, cn.Sustain, cn.StringIndex, cn.Fret, cn.Mute, cn.Hopo,
-                    cn.Harmonic, cn.SlideTo, flags, false, cn.BendOffset, cn.BendCount, cn.BassPicking, dimmed);
+                    cn.Harmonic, cn.SlideTo, flags, false, cn.BendOffset, cn.BendCount, cn.BassPicking, dimmed,
+                    cn.BendCarry);
                 HighwayNoteHeadRenderer.Draw(batcher, rc, in data, _deferredLabels, _chordNoteNextX[chord.NoteOffset + n]);
             }
         }

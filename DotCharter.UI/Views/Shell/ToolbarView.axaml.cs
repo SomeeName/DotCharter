@@ -44,8 +44,84 @@ public partial class ToolbarView : UserControl
         // Overflow affordance (P2-16): the » button exists exactly while the
         // core rail is narrower than its content. ScrollChanged fires on every
         // extent/viewport change (including resizes), so no extra size hook.
-        CoreRailScroller.ScrollChanged += (_, _) => UpdateOverflowVisibility();
-        CoreRailScroller.SizeChanged += (_, _) => UpdateOverflowVisibility();
+        CoreRailScroller.ScrollChanged += (_, _) => OnRailMetricsChanged();
+        CoreRailScroller.SizeChanged += (_, _) => OnRailMetricsChanged();
+    }
+
+    /// <summary>The Tracks chip's arrangement name at its full cap (the markup's MaxWidth).</summary>
+    internal const double ArrangementNameCap = 110;
+
+    /// <summary>Narrower than this a name is just an ellipsis, so the label gives way instead.</summary>
+    internal const double ArrangementNameFloor = 24;
+
+    /// <summary>The gap the chip's StackPanel puts before the name.</summary>
+    private const double ArrangementNameGap = 4;
+
+    /// <summary>
+    ///     How wide the Tracks chip's arrangement name may be so the rail's content still
+    ///     fits: what the viewport has left once everything BUT the name (and its gap) is
+    ///     placed, capped at <see cref="ArrangementNameCap"/>; 0 means "hide the name", because a
+    ///     sliver is an unreadable ellipsis. Computed from the label-free content width, so
+    ///     hiding or showing the name cannot flip its own answer.
+    /// </summary>
+    internal static double ArrangementNameAllowance(double extentWidth, double viewportWidth, double labelContribution)
+    {
+        var allowed = viewportWidth - (extentWidth - labelContribution) - ArrangementNameGap;
+        return allowed >= ArrangementNameFloor ? Math.Min(allowed, ArrangementNameCap) : 0;
+    }
+
+    private void OnRailMetricsChanged()
+    {
+        FitArrangementName();
+        UpdateOverflowVisibility();
+    }
+
+    private readonly double[] _wordWidths = new double[4];
+
+    /// <summary>A word's width is known once it has been laid out while shown; a measured ZERO (an empty speed label) still costs its gap.</summary>
+    private readonly bool[] _wordMeasured = new bool[4];
+
+    private void FitArrangementName()
+    {
+        // The content's own desired width, NOT Extent: the ScrollViewer's extent is never smaller
+        // than its viewport, so once the window grew past the content the extent just echoed the
+        // viewport, the "room" collapsed to what was already visible and hidden words never came
+        // back.
+        var extent = CoreRailScroller.Content is Control content ? content.DesiredSize.Width : CoreRailScroller.Extent.Width;
+        var viewport = CoreRailScroller.Viewport.Width;
+        if (viewport <= 0) return;
+        var name = TracksArrangementName;
+        // Flyout chip words in the order they are given back: Mix first, Tracks last.
+        TextBlock[] words = [MixLabel, TempoLabel, ToolsLabel, TracksLabel];
+        var nameContribution = name.IsVisible ? name.Bounds.Width + ArrangementNameGap : 0;
+        var removed = nameContribution;
+        for (var k = 0; k < words.Length; k++)
+        {
+            if (!words[k].IsVisible) continue;
+            _wordWidths[k] = words[k].Bounds.Width;
+            _wordMeasured[k] = true;
+            removed += words[k].Bounds.Width + ArrangementNameGap;
+        }
+
+        // Everything but the name and the words, so hiding any of them cannot flip its own answer.
+        var room = viewport - (extent - removed);
+        // Degrade in steps: shorten the name, drop the name, then drop the chip words one by
+        // one from the Tracks end (a chip keeps its icon, caret and automation name).
+        var showWord = new bool[words.Length];
+        for (var k = 0; k < words.Length; k++)
+        {
+            var need = _wordWidths[k] + ArrangementNameGap;
+            showWord[k] = !_wordMeasured[k] || room >= need;
+            if (showWord[k]) room -= need;
+        }
+
+        var allowance = showWord[^1] ? ArrangementNameAllowance(0, room, 0) : 0;
+        var showName = allowance > 0;
+        for (var k = 0; k < words.Length; k++)
+            if (words[k].IsVisible != showWord[k]) words[k].IsVisible = showWord[k];
+        if (name.IsVisible != showName) name.IsVisible = showName;
+        var cap = showName ? allowance : ArrangementNameCap;
+        if (Math.Abs(name.MaxWidth - cap) > 0.5) name.MaxWidth = cap;
     }
 
     /// <summary>Pure so the rule is testable without a layout pass: the rail

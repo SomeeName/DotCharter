@@ -93,7 +93,7 @@ internal static partial class AiChartReviewHarness
                 _ => AiChartDecision.Pending
             };
             counts[(int)decision]++;
-            var chunk = new AiChartReviewChunk(new AiChartChunkPlan(i, new(i * 8), new((i + 1) * 8), null, []),
+            var chunk = new AiChartReviewChunk(new AiChartChunkPlan(i, new(i * 8), new((i + 1) * 8), null, [], null),
                 i * 9300, i == count - 1 ? null : (i + 1) * 9300, name, new AiChartApplySummary(0, 3 + (i % 5), 0, 0, 0, 0),
                 AiChartApplyTargets.None)
             {

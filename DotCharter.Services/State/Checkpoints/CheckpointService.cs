@@ -4,6 +4,7 @@ using System.Text.Json;
 using DotCharter.Services.Library;
 using DotCharter.Services.Parsing;
 using DotCharter.Services.Parsing.Rscp;
+using DotCharter.Services.Session;
 
 namespace DotCharter.Services.State.Checkpoints;
 
@@ -315,24 +316,49 @@ public sealed class CheckpointService : ICheckpointService
             if (CheckpointManifestOps.Find(target, entry.Id) != null) continue;
             var from = Path.Combine(fromDir, entry.SnapshotFileName);
             var to = Path.Combine(toDir, entry.SnapshotFileName);
-            // A snapshot already sitting at the target's name is not this one to replace.
-            if (!File.Exists(from) || File.Exists(to)) continue;
-
+            if (!File.Exists(from)) continue;
             var temp = to + TempSuffix;
+            var relocate = ProjectRelativePath.IsLocalAbsolute(source.ProjectIdentity) &&
+                           ProjectRelativePath.IsLocalAbsolute(toIdentity) &&
+                           !ProjectStoreKeys.SamePath(Path.GetDirectoryName(source.ProjectIdentity), Path.GetDirectoryName(toIdentity));
+            using var media = relocate ? new SaveAsMediaReferences(source.ProjectIdentity, toIdentity, deterministicCover: true) : null;
             try
             {
-                File.Copy(from, temp, overwrite: true);
+                if (media == null)
+                {
+                    File.Copy(from, temp, overwrite: true);
+                }
+                else
+                {
+                    var snapshot = _serializer.Load(from);
+                    media.Rebase(snapshot);
+                    _serializer.Save(temp, snapshot);
+                }
                 AtomicFile.FlushFile(temp);
+                if (File.Exists(to))
+                {
+                    // Compare the relocated bytes, including deterministic cover names,
+                    // so a failed manifest publication remains safely reconcilable.
+                    using var sourceFile = File.OpenRead(temp);
+                    using var targetFile = File.OpenRead(to);
+                    if (sourceFile.Length != targetFile.Length ||
+                        !SHA256.HashData(sourceFile).AsSpan().SequenceEqual(SHA256.HashData(targetFile)))
+                    {
+                        continue;
+                    }
+                }
+                else
+                {
+                    AtomicFile.ReplaceWithRetry(temp, to);
+                }
+                media?.Commit();
+                CheckpointManifestOps.Add(target, entry);
+                copied++;
             }
-            catch
+            finally
             {
                 BestEffortDelete.File(temp);
-                throw;
             }
-
-            AtomicFile.ReplaceWithRetry(temp, to);
-            CheckpointManifestOps.Add(target, entry);
-            copied++;
         }
 
         if (copied == 0) return 0;

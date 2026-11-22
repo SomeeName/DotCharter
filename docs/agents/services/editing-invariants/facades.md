@@ -2,6 +2,19 @@
 
 ## The editing façades — `Editing/Highway|Playback|Targets|Pen`
 
+Pitch-preserving string moves refret pitched `SlideTo` targets through
+`SoundingPitch` along with the onset; an unreachable endpoint refuses the whole
+sound (or chord). Right-clicking the final string of a one-note chord removes
+the chord in the same undoable path (`PlacementTemplateRepointTests`,
+`ChordCollapsePlacementTests`).
+
+`EditingScope.SetResolver` also installs the preview arrangement resolver on
+`ProjectState`. `PreviewNoteFret` snaps writes and reads against that target's
+capo, including a fret armed before focus changed. Highway placement clamps
+against its scope too. Bare state users fall back to the active arrangement;
+stacked-track entry must never derive a fret from another arrangement's capo.
+Covered by `PreviewNoteFretCapoTests` and `FocusedHighwayEditingTests`.
+
 - `Editing/Highway/` — the command/undo façade for every highway edit
   (`IHighwayEditCommand.Execute(IHistoryService)` is its ONLY member, which is
   what makes highway editing history-backed by construction — never add an edit
@@ -73,4 +86,3 @@
   state table, the undo granularity (one string toggle = one node; one typing
   RUN = one node, a continuation digit UNDOES the run's own node first) and why
   bare digits toggle strings while `Alt`+digits type frets.
-

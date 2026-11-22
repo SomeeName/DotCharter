@@ -1,15 +1,13 @@
 using DotCharter.Tests.Presentation.Dialogs;
-using DotCharter.UI.Controls;
 using DotCharter.UI.ViewModels.Editor.Inspector;
 
 namespace DotCharter.Tests.UI.ViewModels.Editor;
 
 /// <summary>
-///     The Span card, driven on the extracted <see cref="HandShapeEditorViewModel" />
+///     The hand-shape span verbs, driven on the extracted <see cref="HandShapeEditorViewModel" />
 ///     over a real chart editor and the real undo history: a sync reads the
-///     selected shape and folds the enclosed count, a typed end is ONE undo
-///     node, a garbage end restores the box without touching history, fit-to-
-///     sounds is ONE undo node with an EXCLUSIVE end, and every sync raises
+///     selected shape and folds the enclosed count, fit-to-sounds is ONE undo node
+///     with an EXCLUSIVE end (the typed start/end boxes are gone, #751), and every sync raises
 ///     <see cref="HandShapeEditorViewModel.Synced" /> — the inspector's tie back
 ///     to its selection-issue memo and card matrix.
 /// </summary>
@@ -39,38 +37,7 @@ public sealed class HandShapeEditorViewModelTests
 
         Assert.Same(shape, vm.SelectedHandShape);
         Assert.Equal(2, vm.HandShapeEnclosedCount);
-        Assert.Equal(FractionalLengthFormat.Format(1.0), vm.HandShapeStartText);
-        Assert.Equal(FractionalLengthFormat.Format(5.0), vm.HandShapeEndText);
         Assert.False(vm.HandShapeRebindsChords);
-    }
-
-    [Fact]
-    public void ATypedEnd_IsOneUndoNode()
-    {
-        var (harness, shape, vm) = Selected();
-
-        vm.HandShapeEndText = "4";
-
-        Assert.Equal(4.0, shape.EndPosition.DoubleValue);
-        Assert.Equal(1.0, shape.Position.DoubleValue);
-        Assert.True(harness.History.CanUndo);
-
-        harness.History.Undo();
-
-        Assert.Equal(5.0, shape.EndPosition.DoubleValue);
-        Assert.False(harness.History.CanUndo);
-    }
-
-    [Fact]
-    public void AnEndBeforeTheStart_IsRefused_AndTheBoxIsRestored()
-    {
-        var (harness, shape, vm) = Selected();
-
-        vm.HandShapeEndText = "0.5";
-
-        Assert.Equal(5.0, shape.EndPosition.DoubleValue);
-        Assert.False(harness.History.CanUndo);
-        Assert.Equal(FractionalLengthFormat.Format(5.0), vm.HandShapeEndText);
     }
 
     [Fact]
@@ -92,15 +59,32 @@ public sealed class HandShapeEditorViewModelTests
     }
 
     [Fact]
-    public void EverySync_RaisesSynced_IncludingTheOneACommitRuns()
+    public void EverySync_RaisesSynced_IncludingTheOneAFitRuns()
     {
         var (_, _, vm) = Selected();
         var raised = 0;
         vm.Synced += () => raised++;
 
         vm.SyncHandShapeProperties();
-        vm.HandShapeEndText = "4";
+        vm.FitHandShapeToSoundsCommand.Execute(null);
 
         Assert.Equal(2, raised);
+    }
+
+    [Fact]
+    public void AFittedStartResortsTheOwningCollectionOnExecuteUndoAndRedo()
+    {
+        var (harness, shape, vm) = Selected();
+        var shapes = harness.Project.Arrangements[0].Levels[0].HandShapes;
+        var other = new HandShape { Position = new FractionalPosition(new Fraction(3, 2)), EndPosition = new FractionalPosition(4) };
+        shapes.Add(other);
+
+        vm.FitHandShapeToSoundsCommand.Execute(null);
+
+        Assert.Equal(new[] { other, shape }, shapes);
+        harness.History.Undo();
+        Assert.Equal(new[] { shape, other }, shapes);
+        harness.History.Redo();
+        Assert.Equal(new[] { other, shape }, shapes);
     }
 }

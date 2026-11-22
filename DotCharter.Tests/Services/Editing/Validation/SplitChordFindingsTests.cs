@@ -7,12 +7,12 @@ using DotCharter.Tests.Services.Parsing.GuitarPro;
 namespace DotCharter.Tests.Services.Editing.Validation;
 
 /// <summary>
-///     A Guitar Pro pick scrape imports as a chord split into notes, fully fret-hand
-///     muted and ignored (#599). The inspector used to flag it twice over, both
-///     wrongly: D11 "inside no hand shape, so it exports with no grip" — a split chord
+///     A Guitar Pro pick scrape imports as a chord split into notes, unmuted
+///     and ignored (#599). The inspector must not flag it:
+///     D11 "inside no hand shape, so it exports with no grip" — a split chord
 ///     exports as single notes with no chord frame, and D11's auto-fix (a hand shape)
 ///     would give it a chord box in the game — and L07 "no finger on the fretted
-///     string" — a fully fret-hand-muted chord is no grip (EOF calls its fingering
+///     string" — a split chord is no grip (EOF calls its fingering
 ///     valid, <c>rs.c:3628-3631</c>). Ordinary chords keep both findings.
 /// </summary>
 public sealed class SplitChordFindingsTests
@@ -49,6 +49,7 @@ public sealed class SplitChordFindingsTests
         var arrangement = PickScrapeScenes.Import(PickScrapeScenes.Gpif(PickScrapeScenes.Shinbatsu()));
         var scrapes = arrangement.Levels[0].Chords.Where(GpPickScrape.IsScrapeChord).ToList();
         Assert.Equal(4, scrapes.Count);
+        Assert.All(scrapes.SelectMany(c => c.ChordNotes), n => Assert.Equal(MuteType.None, n.Mute));
 
         var issues = new ArrangementValidationService(new FakeAppLogger()).Validate(arrangement, Beats());
 
@@ -57,6 +58,45 @@ public sealed class SplitChordFindingsTests
         var onScrapes = issues.Where(i => i.Chord != null && scrapes.Contains(i.Chord)).ToList();
         Assert.True(onScrapes.Count == 0,
             "findings on a scrape: " + string.Join("; ", onScrapes.Select(i => $"{i.Type.GetCode()} {i.Message}")));
+    }
+
+    /// <summary>#327: a split chord ships as loose notes with no leftHand, so a
+    /// template only split chords play has no fingers that reach the file.</summary>
+    [Fact]
+    public void ATemplateOnlySplitChordsPlay_RaisesNoL07()
+    {
+        var (arrangement, _) = UnfingeredChord(c => c.SplitIntoNotes = true);
+
+        Assert.DoesNotContain(Run(arrangement, new TemplateAndOverlapRule()),
+            i => i.Type == ArrangementIssueType.FingerMissingOnFrettedString);
+    }
+
+    /// <summary>The same template also played by an ordinary chord ships, so it is judged.</summary>
+    [Fact]
+    public void ATemplateASplitAndAnOrdinaryChordShare_StillRaisesL07()
+    {
+        var (arrangement, _) = UnfingeredChord(c => c.SplitIntoNotes = true);
+        var ordinary = ChordHandShapePlannerTests.Chord(1, 4, G5);
+        ordinary.TemplateId = 0;
+        arrangement.Levels[0].Chords.Add(ordinary);
+
+        var l07 = Run(arrangement, new TemplateAndOverlapRule())
+            .Where(i => i.Type == ArrangementIssueType.FingerMissingOnFrettedString).ToList();
+        Assert.Equal(3, l07.Count);
+        Assert.All(l07, i => Assert.Same(ordinary, i.Chord));
+    }
+
+    /// <summary>An unnamed template is named by its grip, never as <c>''</c>.</summary>
+    [Fact]
+    public void AnUnnamedTemplate_IsNamedByItsGrip()
+    {
+        var (arrangement, _) = UnfingeredChord();
+        arrangement.ChordTemplates[0].Name = "";
+
+        var messages = Run(arrangement, new TemplateAndOverlapRule()).Select(i => i.Message).ToList();
+
+        Assert.NotEmpty(messages);
+        Assert.All(messages, m => Assert.Contains("Template '3-5-5-x-x-x'", m));
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using DotCharter.Services.Editing.Lyrics;
 using DotCharter.Services.Parsing.Xml.Showlights;
 using DotCharter.Services.Parsing.Xml.Song;
 using DotCharter.Services.Parsing.Xml.Vocals;
@@ -65,7 +66,7 @@ public sealed class RsXmlImporter
     ///     showlights readers need to resolve their times, and the caller passes
     ///     a copy when the live list can change underneath.
     /// </summary>
-    public static RsXmlImportPlan Prepare(string filePath, IList<BeatMarker> hostBeats)
+    public static RsXmlImportPlan Prepare(string filePath, IList<BeatMarker> hostBeats, AppConfig? config = null)
     {
         if (string.IsNullOrWhiteSpace(filePath))
             // ReSharper disable once LocalizableElement -- developer-facing argument validation.
@@ -77,7 +78,7 @@ public sealed class RsXmlImporter
         return rootName switch
         {
             "song" => PrepareSong(doc, filePath),
-            "vocals" => PrepareVocals(doc, filePath, hostBeats),
+            "vocals" => PrepareVocals(doc, filePath, hostBeats, config ?? new AppConfig()),
             "showlights" => PrepareShowlights(doc, filePath, hostBeats),
             _ => throw new InvalidDataException(
                 $"Unknown RS-XML root element '{rootName}' in '{filePath}'. " +
@@ -85,8 +86,8 @@ public sealed class RsXmlImporter
         };
     }
 
-    /// <summary>Merges a prepared plan into the live project. Cheap — list adds
-    /// and one name disambiguation.</summary>
+    /// <summary>Merges a prepared plan into the live project, converting a song's
+    /// times to the live beat grid before adding its arrangement.</summary>
     public RsXmlImportResult Apply(ChartProject host, RsXmlImportPlan plan)
     {
         if (host == null) throw new ArgumentNullException(nameof(host));
@@ -114,11 +115,14 @@ public sealed class RsXmlImporter
     }
 
     private static RsXmlImportPlan PrepareVocals(XDocument doc, string filePath,
-        IList<BeatMarker> hostBeats)
+        IList<BeatMarker> hostBeats, AppConfig config)
     {
         // Read positions against the host beats so events land at the correct
         // musical positions (vocals XML has no beat map of its own).
         var loaded = new RsXmlVocalsReader().ReadDocument(doc, filePath, hostBeats);
+        var beats = hostBeats.Count > 0 ? hostBeats : loaded.Beats;
+        foreach (var track in loaded.VocalTracks)
+            LyricPhraseSpacing.CloseGaps(track.Phrases, beats, config);
         return new RsXmlImportPlan
         {
             Kind = RsXmlImportKind.Vocals,
@@ -145,9 +149,8 @@ public sealed class RsXmlImporter
         if (arr == null) return new RsXmlImportResult { Kind = RsXmlImportKind.Song };
 
         // If the host project has no beats yet, adopt the imported beat map so
-        // every position in the new arrangement lines up. Otherwise keep the
-        // host beats untouched and trust they match (typical when importing
-        // RS-XML companions of an existing project — they share the same beats).
+        // every position in the new arrangement lines up. Otherwise convert
+        // source positions through milliseconds onto the host's beat grid.
         // Decided HERE, not in Prepare: the answer is a fact about the live
         // project at merge time.
         var replacedBeats = false;
@@ -155,6 +158,10 @@ public sealed class RsXmlImporter
         {
             foreach (var b in plan.Beats) host.Beats.Add(b);
             replacedBeats = true;
+        }
+        else if (host.Beats.Count > 0 && plan.Beats.Count > 0)
+        {
+            RemapArrangementTimes(arr, plan.Beats.ToList(), host.Beats);
         }
 
         // Disambiguate name collisions so users see both old + new arrangements.
@@ -169,6 +176,32 @@ public sealed class RsXmlImporter
             AddedArrangementName = arr.Name,
             ReplacedHostBeats = replacedBeats
         };
+    }
+
+    private static void RemapArrangementTimes(Arrangement arrangement, IList<BeatMarker> sourceBeats,
+        IList<BeatMarker> hostBeats)
+    {
+        FractionalPosition Map(FractionalPosition position) =>
+            TimelineMath.PositionFromImportedMs(TimelineMath.CalculateTimeMs(position, sourceBeats), hostBeats);
+
+        // The shared position walk maps absolute slots. Re-measure relative
+        // sustains from their original onset and end before that walk moves them.
+        var sounds = arrangement.Levels.Select(l => (l.Notes, l.Chords))
+            .Concat(arrangement.NotationVoices.Select(v => (v.Notes, v.Chords)));
+        foreach (var (notes, chords) in sounds)
+        {
+            foreach (var note in notes)
+                note.Sustain = Map(note.Position + note.Sustain) - Map(note.Position);
+            foreach (var chord in chords)
+            {
+                foreach (var note in chord.ChordNotes)
+                    note.Sustain = Map(chord.Position + note.Sustain) - Map(chord.Position);
+            }
+        }
+
+        var shell = new ChartProject();
+        shell.Arrangements.Add(arrangement);
+        ChartProjectPositions.Remap(shell, Map);
     }
 
     private static RsXmlImportResult ApplyVocals(ChartProject host, RsXmlImportPlan plan)

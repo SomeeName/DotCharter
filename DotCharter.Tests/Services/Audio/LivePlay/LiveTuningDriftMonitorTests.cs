@@ -53,6 +53,31 @@ public sealed class LiveTuningDriftMonitorTests
     }
 
     [Fact]
+    public void CrossingTheNearestSemitoneBoundary_IsNotNinetySevenCentsOfDrift()
+    {
+        var monitor = new LiveTuningDriftMonitor(Strings, new FakeAppLogger());
+        monitor.Reset(centOffset: 49);
+
+        var hints = Play(monitor, 110.0 * Math.Pow(2, 52.0 / 1200.0), checks: 24);
+
+        Assert.Equal([string.Empty], hints);
+    }
+
+    [Theory]
+    [InlineData(49, 64, "LivePlay_TuningDrift_Sharp")]
+    [InlineData(-49, -64, "LivePlay_TuningDrift_Flat")]
+    public void DriftDirectionAcrossTheBoundary_IsRelativeToTheAuthoredPitch(
+        double authoredCents, double playedCents, string key)
+    {
+        var monitor = new LiveTuningDriftMonitor(Strings, new FakeAppLogger());
+        monitor.Reset(authoredCents);
+
+        var hints = Play(monitor, 110.0 * Math.Pow(2, playedCents / 1200.0), checks: 24);
+
+        Assert.Equal([Strings[key]], hints);
+    }
+
+    [Fact]
     public void Checks_are_paced_at_four_per_second()
     {
         var monitor = new LiveTuningDriftMonitor(Strings, new FakeAppLogger());

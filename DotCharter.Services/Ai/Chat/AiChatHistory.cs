@@ -51,12 +51,17 @@ public sealed class AiChatHistory : IAiChatHistory
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly IAppLogger? _logger;
     private readonly TimeProvider _time;
+    private readonly Action<string> _recycle;
 
     public AiChatHistory(IAiChatChartSource chart, TimeProvider? time = null, IAppLogger? logger = null)
+        : this(chart, time, logger, null) { }
+
+    internal AiChatHistory(IAiChatChartSource chart, TimeProvider? time, IAppLogger? logger, Action<string>? recycle)
     {
         _chart = chart ?? throw new ArgumentNullException(nameof(chart));
         _time = time ?? TimeProvider.System;
         _logger = logger;
+        _recycle = recycle ?? RecycleBin.Remove;
     }
 
     public string? OpenChartId => _chart.Current?.ChartId;
@@ -132,7 +137,7 @@ public sealed class AiChatHistory : IAiChatHistory
         if (opened != AiChatStatus.Ok) return Task.FromResult(new AiChatWriteResult(opened));
         return RunAsync(() =>
         {
-            var result = store!.Delete(conversationId);
+            var result = store!.Delete(conversationId, _recycle);
             // Logged, so a later "NotFound" for the same id reads as a second delete, not a lost file.
             if (result.Status == AiChatStatus.Ok)
             {

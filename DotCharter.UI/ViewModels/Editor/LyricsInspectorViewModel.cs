@@ -1,13 +1,11 @@
-using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DotCharter.Analysis.Lyrics;
-using DotCharter.Services.Audio.Lyrics;
+using DotCharter.Presentation.Screens.Dialogs;
+using DotCharter.Services.Editing.Lyrics;
 using DotCharter.Services.Export;
+using DotCharter.Services.Import.Lyrics;
 using DotCharter.Services.Infrastructure;
-using DotCharter.Services.Parsing.Lrc;
-using DotCharter.Services.Parsing.UltraStar;
 using DotCharter.Tone.UI.ViewModels.Shell;
 
 namespace DotCharter.UI.ViewModels.Editor;
@@ -26,25 +24,17 @@ public partial class LyricsInspectorViewModel : ViewModelBase
 {
     private const double DefaultLastSyllableMs = 250.0;
 
-    private readonly ILyricAutoSyncService _autoSync;
-
-    /// <summary>Null in tests — auto-sync then runs with product-default options.</summary>
-    private readonly IConfigurationService? _configService;
-
-    /// <summary>Null when no downloader is wired — the models then have to be present already.</summary>
-    private readonly ILyricModelDownloadService? _modelDownloads;
+    private readonly ILyricAutoSyncRunner _autoSync;
     private readonly ChartEditorViewModel _chartEditor;
     private readonly IHistoryService _history;
-    private readonly LrcLyricsParser _lrcParser;
     private readonly IAppLogger _logger;
     private readonly ILocalizationService _localization;
     private readonly ProjectState _projectState;
     private readonly IFileStorageService _storageService;
-    private readonly IExportTargetWriter _files;
+    private readonly ILyricsFileService _files;
+    private readonly IConfigurationService? _configService;
 
-    // Flat queue across phrases; each item carries its phrase index so we can
-    // group LyricEvents back into LyricPhrase blocks at commit time.
-    private readonly List<QueueItem> _queue = [];
+    private readonly LyricTapSession _tap = new();
 
     [ObservableProperty] private string _rawLyrics = "";
     [ObservableProperty] private bool _isArmed;
@@ -52,6 +42,7 @@ public partial class LyricsInspectorViewModel : ViewModelBase
     [ObservableProperty] private int _remainingCount;
     [ObservableProperty] private string _nextPreview = "";
     [ObservableProperty] private string _statusText = "";
+    private Func<string> _status = () => "";
 
     [ObservableProperty] private bool _hasSelectedLyric;
     [ObservableProperty] private string _selectedLyricText = "";
@@ -61,7 +52,20 @@ public partial class LyricsInspectorViewModel : ViewModelBase
     [ObservableProperty] private int _selectedLyricNote = DefaultPitch;
     [ObservableProperty] private string _selectedLyricNoteName = "";
     private LyricEvent? _selectedLyricRef;
+    private string _draftOrigin = "";
     private bool _suppressSelectedSync;
+
+    /// <summary>
+    ///     A draft commit asked for while the history applies an undo/redo step
+    ///     (<see cref="IHistoryService.IsApplyingStep" />: the app's focus request clears the selection
+    ///     before the step has applied) is DEFERRED to the step's end (<see cref="IHistoryService.StepEnded" />,
+    ///     raised on every exit), rather than dropped: deferring loses no typed text and leaves the
+    ///     undo/redo step intact. A step that applied commits it as a new action like any other; one that
+    ///     FAILED never does, so no later, unrelated edit commits it on top of a half-applied chart: it
+    ///     returns to the box as a pending draft, its syllable selected again. Either way the rule applies —
+    ///     a syllable whose stored text changed from the draft's origin, or that left the chart, drops it.
+    /// </summary>
+    private (LyricEvent Lyric, string Draft, string Origin)? _deferredDraft;
 
     private const int DefaultPitch = 60; // C4 — a comfortable default sung note.
 
@@ -71,25 +75,27 @@ public partial class LyricsInspectorViewModel : ViewModelBase
         ProjectState projectState,
         IAppLogger logger,
         IFileStorageService storageService,
-        LrcLyricsParser lrcParser,
-        ILyricAutoSyncService autoSync,
+        ILyricsFileService files,
+        ILyricAutoSyncRunner autoSync,
         ILocalizationService localization,
-        ILyricModelDownloadService? modelDownloads = null,
-        IConfigurationService? configService = null,
-        IExportTargetWriter? files = null)
+        IConfigurationService? configService = null)
     {
-        _files = files ?? new ExportTargetWriter();
+        _files = files;
         _configService = configService;
-        _modelDownloads = modelDownloads;
         _chartEditor = chartEditor;
         _history = history;
         _projectState = projectState;
         _logger = logger;
         _storageService = storageService;
-        _lrcParser = lrcParser;
         _autoSync = autoSync;
         _localization = localization;
-        StatusText = _localization["Inspector_Lyrics_StatusIdle"];
+        ShowStatus(() => _localization["Inspector_Lyrics_StatusIdle"]);
+        WeakLanguageSubscription.Subscribe(_localization, this, static vm => vm.StatusText = vm._status());
+        _tap.Changed += OnTapChanged;
+        _history.HistoryChanged += SyncFromSelection;
+        _history.StepEnded += OnStepEnded;
+        _chartEditor.AddPendingEditCommit(CommitPendingEdit);
+        Syllables = new LyricSyllableList(chartEditor, history);
 
         if (_chartEditor.Selection is INotifyPropertyChanged npc)
         {
@@ -99,17 +105,51 @@ public partial class LyricsInspectorViewModel : ViewModelBase
                     SyncFromSelection();
             };
         }
+        _chartEditor.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ChartEditorViewModel.ActiveVocalTrack)) RefreshReview();
+        };
+    }
+
+    private void OnStepEnded(bool completed)
+    {
+        if (_deferredDraft is not { } deferred) return;
+        _deferredDraft = null;
+        if (deferred.Lyric.Text != deferred.Origin || !IsInChart(deferred.Lyric)) return;
+        if (completed)
+        {
+            Commit(deferred.Lyric, deferred.Draft);
+            return;
+        }
+
+        _selectedLyricRef = deferred.Lyric;
+        _draftOrigin = deferred.Origin;
+        SelectedLyricText = deferred.Draft;
+        _chartEditor.Selection.SelectedLyric = deferred.Lyric;
     }
 
     private void SyncFromSelection()
     {
         var lyric = _chartEditor.Selection.SelectedLyric;
+        CommitPendingDraft(lyric);
+        // A DIRTY draft (it differs from the text it started from) survives a history change of
+        // the same syllable while that syllable's stored text is still the draft's origin. When
+        // the stored text itself changed (an undo of this syllable, another editor) the stored
+        // text wins and the draft is dropped, and so it is when the syllable left the chart.
+        var keepDraft = lyric != null && ReferenceEquals(lyric, _selectedLyricRef)
+                        && SelectedLyricText != _draftOrigin && lyric.Text == _draftOrigin && IsInChart(lyric);
         _selectedLyricRef = lyric;
         _suppressSelectedSync = true;
         try
         {
             HasSelectedLyric = lyric != null;
-            SelectedLyricText = lyric?.Text ?? "";
+            RefreshReview();
+            if (!keepDraft)
+            {
+                SelectedLyricText = lyric?.Text ?? "";
+                _draftOrigin = SelectedLyricText;
+            }
+
             SelectedLyricIsWordPart = lyric?.IsWordPart ?? false;
             SelectedLyricIsPhraseEnd = lyric?.IsPhraseEnd ?? false;
 
@@ -123,14 +163,124 @@ public partial class LyricsInspectorViewModel : ViewModelBase
         finally { _suppressSelectedSync = false; }
     }
 
-    partial void OnSelectedLyricTextChanged(string value)
+    /// <summary>The review list card: every syllable (or only those to review), the editor's selection its own.</summary>
+    public LyricSyllableList Syllables { get; }
+
+    public string SelectedLyricReviewDetails => LyricReviewText.Format(_selectedLyricRef, _localization);
+
+    /// <summary>Syllables of the active vocal track that still carry an auto-sync review reason.</summary>
+    public int ReviewCount =>
+        _chartEditor.ActiveVocalTrack?.Phrases.Sum(p => p.Lyrics.Count(l => l.ReviewReasons != LyricReviewReason.None)) ?? 0;
+
+    public bool HasReviews => ReviewCount > 0;
+
+    /// <summary>"n to review", or why the review buttons are off.</summary>
+    public string ReviewCountText => ReviewCount is var count and > 0
+        ? _localization.Format("Inspector_Lyrics_ReviewCount", count)
+        : _localization["Inspector_Lyrics_ReviewNone"];
+
+    public bool CanMarkReviewed => _selectedLyricRef is { ReviewReasons: not LyricReviewReason.None };
+
+    private void RefreshReview()
     {
-        if (_suppressSelectedSync || _selectedLyricRef == null) return;
-        if (_selectedLyricRef.Text == value) return;
-        var action = new RenameLyricAction(_selectedLyricRef, _selectedLyricRef.Text, value,
-            _selectedLyricRef.IsWordPart, _selectedLyricRef.IsWordPart,
-            _selectedLyricRef.IsPhraseEnd, _selectedLyricRef.IsPhraseEnd);
-        _history.Do(action);
+        OnPropertyChanged(nameof(SelectedLyricReviewDetails));
+        OnPropertyChanged(nameof(ReviewCount));
+        OnPropertyChanged(nameof(HasReviews));
+        OnPropertyChanged(nameof(ReviewCountText));
+        NextReviewCommand.NotifyCanExecuteChanged();
+        PreviousReviewCommand.NotifyCanExecuteChanged();
+        MarkReviewedCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(HasReviews))]
+    private void NextReview() => SelectReview(1);
+
+    [RelayCommand(CanExecute = nameof(HasReviews))]
+    private void PreviousReview() => SelectReview(-1);
+
+    /// <summary>The selected syllable was right all along: drop its review reasons, one undo step.</summary>
+    [RelayCommand(CanExecute = nameof(CanMarkReviewed))]
+    private void MarkReviewed()
+    {
+        if (_selectedLyricRef == null) return;
+        if (_history.Do(new MarkLyricReviewedAction(_selectedLyricRef))) _chartEditor.RequestRedraw();
+    }
+
+    private void SelectReview(int direction)
+    {
+        var track = _chartEditor.ActiveVocalTrack;
+        if (track == null) return;
+        var lyrics = track.Phrases.SelectMany(p => p.Lyrics).OrderBy(l => l.Position).ToArray();
+        var lyric = LyricReviewNavigation.Find(lyrics, _selectedLyricRef, direction);
+        if (lyric == null) return;
+        _chartEditor.Selection.SelectedLyric = lyric;
+        _chartEditor.ExecuteSeek(lyric.Position.GetPositionMs(_chartEditor.Beats));
+    }
+
+    /// <summary>
+    ///     Applies the text box's draft to the selected syllable — the view calls this on Enter
+    ///     and when the box loses focus, never per keystroke. <see cref="SelectedLyricText" /> is
+    ///     only the draft: a trailing <c>-</c> typed on the way to "x-ray" must not join lines
+    ///     before the user has finished the word.
+    ///     <para>
+    ///         A trailing <c>-</c> in the committed text is input syntax, as in the inline editor:
+    ///         it sets the word part (joining the next line when the syllable ends one) and is
+    ///         never stored text. One commit is at most one history entry.
+    ///     </para>
+    /// </summary>
+    [RelayCommand]
+    public void CommitSelectedLyricText()
+    {
+        if (_selectedLyricRef == null) return;
+        // A committed draft is clean: the commit's history change re-syncs the box to the
+        // stored text ("go-" comes back as "go" with the word part set).
+        _draftOrigin = SelectedLyricText;
+        Commit(_selectedLyricRef, SelectedLyricText);
+        if (ReferenceEquals(_selectedLyricRef, _chartEditor.Selection.SelectedLyric)) SyncFromSelection();
+    }
+
+    /// <summary>
+    ///     The editor's <see cref="ChartEditorViewModel.CommitPendingEdits" /> hook (a save, an
+    ///     export, its check, a close) and the inspector leaving the Lyrics tab: a dirty draft for
+    ///     a syllable still in the chart is committed as Enter would, one history entry at most;
+    ///     an unchanged draft makes none.
+    /// </summary>
+    public void CommitPendingEdit()
+    {
+        if (_selectedLyricRef == null || SelectedLyricText == _draftOrigin || !IsInChart(_selectedLyricRef)) return;
+        if (_history.IsApplyingStep) _deferredDraft = (_selectedLyricRef, SelectedLyricText, _draftOrigin);
+        else CommitSelectedLyricText();
+    }
+
+    private bool IsInChart(LyricEvent lyric) =>
+        _chartEditor.VocalTracks.Any(t => t.Phrases.Any(p => p.Lyrics.Contains(lyric)));
+
+    /// <summary>
+    ///     A draft still pending when the selection moves to another syllable is committed to
+    ///     the syllable it was typed for — unless that syllable left the chart (an import or a
+    ///     delete), where an edit would record a node against an orphan. The reference is
+    ///     dropped first: the commit's history change re-enters the selection sync.
+    /// </summary>
+    private void CommitPendingDraft(LyricEvent? next)
+    {
+        var lyric = _selectedLyricRef;
+        if (lyric == null || ReferenceEquals(lyric, next) || lyric.Text == SelectedLyricText) return;
+        if (!IsInChart(lyric)) return;
+        _selectedLyricRef = null;
+        if (_history.IsApplyingStep) _deferredDraft = (lyric, SelectedLyricText, _draftOrigin);
+        else Commit(lyric, SelectedLyricText);
+    }
+
+    private void Commit(LyricEvent lyric, string draft)
+    {
+        if (_deferredDraft is { } deferred && ReferenceEquals(deferred.Lyric, lyric)) _deferredDraft = null;
+        if (lyric.Text == draft) return;
+        var (text, wordPart) = LyricInlineEditorViewModel.ParseText(draft);
+        var action = wordPart
+            ? LyricWordPartEdit.Create(_chartEditor.VocalTracks.Select(t => t.Phrases), lyric, text, true)
+            : new RenameLyricAction(lyric, lyric.Text, draft,
+                lyric.IsWordPart, lyric.IsWordPart, lyric.IsPhraseEnd, lyric.IsPhraseEnd);
+        if (action.HasEffect) _history.Do(action);
         _chartEditor.RequestRedraw();
     }
 
@@ -138,11 +288,10 @@ public partial class LyricsInspectorViewModel : ViewModelBase
     {
         if (_suppressSelectedSync || _selectedLyricRef == null) return;
         if (_selectedLyricRef.IsWordPart == value) return;
-        var action = new RenameLyricAction(_selectedLyricRef, _selectedLyricRef.Text, _selectedLyricRef.Text,
-            _selectedLyricRef.IsWordPart, value,
-            _selectedLyricRef.IsPhraseEnd, _selectedLyricRef.IsPhraseEnd);
+        var action = LyricWordPartEdit.Create(_chartEditor.VocalTracks.Select(t => t.Phrases), _selectedLyricRef, value);
         _history.Do(action);
         _chartEditor.RequestRedraw();
+        SyncFromSelection();
     }
 
     /// <summary>
@@ -180,11 +329,23 @@ public partial class LyricsInspectorViewModel : ViewModelBase
     {
         if (_suppressSelectedSync || _selectedLyricRef == null) return;
         if (_selectedLyricRef.IsPhraseEnd == value) return;
-        var action = new RenameLyricAction(_selectedLyricRef, _selectedLyricRef.Text, _selectedLyricRef.Text,
-            _selectedLyricRef.IsWordPart, _selectedLyricRef.IsWordPart,
-            _selectedLyricRef.IsPhraseEnd, value);
-        _history.Do(action);
-        _chartEditor.RequestRedraw();
+
+        // Selection can belong to another vocal track. Use its actual owner and
+        // keep the live collections (LyricPhrases aliases the active track's list).
+        foreach (var track in _chartEditor.VocalTracks)
+        {
+            var phrase = track.Phrases.FirstOrDefault(p => p.Lyrics.Contains(_selectedLyricRef));
+            if (phrase == null) continue;
+            var action = new SetLyricPhraseEndAction(track.Phrases, phrase, _selectedLyricRef, value);
+            if (!value && !action.HasEffect)
+                SetStatus(() => _localization["Status_LyricPhraseEnd_NoNextLine"]);
+            if (_history.Do(action)) _chartEditor.RequestRedraw();
+            // A refused history action or the final line must reset the checkbox too.
+            SyncFromSelection();
+            return;
+        }
+
+        SyncFromSelection();
     }
 
     // Turning pitch on assigns the current spinner value; turning it off stores
@@ -235,6 +396,19 @@ public partial class LyricsInspectorViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private void CloseGaps()
+    {
+        if (_chartEditor.ActiveVocalTrack is not { } track || _chartEditor.Beats.Count == 0) return;
+        var edits = LyricPhraseSpacing.InPhraseEnds(track.Phrases, _chartEditor.Beats, LoadSpacingConfig())
+            .Where(change => !change.Lyric.IsSustainShortened && change.Lyric.EndPosition != change.End)
+            .Select(change => new ResizeLyricAction(change.Lyric, change.Lyric.EndPosition, change.End));
+        if (_history.Do(new CompositeAction(edits) { LabelKey = "History_CloseLyricGaps" }))
+            _chartEditor.RequestRedraw();
+    }
+
+    private AppConfig LoadSpacingConfig() => _configService?.LoadAppConfig() ?? new AppConfig();
+
+    [RelayCommand]
     private async Task ImportLrc()
     {
         if (_projectState.ActiveProject == null)
@@ -259,29 +433,30 @@ public partial class LyricsInspectorViewModel : ViewModelBase
                 new FilePickerFilter("LRC Lyrics", new[] { "*.lrc" }),
                 FilePickerFilters.AllFiles
             },
-            startDir);
+            Remembered() ?? startDir);
         if (string.IsNullOrWhiteSpace(filePath))
             return;
+        _configService?.RememberDirectory(filePath, (c, d) => c.LastLyricsDir = d);
 
         try
         {
-            var content = await ReadLyricsTextAsync(filePath);
-            var phrases = _lrcParser.Parse(content, _chartEditor.Beats);
+            var phrases = await _files.ReadLrcAsync(filePath, _chartEditor.Beats);
             if (phrases.Count == 0)
             {
                 _projectState.SetMessage(_localization["Inspector_Lyrics_StatusEmpty"]);
                 return;
             }
 
-            var track = EnsureActiveVocalTrack();
-            if (ReplacePhrases(track, phrases))
+            LyricPhraseSpacing.CloseGaps(phrases, _chartEditor.Beats, LoadSpacingConfig());
+            var track = PrepareActiveVocalTrack(out var isNewTrack);
+            if (ReplacePhrases(track, phrases, isNewTrack: isNewTrack))
             {
                 Reset();
                 _chartEditor.RequestRedraw();
-                var status = _localization.Format("Status_LrcImport_Applied", phrases.Count,
+                Func<string> status = () => _localization.Format("Status_LrcImport_Applied", phrases.Count,
                     phrases.Sum(p => p.Lyrics.Count));
-                StatusText = status;
-                _projectState.SetMessage(status);
+                ShowStatus(status);
+                _projectState.SetMessage(StatusText);
                 _logger.Info(AppLogCategory.Import,
                     $"Imported LRC lyrics from '{filePath}'. phrases={phrases.Count}, lyrics={phrases.Sum(p => p.Lyrics.Count)}.");
             }
@@ -297,21 +472,9 @@ public partial class LyricsInspectorViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    ///     A lyrics file as text, refused when the file system reports it longer
-    ///     than <see cref="ImportSizeLimits.LyricsTextFileBytes" /> — the length is
-    ///     asked of the same seam as the read and BEFORE it, off the UI thread.
-    /// </summary>
-    internal async Task<string> ReadLyricsTextAsync(string filePath)
-    {
-        var length = await Task.Run(() => _files.FileLength(filePath));
-        ImportSizeLimits.RequireWithin(length, ImportSizeLimits.LyricsTextFileBytes, "The lyrics file");
-        return await _files.ReadAllTextAsync(filePath);
-    }
-
     private void ReportTooLarge(ImportFileTooLargeException tooLarge, string filePath)
     {
-        _logger.Warning(AppLogCategory.Import, $"Lyrics import refused: {tooLarge.Message} File='{filePath}'.");
+        _logger.Warning(AppLogCategory.Import, $"Lyrics import refused. File='{filePath}'.", tooLarge);
         _projectState.SetMessage(
             _localization.Format("Status_ImportFileTooLarge", Path.GetFileName(filePath),
                 ImportSizeLimits.ToMegabytes(tooLarge.Length), ImportSizeLimits.ToMegabytes(tooLarge.Cap)),
@@ -325,17 +488,15 @@ public partial class LyricsInspectorViewModel : ViewModelBase
         var project = _projectState.ActiveProject!;
         try
         {
-            var text = new LrcLyricsWriter().Write(track, _chartEditor.Beats,
+            var text = _files.BuildLrc(track, _chartEditor.Beats,
                 project.Chart.SongName, project.Chart.Artist);
             var path = await SaveLyricFileAsync(
                 _localization["Picker_SaveLrcFile"],
-                SafeFileName(project.Chart.SongName) + ".lrc",
+                _files.SuggestFileName(project.Chart.SongName) + ".lrc",
                 "LRC Lyrics", "*.lrc");
             if (string.IsNullOrWhiteSpace(path)) return;
 
-            // AtomicFile: a bare write truncates first, so a crash mid-export
-            // leaves an empty file where the previous export was.
-            await Task.Run(() => AtomicFile.WriteAllText(path, text));
+            await _files.WriteAsync(path, text);
             var status = _localization.Format("Status_LrcExport_Saved", path);
             _projectState.SetMessage(status);
             _logger.Info(AppLogCategory.Project, $"Exported LRC lyrics to '{path}'.");
@@ -371,17 +532,15 @@ public partial class LyricsInspectorViewModel : ViewModelBase
                 new FilePickerFilter("UltraStar Song", new[] { "*.txt" }),
                 FilePickerFilters.AllFiles
             },
-            startDir);
+            Remembered() ?? startDir);
         if (string.IsNullOrWhiteSpace(filePath))
             return;
+        _configService?.RememberDirectory(filePath, (c, d) => c.LastLyricsDir = d);
 
         try
         {
-            var content = await ReadLyricsTextAsync(filePath);
-            var song = new UltraStarLyricsParser().Parse(content);
-            // One track per voice: a duet's second singer goes into a NEW vocal track
-            // rather than interleaving with the first in the active one.
-            var voices = UltraStarVocalConverter.ToVocalTracks(song, _chartEditor.Beats);
+            var imported = await _files.ReadUltraStarAsync(filePath, _chartEditor.Beats);
+            var voices = imported.Voices;
             var phrases = voices[0].Phrases.ToList();
             if (phrases.Count == 0)
             {
@@ -389,21 +548,22 @@ public partial class LyricsInspectorViewModel : ViewModelBase
                 return;
             }
 
-            var track = EnsureActiveVocalTrack();
+            var track = PrepareActiveVocalTrack(out var isNewTrack);
             var addedTracks = voices.Skip(1).ToList();
-            if (ReplacePhrases(track, phrases, addedTracks))
+            LyricPhraseSpacing.CloseGaps(voices.SelectMany(voice => voice.Phrases), _chartEditor.Beats, LoadSpacingConfig());
+            if (ReplacePhrases(track, phrases, addedTracks, isNewTrack))
             {
                 Reset();
                 _chartEditor.RequestRedraw();
                 var phraseCount = voices.Sum(v => v.Phrases.Count);
                 var lyricCount = voices.Sum(v => v.Phrases.Sum(p => p.Lyrics.Count));
-                var status = _localization.Format(
+                Func<string> status = () => _localization.Format(
                     voices.Count > 1 ? "Status_UltraStarImport_AppliedDuet" : "Status_UltraStarImport_Applied",
                     voices.Count > 1 ? [voices.Count, phraseCount, lyricCount] : [phraseCount, lyricCount]);
-                StatusText = status;
-                _projectState.SetMessage(status);
+                ShowStatus(status);
+                _projectState.SetMessage(StatusText);
                 _logger.Info(AppLogCategory.Import,
-                    $"Imported UltraStar lyrics from '{filePath}'. voices={voices.Count}, relative={song.IsRelative}, " +
+                    $"Imported UltraStar lyrics from '{filePath}'. voices={voices.Count}, relative={imported.IsRelative}, " +
                     $"phrases={phraseCount}, lyrics={lyricCount}.");
             }
         }
@@ -425,21 +585,15 @@ public partial class LyricsInspectorViewModel : ViewModelBase
         var project = _projectState.ActiveProject!;
         try
         {
-            var audio = string.IsNullOrWhiteSpace(project.AudioFileName)
-                ? null : Path.GetFileName(project.AudioFileName);
-            var song = UltraStarVocalConverter.ToSong(track, _chartEditor.Beats,
-                project.Bpm, gapMs: 0,
-                project.Chart.SongName, project.Chart.Artist, audio);
-            var text = new UltraStarLyricsWriter().Write(song);
+            var text = _files.BuildUltraStar(track, _chartEditor.Beats, project.Bpm,
+                project.Chart.SongName, project.Chart.Artist, project.AudioFileName);
             var path = await SaveLyricFileAsync(
                 _localization["Picker_SaveUltraStarFile"],
-                SafeFileName(project.Chart.SongName) + ".txt",
+                _files.SuggestFileName(project.Chart.SongName) + ".txt",
                 "UltraStar Song", "*.txt");
             if (string.IsNullOrWhiteSpace(path)) return;
 
-            // AtomicFile: a bare write truncates first, so a crash mid-export
-            // leaves an empty file where the previous export was.
-            await Task.Run(() => AtomicFile.WriteAllText(path, text));
+            await _files.WriteAsync(path, text);
             var status = _localization.Format("Status_UltraStarExport_Saved", path);
             _projectState.SetMessage(status);
             _logger.Info(AppLogCategory.Project, $"Exported UltraStar lyrics to '{path}'.");
@@ -456,6 +610,7 @@ public partial class LyricsInspectorViewModel : ViewModelBase
     private bool TryGetExportTrack(out VocalTrack track)
     {
         track = null!;
+        CommitPendingEdit();
         if (_projectState.ActiveProject == null)
         {
             _projectState.SetMessage(_localization["Status_NoChartLoaded"]);
@@ -477,26 +632,22 @@ public partial class LyricsInspectorViewModel : ViewModelBase
         return true;
     }
 
-    private Task<string?> SaveLyricFileAsync(string title, string suggestedName, string filterName, string pattern)
+    private async Task<string?> SaveLyricFileAsync(string title, string suggestedName, string filterName, string pattern)
     {
         var startDir = Path.GetDirectoryName(Path.GetFullPath(
             string.IsNullOrWhiteSpace(_projectState.CurrentProjectPath) ? "." : _projectState.CurrentProjectPath));
-        return _storageService.SaveFilePickerAsync(title, suggestedName,
+        var path = await _storageService.SaveFilePickerAsync(title, suggestedName,
             new[]
             {
                 new FilePickerFilter(filterName, new[] { pattern }),
                 FilePickerFilters.AllFiles
             },
-            startDir);
+            Remembered() ?? startDir);
+        _configService?.RememberDirectory(path, (c, d) => c.LastLyricsDir = d);
+        return path;
     }
 
-    private static string SafeFileName(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return "lyrics";
-        var invalid = Path.GetInvalidFileNameChars();
-        var cleaned = new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray()).Trim();
-        return cleaned.Length == 0 ? "lyrics" : cleaned;
-    }
+    private string? Remembered() => _configService?.StartDirectory(c => c.LastLyricsDir);
 
     [RelayCommand]
     private void DeleteSelectedLyric()
@@ -535,7 +686,8 @@ public partial class LyricsInspectorViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanAutoSync))]
     private async Task AutoSync()
     {
-        if (_projectState.ActiveProject == null)
+        var syncedProject = _projectState.ActiveProject;
+        if (syncedProject == null)
         {
             _projectState.SetMessage(_localization["Status_NoChartLoaded"]);
             return;
@@ -543,117 +695,67 @@ public partial class LyricsInspectorViewModel : ViewModelBase
 
         if (string.IsNullOrWhiteSpace(RawLyrics))
         {
-            SetStatus(_localization["Status_LyricAutoSync_Empty"]);
+            SetStatus(() => _localization["Status_LyricAutoSync_Empty"]);
             return;
         }
 
         if (_chartEditor.Beats.Count == 0)
         {
-            SetStatus(_localization["Status_LyricAutoSync_NoBeats"]);
+            SetStatus(() => _localization["Status_LyricAutoSync_NoBeats"]);
             return;
         }
 
-        // The models are a one-time download, so a missing one is a step to take
-        // rather than a dead end. Fetch what THIS sheet needs — the multilingual
-        // model always, the English head only when the router wants it — and only
-        // report "no model" if that could not be done.
-        if (_modelDownloads != null)
-        {
-            var sheet = LyricSheetParser.Parse(RawLyrics);
-            var megabytes = _modelDownloads.PendingMegabytesFor(sheet);
-            if (megabytes > 0)
-            {
-                IsAutoSyncing = true;
-                AutoSyncCommand.NotifyCanExecuteChanged();
-                try
-                {
-                    SetStatus(_localization.Format(
-                        "Status_LyricAutoSync_Downloading", megabytes));
-                    var progress = new Progress<string>(step => StatusText =
-                        _localization.Format("Status_LyricAutoSync_Running", step));
-
-                    if (!await _modelDownloads.EnsureModelsForAsync(sheet, progress))
-                    {
-                        SetStatus(_localization.Format(
-                            "Status_LyricAutoSync_NoModel", _autoSync.ModelDirectory));
-                        return;
-                    }
-                }
-                finally
-                {
-                    IsAutoSyncing = false;
-                    AutoSyncCommand.NotifyCanExecuteChanged();
-                }
-            }
-        }
-
-        if (!_autoSync.IsModelInstalled)
-        {
-            SetStatus(_localization.Format(
-                "Status_LyricAutoSync_NoModel", _autoSync.ModelDirectory));
-            return;
-        }
-
-        var audioPath = ProjectAudioLocator.TryResolve(
-            _projectState.CurrentProjectPath, _projectState.CurrentAudioFileName);
-        if (string.IsNullOrWhiteSpace(audioPath))
-        {
-            SetStatus(_localization["Status_LyricAutoSync_NoAudio"]);
-            return;
-        }
-
+        var activeTrack = _chartEditor.ActiveVocalTrack;
+        var track = PrepareActiveVocalTrack(out var isNewTrack);
         IsAutoSyncing = true;
         AutoSyncCommand.NotifyCanExecuteChanged();
         try
         {
-            var progress = new Progress<string>(step => StatusText =
-                _localization.Format("Status_LyricAutoSync_Running", step));
+            var progress = new Progress<string>(step => ShowStatus(() =>
+                _localization.Format("Status_LyricAutoSync_Running", step)));
 
-            // Options come from the editor settings (span word/phrase gaps, the
-            // note-spacing minimum) — built per run so a settings change is
-            // live on the next sync without restarting anything.
-            var config = _configService?.LoadAppConfig();
-            var options = config != null ? LyricAutoSyncOptions.FromConfig(config) : LyricAutoSyncOptions.Default;
+            var result = await _autoSync.RunAsync(RawLyrics, _chartEditor.Beats,
+                megabytes => SetStatus(() => _localization.Format("Status_LyricAutoSync_Downloading", megabytes)),
+                progress);
 
-            // SNAPSHOT the grid, and remember WHICH project this run is for.
-            // `_chartEditor.Beats` is the live ObservableCollection off
-            // ProjectState.ActiveProject, and this await is a multi-second
-            // decode + CTC alignment on a worker: handing the live instance over
-            // lets an edit (or a project OPEN, which replaces the whole
-            // collection) mutate the grid the aligner is walking. A List copy
-            // costs nothing next to the decode and cannot be torn.
-            var syncedProject = _projectState.ActiveProject;
-            var beats = _chartEditor.Beats.ToList();
-
-            var outcome = await _autoSync.SyncAsync(
-                RawLyrics, audioPath, beats, options, progress);
-
-            // …and a result computed against THAT project's grid may only be
-            // applied to THAT project. Identity, not equality: a different
-            // instance is a different chart even when its metadata matches, and
-            // writing these phrases into it would time somebody else's lyrics to
-            // the previous song's beats.
+            // The runner can finish before this UI continuation resumes.
             if (!ReferenceEquals(_projectState.ActiveProject, syncedProject))
+                result = new LyricAutoSyncRunResult(LyricAutoSyncRunStatus.ProjectChanged);
+
+            switch (result.Status)
+            {
+                case LyricAutoSyncRunStatus.NoModel:
+                    SetStatus(() => _localization.Format("Status_LyricAutoSync_NoModel", result.ModelDirectory ?? ""));
+                    return;
+                case LyricAutoSyncRunStatus.NoAudio:
+                    SetStatus(() => _localization["Status_LyricAutoSync_NoAudio"]);
+                    return;
+                case LyricAutoSyncRunStatus.ProjectChanged:
+                    _logger.Info(AppLogCategory.Import,
+                        "Lyric auto-sync discarded: the active project changed while it ran.");
+                    SetStatus(() => _localization["Status_LyricAutoSync_ProjectChanged"]);
+                    return;
+                case LyricAutoSyncRunStatus.Failed:
+                    SetStatus(() => _localization.Format("Status_LyricAutoSync_Failed", result.Error ?? ""));
+                    return;
+            }
+
+            var outcome = result.Outcome!;
+            if (!ReferenceEquals(_projectState.ActiveProject, syncedProject) ||
+                !ReferenceEquals(_chartEditor.ActiveVocalTrack, activeTrack) ||
+                (!isNewTrack && !_chartEditor.VocalTracks.Contains(track)))
             {
                 _logger.Info(AppLogCategory.Import,
-                    "Lyric auto-sync discarded: the active project changed while it ran.");
-                SetStatus(_localization["Status_LyricAutoSync_ProjectChanged"]);
+                    "Lyric auto-sync discarded: the destination vocal track changed while it ran.");
+                SetStatus(() => _localization["Status_LyricAutoSync_TrackChanged"]);
                 return;
             }
 
-            if (!outcome.Ran || outcome.Phrases.Count == 0)
-            {
-                SetStatus(_localization.Format(
-                    "Status_LyricAutoSync_Failed", outcome.Error ?? "no phrases"));
-                return;
-            }
-
-            var track = EnsureActiveVocalTrack();
-            if (!ReplacePhrases(track, outcome.Phrases.ToList())) return;
+            if (!ReplacePhrases(track, outcome.Phrases.ToList(), isNewTrack: isNewTrack)) return;
 
             Reset();
             _chartEditor.RequestRedraw();
-            SetStatus(_localization.Format("Status_LyricAutoSync_Applied",
+            SetStatus(() => _localization.Format("Status_LyricAutoSync_Applied",
                 outcome.SyllableCount, outcome.Phrases.Count, outcome.AudioSource,
                 outcome.LowConfidenceCount + outcome.InterpolatedCount));
             _logger.Info(AppLogCategory.Import,
@@ -661,10 +763,14 @@ public partial class LyricsInspectorViewModel : ViewModelBase
                 $"phrases={outcome.Phrases.Count}, source={outcome.AudioSource}, " +
                 $"lowConfidence={outcome.LowConfidenceCount}, interpolated={outcome.InterpolatedCount}.");
         }
+        catch (Exception) when (!ReferenceEquals(_projectState.ActiveProject, syncedProject))
+        {
+            SetStatus(() => _localization["Status_LyricAutoSync_ProjectChanged"]);
+        }
         catch (Exception ex)
         {
             _logger.Error(AppLogCategory.Import, "Lyric auto-sync failed.", ex);
-            SetStatus(_localization.Format("Status_LyricAutoSync_Failed", ex.Message));
+            SetStatus(() => _localization.Format("Status_LyricAutoSync_Failed", ex.Message));
         }
         finally
         {
@@ -675,73 +781,57 @@ public partial class LyricsInspectorViewModel : ViewModelBase
 
     private bool CanAutoSync() => !IsAutoSyncing;
 
-    private void SetStatus(string status)
+    private void SetStatus(Func<string> status)
     {
-        StatusText = status;
-        _projectState.SetMessage(status);
+        ShowStatus(status);
+        _projectState.SetMessage(StatusText);
+    }
+
+    /// <summary>
+    ///     Shows a status line and keeps how to word it, so a language switch re-words the line in place instead of
+    ///     leaving it in the language it was written in.
+    /// </summary>
+    private void ShowStatus(Func<string> status)
+    {
+        _status = status;
+        StatusText = status();
     }
 
     [RelayCommand]
     private void Apply()
     {
-        _queue.Clear();
-        var lines = RawLyrics.Replace("\r\n", "\n").Split('\n');
-        var phraseIdx = 0;
-        foreach (var rawLine in lines)
-        {
-            var line = rawLine.Trim();
-            if (line.Length == 0) continue;
-            var phraseHadSyllable = false;
-            foreach (var word in line.Split(' ', '\t', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var parts = word.Split('-');
-                for (var i = 0; i < parts.Length; i++)
-                {
-                    var text = parts[i];
-                    if (text.Length == 0) continue;
-                    var isWordPart = i < parts.Length - 1;
-                    // Store the syllable text WITHOUT the trailing dash —
-                    // the dash is just an input-syntax separator, the
-                    // continuation is encoded by IsWordPart and rendered
-                    // as a connector line between adjacent pills.
-                    _queue.Add(new QueueItem(phraseIdx, text, isWordPart));
-                    phraseHadSyllable = true;
-                }
-            }
-            if (phraseHadSyllable) phraseIdx++;
-        }
-
-        if (_queue.Count == 0)
+        var count = _tap.Load(RawLyrics);
+        if (count == 0)
         {
             IsArmed = false;
             RemainingCount = 0;
             NextPreview = "";
-            StatusText = _localization["Inspector_Lyrics_StatusEmpty"];
+            ShowStatus(() => _localization["Inspector_Lyrics_StatusEmpty"]);
             return;
         }
 
-        _phrasesByIndex.Clear();
         IsArmed = true;
-        RemainingCount = _queue.Count;
-        UpdatePreview();
-        StatusText = _localization.Plural("Inspector_Lyrics_StatusArmedOne", "Inspector_Lyrics_StatusArmed", _queue.Count);
+        RemainingCount = count;
+        NextPreview = _tap.Preview;
+        ShowStatus(() => ArmedStatus());
     }
 
     [RelayCommand]
     private void Reset()
     {
-        _queue.Clear();
-        _phrasesByIndex.Clear();
+        _tap.Clear();
         IsArmed = false;
         RemainingCount = 0;
         NextPreview = "";
-        StatusText = _localization["Inspector_Lyrics_StatusIdle"];
+        ShowStatus(() => _localization["Inspector_Lyrics_StatusIdle"]);
     }
 
-    // Maps queue PhraseIndex → the LyricPhrase we appended to last for it.
-    // Reference is stable across undo/redo of SetVocalPhrasesAction because
-    // the same instance is re-added on redo.
-    private readonly Dictionary<int, LyricPhrase> _phrasesByIndex = [];
+    private string ArmedStatus()
+        => _localization.Plural("Inspector_Lyrics_StatusArmedOne", "Inspector_Lyrics_StatusArmed", _tap.Count);
+
+    /// <summary>The raw-text card's "Tap at playhead" button: the same tap as <c>Ctrl+Space</c>.</summary>
+    [RelayCommand]
+    private void TapAtPlayhead() => TapNext();
 
     /// <summary>
     ///     Pops the next syllable from the queue and commits it to the active
@@ -749,125 +839,52 @@ public partial class LyricsInspectorViewModel : ViewModelBase
     /// </summary>
     public void TapNext()
     {
-        if (!IsArmed || _queue.Count == 0)
+        if (!IsArmed || _tap.Count == 0)
         {
             _projectState.SetMessage(_localization["Status_LyricTap_NotArmed"]);
             return;
         }
-        var track = _chartEditor.ActiveVocalTrack;
-        if (track == null)
+
+        var tapMs = _projectState.CurrentTimeMs;
+        var outcome = _tap.TapNext(_chartEditor.ActiveVocalTrack, _chartEditor.Beats, tapMs, _history,
+            out var text);
+        if (outcome == LyricTapOutcome.NoVocalTrack)
         {
             _projectState.SetMessage(_localization["Status_LyricTap_NoVocalTrack"]);
             return;
         }
-        var beats = _chartEditor.Beats;
-        if (beats.Count == 0)
+
+        if (outcome == LyricTapOutcome.NoBeats)
         {
             _projectState.SetMessage(_localization["Status_LyricTap_NoBeats"]);
             return;
         }
 
-        var item = _queue[0];
-        var tapMs = _projectState.CurrentTimeMs;
-        var startPos = TimelineMath.PositionFromMs(tapMs, beats);
-        var endMs = tapMs + DefaultLastSyllableMs;
-        var endPos = TimelineMath.PositionFromMs(endMs, beats);
-
-        // Decide which phrase the new syllable lands in WITHOUT mutating
-        // anything yet — the LyricTapAction does the actual chart mutation
-        // in its Execute() so initial-commit and redo are identical.
-        _phrasesByIndex.TryGetValue(item.PhraseIndex, out var existingPhrase);
-        var hadPhraseInMap = existingPhrase != null;
-        var phraseStillInTrack = existingPhrase != null && track.Phrases.Contains(existingPhrase);
-        var targetPhrase = phraseStillInTrack ? existingPhrase! : new LyricPhrase
-        {
-            Position = startPos,
-            EndPosition = endPos
-        };
-        var newLyric = new LyricEvent
-        {
-            Text = item.Text,
-            IsWordPart = item.IsWordPart,
-            Position = startPos,
-            EndPosition = endPos
-        };
-
-        var prevLyric = phraseStillInTrack && targetPhrase.Lyrics.Count > 0
-            ? targetPhrase.Lyrics[^1] : null;
-        var prevEndBefore = prevLyric?.EndPosition;
-        var trimPrevTo = prevLyric != null && prevEndBefore!.Value.GetPositionMs(beats) > tapMs - 1
-            ? (FractionalPosition?)startPos : null;
-
-        var phraseStartBefore = targetPhrase.Position;
-        var phraseEndBefore = targetPhrase.EndPosition;
-        FractionalPosition? phraseNewStart = phraseStartBefore.GetPositionMs(beats) > tapMs ? startPos : null;
-        FractionalPosition? phraseNewEnd = phraseEndBefore.GetPositionMs(beats) < endMs ? endPos : null;
-
-        var action = new LyricTapAction(this, track.Phrases, targetPhrase, newLyric, item,
-            addPhraseToTrack: !phraseStillInTrack,
-            hadPhraseInMap: hadPhraseInMap,
-            prevLyric: prevLyric,
-            prevEndBefore: prevEndBefore,
-            trimPrevTo: trimPrevTo,
-            phraseStartBefore: phraseStartBefore,
-            phraseEndBefore: phraseEndBefore,
-            phraseNewStart: phraseNewStart,
-            phraseNewEnd: phraseNewEnd);
-
-        _queue.RemoveAt(0);
-        _history.Do(action);
         _logger.Info(AppLogCategory.Editing,
-            $"Lyric tap '{item.Text}' at {tapMs:F0}ms, remaining={_queue.Count}.");
-
-        RemainingCount = _queue.Count;
-        UpdatePreview();
-        if (_queue.Count == 0)
+            $"Lyric tap '{text}' at {tapMs:F0}ms, remaining={_tap.Count}.");
+        RemainingCount = _tap.Count;
+        NextPreview = _tap.Preview;
+        if (_tap.Count == 0)
         {
             IsArmed = false;
-            StatusText = _localization["Inspector_Lyrics_StatusDone"];
+            ShowStatus(() => _localization["Inspector_Lyrics_StatusDone"]);
         }
     }
 
-    // Called by LyricTapAction.Undo to restore the inspector queue/preview
-    // state when the user undoes a tap. Pushes the syllable back to the
-    // front of the queue, optionally drops the phrase mapping if the tap
-    // had created the phrase, and refreshes preview/status.
-    internal void RestoreTapForUndo(QueueItem item, bool addedPhrase, bool hadPhraseInMap)
+    // The session raises this after an undo or redo of a tap moved its queue.
+    private void OnTapChanged(LyricTapChange change)
     {
-        _queue.Insert(0, item);
-        if (addedPhrase && !hadPhraseInMap)
-            _phrasesByIndex.Remove(item.PhraseIndex);
+        RemainingCount = _tap.Count;
+        NextPreview = _tap.Preview;
+        if (change == LyricTapChange.Redone && _tap.Count == 0)
+        {
+            IsArmed = false;
+            ShowStatus(() => _localization["Inspector_Lyrics_StatusDone"]);
+            return;
+        }
+
         IsArmed = true;
-        RemainingCount = _queue.Count;
-        UpdatePreview();
-        StatusText = _localization.Plural("Inspector_Lyrics_StatusArmedOne", "Inspector_Lyrics_StatusArmed", _queue.Count);
-    }
-
-    // Called by LyricTapAction.Execute on redo to re-pop the syllable that
-    // was restored to the queue and re-establish the phrase map.
-    internal void ReapplyTapForRedo(QueueItem item, LyricPhrase phrase)
-    {
-        if (_queue.Count > 0 && _queue[0].PhraseIndex == item.PhraseIndex && _queue[0].Text == item.Text)
-            _queue.RemoveAt(0);
-        _phrasesByIndex[item.PhraseIndex] = phrase;
-        RemainingCount = _queue.Count;
-        UpdatePreview();
-        if (_queue.Count == 0)
-        {
-            IsArmed = false;
-            StatusText = _localization["Inspector_Lyrics_StatusDone"];
-        }
-        else
-        {
-            IsArmed = true;
-            StatusText = _localization.Plural("Inspector_Lyrics_StatusArmedOne", "Inspector_Lyrics_StatusArmed", _queue.Count);
-        }
-    }
-
-    private void UpdatePreview()
-    {
-        var ahead = _queue.Take(8).Select(q => q.Text);
-        NextPreview = string.Join(" ", ahead);
+        ShowStatus(() => ArmedStatus());
     }
 
     /// <summary>
@@ -892,7 +909,7 @@ public partial class LyricsInspectorViewModel : ViewModelBase
     ///     </para>
     /// </remarks>
     private bool ReplacePhrases(VocalTrack track, IReadOnlyList<LyricPhrase> phrases,
-        IReadOnlyList<VocalTrack>? addedTracks = null)
+        IReadOnlyList<VocalTrack>? addedTracks = null, bool isNewTrack = false)
     {
         // An UltraStar duet's further voices are added in the SAME undo node as the
         // first voice's replacement, so one undo takes the whole import back.
@@ -902,6 +919,11 @@ public partial class LyricsInspectorViewModel : ViewModelBase
             action = new CompositeAction(
                 [action, .. addedTracks.Select(t => new AddVocalTrackAction(_chartEditor.VocalTracks, t))]);
         }
+
+        // A track created for this import joins the SAME node, so one undo removes it
+        // again and a refused or failed Do leaves no empty track behind.
+        if (isNewTrack)
+            action = new CompositeAction([new AddActiveVocalTrackAction(_chartEditor, _chartEditor.VocalTracks, track), action]);
 
         if (!_history.Do(action)) return false;
 
@@ -918,111 +940,13 @@ public partial class LyricsInspectorViewModel : ViewModelBase
         return true;
     }
 
-    private VocalTrack EnsureActiveVocalTrack()
+    /// <summary>The active track, or a NEW unattached one; <see cref="ReplacePhrases"/> adds it inside the undo node.</summary>
+    private VocalTrack PrepareActiveVocalTrack(out bool isNew)
     {
-        if (_chartEditor.ActiveVocalTrack != null)
-            return _chartEditor.ActiveVocalTrack;
-
-        var track = new VocalTrack
+        isNew = _chartEditor.ActiveVocalTrack == null;
+        return _chartEditor.ActiveVocalTrack ?? new VocalTrack
         {
             Name = $"Vocals {_chartEditor.VocalTracks.Count + 1}"
         };
-        _chartEditor.VocalTracks.Add(track);
-        _chartEditor.ActiveVocalTrack = track;
-        return track;
-    }
-
-    internal readonly record struct QueueItem(int PhraseIndex, string Text, bool IsWordPart);
-}
-
-/// <summary>
-/// Wraps a single syllable-tap commit so undo/redo also moves the
-/// LyricsInspector queue cursor back/forward AND fully reverts the
-/// chart mutation (LyricEvent insert + previous-syllable tail trim +
-/// new LyricPhrase add). Without this, the user hits Ctrl+Z to recover
-/// from a mis-tap and either the syllable stays in the chart (because
-/// in-place LyricPhrase mutation isn't covered by SetVocalPhrasesAction)
-/// or the inspector queue advances past the recovered syllable.
-/// </summary>
-internal sealed class LyricTapAction : IChartAction, ILinkPolicyAction
-{
-    /// <summary>Linked measures: cannot change linked content in beats.</summary>
-    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
-
-    private readonly LyricsInspectorViewModel _vm;
-    private readonly ObservableCollection<LyricPhrase> _trackPhrases;
-    private readonly LyricPhrase _targetPhrase;
-    private readonly LyricEvent _newLyric;
-    private readonly LyricsInspectorViewModel.QueueItem _item;
-    private readonly bool _addPhraseToTrack;
-    private readonly bool _hadPhraseInMap;
-    private readonly LyricEvent? _prevLyric;
-    private readonly FractionalPosition? _prevEndBefore;
-    private readonly FractionalPosition? _trimPrevTo;
-    private readonly FractionalPosition _phraseStartBefore;
-    private readonly FractionalPosition _phraseEndBefore;
-    private readonly FractionalPosition? _phraseNewStart;
-    private readonly FractionalPosition? _phraseNewEnd;
-
-    public LyricTapAction(LyricsInspectorViewModel vm,
-        ObservableCollection<LyricPhrase> trackPhrases,
-        LyricPhrase targetPhrase, LyricEvent newLyric, LyricsInspectorViewModel.QueueItem item,
-        bool addPhraseToTrack, bool hadPhraseInMap,
-        LyricEvent? prevLyric, FractionalPosition? prevEndBefore, FractionalPosition? trimPrevTo,
-        FractionalPosition phraseStartBefore, FractionalPosition phraseEndBefore,
-        FractionalPosition? phraseNewStart, FractionalPosition? phraseNewEnd)
-    {
-        _vm = vm;
-        _trackPhrases = trackPhrases;
-        _targetPhrase = targetPhrase;
-        _newLyric = newLyric;
-        _item = item;
-        _addPhraseToTrack = addPhraseToTrack;
-        _hadPhraseInMap = hadPhraseInMap;
-        _prevLyric = prevLyric;
-        _prevEndBefore = prevEndBefore;
-        _trimPrevTo = trimPrevTo;
-        _phraseStartBefore = phraseStartBefore;
-        _phraseEndBefore = phraseEndBefore;
-        _phraseNewStart = phraseNewStart;
-        _phraseNewEnd = phraseNewEnd;
-    }
-
-    public bool HasEffect => true;
-
-    public void Execute()
-    {
-        if (_trimPrevTo.HasValue && _prevLyric != null)
-            _prevLyric.EndPosition = _trimPrevTo.Value;
-        if (_phraseNewStart.HasValue) _targetPhrase.Position = _phraseNewStart.Value;
-        if (_phraseNewEnd.HasValue) _targetPhrase.EndPosition = _phraseNewEnd.Value;
-        if (!_targetPhrase.Lyrics.Contains(_newLyric))
-            _targetPhrase.Lyrics.Add(_newLyric);
-        if (_addPhraseToTrack && !_trackPhrases.Contains(_targetPhrase))
-        {
-            // Insert in time-sorted order so the rendered ribbon stays tidy.
-            var idx = 0;
-            while (idx < _trackPhrases.Count &&
-                   _trackPhrases[idx].Position.CompareTo(_targetPhrase.Position) <= 0)
-            {
-                idx++;
-            }
-
-            _trackPhrases.Insert(idx, _targetPhrase);
-        }
-        _vm.ReapplyTapForRedo(_item, _targetPhrase);
-    }
-
-    public void Undo()
-    {
-        _targetPhrase.Lyrics.Remove(_newLyric);
-        if (_addPhraseToTrack)
-            _trackPhrases.Remove(_targetPhrase);
-        if (_phraseNewStart.HasValue) _targetPhrase.Position = _phraseStartBefore;
-        if (_phraseNewEnd.HasValue) _targetPhrase.EndPosition = _phraseEndBefore;
-        if (_prevLyric != null && _prevEndBefore.HasValue)
-            _prevLyric.EndPosition = _prevEndBefore.Value;
-        _vm.RestoreTapForUndo(_item, _addPhraseToTrack, _hadPhraseInMap);
     }
 }
-

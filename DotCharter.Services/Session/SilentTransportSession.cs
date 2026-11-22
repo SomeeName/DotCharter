@@ -20,6 +20,7 @@ internal sealed class SilentTransportSession
     private readonly IEditorTransport _transport;
     private readonly IAppLogger _logger;
     private readonly SilentAudioTrack _silentAudio;
+    private readonly Func<double, Task>? _reload;
 
     /// <summary>The length of the silent transport currently in the engine, or 0
     /// when the engine is on real audio (or nothing). Non-zero is exactly "this
@@ -31,6 +32,11 @@ internal sealed class SilentTransportSession
     /// additions would otherwise queue one regeneration per beat.</summary>
     private bool _growing;
 
+    /// <summary>A growth check arrived while a load was in flight: run the check
+    /// again when it lands, against the chart as it is THEN. Dropping it
+    /// left a chart extended during the load stuck on the shorter track.</summary>
+    private bool _growAgain;
+
     private INotifyCollectionChanged? _watchedBeats;
 
     public SilentTransportSession(
@@ -38,19 +44,23 @@ internal sealed class SilentTransportSession
         ProjectState projectState,
         IEditorTransport transport,
         IAppLogger logger,
-        SilentAudioTrack silentAudio)
+        SilentAudioTrack silentAudio, IHistoryService history, Func<double, Task>? reload = null)
     {
         _audioService = audioService;
         _projectState = projectState;
         _transport = transport;
         _logger = logger;
         _silentAudio = silentAudio;
+        _reload = reload;
+        // A tempo edit moves beats IN PLACE, which the beat collection never
+        // reports; every undoable edit raises HistoryChanged.
+        history.HistoryChanged += OnHistoryChanged;
     }
 
     /// <summary>The loaded silent length in ms; 0 when the engine is not on silence.</summary>
     public double LengthMs => _lengthMs;
 
-    public async Task LoadAsync(double projectLengthMs)
+    public async Task LoadAsync(double projectLengthMs, Func<bool>? isCurrent = null)
     {
         try
         {
@@ -70,7 +80,9 @@ internal sealed class SilentTransportSession
             // (possibly missing) audio reference is preserved for save, and the
             // silent WAV is never the song identity, so stem separation / live
             // detection never run against silence.
+            if (isCurrent != null && !isCurrent()) return;
             await _audioService.LoadAudioAsync(path);
+            if (isCurrent != null && !isCurrent()) return;
             _projectState.TotalAudioLengthMs = _audioService.GetTotalAudioLengthMs();
             _projectState.WaveformData = WaveformSamples.Empty;
             _transport.SeekTo(0);
@@ -79,7 +91,7 @@ internal sealed class SilentTransportSession
         catch (Exception ex)
         {
             _lengthMs = 0;
-            _logger.Warning(AppLogCategory.Audio, $"Silent-transport fallback failed: {ex.Message}");
+            _logger.Warning(AppLogCategory.Audio, "Silent-transport fallback failed", ex);
         }
     }
 
@@ -99,55 +111,65 @@ internal sealed class SilentTransportSession
     /// </summary>
     public async Task EnsureCoversProjectAsync()
     {
-        if (_lengthMs <= 0 || _growing)
+        if (_lengthMs <= 0) return;
+        if (_growing)
         {
-            return;
-        }
-
-        if (_projectState.ActiveProject is not { } project)
-        {
-            return;
-        }
-
-        var contentMs = SilentAudioTrack.DeriveProjectLengthMs(project);
-        if (!SilentAudioTrack.NeedsLongerTrack(_lengthMs, contentMs))
-        {
+            _growAgain = true;
             return;
         }
 
         _growing = true;
         try
         {
-            _logger.Info(AppLogCategory.Audio,
-                $"The chart outgrew its silent transport ({_lengthMs / 1000.0:0.#}s) — " +
-                $"regenerating for a content end of {contentMs / 1000.0:0.#}s.");
-            var resumeMs = _projectState.CurrentTimeMs;
-            await LoadAsync(contentMs);
-            // LoadAsync seeks to 0 (it is the LOAD path). Growing the track is
-            // not a load, so the playhead stays where the user left it — inside
-            // the new, longer track by construction.
-            _transport.SeekTo(Math.Clamp(resumeMs, 0, _projectState.TotalAudioLengthMs));
+            do
+            {
+                _growAgain = false;
+                await GrowOnceAsync();
+            } while (_growAgain && _lengthMs > 0);
         }
         finally
         {
             _growing = false;
+            _growAgain = false;
         }
+    }
+
+    private async Task GrowOnceAsync()
+    {
+        if (_projectState.ActiveProject is not { } project) return;
+
+        var contentMs = SilentAudioTrack.DeriveProjectLengthMs(project);
+        if (!SilentAudioTrack.NeedsLongerTrack(_lengthMs, contentMs)) return;
+
+        _logger.Info(AppLogCategory.Audio,
+            $"The chart outgrew its silent transport ({_lengthMs / 1000.0:0.#}s) — " +
+            $"regenerating for a content end of {contentMs / 1000.0:0.#}s.");
+        var resumeMs = _projectState.CurrentTimeMs;
+        if (_reload != null) await _reload(contentMs);
+        else await LoadAsync(contentMs);
+        if (_lengthMs <= 0 || !ReferenceEquals(project, _projectState.ActiveProject)) return;
+        // LoadAsync seeks to 0 (it is the LOAD path). Growing the track is
+        // not a load, so the playhead stays where the user left it — inside
+        // the new, longer track by construction.
+        _transport.SeekTo(Math.Clamp(resumeMs, 0, _projectState.TotalAudioLengthMs));
     }
 
     /// <summary>Loads the silent transport for a project that has content but no
     /// resolvable audio; a truly empty / no-content project keeps the free-engine
     /// behaviour (nothing to scrub).</summary>
-    public async Task LoadForProjectAsync(ChartProject project)
+    public async Task LoadForProjectAsync(ChartProject project, Func<bool>? isCurrent = null)
     {
         var contentMs = SilentAudioTrack.DeriveProjectLengthMs(project);
         if (!SilentAudioTrack.ShouldUseFallback(hasResolvableAudio: false, contentMs))
         {
             Stop();
-            _audioService.FreeAudio();
+            _audioService.FreeMasterAudio();
+            _projectState.TotalAudioLengthMs = 0;
+            _projectState.WaveformData = WaveformSamples.Empty;
             return;
         }
 
-        await LoadAsync(contentMs);
+        await LoadAsync(contentMs, isCurrent);
     }
 
     /// <summary>The engine is leaving silence (real audio loaded, or shutdown):
@@ -190,5 +212,12 @@ internal sealed class SilentTransportSession
         // Fire-and-forget on the UI thread: the method is re-entrancy guarded
         // and logs its own failures through LoadAsync.
         _ = EnsureCoversProjectAsync();
+    }
+
+    private void OnHistoryChanged()
+    {
+        // Only while this session runs on silence (the beat grid is watched
+        // exactly then); inside the current bucket the check is one comparison.
+        if (_watchedBeats != null) _ = EnsureCoversProjectAsync();
     }
 }

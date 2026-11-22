@@ -278,4 +278,25 @@ public sealed class CoalescedFileWriterTests
         Assert.False(overlapped, "two writes to one file ran at the same time");
         Assert.Equal(["v1", "v2"], landed.ToArray());
     }
+
+    /// <summary>
+    ///     Flush must not depend on the drain being scheduled: on a starved pool
+    ///     the drain work item can sit unrun past the exit-path timeout, and Flush
+    ///     then returned with no file and no error (RigLabAiSettingsTests
+    ///     AKey_IsSealed... in a merge train, green alone). The delay seam here
+    ///     never completes, which is a drain that never got to run.
+    /// </summary>
+    [Fact]
+    public void Flush_WritesEvenWhenTheDrainNeverGetsToRun()
+    {
+        var landed = new ConcurrentQueue<string>();
+        using var writer = new CoalescedFileWriter<string>(
+            (_, payload) => landed.Enqueue(payload),
+            delay: (_, _) => new TaskCompletionSource().Task);
+
+        writer.Queue("cfg", "v1");
+        writer.Flush();
+
+        Assert.Equal(["v1"], landed.ToArray());
+    }
 }

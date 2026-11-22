@@ -35,6 +35,15 @@ public sealed class LivePlayRunArchive
 
     /// <summary>v0.32 run-replay store; null in headless/minimal constructions.</summary>
     private readonly IReplayStore? _replayStore;
+    private PracticeRunIdentity? _currentRun;
+
+    /// <summary>Captures the owner before recording starts; completions keep this identity.</summary>
+    public PracticeRunIdentity BeginRun()
+    {
+        var run = _profiles.CaptureRun();
+        _currentRun = run;
+        return run;
+    }
 
     public LivePlayRunArchive(IPracticeProfileService profiles, IAppLogger logger,
         ILiveTakeStore? takeStore = null, IReplayStore? replayStore = null)
@@ -65,10 +74,11 @@ public sealed class LivePlayRunArchive
     public LiveTakeRecorder? TryStartTake(int sampleRate) => _takeStore?.TryStartTake(sampleRate);
 
     /// <summary>Fire-and-forget take finalization: stops the bounded writer,
-    /// encodes (Opus when ffmpeg is available), attaches the file to the most
-    /// recent session record and sweeps orphaned/over-cap takes. Never throws
+    /// encodes (Opus when ffmpeg is available), attaches the file to its
+    /// owning session record and sweeps orphaned/over-cap takes. Never throws
     /// and never blocks the caller.</summary>
-    public void FinalizeTakeAsync(LiveTakeRecorder recorder, bool attach, string songKey, string arrangement)
+    public void FinalizeTakeAsync(LiveTakeRecorder recorder, bool attach, string songKey, string arrangement,
+        PracticeRunIdentity run)
     {
         var store = _takeStore;
         if (store == null)
@@ -84,16 +94,27 @@ public sealed class LivePlayRunArchive
                 var takeFile = await store.FinalizeTakeAsync(recorder).ConfigureAwait(false);
                 if (attach && takeFile != null)
                 {
-                    _profiles.AttachTakeFile(songKey, arrangement, takeFile);
-                    // Bound state lives on the other side of this event — marshal.
-                    Dispatcher.UIThread.Post(() => TakeSaved?.Invoke(takeFile));
+                    if (_profiles.AttachTakeFile(songKey, arrangement, takeFile, run))
+                    {
+                        // Only this run's Results may offer the recording. Check
+                        // after dispatch too: another run/profile can win the queue.
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (_currentRun == run && _profiles.ActiveProfileId == run.ProfileId)
+                                TakeSaved?.Invoke(takeFile);
+                        });
+                    }
                 }
 
-                await store.CleanupAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                _logger.Warning(AppLogCategory.Audio, $"Take finalization failed: {ex.Message}");
+                _logger.Warning(AppLogCategory.Audio, "Take finalization failed", ex);
+            }
+            finally
+            {
+                store.CompleteTake(recorder);
+                await store.CleanupAsync(run.ProfileId).ConfigureAwait(false);
             }
         });
     }
@@ -101,7 +122,7 @@ public sealed class LivePlayRunArchive
     /// <summary>Fire-and-forget replay persistence (v0.32): writes the tiny
     /// JSON + attaches it to the just-recorded session. Never throws, never
     /// blocks the caller — the projection already happened under the gate.</summary>
-    public void SaveReplayAsync(RunReplay replay)
+    public void SaveReplayAsync(RunReplay replay, PracticeRunIdentity run)
     {
         var store = _replayStore;
         if (store == null)
@@ -113,15 +134,15 @@ public sealed class LivePlayRunArchive
         {
             try
             {
-                var name = store.Save(replay);
+                var name = store.Save(replay, run.ProfileId);
                 if (name != null)
                 {
-                    _profiles.AttachReplayFile(replay.SongKey, replay.ArrangementName, name);
+                    _profiles.AttachReplayFile(replay.SongKey, replay.ArrangementName, name, run);
                 }
             }
             catch (Exception ex)
             {
-                _logger.Warning(AppLogCategory.Audio, $"Replay save failed: {ex.Message}");
+                _logger.Warning(AppLogCategory.Audio, "Replay save failed", ex);
             }
         });
     }

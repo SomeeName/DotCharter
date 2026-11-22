@@ -29,6 +29,22 @@ public sealed class PinnedLabelHitRegistry
 
     private readonly Dictionary<object, List<Entry>> _byOwner = [];
 
+    private readonly Dictionary<object, PinnedLabelKind> _hovered = [];
+
+    /// <summary>The badge the pointer is over in <paramref name="owner" />, drawn with its hover look so
+    /// it reads as clickable. Returns true when the hover CHANGED (the caller repaints).</summary>
+    public bool SetHover(object owner, PinnedLabelKind? kind)
+    {
+        var had = _hovered.TryGetValue(owner, out var current);
+        if (kind is null) return had && _hovered.Remove(owner);
+        if (had && current == kind.Value) return false;
+        _hovered[owner] = kind.Value;
+        return true;
+    }
+
+    public bool IsHovered(object owner, PinnedLabelKind kind)
+        => _hovered.TryGetValue(owner, out var current) && current == kind;
+
     public void Clear(object owner)
     {
         if (_byOwner.TryGetValue(owner, out var entries)) entries.Clear();
@@ -47,7 +63,11 @@ public sealed class PinnedLabelHitRegistry
 
     /// <summary>Drops a viewport's entries entirely — called when the owning
     /// renderer leaves the visual tree.</summary>
-    public void Forget(object owner) => _byOwner.Remove(owner);
+    public void Forget(object owner)
+    {
+        _byOwner.Remove(owner);
+        _hovered.Remove(owner);
+    }
 
     /// <summary>How many rects <paramref name="owner" /> has registered. Exists
     /// so a test can prove one viewport's badges survive another's frame.</summary>

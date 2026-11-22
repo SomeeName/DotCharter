@@ -125,12 +125,11 @@ public sealed class ImportAudioPreparerFfmpegTests : IDisposable
 
     private static bool RunFfmpeg(string ffmpeg, IReadOnlyList<string> args)
     {
-        var psi = new ProcessStartInfo(ffmpeg) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
+        var psi = new ProcessStartInfo(ffmpeg);
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
-        using var process = Process.Start(psi)!;
-        _ = process.StandardError.ReadToEnd();
-        return process.WaitForExit(60_000) && process.ExitCode == 0;
+        // #608: both pipes drain concurrently under one cap (a deadlock detector, never a budget); a hung ffmpeg fails the test.
+        return BoundedProcess.Run(psi, TimeSpan.FromMinutes(2), "ffmpeg (import fixture)").ExitCode == 0;
     }
 
     /// <summary>A valid 1x1 RGB PNG, built here so the fixture needs no lavfi in the ffmpeg build.</summary>

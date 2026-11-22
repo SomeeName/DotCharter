@@ -116,6 +116,38 @@ public sealed class VocalStemLocatorTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AProjectWithAudioElsewhere_DiscoversTheProjectVocalStem(bool declared)
+    {
+        var dir = NewTempDir();
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(dir, "chart")).FullName;
+            var audioDir = Directory.CreateDirectory(Path.Combine(dir, "audio")).FullName;
+            var mix = Path.Combine(audioDir, "song.wav");
+            File.WriteAllText(mix, "mix");
+            var stemsDir = Directory.CreateDirectory(Path.Combine(projectDir, "stems")).FullName;
+            var voice = Path.Combine(stemsDir, "vocals.wav");
+            File.WriteAllText(voice, "voice");
+            var legacy = Directory.CreateDirectory(Path.Combine(audioDir, "stems")).FullName;
+            File.WriteAllText(Path.Combine(legacy, "vocals.wav"), "legacy voice");
+            var options = new LyricAutoSyncOptions
+            {
+                ProjectPath = Path.Combine(projectDir, "project.dcproj"),
+                ProjectAudioFileName = mix,
+                ProjectStems = declared ? [new Stem { Name = "vocals", Path = Path.Combine("stems", "vocals.wav") }] : []
+            };
+
+            Assert.Equal(voice, options.ToSyncOptions().VocalStemPath);
+        }
+        finally
+        {
+            Cleanup(dir);
+        }
+    }
+
     [Fact]
     public void AMixBesideASeparatedStemsFolder_ResolvesToTheVoice()
     {

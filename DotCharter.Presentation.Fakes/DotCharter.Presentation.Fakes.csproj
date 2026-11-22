@@ -10,11 +10,12 @@
         <DotCharterBannedPresentationApis>true</DotCharterBannedPresentationApis>
     </PropertyGroup>
 
-    <!-- Services-free fakes of the Presentation contracts, for the gallery and
-         the tests. DotCharter.UI must never reference this project
-         (AssemblyLayeringTests). -->
+    <!-- Fakes of the Presentation contracts, for the gallery and tests.
+         Services supplies pure format catalog data; no runtime services are resolved.
+         DotCharter.UI must never reference this project (AssemblyLayeringTests). -->
     <ItemGroup>
         <ProjectReference Include="..\DotCharter.Presentation\DotCharter.Presentation.csproj" />
+        <ProjectReference Include="..\DotCharter.Services\DotCharter.Services.csproj" />
     </ItemGroup>
 
     <ItemGroup>

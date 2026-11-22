@@ -19,6 +19,10 @@ public sealed partial class ChartSynthPlayStyleViewModel : ViewModelBase, IDispo
     private readonly ProjectState _projectState;
     private readonly IHistoryService _history;
     private bool _editingBass;
+    private readonly string _resetQuestion;
+
+    // the rows a reset puts back: shapes ring, the two holds and their two gaps
+    private const int ResetCount = 5;
 
     // True while Refresh raises: a picker write that arrives then is the control
     // echoing the old selection, never a pick.
@@ -30,6 +34,8 @@ public sealed partial class ChartSynthPlayStyleViewModel : ViewModelBase, IDispo
         _projectState = projectState;
         _history = history;
         NoProjectText = localization["Mixer_ChartSynth_Style_NoProject"];
+        _resetQuestion = localization.Format("Mixer_Midi_ResetPlayStyleAsk", ResetCount);
+        ResetConfirm = new InspectorPendingAction().ClearOn(projectState, history);
         _editingBass = IsBassArrangement;
         _history.HistoryChanged += Refresh;
         _projectState.PropertyChanged += OnProjectStateChanged;
@@ -110,12 +116,19 @@ public sealed partial class ChartSynthPlayStyleViewModel : ViewModelBase, IDispo
     /// <summary>The shown rule set differs from the defaults.</summary>
     public bool CanReset => Rules is { IsDefault: false };
 
-    /// <summary>Puts the shown rule set (guitar or bass) back to the defaults.</summary>
+    /// <summary>The play style card's reset question (design D: "Reset 5 play style settings? The other MIDI cards stay.").</summary>
+    public InspectorPendingAction ResetConfirm { get; }
+
+    /// <summary>Puts the shown rule set (guitar or bass) back to the defaults, after design D's question; one undo step.</summary>
     [RelayCommand]
     private void ResetToDefaults()
     {
-        if (Rules is not { } target) return;
-        _history.Do(new SetSynthPlayStyleAction(target, new ChartSynthPlayRules()));
+        if (Rules is null) return;
+        // the rule set is read at Confirm: a Guitar | Bass flip while the question waits re-targets it to the rows shown
+        ResetConfirm.Ask(_resetQuestion, () =>
+        {
+            if (Rules is { } target) _history.Do(new SetSynthPlayStyleAction(target, new ChartSynthPlayRules()));
+        });
     }
 
     private ChartSynthPlayRules? Rules => _projectState.ActiveProject?.SynthPlayStyle.For(_editingBass);
@@ -185,5 +198,6 @@ public sealed partial class ChartSynthPlayStyleViewModel : ViewModelBase, IDispo
     {
         _history.HistoryChanged -= Refresh;
         _projectState.PropertyChanged -= OnProjectStateChanged;
+        ResetConfirm.Dispose();
     }
 }

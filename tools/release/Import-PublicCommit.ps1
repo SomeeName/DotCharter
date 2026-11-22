@@ -9,11 +9,16 @@
     1. Fetches public `main` (-PublicUrl, default https://github.com/SomeeName/<Repo>.git)
        into the target repo: the dev checkout for DotCharter, its JuceSharp submodule for
        JuceSharp. -Pr resolves a MERGED pull request to the commits it put on public main
-       (gh): the non-merge commits of a merge commit, the rebased commits, or the squash.
+       (gh): the non-merge commits of a merge commit (and the merge itself when it changed
+       something by hand, a conflict resolution: PublicSync.psm1 Get-PublicMergeOwnBase),
+       the rebased commits, or the squash. A merge commit given to -Commit imports only what
+       it changed by hand; one that changed nothing is refused.
     2. Per commit, oldest first: each changed text file of its parent and of itself is
        turned back into dev form by the reverse rename map (Convert-PublicTextToDev: a
        public line that is the renamed form of a line in the dev file becomes that dev line;
-       other lines are left alone), and the resulting diff goes through `git apply -3
+       other lines are left alone). An unchanged public prefix retains dev-only trailing
+       lines as context in both trees; an edit at public EOF then preserves those lines.
+       The resulting diff goes through `git apply -3
        --index`, so a dev file that moved on since the snapshot gets a real 3-way merge.
        The JuceSharp gitlink of a DotCharter commit is never applied (import the JuceSharp
        commit instead).
@@ -68,6 +73,7 @@ foreach ($repoPath in @($DevRepo, $target) | Select-Object -Unique) {
 # --- 1. the public commits ------------------------------------------------------------------
 Git -C $target fetch -q --no-tags $PublicUrl main | Out-Null
 $publicMain = Git -C $target rev-parse FETCH_HEAD
+$publicGitDir = Git -C $target rev-parse --path-format=absolute --git-common-dir
 if ($PSCmdlet.ParameterSetName -eq 'Pr') {
     $view = gh pr view $Pr -R "$owner/$Repo" --json state,mergeCommit,commits,title | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0) { throw "gh pr view $Pr failed." }
@@ -76,6 +82,8 @@ if ($PSCmdlet.ParameterSetName -eq 'Pr') {
     $parents = @((Git -C $target log -1 --format=%P $merge).Split(' ', [StringSplitOptions]::RemoveEmptyEntries))
     if ($parents.Count -gt 1) {
         $Commit = @((Git -C $target rev-list --no-merges --reverse "$($parents[0])..$merge").Split("`n", [StringSplitOptions]::RemoveEmptyEntries))
+        # A conflict resolution or an edit made in the merge itself comes last.
+        if ($null -ne (Get-PublicMergeOwnBase -GitDir $publicGitDir -Sha $merge)) { $Commit += $merge }
     }
     else {
         # Squash (one commit) or rebase (the PR's commits, re-created): walk back while the
@@ -96,16 +104,23 @@ if ($PSCmdlet.ParameterSetName -eq 'Pr') {
     $slug = "pr-$Pr"
 }
 $Commit = @($Commit | ForEach-Object { Git -C $target rev-parse --verify "$_^{commit}" })
+# Each commit's base: its parent, or for a merge the tree git alone makes of its parents,
+# so only what the merge changed by hand (a conflict resolution) is applied.
+$commitBase = @{}
 foreach ($c in $Commit) {
     # Non-empty when $c is NOT reachable from public main.
     if (Git -C $target rev-list -1 $c --not $publicMain) { throw "$c is not on public $Repo main; only merged public commits are imported." }
-    if (@((Git -C $target log -1 --format=%P $c).Split(' ', [StringSplitOptions]::RemoveEmptyEntries)).Count -ne 1) {
-        throw "$c is a merge or a root commit; import its non-merge commits (or -Pr)."
+    $parentCount = @((Git -C $target log -1 --format=%P $c).Split(' ', [StringSplitOptions]::RemoveEmptyEntries)).Count
+    if ($parentCount -eq 0) { throw "$c is a root commit; there is nothing to import." }
+    $commitBase[$c] = "$c^"
+    if ($parentCount -gt 1) {
+        $own = Get-PublicMergeOwnBase -GitDir $publicGitDir -Sha $c
+        if ($null -eq $own) { throw "$c is a merge with no change of its own; import its non-merge commits (or -Pr)." }
+        $commitBase[$c] = $own
     }
 }
 # A snapshot is dev's own tree going out, never a contribution coming back. Recognised by the
 # ONE snapshot identity the export and the watch use (PublicSync.psm1 Get-SnapshotIdentities).
-$publicGitDir = Git -C $target rev-parse --path-format=absolute --git-common-dir
 $publicRecords = @(Get-SyncCommitRecords -GitDir $publicGitDir -Ref $publicMain)
 $snapshotIdentities = Get-SnapshotIdentities -Records $publicRecords
 foreach ($record in $publicRecords | Where-Object { $Commit -contains $_.Sha }) {
@@ -128,9 +143,9 @@ Git -C $target switch -q -c $Branch $targetBase | Out-Null
 $latin1 = [System.Text.Encoding]::Latin1
 function Test-Binary([byte[]]$Bytes) { [Array]::IndexOf($Bytes, [byte]0, 0, [Math]::Min($Bytes.Length, 8192)) -ge 0 }
 
-# The tree of $Rev with every path in $Paths turned back into dev form against the dev file
-# at HEAD, and $Pinned entries copied from $PinTree (the gitlink stays out of the diff).
-function New-DevFormTree([string]$Rev, [string[]]$Paths, [string]$PinTree) {
+# The tree of $Rev with selected text paths reverse-mapped against the current index.
+# Retain eligible trailing context from $ImportBase and pin the gitlink from $PinTree.
+function New-DevFormTree([string]$Rev, [string[]]$Paths, [string]$PinTree, [string]$ImportBase, [string]$ImportAfter) {
     $index = Join-Path ([System.IO.Path]::GetTempPath()) ('dc-import-index-' + [guid]::NewGuid().ToString('N'))
     $envIndex = @{ GIT_INDEX_FILE = $index }
     try {
@@ -141,10 +156,18 @@ function New-DevFormTree([string]$Rev, [string[]]$Paths, [string]$PinTree) {
             $mode = $Matches[1]
             $bytes = Invoke-SnapshotGit -Arguments @('-C', $target, 'cat-file', 'blob', $Matches[2]) -AsBytes
             if (Test-Binary $bytes) { continue }
-            $devBytes = Invoke-SnapshotGit -Arguments @('-C', $target, 'cat-file', 'blob', "HEAD:$path") -AsBytes -AllowExitCodes @(128)
+            $devBytes = Invoke-SnapshotGit -Arguments @('-C', $target, 'cat-file', 'blob', ":$path") -AsBytes -AllowExitCodes @(128)
             if ($devBytes.Length -eq 0 -or (Test-Binary $devBytes)) { continue }
             $text = $latin1.GetString($bytes)
             $devForm = Convert-PublicTextToDev -PublicText $text -DevText $latin1.GetString($devBytes)
+            $baseBytes = Invoke-SnapshotGit -Arguments @('-C', $target, 'cat-file', 'blob', "${ImportBase}:$path") -AsBytes -AllowExitCodes @(128)
+            $afterBytes = Invoke-SnapshotGit -Arguments @('-C', $target, 'cat-file', 'blob', "${ImportAfter}:$path") -AsBytes -AllowExitCodes @(128)
+            if ($baseBytes.Length -gt 0 -and $afterBytes.Length -gt 0 -and
+                $baseBytes[-1] -eq 10 -and $afterBytes[-1] -eq 10 -and
+                -not (Test-Binary $baseBytes) -and -not (Test-Binary $afterBytes)) {
+                $baseForm = Convert-PublicTextToDev -PublicText $latin1.GetString($baseBytes) -DevText $latin1.GetString($devBytes)
+                $devForm = Add-PublicImportTail -Text $devForm -BaseText $baseForm -DevText $latin1.GetString($devBytes)
+            }
             if ($devForm -ceq $text) { continue }
             $blob = Invoke-SnapshotGit -Arguments @('-C', $target, 'hash-object', '-w', '--stdin') -InputBytes $latin1.GetBytes($devForm)
             Invoke-SnapshotGit -Arguments @('-C', $target, 'update-index', '--cacheinfo', "$mode,$blob,$path") -Environment $envIndex | Out-Null
@@ -170,10 +193,10 @@ foreach ($c in $Commit) {
 $trailers = @($Commit | ForEach-Object { Get-PublicCommitTrailer -Repo $Repo -Commit $_ })
 $trailers += @($authors | ForEach-Object { "Co-authored-by: $_" })
 foreach ($c in $Commit) {
-    $paths = @((Git -C $target diff --name-only -z --no-renames "$c^" $c).Split([char]0, [StringSplitOptions]::RemoveEmptyEntries))
+    $paths = @((Git -C $target diff --name-only -z --no-renames $commitBase[$c] $c).Split([char]0, [StringSplitOptions]::RemoveEmptyEntries))
     if ($Repo -eq 'DotCharter' -and $paths -contains 'JuceSharp') { Write-Warning "$c moves the JuceSharp gitlink; that is not applied here (import the JuceSharp commit instead)." }
-    $before = New-DevFormTree "$c^" $paths $null
-    $after = New-DevFormTree $c $paths "$c^"
+    $before = New-DevFormTree $commitBase[$c] $paths $null $commitBase[$c] $c
+    $after = New-DevFormTree $c $paths $commitBase[$c] $commitBase[$c] $c
     $patch = Join-Path ([System.IO.Path]::GetTempPath()) ('dc-import-' + [guid]::NewGuid().ToString('N') + '.patch')
     try {
         [System.IO.File]::WriteAllBytes($patch, (Invoke-SnapshotGit -Arguments @('-C', $target, 'diff', '--binary', '--full-index', $before, $after) -AsBytes))

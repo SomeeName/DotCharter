@@ -27,8 +27,8 @@ internal sealed class RocksmithSng
     public List<RsDna> Dnas { get; } = [];
     public RsMetaData MetaData { get; set; } = new();
 
-    /// <summary>The RS7X extension block after MetaData (7+ strings, <see cref="RsExtensionBlock" />);
-    /// null when the body ends at MetaData or what follows breaks a validation rule.</summary>
+    /// <summary>Extra per-string fields of the internal slot-order model (<see cref="RsExtensionBlock" />);
+    /// the RS Extended Range writer combines these with the stock columns.</summary>
     public RsExtensionBlock? Extension { get; set; }
 
     /// <summary>Why the bytes after MetaData were not taken as a block; null when there were none.</summary>

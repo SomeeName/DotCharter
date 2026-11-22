@@ -445,7 +445,11 @@ public class RscpArrangementParser
             var endPos = RscpParsingUtilities.ParseFraction(hsNode.Attribute("ep")?.Value);
             var tId = int.TryParse(hsNode.Attribute("templateId")?.Value, CultureInfo.InvariantCulture, out var id) ? id : -1;
 
-            level.HandShapes.Add(new HandShape { Position = pos, EndPosition = endPos, Name = "Chord", TemplateId = tId });
+            level.HandShapes.Add(new HandShape
+            {
+                Position = pos, EndPosition = endPos, Name = "Chord", TemplateId = tId,
+                GhostMask = hsNode.Attribute("ghost") is { } ghost ? RscpGhostStrings.Parse(ghost.Value) : null
+            });
         }
     }
 

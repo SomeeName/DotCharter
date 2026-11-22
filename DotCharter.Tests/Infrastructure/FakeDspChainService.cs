@@ -56,6 +56,7 @@ public sealed class FakeDspChainService : IDspChainService, IDspMeterSource
         public string ModuleTypeId = string.Empty;
         public bool Bypassed;
         public int Branch;
+        public JuceSharp.Dsp.JuceDspSidechainSource Sidechain;
         public IReadOnlyList<RigControlAssignment> ControlAssignments = Array.Empty<RigControlAssignment>();
         public Dictionary<string, float> Values = new(StringComparer.Ordinal);
         public Dictionary<string, string> StringValues = new(StringComparer.Ordinal);
@@ -97,7 +98,7 @@ public sealed class FakeDspChainService : IDspChainService, IDspMeterSource
     public IReadOnlyList<DspNode> GetNodes()
     {
         OnGetNodes?.Invoke();
-        return _entries.Select(e => new DspNode(e.Id, e.ModuleTypeId, e.Bypassed, e.Values, e.StringValues, e.Branch, e.ControlAssignments)).ToList();
+        return _entries.Select(e => new DspNode(e.Id, e.ModuleTypeId, e.Bypassed, e.Values, e.StringValues, e.Branch, e.ControlAssignments, e.Sidechain)).ToList();
     }
 
     /// <summary>Runs at the top of every <see cref="AddNode" /> /
@@ -163,6 +164,17 @@ public sealed class FakeDspChainService : IDspChainService, IDspMeterSource
         entry.Bypassed = bypassed;
         return true;
     }
+
+    public bool SetNodeSidechain(int nodeId, JuceSharp.Dsp.JuceDspSidechainSource source)
+    {
+        var node = _entries.FirstOrDefault(e => e.Id == nodeId);
+        if (node is null || !(Catalog.FirstOrDefault(m => m.Id == node.ModuleTypeId)?.SupportsSidechain ?? false)) return false;
+        node.Sidechain = source;
+        return true;
+    }
+
+    public JuceSharp.Dsp.JuceDspSidechainSource GetNodeSidechain(int nodeId)
+        => _entries.FirstOrDefault(e => e.Id == nodeId)?.Sidechain ?? JuceSharp.Dsp.JuceDspSidechainSource.None;
 
     public bool SetControlAssignments(int nodeId, IReadOnlyList<RigControlAssignment> assignments)
     {

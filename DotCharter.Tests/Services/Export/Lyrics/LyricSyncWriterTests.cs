@@ -29,7 +29,70 @@ public sealed class LyricSyncWriterTests : IDisposable
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("dc-lyricsync-writers").FullName;
 
+    [Fact]
+    public void Cancellation_during_xml_rendering_does_not_publish_the_stage()
+    {
+        var path = Path.Combine(_dir, "song.xml");
+        File.WriteAllText(path, "previous xml");
+        using var cancellation = new CancellationTokenSource();
+        var syllables = new CancelingSyllables(Sample(), cancellation);
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            RsVocalsSecondsWriter.WriteTo(path, syllables, RsVocalsSecondsWriter.PitchlessNote, cancellation.Token));
+
+        Assert.Equal("previous xml", File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_dir));
+    }
+
+    private sealed class CancelingSyllables(IReadOnlyList<LyricSyncSyllable> source,
+        CancellationTokenSource cancellation) : IReadOnlyList<LyricSyncSyllable>
+    {
+        public int Count => source.Count;
+        public LyricSyncSyllable this[int index]
+        {
+            get
+            {
+                cancellation.Cancel();
+                return source[index];
+            }
+        }
+        public IEnumerator<LyricSyncSyllable> GetEnumerator() => source.GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     public void Dispose() => BestEffortDelete.Directory(_dir);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void InvalidXml_PreservesPreviousExportAndRemovesStage(bool existing)
+    {
+        var path = Path.Combine(_dir, "song_vocals.xml");
+        if (existing) File.WriteAllText(path, "previous export");
+        var syllables = Sample();
+        syllables[0] = syllables[0] with { Text = "invalid\u0001lyric" };
+
+        Assert.Throws<ArgumentException>(() => RsVocalsSecondsWriter.WriteTo(
+            path, syllables, RsVocalsSecondsWriter.PitchlessNote, TestContext.Current.CancellationToken));
+
+        if (existing) Assert.Equal("previous export", File.ReadAllText(path));
+        else Assert.False(File.Exists(path));
+        Assert.Empty(Directory.GetFiles(_dir, "*.tmp"));
+    }
+
+    [Fact]
+    public void XmlExport_ReplacesDestinationWithoutOpeningItForWrite()
+    {
+        var path = Path.Combine(_dir, "song_vocals.xml");
+        File.WriteAllText(path, "previous");
+        using var previous = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+
+        RsVocalsSecondsWriter.WriteTo(path, Sample(), RsVocalsSecondsWriter.PitchlessNote, TestContext.Current.CancellationToken);
+
+        using var reader = new StreamReader(previous);
+        Assert.Equal("previous", reader.ReadToEnd());
+        Assert.Contains("<vocals count=\"4\"", File.ReadAllText(path), StringComparison.Ordinal);
+    }
 
     /// <summary>"Hel-lo world" then "bye": two phrases, one word split in two.</summary>
     private static List<LyricSyncSyllable> Sample() =>
@@ -50,7 +113,7 @@ public sealed class LyricSyncWriterTests : IDisposable
     public void TheVocalsXmlRoundTripsThroughTheAppsOwnImporter()
     {
         var path = Path.Combine(_dir, "song_vocals.xml");
-        RsVocalsSecondsWriter.WriteTo(path, Sample());
+        RsVocalsSecondsWriter.WriteTo(path, Sample(), RsVocalsSecondsWriter.PitchlessNote, TestContext.Current.CancellationToken);
 
         // A beat grid to position against — the reader needs one to produce
         // anything but position zero, and 120 BPM makes the arithmetic exact.
@@ -97,7 +160,7 @@ public sealed class LyricSyncWriterTests : IDisposable
     public void TheVocalsXmlHasTheShapeBothImportersNeed()
     {
         var path = Path.Combine(_dir, "shape_vocals.xml");
-        RsVocalsSecondsWriter.WriteTo(path, Sample());
+        RsVocalsSecondsWriter.WriteTo(path, Sample(), RsVocalsSecondsWriter.PitchlessNote, TestContext.Current.CancellationToken);
         var lines = File.ReadAllLines(path);
 
         // Format DETECTION in EOF is the literal "<vocals count".

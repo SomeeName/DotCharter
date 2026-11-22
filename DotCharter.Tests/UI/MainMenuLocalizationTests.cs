@@ -5,7 +5,7 @@ namespace DotCharter.Tests.UI;
 
 /// <summary>
 ///     Every <c>{localization:Loc …}</c> key the main menu names must exist in
-///     BOTH resx files.
+///     ALL THREE resx files.
 ///     <para>
 ///         A missing key is one of this codebase's silent failures: no build
 ///         error, no exception — just a menu entry that renders blank, or an
@@ -16,7 +16,7 @@ namespace DotCharter.Tests.UI;
 public sealed class MainMenuLocalizationTests
 {
     [Fact]
-    public void EveryMenuKeyExistsInBothResxFiles()
+    public void EveryMenuKeyExistsInAllThreeResxFiles()
     {
         var menu = MainMenuSource.ReadAllText();
         var keys = Regex.Matches(menu, @"localization:Loc\s+(\w+)")
@@ -27,16 +27,12 @@ public sealed class MainMenuLocalizationTests
         // If this collapses the lint has stopped looking at anything.
         Assert.True(keys.Count > 60, $"expected the menu to name many keys, saw {keys.Count}");
 
-        var english = KeysIn("Resources.resx");
-        var german = KeysIn("Resources.de-DE.resx");
-
-        var missingEnglish = keys.Where(k => !english.Contains(k)).ToList();
-        var missingGerman = keys.Where(k => !german.Contains(k)).ToList();
-
-        Assert.True(missingEnglish.Count == 0,
-            "main-menu keys missing from Resources.resx: " + string.Join(", ", missingEnglish));
-        Assert.True(missingGerman.Count == 0,
-            "main-menu keys missing from Resources.de-DE.resx: " + string.Join(", ", missingGerman));
+        foreach (var file in new[] { "Resources.resx", "Resources.de-DE.resx", "Resources.ja-JP.resx" })
+        {
+            var known = KeysIn(file);
+            var missing = keys.Where(k => !known.Contains(k)).ToList();
+            Assert.True(missing.Count == 0, $"main-menu keys missing from {file}: " + string.Join(", ", missing));
+        }
     }
 
     /// <summary>
@@ -44,7 +40,8 @@ public sealed class MainMenuLocalizationTests
     ///     longer than the eye scans, and it put "Separate Stems" next to "Refret"
     ///     next to "Screenshot" with nothing to say why. The cap is deliberately
     ///     loose: this guards the SHAPE, so adding a tool inside an existing group
-    ///     is free while adding a twenty-first top-level one is not.
+    ///     is free while adding a twenty-first top-level one is not. Which groups,
+    ///     in which order, is <c>UI/ToolsMenuWorkflowOrderTests</c>.
     /// </summary>
     [Fact]
     public void TheToolsMenuStaysGrouped()
@@ -62,7 +59,8 @@ public sealed class MainMenuLocalizationTests
 
         // …and grouping means the entries actually CONTAIN things, rather than the
         // count being low because tools were deleted.
-        Assert.True(directChildren.Count(e => e.Elements(ns + "MenuItem").Any()) >= 5,
+        // (four groups plus the one AI chat row, which is a door to a panel and holds nothing)
+        Assert.True(directChildren.Count(e => e.Elements(ns + "MenuItem").Any()) >= 4,
             "the Tools menu's top-level entries are not submenus — nothing is grouped.");
     }
 
@@ -77,7 +75,7 @@ public sealed class MainMenuLocalizationTests
     public void EveryTopLevelMenuStaysScannable()
     {
         var (tops, ns) = TopLevelMenus();
-        Assert.Equal(8, tops.Count);
+        Assert.Equal(7, tops.Count);
 
         foreach (var top in tops)
         {
@@ -86,8 +84,9 @@ public sealed class MainMenuLocalizationTests
                 $"the {Header(top)} menu has {direct.Count} top-level entries — group them into submenus.");
         }
 
-        // The five that were too long to scan must each carry at least one group.
-        foreach (var key in new[] { "Menu_File", "Menu_Edit", "Menu_TempoMap", "Menu_View", "Menu_Tools" })
+        // The four that were too long to scan must each carry at least one group. Tempo map left the list when
+        // its five Start & end rows became one dialog (#494): seven direct rows are scannable flat.
+        foreach (var key in new[] { "Menu_File", "Menu_Edit", "Menu_View", "Menu_Tools" })
         {
             var top = tops.Single(e => (string?)e.Attribute("Header") == $"{{localization:Loc {key}}}");
             Assert.True(top.Elements(ns + "MenuItem").Any(c => c.Elements(ns + "MenuItem").Any()),
@@ -102,17 +101,13 @@ public sealed class MainMenuLocalizationTests
     ///     side by side.
     /// </summary>
     /// <remarks>
-    ///     Two of the Tools menu's groups are a deliberate exception and are
-    ///     named here rather than quietly tolerated: they group by TARGET (fret
-    ///     hand positions / chart review), which is what makes that menu
-    ///     readable, and the pair IS the group. They predate this rule. (Hand
-    ///     shapes was the third until #478 gave it a third row.)
+    ///     No exceptions since #491: the three two-row groups this rule used to
+    ///     name (fret hand positions, review, Edit's Timing) were folded into
+    ///     Generate, Fix &amp; clean up and Move &amp; resize.
     /// </remarks>
     [Fact]
     public void NoSubmenuHidesFewerThanThreeRows()
     {
-        string[] byTargetNotByCount = ["Menu_GroupFhp", "Menu_GroupReview"];
-
         var (tops, ns) = TopLevelMenus();
 
         var groups = tops.SelectMany(t => t.Descendants(ns + "MenuItem"))
@@ -124,8 +119,7 @@ public sealed class MainMenuLocalizationTests
         foreach (var group in groups)
         {
             var rows = group.Elements(ns + "MenuItem").Count();
-            var floor = byTargetNotByCount.Any(k => Header(group).Contains(k, StringComparison.Ordinal)) ? 2 : 3;
-            Assert.True(rows >= floor,
+            Assert.True(rows >= 3,
                 $"the submenu {Header(group)} holds {rows} rows — one level for that few is an extra " +
                 "click for nothing");
         }

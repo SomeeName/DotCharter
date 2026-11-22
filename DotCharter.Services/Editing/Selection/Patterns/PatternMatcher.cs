@@ -234,23 +234,13 @@ public static class PatternMatcher
         MatchPattern pattern, List<SoundRef> seeds, List<SoundRef> candidates,
         Arrangement? arrangement, HashSet<object> seedSet, RangeGate gate, List<PatternMatchGroup> output)
     {
+        var capo = CapoOf(arrangement);
         var seedEntries = new List<SeedEntry>(seeds.Count);
         foreach (var s in seeds)
         {
-            var origin = Origin.Of(pattern, [s]);
+            var origin = Origin.Of(pattern, [s], capo);
             var signature = BuildSoundSignature(pattern, s, arrangement, origin);
-            var entry = new SeedEntry(signature, LowestFrettedFret(s));
-            var duplicate = false;
-            foreach (var existing in seedEntries)
-            {
-                if (existing.Signature.SameAs(signature) && existing.LowestFret == entry.LowestFret)
-                {
-                    duplicate = true;
-                    break;
-                }
-            }
-
-            if (!duplicate) seedEntries.Add(entry);
+            AddDistinct(seedEntries, signature, LowestFrettedFret([s], capo));
         }
 
         var claimed = new HashSet<object>(ReferenceEqualityComparer.Instance);
@@ -261,8 +251,8 @@ public static class PatternMatcher
             if (!gate.Allows(candidate.Position)) continue;
             if (!claimed.Add(candidate.Element)) continue;
 
-            var signature = BuildSoundSignature(pattern, candidate, arrangement, Origin.Of(pattern, [candidate]));
-            var candidateFret = LowestFrettedFret(candidate);
+            var signature = BuildSoundSignature(pattern, candidate, arrangement, Origin.Of(pattern, [candidate], capo));
+            var candidateFret = LowestFrettedFret([candidate], capo);
 
             foreach (var entry in seedEntries)
             {
@@ -289,8 +279,9 @@ public static class PatternMatcher
         var template = new List<SoundRef>(seeds);
         template.Sort(CompareSounds);
 
-        var templateOrigin = Origin.Of(pattern, template);
-        var templateFret = LowestFrettedFret(template);
+        var capo = CapoOf(arrangement);
+        var templateOrigin = Origin.Of(pattern, template, capo);
+        var templateFret = LowestFrettedFret(template, capo);
         var templateSignatures = new List<Signature>(template.Count);
         foreach (var element in template)
             templateSignatures.Add(BuildSoundSignature(pattern, element, arrangement, templateOrigin));
@@ -319,7 +310,7 @@ public static class PatternMatcher
             }
 
             if (skip) continue;
-            if (!WithinFretDistance(pattern, templateFret, LowestFrettedFret(window))) continue;
+            if (!WithinFretDistance(pattern, templateFret, LowestFrettedFret(window, capo))) continue;
             if (!RunMatches(pattern, template, templateSignatures, window, arrangement)) continue;
 
             foreach (var element in window) claimed.Add(element.Element);
@@ -331,7 +322,7 @@ public static class PatternMatcher
         MatchPattern pattern, List<SoundRef> template, List<Signature> templateSignatures,
         List<SoundRef> window, Arrangement? arrangement)
     {
-        var windowOrigin = Origin.Of(pattern, window);
+        var windowOrigin = Origin.Of(pattern, window, CapoOf(arrangement));
 
         for (var i = 0; i < template.Count; i++)
         {
@@ -426,26 +417,27 @@ public static class PatternMatcher
         if (!pattern.Scope.HasFlag(PatternScope.HandShapes)) return;
         if (seed.HandShapes.Count == 0) return;
 
-        var seedSignatures = new List<Signature>();
+        var seedEntries = new List<SeedEntry>();
         foreach (var handShape in seed.HandShapes)
         {
-            var signature = BuildHandShapeSignature(pattern, handShape, source.Arrangement);
-            if (signature != null) AddDistinct(seedSignatures, signature);
+            var signature = BuildHandShapeSignature(pattern, handShape, source.Arrangement, out var lowestFret);
+            AddDistinct(seedEntries, signature, lowestFret);
         }
 
-        if (seedSignatures.Count == 0) return;
+        if (seedEntries.Count == 0) return;
 
         var seedSet = new HashSet<HandShape>(seed.HandShapes);
         foreach (var handShape in source.HandShapes)
         {
             if (seedSet.Contains(handShape)) continue;
             if (!gate.Allows(handShape.Position)) continue;
-            var signature = BuildHandShapeSignature(pattern, handShape, source.Arrangement);
+            var signature = BuildHandShapeSignature(pattern, handShape, source.Arrangement, out var lowestFret);
             if (signature == null) continue;
 
-            foreach (var seedSignature in seedSignatures)
+            foreach (var entry in seedEntries)
             {
-                if (!seedSignature.Matches(signature)) continue;
+                if (!entry.Signature.Matches(signature)) continue;
+                if (!WithinFretDistance(pattern, entry.LowestFret, lowestFret)) continue;
                 output.Add(new PatternMatchGroup(handShape.Position, [], [], [handShape], []));
                 break;
             }
@@ -461,9 +453,9 @@ public static class PatternMatcher
         if (!pattern.Scope.HasFlag(PatternScope.Anchors)) return;
         if (seed.Anchors.Count == 0) return;
 
-        var seedSignatures = new List<Signature>();
+        var seedEntries = new List<SeedEntry>();
         foreach (var anchor in seed.Anchors)
-            AddDistinct(seedSignatures, BuildAnchorSignature(pattern, anchor, source));
+            AddDistinct(seedEntries, BuildAnchorSignature(pattern, anchor, source), anchor.Fret);
 
         var seedSet = new HashSet<FretAnchor>(seed.Anchors);
         foreach (var anchor in source.Anchors)
@@ -472,9 +464,10 @@ public static class PatternMatcher
             if (!gate.Allows(anchor.Position)) continue;
             var signature = BuildAnchorSignature(pattern, anchor, source);
 
-            foreach (var seedSignature in seedSignatures)
+            foreach (var entry in seedEntries)
             {
-                if (!seedSignature.Matches(signature)) continue;
+                if (!entry.Signature.Matches(signature)) continue;
+                if (!WithinFretDistance(pattern, entry.LowestFret, anchor.Fret)) continue;
                 output.Add(new PatternMatchGroup(anchor.Position, [], [], [], [anchor]));
                 break;
             }
@@ -717,7 +710,7 @@ public static class PatternMatcher
 
         if (pattern.MatchBeatOffset) key.Append(BeatOffsetKey(sound.Position));
 
-        var template = ResolveTemplate(arrangement, sound.TemplateId);
+        var template = arrangement?.FindChordTemplate(sound.TemplateId);
         if (pattern.MatchChordName) key.Append(template?.Name ?? string.Empty).Append('|');
         // IsArpeggio, not one flag: two flags spell arpeggio and each import
         // path sets only one, so a single-flag key made every RS-XML arpeggio
@@ -732,9 +725,10 @@ public static class PatternMatcher
     }
 
     private static Signature? BuildHandShapeSignature(
-        MatchPattern pattern, HandShape handShape, Arrangement? arrangement)
+        MatchPattern pattern, HandShape handShape, Arrangement? arrangement, out int lowestFret)
     {
-        var template = ResolveTemplate(arrangement, handShape.TemplateId);
+        lowestFret = 0;
+        var template = arrangement?.FindChordTemplate(handShape.TemplateId);
         // A hand shape has no notes of its own — its template IS its shape, so a
         // shape whose template cannot be resolved has no signature at all rather
         // than an empty one that would match every other unresolvable shape.
@@ -744,9 +738,11 @@ public static class PatternMatcher
         var strings = new List<int>(frets.Keys);
         strings.Sort();
 
+        var capo = CapoOf(arrangement);
+        lowestFret = LowestFretted(frets.Values, capo);
         var origin = new Origin(
-            pattern.Fret == FretRule.Transposable ? LowestFretted(frets.Values) : 0,
-            pattern.Strings == StringRule.Relative && strings.Count > 0 ? strings[0] : 0);
+            pattern.Fret == FretRule.Transposable ? lowestFret : 0,
+            pattern.Strings == StringRule.Relative && strings.Count > 0 ? strings[0] : 0, capo);
 
         var key = new StringBuilder(48);
         key.Append("h|");
@@ -799,7 +795,7 @@ public static class PatternMatcher
                     StringRule.Relative => "r" + (stringAt(i) - origin.String).ToString(CultureInfo.InvariantCulture),
                     _ => string.Empty
                 };
-                parts.Add(stringPart + ":" + FretKey(pattern.Fret, fretAt(i), origin.Fret));
+                parts.Add(stringPart + ":" + FretKey(pattern.Fret, fretAt(i), origin.Fret, origin.Capo));
             }
 
             parts.Sort(StringComparer.Ordinal);
@@ -845,38 +841,38 @@ public static class PatternMatcher
     // ----------------------------------------------------------- facet pieces
 
     /// <summary>What a transposable/relative comparison is measured FROM.</summary>
-    private readonly record struct Origin(int Fret, int String)
+    private readonly record struct Origin(int Fret, int String, int Capo)
     {
-        public static Origin Of(MatchPattern pattern, IReadOnlyList<SoundRef> group) => new(
-            pattern.Fret == FretRule.Transposable ? LowestFrettedFret(group) : 0,
-            pattern.Strings == StringRule.Relative ? LowestString(group) : 0);
+        public static Origin Of(MatchPattern pattern, IReadOnlyList<SoundRef> group, int capo) => new(
+            pattern.Fret == FretRule.Transposable ? LowestFrettedFret(group, capo) : 0,
+            pattern.Strings == StringRule.Relative ? LowestString(group) : 0, capo);
     }
 
     private readonly record struct SeedEntry(Signature Signature, int LowestFret);
 
+    private static int CapoOf(Arrangement? arrangement) => Math.Max(0, arrangement?.Capo ?? 0);
+
     /// <summary>
     ///     The lowest FRETTED fret of a group — the reference a transposable
     ///     pattern measures from, and the neck position a fret-distance limit is
-    ///     measured against. Open strings are excluded because an open string does
-    ///     not move with the hand; a shape that contains one is only ever alike
-    ///     another shape with the same string open.
+    ///     measured against. Frets at or below the destination capo are open and
+    ///     excluded because an open string does not move with the hand; a shape
+    ///     that contains one is only ever alike another shape with that string open.
     /// </summary>
-    private static int LowestFrettedFret(IReadOnlyList<SoundRef> group)
+    private static int LowestFrettedFret(IReadOnlyList<SoundRef> group, int capo)
     {
         var lowest = 0;
         foreach (var sound in group)
         {
             foreach (var member in sound.Members)
             {
-                if (member.Fret <= 0) continue;
+                if (member.Fret <= capo) continue;
                 if (lowest == 0 || member.Fret < lowest) lowest = member.Fret;
             }
         }
 
         return lowest;
     }
-
-    private static int LowestFrettedFret(SoundRef sound) => LowestFrettedFret([sound]);
 
     private static int LowestString(IReadOnlyList<SoundRef> group)
     {
@@ -893,12 +889,12 @@ public static class PatternMatcher
         return lowest == int.MaxValue ? 0 : lowest;
     }
 
-    private static int LowestFretted(IEnumerable<int> frets)
+    private static int LowestFretted(IEnumerable<int> frets, int capo)
     {
         var lowest = 0;
         foreach (var fret in frets)
         {
-            if (fret <= 0) continue;
+            if (fret <= capo) continue;
             if (lowest == 0 || fret < lowest) lowest = fret;
         }
 
@@ -917,13 +913,13 @@ public static class PatternMatcher
         return Math.Abs(seedFret - candidateFret) <= pattern.MaxFretDistance;
     }
 
-    private static string FretKey(FretRule rule, int fret, int transposeBase) => rule switch
+    private static string FretKey(FretRule rule, int fret, int transposeBase, int capo) => rule switch
     {
         FretRule.Ignore => string.Empty,
         FretRule.Exact => fret.ToString(CultureInfo.InvariantCulture),
         // "o" and "f" keep an open string from ever colliding with the fretted
         // note that happens to sit on the transposition base.
-        _ => fret <= 0 ? "o" : "f" + (fret - transposeBase).ToString(CultureInfo.InvariantCulture)
+        _ => fret <= capo ? "o" : "f" + (fret - transposeBase).ToString(CultureInfo.InvariantCulture)
     };
 
     private static string SustainKey(SustainRule rule, FractionalPosition sustain) => rule switch
@@ -1005,9 +1001,6 @@ public static class PatternMatcher
                + (member.Sound.UnpitchedSlide ? "u" : "p");
     }
 
-    private static ChordTemplate? ResolveTemplate(Arrangement? arrangement, int templateId)
-        => arrangement == null || templateId < 0 ? null : ChordTemplateResolver.FindById(arrangement, templateId);
-
     /// <summary>
     ///     The template's fingering restricted to the strings actually played, and
     ///     only when the template still describes them — a drifted template's
@@ -1038,16 +1031,16 @@ public static class PatternMatcher
         $"{position.Fraction.Numerator.ToString(CultureInfo.InvariantCulture)}/" +
         position.Fraction.Denominator.ToString(CultureInfo.InvariantCulture);
 
-    private static void AddDistinct(List<Signature> signatures, Signature? candidate)
+    private static void AddDistinct(List<SeedEntry> entries, Signature? candidate, int lowestFret)
     {
         if (candidate == null) return;
-        foreach (var existing in signatures)
+        foreach (var existing in entries)
         {
-            if (existing.SameAs(candidate))
+            if (existing.Signature.SameAs(candidate) && existing.LowestFret == lowestFret)
                 return;
         }
 
-        signatures.Add(candidate);
+        entries.Add(new SeedEntry(candidate, lowestFret));
     }
 
     private static int CompareSounds(SoundRef a, SoundRef b)

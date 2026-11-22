@@ -420,7 +420,7 @@ public static class UiSweepCatalog
     ///     alone.
     ///     <para>
     ///         This is not a nicety. Six of the seven inspector tab views and
-    ///         <c>ChordTemplateEditorView</c> carry no <c>StyleInclude</c> at all:
+    ///         <c>SoundLibraryTemplateView</c> carry no <c>StyleInclude</c> at all:
     ///         <c>InspectorView</c> includes <c>InspectorStyles.axaml</c> once for
     ///         all of them. Swept bare, ~150 controls across those tabs match no
     ///         selector, so every bound measured here is of an UNSTYLED tree —
@@ -432,7 +432,7 @@ public static class UiSweepCatalog
     ///         Derived from the markup, never listed: a view with no include of
     ///         its own is matched against every other view that declares it as an
     ///         ELEMENT, and that host's includes are used — recursing when the
-    ///         host has none either (<c>ChordTemplateEditorView</c> →
+    ///         host has none either (<c>SoundLibraryTemplateView</c> →
     ///         <c>SoundInspectorView</c> → <c>InspectorView</c>). A view that
     ///         includes its own grammar inherits nothing.
     ///     </para>
@@ -1010,6 +1010,9 @@ public static class UiSweepRunner
         var declared = axaml is null ? null : UiSweepCatalog.DeclaredDataType(axaml);
         var (dataContext, source) = seeder.For(declared);
 
+        // State the shared fixture does not hold (a selected chord for the Shape page), undone after the sweep.
+        using var staged = UiSweepStages.Enter(name, App.Services!);
+
         var findings = new List<UiSweepFinding>();
         var inheritedStyles = UiSweepCatalog.InheritedStyleIncludes(viewType);
         var stopwatch = Stopwatch.StartNew();
@@ -1034,6 +1037,10 @@ public static class UiSweepRunner
                 // overlay. Opening them through the product's own state is what
                 // "click everything" means; 41 view models carry the property.
                 SetIsOpen(dataContext, true);
+                // The inline confirm row shows nothing without a pending question, so it
+                // would measure zero. Put a question on it, as a card does when asked.
+                if (dataContext is DotCharter.UI.ViewModels.Editor.Inspector.InspectorPendingAction pending)
+                    pending.Ask("Reset this band back to the loaded preset? Type, frequency, on and solo stay.", () => { });
                 view.DataContext = dataContext;
             }
             else if (declared != null)

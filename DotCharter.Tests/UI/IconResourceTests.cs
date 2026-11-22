@@ -62,9 +62,8 @@ public sealed class IconResourceTests
         ["FileMenu.axaml"] = 10,
         ["EditMenu.axaml"] = 8,
         ["TempoMapMenu.axaml"] = 2,
-        ["ArrangementsMenu.axaml"] = 2,
-        ["VocalsMenu.axaml"] = 2,
-        ["ToolsMenu.axaml"] = 21,
+        ["ArrangementsMenu.axaml"] = 4, // incl. the Vocals submenu folded in
+        ["ToolsMenu.axaml"] = 13,
         ["ViewMenu.axaml"] = 1,
         ["HelpMenu.axaml"] = 2,
         ["ToolbarView.axaml"] = 2

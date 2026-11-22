@@ -49,10 +49,11 @@ public sealed class LinkSuggestionsViewModel : DialogViewModel<LinkSuggestionsCh
     {
         ArgumentNullException.ThrowIfNull(request);
         var l = _edit.Localization;
-        var suggestions = request.Suggestions;
+        var suggestions = request.Suggestions.Where(s => !s.RequiresReview).ToList();
         Headline = l.Plural("LinkSuggest_GroupsOne", "LinkSuggest_Groups", suggestions.Count, suggestions.Sum(s => s.Runs.Count));
         var details = new List<string>(SharedLines(suggestions));
         if (RepeatLine(suggestions) is { } repeat) details.Add(repeat);
+        if (request.Suggestions.Any(s => s.RequiresReview)) details.Add(l["LinkSuggest_ReviewDifferences"]);
         Details = details;
     }
 

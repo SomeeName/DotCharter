@@ -38,13 +38,13 @@ Start from the **last** `EROR` or `FATL` line and read upward: the first
 `WARN` shortly before it is often the cause. Repeated identical lines are
 summarised as `[xN]`.
 
-The same log is shown inside the app: **Help > Session health** lists recent log
+The same log is shown inside the app: **Help > Diagnostics** lists recent log
 entries newest-first with warnings and errors highlighted, and offers
 **Export diagnostics bundle...** (see below).
 
 ## Diagnostics window and bundle
 
-**Help > Session health** is the quickest way to see whether the current session
+**Help > Diagnostics** is the quickest way to see whether the current session
 logged problems. **Export diagnostics bundle...** writes a zip with the recent
 logs and system information. Secrets such as tokens and credentials, and your
 user name, are stripped before anything is zipped; credential files are refused

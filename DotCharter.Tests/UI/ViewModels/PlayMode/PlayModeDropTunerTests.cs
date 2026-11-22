@@ -18,6 +18,7 @@ namespace DotCharter.Tests.UI.ViewModels.PlayMode;
 /// </summary>
 public sealed class PlayModeDropTunerTests : IDisposable
 {
+    private readonly List<(PlayModeViewModel Vm, LivePlayViewModel Live)> _runs = [];
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "DotCharterTests", Guid.NewGuid().ToString("N"));
 
     [Theory]
@@ -183,6 +184,8 @@ public sealed class PlayModeDropTunerTests : IDisposable
     private static void Seed(ProjectState state, params Arrangement[] paths)
     {
         var project = new ChartProject();
+        project.Beats.Add(new BeatMarker { Time = 0, Bpm = 120 });
+        project.Beats.Add(new BeatMarker { Time = 500, Bpm = 120 });
         foreach (var path in paths) project.Arrangements.Add(path);
         state.ActiveProject = project;
         state.ActiveArrangement = project.Arrangements[0];
@@ -206,14 +209,17 @@ public sealed class PlayModeDropTunerTests : IDisposable
         var store = new PracticeProfileService(profiles, logger: null,
             legacyFilePath: Path.Combine(_dir, "legacy.json"));
         config = shared ?? new FakeConfigurationService();
+        config.AppConfig.LivePlayUseCqtVerifier = false;
         var audio = new FakeAudioPlaybackService { InputSampleRate = 48_000 };
         state = new ProjectState();
         transport = new TransportViewModel(audio, state, config, FakeLocalization.KeysOnly());
         livePlay = LivePlayTestFactory.Create(audio, state, new FakeAppLogger(), config, store);
 
-        return TestRigBuilders.PlayMode(profiles, new GameplayStatsService(store),
+        var vm = TestRigBuilders.PlayMode(profiles, new GameplayStatsService(store),
             new LeaderboardService(profiles), state, FakeLocalization.English(), config,
             livePlay: livePlay, transport: transport);
+        _runs.Add((vm, livePlay));
+        return vm;
     }
 
     private PlayModeViewModel NewVm(out ProjectState state, out TransportViewModel transport,
@@ -229,5 +235,14 @@ public sealed class PlayModeDropTunerTests : IDisposable
         method!.Invoke(vm, null);
     }
 
-    public void Dispose() => BestEffortDelete.Directory(_dir);
+    public void Dispose()
+    {
+        foreach (var (vm, live) in _runs)
+        {
+            vm.BackToSongSelectCommand.Execute(null);
+            live.IsActive = false;
+        }
+
+        BestEffortDelete.Directory(_dir);
+    }
 }

@@ -11,6 +11,70 @@ namespace DotCharter.Tests.Services.Editing.Maintenance;
 /// </summary>
 public sealed class ChartChordEditingRegressionTests
 {
+    [Theory]
+    [InlineData(500.0)]
+    [InlineData(1000.0)]
+    [InlineData(2000.0)]
+    [InlineData(8000.0)]
+    public void InsertingAVocal_KeepsOnlyTheLastSyllableFlaggedThroughUndoRedo(double timeMs)
+    {
+        var h = new ChartPowerToolsTests.Harness();
+        var project = h.State.ActiveProject!;
+        var first = new LyricEvent
+        {
+            Text = "one", Position = new FractionalPosition(0), EndPosition = new FractionalPosition(1)
+        };
+        var last = new LyricEvent
+        {
+            Text = "two", Position = new FractionalPosition(2), EndPosition = new FractionalPosition(3), IsPhraseEnd = true
+        };
+        var phrase = new LyricPhrase
+        {
+            Position = new FractionalPosition(0), EndPosition = new FractionalPosition(8), Lyrics = [first, last]
+        };
+        var track = new VocalTrack { Phrases = [phrase] };
+        project.VocalTracks.Add(track);
+        h.State.CurrentTimeMs = timeMs;
+
+        h.Maintenance.InsertVocalAtPlayhead();
+        AssertFlags();
+        h.History.Undo();
+        Assert.Same(phrase, Assert.Single(track.Phrases));
+        Assert.Equal([first, last], phrase.Lyrics);
+        Assert.False(first.IsPhraseEnd);
+        Assert.True(last.IsPhraseEnd);
+        h.History.Redo();
+        AssertFlags();
+
+        void AssertFlags()
+        {
+            Assert.Equal(3, track.Phrases.Sum(p => p.Lyrics.Count));
+            foreach (var line in track.Phrases)
+            {
+                Assert.Equal(Enumerable.Range(0, line.Lyrics.Count).Select(i => i == line.Lyrics.Count - 1),
+                    line.Lyrics.Select(l => l.IsPhraseEnd));
+            }
+        }
+    }
+
+    /// <summary>With an empty Lyrics row hidden (#846) the first syllable is still placed by the
+    /// insert-at-playhead command, into a track that has no phrase yet.</summary>
+    [Fact]
+    public void InsertVocalAtPlayhead_addsTheFirstSyllable_toAnEmptyTrack()
+    {
+        var h = new ChartPowerToolsTests.Harness();
+        var project = h.State.ActiveProject!;
+        var track = new VocalTrack { Name = "Vocals 1" };
+        project.VocalTracks.Add(track);
+        h.State.CurrentTimeMs = 500.0;
+
+        h.Maintenance.InsertVocalAtPlayhead();
+
+        Assert.Single(Assert.Single(track.Phrases).Lyrics);
+        h.History.Undo();
+        Assert.Empty(track.Phrases);
+    }
+
     /// <summary>
     ///     Hand-shape containment is <c>HandShape.Covers</c> — start inclusive, end
     ///     EXCLUSIVE — and this verb open-coded a CLOSED span instead.

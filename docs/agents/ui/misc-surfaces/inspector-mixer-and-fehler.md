@@ -1,5 +1,13 @@
 # The inspector MIXER and FEHLER tabs
 
+Persisted mixer changes are project edits (#553). Gain, mute, solo,
+original-mix mute, Guitar roles and stem recovery notify the session's dirty
+tracker through `ProjectState.NotifyProjectChanged`. Run-scoped changes and
+the solo-scoped original mute do not persist. Muting the last solo restores
+the original's baseline just like releasing Solo. Replacing native audio
+invalidates the loaded-set cache through `ProjectState.AudioLoaded`, including
+when the filename stays the same. `ProjectSessionAttachAudioTests` covers these paths.
+
 Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](../misc-surfaces.md).
 
 **"FEHLER tab" is the CODEBASE nickname, not the caption.** The header reads
@@ -16,12 +24,16 @@ is what eight files and this document's own name call it.
   state that was already there — the tabs were regrouped and restyled, not
   invented.
   - **ONE ROW SHAPE for every channel in the Mixer**: `[M][S] · label · fader ·
-    mono value`, with the label rail (78) and the value rail (54) carried as
-    WIDTHS on `TextBlock.MixerLabel`/`MixerValue` rather than on each
-    `ColumnDefinition` — a `GridLength` is not a double, so a shared number has
-    to live on something that takes one. LEVELS, STEMS, PLAYBACK FX, the EQ
-    filters and the MIDI synth all wear them, which is the only thing giving the
-    tab one left edge and one right edge.
+    mono value`, laid out on the `ColumnFlow*` card grid since #751 P8 (the
+    0.51 `TextBlock.MixerLabel`/`MixerValue` rails and `Border.MixerVerbSlot`
+    were deleted in P9 once no row wore them). **Since #493 the tab has NO Levels and NO Playback FX
+    section**: master / song / input / MIDI level with their mute and solo, track
+    pan, speed and pitch are bound ONCE, in the toolbar's Mix and Tempo popovers
+    (one home per mix control; the table is
+    `UI/MixerLevelsInPopoversTests`, which also pins that the tab binds none of
+    them again). The tab keeps the deep controls: stems, EQ, the chart-sound
+    instrument and play style, plus a link button to the VST instrument picker,
+    which lives in Practice tools only.
   - **The fader is `Slider.MixerSlider`, NOT the shared `Slider.FireSlider`.**
     That class hard-wires the accent gradient into its decrease-track template,
     and this tab's whole point is that the FILL carries the channel's identity
@@ -53,12 +65,18 @@ is what eight files and this document's own name call it.
     original when nothing else would be audible. LOAD time only — muting
     everything while you work is deliberate and must be left alone. Pinned by
     `UI/ViewModels/Editor/StemMixerSilentProjectTests`.
+  - **A saved stem volume of zero is silence, not a missing value (#531).**
+    `StemTrackViewModel` defaults only negative values to unity and preserves
+    zero when applying gains to the engine (`UI/ViewModels/Editor/StemTrackViewModelTests`).
+  - **The EQ analyser clock follows effective visibility (#531).**
+    `EqModuleView` creates a stopped timer and uses `EffectiveVisibilityWatcher`
+    to start/stop it on ancestor visibility changes as well as attach/detach.
+    Closing `MixerEqBody` therefore parks spectrum reads and repaint work
+    (`Perf/EditorUiFaultsUiPerfSmokeTests`).
   - **A stem row only exists if the stem does** — `StemMixerViewModel` only adds
     a track whose file was found on disk, so the `ItemsControl` IS the list of
     what really separated.
-  - **A row draws only the verbs it HAS.** The master bus has no solo and a
-    playback effect has neither; those squares are `Border.MixerVerbSlot`, which
-    holds the column open without offering a dead control.
+  - **A row draws only the verbs it HAS**: no dead mute or solo control.
   - **The M/S chrome is stated on the `/template/ ContentPresenter` in every
     state.** Fluent's ToggleButton template-binds the presenter's fill at rest
     (so a control-level setter looked like it worked) and writes it DIRECTLY on
@@ -86,19 +104,41 @@ is what eight files and this document's own name call it.
     this tab, which is on the layer; and `FireTokens.axaml` is a `<Styles>` file,
     so `Application.Resources` alone does not reach its keys.
   - Runtime guards: `Perf/InspectorConstructionUiPerfSmokeTests
-    .{MixerInspectorView_buildsAndAttaches_andItsRailsLineUp,
-    IssuesInspectorView_buildsAndAttaches_andTheFocusedRowLights}`. The Mixer
-    case **opens Levels, Playback FX and MIDI synth through the tab's rail in
-    turn (#601) and leaves the EQ section closed**: that section's curve is a
-    `Polyline` with `Stretch="Fill"`, and a filled shape with no points has empty
-    geometry bounds, so the fill scale divides by zero under the harness (no
-    transport data), not the view. The rails must line up ACROSS sections, which
-    is the same left and right edge the one-scroll tab had.
-  - **One section at a time since #601.** The five groups are the sections of the
-    tab's icon-only rail (`InspectorSectionRail`, the Sound tab's look); Stems'
-    entry exists only while stems do. `Perf/MixerScrollHostUiPerfSmokeTests`
-    therefore opens the EQ (or the MIDI synth, for the dropdown case) at the
-    ~160 px a 1280x720 window leaves the section body, where it scrolls.
+    .{MixerInspectorView_buildsAndAttaches_andEverySectionLaysOut,
+    IssuesInspectorView_buildsAndAttaches_andEveryCardLaysOut}`, `Perf/MixerTabCardsUiPerfSmokeTests`
+    (every section at 480/530 x 370 in en/de/ja, in the release's layout filter) and
+    `Perf/IssuesTabCardsUiPerfSmokeTests`.
+  - **Inspector design D (#751 P8): a section STRIP over cards.** The Mixer tab is a Stems / EQ / MIDI strip
+    (`MixerSectionStrip`, `ColumnFlowNav` toggles, like the Note tab's) over one section's `ColumnFlowPanel`
+    at a time; `InspectorViewModel.MixerSections` (`MixerSectionsViewModel`, `MixerSection`) owns the open
+    section: Stems is always offered (without stems it says why and offers "Separate stems", the shell's cache-first
+    separation); no stems opens EQ, stems that go away keep their section, stems that arrive open Stems only when
+    nothing was chosen (`UI/ViewModels/Editor/MixerSectionsViewModelTests`). Stems = Levels (the Playback source
+    `StemMixerViewModel.PlaybackSource` — Stems / Original mix / No stems, a VIEW of the strips' mutes so the project
+    and an engine rebuild keep it — strips, a per-stem reset `StemTrackViewModel.ResetLevelCommand` and Reset levels
+    `StemMixerViewModel.ResetLevelsCommand`, both to unity, mute/solo kept; Reset levels asks first and marks the
+    project changed ONCE), Routing (waveform follows the mix, the mini waveform `Controls/ColumnFlowStemWaveform` over
+    `ProjectState.WaveformData` with its Mixed / Source caption, redrawn only per coordinator publish; Guitar roles)
+    and Monitor (fader-derived bars, no meter tap: no managed audio work). EQ = `EqModuleView`'s Response (plot +
+    preset + Bypass = `EqModuleViewModel.IsBypassed`; the analyser polls only while the Response card is on the page,
+    `EqModuleView.IsPollingSpectrum`), Band (the chip row — a colour dot that switches its band, a chip that selects
+    it — the picker over `Bands` with `PickerLabel`, `SelectedBand`; Solo needs the band on; `EqModuleViewModel.Edits`
+    = `EqBandEdits`: typed Frequency / Gain / Q fields committed on Enter or focus loss with the range named inline,
+    and Reset gain + Q, which asks and goes back to the loaded preset's band, flat without one) and Routing cards.
+    MIDI = Instrument (`MidiInstrumentCardView`, design D's grammar over the transport's
+    `ChartSynthInstrumentViewModel`; Play Mode's Amp/FX panel keeps `ChartSynthInstrumentView`; "Not available"
+    placeholders), Routing and Play style; without the synth Routing and Play style stay on screen disabled with the
+    reason; each card's Reset (instrument, routing, play style) asks on its card first. Routing's two design-D rows are
+    `ChartSoundRoutingView` over `Transport.SoundRouting` (`ChartSoundRoutingViewModel`): Sound source (four segments:
+    Song tones / My rig / My instrument / Instrument + rig) and Route instrument (Guitar / Bass / Both, the
+    engine's seat masks). A choice the setup cannot honour is disabled with its reason under the row: the instrument
+    values without a loaded plugin or in the sandbox, Route instrument with one live input, under Song tones (the
+    song's tone exists only on the guitar seat's rig) and under My instrument (after the mix, through no rig).
+    `UI/ChartSoundRoutingChoicesTests`, `Perf/MixerSoundRoutingUiPerfSmokeTests`. The plot is `Controls/ColumnFlowEqPlot` (was `EqPlotControl`):
+    a press near a handle grabs that band, anywhere else moves the SELECTED band (`ColumnFlowEqPlot.Grab`,
+    `UI/ColumnFlowEqPlotGrabTests`); a frequency label that would touch its neighbour is left out
+    (`PlaceAxisLabels`: "20k" goes in a narrow column) and the handles stay `HandleInset` inside the plot. Each card scrolls by itself, so `Perf/MixerScrollHostUiPerfSmokeTests`
+    pages the card that holds its control (`ColumnFlowPanel.ShowPage`) and wheels THAT card's scroller.
 - **FEHLER = severity-grouped triage surface** (0.16 rework). Its view model is
   `Inspector/InspectorIssuesViewModel` (`InspectorViewModel.Issues`, #659; the
   markup binds `Issues.*`). `RecomputeIssues`
@@ -120,11 +160,13 @@ is what eight files and this document's own name call it.
   button); it goes through `Presentation/Shared/RocksmithFixes` and re-runs the
   check (#184, [dlc-builder-fixes.md](../../services/editing-invariants/dlc-builder-fixes.md)).
   **A rule finding's fix menu is the `IssueFixRow` in the header (#618)**: jumping to
-  an E04 or I46 row offers its fixes there (`Inspector/IssueFixViewModel`,
+  an E04, I46 or I30 row offers its fixes there (`Inspector/IssueFixViewModel`,
   `InspectorIssuesViewModel.IssueFix`, bound as `Issues.IssueFix.*`) — the DEFAULT first, the other under it, each ONE
   undo step through `Editing/Anchors/IndexAnchorRepair`. `RecomputeIssues` calls
   `IssueFix.Refresh`, which withdraws the offer once that finding (same rule, same
-  element) is gone. Behaviour: `IssueFixViewModelTests`; layout:
+  element) is gone. An I30 (tone change on a note, #759) offers "a 16th note earlier"
+  (`Editing/Tones/ToneChangeNudge`); when a guard blocks it the button is disabled and
+  `IssueFixBlockedReason` prints why. Behaviour: `IssueFixViewModelTests`; layout:
   `Perf/IssueFixRowUiPerfSmokeTests`. **Audio lint (v0.29)**
   sits between the issue list and Export-readiness: an EXPLICIT-run block over
   the standalone `AudioLintViewModel` (`InspectorViewModel.AudioLint`, seams

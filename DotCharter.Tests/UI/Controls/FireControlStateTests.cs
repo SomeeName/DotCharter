@@ -1,4 +1,5 @@
-﻿using Avalonia.Automation;
+﻿using System.Globalization;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using DotCharter.Tone.UI.Controls.Fire;
@@ -197,16 +198,26 @@ public sealed class FireControlStateTests
     [Fact]
     public void TheCaptionIsUppercased_AndTheReadoutFallsBackToTheValue()
     {
-        var knob = new FireKnob { Label = "Low cut", Value = 0.5 };
-        Assert.Equal("LOW CUT", knob.CaptionText);
-        Assert.Equal("0.5", knob.ReadoutText);
+        var before = CultureInfo.CurrentCulture;
+        try
+        {
+            // The readout follows the region's number format; the case pins one so it reads the same on every machine.
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+            var knob = new FireKnob { Label = "Low cut", Value = 0.5 };
+            Assert.Equal("LOW CUT", knob.CaptionText);
+            Assert.Equal("0.5", knob.ReadoutText);
 
-        knob.ValueText = "480 Hz";
-        Assert.Equal("480 Hz", knob.ReadoutText);
+            knob.ValueText = "480 Hz";
+            Assert.Equal("480 Hz", knob.ReadoutText);
 
-        // Clearing it falls back again rather than going blank.
-        knob.ValueText = null;
-        Assert.Equal("0.5", knob.ReadoutText);
+            // Clearing it falls back again rather than going blank.
+            knob.ValueText = null;
+            Assert.Equal("0.5", knob.ReadoutText);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = before;
+        }
     }
 
     [Fact]

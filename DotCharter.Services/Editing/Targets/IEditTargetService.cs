@@ -41,6 +41,9 @@ public interface IEditTargetService
     /// </summary>
     EditTarget Resolve();
 
+    /// <summary>The installed keyboard pen position, including its grid and sound snapping.</summary>
+    FractionalPosition? PenPosition { get; }
+
     /// <summary>
     ///     <see cref="Resolve" />, then makes an implied target VISIBLE by
     ///     promoting it to a real selection — EOF's implied note selection

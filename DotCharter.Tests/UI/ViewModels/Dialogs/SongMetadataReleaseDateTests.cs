@@ -33,7 +33,7 @@ public sealed class SongMetadataReleaseDateTests
             Chart = new ChartData { Artist = "Muse", SongName = "Knights of Cydonia", AlbumYear = "2006", ReleaseDate = "2006-07-03" }
         };
         state.ActiveProject = project;
-        var vm = new SongMetadataViewModel(state, new HistoryService(logger), FakeLocalization.English(), logger)
+        var vm = new SongMetadataViewModel(state, new HistoryService(logger), FakeLocalization.English(), logger, new InertNewProjectSources(), new DotCharter.Tests.Infrastructure.FakeSongKeyAudioEstimator())
         {
             AlbumName = "Black Holes and Revelations"
         };

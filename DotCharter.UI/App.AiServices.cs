@@ -77,6 +77,7 @@ public partial class App
                 editor.RequestRedraw)
             {
                 // The sections & phrases job's checks: the SAME report "Ready to ship?" shows.
+                AppConfiguration = sp.GetRequiredService<DotCharter.Services.Infrastructure.Configuration.IConfigurationService>(),
                 Quality = sp.GetRequiredService<DotCharter.Services.Editing.Quality.ChartQualityReporter>(),
                 // The Tones job: the W6 generator over the chat's model, its renderer and metric the
                 // match lane's (the same confidence scale), and its stems CACHE-ONLY — a chat message never

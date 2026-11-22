@@ -185,6 +185,68 @@ public sealed partial class PublicSnapshotExportTests
         Assert.Contains("Test-JuceSharpVersionBump.ps1') -DevRepo $RepoRoot -DevRef HEAD",
             File.ReadAllText(Path.Combine(Root, "tools", "release", "New-Release.ps1")), StringComparison.Ordinal);
 
+    /// <summary>
+    ///     The public snapshot's own tree has no <c>.git/modules/JuceSharp</c>: its JuceSharp is checked out from the
+    ///     scratch bare repository beside it. The v1.3.0 release ran this very check there and stopped on
+    ///     "not a git repository"; it now finds that store (and reads the same verdict).
+    /// </summary>
+    private static void ReleasePreflight_FindsTheSnapshotsOwnJuceSharpStore()
+    {
+        var scratch = Directory.CreateTempSubdirectory("dc-juce-snapshot-").FullName;
+        try
+        {
+            var f = NewPushFixture(scratch);
+            var pushed = RunPush(scratch, f, "p1");
+            Assert.True(pushed.ExitCode == 0, pushed.Output);
+
+            var snapshot = Path.Combine(scratch, "p1", "DotCharter");
+            Assert.False(Directory.Exists(Path.Combine(snapshot, ".git", "modules", "JuceSharp")),
+                "the fixture is not the snapshot layout this test is about");
+            var run = RunPwsh(scratch, $"& {Quote(VersionBumpScript)} -DevRepo {Quote(snapshot)} -DevRef HEAD -PublicJuceSharpUrl {Quote(f.PublicJuce)}; exit $LASTEXITCODE");
+
+            Assert.True(run.ExitCode == 0, run.Output);
+            Assert.Contains("JuceSharp 9.8.7: the version moves with the tree", run.Output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteTree(scratch);
+        }
+    }
+
+    /// <summary>
+    ///     <c>-DevRef HEAD</c> in a linked worktree is the WORKTREE's head: resolved against the common git directory it
+    ///     was the main checkout's, so a branch's preflight judged another branch's JuceSharp.
+    /// </summary>
+    private static void ReleasePreflight_ResolvesTheRefInTheWorktree()
+    {
+        var scratch = Directory.CreateTempSubdirectory("dc-juce-worktree-").FullName;
+        try
+        {
+            var f = NewPushFixture(scratch);
+            var pushed = RunPush(scratch, f, "p1");
+            Assert.True(pushed.ExitCode == 0, pushed.Output);
+            var released = Git(f.DevDc, "rev-parse", "HEAD");
+
+            // Main moves on with a JuceSharp change that has no version bump; a worktree of the released commit does not.
+            WriteTree(f.DevJuce, "README.md", "Issues: the tracker, and more" + "\n");
+            Commit(f.DevJuce, "native work 2", "README.md");
+            PointDevAtJuceSharp(f);
+            var worktree = Path.Combine(scratch, "worktree");
+            Git(f.DevDc, "worktree", "add", "-q", "--detach", worktree, released);
+
+            var onMain = RunVersionCheck(scratch, f);
+            Assert.Equal(1, onMain.ExitCode);
+
+            var inWorktree = RunPwsh(scratch, $"& {Quote(VersionBumpScript)} -DevRepo {Quote(worktree)} -DevRef HEAD " +
+                                              $"-DevJuceSharpGitDir {Quote(Path.Combine(f.DevJuce, ".git"))} -PublicJuceSharpUrl {Quote(f.PublicJuce)}; exit $LASTEXITCODE");
+            Assert.True(inWorktree.ExitCode == 0, "the worktree's own HEAD is the released commit:\n" + inWorktree.Output);
+        }
+        finally
+        {
+            DeleteTree(scratch);
+        }
+    }
+
     private static void PointDevAtJuceSharp(PushFixture f)
     {
         Git(f.DevDc, "update-index", "--cacheinfo", $"160000,{Git(f.DevJuce, "rev-parse", "HEAD")},JuceSharp");

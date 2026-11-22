@@ -31,8 +31,8 @@ public sealed class StringLaneDirectionTests
     }
 
     /// <summary>
-    ///     …and flipped (lefty mode, or the invert-strings setting — the viewport
-    ///     XORs them) it is the other way, which is exactly why this is a
+    ///     …and with InvertStrings enabled it is the other way, independently
+    ///     of handedness, which is exactly why this is a
     ///     function of the flag rather than a constant.
     /// </summary>
     [Fact]

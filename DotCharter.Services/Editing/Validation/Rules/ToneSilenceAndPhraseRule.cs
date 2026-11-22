@@ -69,19 +69,17 @@ public sealed class ToneSilenceAndPhraseRule : IArrangementRule
                 continue;
 
             var timeMs = change.Position.GetPositionMs(beats);
-            var shown = string.IsNullOrWhiteSpace(name) ? "(unnamed)" : name.Trim();
+            var shown = string.IsNullOrWhiteSpace(name) ? new IssueTextRef("Validation_UnnamedTone") : (object)name.Trim();
             var remedy = free > 0
-                ? "Put it in a free tone slot in the Tone designer (a base tone plus A–D), or run Auto-fix."
-                : "All four tone slots (A–D) are taken and Rocksmith allows no more — reuse one of " +
-                  string.Join(", ", new[] { arr.ToneA, arr.ToneB, arr.ToneC, arr.ToneD }
-                      .Where(s => !string.IsNullOrWhiteSpace(s))) +
-                  ", or free a slot in the Tone designer.";
+                ? new IssueTextRef("Validation_ToneChangeWithoutMatchingTone_FreeSlot")
+                : new IssueTextRef("Validation_ToneChangeWithoutMatchingTone_NoFreeSlot",
+                    [string.Join(", ", new[] { arr.ToneA, arr.ToneB, arr.ToneC, arr.ToneD }
+                        .Where(s => !string.IsNullOrWhiteSpace(s)))]);
 
-            issues.Add(new ArrangementIssue(
+            issues.Add(ArrangementIssues.Make(
                 ArrangementIssueType.ToneChangeWithoutMatchingTone,
-                $"Tone change to '{shown}' is not declared on this arrangement, so the game cannot " +
-                $"switch to it. {remedy}",
-                timeMs));
+                "Validation_ToneChangeWithoutMatchingTone",
+                timeMs, args: [shown, remedy]));
         }
     }
 
@@ -117,11 +115,10 @@ public sealed class ToneSilenceAndPhraseRule : IArrangementRule
             if (!ChartToneNames.IsDeclared(arr, name)) continue;    // …and the undeclared one
             if (ChartToneNames.HasBody(project, name)) continue;
 
-            issues.Add(new ArrangementIssue(
+            issues.Add(ArrangementIssues.Make(
                 ArrangementIssueType.ToneChangeWithoutDefinition,
-                $"Tone change to '{name.Trim()}' has no tone body in this project, so it will play " +
-                "silently. Author it in the Tone designer.",
-                change.Position.GetPositionMs(beats)));
+                "Validation_ToneChangeWithoutDefinition",
+                change.Position.GetPositionMs(beats), args: [name.Trim()]));
         }
     }
 
@@ -162,11 +159,10 @@ public sealed class ToneSilenceAndPhraseRule : IArrangementRule
         if (firstNote == null && firstChord == null) return;
         if (best >= MinFirstNoteMs) return;
 
-        issues.Add(new ArrangementIssue(
+        issues.Add(ArrangementIssues.Make(
             ArrangementIssueType.FirstNoteTooEarly,
-            $"The first note begins at {best:F0} ms; leave at least {MinFirstNoteMs:F0} ms of lead-in " +
-            "silence so the in-game intro count has room.",
-            best, Note: firstNote, Chord: firstChord));
+            "Validation_FirstNoteTooEarly",
+            best, note: firstNote, chord: firstChord, args: [best, MinFirstNoteMs]));
     }
 
     // ---- empty phrases ---------------------------------------------------
@@ -218,11 +214,10 @@ public sealed class ToneSilenceAndPhraseRule : IArrangementRule
 
             if (HasContentInRange(contentTimes, startMs, endMs)) continue;
 
-            issues.Add(new ArrangementIssue(
+            issues.Add(ArrangementIssues.Make(
                 ArrangementIssueType.EmptyPhrase,
-                $"Phrase '{ep.Name}' spans no notes or chords — mark silent gaps as a noguitar phrase " +
-                "or remove the empty phrase.",
-                startMs));
+                "Validation_EmptyPhrase",
+                startMs, args: [ep.Name]));
         }
     }
 

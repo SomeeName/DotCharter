@@ -66,7 +66,8 @@
 
         <StackPanel>
             <StackPanel Theme="{StaticResource FirePopoverBodyPanel}" Classes="FirePopoverBody Wide">
-                <!-- TUNER. The `IN TUNE` readout is LIVE: opening this popover
+                <!-- TUNER (a readout only: the toolbar's tuner button is the ONE
+                     door to the dialog). The `IN TUNE` readout is LIVE: opening this popover
                      takes a lease on the shared `LiveTuner` (`TunerReadout.Begin`),
                      the same ~15 Hz detection the dialog reads, and closing it
                      releases the lease. -->
@@ -79,9 +80,6 @@
                                    Classes.Silent="{Binding ToneRig.TunerReadout.IsSilent, FallbackValue=True}"
                                    Classes.Off="{Binding !ToneRig.TunerReadout.IsInTune, FallbackValue=True}"
                                    Text="{Binding ToneRig.TunerReadout.Text, FallbackValue=—}" />
-                        <Button Theme="{StaticResource FirePopoverChipButton}" Classes="FirePopoverChip"
-                                Content="{localization:Loc Action_Open}"
-                                Command="{Binding ShellDialogs.OpenTunerCommand}" />
                     </StackPanel>
                 </Grid>
 
@@ -148,10 +146,8 @@
                                       ToolTip.Tip="{localization:Loc Toolbar_OpenSynthGui}"
                                       IsChecked="{Binding Transport.InstrumentVstGuiOpen}"
                                       IsEnabled="{Binding Transport.IsInstrumentVstReady}" />
-                        <ToggleButton Theme="{StaticResource FirePopoverIconToggle}" Classes="FirePopoverIcon"
-                                      Content="{localization:Loc Toolbar_OutputShort}"
-                                      ToolTip.Tip="{localization:Loc Toolbar_EnableMidiOutput}"
-                                      IsChecked="{Binding Transport.MidiEnabled}" />
+                        <!-- No "Out" switch here: "Play the chart" is the toolbar's piano
+                             button (and the Mixer tab's checkbox), one switch, one property. -->
                     </StackPanel>
                 </Grid>
             </StackPanel>

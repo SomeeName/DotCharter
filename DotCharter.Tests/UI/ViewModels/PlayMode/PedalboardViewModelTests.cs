@@ -33,6 +33,25 @@ public sealed class PedalboardViewModelTests
     }
 
     [Fact]
+    public void ModelSidechainChange_RefreshesTheReusedCardAndBothNotifications()
+    {
+        var type = new DspModuleType("ducker", "Ducker", []) { SupportsSidechain = true };
+        var chain = new FakeDspChainService([type]);
+        var model = chain.AddNode(type.Id)!;
+        var card = new PedalNodeViewModel(chain, model, type, FakeLocalization.English());
+        var changes = new List<string?>();
+        card.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+
+        Assert.True(chain.SetNodeSidechain(model.NodeId, JuceSharp.Dsp.JuceDspSidechainSource.SongMix));
+        card.MirrorFrom(Assert.Single(chain.GetNodes()));
+
+        Assert.Equal(JuceSharp.Dsp.JuceDspSidechainSource.SongMix, card.SidechainSource);
+        Assert.Equal(card.SidechainSource, card.SelectedSidechainOption!.Source);
+        Assert.Contains(nameof(PedalNodeViewModel.SidechainSource), changes);
+        Assert.Contains(nameof(PedalNodeViewModel.SelectedSidechainOption), changes);
+    }
+
+    [Fact]
     public void NeuralAmp_card_reports_model_loaded_and_rate_mismatch()
     {
         var catalog = FakeDspChainService.DefaultCatalog()

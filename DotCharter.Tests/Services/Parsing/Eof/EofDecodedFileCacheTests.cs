@@ -18,6 +18,25 @@ namespace DotCharter.Tests.Services.Parsing.Eof;
 public sealed class EofDecodedFileCacheTests
 {
     [Fact]
+    public void OversizedRawFile_IsRefusedBeforeItIsReadOrDecoded()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"dotcharter-eofcache-{Guid.NewGuid():N}.bin");
+        try
+        {
+            using (var file = File.Create(path)) file.SetLength((long)int.MaxValue + 1);
+            var cache = new EofDecodedFileCache();
+
+            Assert.Throws<InvalidDataException>(() => cache.Read(path, static _ =>
+                throw new InvalidOperationException("An oversized file reached the decoder.")));
+            Assert.Equal(0, cache.DecodeCount);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void PreviewThenImport_OfTheSameFile_DecodesOnce()
     {
         var cache = new EofDecodedFileCache();

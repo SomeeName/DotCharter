@@ -48,13 +48,31 @@ internal sealed class FakeChartSynthAudio : FakeAudioPlaybackService, IChartSynt
 
     public bool RouteInstrumentToRig
     {
-        get => _route && CanRouteInstrumentToRig;
+        get => _route && CanRouteInstrumentToRig;   // like ChartSynthEngineDriver: a sandboxed route reads off
         set
         {
             RouteWrites.Add(value);
             _route = value;
         }
     }
+
+    /// <summary>Two live instrument seats (#751); flip with the setter.</summary>
+    public bool TwoSeats { get; set; }
+    public bool CanRouteChartToSeats => TwoSeats;
+    public readonly List<ChartSoundSeatRoute> SeatRouteWrites = [];
+    private ChartSoundSeatRoute _seatRoute = ChartSoundRouting.DefaultSeatRoute;
+
+    public ChartSoundSeatRoute ChartSeatRoute
+    {
+        get => _seatRoute;
+        set
+        {
+            SeatRouteWrites.Add(value);
+            _seatRoute = value;
+        }
+    }
+
+    public bool ChartSynthPlaysSongTones { get; set; } = true;
 
     public bool TryGetChartSynthStatus(out ChartSynthStatus status)
     {

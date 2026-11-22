@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using DotCharter.Services.Editing.Anchors;
 using DotCharter.Services.Editing.ChordShapes;
 using DotCharter.Services.Editing.HandShapes;
+using DotCharter.Services.Editing.Lyrics;
 using DotCharter.UI.Input.Actions;
 using DotCharter.UI.Input.Tools.EventInteractionGestures;
 using DotCharter.UI.ViewModels.Shell;
@@ -125,15 +126,17 @@ public sealed class TimelineWheelAdjuster
         // created note — at a fret the arrangement cannot play (L01), and then
         // stalled there, because ProjectState.PreviewNoteFret snaps the write.
         // The DIRECTION is why this cannot live in the setter alone.
+        var arrangement = vm.ChartEditor.TrackContexts.FocusedTrack?.Arrangement ?? vm.ChartEditor.ActiveArrangement;
         var nextFret = SoundingPitch.SnapToNeck(vm.ProjectState.PreviewNoteFret + deltaSteps,
-            Math.Max(0, vm.ChartEditor.ActiveArrangement?.Capo ?? 0), Math.Sign(deltaSteps));
+            Math.Max(0, arrangement?.Capo ?? 0), Math.Sign(deltaSteps));
         var changed = vm.ProjectState.PreviewNoteFret != nextFret ||
                       vm.ChartEditor.PreviewNotes.Any(note => note.Fret != nextFret);
         if (!changed) return WheelAdjustmentResult.NoChange;
 
         vm.ProjectState.PreviewNoteFret = nextFret;
+        var previewCapo = Math.Max(0, (vm.ChartEditor.Selection.PreviewArrangement ?? arrangement)?.Capo ?? 0);
         foreach (var note in vm.ChartEditor.PreviewNotes)
-            note.Fret = vm.ProjectState.PreviewNoteFret;
+            note.Fret = SoundingPitch.SnapToNeck(vm.ProjectState.EditorUi.PreviewNoteFret, previewCapo);
 
         return WheelAdjustmentResult.Changed;
     }
@@ -151,7 +154,7 @@ public sealed class TimelineWheelAdjuster
         // AnchorFretSuggester). ProjectState clamps the write too; this keeps the
         // ghost from stalling one fret short of what it can be set to.
         var floor = AnchorFretSuggester.MinFret(vm.ChartEditor.ActiveArrangement?.Capo ?? 0);
-        var nextFret = Math.Clamp(currentFret + deltaSteps, floor, 24);
+        var nextFret = Math.Clamp(currentFret + deltaSteps, floor, FretLimits.MaxFret);
         var changed = vm.ProjectState.PreviewAnchorFret != nextFret ||
                       vm.ChartEditor.PreviewAnchors.Any(anchor => anchor.Fret != nextFret);
         if (!changed) return WheelAdjustmentResult.NoChange;
@@ -172,26 +175,23 @@ public sealed class TimelineWheelAdjuster
                     (includeHovered ? vm.ChartEditor.Selection.HoveredLyric : null);
         if (lyric == null) return WheelAdjustmentResult.NotTargeted;
 
-        var delta = new FractionalPosition(new Fraction(deltaSteps, vm.Transport.GridDivisor));
-        var newEnd = lyric.EndPosition + delta;
-        if (newEnd <= lyric.Position)
-            newEnd = lyric.Position + new FractionalPosition(new Fraction(1, Math.Max(vm.Transport.GridDivisor, 16)));
+        var divisor = vm.Transport.GridDivisor;
+        var delta = new FractionalPosition(new Fraction(deltaSteps, divisor));
+        var newEnd = FractionalPosition.Max(lyric.Position + LyricPhraseSpacing.MinimumLength(divisor),
+            lyric.EndPosition + delta);
 
-        // The end may never cross into the next syllable's minimum gap — the
-        // same cap note sustains get from ChartSpacingEnforcer, anchored at the
-        // earlier sound's position. The neighbour may live in the next phrase.
-        // A pill that already overlaps (older data) snaps back into legality on
-        // the first wheel tick, mirroring the enforcer's only-ever-shortens rule.
+        var shortened = lyric.IsSustainShortened;
         var phrases = vm.ChartEditor.ActiveVocalTrack?.Phrases;
         var beats = vm.ChartEditor.Beats;
         if (phrases != null && beats.Count > 0)
         {
-            var (_, next) = LyricDragBounds.FindNeighbors(phrases, lyric);
+            var (_, next) = LyricDragBounds.FindNeighbors(phrases, lyric, out _, out var nextInPhrase);
             if (next != null)
             {
-                var config = _configService.LoadAppConfig();
-                var maxEnd = next.Position - ChartSpacingEnforcer.GetMinDistance(lyric.Position, beats, config);
-                if (maxEnd > lyric.Position && newEnd > maxEnd) newEnd = maxEnd;
+                var maxEnd = LyricPhraseSpacing.EndLimit(lyric.Position, next.Position, beats, _configService.LoadAppConfig());
+                if (maxEnd < lyric.Position) return WheelAdjustmentResult.NoChange;
+                newEnd = FractionalPosition.Min(newEnd, maxEnd);
+                shortened = nextInPhrase && newEnd < maxEnd && (shortened || deltaSteps < 0);
             }
         }
 
@@ -201,7 +201,7 @@ public sealed class TimelineWheelAdjuster
         // One wheel run = one undo node, exactly like the hand-shape resize two
         // rules up. Without the verb this pushed a node per TICK — the last
         // wheel gesture in the editor still doing so.
-        return _history.Do(new ResizeLyricAction(lyric, oldEnd, newEnd, MergeVerbs.LyricLength))
+        return _history.Do(new ResizeLyricAction(lyric, oldEnd, newEnd, MergeVerbs.LyricLength, shortened))
             ? WheelAdjustmentResult.Changed
             : WheelAdjustmentResult.NoChange;
     }
@@ -289,14 +289,24 @@ public sealed class TimelineWheelAdjuster
         {
             var shape = targets[i];
             var next = newStates[i];
-            var current = arrangement.ChordTemplates.FirstOrDefault(t => t.Id == shape.TemplateId);
+            var current = arrangement.FindChordTemplate(shape.TemplateId);
+
+            if (current != null && (current.IsPinned || shape.GetGhostMask(current) != 0)) continue;
+
+            // A note the grip cannot play (the same string at another fret, a stretch past one
+            // hand) leaves the grip alone: the bar grows, the grip stays.
+            var covered = HandShapeGripFit.SoundsIn(notes, chords, next.Position, next.EndPosition).ToList();
+            if (HandShapeGripFit.Grow(new Dictionary<int, int>(), covered) == null) continue;
 
             var owned = shape.TemplateId < 0 ||
-                        HandShapeAutoTemplate.OwnsItsTemplateAlone(shape, chords, shapes);
-            if (!owned) continue;
-            // A pinned grip (authored, or holding ghost gems) keeps its shape however far
-            // the bar is dragged; HandShapeAutoTemplate.Rebuild refuses it too.
-            if (current is { IsPinned: true }) continue;
+                        (HandShapeAutoTemplate.OwnsItsTemplateAlone(shape, chords, shapes) &&
+                         HandShapeAutoTemplate.OwnsItsTemplateAloneInArrangement(shape, arrangement));
+            if (!owned)
+            {
+                if (current != null)
+                    GrowSharedGrip(fingeringService, arrangement, current, covered, next, stringCount, minted);
+                continue;
+            }
 
             var seed = fingeringService.BuildTemplateForRange(arrangement, notes, chords,
                 next.Position, next.EndPosition);
@@ -324,5 +334,39 @@ public sealed class TimelineWheelAdjuster
             minted.Add(rebuilt);
             next.TemplateId = rebuilt.Id;
         }
+    }
+
+    /// <summary>
+    ///     A bar on a SHARED grip grown over a note that grip does not hold yet (an imported
+    ///     arpeggio bar ending one note early). The shared template is never edited: the grown grip
+    ///     resolves to a plain template with those frets, or is minted, and the bar is repointed —
+    ///     inside the same resize action, so it is one undo step with the length. A bar that only
+    ///     shrinks, or covers nothing new, keeps its grip.
+    /// </summary>
+    private static void GrowSharedGrip(IFingeringGenerationService fingeringService, Arrangement arrangement,
+        ChordTemplate current, List<(int StringIndex, int Fret)> covered, HandShape next, int stringCount,
+        List<ChordTemplate> minted)
+    {
+        if (HandShapeGripFit.Grow(current.Frets, covered) is not { } frets || frets.Count == current.Frets.Count) return;
+        var rebuilt = ArrangementFingeringStyle.RebuildHandShapeGrip(arrangement, current,
+            new ChordTemplate { Frets = frets }, stringCount);
+        if (rebuilt == null) return;
+
+        // Resolve by FRETS within the grip's own arpeggio flavour, so a resize of an arpeggio grip
+        // reuses its twin instead of minting a template per gesture.
+        var flavour = ArpeggioFlavour.Of(current);
+        var resolved = minted.FirstOrDefault(t => flavour.Matches(t) && t.HasFrets(frets)) ??
+                       ChordTemplateResolver.FindByShape(arrangement, frets, flavour);
+        if (resolved != null)
+        {
+            next.TemplateId = resolved.Id;
+            return;
+        }
+
+        // The grown grip holds other frets, so it takes the name suggested for them, not the old grip's.
+        rebuilt.Name = NewChordNames.For(arrangement, rebuilt.Frets);
+        rebuilt.Id = fingeringService.NextTemplateId(arrangement) + minted.Count;
+        minted.Add(rebuilt);
+        next.TemplateId = rebuilt.Id;
     }
 }

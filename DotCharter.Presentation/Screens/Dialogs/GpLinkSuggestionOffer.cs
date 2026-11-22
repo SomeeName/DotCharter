@@ -24,7 +24,8 @@ public sealed class GpLinkSuggestionOffer(IDialogs dialogs, GpImportApplier appl
 
         var clock = Stopwatch.StartNew();
         var rule = LinkSuggestionFinder.RuleFor(edit.Config.LoadAppConfig());
-        var suggestions = LinkSuggestionFinder.Find(project, score.Arrangements, score.SourceBars, rule);
+        var suggestions = LinkSuggestionFinder.Find(project, score.Arrangements, score.SourceBars ?? [], rule,
+            CancellationToken.None, message => edit.Logger.Warning(AppLogCategory.Import, message));
         edit.Logger.Info(AppLogCategory.Import,
             $"Link suggestions after the Guitar Pro import: {suggestions.Count} groups ({suggestions.Count(s => s.FromRepeats)} from repeats), " +
             $"repeatTier={score.SourceBars != null}, {clock.ElapsedMilliseconds} ms.");

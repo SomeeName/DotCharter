@@ -87,7 +87,7 @@ public sealed partial class StemCacheViewModel : ObservableObject, IStemCachePar
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Stem cache measure failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Stem cache measure failed", ex);
         }
     }
 
@@ -105,7 +105,7 @@ public sealed partial class StemCacheViewModel : ObservableObject, IStemCachePar
         }
         catch (Exception ex)
         {
-            _logger?.Error(AppLogCategory.Audio, $"Stem cache clear failed: {ex.Message}", ex);
+            _logger?.Error(AppLogCategory.Audio, "Stem cache clear failed", ex);
             Detail = ex.Message;
         }
         finally

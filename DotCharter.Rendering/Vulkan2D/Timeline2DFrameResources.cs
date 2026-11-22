@@ -51,6 +51,15 @@ internal sealed unsafe class Timeline2DFrameResources : IDisposable
     public Timeline2DFrameResources(VulkanContext context)
     {
         _context = context;
+        NativeResourceSet.CompleteOrRollback(() =>
+        {
+            CreateFrameObjects(context);
+            CreateVertexBuffers(InitialSolidSlotBytes, InitialGeneralSlotBytes);
+        }, Dispose);
+    }
+
+    private void CreateFrameObjects(VulkanContext context)
+    {
         var api = context.Api;
 
         var poolInfo = new CommandPoolCreateInfo
@@ -83,8 +92,6 @@ internal sealed unsafe class Timeline2DFrameResources : IDisposable
             if (api.CreateFence(context.Device, in fenceInfo, null, out Fences[i]) != Result.Success)
                 throw new Exception("Failed to create a 2D timeline frame fence.");
         }
-
-        CreateVertexBuffers(InitialSolidSlotBytes, InitialGeneralSlotBytes);
     }
 
     public void Dispose()
@@ -119,7 +126,7 @@ internal sealed unsafe class Timeline2DFrameResources : IDisposable
         var newGeneral = _generalSlotBytes;
         while (newGeneral < generalBytes) newGeneral *= 2;
 
-        _context.Api.DeviceWaitIdle(_context.Device);
+        VulkanCheck.Ok(_context.Api.DeviceWaitIdle(_context.Device), "Timeline2DFrameResources.DeviceWaitIdle");
         DestroyVertexBuffers();
         CreateVertexBuffers(newSolid, newGeneral);
     }
@@ -221,13 +228,13 @@ internal sealed unsafe class Timeline2DFrameResources : IDisposable
             MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit,
             out _solidBuffer, out _solidMemory);
         void* mapped;
-        _context.Api.MapMemory(_context.Device, _solidMemory, 0, solidSlotBytes * MaxFramesInFlight, 0, &mapped);
+        VulkanCheck.Ok(_context.Api.MapMemory(_context.Device, _solidMemory, 0, solidSlotBytes * MaxFramesInFlight, 0, &mapped), "Timeline2DFrameResources.MapMemory");
         _solidMapped = (byte*)mapped;
 
         _context.CreateBuffer(generalSlotBytes * MaxFramesInFlight, BufferUsageFlags.VertexBufferBit,
             MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit,
             out _generalBuffer, out _generalMemory);
-        _context.Api.MapMemory(_context.Device, _generalMemory, 0, generalSlotBytes * MaxFramesInFlight, 0, &mapped);
+        VulkanCheck.Ok(_context.Api.MapMemory(_context.Device, _generalMemory, 0, generalSlotBytes * MaxFramesInFlight, 0, &mapped), "Timeline2DFrameResources.MapMemory");
         _generalMapped = (byte*)mapped;
     }
 

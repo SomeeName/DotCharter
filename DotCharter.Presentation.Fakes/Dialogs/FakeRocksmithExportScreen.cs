@@ -2,10 +2,11 @@ using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Presentation.Contracts.Dialogs;
+using DotCharter.Services.Export.Audio;
 
 namespace DotCharter.Presentation.Fakes.Dialogs;
 
-/// <summary>A services-free <see cref="IRocksmithExportScreen" />; Export answers true.</summary>
+/// <summary>A fake <see cref="IRocksmithExportScreen" /> with shared format data; Export answers true.</summary>
 public sealed class FakeRocksmithExportScreen : FakeDialog<bool>, IRocksmithExportScreen
 {
     private FakeRocksmithExportScreen(IReadOnlyList<(string Name, string Type, bool On)> arrangements, string audio, string output,
@@ -13,7 +14,6 @@ public sealed class FakeRocksmithExportScreen : FakeDialog<bool>, IRocksmithExpo
         string result = "", IReadOnlyList<string>? warnings = null, string dlcKey = "",
         bool extendedStrings = false, bool plain = false)
     {
-        HasExtendedStringGuitar = extendedStrings;
         // Mac alone (LongText, with a 7-string guitar ticked) or PC + Mac, the default when a
         // Mac package can be written.
         Target = new FakeTarget(mac ? 2 : 1, plain);
@@ -25,7 +25,7 @@ public sealed class FakeRocksmithExportScreen : FakeDialog<bool>, IRocksmithExpo
         AudioPath = audio;
         OutputPath = output;
         DlcKey = dlcKey;
-        ValidationItems = [.. findings.Select(f => new Finding(f.Error, f.Location, f.Message, f.Location.Contains(':'), f.Fix))];
+        ValidationItems = [.. findings.Select(f => new Finding(f.Error, f.Location, f.Message, f.Location.Contains(':'), f.Fix, f.Location.Length == 0 && f.Fix.Length == 0))];
         IsBuilding = building;
         ProgressFraction = building ? 0.42 : 0;
         ProgressMessage = building ? "Step 3 of 7 — Writing SNG" : "";
@@ -33,7 +33,7 @@ public sealed class FakeRocksmithExportScreen : FakeDialog<bool>, IRocksmithExpo
         ResultWarnings = warnings ?? [];
         static ICommand Idle() => new RelayCommand(() => { });
         OpenToneDesignerCommand = Idle();
-        ReviewReportCommand = building ? Disabled() : Idle();
+        ShowInIssuesCommand = building ? Disabled() : Idle();
         BrowseAudioCommand = Idle();
         BrowsePreviewAudioCommand = Idle();
         BrowseAlbumArtCommand = Idle();
@@ -73,6 +73,10 @@ public sealed class FakeRocksmithExportScreen : FakeDialog<bool>, IRocksmithExpo
     ///     The default chart with an unencrypted package ahead: the warning and its DLC Builder button, and the line
     ///     that says where a project was written. Short, so it lays out the same at every size and in every language.
     /// </summary>
+    /// <summary>The default dialog with one more warning (location, text): a finding the caller localized itself.</summary>
+    public static FakeRocksmithExportScreen WithWarning(string location, string message) =>
+        new(DefaultArrangements, DefaultAudio, DefaultOutput, [.. DefaultFindings, (false, location, message, "")]);
+
     public static FakeRocksmithExportScreen Plain() => new(DefaultArrangements, DefaultAudio, DefaultOutput, DefaultFindings, plain: true)
     {
         DlcBuilderProjectMessage = @"DLC Builder project written: C:\Exports\DLC Builder\PolkadotStingray_Sakasma.rs2dlc"
@@ -91,9 +95,24 @@ public sealed class FakeRocksmithExportScreen : FakeDialog<bool>, IRocksmithExpo
         (false, "Rhythm", "No phrases: Rocksmith needs at least COUNT and END.",
             "Generate the structure of Rhythm: COUNT and END phrases and the no-guitar sections."),
         (false, "Lead", "Tone \"clean_verse\" has no definition and plays as the default tone.",
-            "Open the Tone designer on Lead."),
+            "Create missing tone definitions for Lead: a default tone under each name the arrangement uses. One undo step."),
         (false, "Lead · 1:23.456", "Chord has no fingering.", "")
     ];
+
+    /// <summary>
+    ///     The default chart with the song-list name warning: a finding with no location, the sentence that names
+    ///     Song metadata (<paramref name="message" />, in the language under test) and the button that opens it.
+    /// </summary>
+    public static FakeRocksmithExportScreen NameWarning(string message) => new(DefaultArrangements, DefaultAudio, DefaultOutput,
+        [(false, "", message, ""), .. DefaultFindings]);
+
+    /// <summary>
+    ///     The two warnings every export repeats, each with its one-click Fix: no show lights (a project-wide
+    ///     finding with no location) and a tone with no definition. The texts are the language under test's own.
+    /// </summary>
+    public static FakeRocksmithExportScreen OneClickFixes(string showlights, string showlightsFix, string tone, string toneFix) =>
+        new(DefaultArrangements, DefaultAudio, DefaultOutput,
+            [(false, "", showlights, showlightsFix), (false, "Lead", tone, toneFix), .. DefaultFindings.Where(f => f.Location != "Lead")]);
 
     /// <summary>Nothing to export yet: no arrangement ticked, no audio, and each gate says why.</summary>
     public static FakeRocksmithExportScreen Empty() => new([], "", "", []);
@@ -138,11 +157,13 @@ public sealed class FakeRocksmithExportScreen : FakeDialog<bool>, IRocksmithExpo
     public bool HasPlatformNote => PlatformNote.Length > 0;
     public IReadOnlyList<IExportArrangementRow> Arrangements { get; }
     public bool IncludeVocals { get; set; }
+    public bool VocalsTicked { get => IncludeVocals && HasVocals; set => IncludeVocals = value; }
     public bool HasVocals => false;
-    public bool SplitExtendedStringChords { get; set; }
-    public bool HasExtendedStringGuitar { get; }
     public string AudioPath { get; set; }
+    public string MainAudioWatermark => ExportAudioFormats.DisplayText;
     public string PreviewAudioPath { get; set; } = "";
+    public string PreviewStartText { get; set; } = "";
+    public bool HasInvalidPreviewStart => false;
     public double AudioVolume { get; set; } = -8;
     public double PreviewVolume { get; set; } = -7;
     public ICommand AutoVolumeCommand { get; } = new RelayCommand(() => { });
@@ -165,7 +186,6 @@ public sealed class FakeRocksmithExportScreen : FakeDialog<bool>, IRocksmithExpo
         ? $"{ValidationItems.Count(f => f.IsError)} errors, {ValidationItems.Count(f => !f.IsError)} warnings"
         : "No problems found.";
     public bool HasFindings => ValidationItems.Count > 0;
-    public ICommand ReviewReportCommand { get; }
     public IReadOnlyList<IExportFinding> ValidationItems { get; }
     public string ExportBlockedReason { get; }
     public bool IsExportBlocked => ExportBlockedReason.Length > 0;
@@ -176,6 +196,7 @@ public sealed class FakeRocksmithExportScreen : FakeDialog<bool>, IRocksmithExpo
     public string ResultPath { get; }
     public IReadOnlyList<string> ResultWarnings { get; }
     public ICommand OpenToneDesignerCommand { get; }
+    public ICommand ShowInIssuesCommand { get; }
     public ICommand BrowseAudioCommand { get; }
     public ICommand BrowsePreviewAudioCommand { get; }
     public ICommand BrowseAlbumArtCommand { get; }
@@ -195,8 +216,10 @@ public sealed class FakeRocksmithExportScreen : FakeDialog<bool>, IRocksmithExpo
 
     private sealed record Choice(string Label) : IExportChoice;
 
-    private sealed record Finding(bool IsError, string Location, string Message, bool HasTime, string FixDescription) : IExportFinding
+    private sealed record Finding(bool IsError, string Location, string Message, bool HasTime, string FixDescription,
+        bool HasSongMetadataLink) : IExportFinding
     {
+        public ICommand OpenSongMetadataCommand { get; } = new RelayCommand(() => { });
         public ICommand JumpCommand { get; } = new RelayCommand(() => { });
         public bool HasFix => FixDescription.Length > 0;
         public ICommand FixCommand { get; } = new RelayCommand(() => { });
@@ -211,20 +234,40 @@ public sealed class FakeRocksmithExportScreen : FakeDialog<bool>, IRocksmithExpo
 
     private sealed class FakeTarget : ObservableObject, IExportTarget
     {
+        private IExportChoice _selectedPlatformOption;
+        private IExportChoice _selectedPackageOption;
+
         public FakeTarget(int platform, bool plain)
         {
-            WritesPlainPackage = plain;
             PlatformOptions = [new Choice("Windows (PC)"), new Choice("Windows + macOS (PC + Mac)"), new Choice("macOS (Mac)")];
-            SelectedPlatformOption = PlatformOptions[platform];
+            _selectedPlatformOption = PlatformOptions[platform];
             PackageOptions = [new Choice("Encrypted (default)"), new Choice("Plain (unencrypted)")];
-            SelectedPackageOption = PackageOptions[plain ? 1 : 0];
+            _selectedPackageOption = PackageOptions[plain ? 1 : 0];
         }
 
         public IReadOnlyList<IExportChoice> PlatformOptions { get; }
-        public IExportChoice SelectedPlatformOption { get; set; }
+        public IExportChoice SelectedPlatformOption
+        {
+            get => _selectedPlatformOption;
+            set
+            {
+                if (SetProperty(ref _selectedPlatformOption, value)) OnPropertyChanged(nameof(WritesPlainPackage));
+            }
+        }
+
         public IReadOnlyList<IExportChoice> PackageOptions { get; }
-        public IExportChoice SelectedPackageOption { get; set; }
+
+        public IExportChoice SelectedPackageOption
+        {
+            get => _selectedPackageOption;
+            set
+            {
+                if (SetProperty(ref _selectedPackageOption, value)) OnPropertyChanged(nameof(WritesPlainPackage));
+            }
+        }
+
         public bool CanChoosePackage => true;
-        public bool WritesPlainPackage { get; }
+        public bool WritesExtendedRange => false;
+        public bool WritesPlainPackage => SelectedPackageOption != PackageOptions[0] && SelectedPlatformOption != PlatformOptions[2];
     }
 }

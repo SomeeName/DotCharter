@@ -125,6 +125,45 @@ public sealed class ChordNoNameTests : IDisposable
         Assert.Equal("", written.Attribute("chordName")!.Value);
     }
 
+    [Fact]
+    public void UntickingNoName_OnOneStrum_PreservesTheOtherStrumAndUndoRedo()
+    {
+        var h = new Harness();
+        var (vm, original) = h.Loaded([(0, 3), (1, 5)], "", unnamed: true);
+        var arrangement = h.State.ActiveArrangement!;
+        var level = arrangement.Levels[0];
+        var selected = Assert.Single(level.Chords);
+        original.Id = 7;
+        selected.TemplateId = 7;
+        var other = selected.Clone();
+        other.Position = new FractionalPosition(2);
+        level.Chords.Add(other);
+        var kept = new ChordTemplate { Id = 19, Name = "kept", Frets = Frets(G) };
+        arrangement.ChordTemplates.Insert(0, kept);
+        var existing = new Chord { TemplateId = 19, Position = new FractionalPosition(4) };
+        foreach (var (str, fret) in G)
+            existing.ChordNotes.Add(new ChordNote { StringIndex = str, Fret = fret });
+        level.Chords.Add(existing);
+        vm.LoadTemplate(original, 6);
+        Assert.Equal(ChordApplyRung.Selected, vm.ApplyRung);
+        var before = ChartProjectCloner.CloneArrangement(arrangement);
+
+        vm.IsUnnamed = false;
+
+        Assert.NotEqual(original.Id, selected.TemplateId);
+        var edited = arrangement.FindChordTemplate(selected.TemplateId)!;
+        Assert.False(edited.Unnamed);
+        Assert.Equal("", edited.Name);
+        Assert.True(original.Unnamed);
+        Assert.Equal(7, other.TemplateId);
+        Assert.Equal(19, existing.TemplateId);
+        var after = ChartProjectCloner.CloneArrangement(arrangement);
+        h.History.Undo();
+        Assert.Empty(DeepCompare.Diff("Undo", before, arrangement, new HashSet<string>()));
+        h.History.Redo();
+        Assert.Empty(DeepCompare.Diff("Redo", after, arrangement, new HashSet<string>()));
+    }
+
     private static Dictionary<int, int> Frets((int String, int Fret)[] grip) => grip.ToDictionary(g => g.String, g => g.Fret);
 
     private static ChartProject ProjectWith(params ChordTemplate[] templates)

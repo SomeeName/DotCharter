@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using DotCharter.Services.Diagnostics;
 
@@ -40,10 +41,28 @@ public static class UsageInstrumentation
         _installed = true;
 
         MenuItem.ClickEvent.AddClassHandler<MenuItem>((item, _) =>
-            Record(tracker, item.Command, item.Name, item.Header));
+            Record(tracker, item.Command, OwnerName(item), item.Header));
 
         Button.ClickEvent.AddClassHandler<Button>((button, _) =>
-            Record(tracker, button.Command, button.Name, button.Content));
+            Record(tracker, button.Command, OwnerName(button), button.Content));
+    }
+
+    /// <summary>
+    ///     The control's own name, or for a template part (a spinner's
+    ///     <c>PART_IncreaseButton</c>) the name of the control whose template it
+    ///     lives in; null when that owner has no name, so the click is skipped
+    ///     rather than counted under a name every spinner shares.
+    /// </summary>
+    internal static string? OwnerName(StyledElement element)
+    {
+        if (!CommandIdResolver.IsTemplatePart(element.Name)) return element.Name;
+
+        for (var owner = element.TemplatedParent as StyledElement; owner != null; owner = owner.TemplatedParent as StyledElement)
+        {
+            if (!string.IsNullOrWhiteSpace(owner.Name) && !CommandIdResolver.IsTemplatePart(owner.Name)) return owner.Name;
+        }
+
+        return element.Name;
     }
 
     private static void Record(IUsageTracker tracker, System.Windows.Input.ICommand? command,

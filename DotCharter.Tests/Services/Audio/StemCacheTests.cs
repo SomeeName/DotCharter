@@ -22,18 +22,153 @@ public sealed class StemCacheTests : IDisposable
 
     public void Dispose() => BestEffortDelete.Directory(_tmp);
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task Saving_again_never_replaces_an_existing_archive(int replacementCount)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var store = new StemCacheStore(new FakeEncoder(StemCodec.Wav), rootOverride: Path.Combine(_tmp, "immutable"));
+        var id = StemCacheIdentity.ForLibrary("lib:IMMUTABLE");
+        var sig = new StemAudioSignature(10, "same-audio");
+        var key = StemCacheKey.Derive(id, sig);
+        var original = new StemTrack { Name = "bass", Path = WriteBytes("original.wav", FakeWav(200, 1)) };
+        await store.SaveAsync(key, id, sig, [original], "original", "", ct);
+        var before = File.ReadAllBytes(store.ArchivePath(key));
+        var replacement = Enumerable.Range(0, replacementCount)
+            .Select(i => new StemTrack { Name = "replacement" + i, Path = WriteBytes($"replacement{i}.wav", FakeWav(200, 2)) })
+            .ToArray();
+
+        await store.SaveAsync(key, id, sig, replacement, "replacement", "", ct);
+
+        Assert.Equal(before, File.ReadAllBytes(store.ArchivePath(key)));
+    }
+
+    [Fact]
+    public async Task An_archive_published_while_encoding_wins_without_being_overwritten()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var root = Path.Combine(_tmp, "race");
+        var id = StemCacheIdentity.ForLibrary("lib:RACE");
+        var sig = new StemAudioSignature(10, "same-audio");
+        var key = StemCacheKey.Derive(id, sig);
+        var first = new StemCacheStore(new FakeEncoder(StemCodec.Wav), rootOverride: root);
+        var wav = WriteBytes("race.wav", FakeWav(200, 1));
+        await first.SaveAsync(key, id, sig, [new StemTrack { Name = "bass", Path = wav }], "first", "", ct);
+        var bytes = File.ReadAllBytes(first.ArchivePath(key));
+        File.Delete(first.ArchivePath(key));
+        var racing = new StemCacheStore(new FakeEncoder(StemCodec.Wav,
+            beforeEncode: () => File.WriteAllBytes(first.ArchivePath(key), bytes)), rootOverride: root);
+
+        await racing.SaveAsync(key, id, sig, [new StemTrack { Name = "vocals", Path = wav }], "second", "", ct);
+
+        Assert.Equal(bytes, File.ReadAllBytes(first.ArchivePath(key)));
+    }
+
+    [Fact]
+    public async Task A_failed_replacement_invalidates_the_previous_expansion_marker()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var root = Path.Combine(_tmp, "cache-replace");
+        var store = new StemCacheStore(new FakeEncoder(StemCodec.Opus), rootOverride: root);
+        var identity = StemCacheIdentity.ForLibrary("lib:REPLACE");
+        var sigA = new StemAudioSignature(10, "a");
+        var sigB = new StemAudioSignature(10, "b");
+        var keyA = StemCacheKey.Derive(identity, sigA);
+        var keyB = StemCacheKey.Derive(identity, sigB);
+        var original = FakeWav(200, 1);
+        var replaced = FakeWav(200, 2);
+        await store.SaveAsync(keyA, identity, sigA,
+            [new StemTrack { Name = "vocals", Path = WriteBytes("a.wav", original) }], "model", "", ct);
+        await store.SaveAsync(keyB, identity, sigB,
+            [new StemTrack { Name = "vocals", Path = WriteBytes("b.wav", replaced) }], "model", "", ct);
+        var dest = Path.Combine(_tmp, "play-replace");
+        await store.ExtractAsync(keyA, dest, ct);
+        var failing = new StemCacheStore(new FakeEncoder(StemCodec.Opus,
+            afterDecode: () => throw new IOException("decode failed after writing")), rootOverride: root);
+
+        await Assert.ThrowsAsync<IOException>(() => failing.ExtractAsync(keyB, dest, ct));
+
+        Assert.False(File.Exists(Path.Combine(dest, StemCacheStore.ExpandedMarkerFileName)));
+        var restored = Assert.Single(await store.ExtractAsync(keyA, dest, ct));
+        Assert.Equal(original, File.ReadAllBytes(restored.Path));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_interrupted_restore_leaves_no_stems_for_mixer_recovery(bool decodeFails)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var root = Path.Combine(_tmp, "restore-project");
+        Directory.CreateDirectory(root);
+        var destination = Path.Combine(root, "stems");
+        var cache = Path.Combine(_tmp, "restore-cache");
+        var store = new StemCacheStore(new FakeEncoder(StemCodec.Opus), rootOverride: cache);
+        var identity = StemCacheIdentity.ForLibrary("lib:INTERRUPTED");
+        var signature = new StemAudioSignature(10, "restore");
+        var key = StemCacheKey.Derive(identity, signature);
+        await store.SaveAsync(key, identity, signature,
+            [new StemTrack { Name = "vocals", Path = WriteBytes("restore.wav", FakeWav(200, 1)) }], "m", "", ct);
+        var visibleDuringDecode = -1;
+        var interrupted = new StemCacheStore(new FakeEncoder(StemCodec.Opus, afterDecode: () =>
+        {
+            visibleDuringDecode = StemFolderProbe.Probe(root, root, [], false, null).Recovered.Count;
+            if (decodeFails) throw new IOException("decoder left a partial output");
+            cancel.Cancel();
+        }), rootOverride: cache);
+
+        if (decodeFails) await Assert.ThrowsAsync<IOException>(() => interrupted.ExtractAsync(key, destination, cancel.Token));
+        else await Assert.ThrowsAnyAsync<OperationCanceledException>(() => interrupted.ExtractAsync(key, destination, cancel.Token));
+
+        Assert.Equal(0, visibleDuringDecode);
+        Assert.Empty(StemFolderProbe.Probe(root, root, [], false, null).Recovered);
+        Assert.Empty(Directory.EnumerateDirectories(root, "stems.restore-*"));
+        var completed = Assert.Single(await store.ExtractAsync(key, destination, ct));
+        var recovered = Assert.Single(StemFolderProbe.Probe(root, root, [], false, null).Recovered);
+        Assert.Equal(Path.GetRelativePath(root, completed.Path), recovered.RelativePath);
+        Assert.Equal(FakeWav(200, 1), File.ReadAllBytes(completed.Path));
+
+        // An interrupted publication cannot expose a partial set through recovery,
+        // even if a previous complete-set marker is still present.
+        var pending = Path.Combine(destination, ".stemcache-publishing");
+        File.WriteAllText(pending, "interrupted publication");
+        Assert.Empty(StemFolderProbe.Probe(root, root, [], false, null).Recovered);
+        await store.ExtractAsync(key, destination, ct);
+        Assert.False(File.Exists(pending));
+        Assert.Single(StemFolderProbe.Probe(root, root, [], false, null).Recovered);
+    }
+
+    [Fact]
+    public void Every_manifest_entry_is_validated_before_any_decode_is_scheduled()
+    {
+        var source = File.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "DotCharter.Services", "Audio",
+            "StemSeparation", "Cache", "StemCacheStore.cs"));
+        var extract = source[source.IndexOf("public async Task<IReadOnlyList<StemTrack>> ExtractAsync", StringComparison.Ordinal)..];
+        var validation = extract.IndexOf("foreach (var stem in manifest.Stems)", StringComparison.Ordinal);
+        var scheduling = extract.IndexOf("Task.Run", StringComparison.Ordinal);
+        Assert.True(validation >= 0 && validation < scheduling,
+            "Validate the entire manifest before starting workers that own .encoded files and semaphore slots.");
+        var validationEnd = extract.IndexOf("var pending", StringComparison.Ordinal);
+        Assert.True(validationEnd > validation);
+        Assert.Contains("throw new StemArchiveCorruptException", extract[validation..validationEnd], StringComparison.Ordinal);
+    }
+
+
     // ---- test doubles -------------------------------------------------------
 
     /// <summary>Encoder that "encodes" by copying the WAV to a codec-extension
     /// file and decodes by copying back — lets the store round-trip without
     /// ffmpeg while still exercising the codec plumbing / manifest recording.</summary>
-    private sealed class FakeEncoder(StemCodec codec, bool external = true) : IStemEncoder
+    private sealed class FakeEncoder(StemCodec codec, bool external = true, Action? beforeEncode = null, Action? afterDecode = null) : IStemEncoder
     {
         public StemCodec PreferredCodec => codec;
         public bool IsExternalEncoderAvailable => external;
 
         public Task<string> EncodeAsync(string wavPath, string destPathWithoutExtension, StemCodec target, CancellationToken ct = default)
         {
+            beforeEncode?.Invoke();
             var dest = destPathWithoutExtension + "." + target.FileExtension();
             File.Copy(wavPath, dest, overwrite: true);
             return Task.FromResult(dest);
@@ -42,13 +177,14 @@ public sealed class StemCacheTests : IDisposable
         public Task<string> DecodeToWavAsync(string encodedPath, StemCodec c, string destWavPath, CancellationToken ct = default)
         {
             File.Copy(encodedPath, destWavPath, overwrite: true);
+            afterDecode?.Invoke();
             return Task.FromResult(destWavPath);
         }
     }
 
     /// <summary>
-    ///     A save may ADD to the cache or replace an entry with an equal-or-better one;
-    ///     it may never SHRINK one.
+    ///     A save only creates a missing archive. In particular, missing source
+    ///     WAVs must never shrink an existing archive.
     ///     <para>
     ///         <c>SaveAsync</c>'s <c>usable</c> filter silently drops any stem whose WAV
     ///         has gone from disk (a cleaned playback dir, a failed run, a file still

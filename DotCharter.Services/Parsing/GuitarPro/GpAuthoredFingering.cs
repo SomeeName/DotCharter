@@ -22,9 +22,9 @@ namespace DotCharter.Services.Parsing.GuitarPro;
 ///     suggester context-dependent — <see cref="ChordTemplateFingerSetter" />
 ///     stays a pure function of the fret shape, per the Core invariant; the
 ///     builder simply prefers an authored finger over the suggested one, per
-///     string, at template CREATION only. A shape already backed by a template is
-///     reused verbatim and never mutated, so the first fingering a shape is seen
-///     with wins — the same rule its name follows.
+///     string, at template CREATION only. An existing template is reused only when
+///     its fingers agree with the authored ones; differing fingerings get separate
+///     templates, as differing authored names do.
 ///     </para>
 ///     <para>
 ///     It also remembers WHICH templates took an authored finger

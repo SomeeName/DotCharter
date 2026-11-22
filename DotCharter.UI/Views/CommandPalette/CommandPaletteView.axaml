@@ -213,8 +213,11 @@
                                   Margin="13,0" MinHeight="38">
                                 <TextBlock Grid.Column="0" Classes="PaletteGroup"
                                            Text="{Binding Category}" />
-                                <TextBlock Grid.Column="1" Classes="PaletteName"
-                                           Text="{Binding Title}" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Classes="PaletteName" Text="{Binding Title}" />
+                                    <TextBlock Classes="PaletteGroup" IsVisible="{Binding HasDisabledReason}"
+                                               Text="{Binding DisabledReason}" />
+                                </StackPanel>
                                 <Border Grid.Column="2" Classes="PaletteKey"
                                         IsVisible="{Binding HasShortcut}">
                                     <TextBlock Text="{Binding ShortcutText}" />

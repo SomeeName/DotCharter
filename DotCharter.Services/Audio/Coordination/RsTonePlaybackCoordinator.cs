@@ -155,8 +155,12 @@ public sealed partial class RsTonePlaybackCoordinator
     /// <summary>True when the last prepare converted the OPEN PROJECT's own
     /// authored tone bodies rather than a package's — an own chart played from
     /// Play Mode. <see cref="BeginRun"/> reads it to point at the right maps;
-    /// written on whichever thread <c>BuildSummary</c> ran on.</summary>
+    /// written with <see cref="LastSummary"/> by <see cref="PublishSummary"/>.</summary>
     private volatile bool _preparedFromProject;
+
+    /// <summary>Bumped by every prepare: only the newest publishes.</summary>
+    private long _prepareGeneration;
+    private readonly object _prepareGate = new();
 
     /// <summary>The maps the CURRENTLY driving source applies from — the psarc
     /// cache for a run, the project's own tones for the editor preview. Assigned
@@ -176,9 +180,8 @@ public sealed partial class RsTonePlaybackCoordinator
 
     private RsToneDriver _driver = RsToneDriver.None;
     private readonly object _convertGate = new();
-    // The in-flight background conversion started by PrepareForSongAsync (BUG 2:
-    // tone conversion moved off the UI thread). BeginRun skips gracefully if a
-    // run somehow begins before it finishes — never blocks the UI thread on it.
+    // The in-flight background conversion started by PrepareForSongAsync. BeginRun
+    // skips if a run begins before it finishes, never blocking the UI thread on it.
     private volatile Task? _prepareInFlight;
 
     private RsToneScanner? _scanner;
@@ -188,6 +191,7 @@ public sealed partial class RsTonePlaybackCoordinator
     /// them back with the board.</summary>
     private DotCharter.Tone.Audio.Dsp.Scenes.RigSceneSet? _userScenesSnapshot;
     private string _activeToneKey = "";
+    private DcRigPreset? _lastAppliedPreset;
 
     private Channel<ApplyRequest>? _applyChannel;
     private Task? _worker;
@@ -296,8 +300,7 @@ public sealed partial class RsTonePlaybackCoordinator
     /// <para><paramref name="psarcPath"/> picks the tone SOURCE, and BOTH are
     /// real: a path converts from the PACKAGE, null/empty converts the open
     /// project's own <see cref="ChartProject.ToneDefinitions"/> (see
-    /// <see cref="BuildSummary"/>). It does NOT mean "no tones" (a stale
-    /// claim to the contrary once got a fixed bug re-diagnosed as a live one).
+    /// <see cref="BuildSummary"/>). It does NOT mean "no tones".
     /// An edited CDLC saved as a <c>.dcproj</c> takes the second
     /// branch: its bodies came from the package, but the package is gone.</para>
     /// <paramref name="songIdentity"/> is the practice-profile song key
@@ -309,48 +312,102 @@ public sealed partial class RsTonePlaybackCoordinator
     public RsToneConversionSummary PrepareForSong(string? psarcPath, Arrangement? arrangement, string? songIdentity = null)
     {
         psarcPath = PackageToneSource(psarcPath);
-        _preparedArrangement = WeakRef(arrangement);
-        _preparedSongIdentity = songIdentity;
-        LastSummary = BuildSummary(psarcPath, arrangement, songIdentity);
-        return LastSummary;
+        var pending = new TaskCompletionSource<RsToneConversionSummary>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var generation = BeginPrepare(arrangement, songIdentity, pending.Task);
+        PrepareBegunForTesting?.Invoke();
+        var summary = RsToneConversionSummary.None;
+        try
+        {
+            lock (_convertGate)
+            {
+                if (Volatile.Read(ref _prepareGeneration) != generation) return summary;
+                return summary = PublishSummary(BuildSummary(psarcPath, arrangement, songIdentity), psarcPath, generation);
+            }
+        }
+        finally
+        {
+            pending.TrySetResult(summary);
+        }
     }
 
-    /// <summary>Off-UI-thread variant of <see cref="PrepareForSong"/> (BUG 2 /
-    /// 0.15.1): the expensive part — reading + parsing + converting EVERY tone in
+    /// <summary>Runs right after a prepare has begun, before its summary is built; for tests.</summary>
+    internal Action? PrepareBegunForTesting { get; set; }
+
+    /// <summary>Records the song about to be prepared and, in the SAME critical section, the task that
+    /// publishes its summary: a <see cref="BeginRun" /> on another thread sees either the previous song
+    /// whole or the new one still in flight, never the new arrangement beside the previous summary.</summary>
+    private long BeginPrepare(Arrangement? arrangement, string? songIdentity, Task inFlight)
+    {
+        lock (_prepareGate)
+        {
+            _preparedArrangement = WeakRef(arrangement);
+            _preparedSongIdentity = songIdentity;
+            _prepareInFlight = inFlight;
+            return ++_prepareGeneration;
+        }
+    }
+
+    /// <summary>Publishes a summary with its source unless a newer prepare started.</summary>
+    private RsToneConversionSummary PublishSummary(RsToneConversionSummary summary, string? psarcPath, long generation)
+    {
+        lock (_prepareGate)
+        {
+            if (Volatile.Read(ref _prepareGeneration) != generation) return summary;
+            _preparedFromProject = string.IsNullOrWhiteSpace(psarcPath) && summary.HasTones;
+            LastSummary = summary;
+            return summary;
+        }
+    }
+
+    /// <summary>Off-UI-thread variant of <see cref="PrepareForSong"/>: the expensive part — reading + parsing + converting EVERY tone in
     /// the package — runs on a background thread so the pre-play screen never
     /// stalls the UI. The prepared arrangement is recorded synchronously (so
     /// <see cref="BeginRun"/> sees the right one immediately); the badge
     /// <see cref="LastSummary"/> updates when the conversion finishes. Only a song
     /// with NO tone bodies to convert at all short-circuits inline (no thread
     /// hop) — an own chart with authored tones has real conversion work and takes
-    /// the same background path a package does. Never throws.</summary>
+    /// the same background path a package does. Overlapping prepares publish only the
+    /// newest one's summary; an older one still queued converts nothing. Never throws.</summary>
     public Task<RsToneConversionSummary> PrepareForSongAsync(string? psarcPath, Arrangement? arrangement, string? songIdentity = null)
     {
         psarcPath = PackageToneSource(psarcPath);
-        _preparedArrangement = WeakRef(arrangement);
-        _preparedSongIdentity = songIdentity;
+        var pending = new TaskCompletionSource<RsToneConversionSummary>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var generation = BeginPrepare(arrangement, songIdentity, pending.Task);
+        PrepareBegunForTesting?.Invoke();
 
         // Nothing to convert from either source — compute inline, no thread hop.
         if (arrangement is null ||
             (string.IsNullOrWhiteSpace(psarcPath) &&
              (_projectState.ActiveProject?.ToneDefinitions.Count ?? 0) == 0))
         {
-            LastSummary = BuildSummary(psarcPath, arrangement, songIdentity);
-            _prepareInFlight = null;
-            return Task.FromResult(LastSummary);
+            Complete(pending, () => PublishSummary(BuildSummary(psarcPath, arrangement, songIdentity), psarcPath, generation));
+            return pending.Task;
         }
 
-        var task = Task.Run(() =>
+        // One build at a time, so a newer prepare's conversion lands last; publish BEFORE
+        // the task completes, so a BeginRun seeing it complete sees its LastSummary.
+        _ = Task.Run(() => Complete(pending, () =>
         {
-            var summary = BuildSummary(psarcPath, arrangement, songIdentity);
-            // Publish inside the background work, BEFORE the task completes, so a
-            // BeginRun that observes _prepareInFlight.IsCompleted also sees the
-            // matching LastSummary (no torn read between the two).
-            LastSummary = summary;
-            return summary;
-        });
-        _prepareInFlight = task;
-        return task;
+            lock (_convertGate)
+            {
+                if (Volatile.Read(ref _prepareGeneration) != generation) return RsToneConversionSummary.None;
+                return PublishSummary(BuildSummary(psarcPath, arrangement, songIdentity), psarcPath, generation);
+            }
+        }));
+        return pending.Task;
+    }
+
+    /// <summary>Completes the prepare's task with <paramref name="build" />'s summary, or its fault.</summary>
+    private static void Complete(TaskCompletionSource<RsToneConversionSummary> pending, Func<RsToneConversionSummary> build)
+    {
+        try
+        {
+            pending.TrySetResult(build());
+        }
+        catch (Exception ex)
+        {
+            pending.TrySetException(ex);
+        }
     }
 
     /// <summary>The archive to read tone bodies from: a Rocksmith <c>.psarc</c>, or null
@@ -362,7 +419,6 @@ public sealed partial class RsTonePlaybackCoordinator
     private RsToneConversionSummary BuildSummary(string? psarcPath, Arrangement? arrangement, string? songIdentity)
     {
         var dspAvailable = _chain is not NullDspChainService;
-        _preparedFromProject = false;
 
         if (arrangement is null)
             return new RsToneConversionSummary(false, dspAvailable, 0, 0, 0, Array.Empty<string>());
@@ -379,75 +435,15 @@ public sealed partial class RsTonePlaybackCoordinator
             if (project is null || project.ToneDefinitions.Count == 0)
                 return new RsToneConversionSummary(false, dspAvailable, 0, 0, 0, Array.Empty<string>());
 
-            var own = BuildPreviewSummary(project, arrangement, bodyEdits: null);
-            _preparedFromProject = own.HasTones;
-            return own;
+            return BuildPreviewSummary(project, arrangement, bodyEdits: null);
         }
 
         EnsureConverted(psarcPath!);
         LevelPackageTones(arrangement, songIdentity);
 
         return WithSongEdits(
-            Summarise(System.IO.Path.GetFileName(psarcPath), arrangement, _presets, _reports, dspAvailable),
+            RsToneSummaryBuilder.Build(System.IO.Path.GetFileName(psarcPath), arrangement, _presets, _reports, dspAvailable, _logger),
             songIdentity);
-    }
-
-    /// <summary>The half of a summary that is the same whichever SOURCE the tone
-    /// bodies came from: resolve the arrangement's referenced keys against the
-    /// converted presets and roll up their conversion notes.</summary>
-    private RsToneConversionSummary Summarise(
-        string source,
-        Arrangement arrangement,
-        Dictionary<string, DcRigPreset> presets,
-        Dictionary<string, ConversionReport> reports,
-        bool dspAvailable)
-    {
-        var referenced = ReferencedToneKeys(arrangement);
-        var resolved = new List<string>();
-        foreach (var key in referenced)
-        {
-            if (presets.ContainsKey(NormalizeKey(key)))
-            {
-                resolved.Add(key);
-            }
-            else
-            {
-                _logger?.Info(AppLogCategory.Audio,
-                    $"RsTone: chart tone '{key}' has no converted preset (available: {DescribeKeys(presets)}).");
-            }
-        }
-
-        _logger?.Info(AppLogCategory.Audio,
-            $"RsTone: summary for '{source}' — dspAvailable={dspAvailable}, " +
-            $"referencedTones={referenced.Count}, resolved={resolved.Count}, presetKeys={presets.Count}.");
-
-        if (resolved.Count == 0)
-            return new RsToneConversionSummary(false, dspAvailable, 0, 0, 0, Array.Empty<string>());
-
-        var approx = 0;
-        var skipped = 0;
-        var notes = new List<string>();
-        foreach (var key in resolved)
-        {
-            if (!reports.TryGetValue(NormalizeKey(key), out var rep)) continue;
-            approx += rep.ApproximatedCount;
-            skipped += rep.SkippedCount;
-            foreach (var note in rep.Notes)
-            {
-                if (note.Kind is ConversionNoteKind.Approximated or ConversionNoteKind.Skipped &&
-                    notes.Count < 16)
-                {
-                    notes.Add($"{key}: {note.Message}");
-                }
-            }
-        }
-
-        return new RsToneConversionSummary(true, dspAvailable, resolved.Count, approx, skipped, notes)
-        {
-            // The RESOLVED keys, not the referenced ones: a chip must name a tone
-            // the rig will really play.
-            ToneNames = resolved
-        };
     }
 
     /// <summary>Read + parse + convert every tone in the package once, cached by
@@ -647,6 +643,7 @@ public sealed partial class RsTonePlaybackCoordinator
     private void StartDriving(RsToneSchedule schedule, RsToneDriver driver)
     {
         _scanner = new RsToneScanner(schedule);
+        _lastAppliedPreset = null;
 
         // From here on the chain is the song's, not the player's: the tone session
         // must not save it. Raised before the first apply below.
@@ -663,6 +660,7 @@ public sealed partial class RsTonePlaybackCoordinator
         _userChainSnapshot = _pendingRestore ?? _chain.GetNodes();
         _pendingRestore = null;
         _pendingRestoreScenes = null;
+        _chain.EngineAttached += OnDrivingEngineAttached;
 
         // Start the off-UI-thread apply worker (latest-wins, coalesces rapid
         // ToneChange clusters into one apply).
@@ -717,6 +715,7 @@ public sealed partial class RsTonePlaybackCoordinator
         if (!IsDriving) return;
         IsDriving = false;
         _driver = RsToneDriver.None;
+        _chain.EngineAttached -= OnDrivingEngineAttached;
         _projectState.PropertyChanged -= _onProjectStateChanged;
 
         var channel = _applyChannel;
@@ -735,6 +734,7 @@ public sealed partial class RsTonePlaybackCoordinator
         _pendingRestoreScenes = scenes;
         _pendingRestore = snapshot;
         _activeToneKey = "";
+        _lastAppliedPreset = null;
         // Drop the HUD rig override so the tone label falls back to the chart's
         // own tone (or nothing) once the run ends.
         _toneHud?.ClearRig();
@@ -838,7 +838,7 @@ public sealed partial class RsTonePlaybackCoordinator
         lock (_convertGate) _previewPresets = LevelPreviewTones(presets, volumes, arrangement);
         _previewReports = reports;
 
-        return Summarise("the open project", arrangement, presets, reports, dspAvailable);
+        return RsToneSummaryBuilder.Build("the open project", arrangement, presets, reports, dspAvailable, _logger);
     }
 
     /// <summary>
@@ -995,6 +995,27 @@ public sealed partial class RsTonePlaybackCoordinator
         }
     }
 
+    private void OnDrivingEngineAttached()
+    {
+        // Inline on the attach thread, like the player-rig restore. A base-only
+        // schedule will never request another tone from a transport tick.
+        lock (_applyGate)
+        {
+            if (_scanner is null) return;
+            var preset = _lastAppliedPreset;
+            if (preset is null && _userChainSnapshot is { } snapshot) preset = SnapshotToPreset(snapshot, _userScenesSnapshot);
+            if (preset is not null) _applier.Apply(preset);
+        }
+    }
+
+    private void RememberAppliedPreset(DcRigPreset preset, DcRigApplyResult result)
+    {
+        // A rejected parameter can still leave an audible rig. Retain what the
+        // chain accepted, rather than falling back to the player's board.
+        var applied = result.FailedOps == 0 ? preset : DcRigSnapshot.FromChain(_chain);
+        if (result.FailedOps == 0 || applied.Modules.Count > 0) _lastAppliedPreset = applied;
+    }
+
     internal void ApplyToneKey(string key)
     {
         // The maps of whoever is DRIVING (a run's package tones, or the editor
@@ -1019,8 +1040,12 @@ public sealed partial class RsTonePlaybackCoordinator
         // each PLAN atomic; this gate decides which plan happens first.
         DcRigApplyResult result;
         var previousKey = _activeToneKey;
-        lock (_applyGate) result = _applier.Apply(preset);
-        _activeToneKey = key;
+        lock (_applyGate)
+        {
+            result = _applier.Apply(preset);
+            RememberAppliedPreset(preset, result);
+            _activeToneKey = key;
+        }
         _appliedGainDb = RsToneLevelling.TrailingGainDb(preset);
         _appliedAmpLevelDb = RsToneLevelling.AmpLevelDb(preset);
 
@@ -1104,7 +1129,7 @@ public sealed partial class RsTonePlaybackCoordinator
         return rig with { Scenes = DotCharter.Tone.Audio.Dsp.Scenes.RigScenes.Fold(scenes, rig.Modules) };
     }
 
-    private static List<string> ReferencedToneKeys(Arrangement arr)
+    internal static List<string> ReferencedToneKeys(Arrangement arr)
     {
         var keys = new List<string>();
         void Add(string? key)
@@ -1144,7 +1169,7 @@ public sealed partial class RsTonePlaybackCoordinator
     // the same preset — good enough to eyeball an unmatched-name mismatch).
     // Capped: a multi-song package (RS1 compatibility disc) converts hundreds
     // of tones, and listing all of them printed multi-KB log lines per lookup.
-    private static string DescribeKeys(Dictionary<string, DcRigPreset> presets)
+    internal static string DescribeKeys(Dictionary<string, DcRigPreset> presets)
     {
         const int maxListed = 24;
         var keys = presets.Keys;

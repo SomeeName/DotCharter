@@ -165,6 +165,64 @@ public sealed class ToneDesignerGearSearchUiPerfSmokeTests
         }, CancellationToken.None);
     }
 
+    /// <summary>#329: the list is a Fire card the width of the field, aligned to it, with the picked gear marked.</summary>
+    [Fact]
+    public async Task TheList_IsACardAsWideAsTheField_WithThePickedGearMarkedAndGroupsHeaded()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            WithDesigner((view, window, vm) =>
+            {
+                var picker = OpenPicker(view);
+                var box = Focus(window, picker);
+                box.IsDropDownOpen = true;
+                Settle(window);
+
+                var popup = box.GetVisualDescendants().OfType<Popup>().Single();
+                var card = Assert.IsType<Border>(popup.Child);
+                Assert.True(popup.IsOpen, "the list did not open");
+                Assert.Same(picker, popup.PlacementTarget);
+                Assert.True(card.Bounds.Width > 1 && card.Bounds.Height > 1, $"the list card laid out {card.Bounds}");
+                Assert.Equal(picker.Bounds.Width, card.Bounds.Width, 1.0);
+                Assert.Equal(picker.Bounds.Width, card.Width, 1.0);
+
+                var picked = PickedSlot(vm).SelectedOption.DisplayName;
+                Assert.Equal(picked, box.PlaceholderText);
+                var marks = card.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Ellipse>().Where(e => e.Name == "CurrentMark" && e.IsVisible).ToList();
+                var mark = Assert.Single(marks);
+                Assert.Equal(picked, mark.GetVisualParent()!.GetVisualChildren().OfType<TextBlock>().Single().Text);
+                Assert.Contains(card.GetVisualDescendants().OfType<TextBlock>(), t => t.Name == "GroupHeading" && t.Bounds.Width > 1);
+            });
+        }, CancellationToken.None);
+    }
+
+    /// <summary>#329: the typed text is highlighted in the rows, and a search nothing matches says so.</summary>
+    [Fact]
+    public async Task Typing_HighlightsTheMatch_AndANoMatchSearchShowsTheEmptyState()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            WithDesigner((view, window, vm) =>
+            {
+                var picker = OpenPicker(view);
+                var box = Focus(window, picker);
+                var word = PickedSlot(vm).Options.Select(o => o.DisplayName).First(n => n.Length > 4 && n.Any(char.IsLetter));
+                var needle = word.Substring(1, 3);
+                Type(window, box, needle);
+                var card = Assert.IsType<Border>(box.GetVisualDescendants().OfType<Popup>().Single().Child);
+                var hits = card.GetVisualDescendants().OfType<TextBlock>().SelectMany(t => t.Inlines ?? []).OfType<Avalonia.Controls.Documents.Run>()
+                    .Where(r => string.Equals(r.Text, needle, StringComparison.OrdinalIgnoreCase)).ToList();
+                Assert.True(hits.Count > 0, $"no row highlights '{needle}'");
+
+                Type(window, box, "zzqqxx");
+                Assert.Empty(Shown(box));
+                var empty = DotCharter.Localization.LocalizationService.Instance["GearPicker_NoMatch"];
+                var message = card.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Text == empty);
+                Assert.True(message is { Bounds.Width: > 1 }, "a search nothing matches shows no 'no match' row");
+            });
+        }, CancellationToken.None);
+    }
+
     private static ToneGearSlot PickedSlot(ToneDesignerViewModel vm) =>
         Assert.IsType<ToneGearSlot>(vm.Editor.SelectedGearSlot);
 

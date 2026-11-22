@@ -60,10 +60,15 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
     /// one per load, exactly like the save's.</summary>
     private const string LoadTaskId = "project-load";
     private bool _disposed;
+    private readonly AudioLoadQueue _audioLoads = new();
+    private int _audioLoadGeneration;
+    private int _lastFreeAudioGeneration;
+    private int _projectOpenGeneration;
     private readonly DetachedCompanionBuilder _detachedCompanions;
     private readonly SilentTransportSession _silentTransport;
     private readonly ProjectAutoBackup _autoBackup;
     private readonly LibraryDeviceRateAudio? _deviceRateAudio;
+    private readonly ProjectViewMemory? _viewMemory;
     private readonly DcSongProjectOpener _dcSongOpener;
 
     public ProjectSessionService(
@@ -88,8 +93,10 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
         IStatusBarService? statusBar = null,
         SongToneEditStore? songToneEdits = null,
         ICheckpointService? checkpoints = null,
-        LibraryDeviceRateAudio? deviceRateAudio = null)
+        LibraryDeviceRateAudio? deviceRateAudio = null,
+        ProjectViewMemory? viewMemory = null)
     {
+        _viewMemory = viewMemory;
         _deviceRateAudio = deviceRateAudio;
         _statusBar = statusBar;
         _uiDispatcher = uiDispatcher;
@@ -106,16 +113,18 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
         _crashRecovery = crashRecovery;
         _waveformCache = waveformCache;
         _silentTransport = new SilentTransportSession(audioService, projectState, transport, logger,
-            silentAudio ?? new SilentAudioTrack(logger));
+            silentAudio ?? new SilentAudioTrack(logger), historyService, GrowSilentAudioAsync);
         _messageDialog = messageDialog;
-        _detachedCompanions = new DetachedCompanionBuilder(saveCompanions, uiDispatcher, projectState, logger, _localization);
+        _detachedCompanions = new DetachedCompanionBuilder(saveCompanions, documentService, uiDispatcher, projectState, logger, _localization, statusBar,
+            () => _configService.LoadAppConfig().ExportAutoVolumeTargetLufs);
 
         // Dirty state rides the SAME change signal the crash-recovery
         // scheduler uses (the undo history) — no parallel mutation tracking.
         _dirtyTracker = new ProjectDirtyTracker(historyService);
+        _projectState.ProjectChanged += MarkProjectDirty;
         _autoBackup = new ProjectAutoBackup(configService, _dirtyTracker, documentService, projectState, transport,
             chartEditor, uiDispatcher, logger, _localization);
-        Saver = new ProjectSaver(configService, documentService, saveCompanions, crashRecovery, storageService,
+        Saver = new ProjectSaver(configService, documentService, crashRecovery, storageService,
             projectState, transport, chartEditor, _dirtyTracker, _detachedCompanions, uiDispatcher, logger,
             _localization, messageDialog, statusBar, this, songToneEdits ?? SongToneEditStore.Default, pathRekey, checkpoints);
         _dirtyTracker.IsDirtyChanged += () => ProjectDirtyChanged?.Invoke();
@@ -161,9 +170,17 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
 
     /// <summary>
     ///     True when the caller may replace the open project. Clean sessions and
-    ///     hosts with no prompt wired never ask.
+    ///     hosts with no prompt wired never ask. A pending draft is applied first, so it counts; a staged draft that
+    ///     only its own Apply writes counts too.
     /// </summary>
-    public Task<bool> MayReplaceOpenProjectAsync() => ShouldProceedAsync(IsProjectDirty, ConfirmDiscardAsync);
+    public Task<bool> MayReplaceOpenProjectAsync() => ShouldProceedAsync(HasUnsavedWork(), ConfirmDiscardAsync);
+
+    /// <inheritdoc />
+    public bool HasUnsavedWork()
+    {
+        _chartEditor.CommitPendingEdits();
+        return IsProjectDirty || _chartEditor.HasPendingDrafts;
+    }
 
     /// <inheritdoc />
     public void MarkProjectClean() => _dirtyTracker.MarkClean();
@@ -187,6 +204,8 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
 
     /// <inheritdoc />
     public event Action? RecentProjectsChanged;
+
+    public event Action? SongPackageOpened;
 
     /// <inheritdoc />
     public IReadOnlyList<RecentProjectEntry> GetRecentProjects()
@@ -229,7 +248,7 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
         {
             // Cosmetic bookkeeping — never fail an open/save over it.
             _logger.Warning(AppLogCategory.Settings,
-                $"Could not record the recent-project entry: {ex.Message}");
+                "Could not record the recent-project entry", ex);
         }
     }
 
@@ -272,6 +291,7 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
     {
         if (_disposed) return;
         _disposed = true;
+        _projectState.ProjectChanged -= MarkProjectDirty;
 
         try
         {
@@ -335,8 +355,27 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
 
     public void FreeAudio()
     {
+        _lastFreeAudioGeneration = Interlocked.Increment(ref _audioLoadGeneration);
+        Interlocked.Increment(ref _projectOpenGeneration);
+        _silentTransport.Stop();
+        _projectState.WaveformData = WaveformSamples.Empty;
+        _projectState.TotalAudioLengthMs = 0;
         _logger.Info(AppLogCategory.Audio, "FreeAudio requested.");
-        _audioService.FreeAudio();
+        _ = ClearAudioAsync(_lastFreeAudioGeneration);
+    }
+
+    public void DrainSaveCompanions() => _detachedCompanions.Stop();
+
+    public async Task ReloadProjectAudioAsync()
+    {
+        if (_projectState.ActiveProject is not { } project) return;
+        Interlocked.Increment(ref _projectOpenGeneration);
+        Interlocked.Increment(ref _audioLoadGeneration);
+        _silentTransport.Stop();
+        _projectState.WaveformData = WaveformSamples.Empty;
+        _projectState.TotalAudioLengthMs = 0;
+        _projectState.CurrentAudioFileName = project.AudioFileName ?? "";
+        await LoadProjectAudioAsync(project, _projectState.CurrentProjectPath);
     }
 
     public async Task OpenProject()
@@ -381,9 +420,9 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
         }
     }
 
-    public Task<bool> SaveProjectAsync() => Saver.SaveWithGuardAsync(false);
+    public async Task<bool> SaveProjectAsync(SaveInitiator initiator) => await Saver.SaveWithGuardAsync(false, initiator) && !IsProjectDirty;
 
-    public Task<bool> SaveProjectAsAsync() => Saver.SaveWithGuardAsync(true);
+    public Task<bool> SaveProjectAsAsync() => Saver.SaveWithGuardAsync(true, SaveInitiator.User);
 
     string? IProjectSaveHost.LastRscpDirectory => AppConfig.LastRscpDir;
 
@@ -420,8 +459,14 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
         }
     }
 
-    public async Task LoadFile(string filePath) =>
-        await LoadFileAsync(await PreferProjectFileAsync(filePath), replaceConfirmed: false);
+    public async Task LoadFile(string filePath)
+    {
+        var previous = _projectState.ActiveProject;
+        var previousPath = _projectState.CurrentProjectPath;
+        var preferred = await PreferProjectFileAsync(filePath);
+        if (!IsCurrentProject(previous, previousPath)) return;
+        await LoadFileAsync(preferred, replaceConfirmed: false);
+    }
 
     /// <summary>
     ///     A <c>.rscp</c> with its <c>.dcproj</c> beside it is that project's Charter companion:
@@ -443,37 +488,9 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
     /// picker), so the user is not asked twice.</param>
     private async Task LoadFileAsync(string filePath, bool replaceConfirmed)
     {
-        // Audio goes to the audio path, ALWAYS. Testing only .wav/.ogg
-        // would let a dropped .mp3/.flac fall through to the project loader below, where
-        // ResolveFormat throws NotSupportedException and the blanket catch reports
-        // it as "error loading project" — a corrupt-project message for a perfectly
-        // good song. The engine decodes every format in AudioFileTypes.
-        if (AudioFileTypes.IsAudioFile(filePath))
-        {
-            // With a project open, dropping audio ATTACHES it (copied into the
-            // project folder, reference written, so it survives save/reopen).
-            // Without one there is nothing to attach to, so keep the historical
-            // audition behaviour.
-            if (_projectState.ActiveProject != null)
-            {
-                _logger.Info(AppLogCategory.Audio,
-                    $"Attaching dropped/opened audio file '{filePath}' to the open project.");
-                await AttachAudioAsync(filePath);
-                return;
-            }
+        if (await TryOpenAudioOrSongPackageAsync(filePath)) return;
 
-            _logger.Info(AppLogCategory.Audio, $"Loading dropped/opened audio file '{filePath}'.");
-            await LoadAudioFile(filePath);
-            return;
-        }
-
-        // A song package opens as a NEW project folder it unpacks first.
-        if (string.Equals(Path.GetExtension(filePath), DcSongFormat.Extension, StringComparison.OrdinalIgnoreCase))
-        {
-            await _dcSongOpener.OpenAsync(filePath);
-            return;
-        }
-
+        var previous = _projectState.ActiveProject;
         // Opening REPLACES the session: ApplyProject(resetHistory: true) clears
         // the undo history, so unsaved edits become unreachable the instant it
         // runs. This path is worse than the others — it also calls
@@ -486,12 +503,16 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
             return;
         }
 
-        // Whether the session was actually REPLACED, which is what decides
-        // whether the finally below may speak for it. A failure before
-        // ApplyProject leaves the previous project open with its own edits, and
-        // declaring THAT clean would discard them at the close prompt.
-        var sessionReplaced = false;
+        if (!ReferenceEquals(previous, _projectState.ActiveProject)) return;
+        // Save may migrate .rscp or give this same session its first path.
+        var previousPath = _projectState.CurrentProjectPath;
+        var previousAudio = _projectState.CurrentAudioFileName;
+        var request = Interlocked.Increment(ref _projectOpenGeneration);
+        Interlocked.Increment(ref _audioLoadGeneration);
+        var loadingProject = previous;
         var isInternalSnapshot = IsRecoverySnapshotPath(filePath);
+        // The arrangements ApplyProject and the view memory pick are the open's, not user switches.
+        using var opening = _projectState.BeginProjectOpen();
 
         try
         {
@@ -507,22 +528,29 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
             // the freshly loaded (not yet applied) project, so run them on a
             // worker thread — otherwise opening a dense multi-arrangement
             // chart freezes the window for the whole deserialize.
+            var layoutChanged = false;
             var project = await Task.Run(() =>
             {
                 var loaded = _documentService.LoadChart(filePath);
+                if (!isInternalSnapshot && (ProjectFiles.IsProject(filePath) ||
+                                           CharterRscp.IsCharterProject(filePath) && CharterRscp.IsWrittenByDotCharter(filePath)))
+                {
+                    layoutChanged = ProjectFolderTidy.Run(filePath, loaded, _logger);
+                }
                 ChartSpacingEnforcer.EnforceProject(loaded, _configService.LoadAppConfig());
                 return loaded;
             });
+            if (request != Volatile.Read(ref _projectOpenGeneration) ||
+                !IsCurrentOpenSource(previous, previousPath, previousAudio))
+            {
+                return;
+            }
+            loadingProject = project;
             _logger.Info(AppLogCategory.Project,
                 $"Project spacing enforced after load. Arrangements={project.Arrangements.Count}, beats={project.Beats.Count}, bpm={project.Bpm:0.###}.");
             _projectState.CurrentProjectPath = filePath;
-            // The library song identity belongs to the PREVIOUS session.
-            // SongBrowserViewModel.LoadSongItem is its only writer, and nothing
-            // cleared it — so after loading one PSARC song every own-chart project
-            // opened afterwards still carried `psarc:<SongKey>`, and
-            // BuildWaveformCacheIdentity (which reads the identity BEFORE the
-            // project path) keyed each one's waveform pyramid under the library
-            // song: cache pollution plus a permanent miss for the real project.
+            // Project files carry no library identity. Clear the outgoing song's
+            // cache identity before resolving this project's media and waveform.
             _projectState.CurrentSongIdentity = "";
             // A crash-recovery snapshot is an INTERNAL artifact this app wrote,
             // not a project the user has on disk — so it may not become the
@@ -538,7 +566,6 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
             _autoBackup.ResetSchedule();
 
             _chartEditor.ApplyProject(project, resetHistory: true);
-            sessionReplaced = true;
             _transport.Bpm = project.Bpm;
 
             // UNCONDITIONAL, exactly like every other replace path (the song
@@ -555,95 +582,168 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
             // project that had none.
             _projectState.CurrentAudioFileName = project.AudioFileName ?? "";
 
-            var audioLoaded = false;
-            // Set only when the project NAMES audio we could not find — an
-            // audio-less chart (no reference at all) is a legitimate state and
-            // must not be nagged about.
-            var missingAudioName = "";
-            if (!string.IsNullOrEmpty(project.AudioFileName))
-            {
-                var audioPath = ProjectAudioLocator.ResolveOrDefault(filePath, project.AudioFileName);
-                if (File.Exists(audioPath))
-                {
-                    _logger.Info(AppLogCategory.Project,
-                        $"Project references audio '{project.AudioFileName}'. Loading from '{audioPath}'.");
-                    await LoadAudioFile(audioPath, false);
-                    audioLoaded = true;
-                }
-                else
-                {
-                    _logger.Warning(AppLogCategory.Project,
-                        $"Project references missing audio '{project.AudioFileName}' at '{audioPath}'.");
-                    missingAudioName = project.AudioFileName;
-                }
-            }
+            // The applied chart is the disk baseline even if audio fails. Declare it
+            // before yielding: edits during audio loading must remain unsaved, and
+            // CleanMarked retires only the outgoing session's recovery snapshot here.
+            _dirtyTracker.MarkClean();
 
-            if (!audioLoaded)
-            {
-                // Audio-less chart (RS1 chart-only import, missing/unresolvable
-                // audio, or no reference at all): give it a silent transport of
-                // the project's length so the playhead, scrubbing, count-in and
-                // Play Mode work. CurrentAudioFileName is left as-is (the declared
-                // name is preserved for save; empty stays empty), never the silent
-                // file — so stem separation / detection never run against silence.
-                await _silentTransport.LoadForProjectAsync(project);
-            }
+            var missingAudioName = await LoadAudioAndRestoreViewAsync(project, filePath, isInternalSnapshot);
+            if (!IsCurrentProject(project, filePath)) return;
 
-            _logger.Info(AppLogCategory.Project,
-                $"Loaded project '{filePath}'. Song='{project.Chart.SongName}', arrangements={project.Arrangements.Count}, beats={project.Beats.Count}, audio='{project.AudioFileName}'.");
-            // A project whose declared audio is gone loaded to a SILENT transport
-            // and said "Loaded Chart" — so pressing play produced silence with no
-            // explanation anywhere the user looks (the only record was a log
-            // line). Say which file is missing and name the menu route that fixes
-            // it; File ▸ Attach audio… is the command that exists for exactly
-            // this, and it re-points the project's reference.
-            _projectState.SetMessage(
-                missingAudioName.Length > 0
-                    ? L("Status_ProjectAudioMissingOnOpen", missingAudioName)
-                    : L("Status_LoadedChart", ProjectDisplayName.For(filePath, project.Chart)),
-                missingAudioName.Length > 0 ? StatusSeverity.Warning : StatusSeverity.Info);
-            // After the swap succeeded — a file that failed to parse or a
-            // declined discard prompt must not enter the MRU. Nor may a crash
-            // snapshot: see the note beside LastProjectPath above.
-            if (!isInternalSnapshot) RecordRecentProject(filePath, project.Chart?.SongName);
+            FinishOpenedProject(project, filePath, isInternalSnapshot, missingAudioName);
+            if (layoutChanged) _detachedCompanions.Schedule(filePath, ChartProjectCloner.Clone(project, retainIdentities: true), _projectState.TotalAudioLengthMs);
         }
         catch (Exception ex)
         {
             _logger.Error(AppLogCategory.Project, $"Error loading project '{filePath}'.", ex);
-            _projectState.SetMessage(L("Status_LoadProjectError", ex.Message), StatusSeverity.Error);
+            if (request == Volatile.Read(ref _projectOpenGeneration) && ReferenceEquals(loadingProject, _projectState.ActiveProject))
+                _projectState.SetMessage(L("Status_LoadProjectError", ex.Message), StatusSeverity.Error);
         }
         finally
         {
             // The pill must go on EVERY exit path — a load that threw would
             // otherwise leave "Opening project…" on the rail forever.
-            _statusBar?.CompleteTask(LoadTaskId);
-            // EVERY exit path, not just the happy one. Neither of these may sit
-            // at the end of the try, after fallible audio I/O (the decode throws,
-            // the file is unreadable) — so a project whose audio would not load
-            // leaves the chart on screen, correct and untouched, while:
-            //   * IsDirty is `CurrentNodeId != _baselineNodeId` and ApplyProject
-            //     had just minted a NEW root id, so the baseline could never match
-            //     again — the title showed `*` forever and closing raised "unsaved
-            //     changes" over a chart nobody had edited;
-            //   * CrashRecoveryService watches the same flag, so it started
-            //     snapshotting that chart and the restore prompt came back on
-            //     every launch;
-            //   * the PREVIOUS project's snapshot was never dropped, so what the
-            //     prompt offered to restore was the wrong session entirely.
-            // Guarded on sessionReplaced: before ApplyProject there is nothing new
-            // to describe and the old project's dirty state is still the truth.
-            if (sessionReplaced)
+            if (request == Volatile.Read(ref _projectOpenGeneration)) _statusBar?.CompleteTask(LoadTaskId);
+
+        }
+    }
+
+    /// <summary>Audio and <c>.dcsong</c> files take their own paths; true when handled.</summary>
+    private async Task<bool> TryOpenAudioOrSongPackageAsync(string filePath)
+    {
+        // Audio goes to the audio path, ALWAYS. Testing only .wav/.ogg
+        // would let a dropped .mp3/.flac fall through to the project loader below, where
+        // ResolveFormat throws NotSupportedException and the blanket catch reports
+        // it as "error loading project" — a corrupt-project message for a perfectly
+        // good song. The engine decodes every format in AudioFileTypes.
+        if (AudioFileTypes.IsAudioFile(filePath))
+        {
+            // With a project open, dropping audio ATTACHES it (copied into the
+            // project folder, reference written, so it survives save/reopen).
+            // Without one there is nothing to attach to, so keep the historical
+            // audition behaviour.
+            if (_projectState.ActiveProject != null)
             {
-                // Clean project switch: the previous session's crash snapshot no
-                // longer describes open work. This also swallows the dirty flag
-                // raised by history churn during ApplyProject, so merely opening
-                // a project never writes a snapshot.
-                _crashRecovery.NotifyProjectSwitched();
-                // The freshly loaded CHART is the on-disk chart — audio that
-                // failed to load is not an unsaved edit.
-                _dirtyTracker.MarkClean();
+                _logger.Info(AppLogCategory.Audio,
+                    $"Attaching dropped/opened audio file '{filePath}' to the open project.");
+                await AttachAudioAsync(filePath);
+                return true;
+            }
+
+            _logger.Info(AppLogCategory.Audio, $"Loading dropped/opened audio file '{filePath}'.");
+            await LoadAudioFile(filePath);
+            return true;
+        }
+
+        // A song package opens as a NEW project folder it unpacks first.
+        if (string.Equals(Path.GetExtension(filePath), DcSongFormat.Extension, StringComparison.OrdinalIgnoreCase))
+        {
+            var before = _projectState.ActiveProject;
+            await _dcSongOpener.OpenAsync(filePath);
+            if (!ReferenceEquals(before, _projectState.ActiveProject)) SongPackageOpened?.Invoke();
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool IsCurrentProject(ChartProject? project, string path) =>
+        ReferenceEquals(project, _projectState.ActiveProject) && path == _projectState.CurrentProjectPath;
+
+    private bool IsCurrentOpenSource(ChartProject? project, string path, string audio) =>
+        IsCurrentProject(project, path) && audio == _projectState.CurrentAudioFileName;
+
+    private void FinishOpenedProject(ChartProject project, string filePath, bool isInternalSnapshot, string missingAudioName)
+    {
+        _logger.Info(AppLogCategory.Project,
+            $"Loaded project '{filePath}'. Song='{project.Chart.SongName}', arrangements={project.Arrangements.Count}, beats={project.Beats.Count}, audio='{project.AudioFileName}'.");
+        // A project whose declared audio is gone loaded to a SILENT transport
+        // and said "Loaded Chart" — so pressing play produced silence with no
+        // explanation anywhere the user looks (the only record was a log
+        // line). Say which file is missing and name the menu route that fixes
+        // it; File ▸ Attach audio… is the command that exists for exactly
+        // this, and it re-points the project's reference.
+        if (!string.IsNullOrEmpty(project.NewerWriterVersion))
+        {
+            _projectState.SetMessage(L("Status_ProjectFromNewerBuild", project.NewerWriterVersion), StatusSeverity.Warning);
+        }
+        else
+        {
+            _projectState.SetMessage(
+                missingAudioName.Length > 0
+                    ? L("Status_ProjectAudioMissingOnOpen", missingAudioName)
+                    : L("Status_LoadedChart", ProjectDisplayName.For(filePath, project.Chart)),
+                missingAudioName.Length > 0 ? StatusSeverity.Warning : StatusSeverity.Info);
+        }
+        // After the swap succeeded — a file that failed to parse or a
+        // declined discard prompt must not enter the MRU. Nor may a crash
+        // snapshot: see the note beside LastProjectPath above.
+        if (!isInternalSnapshot) RecordRecentProject(filePath, project.Chart?.SongName);
+    }
+
+    /// <summary>
+    ///     Loads the audio, then puts back what the owner had on screen in this project:
+    ///     the active arrangement, the ghost and stacked selections and the playhead.
+    ///     A crash snapshot is no project of its own and restores nothing.
+    /// </summary>
+    private async Task<string> LoadAudioAndRestoreViewAsync(ChartProject project, string filePath, bool isInternalSnapshot)
+    {
+        var missingAudioName = await LoadProjectAudioAsync(project, filePath);
+        if (!IsCurrentProject(project, filePath)) return missingAudioName;
+        if (!isInternalSnapshot && _viewMemory?.Restore(project, filePath) is { } savedPlayheadMs)
+        {
+            var playheadMs = Math.Clamp(savedPlayheadMs, 0, Math.Max(0, _projectState.TotalAudioLengthMs));
+            _projectState.CurrentTimeMs = playheadMs;
+            _audioService.SeekTo(playheadMs);
+        }
+
+        return missingAudioName;
+    }
+
+    /// <summary>
+    ///     Loads the audio the project names (or a silent transport of its length when there is none),
+    ///     returning the declared name when that file could not be found, else an empty string.
+    /// </summary>
+    private async Task<string> LoadProjectAudioAsync(ChartProject project, string filePath)
+    {
+        if (!ReferenceEquals(project, _projectState.ActiveProject)) return "";
+        var audioLoaded = false;
+        // Set only when the project NAMES audio we could not find — an
+        // audio-less chart (no reference at all) is a legitimate state and
+        // must not be nagged about.
+        var missingAudioName = "";
+        if (!string.IsNullOrEmpty(project.AudioFileName))
+        {
+            var audioPath = ProjectAudioLocator.ResolveOrDefault(filePath, project.AudioFileName);
+            if (File.Exists(audioPath))
+            {
+                _logger.Info(AppLogCategory.Project,
+                    $"Project references audio '{project.AudioFileName}'. Loading from '{audioPath}'.");
+                await LoadAudioFile(audioPath, false);
+                audioLoaded = true;
+            }
+            else
+            {
+                _logger.Warning(AppLogCategory.Project,
+                    $"Project references missing audio '{project.AudioFileName}' at '{audioPath}'.");
+                missingAudioName = project.AudioFileName;
             }
         }
+
+        if (!audioLoaded)
+        {
+            // Audio-less chart (RS1 chart-only import, missing/unresolvable
+            // audio, or no reference at all): give it a silent transport of
+            // the project's length so the playhead, scrubbing, count-in and
+            // Play Mode work. CurrentAudioFileName is left as-is (the declared
+            // name is preserved for save; empty stays empty), never the silent
+            // file — so stem separation / detection never run against silence.
+            var generation = Interlocked.Increment(ref _audioLoadGeneration);
+            await RunOwnedAudioLoadAsync(project, generation,
+                () => _silentTransport.LoadForProjectAsync(project, () => OwnsAudioLoad(project, generation)));
+        }
+
+        return missingAudioName;
     }
 
     /// <summary>Same identity rule as the stem cache
@@ -662,8 +762,6 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
     {
         if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
         {
-            _logger.Warning(AppLogCategory.Audio,
-                $"Attach audio ignored: '{sourcePath}' does not exist.");
             _projectState.SetMessage(L("Status_AttachAudioFailed", sourcePath), StatusSeverity.Error);
             return false;
         }
@@ -671,151 +769,62 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
         var project = _projectState.ActiveProject;
         if (project == null)
         {
-            // Nothing to attach TO — audition it so the drop still does something.
-            _logger.Info(AppLogCategory.Audio,
-                $"No active project; auditioning '{sourcePath}' instead of attaching it.");
             await LoadAudioFile(sourcePath);
             return false;
         }
 
-        var newName = Path.GetFileName(sourcePath);
+        var projectPath = _projectState.CurrentProjectPath;
         var existing = _projectState.CurrentAudioFileName;
-        if (!string.IsNullOrWhiteSpace(existing) && _messageDialog != null)
-        {
-            // Replacing the song audio re-bases everything already charted against
-            // it, so never do it silently on a stray drop.
-            var confirmed = await _messageDialog.ShowAsync(
-                L("Dialog_ReplaceAudio_Title"),
+        var newName = Path.GetFileName(sourcePath);
+        if (!string.IsNullOrWhiteSpace(existing) && _messageDialog != null &&
+            !await _messageDialog.ShowAsync(L("Dialog_ReplaceAudio_Title"),
                 L("Dialog_ReplaceAudio_Message", Path.GetFileName(existing), newName),
-                MessageDialogKind.Question,
-                confirmation: true);
-            if (!confirmed)
-            {
-                _logger.Info(AppLogCategory.Audio,
-                    $"Attach audio canceled by user (would have replaced '{existing}' with '{newName}').");
-                return false;
-            }
+                MessageDialogKind.Question, confirmation: true))
+        {
+            return false;
         }
 
+        // A declined or obsolete prompt never invalidates an accepted engine load.
+        if (!ReferenceEquals(project, _projectState.ActiveProject) || projectPath != _projectState.CurrentProjectPath) return false;
+        var generation = Interlocked.Increment(ref _audioLoadGeneration);
+        bool MayCommit() => OwnsAudioLoad(project, generation) && projectPath == _projectState.CurrentProjectPath;
+        var committed = false;
         try
         {
-            // Release the previous source (or the silent transport an audio-less
-            // chart is running) BEFORE loading the new one, so the old engine
-            // source is never left dangling. The silent WAV was engine-only and
-            // was never the audio identity, so there is no stale reference to
-            // clean up.
-            FreeAudio();
-
-            var projectDirectory = GetProjectDirectory();
-            string audioReference;
-            string audioPathToLoad;
-
-            if (!string.IsNullOrEmpty(projectDirectory))
-            {
-                Directory.CreateDirectory(projectDirectory);
-                if (IsInsideDirectory(sourcePath, projectDirectory))
-                {
-                    // Already living in the project folder — reference it in place
-                    // rather than copying a file onto itself.
-                    audioReference = newName;
-                    audioPathToLoad = Path.GetFullPath(sourcePath);
-                }
-                else
-                {
-                    // Deliberately 0/0 silence: unlike NEW-project creation, the
-                    // chart here already has beats and notes placed against a time
-                    // base. Baking leading silence would shift the audio out from
-                    // under all of them, so an attach is always a verbatim copy and
-                    // Chart.MainAudioOffsetAdded is left alone.
-                    var prepared = ImportAudioPreparer.Prepare(
-                        sourcePath, projectDirectory, leadingSeconds: 0, trailingSeconds: 0,
-                        logWarning: w => _logger.Warning(AppLogCategory.Audio, w));
-                    audioReference = prepared.WorkingAudioFileName;
-                    audioPathToLoad = Path.Combine(projectDirectory, audioReference);
-                }
-            }
-            else
-            {
-                // Unsaved session with no folder to copy into. Store the ABSOLUTE
-                // source path instead of forcing a Save As mid-attach: both audio
-                // resolvers (ResolveProjectAudioPath here, ResolveCurrentAudioPath
-                // in ChartMaintenanceService) already accept a rooted
-                // AudioFileName, so this round-trips through save/reopen — while a
-                // forced picker would make an audio drop cancelable by a dialog
-                // the user never asked for.
-                audioReference = Path.GetFullPath(sourcePath);
-                audioPathToLoad = audioReference;
-                _logger.Info(AppLogCategory.Audio,
-                    "Project has no folder yet; attaching audio by absolute path. " +
-                    "Saving the project does not relocate it.");
-            }
-
-            // The pairing that was missing entirely: without BOTH of these the
-            // audio plays but the save writes the "song.wav" fallback and the
-            // reopened project finds nothing.
-            project.AudioFileName = audioReference;
-            _projectState.CurrentAudioFileName = audioReference;
-
-            // An audio-less project already carries a beat grid (the new-project
-            // flow lays one down), and regenerating would throw away tempo work.
-            // Only a genuinely empty grid gets the default one.
+            var (reference, destination) = ProjectAudioPaths.ForAttachment(sourcePath, projectPath, _logger);
             var generateBeats = _chartEditor.Beats.Count == 0;
-            await LoadAudioFile(audioPathToLoad, generateBeats);
-
-            RememberAudioDirectory(sourcePath);
-            _dirtyTracker.MarkDirty();
-            _logger.Info(AppLogCategory.Audio,
-                $"Attached audio to project. source='{sourcePath}', reference='{audioReference}', " +
-                $"loaded='{audioPathToLoad}', generatedBeats={generateBeats}.");
-            _projectState.MainDisplayMessage = L("Status_AttachedAudio", Path.GetFileName(audioPathToLoad));
+            var attachment = new AudioAttachment(_audioService, _audioLoads, _logger, ClearPlaybackAudio, L("Status_AttachAudioDecodeRefused"));
+            committed = await attachment.LoadAsync(sourcePath, destination, MayCommit, RestoreCurrentPlaybackAsync, waveform =>
+            {
+                _projectState.CommitSongAudio(project, reference);
+                if (!MayCommit()) return;
+                _dirtyTracker.MarkDirty();
+                PublishLoadedAudio(destination, waveform, generateBeats);
+            });
+            if (!committed) return false;
+            var targetLufs = _configService.LoadAppConfig().ExportAutoVolumeTargetLufs;
+            await AttachmentVolumeMeasurement.MeasureAsync(project, destination,
+                () => OwnsAudioLoad(project, generation) && _configService.LoadAppConfig().ExportAutoVolumeTargetLufs == targetLufs,
+                _logger, targetLufs);
+            if (MayCommit())
+            {
+                RememberAudioDirectory(sourcePath);
+                _projectState.MainDisplayMessage = L("Status_AttachedAudio", Path.GetFileName(destination));
+            }
+            // A caller may delete an unaccepted download on false. Once committed,
+            // even an outgoing/saved project can still own that file.
             return true;
         }
         catch (Exception ex)
         {
             _logger.Error(AppLogCategory.Audio, $"Failed to attach audio '{sourcePath}'.", ex);
-            _projectState.SetMessage(L("Status_AttachAudioFailed", ex.Message), StatusSeverity.Error);
-            return false;
+            if (!committed && MayCommit()) _projectState.SetMessage(L("Status_AttachAudioFailed", ex.Message), StatusSeverity.Error);
+            return committed;
         }
     }
 
-    /// <summary>The folder the project lives in, or null for a session that has
-    /// never been saved (nothing to copy audio into).</summary>
-    private string? GetProjectDirectory()
-    {
-        var projectPath = _projectState.CurrentProjectPath;
-        if (string.IsNullOrWhiteSpace(projectPath)) return null;
-        try
-        {
-            var directory = Path.GetDirectoryName(Path.GetFullPath(projectPath));
-            return string.IsNullOrWhiteSpace(directory) ? null : directory;
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(AppLogCategory.Project,
-                $"Could not derive a project directory from '{projectPath}': {ex.Message}");
-            return null;
-        }
-    }
-
-    /// <summary>True when <paramref name="filePath" /> sits directly in
-    /// <paramref name="directory" /> (so copying it there would copy it onto
-    /// itself).</summary>
-    private static bool IsInsideDirectory(string filePath, string directory)
-    {
-        try
-        {
-            var fileDirectory = Path.GetDirectoryName(Path.GetFullPath(filePath));
-            if (string.IsNullOrEmpty(fileDirectory)) return false;
-            return string.Equals(
-                Path.TrimEndingDirectorySeparator(fileDirectory),
-                Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory)),
-                StringComparison.OrdinalIgnoreCase);
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    private bool OwnsAudioLoad(ChartProject? project, int generation) =>
+        !_disposed && ReferenceEquals(project, _projectState.ActiveProject) && generation == Volatile.Read(ref _audioLoadGeneration);
 
     /// <summary>Remembers the folder an attached audio file came from, so the next
     /// picker starts there. Cosmetic — never fails the attach.</summary>
@@ -831,12 +840,112 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
         catch (Exception ex)
         {
             _logger.Warning(AppLogCategory.Settings,
-                $"Could not remember the last audio directory: {ex.Message}");
+                "Could not remember the last audio directory", ex);
         }
     }
 
-    public async Task LoadAudioFile(string filePath, bool generateBeats = true, bool preferMemoryPlayback = false)
+    public Task LoadAudioFile(string filePath, bool generateBeats = true, bool preferMemoryPlayback = false)
     {
+        var project = _projectState.ActiveProject;
+        var generation = Interlocked.Increment(ref _audioLoadGeneration);
+        return RunOwnedAudioLoadAsync(project, generation,
+            () => LoadAudioFileCoreAsync(filePath, generateBeats, preferMemoryPlayback, project, generation));
+    }
+
+    private Task RunOwnedAudioLoadAsync(ChartProject? project, int generation, Func<Task> load) => _audioLoads.RunAsync(async () =>
+    {
+        if (!OwnsAudioLoad(project, generation)) return;
+        try
+        {
+            await load();
+        }
+        finally
+        {
+            if (!OwnsAudioLoad(project, generation)) await RestoreCurrentPlaybackAsync();
+        }
+    });
+
+    private void ClearPlaybackAudio() => AudioSessionNotifications.Clear(_audioService, _projectState, _uiDispatcher, () => _disposed);
+
+    private async Task ClearAudioAsync(int generation)
+    {
+        try
+        {
+            await _audioLoads.RunAsync(() =>
+            {
+                if (!_disposed && generation == Volatile.Read(ref _audioLoadGeneration)) ClearPlaybackAudio();
+                return Task.CompletedTask;
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(AppLogCategory.Audio, "Could not clear playback", ex);
+        }
+    }
+
+    private async Task RestoreCurrentPlaybackAsync()
+    {
+        if (_disposed) return;
+        _audioService.FreeMasterAudio();
+        _silentTransport.Stop();
+        _projectState.WaveformData = WaveformSamples.Empty;
+        _projectState.TotalAudioLengthMs = 0;
+        if (_projectState.ActiveProject is not { } project ||
+            Volatile.Read(ref _lastFreeAudioGeneration) == Volatile.Read(ref _audioLoadGeneration))
+        {
+            return;
+        }
+        var reference = project.AudioFileName;
+        try
+        {
+            var path = ProjectAudioLocator.ResolveOrDefault(_projectState.CurrentProjectPath, reference);
+            bool IsCurrent() => !_disposed && ReferenceEquals(project, _projectState.ActiveProject) &&
+                Volatile.Read(ref _lastFreeAudioGeneration) != Volatile.Read(ref _audioLoadGeneration) &&
+                ((string.IsNullOrEmpty(reference) && string.IsNullOrEmpty(project.AudioFileName)) || OwnsDeclaredAudio(project, path));
+            if (!string.IsNullOrEmpty(reference) && File.Exists(path))
+            {
+                await LoadAudioFileCoreAsync(path, false, LibrarySongIdentity.IsLibrary(_projectState.CurrentSongIdentity),
+                    project, Volatile.Read(ref _audioLoadGeneration), restoring: true);
+            }
+            else
+            {
+                await _silentTransport.LoadForProjectAsync(project, IsCurrent);
+            }
+            if (!IsCurrent()) _audioService.FreeMasterAudio();
+        }
+        catch (Exception ex)
+        {
+            _audioService.FreeMasterAudio();
+            _logger.Warning(AppLogCategory.Audio, "Could not reload the previous audio after an abandoned attachment.", ex);
+        }
+    }
+
+    private bool OwnsDeclaredAudio(ChartProject? project, string path) =>
+        !_disposed && project != null && ReferenceEquals(project, _projectState.ActiveProject) &&
+        Volatile.Read(ref _lastFreeAudioGeneration) != Volatile.Read(ref _audioLoadGeneration) &&
+        string.Equals(Path.GetFullPath(path),
+            Path.GetFullPath(ProjectAudioLocator.ResolveOrDefault(_projectState.CurrentProjectPath, project.AudioFileName)),
+            StringComparison.OrdinalIgnoreCase);
+
+    private Task GrowSilentAudioAsync(double length)
+    {
+        var project = _projectState.ActiveProject;
+        var generation = Volatile.Read(ref _audioLoadGeneration);
+        return RunOwnedAudioLoadAsync(project, generation, async () =>
+        {
+            if (_silentTransport.LengthMs > 0) await _silentTransport.LoadAsync(length, () => OwnsAudioLoad(project, generation));
+        });
+    }
+
+    private async Task LoadAudioFileCoreAsync(string filePath, bool generateBeats, bool preferMemoryPlayback,
+        ChartProject? project, int generation, bool restoring = false)
+    {
+        bool MayPublish() => restoring ? OwnsDeclaredAudio(project, filePath) : OwnsAudioLoad(project, generation);
+        if (!MayPublish()) return;
+        _silentTransport.Stop();
+        _audioService.FreeMasterAudio();
+        _projectState.TotalAudioLengthMs = 0;
+        _projectState.WaveformData = WaveformSamples.Empty;
         _projectState.MainDisplayMessage = L("Status_DecodingAudio", Path.GetFileName(filePath));
         _logger.Info(AppLogCategory.Audio, $"Decoding audio '{filePath}'. GenerateBeats={generateBeats}, MemoryPlayback={preferMemoryPlayback}.");
         // Run audio decode + waveform generation concurrently: the waveform
@@ -861,8 +970,13 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
         if (preferMemoryPlayback && File.Exists(filePath))
         {
             if (deviceRateAudio != null)
-                await Task.Run(() => deviceRateAudio.PrepareForOpen(filePath, deviceRate)).ConfigureAwait(false);
-            fileBytes = await NativeFileBuffer.ReadAsync(filePath).ConfigureAwait(false);
+                await Task.Run(() => deviceRateAudio.PrepareForOpen(filePath, deviceRate));
+            fileBytes = await NativeFileBuffer.ReadAsync(filePath);
+        }
+        if (!MayPublish())
+        {
+            fileBytes?.Release();
+            return;
         }
         if (fileBytes != null)
         {
@@ -874,13 +988,8 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
             loadTask = _audioService.LoadAudioAsync(filePath);
         }
 
-        // 0.14 P4: generate-once waveform. Cache-first (keyed like the stem
-        // cache: song identity + audio content signature); a miss generates
-        // from the FILE (the native pass streams it; on the library path the
-        // read above has just put it in the OS cache) and saves best-effort.
-        // The task stays on the open's critical path (awaited below), so no
-        // load-generation token is needed: a stale waveform can't land on a
-        // newer song.
+        // Decode/cache independently of the engine; the generation check below
+        // prevents an older waveform from settling over a newer load.
         var identity = BuildWaveformCacheIdentity(filePath);
         var waveTask = Task.Run(async () =>
         {
@@ -891,7 +1000,7 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
                 return cached;
             }
 
-            var generated = await _audioService.GenerateWaveformAsync(filePath).ConfigureAwait(false);
+            var generated = await _audioService.GenerateWaveformAsync(filePath);
             if (generated.HasData) _waveformCache?.Save(identity, filePath, generated);
             return generated;
         });
@@ -914,22 +1023,36 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
             // the engine refuses a damaged device-rate file rather than play
             // it wrong. Re-derive the original and open that; anything else fails
             // exactly as it did.
-            if (!await Task.Run(() => deviceRateAudio!.RecoverAfterFailedOpen(filePath)).ConfigureAwait(false))
+            if (!await Task.Run(() => deviceRateAudio!.RecoverAfterFailedOpen(filePath)))
                 ExceptionDispatchInfo.Capture(openFailure).Throw();
             _logger.Warning(AppLogCategory.Audio,
-                $"Re-opening '{filePath}' from its re-derived original after: {openFailure.Message}");
-            await OpenLibraryBytesAsync(filePath).ConfigureAwait(false);
+                $"Re-opening '{filePath}' from its re-derived original failed", openFailure);
+            await OpenLibraryBytesAsync(filePath);
         }
         var convertForRate = fileBytes != null
-            ? await SettleDeviceRateAsync(filePath, deviceRate).ConfigureAwait(false)
+            ? await SettleDeviceRateAsync(filePath, deviceRate)
             : 0;
+        AwaitingWaveformForTesting?.Invoke();
+        var waveform = await waveTask;
+        if (!MayPublish())
+        {
+            _audioService.FreeMasterAudio();
+            return;
+        }
+        PublishLoadedAudio(filePath, waveform, generateBeats);
+        // The background conversion replaces the file after the waveform reader has closed it.
+        if (convertForRate > 0) _ = deviceRateAudio!.ScheduleConversion(filePath, convertForRate);
+    }
+
+    /// <summary>Test seam: runs as a load starts waiting for its waveform.</summary>
+    internal Action? AwaitingWaveformForTesting { get; set; }
+
+    private void PublishLoadedAudio(string filePath, WaveformSamples waveform, bool generateBeats)
+    {
         _projectState.TotalAudioLengthMs = _audioService.GetTotalAudioLengthMs();
         _logger.Info(AppLogCategory.Audio,
             $"Audio decoded. Path='{filePath}', totalLengthMs={_projectState.TotalAudioLengthMs:0.###}.");
-        _projectState.WaveformData = await waveTask;
-        // the background conversion REPLACES the file, so only once the
-        // waveform pass has stopped reading it.
-        if (convertForRate > 0) _ = deviceRateAudio!.ScheduleConversion(filePath, convertForRate);
+        _projectState.WaveformData = waveform;
         _logger.Info(AppLogCategory.Audio,
             $"Waveform generated for '{filePath}'. BaseBlocks={(_projectState.WaveformData?.Mipmaps.Length > 0 ? _projectState.WaveformData.Mipmaps[0].Length : 0)}.");
         _transport.SeekTo(0);
@@ -943,6 +1066,9 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
 
         _silentTransport.Stop();
         _projectState.MainDisplayMessage = L("Status_LoadedAudio", Path.GetFileName(filePath));
+        var project = _projectState.ActiveProject;
+        var generation = Volatile.Read(ref _audioLoadGeneration);
+        AudioSessionNotifications.Loaded(_projectState, _uiDispatcher, () => OwnsAudioLoad(project, generation));
     }
 
     /// <summary>
@@ -993,7 +1119,13 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
     }
 
     /// <inheritdoc />
-    public Task LoadSilentTransportAsync(double projectLengthMs) => _silentTransport.LoadAsync(projectLengthMs);
+    public Task LoadSilentTransportAsync(double projectLengthMs)
+    {
+        var project = _projectState.ActiveProject;
+        var generation = Interlocked.Increment(ref _audioLoadGeneration);
+        return RunOwnedAudioLoadAsync(project, generation,
+            () => _silentTransport.LoadAsync(projectLengthMs, () => OwnsAudioLoad(project, generation)));
+    }
 
     private void InitializeDefaultProject()
     {

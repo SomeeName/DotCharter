@@ -135,9 +135,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable, IShortcut
             // undoing that optimization at playback rate.
             OnPropertyChanged(e);
             if (e.PropertyName is nameof(ProjectState.ActiveArrangement) or nameof(ProjectState.ActiveProject))
-            {
-                OnPropertyChanged(nameof(ActiveArrangementName));
-            }
+                OnActiveChartChanged();
             if (e.PropertyName is nameof(ProjectState.TotalAudioLengthMs)
                 or nameof(ProjectState.ActiveProject) or nameof(ProjectState.ActiveArrangement)
                 or nameof(ProjectState.Beats) or nameof(ProjectState.CurrentProjectPath))
@@ -162,17 +160,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable, IShortcut
             OnPropertyChanged(nameof(IsProjectDirty));
             StatusBar.RefreshDirtyState();
         };
-        // The status rail's ⚠/⛔ chips show the CURRENT chart's lint issues
-        // (counting log lines since launch would climb
-        // during pure browsing). IssueSummary is re-announced on every debounced
-        // InspectorIssuesViewModel.RecomputeIssues, so this rides the inspector's own 150 ms cadence —
-        // no extra timer, and a fresh empty project pushes 0/0. The chips open
-        // the Issues tab; the delegate keeps StatusBarViewModel shell-agnostic.
-        StatusBar.OpenChartIssues = () =>
-        {
-            SelectedMainTabIndex = ChartEditorTabIndex;
-            ShowInspectorTab(InspectorViewModel.IssuesTabIndex);
-        };
+        // The status rail's chips show the CURRENT chart's lint issues and ride the inspector's own
+        // 150 ms cadence (IssueSummary, re-announced by each debounced RecomputeIssues). They open the
+        // Issues tab (IssuesDoors: Findings; the quality report and the EOF export's Show open their own sections).
+        var issuesDoors = new IssuesDoors(Inspector, () => (SelectedMainTabIndex, IsInspectorVisible) = (ChartEditorTabIndex, true));
+        StatusBar.OpenChartIssues = issuesDoors.Findings;
+
+        TabMenu = new(this);
 
         Inspector.Issues.PropertyChanged += (_, e) =>
         {
@@ -197,9 +191,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable, IShortcut
         ToneRig = toneRig;
         Export = export;
         Project = project;
+        Project.ProjectOpened += OnProjectOpened;
         ShellDialogs = shellDialogs;
-        // Tools ▸ Fix & clean up ▸ AI settings… swaps to the Settings tab like every other door.
-        if (ShellDialogs.AiChart is { } aiChart) aiChart.OpenSettingsRequested += OpenSettings;
+        Inspector.SongOverview.OpenSongMetadataCommand = shellDialogs.OpenSongMetadataCommand;
+        ShellDialogs.ShowChartIssues = issuesDoors.Project;
+        Export.ShowChartReport = issuesDoors.EditorOnFire;
         if (ShellDialogs.AiChat is { } aiChat)
         {
             aiChat.Chat.OpenSettingsRequested += OpenSettings;
@@ -209,11 +205,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable, IShortcut
         ToneRig.ShellChromeVisibleSource = () => IsShellChromeVisible;
         ToneRig.OpenSettingsRequested += OpenSettings;
         Help.CommandUsageIds = () => CommandCatalog.Build(this, _localization).Select(c => c.UsageId);
-        PlayMode.ExitToEditorRequested += () =>
-        {
-            IsGameplayPresentation = false;
-            SelectedMainTabIndex = ChartEditorTabIndex;
-        };
+        PlayMode.ExitToEditorRequested += ShowEditor;
         // Start's button, Esc on Song Select and the pause menu's Home all
         // land on Home, which took the retired Play Mode menu's place.
         PlayMode.HomeRequested += () =>
@@ -234,8 +226,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable, IShortcut
             SelectedMainTabIndex = PlayModeTabIndex;
         };
         PlayMode.RiffRepeaterRequested += () => ShowPracticeToolsInGameplay = true;
-        // Pause: swap to the Play Mode surface WITHOUT restoring the chrome —
-        // the pause menu floats over the frozen-highway backdrop.
+        // Pause: swap to the Play Mode surface WITHOUT restoring the chrome (the pause menu floats over the backdrop).
         PlayMode.ShowPauseSurfaceRequested += () => SelectedMainTabIndex = PlayModeTabIndex;
         PlayMode.OpenSettingsRequested += () => SelectedMainTabIndex = SettingsTabIndex;
         // Get Ready's "T TUNER" hint. The dialog is the shell's, so the screen
@@ -252,7 +243,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable, IShortcut
             }
             catch (Exception ex)
             {
-                _logger.Error(AppLogCategory.Audio, $"Play Mode stem separation failed: {ex.Message}");
+                _logger.Error(AppLogCategory.Audio, "Play Mode stem separation failed", ex);
             }
         };
         LivePlay.PropertyChanged += (_, e) =>
@@ -351,6 +342,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable, IShortcut
     public TransportViewModel Transport { get; }
     public LivePlayViewModel LivePlay { get; }
     public InspectorViewModel Inspector { get; }
+    public InspectorTabMenu TabMenu { get; }
     public ChartEditorViewModel ChartEditor { get; }
 
     /// <summary>
@@ -380,6 +372,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable, IShortcut
         return projectName.Length > 0 ? $"{projectName}{mark} — DotCharter" : $"DotCharter{mark}";
     }
     public string ActiveArrangementName => ChartEditor.ActiveArrangement?.Name ?? "—";
+
+    private void OnActiveChartChanged()
+    {
+        OnPropertyChanged(nameof(ActiveArrangementName));
+        OnPropertyChanged(nameof(IsBeatMapLocked));
+    }
     public SongBrowserViewModel SongBrowser { get; }
     public AudioPlaybackCoordinator PlaybackCoordinator { get; }
     public ChartKeybindHandler KeybindHandler { get; }
@@ -452,7 +450,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable, IShortcut
         _settings.PropertyChanged -= OnSettingsSessionChanged;
         StemSeparation.StemsApplied -= OnStemsApplied;
         ToneRig.OpenSettingsRequested -= OpenSettings;
-        if (ShellDialogs.AiChart is { } aiChart) aiChart.OpenSettingsRequested -= OpenSettings;
+        Project.ProjectOpened -= OnProjectOpened;
+        if (ShellDialogs.AiChat is { } aiChat) aiChat.Chat.OpenSettingsRequested -= OpenSettings;
         ToneRig.Dispose();
         Project.Dispose();
         _projectSession.Dispose();
@@ -547,6 +546,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable, IShortcut
             _logger.Info(AppLogCategory.Input, "Escape pressed in Play Mode; navigating back.");
             PlayMode.NavigateBack();
         }
+        else if (ShellDialogs.InlineEdit.Lyric.IsOpen)
+        {
+            ShellDialogs.InlineEdit.Lyric.Cancel();
+        }
         else if (_pen.RevertPendingEntry())
         {
             // The keyboard pen has an in-progress fret entry — Esc reverts it
@@ -626,12 +629,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable, IShortcut
             Transport.PauseCommand.Execute(null);
     }
 
-    /// <summary>The settings shell closed the page (Save or Cancel): leave the tab.</summary>
     private void OnSettingsSessionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is not (null or "" or nameof(DotCharter.Presentation.Shared.SettingsSession.IsOpen))) return;
         if (!_settings.IsOpen && SelectedMainTabIndex == SettingsTabIndex)
+        {
+            Inspector.Queue.MarkStale();
+            if (Inspector.IsSoundTabSelected) Inspector.Queue.EnsureCurrent();
             SelectedMainTabIndex = ChartEditorTabIndex;
+        }
     }
 
     [RelayCommand]

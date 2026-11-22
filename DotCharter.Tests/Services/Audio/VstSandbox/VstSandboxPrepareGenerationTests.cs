@@ -47,6 +47,8 @@ public class VstSandboxPrepareGenerationTests
             Constant(header, "int", "kMaxBlockFrames"));
         Assert.Equal((uint)VstSandboxLayout.MaxMidiEvents,
             Constant(header, "int", "kMaxMidiEvents"));
+        Assert.Equal((uint)VstSandboxLayout.MaxSeats,
+            Constant(header, "int", "kMaxSeats"));
 
         // The two fields v2 added, at the offsets the header documents beside
         // them. `reserved0`/`reserved1` must be GONE, not merely unused: a
@@ -69,6 +71,17 @@ public class VstSandboxPrepareGenerationTests
         Assert.Matches($@"kMidiTimingOffset\s*==\s*{VstSandboxLayout.OffMidiTiming}\b", header);
         Assert.Contains($"sizeof(MidiTiming) == {VstSandboxLayout.MidiTimingBytes}", header,
             StringComparison.Ordinal);
+
+        // Bridge v4 (DotCharter #646): the seat-routing block appended after the
+        // MIDI-timing block — its offset and its pinned size.
+        Assert.Matches($@"kSeatRoutingOffset\s*==\s*{VstSandboxLayout.OffSeatRouting}\b", header);
+        Assert.Contains($"sizeof(SeatRouting) == {VstSandboxLayout.SeatRoutingBytes}", header,
+            StringComparison.Ordinal);
+
+        // The request sequence lock's marker (#646): the value the writer stores
+        // before the first payload byte.
+        Assert.Equal(VstSandboxLayout.RequestWriting,
+            Constant(header, "uint32_t", "kRequestWriting"));
     }
 
     // ---------------------------------------------------------------- protocol

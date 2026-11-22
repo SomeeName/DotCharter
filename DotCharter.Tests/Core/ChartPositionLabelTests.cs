@@ -23,6 +23,13 @@ public sealed class ChartPositionLabelTests
             })
             .ToList();
 
+    [Theory]
+    [InlineData(3_599_999, "59:59.99")]
+    [InlineData(3_600_000, "1:00:00.00")]
+    [InlineData(90_061_456, "25:01:01.45")]
+    public void Time_preserves_elapsed_hours(double ms, string expected) =>
+        Assert.Equal(expected, ChartPositionLabel.Time(ms));
+
     [Fact]
     public void ABarAndABeatAreCountedTheWayTheStatusBarCountsThem()
     {

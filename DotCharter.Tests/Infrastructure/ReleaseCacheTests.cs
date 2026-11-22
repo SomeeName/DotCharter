@@ -42,11 +42,11 @@ public sealed class ReleaseCacheTests
             WriteTree(scratch, "added/ffmpeg-min/build.sh", "make\n");
             WriteTree(scratch, "added/ffmpeg-min/msys2-packages.json", "[]\n");
 
-            var run = RunPwsh(scratch, $$"""
+            var run = RunPowerShell(scratch, $$"""
                 Import-Module {{Quote(Module)}} -Force
                 foreach ($d in 'lf', 'crlf', 'script', 'inventory', 'added') { "$d=$(Get-FfmpegPinKey -ReleaseDir (Join-Path {{Quote(scratch)}} $d))" }
                 "repo=$(Get-FfmpegPinKey -ReleaseDir {{Quote(ReleaseDir)}})"
-                """);
+                """, "powershell.exe");
             Assert.True(run.ExitCode == 0, run.Output);
             var keys = Lines(run.Output).Where(l => l.Contains('=', StringComparison.Ordinal))
                 .ToDictionary(l => l[..l.IndexOf('=', StringComparison.Ordinal)], l => l[(l.IndexOf('=', StringComparison.Ordinal) + 1)..]);
@@ -132,6 +132,14 @@ public sealed class ReleaseCacheTests
                 "other=$([bool](Find-GateRecord -Trees @('{{other}}') -Kind gate))"
                 "second=$((Find-GateRecord -Trees @('{{other}}', '{{tree}}') -Kind gate).Tree)"
                 try { [void](Save-GateRecord -Tree 'HEAD' -Gate -Source x); 'saved-bad-tree' } catch { 'refused-bad-tree' }
+                "cultures-before=$([bool](Find-GateRecord -Trees @('{{tree}}') -Kind headlessCultures -Cultures 'de-DE'))"
+                [void](Save-GateRecord -Tree '{{tree}}' -Commit 'c1' -HeadlessCultures @('de-DE') -Source 'release C')
+                "de-only=$([bool](Find-GateRecord -Trees @('{{tree}}') -Kind headlessCultures -Cultures 'de-DE'))"
+                "de-ja-partial=$([bool](Find-GateRecord -Trees @('{{tree}}') -Kind headlessCultures -Cultures @('de-DE', 'ja-JP')))"
+                [void](Save-GateRecord -Tree '{{tree}}' -Commit 'c1' -HeadlessCultures @('ja-JP') -Source 'release D')
+                "de-ja=$((Find-GateRecord -Trees @('{{tree}}') -Kind headlessCultures -Cultures @('de-DE', 'ja-JP')).Source)"
+                "headless-kept=$((Find-GateRecord -Trees @('{{tree}}') -Kind headless).Source)"
+                try { [void](Find-GateRecord -Trees @('{{tree}}') -Kind headlessCultures); 'found-no-cultures' } catch { 'refused-no-cultures' }
                 """);
             if (output is null) return;
             var lines = Lines(output);
@@ -144,6 +152,13 @@ public sealed class ReleaseCacheTests
             Assert.Contains("other=False", lines);
             Assert.Contains($"second={tree}", lines);
             Assert.Contains("refused-bad-tree", lines);
+            // The layout sweeps are recorded per culture and found only when EVERY asked culture is on record.
+            Assert.Contains("cultures-before=False", lines);
+            Assert.Contains("de-only=True", lines);
+            Assert.Contains("de-ja-partial=False", lines);
+            Assert.Contains("de-ja=release D", lines);
+            Assert.Contains("headless-kept=release B", lines);
+            Assert.Contains("refused-no-cultures", lines);
         }
         finally
         {
@@ -197,7 +212,7 @@ public sealed class ReleaseCacheTests
             Directory.CreateDirectory(export);
             var devTree = new string('3', 40);
             var publicTree = new string('4', 40);
-            var run = RunPwsh(scratch, $$"""
+            var run = RunPowerShell(scratch, $$"""
                 Import-Module {{Quote(Module)}} -Force
                 "dev=$(Get-ReleaseLocalDir -RepoRoot {{Quote(dev)}})"
                 [void](Write-ExportOrigin -RepoRoot {{Quote(export)}} -DevCheckout {{Quote(dev)}} -DevCommit c -DevTree '{{devTree}}' -PublicTree '{{publicTree}}')
@@ -206,7 +221,7 @@ public sealed class ReleaseCacheTests
                 "export=$(Get-ReleaseLocalDir -RepoRoot {{Quote(export)}})"
                 "trees=$(@(Get-GateRecordTrees -RepoRoot {{Quote(export)}} -Tree '{{publicTree}}') -join ',')"
                 "edited=$(@(Get-GateRecordTrees -RepoRoot {{Quote(export)}} -Tree '{{new string('5', 40)}}') -join ',')"
-                """);
+                """, "powershell.exe");
             Assert.True(run.ExitCode == 0, run.Output);
             var lines = Lines(run.Output);
             var local = Path.Combine(scratch, "projects", "DotCharter-local");
@@ -253,30 +268,85 @@ public sealed class ReleaseCacheTests
     }
 
     /// <summary>
-    ///     The headless gate skips its main pass only for a CLEAN tree with a green run on
-    ///     record, never with -ForceHeadlessUi, still builds the tests and still runs the
-    ///     localized sweeps; a green main pass is recorded.
+    ///     The release gates (default gate, headless en-US pass, localized layout sweeps,
+    ///     release lane) each reuse a record of this CLEAN tree through the pure
+    ///     Get-ReleaseGatePlan, build the tests only when one runs, record what they ran,
+    ///     and run the sweeps of every culture side by side; all before the publishes.
     /// </summary>
     [Fact]
-    public void NewRelease_HeadlessGate_ReusesARecordedRun_ButStillBuildsAndSweeps()
+    public void NewRelease_Gates_ReuseRecordsOfThisTree_AndRecordWhatTheyRan()
     {
         var script = Script("New-Release.ps1");
-        var body = script[IndexOf(script, "function Invoke-HeadlessUiGate")..IndexOf(script, "if ($SelfTest) { Invoke-SelfTest; exit 0 }")];
+        var gates = script[IndexOf(script, "function Invoke-ReleaseGates")..IndexOf(script, "if ($SelfTest) { Invoke-SelfTest; exit 0 }")];
 
+        Assert.Contains("[switch]$ForceGate,", script, StringComparison.Ordinal);
         Assert.Contains("[switch]$ForceHeadlessUi,", script, StringComparison.Ordinal);
-        Assert.Contains("$tree = Get-CleanTreeId -Repo $RepoRoot", body, StringComparison.Ordinal);
-        Assert.Contains("elseif ($ForceHeadlessUi) {", body, StringComparison.Ordinal);
-        Assert.Contains("else { $recorded = Find-GateRecord -Trees (Get-GateRecordTrees -RepoRoot $RepoRoot -Tree $tree) -Kind headless }", body, StringComparison.Ordinal);
-        // The build is shared with the release lane (Build-ReleaseTestProject, once per run).
+        Assert.Contains("$tree = Get-CleanTreeId -Repo $RepoRoot", gates, StringComparison.Ordinal);
+        Assert.Contains("Find-GateRecord -Trees $trees -Kind gate @scope\n", gates, StringComparison.Ordinal);
+        Assert.Contains("Find-GateRecord -Trees $trees -Kind headless @scope\n", gates, StringComparison.Ordinal);
+        Assert.Contains("Find-GateRecord -Trees $trees -Kind headlessCultures -Cultures $HeadlessSweepCultures", gates, StringComparison.Ordinal);
+        Assert.Contains("Find-GateRecord -Trees $trees -Kind releaseLane", gates, StringComparison.Ordinal);
+        Assert.Contains("-ForceGate:$ForceGate -ForceHeadless:$ForceHeadlessUi -ForceReleaseLane:$ForceReleaseLane -SkipHeadless:$SkipHeadlessUi", gates, StringComparison.Ordinal);
+        Assert.Contains("if ($plan.NeedsTestBuild) { Build-ReleaseTestProject -ResultsDir $ResultsDir }", gates, StringComparison.Ordinal);
         Assert.Contains("& dotnet build $script:HeadlessTestProject", script, StringComparison.Ordinal);
-        Assert.True(IndexOf(body, "Build-ReleaseTestProject -ResultsDir $ResultsDir") < IndexOf(body, "if ($recorded) {"),
-            "the test build must run whether or not the main pass is reused.");
-        var reuse = IndexOf(body, "if ($recorded) {");
-        var pass = IndexOf(body, "-Label 'run1' -Culture 'en-US'");
-        var sweeps = IndexOf(body, "foreach ($culture in $HeadlessSweepCultures) {");
-        Assert.True(reuse < pass && pass < sweeps, "only the main pass sits behind the record; the sweeps follow it.");
-        Assert.Contains("if ($tree -and -not $recorded) {\n        $saved = Save-GateRecord -Tree $tree", body, StringComparison.Ordinal);
+
+        // Fail fast: the default gate first, then the headless suite, then the lane.
+        var gate = IndexOf(gates, "Invoke-DefaultGate -Step $step['gate']");
+        var headless = IndexOf(gates, "Invoke-HeadlessUiGate -ResultsDir $ResultsDir -MainStep");
+        var lane = IndexOf(gates, "Invoke-ReleaseLaneGate -ResultsDir $ResultsDir -Step");
+        Assert.True(gate < headless && headless < lane, "the gates run broadest-first.");
+
+        // Each runs only when its plan step says so, and a green run is recorded.
+        Assert.Contains("'-Gate', '-NoBuild'", gates, StringComparison.Ordinal);
+        Assert.Contains("-Gate -Source 'New-Release.ps1 default gate'", gates, StringComparison.Ordinal);
+        Assert.Contains("if ($Tree -and (Test-HeadlessGateRecordable -Step $MainStep -Unverified $mainUnverified)) {", gates, StringComparison.Ordinal);
+        Assert.Contains("if ($Tree -and (Test-HeadlessGateRecordable -Step $SweepStep -Unverified $sweepUnverified)) {", gates, StringComparison.Ordinal);
+        Assert.Contains("-HeadlessCultures $HeadlessSweepCultures -Source 'New-Release.ps1 layout sweeps'", gates, StringComparison.Ordinal);
+        Assert.Contains("-ReleaseLane -Source 'New-Release.ps1 release lane'", gates, StringComparison.Ordinal);
+
+        // The sweeps START together, share the shard budget, and are graded after ONE wait.
+        var split = IndexOf(gates, "Get-CultureShardSplit -Shards $HeadlessShards -Cultures $HeadlessSweepCultures");
+        var start = IndexOf(gates, "Start-HeadlessUiShardedRun -Filter $HeadlessLayoutFilter");
+        var wait = IndexOf(gates, "$null = Wait-TestShards -Runs @($pending | ForEach-Object { $_.Runs })");
+        var grade = IndexOf(gates, "-Run (Complete-HeadlessUiShardedRun $sweep)");
+        Assert.True(split < start && start < wait && wait < grade, "the sweeps must start before the one shared wait.");
+        // ONE wait, after the loop that starts every culture: a wait inside it would run them one after the other again.
+        Assert.Contains("            })\n        $null = Wait-TestShards -Runs @($pending | ForEach-Object { $_.Runs })", gates.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(gates, "Wait-TestShards"));
+
+        // Every gate runs before the publishes.
+        Assert.True(IndexOf(script, "Invoke-ReleaseGates -ResultsDir (Join-Path $OutputDir 'tests')") < IndexOf(script, "# --- Clean Release build"),
+            "the gates run before the clean release build.");
         Assert.Contains("$SigningKeyPath = Join-Path (Get-ReleaseLocalDir -RepoRoot $RepoRoot) 'release-signing/dotcharter-release-ed25519.key'", script, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    ///     The preflight runs cheapest first (git, then pinned hashes, then the checks that
+    ///     build or restore, then the ones that may rebuild or download), and all of it
+    ///     before the first gate: a stale pin costs seconds, not a gate run (v1.4.0 lost
+    ///     a run to the licence inventory).
+    /// </summary>
+    [Fact]
+    public void NewRelease_Preflight_RunsCheapestFirst_AndBeforeAnyGate()
+    {
+        var script = Script("New-Release.ps1");
+        var main = script[IndexOf(script, "Write-Step 'Preflight checks'")..];
+        string[] order =
+        [
+            "Find-UnimportedPublicCommits.ps1') -DevRepo",
+            "Test-JuceSharpVersionBump.ps1') -DevRepo",
+            "$tonelabCommit = Test-TonelabPin",
+            "$vcSource = Install-VcRedist",
+            "$signingPublicKey = (& dotnet run $SignTool pubkey $SigningKeyPath",
+            "Update-DependencyInventory.ps1') -Check -Restore",
+            "Initialize-VoicePacks\n",
+            "$redist = Ensure-RedistTools",
+            "Write-Ok 'preflight done'",
+            "Invoke-ReleaseGates -ResultsDir",
+        ];
+        var at = order.Select(n => IndexOf(main, n)).ToArray();
+        for (var i = 1; i < at.Length; i++)
+            Assert.True(at[i - 1] < at[i], $"`{order[i - 1]}` must come before `{order[i]}`.");
     }
 
     /// <summary>The merge train records only a GREEN full-gate train, after the verdict.</summary>
@@ -289,7 +359,7 @@ public sealed class ReleaseCacheTests
         var record = IndexOf(train, "$recordPath = Save-GateRecord @recordArgs");
         Assert.True(red < record && record < IndexOf(train, "# ---- 4. merge in the tested order"), "the record must follow the red-train exit.");
         Assert.Contains("if (-not $docsOnly) {\n        Import-Module (Join-Path $PSScriptRoot '..\\release\\ReleaseCache.psm1') -Force", train, StringComparison.Ordinal);
-        Assert.Contains("Gate = $true; Headless = $ranHeadless;", train, StringComparison.Ordinal);
+        Assert.Contains("Gate = ($executedGreenLanes -contains 'gate'); Headless = ($executedGreenLanes -contains 'headless');", train, StringComparison.Ordinal);
         Assert.Contains("$trainTree = Get-CleanTreeId -Repo $wt", train, StringComparison.Ordinal);
     }
 
@@ -315,39 +385,21 @@ public sealed class ReleaseCacheTests
 
         var file = Path.Combine(Directory.CreateTempSubdirectory("dc-release-cache-ps5-").FullName, "case.ps1");
         File.WriteAllText(file, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-        var info = new ProcessStartInfo(shell)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var info = new ProcessStartInfo(shell);
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", file })
             info.ArgumentList.Add(argument);
         try
         {
-            Process? process;
-            try
-            {
-                process = Process.Start(info);
-            }
-            catch (System.ComponentModel.Win32Exception)
+            // #608: both pipes drain concurrently under one cap (a deadlock detector for a hung child, never a budget).
+            var result = BoundedProcess.TryRun(info, TimeSpan.FromMinutes(2), shell + " (release cache)");
+            if (result is null)
             {
                 Assert.Skip($"{shell} is not on PATH.");
                 return null;
             }
 
-            Assert.NotNull(process);
-            using (process)
-            {
-                var stdout = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
-                var stderr = process.StandardError.ReadToEnd();
-                // A deadlock detector for a hung child, never a budget.
-                Assert.True(process.WaitForExit(120_000), $"{shell} did not finish within 120 s.");
-                var output = stdout.GetAwaiter().GetResult();
-                Assert.True(process.ExitCode == 0, $"{shell} exited {process.ExitCode}.\n{stderr}\n{output}");
-                return output;
-            }
+            Assert.True(result.ExitCode == 0, $"{shell} exited {result.ExitCode}.{Environment.NewLine}{result.StandardError}{Environment.NewLine}{result.StandardOutput}");
+            return result.StandardOutput;
         }
         finally
         {

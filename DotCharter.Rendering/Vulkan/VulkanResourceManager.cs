@@ -43,33 +43,51 @@ public unsafe class VulkanResourceManager : IDisposable
         VulkanCheck.Ok(_context.Api.CreateCommandPool(_context.Device, in poolInfo, null, out _transferCommandPool), "VulkanResourceManager.CreateCommandPool");
     }
 
+    /// <summary>
+    ///     Uploads <paramref name="pixels" /> into a new sampled texture. All or
+    ///     nothing: a failure at any step (staging map, image, view, sampler,
+    ///     descriptor set) disposes every part of the texture already created and
+    ///     frees the staging buffer before the exception leaves, so a retried load
+    ///     cannot pile up orphaned GPU objects.
+    /// </summary>
     public VulkanTexture LoadTexture(uint width, uint height, byte[] pixels, bool mipmapped = true)
     {
         var tex = new VulkanTexture(_context.Api, _context.Device);
-        ulong imageSize = width * height * 4;
+        VkBuffer stagingBuffer = default;
+        DeviceMemory stagingBufferMemory = default;
+        NativeResourceSet.CompleteOrRollback(() =>
+        {
+            ulong imageSize = width * height * 4;
+            _context.CreateBuffer(imageSize, BufferUsageFlags.TransferSrcBit,
+                MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, out stagingBuffer,
+                out stagingBufferMemory);
+            void* data;
+            VulkanCheck.Ok(_context.Api.MapMemory(_context.Device, stagingBufferMemory, 0, imageSize, 0, &data), "VulkanResourceManager.MapMemory");
+            Marshal.Copy(pixels, 0, (nint)data, pixels.Length);
+            _context.Api.UnmapMemory(_context.Device, stagingBufferMemory);
 
-        _context.CreateBuffer(imageSize, BufferUsageFlags.TransferSrcBit,
-            MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, out var stagingBuffer,
-            out var stagingBufferMemory);
-        void* data;
-        VulkanCheck.Ok(_context.Api.MapMemory(_context.Device, stagingBufferMemory, 0, imageSize, 0, &data), "VulkanResourceManager.MapMemory");
-        Marshal.Copy(pixels, 0, (nint)data, pixels.Length);
-        _context.Api.UnmapMemory(_context.Device, stagingBufferMemory);
+            // A full mip chain when the device can blit-filter the format linearly; one level otherwise.
+            var mipLevels = mipmapped && CanBlitLinear(Format.R8G8B8A8Unorm)
+                ? TextureFilterPolicy.MipLevels(width, height)
+                : 1u;
+            _context.CreateImage(width, height, Format.R8G8B8A8Unorm, ImageTiling.Optimal,
+                ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
+                MemoryPropertyFlags.DeviceLocalBit, out tex.Image, out tex.Memory, mipLevels: mipLevels);
+            TransitionImageLayout(tex.Image, ImageLayout.Undefined, ImageLayout.TransferDstOptimal, mipLevels);
+            CopyBufferToImage(stagingBuffer, tex.Image, width, height);
+            GenerateMipmaps(tex.Image, width, height, mipLevels);
 
-        // A full mip chain when the device can blit-filter the format linearly; one level otherwise.
-        var mipLevels = mipmapped && CanBlitLinear(Format.R8G8B8A8Unorm)
-            ? TextureFilterPolicy.MipLevels(width, height)
-            : 1u;
-        _context.CreateImage(width, height, Format.R8G8B8A8Unorm, ImageTiling.Optimal,
-            ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
-            MemoryPropertyFlags.DeviceLocalBit, out tex.Image, out tex.Memory, mipLevels: mipLevels);
-        TransitionImageLayout(tex.Image, ImageLayout.Undefined, ImageLayout.TransferDstOptimal, mipLevels);
-        CopyBufferToImage(stagingBuffer, tex.Image, width, height);
-        GenerateMipmaps(tex.Image, width, height, mipLevels);
+            CreateViewSamplerAndDescriptor(tex, mipLevels);
+        }, tex.Dispose, () =>
+        {
+            if (stagingBuffer.Handle != 0) _context.Api.DestroyBuffer(_context.Device, stagingBuffer, null);
+            if (stagingBufferMemory.Handle != 0) _context.Api.FreeMemory(_context.Device, stagingBufferMemory, null);
+        });
+        return tex;
+    }
 
-        _context.Api.DestroyBuffer(_context.Device, stagingBuffer, null);
-        _context.Api.FreeMemory(_context.Device, stagingBufferMemory, null);
-
+    private void CreateViewSamplerAndDescriptor(VulkanTexture tex, uint mipLevels)
+    {
         tex.View = _context.CreateImageView(tex.Image, Format.R8G8B8A8Unorm, ImageAspectFlags.ColorBit, mipLevels);
 
         var samplerInfo = TextureFilterPolicy.Sampler(mipLevels, _context.SamplerAnisotropy);
@@ -94,8 +112,6 @@ public unsafe class VulkanResourceManager : IDisposable
             DescriptorType = DescriptorType.CombinedImageSampler, DescriptorCount = 1, PImageInfo = &imageInfo
         };
         _context.Api.UpdateDescriptorSets(_context.Device, 1, in descriptorWrite, 0, null);
-
-        return tex;
     }
 
     private bool CanBlitLinear(Format format)

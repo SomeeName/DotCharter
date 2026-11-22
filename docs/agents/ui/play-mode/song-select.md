@@ -2,6 +2,11 @@
 
 Part of the Play Mode reference. Router: [../play-mode.md](../play-mode.md).
 
+- Own-chart discovery uses the statistics projection's complete `KnownSongKeys`
+  plus the last opened project. `MostPlayed` and `RecentlyPlayed` are capped
+  display lists and must not be used to enumerate known charts
+  (`SongListStatsRefreshTests`).
+
 - **Listen-back.** The results screen plays the run just played back. There
   is one master transport, so it is BORROWED and handed back — see
   [docs/agents/services/live-play.md](../../services/live-play.md). The v0.27

@@ -145,7 +145,7 @@ public sealed class ToneSilenceAndPhraseRuleTests
         var issuesVm = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(),
             "DotCharter.UI", "ViewModels", "Editor", "Inspector", "InspectorIssuesViewModel.cs")));
 
-        Assert.Contains("_projectState.ActiveProject)", issuesVm, StringComparison.Ordinal);
+        Assert.Contains("totalAudioLengthMs, copy)", issuesVm, StringComparison.Ordinal);
 
         var lint = UiSourceTree.ReadAllText(Path.Combine(TestPaths.RepoRoot(),
             "DotCharter.Services", "Editing", "Linting", "BatchChartLintService.cs"));

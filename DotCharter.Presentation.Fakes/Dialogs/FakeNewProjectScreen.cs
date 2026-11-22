@@ -11,7 +11,7 @@ public sealed class FakeNewProjectScreen : FakeDialog<NewProjectDetails?>, INewP
 {
     private FakeNewProjectScreen(bool chooser, bool extracting, string artist = "", string title = "",
         string album = "", string year = "", string date = "", string genre = "", string japaneseArtist = "",
-        string japaneseTitle = "", bool suggestion = false, byte[]? cover = null)
+        string japaneseTitle = "", bool suggestion = false, byte[]? cover = null, bool sortFields = false)
     {
         IsChooserStage = chooser;
         IsExtracting = extracting;
@@ -24,6 +24,14 @@ public sealed class FakeNewProjectScreen : FakeDialog<NewProjectDetails?>, INewP
         JapaneseArtist = japaneseArtist;
         JapaneseTitle = japaneseTitle;
         HasNameSuggestion = suggestion;
+        ShowJapaneseFields = japaneseArtist.Length > 0 || japaneseTitle.Length > 0;
+        ShowSortFields = sortFields;
+        ArtistSort = artist.Length > 0 ? "Polkadot Stingray" : "";
+        TitleSort = title;
+        AlbumSort = album;
+        DlcKey = artist.Length > 0 ? "DCPolkadotStSakasma" : "";
+        HasOriginalScriptOffer = !suggestion && !chooser && !extracting && artist.Length > 0 && japaneseArtist.Length > 0 && artist == japaneseArtist;
+        MoveToOriginalScriptCommand = new RelayCommand(() => { });
         CoverArtPng = cover;
         ChooseAudioCommand = new RelayCommand(() => { });
         StartWithoutAudioCommand = new RelayCommand(() => { });
@@ -41,8 +49,12 @@ public sealed class FakeNewProjectScreen : FakeDialog<NewProjectDetails?>, INewP
         new(FakeVariantNames.Empty, Empty),
         new(FakeVariantNames.LongText, LongText),
         new(FakeVariantNames.Full, Full),
-        new(FakeVariantNames.Busy, Busy)
+        new(FakeVariantNames.Busy, Busy),
+        new("NonLatinNames", NonLatinNames)
     ];
+
+    public static FakeNewProjectScreen NonLatinNames() => new(false, false, "ヨルシカ", "だから僕は音楽を辞めた",
+        "エルマ", "2019", "2019-04-10", "J-Pop", "ヨルシカ", "だから僕は音楽を辞めた", suggestion: false);
 
     /// <summary>The form after an audio pick: Create is the default button there.</summary>
     public static FakeNewProjectScreen Default() => new(false, false, "Polkadot Stingray", "Sakasma", "Ultra Pop", "2019");
@@ -60,7 +72,7 @@ public sealed class FakeNewProjectScreen : FakeDialog<NewProjectDetails?>, INewP
 
     /// <summary>Every field filled from the tags, with a cover.</summary>
     public static FakeNewProjectScreen Full() => new(false, false, "Polkadot Stingray", "Sakasma", "Ultra Pop",
-        "2019", "2019-11-13", "J-Rock", cover: FakeCover.Png);
+        "2019", "2019-11-13", "J-Rock", cover: FakeCover.Png, sortFields: true);
 
     /// <summary>Reading the tags off the picked file.</summary>
     public static FakeNewProjectScreen Busy() => new(chooser: false, extracting: true);
@@ -80,6 +92,17 @@ public sealed class FakeNewProjectScreen : FakeDialog<NewProjectDetails?>, INewP
     public byte[]? CoverArtPng { get; }
     public bool HasCoverArt => CoverArtPng != null;
     public bool HasNameSuggestion { get; }
+    public bool ShowJapaneseFields { get; set; }
+    public bool ShowSortFields { get; set; }
+    public string ArtistSort { get; set; }
+    public string TitleSort { get; set; }
+    public string AlbumSort { get; set; }
+    public string DlcKey { get; set; }
+    public string Version { get; set; } = "1";
+    public string Charter { get; set; } = "alex";
+    public string ToolVersion => "DotCharter v1.3.0";
+    public bool HasOriginalScriptOffer { get; }
+    public ICommand MoveToOriginalScriptCommand { get; }
     public ICommand ChooseAudioCommand { get; }
     public ICommand StartWithoutAudioCommand { get; }
     public ICommand ApplyNameSuggestionCommand { get; }

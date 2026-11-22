@@ -23,6 +23,18 @@ public sealed class TuningOffsetResolutionTests
         return arrangement;
     }
 
+    [Theory]
+    [InlineData("E_DROP_D", new[] { -2, 0, 0, 0, 0, 0 })]
+    [InlineData("E_FLAT_DROP_D_FLAT", new[] { -3, -1, -1, -1, -1, -1 })]
+    public void With_neither_offsets_nor_letters_the_named_tuning_remains_available(string name, int[] expected)
+    {
+        var arrangement = With(notes: []);
+        arrangement.TuningType = name;
+
+        Assert.Equal(expected, TuningOffsetResolution.Resolve(arrangement));
+        Assert.Equal(40 + expected[0], SoundingPitch.OpenStringMidi(arrangement, 0));
+    }
+
     [Fact]
     public void AuthoredOffsetsAlwaysWin_SoEveryExistingChartExportsUnchanged()
     {

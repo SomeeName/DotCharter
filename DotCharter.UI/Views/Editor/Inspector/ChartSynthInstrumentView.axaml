@@ -26,13 +26,13 @@
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
                        Text="{localization:Loc Mixer_ChartSynth_Guitar}" />
-            <ComboBox x:Name="ChartSynthGuitarModelPicker" Grid.Column="1"
+            <ComboBox x:Name="ChartSynthGuitarModelPicker" PlaceholderText="{localization:Loc Mixer_Midi_NotAvailable}" Grid.Column="1"
                       HorizontalAlignment="Stretch" MinWidth="0"
                       ItemsSource="{Binding GuitarModels}"
                       SelectedItem="{Binding SelectedGuitarModel}"
                       ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Model_Tip}"
                       AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_Guitar}" />
-            <ComboBox x:Name="ChartSynthGuitarPickupPicker" Grid.Column="2"
+            <ComboBox x:Name="ChartSynthGuitarPickupPicker" PlaceholderText="{localization:Loc Mixer_Midi_NotAvailable}" Grid.Column="2"
                       HorizontalAlignment="Stretch" MinWidth="0"
                       ItemsSource="{Binding GuitarPickups}"
                       SelectedItem="{Binding SelectedGuitarPickup}"
@@ -58,13 +58,13 @@
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
                        Text="{localization:Loc Mixer_ChartSynth_Bass}" />
-            <ComboBox x:Name="ChartSynthBassModelPicker" Grid.Column="1"
+            <ComboBox x:Name="ChartSynthBassModelPicker" PlaceholderText="{localization:Loc Mixer_Midi_NotAvailable}" Grid.Column="1"
                       HorizontalAlignment="Stretch" MinWidth="0"
                       ItemsSource="{Binding BassModels}"
                       SelectedItem="{Binding SelectedBassModel}"
                       ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Model_Tip}"
                       AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_Bass}" />
-            <ComboBox x:Name="ChartSynthBassPickupPicker" Grid.Column="2"
+            <ComboBox x:Name="ChartSynthBassPickupPicker" PlaceholderText="{localization:Loc Mixer_Midi_NotAvailable}" Grid.Column="2"
                       HorizontalAlignment="Stretch" MinWidth="0"
                       ItemsSource="{Binding BassPickups}"
                       SelectedItem="{Binding SelectedBassPickup}"

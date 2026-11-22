@@ -2,6 +2,21 @@ namespace DotCharter.Tests.Core.Utilities;
 
 public class ChordTemplateFingerSetterTests
 {
+    [Theory]
+    [InlineData(7)]
+    [InlineData(8)]
+    [InlineData(9)]
+    public void SameFretBarre_FingersEveryStringOfAnExtendedArrangement(int strings)
+    {
+        var template = new ChordTemplate();
+        for (var i = 0; i < strings; i++) template.Frets[i] = 5;
+
+        ChordTemplateFingerSetter.SetSuggestedFingers(template, strings);
+
+        Assert.Equal(strings, template.Fingers.Count);
+        Assert.All(template.Fingers.Values, finger => Assert.Equal(1, finger));
+    }
+
     private static ChordTemplate Fingered(params (int String, int Fret)[] frets)
     {
         var t = new ChordTemplate();

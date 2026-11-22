@@ -146,7 +146,7 @@ public sealed partial class LinkPanelViewModel : ObservableObject
         {
             var placement = new LinkPlacement { Arrangement = run.Arrangement, Position = run.Start, EndPosition = run.End };
             Suggestions.Add(new LinkPanelSuggestion(run, run.Arrangement.Name, LinkMeasureLabels.Range(measures, placement),
-                SectionAt(run.Arrangement, run.Start), Link, _goTo));
+                SectionMarkers.At(run.Arrangement, run.Start), Link, _goTo));
         }
 
         HasSuggestions = Suggestions.Count > 0;
@@ -162,14 +162,9 @@ public sealed partial class LinkPanelViewModel : ObservableObject
 
     private static string SectionLabel(Arrangement arrangement, LinkPlacement placement, int index)
     {
-        var section = SectionAt(arrangement, placement.Position);
+        var section = SectionMarkers.At(arrangement, placement.Position);
         return string.IsNullOrEmpty(section) ? "" : $"{section} {index + 1}";
     }
-
-    private static string SectionAt(Arrangement arrangement, FractionalPosition at) =>
-        arrangement.EventPoints
-            .Where(e => !string.IsNullOrEmpty(e.Section) && e.Position <= at)
-            .MaxBy(e => e.Position)?.Section ?? "";
 
     private List<LinkPlacement> Checked() => [.. Sections.SelectMany(s => s.Rows).Where(r => r.IsChecked).Select(r => r.Placement)];
 

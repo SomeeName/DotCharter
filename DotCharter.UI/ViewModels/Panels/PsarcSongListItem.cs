@@ -63,8 +63,8 @@ public sealed partial class PsarcSongListItem : ObservableObject, ILibrarySong
         CanLoad = song.CanLoad && block == LibrarySongBlock.None;
         FileName = Path.GetFileName(song.PackagePath);
         Subtitle = string.IsNullOrWhiteSpace(song.Album) ? song.Artist : $"{song.Artist} | {song.Album}";
-        SongLengthFormatted = TimeSpan.FromSeconds(song.SongLength).ToString(@"m\:ss");
-        TuningDisplay = TuningNameResolver.Describe(song.TuningSummary);
+        SongLengthFormatted = ElapsedTimeLabel.Format(song.SongLength * 1000);
+        TuningDisplay = TuningDisplayNames.Describe(song.TuningSummary);
         CapoSummary = SongRowFacts.CapoLabel(song.CapoSummary, localization);
         HasCapo = song.CapoSummary > 0;
         TuningCellLabel = SongRowFacts.TuningCell(song.TuningSummary, song.CapoSummary, localization);
@@ -145,7 +145,7 @@ public sealed partial class PsarcSongListItem : ObservableObject, ILibrarySong
     /// <see cref="TuningSummary" />, which stays raw.</summary>
     public string TuningDisplay { get; }
 
-    public string CapoSummary { get; }
+    public string CapoSummary { get; private set; }
     public bool HasCapo { get; }
 
     public bool HasGroupHeader => GroupHeader.Length > 0;
@@ -153,7 +153,16 @@ public sealed partial class PsarcSongListItem : ObservableObject, ILibrarySong
     /// <summary>The row's ONE fixed-width tuning cell — tuning WITH its capo, the
     /// identical projection Play Mode's library prints, so one song reads the same
     /// way whichever library you opened.</summary>
-    public string TuningCellLabel { get; }
+    public string TuningCellLabel { get; private set; }
+
+    /// <summary>Reads the capo words again after a language switch; the other projections hold no words.</summary>
+    internal void Relabel()
+    {
+        CapoSummary = SongRowFacts.CapoLabel(Song.CapoSummary, Localization);
+        TuningCellLabel = SongRowFacts.TuningCell(Song.TuningSummary, Song.CapoSummary, Localization);
+        OnPropertyChanged(nameof(CapoSummary));
+        OnPropertyChanged(nameof(TuningCellLabel));
+    }
 
     /// <summary>Amber-worthy: a non-standard tuning or a capo — i.e. something
     /// has to happen to the guitar before this chart is playable.</summary>
@@ -286,21 +295,57 @@ public sealed partial class PsarcSongListItem : ObservableObject, ILibrarySong
         if (bitmap == null)
             return;
 
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await Dispatcher.UIThread.InvokeAsync(() => PublishCover(bitmap, generation));
+    }
+
+    internal void PublishCover(Bitmap bitmap, int generation)
+    {
+        switch (DecideCoverPublish(Volatile.Read(ref _coverGeneration) == generation,
+                    Volatile.Read(ref _coverWanted) == 1))
         {
-            // Released while we were decoding (scrolled out of view): drop the
-            // bitmap instead of resurrecting a cover on a recycled item — nobody
-            // would ever free it, and the list would accumulate exactly the
-            // decoded bitmaps ReleaseCover is there to shed.
-            if (Volatile.Read(ref _coverGeneration) != generation)
-            {
+            case CoverPublish.Drop:
+                // Released while we were decoding: drop the bitmap instead of
+                // resurrecting a cover on a recycled item — nobody would ever
+                // free it, and the list would accumulate exactly the decoded
+                // bitmaps DisposeCoverImage is there to shed.
                 bitmap.Dispose();
                 return;
-            }
+            case CoverPublish.Park:
+                // The row was recycled (parked with no bitmap yet) after the
+                // last wanted check: the cover lands on an item no container
+                // shows, so it joins the byte-capped park, which evicts past
+                // its budget, rather than living outside every budget.
+                CoverImage?.Dispose();
+                CoverImage = bitmap;
+                SongCoverCache.Shared.Park(this);
+                return;
+            default:
+                CoverImage?.Dispose();
+                CoverImage = bitmap;
+                return;
+        }
+    }
 
-            CoverImage?.Dispose();
-            CoverImage = bitmap;
-        });
+    /// <summary>Where a decoded cover goes once it reaches the UI thread.</summary>
+    internal enum CoverPublish
+    {
+        /// <summary>A container shows the row: the cover goes live.</summary>
+        Show,
+
+        /// <summary>The row was recycled without a release: the cover is kept,
+        /// but on the bounded park, not outside it.</summary>
+        Park,
+
+        /// <summary>The cover was released mid-decode: dispose it.</summary>
+        Drop
+    }
+
+    /// <summary>Pure publish rule: a release (generation moved) drops the bitmap,
+    /// a recycle (unwanted) parks it, anything else shows it.</summary>
+    internal static CoverPublish DecideCoverPublish(bool sameGeneration, bool wanted)
+    {
+        if (!sameGeneration) return CoverPublish.Drop;
+        return wanted ? CoverPublish.Show : CoverPublish.Park;
     }
 
     public void DisposeCoverImage()

@@ -69,9 +69,9 @@ public class ChordBoxControl : Control
         AvaloniaProperty.Register<ChordBoxControl, int>(nameof(Capo));
 
     /// <summary>
-    ///     The viewport's own <c>LeftyFlip ^ InvertStrings</c>. It has to reach
-    ///     this control or the flip toggle inverts the highway and leaves the
-    ///     chord box pointing the other way — the two must always agree.
+    ///     The row-style chord diagram's string order, supplied by
+    ///     <c>ProjectState.FlipStrings</c>: InvertStrings alone, matching the
+    ///     timeline and per-string editor rows independently of handedness.
     /// </summary>
     public static readonly StyledProperty<bool> FlipStringsProperty =
         AvaloniaProperty.Register<ChordBoxControl, bool>(nameof(FlipStrings));
@@ -260,7 +260,7 @@ public class ChordBoxControl : Control
         set => SetValue(IssueStringsProperty, value);
     }
 
-    private ChordBoxGeometry Geometry => new(Bounds.Width, Bounds.Height, StringCount,
+    protected virtual ChordBoxGeometry Geometry => new(Bounds.Width, Bounds.Height, StringCount,
         _displayMinFret, _displayMaxFret, FlipStrings);
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -313,8 +313,9 @@ public class ChordBoxControl : Control
         var prevFret = _hoveredFret;
         var prevPip = _hoveredOverPip;
 
-        Geometry.TryHit(p.X, p.Y, Capo, out _hoveredString, out _hoveredFret);
-        _hoveredOverPip = _hoveredString >= 0 && ChordBoxGeometry.IsOverMaskPip(p.X);
+        var geometry = Geometry;
+        geometry.TryHit(p.X, p.Y, Capo, out _hoveredString, out _hoveredFret);
+        _hoveredOverPip = _hoveredString >= 0 && geometry.IsInMaskZone(p.X);
 
         // Only repaint when the hovered cell actually changed — pointer-move
         // fires per input event and unconditional invalidation floods the
@@ -342,7 +343,8 @@ public class ChordBoxControl : Control
         base.OnPointerPressed(e);
         var props = e.GetCurrentPoint(this).Properties;
         var p = e.GetPosition(this);
-        if (!Geometry.TryHit(p.X, p.Y, Capo, out var stringIdx, out var fret)) return;
+        var geometry = Geometry;
+        if (!geometry.TryHit(p.X, p.Y, Capo, out var stringIdx, out var fret)) return;
 
         // Right-click clears the string from the shape.
         if (props.IsRightButtonPressed)
@@ -355,7 +357,7 @@ public class ChordBoxControl : Control
 
         // The mask is toggled from the pip column or with Ctrl — in EVERY role,
         // including ReadOnly. It is editor state, not chart state.
-        if (ChordBoxGeometry.IsOverMaskPip(p.X) || e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        if (geometry.IsInMaskZone(p.X) || e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             Execute(ToggleMaskCommand, stringIdx);
             return;
@@ -402,8 +404,11 @@ public class ChordBoxControl : Control
         var digit = DigitFor(e.Key);
         if (digit < 0 || e.KeyModifiers != KeyModifiers.None) return;
 
-        var continues = _fretDigits.IsAccumulating && _fretDigitsString == _hoveredString;
-        _fretDigits = _fretDigits.Push(digit, Environment.TickCount64,
+        var now = Environment.TickCount64;
+        var continues = _fretDigits.IsAccumulating && _fretDigitsString == _hoveredString &&
+                        now - _fretDigits.LastDigitTicks <= FretDigitAccumulator.SheetWindowMs;
+        if (!continues) EndFretDigitRun();
+        _fretDigits = _fretDigits.Push(digit, now,
             FretDigitAccumulator.SheetWindowMs, FretDigitAccumulator.MaxTypedFret, out var typedFret);
         _fretDigitsString = _hoveredString;
 
@@ -454,6 +459,18 @@ public class ChordBoxControl : Control
 
     // ---- render ------------------------------------------------------------
 
+    protected virtual void DrawMaskPip(DrawingContext context, ChordBoxGeometry geometry, double stringY, bool isExplicit) =>
+        context.DrawEllipse(isExplicit ? MaskPipOnBrush : MaskPipOffBrush, null,
+            new Point(geometry.MaskWidth / 2, stringY), 3.5, 3.5);
+
+    protected virtual Point TuningLabelPosition(ChordBoxGeometry geometry, double stringY, Size label) =>
+        new(geometry.OpenMarkerX + 9 - label.Width, stringY - label.Height / 2);
+
+    protected virtual bool OutlineGhostNotes => false;
+
+    protected virtual (double Top, double Bottom, double LabelY) FretGrid(ChordBoxGeometry geometry) =>
+        (geometry.StringTopInset, geometry.Height - geometry.StringBottomInset, geometry.Height - geometry.StringBottomInset + 6);
+
     public override void Render(DrawingContext context)
     {
         var bounds = Bounds;
@@ -464,32 +481,31 @@ public class ChordBoxControl : Control
         var g = Geometry;
         var stringSpacing = g.StringSpacing;
         var maskEmpty = Mask.IsEmpty;
+        var (fretTop, fretBottom, fretLabelY) = FretGrid(g);
 
         // Nut / capo.
         context.DrawLine(Capo > 0 ? NutPenCapo : NutPenSlim,
-            new Point(ChordBoxGeometry.FretboardStartX, ChordBoxGeometry.TopPadding),
-            new Point(ChordBoxGeometry.FretboardStartX, bounds.Height - ChordBoxGeometry.BottomPadding));
+            new Point(g.NutX, fretTop),
+            new Point(g.NutX, fretBottom));
 
         if (Capo > 0)
         {
             var capoText = ChartTheme.GetCachedText($"CAPO {Capo}", 10, ChartTheme.WhiteBrush, true);
             context.DrawText(capoText,
-                new Point(ChordBoxGeometry.FretboardStartX - capoText.Width / 2,
-                    ChordBoxGeometry.TopPadding - 16));
+                new Point(g.NutX - capoText.Width / 2,
+                    g.StringTopInset - 16));
         }
 
         // Fret wires + numbers.
         for (var i = 1; i <= g.FretCount; i++)
         {
-            var fx = ChordBoxGeometry.FretboardStartX + i * g.FretSpacing;
-            context.DrawLine(FretPen, new Point(fx, ChordBoxGeometry.TopPadding),
-                new Point(fx, bounds.Height - ChordBoxGeometry.BottomPadding));
+            var fx = g.NutX + i * g.FretSpacing;
+            context.DrawLine(FretPen, new Point(fx, fretTop), new Point(fx, fretBottom));
 
-            var fretText = ChartTheme.GetCachedText((_displayMinFret + i - 1).ToString(), 12,
+            var fretText = ChartTheme.GetCachedText((g.MinFret + i - 1).ToString(), 12,
                 ChartTheme.WhiteBrush, true);
             context.DrawText(fretText,
-                new Point(fx - g.FretSpacing / 2 - fretText.Width / 2,
-                    bounds.Height - ChordBoxGeometry.BottomPadding + 6));
+                new Point(fx - g.FretSpacing / 2 - fretText.Width / 2, fretLabelY));
         }
 
         var stringBrushes = ChartTheme.StringBrushes;
@@ -497,22 +513,21 @@ public class ChordBoxControl : Control
         {
             var sy = g.StringY(i);
             var sPen = StringPens[ChartTheme.StringSlot(i, StringCount)];
-            context.DrawLine(sPen, new Point(ChordBoxGeometry.FretboardStartX, sy),
-                new Point(ChordBoxGeometry.FretboardStartX + g.FretboardWidth, sy));
+            context.DrawLine(sPen, new Point(g.NutX, sy),
+                new Point(g.NutX + g.FretboardWidth, sy));
 
             // Mask pip. An empty mask draws every pip DIM, never every pip lit —
             // "no mask set" and "all nine explicitly masked" must not look the
             // same, which is the same split StringEditMask.IsExplicit encodes.
             var explicitlyMasked = Mask.IsExplicit(i);
-            context.DrawEllipse(explicitlyMasked ? MaskPipOnBrush : MaskPipOffBrush, null,
-                new Point(ChordBoxGeometry.PipZoneWidth / 2, sy), 3.5, 3.5);
+            DrawMaskPip(context, g, sy, explicitlyMasked);
 
             if (TuningNames != null && i < TuningNames.Count && !string.IsNullOrEmpty(TuningNames[i]))
             {
                 var noteText = ChartTheme.GetCachedText(TuningNames[i], 10,
                     stringBrushes[ChartTheme.StringSlot(i, StringCount)], true);
                 context.DrawText(noteText,
-                    new Point(ChordBoxGeometry.OpenDotX + 9 - noteText.Width, sy - noteText.Height / 2));
+                    TuningLabelPosition(g, sy, new Size(noteText.Width, noteText.Height)));
             }
 
             if (_hoveredString == i)
@@ -539,7 +554,7 @@ public class ChordBoxControl : Control
             {
                 if (idx < 0 || idx >= StringCount) continue;
                 var sy = g.StringY(idx);
-                var cx = ChordBoxGeometry.OpenDotX;
+                var cx = g.OpenMarkerX;
                 context.DrawLine(MuteMarkPen, new Point(cx - 5, sy - 5), new Point(cx + 5, sy + 5));
                 context.DrawLine(MuteMarkPen, new Point(cx + 5, sy - 5), new Point(cx - 5, sy + 5));
             }
@@ -550,7 +565,7 @@ public class ChordBoxControl : Control
         {
             var sy = g.StringY(_hoveredString);
             var sx = _hoveredFret <= Capo
-                ? ChordBoxGeometry.OpenDotX
+                ? g.OpenMarkerX
                 : g.FretCenterX(_hoveredFret);
             context.DrawEllipse(HoverDotBrush, null, new Point(sx, sy), 8.5, 8.5);
         }
@@ -563,23 +578,26 @@ public class ChordBoxControl : Control
                 if (cn.StringIndex < 0 || cn.StringIndex >= StringCount) continue;
 
                 var sy = g.StringY(cn.StringIndex);
-                var noteBrush = stringBrushes[ChartTheme.StringSlot(cn.StringIndex, StringCount)];
+                var slot = ChartTheme.StringSlot(cn.StringIndex, StringCount);
+                var noteBrush = stringBrushes[slot];
 
                 if (cn.Fret <= Capo)
                 {
                     context.DrawEllipse(null, StringNotePens[ChartTheme.StringSlot(cn.StringIndex, StringCount)],
-                        new Point(ChordBoxGeometry.OpenDotX, sy), 6, 6);
+                        new Point(g.OpenMarkerX, sy), 6, 6);
                 }
-                else if (cn.Fret >= _displayMinFret && cn.Fret <= _displayMaxFret)
+                else if (cn.Fret >= g.MinFret && cn.Fret <= g.MaxFret)
                 {
                     var sx = g.FretCenterX(cn.Fret);
-                    context.DrawEllipse(noteBrush, null, new Point(sx, sy), 8.5, 8.5);
+                    var ghost = OutlineGhostNotes && Template?.IsGhost(cn.StringIndex) == true;
+                    context.DrawEllipse(ghost ? ChartTheme.BottomMarginBgBrush : noteBrush, ghost ? StringNotePens[slot] : null,
+                        new Point(sx, sy), 8.5, 8.5);
 
                     if (Template?.Fingers != null &&
                         Template.Fingers.TryGetValue(cn.StringIndex, out var fingerId))
                     {
                         var fingerStr = fingerId == 0 ? "T" : fingerId.ToString();
-                        var fText = ChartTheme.GetCachedText(fingerStr, 11, FingerTextBrush, true);
+                        var fText = ChartTheme.GetCachedText(fingerStr, 11, ghost ? noteBrush : FingerTextBrush, true);
                         context.DrawText(fText, new Point(sx - fText.Width / 2, sy - fText.Height / 2));
                     }
 
@@ -592,16 +610,18 @@ public class ChordBoxControl : Control
             }
         }
 
-        // Issue pips, at the far right of the offending string.
-        if (IssueStrings != null)
+        DrawIssuePips(context, g, bounds.Width - 5);
+    }
+
+    protected void DrawIssuePips(DrawingContext context, ChordBoxGeometry geometry, double x)
+    {
+        if (IssueStrings == null) return;
+        foreach (var pip in IssueStrings)
         {
-            foreach (var pip in IssueStrings)
-            {
-                if (pip.StringIndex < 0 || pip.StringIndex >= StringCount) continue;
-                var sy = g.StringY(pip.StringIndex);
-                context.DrawEllipse(pip.BlocksExport ? IssueBlockingBrush : IssueWarnBrush, null,
-                    new Point(bounds.Width - 5, sy), 3.5, 3.5);
-            }
+            if (pip.StringIndex < 0 || pip.StringIndex >= StringCount) continue;
+            var y = geometry.StringY(pip.StringIndex);
+            context.DrawEllipse(pip.BlocksExport ? IssueBlockingBrush : IssueWarnBrush, null,
+                new Point(x, y), 3.5, 3.5);
         }
     }
 }

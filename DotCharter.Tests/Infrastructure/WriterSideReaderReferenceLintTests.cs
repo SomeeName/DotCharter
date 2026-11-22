@@ -53,7 +53,7 @@ public sealed class WriterSideReaderReferenceLintTests
         Assert.True(offenders.Count == 0, LintReport.Of(
             "A writer-side file (Export/, Infrastructure/Psarc/Write/) references the package reader",
             offenders,
-            "Use the writer halves (SngPacker, PsarcTocEncryptor, RsExtensionBlockWriter, Rs7ChordSidecar, Export/Sng/Model); " +
+            "Use the writer halves (SngPacker, PsarcTocEncryptor, RsxrSngWriter, Rs7ChordSidecar, Export/Sng/Model); " +
             "a doc comment says \"the package reader\" instead of naming its type.",
             "docs/agents/services/parsing-psarc.md"));
     }

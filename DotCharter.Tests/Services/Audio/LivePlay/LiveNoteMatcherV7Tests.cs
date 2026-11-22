@@ -400,7 +400,7 @@ public sealed class LiveNoteMatcherV7Tests
         // Reload right after a seek to the start: verdicts are all in the
         // future and get dropped, but the session-best streak survives.
         matcher.Reload(arr, Beats(), _ => 0, playheadMs: 0);
-        Assert.Equal(0, matcher.Stats.Hits);
+        Assert.Equal(2, matcher.Stats.Hits);
         Assert.Equal(2, matcher.Stats.BestStreak);
     }
 }

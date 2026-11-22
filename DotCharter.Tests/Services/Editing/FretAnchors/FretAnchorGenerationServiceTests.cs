@@ -436,7 +436,7 @@ public class FretAnchorGenerationServiceTests
 
         var anchors = svc.GenerateAnchors(BuildMixedLevel(), null, null, null, 99);
 
-        Assert.All(anchors, a => Assert.InRange(a.Fret, 1, 22));
+        Assert.All(anchors, a => Assert.InRange(a.Fret, 1, FretLimits.MaxAnchorFret));
     }
 
     // ─── Hand-abandonment re-anchor (bass looks 6 ahead, guitar 14) ─────────

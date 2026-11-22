@@ -178,6 +178,40 @@ public sealed class HandShapeContentRuleTests
         Assert.Contains("fret 7", issue.Message);
     }
 
+    [Theory]
+    [InlineData(7, false, false)]
+    [InlineData(9, false, true)]
+    [InlineData(7, true, false)]
+    [InlineData(9, true, true)]
+    public void ALaterSoundOnAnOpeningGhostMustMatchTheGrip(int fret, bool strum, bool violates)
+    {
+        var arr = WithShape((0, 0, 5));
+        var level = arr.Levels[0];
+        level.HandShapes[0].GhostMask = (1 << 1) | (1 << 2);
+        if (strum)
+        {
+            var chord = new Chord { Position = new(1) };
+            chord.ChordNotes.Add(new ChordNote { StringIndex = 0, Fret = 5 });
+            chord.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = fret });
+            level.Chords.Add(chord);
+        }
+        else
+        {
+            level.Notes.Add(new GuitarNote { Position = new(1), StringIndex = 1, Fret = fret });
+        }
+
+        if (violates)
+        {
+            var issue = Assert.Single(Violations(arr));
+            Assert.Equal(1, issue.StringIndex);
+            Assert.Contains("fret 7", issue.Message);
+        }
+        else
+        {
+            Assert.Empty(Violations(arr));
+        }
+    }
+
     /// <summary>
     ///     A hand shape's end is EXCLUSIVE — shapes abut, and the next shape's
     ///     opening chord sits exactly on this one's end. A closed span would blame

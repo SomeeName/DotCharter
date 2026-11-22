@@ -15,7 +15,8 @@ namespace DotCharter.Tone.UI.ViewModels.PlayMode;
 /// profiles. Clicking a card applies it onto the live chain via
 /// <see cref="IDspTonePresetService.ApplyToPlayer"/> — on the rig's SELECTED
 /// seat — and asks the owning pedalboard to
-/// re-sync its pedals (<c>onApplied</c>). Saves snapshot the CURRENT live rig
+/// adopt a successfully applied preset (<c>onApplied</c>). Failed settlements
+/// refresh the existing chain through <c>onApplyFailed</c>. Saves snapshot the CURRENT live rig
 /// (supplied by <c>captureRig</c>) so "apply → tweak knobs → Save as new" works.
 /// The pure category/search filtering lives in <see cref="PresetBrowserFilter"/>;
 /// this VM is the stateful shell and is unit-tested against a fake service.
@@ -60,6 +61,10 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
     ///     dispatcher's post; tests omit both and the apply runs inline.</para>
     /// </summary>
     private readonly ToneApplyQueue _applyQueue;
+    // A user-preset save's disk write runs here, never on the UI thread; its answer posts back.
+    private readonly Action<Action> _saveWorker;
+    private readonly Action<Action> _savePostBack;
+    private long _statusGeneration;
 
     /// <summary>The OS file pickers, for the tone-file exchange below. Null in a
     /// host with no window (preset-only tests, headless) — both commands then
@@ -68,6 +73,7 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
 
     /// <summary>Reads and writes the tone files the pickers above choose.</summary>
     private readonly IExportTargetWriter _exportFiles;
+    private readonly IRigConfigService _config;
 
     /// <summary>Module type id → the catalogue's display name, for a card's chain
     /// line ("Compressor → Overdrive → Legacy Amp"). Identity when the host has no
@@ -80,6 +86,7 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
 
     public PresetBrowserViewModel(
         IDspTonePresetService presets, ILocalizationService localization, Func<DcRigPreset> captureRig, Action onApplied,
+        IRigConfigService config,
         NamCaptureBrowserViewModel? namBrowser = null,
         Action<Action>? searchPost = null,
         Func<int>? selectedPlayer = null,
@@ -95,8 +102,11 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
         // The rig tuner's tuning, handed to the design panel for every request.
         Func<string?>? currentTuning = null,
         // The rig's setlists: a rail entry of their own when supplied.
-        RigSetlistsViewModel? setlists = null)
+        RigSetlistsViewModel? setlists = null,
+        // A failed settlement refreshes the chain without adopting a new preset's state.
+        Action? onApplyFailed = null)
     {
+        _config = config;
         Setlists = setlists;
         _loc = localization;
         _exportFiles = exportFiles ?? new ExportTargetWriter();
@@ -106,9 +116,15 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
         _onApplied = onApplied;
         _files = files;
         _selectedPlayer = selectedPlayer ?? (static () => 0);
+        _saveWorker = applyWorker ?? (static action => action());
+        _savePostBack = applyPostBack ?? (static action => action());
         NamBrowser = namBrowser;
         _searchPass = new Shell.CoalescedFilterPass(RefreshCards, searchPost ?? (action => action()));
-        _applyQueue = new ToneApplyQueue(presets, (_, _) => _onApplied(), applyWorker, applyPostBack, logger);
+        _applyQueue = new ToneApplyQueue(presets, (_, result) =>
+        {
+            if (result.FailedOps > 0) onApplyFailed?.Invoke();
+            else _onApplied();
+        }, applyWorker, applyPostBack, logger);
         ToneDesign = toneDesignPanel?.Invoke(new ToneDesignHostSeams(
             ApplyPreset,
             SnapshotLiveTone,
@@ -166,7 +182,7 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
 
     /// <summary>
     ///     Saves a DESIGNED rig into the player's library. It goes through
-    ///     <see cref="IDspTonePresetService.SaveUser" /> like every other user
+    ///     <see cref="IDspTonePresetService.SaveUser(string, DspToneCategory, string, DcRigPreset, string?)" /> like every other user
     ///     tone — the rig comes from the design rather than from
     ///     <c>captureRig</c>, which is the only difference from
     ///     <see cref="ConfirmSave" /> — and then rebuilds the picker, jumps to My
@@ -179,7 +195,7 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
         var cleanName = string.IsNullOrWhiteSpace(name)
             ? _loc["PresetBrowser_DefaultName"]
             : name.Trim();
-        var saved = _presets.SaveUser(cleanName, category, description?.Trim() ?? string.Empty, rig);
+        var saved = SaveUser(cleanName, category, description?.Trim() ?? string.Empty, rig);
         SelectUserRail();
         RefreshCards();
         SelectedCard = Cards.FirstOrDefault(c => c.Id == saved.Id);
@@ -472,6 +488,8 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
     /// is working): anything that would snapshot the chain must wait for it.</summary>
     internal bool IsApplying => _applyQueue.IsBusy(_selectedPlayer());
 
+    internal long ApplyGeneration { get; private set; }
+
     /// <summary>
     ///     <see cref="ApplyPreset(DspTonePreset)" />, starting on scene
     ///     <paramref name="startScene" /> (a setlist entry's): the scene's values
@@ -482,12 +500,13 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
     public void ApplyPresetOnScene(DspTonePreset preset, int? startScene)
     {
         _activePreset = preset;
+        ApplyGeneration++;
         if (startScene is { } scene)
             preset = preset with { Rig = RigScenes.StartOn(preset.Rig, scene) };
         // The name and the playing card are the click's own feedback and must
         // land in this frame; the CHAIN work goes to the queue, which is what
         // keeps the native crossfade off the UI thread. The board re-sync
-        // (`_onApplied`) is the queue's completion, posted back.
+        // reaches the success/failure callback through the queue's posted settlement.
         OnPropertyChanged(nameof(ActivePresetName));
         SyncActiveCard();
         _applyQueue.ApplyToPlayer(_selectedPlayer(), preset);
@@ -563,7 +582,7 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
             return;
         }
 
-        var saved = _presets.SaveUser(name, category, SaveDescription?.Trim() ?? string.Empty, _captureRig());
+        var saved = SaveUser(name, category, SaveDescription?.Trim() ?? string.Empty, _captureRig());
 
         // The saved tone IS the live rig — make it the ACTIVE tone. Without this the
         // toolbar's active-tone name and the searchable dropdown keep pointing at the
@@ -586,7 +605,7 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
     /// </summary>
     private void ConfirmEdit(DspTonePreset target, string name, DspToneCategory category)
     {
-        var saved = _presets.SaveUser(name, category, SaveDescription?.Trim() ?? string.Empty, target.Rig, target.Id);
+        var saved = SaveUser(name, category, SaveDescription?.Trim() ?? string.Empty, target.Rig, target.Id);
         if (_activePreset?.Id == target.Id) _activePreset = saved;
 
         IsSaveDialogOpen = false;
@@ -615,7 +634,7 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
     {
         if (card == null) return;
         var name = _loc.Format("PresetBrowser_CopyName", card.Name);
-        var saved = _presets.SaveUser(name, card.Category, card.Description, card.Preset.Rig);
+        var saved = SaveUser(name, card.Category, card.Description, card.Preset.Rig);
         SelectUserRail();
         RefreshCards();
         SelectedCard = Cards.FirstOrDefault(c => c.Id == saved.Id);
@@ -636,7 +655,7 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
     public void OverwriteCard(PresetCardViewModel? card)
     {
         if (!CanChangeCard(card)) return;
-        var saved = _presets.SaveUser(card!.Name, card.Category, card.Description, _captureRig(), card.Id);
+        var saved = SaveUser(card!.Name, card.Category, card.Description, _captureRig(), card.Id);
         // The overwritten profile now HOLDS the live rig — it is the active tone (and
         // the stale _activePreset instance would otherwise still carry the old rig).
         _activePreset = saved;
@@ -756,6 +775,7 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
     private async Task ExportPresetAsync(DspTonePreset preset)
     {
         if (_files is null) return;
+        var status = ++_statusGeneration;
         var name = preset.Name is { Length: > 0 } n ? n : _loc["PresetBrowser_DefaultName"];
         var stem = DotCharter.Tone.Infrastructure.Storage.SafeFileName.Make(name);
         if (stem.Length == 0) stem = "tone";
@@ -763,19 +783,25 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
         var path = await _files.SaveFilePickerAsync(
             _loc["Rig_ToneExportTitle"],
             stem + TonePresetJsonFile.FileExtension,
-            ToneFileFilters());
+            ToneFileFilters(),
+            _config.StartFolder(c => c.LastPresetDir));
         if (string.IsNullOrEmpty(path)) return;
+        _config.RememberFileFolder(path, (c, d) => c.LastPresetDir = d);
 
         try
         {
             // Asynchronous write: the whole point of not doing file I/O between a
             // click and the next frame (UiThreadIoDeferralTests' rule).
-            await _exportFiles.WriteAllTextAsync(path, TonePresetJsonFile.Serialize(preset));
-            ImportStatus = _loc.Format("Rig_ToneExported", Path.GetFileName(path));
+            var library = NamBrowser?.LibraryDirectory;
+            await _exportFiles.WriteAllTextAsync(path, TonePresetJsonFile.Serialize(preset, library));
+            var local = DcRigPresetPreparation.FindNonPortableFiles(preset.Rig, library);
+            ShowStatus(status, local.Count == 0
+                ? _loc.Format("Rig_ToneExported", Path.GetFileName(path))
+                : _loc.Format("Rig_ToneExportedLocalFiles", Path.GetFileName(path), string.Join(", ", local)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            ImportStatus = _loc["Rig_ToneExportFailed"];
+            ShowStatus(status, _loc["Rig_ToneExportFailed"]);
         }
     }
 
@@ -799,10 +825,13 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
     private async Task ImportAsync()
     {
         if (_files is null) return;
+        var status = ++_statusGeneration;
 
         var path = await _files.OpenFilePickerAsync(
-            _loc["Rig_ToneImportTitle"], ToneFileFilters());
+            _loc["Rig_ToneImportTitle"], ToneFileFilters(),
+            _config.StartFolder(c => c.LastPresetDir));
         if (string.IsNullOrEmpty(path)) return;
+        _config.RememberFileFolder(path, (c, d) => c.LastPresetDir = d);
 
         string json;
         try
@@ -811,14 +840,14 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            ImportStatus = _loc["Rig_ToneImportUnreadable"];
+            ShowStatus(status, _loc["Rig_ToneImportUnreadable"]);
             return;
         }
 
         var result = TonePresetJsonFile.Parse(json);
         if (result.Preset is not { } imported)
         {
-            ImportStatus = FaultText(result);
+            ShowStatus(status, FaultText(result));
             return;
         }
 
@@ -828,14 +857,43 @@ public sealed partial class PresetBrowserViewModel : ObservableObject
             ? named
             : Path.GetFileNameWithoutExtension(path);
 
-        var saved = _presets.SaveUser(name, imported.Category, imported.Description, imported.Rig);
+        var saved = SaveUser(name, imported.Category, imported.Description, imported.Rig, null, imported: true, statusGeneration: status);
         _activePreset = saved;
         SelectUserRail();
         RefreshCards();
         SelectedCard = Cards.FirstOrDefault(c => c.Id == saved.Id);
         OnPropertyChanged(nameof(ActivePresetName));
         ApplyPreset(saved);
-        ImportStatus = _loc.Format("Rig_ToneImported", saved.Name);
+    }
+
+    /// <summary>Every user-preset save of this browser. The preset is in the library at once;
+    /// its disk write runs on the save worker, and the newest save's answer comes back to the
+    /// tone-file status line: a preset the disk did not take is kept for the session and named
+    /// there, a written one clears an old failure (an import names itself instead).</summary>
+    private DspTonePreset SaveUser(
+        string name, DspToneCategory category, string description, DcRigPreset rig, string? overwriteId = null,
+        bool imported = false, long? statusGeneration = null)
+    {
+        var save = statusGeneration ?? ++_statusGeneration;
+        var saved = _presets.StageUser(name, category, description, rig, overwriteId, out var write);
+        _saveWorker(() =>
+        {
+            var written = write();
+            _savePostBack(() => ShowSaveResult(save, saved, written, imported));
+        });
+        return saved;
+    }
+
+    private void ShowSaveResult(long save, DspTonePreset saved, bool written, bool imported)
+    {
+        ShowStatus(save, !written ? _loc.Format("Rig_ToneSaveFailed", saved.Name)
+            : imported ? _loc.Format("Rig_ToneImported", saved.Name)
+            : string.Empty);
+    }
+
+    private void ShowStatus(long generation, string status)
+    {
+        if (generation == _statusGeneration) ImportStatus = status;
     }
 
     /// <summary>The localized reason an import was refused. The FAULT travels as an

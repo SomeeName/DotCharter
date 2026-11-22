@@ -6,14 +6,17 @@ namespace DotCharter.Tone.Audio;
 
 public sealed partial class JuceAudioPlaybackService
 {
-    public bool IsInstrumentVstLoaded => _instrumentPlugin != null || _sandboxInstrumentLoaded;
+    private long _guitarChainGeneration;
+    private List<Guid> _guitarChainOrder = [];
+
+    public bool IsInstrumentVstLoaded => _instrumentPlugin != null || SandboxInstrumentLoaded;
     public bool IsInstrumentVstLoading
         => _instrumentLoadInFlight || _instrumentReloadPending || _pendingInstrumentLoadPath != null;
     public bool IsGuitarVstSlotLoaded(Guid id)
     {
         if (_outOfProcessVst)
         {
-            lock (_sandboxGate) return _sandboxSlots.ContainsKey(id);
+            lock (_sandboxGate) return SandboxSlotOwner(id) != null;
         }
         lock (_gate)
             return _guitarChain.ContainsKey(id);
@@ -66,7 +69,7 @@ public sealed partial class JuceAudioPlaybackService
             }
             catch (Exception ex)
             {
-                _logger?.Warning(AppLogCategory.Audio, $"VST3 scan skipped '{root}': {ex.Message}");
+                _logger?.Warning(AppLogCategory.Audio, $"VST3 scan skipped '{root}'", ex);
             }
         }
         result.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
@@ -82,6 +85,7 @@ public sealed partial class JuceAudioPlaybackService
             Id = e.Id,
             PluginPath = e.PluginPath,
             Bypass = e.Bypass,
+            State = e.State?.ToArray(),
             // ABI v28: a slot's SEAT travels with it. Dropping it here would
             // silently re-seat every per-player slot onto player 1 the moment
             // anything re-applied the chain — the same shape of bug as a model
@@ -102,17 +106,26 @@ public sealed partial class JuceAudioPlaybackService
         // the restore worker write _pendingGuitarChain — which nothing reads
         // again. The user's saved FX chain silently never loads, which is the
         // exact bug this queue was added to fix.
+        long generation;
         lock (_gate)
         {
+            generation = ++_guitarChainGeneration;
+            // Keep the newest request even while an engine exists: a rebuild
+            // may already own _vstGate and be about to tear that engine down.
+            _pendingGuitarChain = snapshot;
             if (_engine == null)
             {
-                _pendingGuitarChain = snapshot;
                 _logger?.Info(AppLogCategory.Audio,
                     $"VST3 chain queued ({snapshot.Count} slot(s)): audio engine not yet initialised.");
                 return;
             }
         }
 
+        QueueGuitarVstChain(snapshot, generation);
+    }
+
+    private void QueueGuitarVstChain(IReadOnlyList<VstChainEntry> snapshot, long generation)
+    {
         const string taskId = "guitar-vst-chain-apply";
         _statusBar?.BeginTask(taskId,
             snapshot.Count == 0
@@ -121,20 +134,23 @@ public sealed partial class JuceAudioPlaybackService
             indeterminate: true);
         _ = Task.Run(async () =>
         {
-            await _vstGate.WaitAsync().ConfigureAwait(false);
             try
             {
-                // Out-of-process mode routes the whole chain into the sandbox
-                // child; in-proc otherwise. Both diff against their live state.
-                if (_outOfProcessVst) await ApplySandboxGuitarChainCoreAsync(snapshot).ConfigureAwait(false);
-                else ApplyGuitarVstChainCore(snapshot);
+                await VstChainWork.RunAsync(_vstGate, () =>
+                {
+                    lock (_gate) return generation == _guitarChainGeneration;
+                }, async () =>
+                {
+                    if (_outOfProcessVst) await ApplySandboxGuitarChainCoreAsync(snapshot).ConfigureAwait(false);
+                    else ApplyGuitarVstChainCore(snapshot);
+                    lock (_gate)
+                    {
+                        if (_engine is not null && generation == _guitarChainGeneration) _pendingGuitarChain = null;
+                    }
+                }).ConfigureAwait(false);
             }
-            catch (Exception ex) { _logger?.Error(AppLogCategory.Audio, $"VST3 chain apply failed: {ex.Message}"); }
-            finally
-            {
-                _vstGate.Release();
-                _statusBar?.CompleteTask(taskId);
-            }
+            catch (Exception ex) { _logger?.Error(AppLogCategory.Audio, "VST3 chain apply failed", ex); }
+            finally { _statusBar?.CompleteTask(taskId); }
         });
     }
 
@@ -151,10 +167,9 @@ public sealed partial class JuceAudioPlaybackService
         // need a native load. NOTHING native happens under the lock.
         var toLoad = new List<VstChainEntry>();
         var toUnload = new List<(Guid Id, JuceAudioPlugin Plugin)>();
-        var toReseat = new List<(JuceAudioPlugin Plugin, int Player, string Path)>();
-        var toBypass = new List<(JuceAudioPlugin Plugin, bool Bypass, string Path, int Player)>();
         lock (_gate)
         {
+            _guitarChainOrder = entries.Select(e => e.Id).ToList();
             foreach (var kv in _guitarChain.ToList())
             {
                 var desired = entries.FirstOrDefault(e => e.Id == kv.Key);
@@ -172,45 +187,12 @@ public sealed partial class JuceAudioPlaybackService
 
             foreach (var entry in entries)
             {
-                if (_guitarChain.TryGetValue(entry.Id, out var existing))
+                if (_guitarChain.ContainsKey(entry.Id))
                 {
-                    // A re-SEATED slot (ABI v28) is collected for an unlocked
-                    // re-attach: dca_plugin_attach_to_input_for_player MOVES an
-                    // already-attached plugin, and its native detach half waits
-                    // out an in-flight audio block — which must never happen
-                    // under _gate.
-                    var wasPlayer = _guitarSlotPlayer.GetValueOrDefault(entry.Id);
-                    // The app's OWN record of this slot's bypass, never
-                    // `existing.Bypass`: the wrapper's property answers "not in
-                    // any seat's input chain", so a slot whose attach threw — or
-                    // one still parked from a load — reads bypassed when the app
-                    // never asked for that, and both branches below would then
-                    // act on a state nobody requested.
-                    var wasBypass = _guitarSlotBypass.GetValueOrDefault(entry.Id);
-                    if (wasPlayer != entry.Player)
-                    {
-                        _guitarSlotPlayer[entry.Id] = entry.Player;
-                        // Only a slot that is ACTUALLY ATTACHED can be re-seated
-                        // here: AttachToInput on a bypassed plugin would put it
-                        // back in the signal path while its wrapper still says
-                        // bypassed. A bypassed slot's new seat is remembered in
-                        // _guitarSlotPlayer above and asserted at the un-bypass
-                        // below, which is the only moment it can be.
-                        if (!entry.Bypass && !wasBypass) toReseat.Add((existing, entry.Player, entry.PluginPath));
-                    }
-
-                    // A bypass TOGGLE is native too — the setter P/Invokes
-                    // PluginDetachFromInput or PluginAttachToInputForPlayer —
-                    // so it is collected for the same unlocked phase as the
-                    // re-seats, and for the same reason. (At v28 the detach
-                    // walks every seat in turn.) The SEAT travels with it: see
-                    // the apply loop for why it has to.
-                    if (wasBypass != entry.Bypass)
-                    {
-                        _guitarSlotBypass[entry.Id] = entry.Bypass;
-                        toBypass.Add((existing, entry.Bypass, entry.PluginPath, entry.Player));
-                    }
-
+                    // Record intent only. The unlocked final ordering pass
+                    // applies seat, bypass and order together to the live objects.
+                    _guitarSlotPlayer[entry.Id] = entry.Player;
+                    _guitarSlotBypass[entry.Id] = entry.Bypass;
                     continue;
                 }
 
@@ -241,53 +223,6 @@ public sealed partial class JuceAudioPlaybackService
             try { GuitarVstSlotLoadChanged?.Invoke(this, (id, false)); } catch { /* ignored */ }
         }
 
-        // Phase 1c (unlocked): RE-SEAT slots that changed player (ABI v28), and
-        // apply BYPASS toggles. Native attach-to-a-different-seat detaches
-        // first, and that detach is a wait-one-block barrier — same reason the
-        // unloads above are unlocked. `JuceAudioPlugin.Bypass`'s setter is the
-        // same barrier through the same two P/Invokes, so clicking Bypass used
-        // to stall whichever UI-thread member was waiting on _gate (Play, Pause,
-        // Stop and SeekTo all reach it through SnapshotStems()) for tens of ms —
-        // against a 150 ms budget, in the one function that otherwise enforces
-        // this rule carefully.
-        foreach (var (plugin, player, path) in toReseat)
-        {
-            try
-            {
-                plugin.AttachToInput(player);
-                _logger?.Info(AppLogCategory.Audio,
-                    $"VST3 chain: moved '{Path.GetFileName(path)}' to player {player + 1}'s input chain.");
-            }
-            catch (Exception ex)
-            {
-                _logger?.Error(AppLogCategory.Audio,
-                    $"VST3 chain: re-seating '{path}' onto player {player + 1} failed: {ex.Message}");
-            }
-        }
-
-        foreach (var (plugin, bypass, path, player) in toBypass)
-        {
-            try
-            {
-                // UN-bypassing must say the seat FIRST. `JuceAudioPlugin` learns
-                // its seat only from AttachToInput, and a slot that was LOADED
-                // while bypassed (the load path sets Bypass and never attaches)
-                // or RE-SEATED while bypassed (skipped above) never called it —
-                // so the Bypass setter's own re-attach would land on seat 0.
-                // Player 2's amp sim would join player 1's input chain: player 1
-                // hears a doubled chain, player 2 hears nothing, and the next
-                // diff never corrects it because _guitarSlotPlayer already says
-                // the right seat.
-                if (!bypass) plugin.AttachToInput(player);
-                plugin.Bypass = bypass;
-            }
-            catch (Exception ex)
-            {
-                _logger?.Error(AppLogCategory.Audio,
-                    $"VST3 chain: {(bypass ? "bypassing" : "un-bypassing")} '{path}' failed: {ex.Message}");
-            }
-        }
-
         // Phase 2 (unlocked): native loads. Big amp sims (Helix, BIAS) spend
         // multiple seconds inside LoadPlugin; holding _gate across that used
         // to block SwapMasterSourceLocked — at startup the song "decode"
@@ -300,19 +235,22 @@ public sealed partial class JuceAudioPlaybackService
             try { plugin = engine.LoadPlugin(entry.PluginPath); }
             catch (Exception ex)
             {
-                _logger?.Error(AppLogCategory.Audio, $"VST3 chain: failed to load '{entry.PluginPath}': {ex.Message}");
+                _logger?.Error(AppLogCategory.Audio, $"VST3 chain: failed to load '{entry.PluginPath}'", ex);
                 continue;
             }
             try
             {
                 // ABI v28: the slot declares which seat's input chain it
                 // processes. Player 0 is the single-player chain, unchanged.
-                if (!entry.Bypass) plugin.AttachToInput(entry.Player);
-                else plugin.Bypass = true; // syncs wrapper state; native detach is a no-op when not attached
+                VstRebuildState.Restore(plugin, entry.State, () =>
+                {
+                    if (!entry.Bypass) plugin.AttachToInput(entry.Player);
+                    else plugin.Bypass = true;
+                }); // syncs wrapper state; native detach is a no-op when not attached
             }
             catch (Exception ex)
             {
-                _logger?.Error(AppLogCategory.Audio, $"VST3 chain: attach failed for '{entry.PluginPath}': {ex.Message}");
+                _logger?.Error(AppLogCategory.Audio, $"VST3 chain: attach failed for '{entry.PluginPath}'", ex);
                 try { plugin.Dispose(); } catch { /* ignored */ }
                 continue;
             }
@@ -353,23 +291,48 @@ public sealed partial class JuceAudioPlaybackService
                     }
                     catch (Exception ex)
                     {
-                        _logger?.Warning(AppLogCategory.Audio, $"Deferred VST3 chain editor open failed: {ex.Message}");
+                        _logger?.Warning(AppLogCategory.Audio, "Deferred VST3 chain editor open failed", ex);
                     }
                 });
             }
         }
+
+        ReapplyGuitarInputOrder();
+    }
+
+    // Caller owns _vstGate. Detaching and attaching reuse the plugin objects,
+    // including their opaque state and editor; no reload is needed to reorder.
+    private void ReapplyGuitarInputOrder()
+    {
+        List<(JuceAudioPlugin Plugin, int Player, bool BypassIntent)> slots;
+        lock (_gate)
+        {
+            slots = _guitarChainOrder.Where(_guitarChain.ContainsKey)
+                .Select(id => (_guitarChain[id], _guitarSlotPlayer.GetValueOrDefault(id),
+                    _guitarSlotBypass.GetValueOrDefault(id))).ToList();
+        }
+        VstInputOrder.Apply(slots, plugin =>
+        {
+            try { plugin.DetachFromInput(); }
+            catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, "VST3 chain detach for reorder failed", ex); }
+        }, (plugin, player) =>
+        {
+            try { plugin.AttachToInput(player); }
+            catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, "VST3 chain attach for reorder failed", ex); }
+        });
     }
 
     public void ToggleGuitarVstSlotEditor(Guid id, bool open)
     {
         if (_outOfProcessVst)
         {
-            Vst.Sandbox.VstSandboxHost? host;
+            Vst.Sandbox.IVstSandboxHost? host;
             bool loaded;
             lock (_sandboxGate)
             {
-                host = _sandbox;
-                loaded = _sandboxSlots.ContainsKey(id);
+                var seat = SandboxSlotOwner(id);
+                host = seat?.Host;
+                loaded = seat != null;
             }
             if (!loaded || host is not { IsRunning: true })
             {
@@ -382,8 +345,7 @@ public sealed partial class JuceAudioPlaybackService
                     $"VST3 chain editor toggle deferred (sandbox): slot {id} not loaded yet (will auto-{(open ? "open" : "stay-closed")} on completion).");
                 return;
             }
-            var hostSnapshot = host;
-            _ = Task.Run(() => SendSandboxEditorToggleAsync(hostSnapshot, id.ToString(), open));
+            _ = Task.Run(() => SendSandboxOwnedEditorToggleAsync(id.ToString(), open));
             return;
         }
 
@@ -431,82 +393,47 @@ public sealed partial class JuceAudioPlaybackService
             }
             catch (Exception ex)
             {
-                _logger?.Warning(AppLogCategory.Audio, $"VST3 editor toggle failed: {ex.Message}");
+                _logger?.Warning(AppLogCategory.Audio, "VST3 editor toggle failed", ex);
             }
         });
     }
 
     public void SetGuitarVstSlotBypass(Guid id, bool bypass)
     {
-        if (_engine == null) return;
         if (_outOfProcessVst)
         {
-            Vst.Sandbox.VstSandboxHost? host;
             lock (_sandboxGate)
             {
-                if (!_sandboxSlots.TryGetValue(id, out var slot)) return;
-                _sandboxSlots[id] = (slot.Path, bypass);
-                var desired = _sandboxDesired.Chain.FirstOrDefault(e => e.Id == id);
+                var seat = SandboxSlotOwner(id);
+                if (seat == null) return;
+                var slot = seat.Slots[id];
+                seat.Slots[id] = (slot.Path, bypass, slot.Player);
+                var desired = seat.Desired.Chain.FirstOrDefault(e => e.Id == id);
                 desired?.Bypass = bypass;
-                host = _sandbox;
             }
-            if (host is { IsRunning: true })
-            {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await host.SendAsync(new Vst.Sandbox.VstSandboxRequest
-                        { Op = "bypass", Slot = id.ToString(), Value = bypass },
-                            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    { _logger?.Warning(AppLogCategory.Audio, $"Sandbox bypass({id}) failed: {ex.Message}"); }
-                });
-            }
+            _ = Task.Run(() => SendSandboxOwnedBypassAsync(id));
             return;
         }
-        JuceAudioPlugin? plugin;
-        int player;
         lock (_gate)
         {
-            if (!_guitarChain.TryGetValue(id, out plugin)) return;
-            // The seat this slot belongs to. The plugin wrapper cannot be asked:
-            // it only learns its seat from AttachToInput, so a slot loaded or
-            // re-seated while bypassed still believes it is on seat 0.
-            player = _guitarSlotPlayer.GetValueOrDefault(id);
-            // The app's intent, recorded before the native call for the same
-            // reason the seat is: this is what every snapshot and every later
-            // diff reads, and `plugin.Bypass` is not it.
+            if (!_guitarChain.ContainsKey(id)) return;
             _guitarSlotBypass[id] = bypass;
         }
 
-        // Unlocked, and this is the path the Bypass BUTTON takes.
-        // JuceAudioPlugin.Bypass's setter P/Invokes PluginDetachFromInput /
-        // PluginAttachToInputForPlayer — a wait-one-block barrier on the audio
-        // callback, walking every seat at ABI v28 — and _gate is what Play,
-        // Pause, Stop and SeekTo all wait on through SnapshotStems(). Holding it
-        // across the toggle stalled the UI thread for as long as the barrier
-        // took, in a service whose own rule is that _gate is never held across a
-        // P/Invoke. The plugin is resolved under the lock; the handle is
-        // reference-counted (NativeHandleOwner), so a concurrent unload throws
-        // here rather than reaching a dead handle.
-        try
+        // Serialize against chain updates and engine teardown. Read current
+        // intent on the worker so older bypass workers cannot undo a newer toggle.
+        _ = Task.Run(async () =>
         {
-            // Say the seat before clearing the flag — same reason as the chain
-            // diff's bypass phase: the Bypass setter re-attaches to the seat the
-            // WRAPPER remembers, which is 0 for anything that was never attached.
-            if (!bypass) plugin.AttachToInput(player);
-            plugin.Bypass = bypass;
-        }
-        catch (Exception ex)
-        {
-            _logger?.Warning(AppLogCategory.Audio,
-                $"VST3 chain: {(bypass ? "bypassing" : "un-bypassing")} slot {id} failed: {ex.Message}");
-        }
+            if (!await _vstGate.TryEnterAsync().ConfigureAwait(false)) return;
+            try { ReapplyGuitarInputOrder(); }
+            finally { _vstGate.Release(); }
+        });
     }
 
     public void LoadInstrumentVst(string pluginPath, bool openEditorAfterLoad = false)
+        => LoadInstrumentVstCore(pluginPath, openEditorAfterLoad, null);
+
+    private void LoadInstrumentVstCore(string pluginPath, bool openEditorAfterLoad, byte[]? state)
     {
         // Mark that the MIDI route is about to be claimed by an instrument
         // VSTi so that any concurrent ApplyMidiDevice call does not open a
@@ -553,9 +480,13 @@ public sealed partial class JuceAudioPlaybackService
             indeterminate: true);
         _ = Task.Run(async () =>
         {
-            // WaitAsync, not Wait(): a queued load must not park a pool thread
-            // behind another load that can run for minutes.
-            await _vstGate.WaitAsync().ConfigureAwait(false);
+            if (!await _vstGate.TryEnterAsync().ConfigureAwait(false))
+            {
+                _instrumentReloadPending = false;
+                _instrumentLoadInFlight = false;
+                _statusBar?.CompleteTask(statusTaskId);
+                return;
+            }
             try
             {
                 var engine = _engine;
@@ -589,13 +520,16 @@ public sealed partial class JuceAudioPlaybackService
                 try { plugin = engine.LoadPlugin(pluginPath); }
                 catch (Exception ex)
                 {
-                    _logger?.Warning(AppLogCategory.Audio, $"Failed to load instrument VST3 '{pluginPath}': {ex.Message}");
+                    _logger?.Warning(AppLogCategory.Audio, $"Failed to load instrument VST3 '{pluginPath}'", ex);
                     return;
                 }
-                try { plugin.AttachToInstrument(); }
+                try
+                {
+                    VstRebuildState.Restore(plugin, state, plugin.AttachToInstrument);
+                }
                 catch (Exception ex)
                 {
-                    _logger?.Warning(AppLogCategory.Audio, $"Failed to attach instrument VST3 '{pluginPath}' to bus: {ex.Message}");
+                    _logger?.Warning(AppLogCategory.Audio, $"Failed to attach instrument VST3 '{pluginPath}' to bus", ex);
                     try { plugin.Dispose(); } catch { /* ignored */ }
                     return;
                 }
@@ -681,9 +615,9 @@ public sealed partial class JuceAudioPlaybackService
     {
         if (_outOfProcessVst)
         {
-            Vst.Sandbox.VstSandboxHost? host;
-            lock (_sandboxGate) host = _sandbox;
-            if (!_sandboxInstrumentLoaded || host is not { IsRunning: true })
+            Vst.Sandbox.IVstSandboxHost? host;
+            lock (_sandboxGate) host = _sandboxSeats[0].Host;
+            if (!SandboxInstrumentLoaded || host is not { IsRunning: true })
             {
                 _instrumentPendingEditorOpen = open && (_instrumentReloadPending || _instrumentLoadInFlight);
                 _logger?.Warning(AppLogCategory.Audio,
@@ -692,8 +626,7 @@ public sealed partial class JuceAudioPlaybackService
                         : "Instrument VST editor toggle ignored (sandbox): no instrument VST loaded.");
                 return;
             }
-            var hostSnapshot = host;
-            _ = Task.Run(() => SendSandboxEditorToggleAsync(hostSnapshot, Vst.Sandbox.VstSandboxProtocol.InstrumentSlotId, open));
+            _ = Task.Run(() => SendSandboxOwnedEditorToggleAsync(Vst.Sandbox.VstSandboxProtocol.InstrumentSlotId, open));
             return;
         }
 
@@ -742,7 +675,7 @@ public sealed partial class JuceAudioPlaybackService
             _instrumentPath = null;
             // The sandbox instrument owns _instrumentIsAmpleGuitar while it
             // is loaded — don't clobber it from the in-proc no-op path.
-            if (!_sandboxInstrumentLoaded) _instrumentIsAmpleGuitar = false;
+            if (!SandboxInstrumentLoaded) _instrumentIsAmpleGuitar = false;
             return;
         }
         _instrumentPlugin = null;

@@ -5,6 +5,8 @@ public sealed partial class JuceDspChainService : IDspMeterSource
 {
     private int _meteringOwners;
     private bool _meteringActive;
+    // Nodes whose current failure episode is already logged; guarded by _gate.
+    private readonly HashSet<int> _meterFailed = [];
 
     public IDisposable AcquireMetering()
     {
@@ -53,12 +55,15 @@ public sealed partial class JuceDspChainService : IDspMeterSource
                     return false;
                 }
 
+                if (_meterFailed.Remove(nodeId))
+                    _logger?.Info(AppLogCategory.Audio, $"DSP node meter read recovered (node {nodeId})");
                 reading = result;
                 return true;
             }
             catch (Exception ex)
             {
-                _logger?.Warning(AppLogCategory.Audio, $"DSP node meter read failed: {ex.Message}");
+                if (_meterFailed.Add(nodeId))
+                    _logger?.Warning(AppLogCategory.Audio, "DSP node meter read failed", ex);
                 return false;
             }
         }

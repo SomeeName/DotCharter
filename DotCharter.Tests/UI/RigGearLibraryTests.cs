@@ -274,4 +274,17 @@ public sealed class RigGearLibraryTests
 
         Assert.Equal(["overdrive", "amp"], dsp.GetNodes().Select(n => n.ModuleTypeId).ToArray());
     }
+
+    /// <summary>#595: the panel's module count picks the singular for one unit.</summary>
+    [Fact]
+    public void TheModuleCount_ReadsInTheSingularForOneUnit()
+    {
+        var one = new FakeDspChainService([Catalog()[0]]);
+        var single = new AmpFxRigViewModel(
+            TestRigBuilders.Pedalboard(one, new FakeDspTonePresetService(), FakeLocalization.English(), new FakeConfigurationService()));
+        var many = new AmpFxRigViewModel(NewRig(out _, out _));
+
+        Assert.Equal("1 module", single.ModuleCountLabel);
+        Assert.Equal("6 modules", many.ModuleCountLabel);
+    }
 }

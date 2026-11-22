@@ -12,18 +12,12 @@ public partial class MainWindowViewModel
     public bool IsBeatMapLocked => ProjectState.ActiveProject?.IsBeatMapLocked == true;
 
     /// <summary>
-    /// The chart's context menu ▸ Apply DLC Builder fixes: DLC Builder's fixes, then dynamic
+    /// Tools and the chart's context menu ▸ Apply DLC Builder fixes: DLC Builder's fixes, then dynamic
     ///     difficulty for a single-level arrangement, on the active arrangement as ONE undo step —
     ///     what every Rocksmith export already does to its copy, put into the project.
     /// </summary>
     [RelayCommand]
     private void ApplyDlcBuilderFixes() => _chartMaintenance.ApplyDlcBuilderFixes();
-
-    [RelayCommand]
-    private void ImproveChart() => _chartMaintenance.ImproveChart();
-
-    [RelayCommand]
-    private void AutoFixChart() => _chartMaintenance.AutoFixChart();
 
     [RelayCommand]
     private void RemoveDoubleStopChordNames() => _chartMaintenance.RemoveDoubleStopChordNames();
@@ -72,25 +66,19 @@ public partial class MainWindowViewModel
     private void Refret() => _chartMaintenance.Refret();
 
     [RelayCommand]
-    private void GenerateFhp() => _chartMaintenance.GenerateFhp();
-
-    [RelayCommand]
-    private void GenerateFhpForSelection() => _chartMaintenance.GenerateFhpForSelection();
-
-    [RelayCommand]
     private void GenerateHandShape() => _globalEditing.GenerateHandShapeFromSelection();
 
-    /// <summary>Tools ▸ Hand shapes ▸ Generate arpeggio from selection: the
+    /// <summary>Tools ▸ Generate ▸ Arpeggio from selection: the
     /// same bars as Generate hand shape, each on an arpeggio template.</summary>
     [RelayCommand]
     private void GenerateArpeggio() => _globalEditing.GenerateArpeggioFromSelection();
 
-    /// <summary>Tools ▸ Hand shapes ▸ Generate hand shapes (arrangement): a bar
+    /// <summary>Tools ▸ Generate ▸ Hand shapes (arrangement): a bar
     /// over every chord no bar covers, on every level, one undo step.</summary>
     [RelayCommand]
     private void GenerateHandShapesForArrangement() => _chartMaintenance.GenerateHandShapesForArrangement();
 
-    /// <summary>Tools ▸ Hand shapes ▸ Accept suggested hand shapes in selection: every
+    /// <summary>Tools ▸ Generate ▸ Accept suggested hand shapes in selection: every
     /// dashed bar holding a selected sound becomes a plain bar, one undo step.</summary>
     [RelayCommand]
     private void AcceptSuggestedHandShapes() => _globalEditing.AcceptSuggestedHandShapesInSelection(arpeggio: false);
@@ -103,6 +91,16 @@ public partial class MainWindowViewModel
     /// sound — the charting fix for a bar drawn across a fret change.</summary>
     [RelayCommand]
     private void SplitHandShape() => _globalEditing.SplitHandShapeAtSelection();
+
+    [RelayCommand]
+    private void GripsFromHeldNotes()
+    {
+        _globalEditing.GripsFromHeldNotes();
+        ChartEditor.RequestRedraw();
+    }
+
+    [RelayCommand]
+    private void HandShapesFromLetRing() => _globalEditing.HandShapesFromLetRing();
 
     [RelayCommand]
     private void ApplyHandShapeTemplateToChords() => _chartMaintenance.ApplyHandShapeTemplateToSelectedChords();
@@ -169,7 +167,9 @@ public partial class MainWindowViewModel
     private void SplitChordsIntoNotes() => _chartMaintenance.SplitSelectedChordsIntoNotes();
 
     [RelayCommand]
-    private void SelectLikePattern() => _globalEditing.SelectLikePattern();
+    private void SelectLikePattern() => SelectionEdits.SelectSimilar();
+
+    public SelectionEditsViewModel SelectionEdits => ShellDialogs.SelectionEdits;
 
     [RelayCommand]
     private void Copy() => _globalEditing.CopySelected(ChartEditor.FocusArea);
@@ -216,6 +216,21 @@ public partial class MainWindowViewModel
 
     [RelayCommand]
     private void SnapAll() => _globalEditing.SnapAllNotes(Transport.GridDivisor);
+
+    /// <summary>Why a selection-dependent editing verb is unavailable: menu tooltips, palette subtitles, blocked-key message.</summary>
+    public EditingAvailability EditingAvailability => _editingAvailability ??=
+        new EditingAvailability(ChartEditor.Selection, ProjectState, _localization);
+
+    private EditingAvailability? _editingAvailability;
+    private FhpGenerationViewModel? _fhpGeneration;
+
+    /// <summary>The FHP generators (menu and palette).</summary>
+    public FhpGenerationViewModel FhpGeneration => _fhpGeneration ??= new(_chartMaintenance, EditingAvailability);
+    private TimeNudgeViewModel? _timeNudge;
+
+    /// <summary>Nudging the selection earlier or later in time: the menu, the palette and the keys.</summary>
+    public TimeNudgeViewModel TimeNudge => _timeNudge ??= new TimeNudgeViewModel(
+        _highwayEditing, ChartEditor.Selection, Transport, ProjectState, _localization);
 
     [RelayCommand]
     private void ZoomIn() =>

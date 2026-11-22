@@ -72,6 +72,26 @@ public sealed class RsXmlSongWriterExportFidelityTests
     private static List<XElement> Notes(XElement song)
         => song.Element("levels")!.Element("level")!.Element("notes")!.Elements("note").ToList();
 
+    [Fact]
+    public void AHandShapeExportsItsHeldFretAndFingerInTheReferencedTemplate()
+    {
+        var project = BuildProject();
+        var level = AddLevel(project);
+        Arr(project).ChordTemplates.Add(new ChordTemplate
+        {
+            Id = 7, Name = "Grip", Frets = { [0] = 3, [2] = 5 }, Fingers = { [0] = 1, [2] = 4 }
+        });
+        level.Notes.Add(new GuitarNote { Position = new(1), StringIndex = 0, Fret = 3 });
+        level.HandShapes.Add(new HandShape { Position = new(1), EndPosition = new(2), TemplateId = 7, GhostMask = 1 << 2 });
+
+        var song = Write(project);
+
+        var shape = Assert.Single(song.Descendants("handShape"));
+        var template = song.Descendants("chordTemplate").ElementAt((int)shape.Attribute("chordId")!);
+        Assert.Equal("5", (string?)template.Attribute("fret2"));
+        Assert.Equal("4", (string?)template.Attribute("finger2"));
+    }
+
     // ── link landings ────────────────────────────────────────────────────
 
     /// <summary>

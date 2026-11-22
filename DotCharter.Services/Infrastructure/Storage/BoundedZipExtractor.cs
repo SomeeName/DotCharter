@@ -81,16 +81,36 @@ public static class BoundedZipExtractor
 
     private const int CopyBufferBytes = 81920;
 
+    /// <summary>Reads a small text member after bounding actual inflated bytes.
+    /// Null means the byte budget was exceeded; no partial text is returned.
+    /// The entry's declared length never drives an allocation.</summary>
+    internal static string? ReadEntryText(ZipArchiveEntry entry, int maxBytes)
+    {
+        using var source = entry.Open();
+        using var content = new MemoryStream();
+        var buffer = new byte[8192];
+        while (true)
+        {
+            var remaining = maxBytes - content.Length;
+            var read = source.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining + 1));
+            if (read == 0) break;
+            if (read > remaining) return null;
+            content.Write(buffer, 0, read);
+        }
+
+        content.Position = 0;
+        using var reader = new StreamReader(content);
+        return reader.ReadToEnd();
+    }
+
     /// <summary>
     ///     Reads how many members the archive DECLARES, straight out of the
     ///     end-of-central-directory record, without materialising any of them.
     ///     Null when there is no readable record (not a zip).
     ///     <para>
     ///         A zip64 archive stores <c>0xFFFF</c> here and its real count in a
-    ///         separate record; that sentinel is returned verbatim, so it fails
-    ///         every sane <c>maxEntries</c> and the archive is refused. That is
-    ///         the wanted answer — nothing this app receives over the LAN has
-    ///         65,535 members.
+    ///         separate record. This diagnostic returns the sentinel verbatim;
+    ///         the budget guard reads ZIP64 metadata and counts actual records.
     ///     </para>
     /// </summary>
     public static int? TryReadDeclaredEntryCount(Stream stream)
@@ -125,9 +145,7 @@ public static class BoundedZipExtractor
         try
         {
             using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            var declared = TryReadDeclaredEntryCount(stream);
-            if (declared == null) return ZipExtractionRefusal.Unreadable;
-            return declared > maxEntries ? ZipExtractionRefusal.TooManyEntries : ZipExtractionRefusal.None;
+            return ZipDirectoryBudget.Check(stream, maxEntries);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

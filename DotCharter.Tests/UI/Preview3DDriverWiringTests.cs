@@ -14,6 +14,46 @@ public sealed class Preview3DDriverWiringTests
     private const string Renderer2D = "DotCharter.UI/Controls/ChartRenderer.cs";
     private const string ViewMath = "DotCharter.UI/Input/TimelineViewMath.cs";
 
+    [Fact]
+    public void Project_switch_defers_atlas_mutation_to_the_snapshot_owner()
+    {
+        var body = DriverCode();
+        var handlerStart = body.IndexOf("private void OnProjectStateChanged", StringComparison.Ordinal);
+        var handlerEnd = body.IndexOf("private void SyncEditorSubscription", handlerStart, StringComparison.Ordinal);
+        var handler = body[handlerStart..handlerEnd];
+        Assert.DoesNotContain("_engine?.ResetTextRegistrations()", handler);
+        var publish = handler.IndexOf("Interlocked.Exchange(ref _resetTextRegistrations, 1)", StringComparison.Ordinal);
+        Assert.True(publish >= 0);
+        Assert.True(handler.IndexOf("RequestRender();", StringComparison.Ordinal) > publish);
+
+        var snapshotStart = body.IndexOf("private void RunSnapshotUpdate()", StringComparison.Ordinal);
+        var preRegister = body.IndexOf("_engine?.PreRegisterChartText(", snapshotStart, StringComparison.Ordinal);
+        var snapshot = body[snapshotStart..preRegister];
+        Assert.Contains("Interlocked.Exchange(ref _resetTextRegistrations, 0)", snapshot);
+        Assert.Contains("_engine?.ResetTextRegistrations();", snapshot);
+        Assert.Contains("_textRegistration.Reset();", snapshot);
+        var capture = body.IndexOf("RunSnapshotUpdate();", StringComparison.Ordinal);
+        var render = body.IndexOf("_engine.RenderFrame(", StringComparison.Ordinal);
+        Assert.True(capture >= 0 && render > capture);
+    }
+
+    [Fact]
+    public void Both_snapshot_builders_version_the_beat_content_with_history()
+    {
+        Assert.Contains("_updateContext.BeatsVersion = localEditor.HistoryRevision;", DriverCode());
+        Assert.Contains("_snapshotCtx.BeatsVersion = editor.HistoryRevision;", Code(Renderer2D));
+    }
+
+    [Fact]
+    public void Annotation_glyphs_register_before_begin_frame_outside_the_text_signature_gate()
+    {
+        var body = Code(Renderer2D);
+        var annotations = body.IndexOf("ChartTextPreRegistration.RegisterAnnotations(atlas, Editor.Annotations);", StringComparison.Ordinal);
+        var signature = body.IndexOf("var sig = ComputeRegisterSignature();", StringComparison.Ordinal);
+        var begin = body.IndexOf("backend.BeginFrame(", StringComparison.Ordinal);
+        Assert.True(annotations >= 0 && annotations < signature && signature < begin);
+    }
+
     /// <summary>
     ///     The 3D driver never versioned its selection, so
     ///     <c>FrameSnapshot.Update</c> saw the -1 default and re-hashed all six

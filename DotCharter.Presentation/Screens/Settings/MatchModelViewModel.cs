@@ -284,9 +284,10 @@ public sealed partial class MatchModelViewModel : ObservableObject, IMatchModelP
     private async Task<(bool Cancelled, string? Failure)> RunAsync(
         Func<IProgress<string>, Task<RigEstimatorModelInstallResult>> install, Action<string> onStep)
     {
+        var gate = new StepGate(_ui);
         try
         {
-            var result = await install(new SynchronousProgress(onStep)).ConfigureAwait(true);
+            var result = await install(new SynchronousProgress(gate.Wrap(onStep))).ConfigureAwait(true);
             return result.Installed
                 ? (false, null)
                 : (false, _localization.Format("Settings_Ai_MatchModel_Failed", result.Reason ?? ""));
@@ -299,6 +300,10 @@ public sealed partial class MatchModelViewModel : ObservableObject, IMatchModelP
         {
             _logger?.Error(AppLogCategory.Audio, "Match-model download failed.", ex);
             return (false, _localization.Format("Settings_Ai_MatchModel_Failed", ex.Message));
+        }
+        finally
+        {
+            gate.Close();
         }
     }
 
@@ -355,15 +360,9 @@ public sealed partial class MatchModelViewModel : ObservableObject, IMatchModelP
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Could not open '{directory}': {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, $"Could not open '{directory}'", ex);
             ModelDetail = ex.Message;
             ModelIsError = true;
         }
-    }
-
-    /// <summary>Reports on the calling thread, so the caller's own write always lands last.</summary>
-    private sealed class SynchronousProgress(Action<string> handler) : IProgress<string>
-    {
-        public void Report(string value) => handler(value);
     }
 }

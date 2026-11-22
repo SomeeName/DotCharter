@@ -60,7 +60,7 @@ screenshot goldens and several lint tests for free. Background:
 
 ## Example in the code
 
-The Tempo map "Align to recording" dialog: the contract `IAlignToRecordingScreen`,
+The Tempo map "Fit the tab's tempo to the recording" dialog: the contract `IAlignToRecordingScreen`,
 its fake `FakeAlignToRecordingScreen`, `AlignToRecordingViewModel`,
 `AlignToRecordingDialogView.axaml`, its line in `DialogsModule`, the command that
 opens it, and `AlignToRecordingDialogUiPerfSmokeTests`.

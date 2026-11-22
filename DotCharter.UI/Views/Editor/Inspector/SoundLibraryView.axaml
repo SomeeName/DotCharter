@@ -1,0 +1,64 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspector="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
+             xmlns:panels="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundLibraryView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Library page's TEMPLATE LIBRARY card (#751 P5, design D; #751.1): the arrangement's templates, searched by
+         name AND frets ("x07", "Am") through a CoalescedFilterPass, each row its frets and its name. The list
+         virtualizes (a fixed height inside the card's scroller). Picking one browses the chord panel to it; New
+         template copies it, Edit template brings the Template card on screen. -->
+    <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="{StaticResource SpaceXs}">
+        <TextBox x:Name="SoundLibrarySearch" Grid.Row="0" Classes="ColumnFlowField" Text="{Binding Library.Query}"
+                 PlaceholderText="{localization:Loc Inspector_Library_Search}" AutomationProperties.Name="{localization:Loc Inspector_Library_Search}"
+                 ToolTip.Tip="{localization:Loc Inspector_Library_SearchTip}" />
+        <Panel Grid.Row="1" Height="132">
+            <ListBox x:Name="SoundLibraryList" ItemsSource="{Binding Library.Entries}" SelectedItem="{Binding Library.Selected}"
+                     Background="Transparent" AutomationProperties.Name="{localization:Loc Inspector_Library_Templates}"
+                     Grid.IsSharedSizeScope="True">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.Styles>
+                    <Style Selector="ListBoxItem">
+                        <Setter Property="Padding" Value="4,2" />
+                        <Setter Property="MinHeight" Value="22" />
+                    </Style>
+                </ListBox.Styles>
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="inspector:ChordLibraryEntry">
+                        <!-- One frets column for every row (a shared size group), so the names line up when the fret
+                             text varies (8 strings, frets past 9: "x 10 12 12 x x"). -->
+                        <Grid ColumnSpacing="{StaticResource SpaceSm}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="SoundLibraryFrets" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding Frets}" FontFamily="{StaticResource FireFontMono}"
+                                       FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextPrimary}" />
+                            <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="{StaticResource FireSizeXs}"
+                                       Foreground="{DynamicResource FireTextMuted}" TextTrimming="CharacterEllipsis" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{localization:Loc Inspector_Library_NoMatch}" IsVisible="{Binding Library.NoEntries}"
+                       TextWrapping="Wrap" />
+        </Panel>
+        <WrapPanel Grid.Row="2" ItemSpacing="{StaticResource SpaceXs}" LineSpacing="{StaticResource SpaceXs}">
+            <Button x:Name="SoundLibraryNew" Grid.Column="0" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc Inspector_Library_NewTemplate}" AutomationProperties.Name="{localization:Loc Inspector_Library_NewTemplate}"
+                    ToolTip.Tip="{localization:Loc Inspector_Library_NewTemplateTip}" Command="{Binding Library.NewTemplateCommand}" />
+            <Button x:Name="SoundLibraryEdit" Grid.Column="1" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc Inspector_Library_EditTemplate}" AutomationProperties.Name="{localization:Loc Inspector_Library_EditTemplate}"
+                    IsEnabled="{Binding Library.HasSelected}" Click="OnEditTemplate"
+                    Command="{Binding ChordTemplateEditor.ShapeEditor.OpenCommand}" ToolTip.Tip="{localization:Loc Inspector_Library_EditTemplateTip}" />
+        </WrapPanel>
+    </Grid>
+</UserControl>

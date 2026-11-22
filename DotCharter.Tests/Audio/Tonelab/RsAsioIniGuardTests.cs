@@ -149,6 +149,88 @@ public sealed class RsAsioIniGuardTests : IDisposable
     }
 
     [Fact]
+    public void APartialBackupWriteIsNeverPublishedOrRestoredOverTheOriginal()
+    {
+        var files = new MemoryTonelabFileSystem { TearWrites = true };
+        var guard = new RsAsioIniGuard(files, () => false, @"C:\Game");
+        var original = Original();
+        files.TearWrites = false;
+        files.WriteAllBytes(guard.IniPath!, original);
+        files.TearWrites = true;
+
+        Assert.Equal(RsAsioIniOutcome.Failed, guard.Apply());
+        Assert.False(guard.HasBackup);
+        Assert.Equal(RsAsioIniOutcome.NothingToRestore, guard.Restore());
+        Assert.Equal(original, files.ReadAllBytes(guard.IniPath!));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("[Config]\r\n")]
+    [InlineData("[Config]\r\nEnableAsio=")]
+    public void AnInvalidBackupNeverReplacesTheIntactIni(string backup)
+    {
+        var original = Original();
+        File.WriteAllBytes(Ini, original);
+        File.WriteAllText(Backup, backup);
+
+        Assert.Equal(RsAsioIniOutcome.Failed, Guard().Restore());
+        Assert.Equal(RsAsioIniOutcome.Failed, Guard().Apply());
+        Assert.Equal(original, File.ReadAllBytes(Ini));
+        Assert.True(File.Exists(Backup));
+    }
+
+    [Fact]
+    public void ABackupModifiedAfterPublicationIsNotRestored()
+    {
+        File.WriteAllBytes(Ini, Original());
+        Assert.Equal(RsAsioIniOutcome.Applied, Guard().Apply());
+        var changed = File.ReadAllBytes(Backup);
+        changed[^1] ^= 1;
+        File.WriteAllBytes(Backup, changed);
+
+        Assert.Equal(RsAsioIniOutcome.Failed, Guard().Restore());
+        Assert.Equal(RsAsioIniGuard.DriverlessIni, File.ReadAllBytes(Ini));
+        Assert.True(File.Exists(Backup));
+    }
+
+    [Fact]
+    public void ALegacyBackupStillRestoresTheDriverlessIni()
+    {
+        var legacy = System.Text.Encoding.UTF8.GetString(RsAsioIniGuard.DriverlessIni)
+            .Replace("DotCharter", "tonelab launcher", StringComparison.Ordinal);
+        File.WriteAllText(Ini, legacy);
+        File.WriteAllBytes(Backup, Original());
+        Assert.Equal(RsAsioIniOutcome.Restored, Guard().Restore());
+        Assert.Equal(Original(), File.ReadAllBytes(Ini));
+    }
+
+    [Fact]
+    public void APartialRestoreWriteLeavesTheDriverlessIniAndBackupIntact()
+    {
+        var files = new MemoryTonelabFileSystem();
+        var guard = new RsAsioIniGuard(files, () => false, @"C:\Game");
+        files.WriteAllBytes(guard.IniPath!, Original());
+        Assert.Equal(RsAsioIniOutcome.Applied, guard.Apply());
+        files.TearWrites = true;
+
+        Assert.Equal(RsAsioIniOutcome.Failed, guard.Restore());
+        Assert.Equal(RsAsioIniGuard.DriverlessIni, files.ReadAllBytes(guard.IniPath!));
+        Assert.Equal(Original(), files.ReadAllBytes(guard.BackupPath!));
+        files.TearWrites = false;
+        Assert.Equal(RsAsioIniOutcome.Restored, guard.Restore());
+    }
+
+    [Fact]
+    public void ADriverlessBackupIsRefused()
+    {
+        File.WriteAllBytes(Ini, Original());
+        File.WriteAllBytes(Backup, RsAsioIniGuard.DriverlessIni);
+        Assert.Equal(RsAsioIniOutcome.Failed, Guard().Restore());
+        Assert.Equal(Original(), File.ReadAllBytes(Ini));
+    }
+
+    [Fact]
     public void TheDriverlessIni_TurnsEveryDriverOff()
     {
         var text = System.Text.Encoding.ASCII.GetString(RsAsioIniGuard.DriverlessIni);

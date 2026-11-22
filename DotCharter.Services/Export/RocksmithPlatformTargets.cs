@@ -7,7 +7,7 @@ namespace DotCharter.Services.Export;
 /// Which packages one export writes, and where. The Mac package has three rules
 ///     the PC one does not: it is always ENCRYPTED (a plain package loads only through the
 ///     Windows CDLC enabler's patch), so it needs the TOC key and the Mac SNG key; it has no
-///     7-/8-string form (the rs7string mod is Windows-only); and it is never written plain on
+///     extended-range form (the RS Extended Range mod is Windows-only); and it is never written plain on
 ///     request. A Mac-only export that breaks a rule fails with the reason; PC + Mac writes
 ///     the PC package alone and says why. The export dialog asks the same questions first
 ///     (<see cref="MacUnavailableReason" />) so the user sees the reason before exporting.
@@ -15,13 +15,11 @@ namespace DotCharter.Services.Export;
 public static class RocksmithPlatformTargets
 {
     /// <summary>
-    ///     Why no Mac package can be written: a 7-/8-string arrangement among
-    ///     <paramref name="hasExtendedStringGuitar" />, or no Mac encryption
+    ///     Why no Mac package can be written: no Mac encryption
     ///     (<see cref="RocksmithKeys.CanWriteMac" />). Null when the Mac package can be built.
     /// </summary>
-    public static RocksmithMacBlock? MacUnavailableReason(bool hasExtendedStringGuitar) =>
-        hasExtendedStringGuitar ? RocksmithMacBlock.ExtendedStrings
-        : !RocksmithKeys.CanWriteMac ? RocksmithMacBlock.NoEncryption
+    public static RocksmithMacBlock? MacUnavailableReason() =>
+        !RocksmithKeys.CanWriteMac ? RocksmithMacBlock.NoEncryption
         : null;
 
     /// <summary>The package path of <paramref name="mac" />'s platform for an export whose
@@ -40,12 +38,13 @@ public static class RocksmithPlatformTargets
     {
         if (options.Platform == ExportPlatform.Pc) return [RsPlatformLayout.Pc];
 
-        var reason = MacUnavailableReason(arrangements.Any(a => a.Sng.MetaData.Tuning.Length > 6)) switch
-        {
-            RocksmithMacBlock.ExtendedStrings => "a 7- or 8-string arrangement plays only on Windows (the rs7string mod).",
-            RocksmithMacBlock.NoEncryption => "a Mac package is always encrypted, and packages are written unencrypted here.",
-            _ => options.PlainPackage == true ? "a Mac package is always encrypted, and a plain package was asked for." : null
-        };
+        var reason = arrangements.Any(a => a.Sng.Extension != null)
+            ? "the RS Extended Range format is available only on Windows."
+            : MacUnavailableReason() switch
+            {
+                RocksmithMacBlock.NoEncryption => "a Mac package is always encrypted, and packages are written unencrypted here.",
+                _ => options.PlainPackage == true ? "a Mac package is always encrypted, and a plain package was asked for." : null
+            };
 
         if (reason == null)
             return options.Platform == ExportPlatform.Mac ? [RsPlatformLayout.Mac] : [RsPlatformLayout.Pc, RsPlatformLayout.Mac];
@@ -60,9 +59,9 @@ public static class RocksmithPlatformTargets
 /// <summary>Why a Mac package cannot be written for the content.</summary>
 public enum RocksmithMacBlock
 {
-    /// <summary>A 7- or 8-string guitar: the rs7string mod is Windows-only.</summary>
-    ExtendedStrings,
-
     /// <summary>No Mac encryption available: the package would be plain.</summary>
-    NoEncryption
+    NoEncryption,
+
+    /// <summary>The RS Extended Range format is Windows-only.</summary>
+    RsxrWindowsOnly
 }

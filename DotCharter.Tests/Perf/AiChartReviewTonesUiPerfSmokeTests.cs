@@ -1,6 +1,8 @@
 using System.Globalization;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.VisualTree;
 using DotCharter.Localization;
 using DotCharter.Services.Ai.Chart;
@@ -101,7 +103,49 @@ public sealed class AiChartReviewTonesUiPerfSmokeTests
             }
         }, CancellationToken.None);
 
-    private static (AiChartReviewViewModel Vm, AiChartPassRun Run, AiChatToneFixture F) NewToneReview()
+    /// <summary>#593: Audition is not a Tab stop, so P on the focused row plays its tone through a real key press;
+    /// on a row that cannot play, P is left to the editor.</summary>
+    [Fact]
+    public Task P_OnAFocusedToneRow_AuditionsIt() =>
+        HeadlessSessionFixture.Dispatch(async () =>
+        {
+            var audition = new NoAudition();
+            var (vm, run, f) = NewToneReview(audition);
+            await run.RunInstructionAsync(new AiChartInstructedRun(AiChartJob.Tones,
+                new AiChartInstruction("darker"), ToneChanges: f.All().ToneChanges));
+            var view = new AiChartReviewView { DataContext = vm };
+            var (window, _) = NewTimelineHost(720, DefaultTimelineHeight, view);
+            window.Show();
+            try
+            {
+                NarrowWidthLayout.Settle(window);
+                var rows = Rows(view);
+                AssertMeasured(view.FindControl<Border>("AiChartReviewCard")!);
+
+                Assert.True(Named<Button>(rows[0], "AiChartReviewRowGo").Focus(), "the tone row refused focus");
+                PressP(window);
+                Assert.Equal(1, audition.Starts);
+
+                // The third tone has no body yet: P does nothing on it.
+                Assert.True(Named<Button>(rows[2], "AiChartReviewRowGo").Focus());
+                Assert.Same(vm.Rows[2], vm.CurrentRow);
+                PressP(window);
+                Assert.Equal(1, audition.Starts);
+            }
+            finally
+            {
+                window.Close();
+            }
+        }, CancellationToken.None);
+
+    private static void PressP(Window window)
+    {
+        window.KeyPress(Key.P, RawInputModifiers.None, PhysicalKey.P, null);
+        window.KeyRelease(Key.P, RawInputModifiers.None, PhysicalKey.P, null);
+        window.UpdateLayout();
+    }
+
+    private static (AiChartReviewViewModel Vm, AiChartPassRun Run, AiChatToneFixture F) NewToneReview(NoAudition? audition = null)
     {
         var f = new AiChatToneFixture();
         // A third placed tone whose name has no definition yet: its row can be applied but not auditioned.
@@ -112,12 +156,18 @@ public sealed class AiChartReviewTonesUiPerfSmokeTests
         var editor = new ChartEditorViewModel(f.State, transport, f.History, selection, new TempoService(logger),
             new TrackContextRegistry(f.State, selection), FakeLocalization.KeysOnly());
         var run = f.Run(new FakeChartModel((_, _) => GenerateFakes.ValidReply()));
-        return (new AiChartReviewViewModel(run, editor, f.History, f.State, LocalizationService.Instance, new NoAudition()), run, f);
+        return (new AiChartReviewViewModel(run, editor, f.History, f.State, LocalizationService.Instance, audition ?? new NoAudition()), run, f);
     }
 
     private sealed class NoAudition : IAiToneAudition
     {
-        public string? Start(string key, string json, double fromMs, double toMs) => null;
+        public int Starts { get; private set; }
+
+        public string? Start(string key, string json, double fromMs, double toMs)
+        {
+            Starts++;
+            return null;
+        }
 
         public void Stop()
         {

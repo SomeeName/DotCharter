@@ -34,9 +34,15 @@ public sealed partial class FakeGeneralSettingsScreen : ObservableObject, IGener
     [ObservableProperty] private bool _logAudio = true;
     [ObservableProperty] private bool _logErrors = true;
     [ObservableProperty] private bool _logExternal = true;
+    [ObservableProperty] private int _exportAutoVolumeTargetLufs = -14;
+    [ObservableProperty] private string _exportTestDefaultFolder = "";
     [ObservableProperty] private bool _isAdvancedOpen;
 
-    private FakeGeneralSettingsScreen(IReadOnlyList<string> languages) => LanguageOptions = languages;
+    private FakeGeneralSettingsScreen(IReadOnlyList<string> languages)
+    {
+        LanguageOptions = languages;
+        ClearTestExportDefaultFolderCommand = new RelayCommand(() => ExportTestDefaultFolder = "");
+    }
 
     public static IReadOnlyList<FakeVariant<IGeneralSettingsScreen>> Variants { get; } =
     [
@@ -99,6 +105,10 @@ public sealed partial class FakeGeneralSettingsScreen : ObservableObject, IGener
     public IReadOnlyList<string> LanguageOptions { get; }
 
     public ICommand RunSetupAgainCommand { get; } = new RelayCommand(() => { });
+
+    public ICommand BrowseTestExportDefaultFolderCommand { get; } = new RelayCommand(() => { });
+
+    public ICommand ClearTestExportDefaultFolderCommand { get; }
 
     public IReadOnlySet<string> HiddenKeys { get; } = new HashSet<string>();
 }

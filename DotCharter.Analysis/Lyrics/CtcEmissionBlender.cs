@@ -23,6 +23,15 @@ namespace DotCharter.Analysis.Lyrics;
 public static class CtcEmissionBlender
 {
     /// <summary>
+    ///     The primary's share in the linear opinion pool (<see cref="CtcEmissions.Pooled" />). The
+    ///     geometric blend needs both heads to agree on a letter, so one head's confident blank
+    ///     drowns a word only the other head heard; the pool keeps a letter that EITHER head
+    ///     heard. The secondary gets the larger share because the pool exists to recover what
+    ///     the primary missed (measured on Jamendo: 0.3 → 1.86% gross, 0.5 → 2.11%, 0.7 → 2.38%).
+    /// </summary>
+    public const double PoolPrimaryWeight = 0.3;
+
+    /// <summary>
     ///     Weighted geometric mean of two emission matrices, expressed in
     ///     <paramref name="primaryVocabulary" />'s symbol space (the one the
     ///     tokenizer emits, so the aligner needs no other change).
@@ -60,6 +69,7 @@ public static class CtcEmissionBlender
         var width = primary.Width;
         var map = BuildSymbolMap(primaryVocabulary, secondaryVocabulary, width);
         var blended = new float[frames * width];
+        var pooled = new float[frames * width];
 
         for (var f = 0; f < frames; f++)
         {
@@ -78,8 +88,14 @@ public static class CtcEmissionBlender
                     : primary.LogProbs[p + i];
 
                 blended[p + i] = value;
+                pooled[p + i] = map[i] >= 0
+                    ? (float)Math.Log(PoolPrimaryWeight * Math.Exp(primary.LogProbs[p + i]) +
+                                      (1 - PoolPrimaryWeight) * Math.Exp(secondary.LogProbs[s + map[i]]) + float.Epsilon)
+                    : primary.LogProbs[p + i];
                 if (value > max) max = value;
             }
+
+            Normalize(pooled.AsSpan(p, width));
 
             // A weighted mean of two log-softmax rows is not itself one, and the
             // trellis compares absolute scores ACROSS frames — an unnormalized row
@@ -90,7 +106,21 @@ public static class CtcEmissionBlender
             for (var i = 0; i < width; i++) blended[p + i] -= logZ;
         }
 
-        return new CtcEmissions(blended, frames, width, primary.SecondsPerFrame);
+        return new CtcEmissions(blended, frames, width, primary.SecondsPerFrame)
+        {
+            Pooled = new CtcEmissions(pooled, frames, width, primary.SecondsPerFrame)
+        };
+    }
+
+    /// <summary>Renormalise one row of log-probabilities so it sums to 1.</summary>
+    private static void Normalize(Span<float> row)
+    {
+        var max = float.NegativeInfinity;
+        foreach (var value in row) max = Math.Max(max, value);
+        var sum = 0.0;
+        foreach (var value in row) sum += Math.Exp(value - max);
+        var logZ = (float)(max + Math.Log(sum));
+        for (var i = 0; i < row.Length; i++) row[i] -= logZ;
     }
 
     /// <summary>

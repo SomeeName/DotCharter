@@ -150,21 +150,27 @@ public sealed class LibrarySongBytesReleaseTests : IDisposable
     }
 
     /// <summary>The conversion REPLACES the file, which fails (or worse) while the
-    /// native waveform pass still has it open: it starts only once that pass is done.</summary>
+    /// native waveform pass still has it open: it starts only once that pass is done.
+    /// <para>#607: the waveform pass used to take a fixed 200 ms, which a conversion
+    /// scheduled too early could miss. Now the pass is PARKED until the load has
+    /// reached its wait for it, and nothing may have been scheduled by then.</para></summary>
     [Fact]
     public async Task TheConversion_StartsOnlyAfterTheWaveformPassStoppedReadingTheFile()
     {
+        var ct = TestContext.Current.CancellationToken;
         var wav = WriteCachedSong(DeviceRateWavFixture.Plain(44_100));
         var waveformDone = false;
+        var awaitingWaveform = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var audio = new FakeAudioPlaybackService
         {
             ActiveSampleRate = 48_000,
             WaveformPass = async () =>
             {
-                await Task.Delay(200, TestContext.Current.CancellationToken);
+                await awaitingWaveform.Task.WaitAsync(TimeSpan.FromMinutes(5), ct);
                 Volatile.Write(ref waveformDone, true);
             },
         };
+        bool? waveformDoneAtSchedule = null;
         bool? waveformDoneAtConversion = null;
         var converted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var deviceRateAudio = new LibraryDeviceRateAudio(new LibraryAudioCacheStore(rootOverride: CacheRoot), null,
@@ -174,12 +180,29 @@ public sealed class LibrarySongBytesReleaseTests : IDisposable
                 File.WriteAllBytes(destination, DeviceRateWavFixture.DeviceRate(rate));
                 converted.TrySetResult();
                 return JuceDeviceRateConversion.Pcm16;
+            },
+            originalsReplaceable: () =>
+            {
+                // Called synchronously by ScheduleConversion: the moment of scheduling.
+                waveformDoneAtSchedule ??= Volatile.Read(ref waveformDone);
+                return true;
             });
         var session = NewSession(audio, deviceRateAudio);
+        // The waveform pass stays parked until the load has done everything else.
+        session.AwaitingWaveformForTesting = () => awaitingWaveform.TrySetResult();
 
-        await session.LoadAudioFile(wav, generateBeats: false, preferMemoryPlayback: true);
+        try
+        {
+            await BoundedWait.ForAsync(session.LoadAudioFile(wav, generateBeats: false, preferMemoryPlayback: true),
+                "the library song's load", ct);
+        }
+        finally
+        {
+            awaitingWaveform.TrySetResult();
+        }
 
-        await converted.Task.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        await BoundedWait.ForAsync(converted.Task, "the background conversion", ct);
+        Assert.True(waveformDoneAtSchedule, "the conversion was scheduled while the waveform pass was still reading the song");
         Assert.True(waveformDoneAtConversion, "the conversion started while the waveform pass was still reading the song");
     }
 

@@ -54,7 +54,8 @@ internal static class EofProGuitarTrackParser
         }
     }
 
-    public static Arrangement Parse(EofPackReader r, EofTrackInfo info, IList<BeatMarker> beats)
+    public static Arrangement Parse(EofPackReader r, EofTrackInfo info, IList<BeatMarker> beats,
+        IReadOnlyList<EofTextEventInfo>? textEvents = null)
     {
         var arrangement = new Arrangement
         {
@@ -153,7 +154,7 @@ internal static class EofProGuitarTrackParser
         }
 
         // Custom data blocks — fingers (2), arrangement type (3), capo (6) are honored.
-        var fingerByNote = new Dictionary<int, int[]>();
+        var fingerByNote = new Dictionary<EofRawProGuitarNote, int[]>();
         var rawTechNotes = new List<EofRawProGuitarNote>();
         var blockCount = r.ReadU32();
         for (var b = 0; b < blockCount; b++)
@@ -167,7 +168,10 @@ internal static class EofProGuitarTrackParser
             if (consumed < payloadSize) r.Skip(payloadSize - consumed);
         }
 
-        var graceFretByNote = FoldGraceNotePairs(rawNotes, arrangement.Capo);
+        var attachments = EofGraceAttachments.Create(rawTechNotes, trills);
+        var graceFretByNote = FoldGraceNotePairs(rawNotes, arrangement.Capo, beats, fingerByNote, attachments);
+        // The identity belongs only to the fold decision, never to chart data.
+        foreach (var raw in rawNotes.Where(n => EofGraceTiming.IsReservedName(n.Name))) raw.Name = "";
         BuildLevels(arrangement, rawNotes, rawTechNotes, fingerByNote, beats, trills, tremolos, graceFretByNote,
             out var ghostShapes);
         ApplyAnchors(arrangement, rawAnchors, beats);
@@ -226,14 +230,7 @@ internal static class EofProGuitarTrackParser
             // (in BuildLevels) and prefer those here so the handshape renders
             // with the *intended* fingers/frets instead of inheriting from a
             // possibly unrelated nearby chord.
-            var templateId = -1;
-            foreach (var ((d, posMs), tid) in ghostShapeTemplates)
-            {
-                if (d != diff) continue;
-                if (posMs < startMs || posMs > endMs) continue;
-                templateId = tid;
-                break;
-            }
+            var templateId = GhostTemplateAtOpening(ghostShapeTemplates, diff, startMs, endMs);
             if (templateId < 0)
                 templateId = ResolveHandShapeTemplate(level, start, end);
 
@@ -253,10 +250,22 @@ internal static class EofProGuitarTrackParser
         }
     }
 
+    private static int GhostTemplateAtOpening(Dictionary<(int diff, uint posMs), int> templates, int diff,
+        uint startMs, uint endMs)
+    {
+        if (templates.TryGetValue((diff, startMs), out var atStart)) return atStart;
+        foreach (var ((d, posMs), template) in templates)
+        {
+            if (d == diff && posMs > startMs && posMs < endMs) return template;
+        }
+
+        return -1;
+    }
+
     private static int EnsureArpeggioTemplate(Arrangement arrangement, int templateId)
     {
         if (templateId < 0) return templateId;
-        var source = arrangement.ChordTemplates.FirstOrDefault(t => t.Id == templateId);
+        var source = arrangement.FindChordTemplate(templateId);
         if (source == null || source.Arpeggio) return templateId;
 
         var existing = arrangement.ChordTemplates.FirstOrDefault(t => t.Arpeggio && t.HasSameShapeAs(source));
@@ -322,7 +331,7 @@ internal static class EofProGuitarTrackParser
     }
 
     private static int ConsumeCustomBlock(EofPackReader r, uint id, int _,
-        List<EofRawProGuitarNote> rawNotes, List<EofRawProGuitarNote> rawTechNotes, Dictionary<int, int[]> fingerByNote,
+        List<EofRawProGuitarNote> rawNotes, List<EofRawProGuitarNote> rawTechNotes, Dictionary<EofRawProGuitarNote, int[]> fingerByNote,
         Arrangement arrangement, int numStrings)
     {
         var startPos = r.Position;
@@ -341,7 +350,7 @@ internal static class EofProGuitarTrackParser
                             fingers[s] = r.ReadU8();
                     }
 
-                    fingerByNote[i] = fingers;
+                    fingerByNote[note] = fingers;
                 }
                 break;
             case EofConstants.PgCustomArrangementType:
@@ -373,125 +382,33 @@ internal static class EofProGuitarTrackParser
         return r.Position - startPos;
     }
 
-    /// <summary>
-    ///     Detects EOF-style grace pairs — a short (≤130 ms) note carrying
-    ///     LINKNEXT plus a pitched RS_NOTATION slide, immediately followed by
-    ///     its slide target on the same string(s) and difficulty — and folds
-    ///     them back into DotCharter's grace-fret hints. The result maps each
-    ///     surviving TARGET note to its per-string grace frets:
-    ///     <see cref="GuitarNote.GraceFret"/> for a single-string ornament and
-    ///     <see cref="ChordNote.GraceFret"/> for a chord grace (Guitar Pro
-    ///     graces a strum with one grace note per string, so EOF's grace note
-    ///     carries the whole graced sub-shape). This is the exact inverse of
-    ///     <c>EofNoteBuilder</c>'s grace materialization; EOF's own GP import
-    ///     writes the same shape (34–68 ms grace + displaced target).
-    /// </summary>
+    /// <summary>Fold only the final single-note wire shapes defined by <see cref="EofGraceTiming.TargetIndex"/>.</summary>
     private static Dictionary<EofRawProGuitarNote, Dictionary<int, int>> FoldGraceNotePairs(
-        List<EofRawProGuitarNote> rawNotes, int capo)
+        List<EofRawProGuitarNote> rawNotes, int capo, IList<BeatMarker> beats,
+        Dictionary<EofRawProGuitarNote, int[]> fingerByNote, EofGraceAttachments attachments)
     {
         var graceFrets = new Dictionary<EofRawProGuitarNote, Dictionary<int, int>>();
         var consumed = new HashSet<EofRawProGuitarNote>();
-        for (var i = 0; i < rawNotes.Count; i++)
+        var pairs = EofGracePairing.Targets(rawNotes, beats,
+            i => fingerByNote.TryGetValue(rawNotes[i], out var fingers) && fingers.Any(f => f != 0));
+        attachments.PrepareOwners(rawNotes, pairs);
+        foreach (var (i, j) in pairs)
         {
-            var g = rawNotes[i];
-            if (consumed.Contains(g)) continue;
-            if (g.LengthMs is 0 or > 130) continue;
-            if ((g.Flags & EofConstants.PgFlagLinkNext) == 0) continue;
-            if ((g.Flags & EofConstants.PgFlagRsNotation) == 0) continue;
-            if ((g.Flags & (EofConstants.PgFlagSlideUp | EofConstants.PgFlagSlideDown)) == 0) continue;
-
-            var live = (byte)(g.NoteBitmask & ~g.GhostBitmask);
-            var liveCount = PopCount(live);
-            if (liveCount == 0) continue;
-            var slideEnd = g.SlideEndFret & EofConstants.FretValueMask;
-            if (slideEnd <= 0) continue;
-
-            var graceEnd = (ulong)g.PositionMs + g.LengthMs;
-            for (var j = i + 1; j < rawNotes.Count; j++)
-            {
-                var m = rawNotes[j];
-                if (m.PositionMs > graceEnd + 2) break; // notes are position-sorted
-                if (m.PositionMs + 2 < graceEnd) continue;
-                if (m.Difficulty != g.Difficulty) continue;
-                var mLive = (byte)(m.NoteBitmask & ~m.GhostBitmask);
-
-                var hints = liveCount == 1
-                    ? MatchSingleStringGrace(g, m, live, mLive, slideEnd, capo)
-                    : MatchChordGrace(g, m, live, mLive, slideEnd, capo);
-                if (hints == null) continue;
-
-                m.PositionMs = g.PositionMs;
-                m.LengthMs += g.LengthMs;
-                graceFrets[m] = hints;
-                consumed.Add(g);
-                break;
-            }
+            var ornament = rawNotes[i];
+            var target = rawNotes[j];
+            if (attachments.Touches(ornament, target, capo, beats)) continue;
+            var s = FirstSetBit(ornament.NoteBitmask);
+            target.PositionMs = ornament.PositionMs;
+            target.LengthMs = EofGraceTiming.FoldedLength(target.LengthMs, ornament.LengthMs);
+            graceFrets[target] = new Dictionary<int, int> { [s] = ornament.Frets[s] + capo };
+            consumed.Add(ornament);
         }
-
         if (consumed.Count > 0) rawNotes.RemoveAll(consumed.Contains);
         return graceFrets;
     }
 
-    /// <summary>
-    ///     The single-string half of <see cref="FoldGraceNotePairs"/>, unchanged
-    ///     since it shipped: the target must sound the grace's one string at
-    ///     exactly the stored slide end fret. A fret-0 (open) grace is a real
-    ///     hint value, not "absent". Null = not a grace pair.
-    /// </summary>
-    private static Dictionary<int, int>? MatchSingleStringGrace(EofRawProGuitarNote g, EofRawProGuitarNote m,
-        byte live, byte mLive, int slideEnd, int capo)
-    {
-        var s = FirstSetBit(live);
-        if ((mLive & (1 << s)) == 0) return null;
-        if ((m.Frets[s] & EofConstants.FretMutedBit) != 0) return null;
-        if ((m.Frets[s] & EofConstants.FretValueMask) != slideEnd) return null;
-
-        var gFret = g.Frets[s] & EofConstants.FretValueMask;
-        return new Dictionary<int, int> { [s] = gFret > 0 ? gFret + capo : 0 };
-    }
-
-    /// <summary>
-    ///     The multi-string half of <see cref="FoldGraceNotePairs"/>. EOF stores
-    ///     ONE slide end fret — that of the note's LOWEST fretted string — and
-    ///     projects the resulting distance onto every string, so a chord grace
-    ///     only matches when the target sounds EVERY graced string exactly one
-    ///     uniform distance away. Every graced string needs a fretted (non-open,
-    ///     unmuted) origin, because an open string has no slide origin. Null =
-    ///     not a grace pair, and the two notes stay independent chords.
-    /// </summary>
-    private static Dictionary<int, int>? MatchChordGrace(EofRawProGuitarNote g, EofRawProGuitarNote m,
-        byte live, byte mLive, int slideEnd, int capo)
-    {
-        int? lowest = null;
-        for (var s = 0; s < 8; s++)
-        {
-            if ((live & (1 << s)) == 0) continue;
-            if ((g.Frets[s] & EofConstants.FretMutedBit) != 0) return null;
-            var fret = g.Frets[s] & EofConstants.FretValueMask;
-            if (fret <= 0) return null;
-            if (lowest == null || fret < lowest.Value) lowest = fret;
-        }
-
-        if (lowest is null) return null;
-        var distance = slideEnd - lowest.Value;
-        if (distance == 0) return null;
-
-        var hints = new Dictionary<int, int>(8);
-        for (var s = 0; s < 8; s++)
-        {
-            if ((live & (1 << s)) == 0) continue;
-            if ((mLive & (1 << s)) == 0) return null;
-            if ((m.Frets[s] & EofConstants.FretMutedBit) != 0) return null;
-            var gFret = g.Frets[s] & EofConstants.FretValueMask;
-            if ((m.Frets[s] & EofConstants.FretValueMask) != gFret + distance) return null;
-            hints[s] = gFret + capo;
-        }
-
-        return hints;
-    }
-
     private static void BuildLevels(Arrangement arrangement, List<EofRawProGuitarNote> rawNotes,
-        List<EofRawProGuitarNote> rawTechNotes, Dictionary<int, int[]> fingerByNote, IList<BeatMarker> beats,
+        List<EofRawProGuitarNote> rawTechNotes, Dictionary<EofRawProGuitarNote, int[]> fingerByNote, IList<BeatMarker> beats,
         List<(int diff, uint startMs, uint endMs)> trills,
         List<(int diff, uint startMs, uint endMs)> tremolos,
         Dictionary<EofRawProGuitarNote, Dictionary<int, int>> graceFretByNote,
@@ -504,13 +421,12 @@ internal static class EofProGuitarTrackParser
             .ToDictionary(g => g.Key, g => (IReadOnlyList<EofRawProGuitarNote>)g.OrderBy(n => n.PositionMs).ToList());
 
         // Group raw notes by EOF "type" (difficulty index).
-        var byDifficulty = new Dictionary<int, List<(int idx, EofRawProGuitarNote note)>>();
-        for (var i = 0; i < rawNotes.Count; i++)
+        var byDifficulty = new Dictionary<int, List<EofRawProGuitarNote>>();
+        foreach (var note in rawNotes)
         {
-            var note = rawNotes[i];
             if (!byDifficulty.TryGetValue(note.Difficulty, out var list))
                 byDifficulty[note.Difficulty] = list = [];
-            list.Add((i, note));
+            list.Add(note);
         }
 
         // ChordTemplate dedupe across all chords on the arrangement so identical
@@ -520,8 +436,9 @@ internal static class EofProGuitarTrackParser
         foreach (var kv in byDifficulty.OrderBy(k => k.Key))
         {
             var level = new ChartLevel { DifficultyIndex = kv.Key };
+            ILookup<uint, EofRawProGuitarNote>? onsets = null;
             techNotesByDifficulty.TryGetValue(kv.Key, out var techNotes);
-            foreach (var (idx, note) in kv.Value)
+            foreach (var note in kv.Value)
             {
                 // EOF stores ghost gems as a bitmask alongside the note bitmask
                 // (see song.c eof_read_pro_guitar_note: ghost is read right after
@@ -540,7 +457,7 @@ internal static class EofProGuitarTrackParser
                 var liveBitmask = (byte)(note.NoteBitmask & ~note.GhostBitmask);
                 var setBits = PopCount(liveBitmask);
 
-                var fingers = fingerByNote.GetValueOrDefault(idx);
+                var fingers = fingerByNote.GetValueOrDefault(note);
 
                 // Register the ghost-derived handshape template if this note
                 // actually has ghost strings. We use the full NoteBitmask
@@ -551,19 +468,16 @@ internal static class EofProGuitarTrackParser
                 // finger is one such note.
                 if (note.GhostBitmask != 0 && (PopCount(note.NoteBitmask) > 1 || setBits == 0))
                 {
-                    var ghostTid = BuildShapeTemplate(note, note.NoteBitmask, fingers, capo,
+                    onsets ??= kv.Value.ToLookup(n => n.PositionMs);
+                    var ghostTid = BuildShapeTemplate(note, onsets[note.PositionMs], fingerByNote, capo,
                         arrangement, templateCache);
                     ghostShapeTemplates[(note.Difficulty, note.PositionMs)] = ghostTid;
                 }
 
                 if (setBits == 0) continue; // Pure-ghost note: nothing is played.
 
-                var inTrill = trills.Any(s => s.diff == note.Difficulty &&
-                                              note.PositionMs >= s.startMs &&
-                                              note.PositionMs <= s.endMs);
-                var inTremolo = tremolos.Any(s => s.diff == note.Difficulty &&
-                                                  note.PositionMs >= s.startMs &&
-                                                  note.PositionMs <= s.endMs);
+                var inTrill = trills.Any(s => EofAttachmentApplicability.SectionApplies(s, note));
+                var inTremolo = tremolos.Any(s => EofAttachmentApplicability.SectionApplies(s, note));
 
                 graceFretByNote.TryGetValue(note, out var graceFrets);
 
@@ -605,33 +519,40 @@ internal static class EofProGuitarTrackParser
     }
 
     /// <summary>
-    ///     Builds (and caches) a ChordTemplate from the given string bitmask
-    ///     and EOF raw note, using the supplied finger array. Returns the
-    ///     template id. Used for ghost-gem-derived handshape shapes that
-    ///     never become real played chords.
+    ///     Builds the hand-shape grip from the ghost carrier and the other played
+    ///     strings at that onset. The original raw notes still supply the sounds.
     /// </summary>
-    private static int BuildShapeTemplate(EofRawProGuitarNote raw, byte bitmask, int[]? fingers, int capo,
+    private static int BuildShapeTemplate(EofRawProGuitarNote raw, IEnumerable<EofRawProGuitarNote> onset,
+        Dictionary<EofRawProGuitarNote, int[]> fingerByNote, int capo,
         Arrangement arrangement, Dictionary<string, ChordTemplate> templateCache)
     {
         var fretMap = new Dictionary<int, int>();
         var fingerMap = new Dictionary<int, int>();
         var fingerless = IsFingerless(raw);
-        for (var s = 0; s < 8; s++)
+        AddFrets(raw, raw.NoteBitmask);
+        foreach (var other in onset)
         {
-            if ((bitmask & (1 << s)) == 0) continue;
-            var (fret, _) = DecodeFret(raw.Frets[s]);
-            if (fret > 0) fret += capo;
-            fretMap[s] = fret;
-            if (!fingerless && fingers != null && s < fingers.Length && fingers[s] > 0)
-                fingerMap[s] = RemapFinger(fingers[s]);
+            if (!ReferenceEquals(other, raw)) AddFrets(other, other.NoteBitmask & ~other.GhostBitmask);
         }
-        // The EOF ghost bits become the grip's ghost gems (song.h:200 — bit n = string
-        // n, the same numbering): held, drawn dimmed, never played.
-        var ghostMask = raw.GhostBitmask & bitmask;
+
+        var ghostMask = raw.GhostBitmask & raw.NoteBitmask;
         return GetOrCreateTemplate(arrangement, templateCache, fretMap, fingerMap, raw.Name, fingerless, ghostMask).Id;
+
+        void AddFrets(EofRawProGuitarNote note, int strings)
+        {
+            var fingers = fingerByNote.GetValueOrDefault(note);
+            for (var s = 0; s < 8; s++)
+            {
+                if ((strings & (1 << s)) == 0 || fretMap.ContainsKey(s)) continue;
+                var (fret, _) = DecodeFret(note.Frets[s]);
+                fretMap[s] = fret > 0 ? fret + capo : fret;
+                if (!fingerless && fingers != null && s < fingers.Length && fingers[s] > 0)
+                    fingerMap[s] = RemapFinger(fingers[s]);
+            }
+        }
     }
 
-    private static GuitarNote BuildSingleNote(EofRawProGuitarNote raw, byte liveBitmask, int capo,
+    internal static GuitarNote BuildSingleNote(EofRawProGuitarNote raw, byte liveBitmask, int capo,
         IList<BeatMarker> beats, IReadOnlyList<EofRawProGuitarNote>? techNotes)
     {
         var stringIdx = FirstSetBit(liveBitmask);
@@ -688,7 +609,6 @@ internal static class EofProGuitarTrackParser
         IList<BeatMarker> beats)
     {
         if (techNotes == null || techNotes.Count == 0 || stringIndex is < 0 or > 7) return false;
-        var stringBit = 1 << stringIndex;
         var noteEnd = (ulong)raw.PositionMs + raw.LengthMs;
         var added = false;
         // Start at the note's onset instead of index 0 — see FirstTechNoteAtOrAfter.
@@ -696,8 +616,7 @@ internal static class EofProGuitarTrackParser
         {
             var tech = techNotes[i];
             if (tech.PositionMs > noteEnd) break; // the list is position-sorted
-            if (tech.Difficulty != raw.Difficulty) continue;
-            if ((tech.NoteBitmask & stringBit) == 0) continue;
+            if (!EofAttachmentApplicability.TechNoteApplies(tech, raw, stringIndex)) continue;
             if ((tech.Flags & EofConstants.PgFlagBend) == 0) continue;
             bends.Add(new BendValue(TimelineMath.PositionFromImportedMs(tech.PositionMs, beats),
                 DecodeBendStrengthSemitones(tech.BendStrength)));
@@ -707,7 +626,7 @@ internal static class EofProGuitarTrackParser
         return added;
     }
 
-    private static Chord BuildChord(EofRawProGuitarNote raw, byte liveBitmask, int[]? fingers, int capo,
+    internal static Chord BuildChord(EofRawProGuitarNote raw, byte liveBitmask, int[]? fingers, int capo,
         IList<BeatMarker> beats, Arrangement arrangement, Dictionary<string, ChordTemplate> templateCache,
         IReadOnlyList<EofRawProGuitarNote>? techNotes, IReadOnlyDictionary<int, int>? graceFrets = null)
     {
@@ -789,7 +708,6 @@ internal static class EofProGuitarTrackParser
         if (techNotes == null || techNotes.Count == 0 || stringIndex is < 0 or > 7)
             return null;
 
-        var stringBit = 1 << stringIndex;
         var noteEnd = (ulong)raw.PositionMs + raw.LengthMs;
         EofRawProGuitarNote? match = null;
 
@@ -798,8 +716,7 @@ internal static class EofProGuitarTrackParser
         {
             var tech = techNotes[i];
             if (tech.PositionMs > noteEnd) break;
-            if (tech.Difficulty != raw.Difficulty) continue;
-            if ((tech.NoteBitmask & stringBit) == 0) continue;
+            if (!EofAttachmentApplicability.TechNoteApplies(tech, raw, stringIndex)) continue;
             match = tech;
         }
 
@@ -821,7 +738,7 @@ internal static class EofProGuitarTrackParser
     ///     index the linear skip would have stopped at.
     ///     </para>
     /// </summary>
-    private static int FirstTechNoteAtOrAfter(IReadOnlyList<EofRawProGuitarNote> techNotes, uint positionMs)
+    internal static int FirstTechNoteAtOrAfter(IReadOnlyList<EofRawProGuitarNote> techNotes, uint positionMs)
     {
         var lo = 0;
         var hi = techNotes.Count;
@@ -904,7 +821,7 @@ internal static class EofProGuitarTrackParser
         return null;
     }
 
-    private static int? GetLowestAdjustedChordFret(EofRawProGuitarNote raw, byte liveBitmask, int capo)
+    internal static int? GetLowestAdjustedChordFret(EofRawProGuitarNote raw, byte liveBitmask, int capo)
     {
         int? lowest = null;
         for (var s = 0; s < 8; s++)
@@ -934,25 +851,17 @@ internal static class EofProGuitarTrackParser
         Dictionary<int, int> frets, Dictionary<int, int> fingers, string? name = null, bool fingerless = false,
         int ghostMask = 0)
     {
-        // Fingerless is in the key: EOF keeps a fingerless chord and an unfingered
-        // one on the same frets apart too (rs.c:231, eof_build_chord_list).
+        // Authored names distinguish equal voicings (C6 and Am7). Fingerless likewise
+        // keeps a deliberately fingerless chord apart (rs.c:231, eof_build_chord_list).
         var key = string.Join("|", frets.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value}"))
                   + "/"
                   + string.Join("|", fingers.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value}"))
                   + (fingerless ? "/F" : "")
                   // Ghost gems are in the key: a played chord and a handshape grip
                   // holding the same frets are different templates.
-                  + (ghostMask != 0 ? $"/G{ghostMask}" : "");
-        if (cache.TryGetValue(key, out var existing))
-        {
-            if (string.IsNullOrWhiteSpace(existing.Name) && !string.IsNullOrWhiteSpace(name))
-            {
-                existing.Name = name.Trim();
-                RsChordDisplaySuffix.FoldNop(existing);
-            }
-
-            return existing;
-        }
+                  + (ghostMask != 0 ? $"/G{ghostMask}" : "")
+                  + "/N" + (name?.Trim() ?? string.Empty);
+        if (cache.TryGetValue(key, out var existing)) return existing;
 
         var template = new ChordTemplate
         {

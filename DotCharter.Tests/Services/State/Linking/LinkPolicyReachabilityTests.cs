@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using DotCharter.UI.ViewModels.Editor.Inspector;
 
 namespace DotCharter.Tests.Services.State.Linking;
 
@@ -61,36 +62,53 @@ public sealed class LinkPolicyReachabilityTests
         // Whole-chart tools: never propagated; what they make differ is unlinked.
         ["ProjectSnapshotAction"] = LinkPolicy.UnlinkOnDivergence,
         ["ArrangementSnapshotAction"] = LinkPolicy.UnlinkOnDivergence,
+        ["EnforceArrangementSpacingAction"] = LinkPolicy.UnlinkOnDivergence,
         ["AudioSpliceAction"] = LinkPolicy.UnlinkOnDivergence,
         ["BeatScaleAction"] = LinkPolicy.UnlinkOnDivergence,
 
         // Cannot change linked content in beats.
         ["MutateBeatsAction"] = LinkPolicy.Retain,
         ["SetSongMetadataAction"] = LinkPolicy.Retain,
+        ["SetShowlightsAction"] = LinkPolicy.Retain,
+        ["SetProjectVolumesAction"] = LinkPolicy.Retain,
+        ["SetBookmarkAction"] = LinkPolicy.Retain,
+        ["ImportRsXmlAction"] = LinkPolicy.Retain,
         ["AddArrangementAction"] = LinkPolicy.Retain,
         ["MutateArrangementSettingsAction"] = LinkPolicy.Retain,
         ["EditPhrasesAction"] = LinkPolicy.Retain,
         ["DeleteChordShapesAction"] = LinkPolicy.Retain,
         ["RemoveStrandedShapesAction"] = LinkPolicy.Retain,
+        ["PickSlideSelectionAction"] = LinkPolicy.Retain,
         ["SetPhraseSoloAction"] = LinkPolicy.Retain,
         ["RenameStringFieldAction`1"] = LinkPolicy.Retain,
         ["SetKeySignatureAction"] = LinkPolicy.Retain,
+        ["SetStartingToneAction"] = LinkPolicy.Retain,
+        ["ReplaceListContentAction`1"] = LinkPolicy.Retain,
         ["MoveLyricAction"] = LinkPolicy.Retain,
         ["ResizeLyricAction"] = LinkPolicy.Retain,
+        ["MarkLyricReviewedAction"] = LinkPolicy.Retain,
         ["ResizeLyricPhraseAction"] = LinkPolicy.Retain,
         ["RemoveLyricAction"] = LinkPolicy.Retain,
         ["SetLyricNoteAction"] = LinkPolicy.Retain,
+        ["SetLyricPhraseEndAction"] = LinkPolicy.Retain,
+        ["JoinNextLyricLineAction"] = LinkPolicy.Retain,
+        ["NormalizeLyricEndsAction"] = LinkPolicy.Retain,
         ["RenameLyricAction"] = LinkPolicy.Retain,
         ["LyricTapAction"] = LinkPolicy.Retain,
         ["AddAnnotationAction"] = LinkPolicy.Retain,
         ["RemoveAnnotationAction"] = LinkPolicy.Retain,
+        ["SetAnnotationResolvedAction"] = LinkPolicy.Retain,
+        ["SetAnnotationTextAction"] = LinkPolicy.Retain,
+        ["SetAnnotationKindAction"] = LinkPolicy.Retain,
         ["AddVocalTrackAction"] = LinkPolicy.Retain,
+        ["AddActiveVocalTrackAction"] = LinkPolicy.Retain,
         ["SetVocalPhrasesAction"] = LinkPolicy.Retain,
         ["SetStyleAction"] = LinkPolicy.Retain,
         ["SetSynthPlayStyleAction"] = LinkPolicy.Retain,
         ["UpsertToneDefinitionAction"] = LinkPolicy.Retain,
         ["AssignArrangementTonesAction"] = LinkPolicy.Retain,
         ["RetargetToneChangesAction"] = LinkPolicy.Retain,
+        ["MoveToneChangeAction"] = LinkPolicy.Retain,
         ["ToneKeyRenameJournalStep"] = LinkPolicy.Retain,
         ["LinkFollowUpAction"] = LinkPolicy.Retain,
         ["CreateLinkGroupAction"] = LinkPolicy.Retain,
@@ -99,7 +117,8 @@ public sealed class LinkPolicyReachabilityTests
         ["AddLinkPlacementAction"] = LinkPolicy.Retain,
 
         // Computed: an override, else the strictest of its children (LinkPolicies.Of).
-        ["CompositeAction"] = null
+        ["CompositeAction"] = null,
+        ["FixAllAction"] = null
     };
 
     /// <summary>The whole-chart tools that commit ordinary edits, the file that must wrap them, the
@@ -114,7 +133,7 @@ public sealed class LinkPolicyReachabilityTests
             nameof(LinkedMeasuresGeneratorTests.Generate_hand_shapes_keeps_every_link_and_carries_the_shapes_to_the_other_arrangement)),
         ("DotCharter.Services/Editing/Maintenance/ChartMaintenanceService.PowerTools.cs", LinkPolicy.ShareFirstChanged,
             nameof(LinkedMeasuresGeneratorTests.Generate_levels_keeps_every_link_and_the_lower_levels_stay_per_arrangement)),
-        ("DotCharter.UI/ViewModels/Panels/ChordTemplateEditorViewModel.cs", LinkPolicy.ShareFirstChanged,
+        ("DotCharter.UI/ViewModels/Panels/ChordFingeringBatch.cs", LinkPolicy.ShareFirstChanged,
             nameof(LinkedMeasuresGeneratorTests.Generate_fingerings_keeps_every_link_and_carries_the_fingering_to_the_other_arrangement)),
         ("DotCharter.Services/Editing/Maintenance/ChartMaintenanceService.cs", LinkPolicy.UnlinkOnDivergence,
             nameof(LinkedMeasuresToolPolicyTests.A_single_undo_step_tool_that_changes_one_copy_unlinks_it_and_never_propagates)),
@@ -123,7 +142,7 @@ public sealed class LinkPolicyReachabilityTests
         ("DotCharter.Services/Editing/Maintenance/ChartMaintenanceService.cs", LinkPolicy.UnlinkOnDivergence,
             nameof(LinkedMeasuresToolPolicyTests.Sync_arrangement_unlinks_the_copy_it_made_differ)),
         ("DotCharter.Services/Editing/Maintenance/ChartMaintenanceService.cs", LinkPolicy.UnlinkOnDivergence,
-            nameof(LinkedMeasuresToolPolicyTests.Inserting_a_beat_inside_a_placement_unlinks_it_and_shifts_the_others))
+            nameof(LinkedMeasuresToolPolicyTests.Inserting_a_beat_inside_a_placement_keeps_the_later_placements_linked))
     ];
 
     private static IEnumerable<Type> ProductActionTypes() =>
@@ -199,6 +218,25 @@ public sealed class LinkPolicyReachabilityTests
         Assert.Equal(LinkPolicy.UnlinkOnDivergence, LinkPolicies.Of(new CompositeAction([shared, new UndeclaredAction()])));
         Assert.Equal(LinkPolicy.Retain, LinkPolicies.Of(beats));
         Assert.Equal(LinkPolicy.UnlinkOnDivergence, LinkPolicies.Of(new UndeclaredAction()));
+    }
+
+    [Fact]
+    public void Fix_all_takes_the_strictest_policy_of_the_repairs_it_ran()
+    {
+        var issues = new[]
+        {
+            new ArrangementIssue(ArrangementIssueType.FingerMissingOnFrettedString, "a"),
+            new ArrangementIssue(ArrangementIssueType.FingerMissingOnFrettedString, "b")
+        };
+
+        var two = new SelectionFindingsViewModel.FixAllAction(issues, _ => new AddNotesAction([], [new GuitarNote()]));
+        two.Execute();
+        Assert.Equal(LinkPolicy.Propagate, two.LinkPolicy);
+
+        var mixed = new SelectionFindingsViewModel.FixAllAction(issues,
+            issue => issue.Message == "a" ? new AddNotesAction([], [new GuitarNote()]) : new UndeclaredAction());
+        mixed.Execute();
+        Assert.Equal(LinkPolicy.UnlinkOnDivergence, mixed.LinkPolicy);
     }
 
     private sealed class UndeclaredAction : IChartAction

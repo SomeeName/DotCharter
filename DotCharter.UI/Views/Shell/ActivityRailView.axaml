@@ -99,7 +99,7 @@
                                          ConverterParameter=2}">
                     <StackPanel Theme="{StaticResource FireRailStackPanel}" Classes="FireRailStack">
                         <PathIcon Classes="FireRailGlyph" Data="{DynamicResource IconCog}" />
-                        <TextBlock Theme="{StaticResource FireRailCaptionText}" Classes="FireRailCaption" Text="{localization:Loc Nav_Settings}" />
+                        <TextBlock Theme="{StaticResource FireRailCaptionText}" Classes="FireRailCaption" Text="{localization:Loc Nav_Settings_Rail}" />
                     </StackPanel>
                 </RadioButton>
             </StackPanel>

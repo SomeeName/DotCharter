@@ -200,7 +200,7 @@ public sealed partial class DiagnosticsViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            _logger.Warning(AppLogCategory.Application, $"Could not open the log folder: {ex.Message}");
+            _logger.Warning(AppLogCategory.Application, "Could not open the log folder", ex);
         }
     }
 
@@ -210,8 +210,10 @@ public sealed partial class DiagnosticsViewModel : ViewModelBase
         var path = await _fileStorage.SaveFilePickerAsync(
             _localization["Diagnostics_ExportTitle"],
             $"DotCharter-diagnostics-{DateTime.Now:yyyy-MM-dd-HHmm}.zip",
-            [new FilePickerFilter(_localization["Diagnostics_ZipFilter"], ["*.zip"])]);
+            [new FilePickerFilter(_localization["Diagnostics_ZipFilter"], ["*.zip"])],
+            _configService.StartDirectory(c => c.LastDiagnosticsDir));
         if (path == null) return;
+        _configService.RememberDirectory(path, (c, d) => c.LastDiagnosticsDir = d);
 
         try
         {

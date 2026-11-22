@@ -803,7 +803,7 @@ internal static class GoldMode
                 }
                 if (chord != null && row[5].Length > 0)
                 {
-                    var t = arr.ChordTemplates.FirstOrDefault(x => x.Id == chord.TemplateId);
+                    var t = arr.FindChordTemplate(chord.TemplateId);
                     var wantF = row[5].Split(',').Select(p => p.Split(':')).ToDictionary(p => int.Parse(p[0]), p => int.Parse(p[1]));
                     cN++;
                     if (t != null && wantF.All(kv => t.Fingers.TryGetValue(kv.Key, out var f) && f == kv.Value)) cS++;

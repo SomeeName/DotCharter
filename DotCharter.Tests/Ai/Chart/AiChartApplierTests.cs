@@ -145,6 +145,19 @@ public sealed class AiChartApplierTests
     }
 
     [Fact]
+    public void A_hand_position_plan_whose_single_note_was_refretted_meanwhile_is_dropped_whole()
+    {
+        var plan = VersePlan();
+        var note = _f.Level.Notes.First(n => Verse.Contains(n.Position));
+        note.Fret += 2;
+
+        var action = AiChartApplier.Build(_f.Arrangement, _f.Level, [plan], _fingering, out var summary);
+
+        Assert.Null(action);
+        Assert.Equal(1, summary.StaleChunks);
+    }
+
+    [Fact]
     public void The_rule_gate_rejects_a_chunk_that_introduces_an_inspector_finding_and_leaves_the_scratch_alone()
     {
         // Index finger on fret 5 under an anchor on fret 3: E04 (and L08) — the inspector's

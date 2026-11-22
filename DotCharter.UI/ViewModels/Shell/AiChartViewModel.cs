@@ -1,24 +1,24 @@
-// Tools ▸ Fix & clean up: the AI chart pass verbs — FHP + fingering, FHP only, fingering only,
-// chord names in the EOF or the musical style — and the door to Settings ▸ AI. One line each over AiChartPassRun.
-using CommunityToolkit.Mvvm.Input;
+// The AI chart verbs of the old Tools ▸ AI rows, kept as palette ids: each starts its job in the AI chat panel.
+using DotCharter.Presentation.Screens.Editor;
 using DotCharter.Services.Ai.Chart;
 using DotCharter.Tone.UI.ViewModels.Shell;
 
 namespace DotCharter.UI.ViewModels.Shell;
 
 /// <summary>
-///     The AI chart pass, as menu and palette verbs. Each verb is an async command, so its
-///     row is disabled while its run is in flight; <see cref="AiChartPassRun" /> refuses a
-///     second run of ANY verb meanwhile, reports progress on the status rail, and holds the
-///     proposals for <see cref="Review" />, which writes the accepted ones as one undo step.
+///     The AI chart pass as palette verbs. The Tools menu has one "AI chat" row; the five fix verbs are
+///     jobs in the chat panel, and each verb here shows the panel, picks its job and runs it on the
+///     panel's scope through the same pass (<see cref="AiChartPassRun" />), so the proposals are held in
+///     <see cref="Review" /> and written as one undo step. The palette calls the methods directly (no view binds
+///     them); the panel refuses a second run while one is in flight.
 /// </summary>
-public sealed partial class AiChartViewModel : ViewModelBase
+public sealed class AiChartViewModel : ViewModelBase
 {
-    private readonly AiChartPassRun _run;
+    private readonly AiChatViewModel _chat;
 
-    public AiChartViewModel(AiChartPassRun run, AiChartReviewViewModel review)
+    public AiChartViewModel(AiChatViewModel chat, AiChartReviewViewModel review)
     {
-        _run = run;
+        _chat = chat;
         Review = review;
     }
 
@@ -26,26 +26,18 @@ public sealed partial class AiChartViewModel : ViewModelBase
     /// the accepted sections.</summary>
     public AiChartReviewViewModel Review { get; }
 
-    /// <summary>Tools ▸ Fix &amp; clean up ▸ AI settings…: the shell swaps to its Settings tab.</summary>
-    public event Action? OpenSettingsRequested;
+    /// <summary>The chat panel's AI settings door, as the palette's "AI settings" id.</summary>
+    public System.Windows.Input.ICommand OpenAiSettingsCommand => _chat.OpenAiSettingsCommand;
 
-    [RelayCommand]
-    private Task FixFhpAndFingeringAsync() => _run.RunAsync(AiChartJob.FhpAndFingering);
+    public Task FixFhpAndFingeringAsync() => _chat.StartJobAsync(AiChartJob.FhpAndFingering);
 
     /// <summary>Anchors from the model; free fingerings follow them deterministically.</summary>
-    [RelayCommand]
-    private Task FixFhpOnlyAsync() => _run.RunAsync(AiChartJob.FhpOnly);
+    public Task FixFhpOnlyAsync() => _chat.StartJobAsync(AiChartJob.FhpOnly);
 
     /// <summary>Fingers from the model; the anchors stay as they are.</summary>
-    [RelayCommand]
-    private Task FixFingeringOnlyAsync() => _run.RunAsync(AiChartJob.FingeringOnly);
+    public Task FixFingeringOnlyAsync() => _chat.StartJobAsync(AiChartJob.FingeringOnly);
 
-    [RelayCommand]
-    private Task FixChordNamesAsync() => _run.RunAsync(AiChartJob.ChordNames, ChordNamingStyle.Eof);
+    public Task FixChordNamesAsync() => _chat.StartJobAsync(AiChartJob.ChordNames, ChordNamingStyle.Eof);
 
-    [RelayCommand]
-    private Task FixChordNamesMusicalAsync() => _run.RunAsync(AiChartJob.ChordNames, ChordNamingStyle.Musical);
-
-    [RelayCommand]
-    private void OpenAiSettings() => OpenSettingsRequested?.Invoke();
+    public Task FixChordNamesMusicalAsync() => _chat.StartJobAsync(AiChartJob.ChordNames, ChordNamingStyle.Musical);
 }

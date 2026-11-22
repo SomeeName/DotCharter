@@ -188,7 +188,7 @@ public sealed partial class JuceDspChainService : IDspChainService
             // A restore that throws must never take the audio engine's attach
             // path down with it — this runs inside ReplaceEngineGated.
             _logger?.Warning(AppLogCategory.Audio,
-                $"A DSP EngineAttached handler threw: {ex.GetType().Name}: {ex.Message}");
+                "A DSP EngineAttached handler threw", ex);
         }
     }
 
@@ -263,6 +263,17 @@ public sealed partial class JuceDspChainService : IDspChainService
     {
         _catalog = source._catalog;
         _catalogById = source._catalogById;
+    }
+
+    /// <summary>
+    ///     Adopts the catalogue <see cref="NativeEnginePrefetch" /> read on the startup
+    ///     worker and logs it as <see cref="LoadCatalog" /> does, so the log reads
+    ///     the same whichever thread did the read.
+    /// </summary>
+    internal void AdoptPrefetchedCatalog(JuceDspChainService source)
+    {
+        ShareCatalogFrom(source);
+        _logger?.Info(AppLogCategory.Audio, $"DSP module catalogue loaded: {_catalog.Count} module type(s).");
     }
 
     /// <summary>Loads the ABI-v24 value labels for a discrete ("model picker")
@@ -367,7 +378,7 @@ public sealed partial class JuceDspChainService : IDspChainService
     private void RaiseNodesChanged()
     {
         try { NodesChanged?.Invoke(); }
-        catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, $"DSP NodesChanged handler threw: {ex.Message}"); }
+        catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, "DSP NodesChanged handler threw", ex); }
     }
 
     public bool MoveNode(int nodeId, int newIndex)
@@ -585,7 +596,7 @@ public sealed partial class JuceDspChainService : IDspChainService
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"DSP chain native call '{what}' failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, $"DSP chain native call '{what}' failed", ex);
             return fallback;
         }
     }

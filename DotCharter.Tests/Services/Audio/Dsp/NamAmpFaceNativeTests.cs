@@ -416,20 +416,32 @@ public sealed class NamAmpFaceNativeTests
         /// type (never the default pick), so a concurrent test creating an
         /// ordinary engine is unaffected.
         /// </summary>
+        /// <remarks>
+        ///     Null ONLY when no engine can exist here (the native library is missing,
+        ///     or the device did not open): that is the callers' skip. A catalogue
+        ///     load or an attach that throws is a product failure and fails the test;
+        ///     it used to be caught with everything else and skipped (#608).
+        /// </remarks>
         public static NativeChainEnv? TryCreate(int sampleRate = 48_000)
         {
-            var guard = new NullDeviceScope();
+            var guard = NullDeviceEnvScope.EnableManual();
             JuceAudioEngine? engine = null;
             try
             {
-                engine = new JuceAudioEngine(new JuceEngineConfig
+                engine = NativeEngineSetup.TryOpen(() => new JuceAudioEngine(new JuceEngineConfig
                 {
                     OutputTypeName = "Null",
                     InputTypeName = "Null",
                     SampleRate = sampleRate,
                     BufferFrames = 1024,   // >= the 512-frame offline chunk
                     EnableConsoleLog = false,
-                });
+                }), out _);
+                if (engine is null)
+                {
+                    guard.Dispose();
+                    return null;
+                }
+
                 engine.Stop(); // transport off — this rig is driven offline only
                 var chain = new JuceDspChainService();
                 chain.LoadCatalog();
@@ -448,25 +460,7 @@ public sealed class NamAmpFaceNativeTests
             {
                 engine?.Dispose();
                 guard.Dispose();
-                return null;
-            }
-        }
-
-        /// <summary>Sets both null-device guards for the engine's lifetime. They
-        /// are read natively at engine start (via GetEnvironmentVariable, not the
-        /// CRT's cached getenv), so they must be live before construction.</summary>
-        private sealed class NullDeviceScope : IDisposable
-        {
-            public NullDeviceScope()
-            {
-                Environment.SetEnvironmentVariable("DCA_ENABLE_NULL_DEVICE", "1");
-                Environment.SetEnvironmentVariable("DCA_NULL_DEVICE_MANUAL", "1");
-            }
-
-            public void Dispose()
-            {
-                Environment.SetEnvironmentVariable("DCA_ENABLE_NULL_DEVICE", null);
-                Environment.SetEnvironmentVariable("DCA_NULL_DEVICE_MANUAL", null);
+                throw;
             }
         }
 

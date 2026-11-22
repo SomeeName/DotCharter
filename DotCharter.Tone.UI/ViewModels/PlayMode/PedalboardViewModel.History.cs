@@ -26,7 +26,7 @@ public sealed partial class PedalboardViewModel
     public bool CanPaste => _clipboard is not null;
 
     /// <summary>Wires a card's edits into the history: every param and string
-    /// value, and its bypass. Called for every card the board creates.</summary>
+    /// value, bypass and sidechain source. Called for every card the board creates.</summary>
     private void TrackEdits(PedalNodeViewModel node)
     {
         node.PropertyChanged += OnNodeEdited;
@@ -36,7 +36,7 @@ public sealed partial class PedalboardViewModel
 
     private void OnNodeEdited(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(PedalNodeViewModel.Bypassed)) NoteEdit();
+        if (e.PropertyName is nameof(PedalNodeViewModel.Bypassed) or nameof(PedalNodeViewModel.SidechainSource)) NoteEdit();
     }
 
     private void OnValueEdited(object? sender, PropertyChangedEventArgs e)

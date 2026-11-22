@@ -73,6 +73,7 @@ public sealed class ChartSynthToolbarToggleTests
         Assert.Contains(nameof(TransportViewModel.ChartSynthToggleTip), raised);
         Assert.True(canExecuteChanged > 0, "the toolbar button was never told to re-read CanExecute");
         Assert.False(transport.ToggleChartSynthCommand.CanExecute(null));
+        Assert.False(transport.ResetRoutingCommand.CanExecute(null));   // the Routing card's Reset is off with it
         Assert.Equal("Toolbar_ToggleChartSynth_Unavailable", transport.ChartSynthToggleTip);
 
         transport.ToggleChartSynthCommand.Execute(null);   // the keybind runs Execute directly
@@ -82,6 +83,7 @@ public sealed class ChartSynthToolbarToggleTests
         audio.SetEngineUp(true);
         Assert.True(transport.CanPlayChart);
         Assert.True(transport.ToggleChartSynthCommand.CanExecute(null));
+        Assert.True(transport.ResetRoutingCommand.CanExecute(null));
         Assert.Equal("Toolbar_ToggleChartSynth_Hint", transport.ChartSynthToggleTip);
     }
 

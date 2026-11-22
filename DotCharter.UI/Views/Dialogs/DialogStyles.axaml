@@ -114,5 +114,6 @@
     <StyleInclude Source="avares://DotCharter/Views/Dialogs/DialogStyles/ShellAndHead.axaml" />
     <StyleInclude Source="avares://DotCharter/Views/Dialogs/DialogStyles/BodyAndStates.axaml" />
     <StyleInclude Source="avares://DotCharter/Views/Dialogs/DialogStyles/Foot.axaml" />
+    <StyleInclude Source="avares://DotCharter/Views/Dialogs/DialogStyles/GearPicker.axaml" />
 
 </Styles>

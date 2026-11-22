@@ -19,8 +19,9 @@ public static class LibraryQuery
                 .ToArray();
 
     /// <summary>
-    ///     Lower case (invariantly) and stripped of combining marks, so "Motorhead" finds
-    ///     "Motörhead". Both sides of the search are folded, so the per-row test is an ordinal
+    ///     Lower case (invariantly), width-folded and stripped of combining marks, so "Motorhead" finds
+    ///     "Motörhead" and half-width kana find full-width. Kana voicing marks stay, so voiced never
+    ///     matches unvoiced. Both sides of the search are folded, so the per-row test is an ordinal
     ///     Contains. ASCII skips the normalization; a string that will not normalize is lower-cased.
     /// </summary>
     public static string Fold(string text)
@@ -31,7 +32,7 @@ public static class LibraryQuery
         string decomposed;
         try
         {
-            decomposed = text.Normalize(NormalizationForm.FormD);
+            decomposed = text.Normalize(NormalizationForm.FormKC).Normalize(NormalizationForm.FormD);
         }
         catch (ArgumentException)
         {
@@ -41,11 +42,11 @@ public static class LibraryQuery
         var builder = new StringBuilder(decomposed.Length);
         foreach (var ch in decomposed)
         {
-            if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
+            if (ch is '゙' or '゚' || CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
                 builder.Append(ch);
         }
 
-        return builder.ToString().ToLowerInvariant();
+        return builder.ToString().Normalize(NormalizationForm.FormC).ToLowerInvariant();
     }
 
     /// <summary><see cref="Tokenize" /> with each token <see cref="Fold" />ed — what <see cref="Matches" /> expects.</summary>

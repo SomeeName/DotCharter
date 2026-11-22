@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -7,8 +8,8 @@ namespace DotCharter.Services.Export.Rocksmith;
 /// <summary>
 ///     A release package's file name, the way DLC Builder names it
 ///     (<c>ReleasePackageBuilder.fs</c>): <c>&lt;Artist&gt;_&lt;Title&gt;_v&lt;Version, . as _&gt;</c>
-///     sanitised by <c>StringValidator.fileName</c>. The platform suffix (<c>_p.psarc</c>,
-///     <c>_m.psarc</c>) is the caller's.
+///     sanitised by <c>StringValidator.fileName</c>. <see cref="RocksmithPackageName" /> owns
+///     the full package name, including release/test and platform suffixes.
 ///     <para>
 ///         Each name is its authored sort value when it has one, else the name as written.
 ///         Unlike DLC Builder's <c>convertToSortField</c> fallback, a leading "the "/"a "/"an "
@@ -22,9 +23,8 @@ public static class RocksmithReleaseName
     /// <summary>The release file name for <paramref name="project" /> at <paramref name="version" />, without the suffix.</summary>
     public static string For(ChartProject project, string version)
     {
-        var meta = RsPackageMetadataFactory.Create(project,
-            new RocksmithBuildOptions { OutputPath = "", AudioPath = "" });
-        return Create(meta.Artist, meta.ArtistSortOverride, meta.Title, "", version);
+        var names = RsPackageMetadataFactory.CreateNames(project);
+        return Create(names.Artist, names.ArtistSort, names.Title, "", version);
     }
 
     /// <summary>
@@ -36,8 +36,40 @@ public static class RocksmithReleaseName
         var artistPart = Authored(artistSort, artist) ? artistSort : artist;
         var titlePart = Authored(titleSort, title) ? titleSort : title;
         var versionPart = (string.IsNullOrWhiteSpace(version) ? "1" : version.Trim()).Replace('.', '_');
-        return FileName($"{artistPart}_{titlePart}_v{versionPart}");
+        return FileName($"{Segment(artistPart, "Artist")}_{Segment(titlePart, "Song")}_v{versionPart}");
     }
+
+    /// <summary>
+    ///     A name part as it reads in the file name. A name with no Latin letter or digit (a title in
+    ///     Japanese script) would leave an empty segment (<c>SYU__v1_p.psarc</c>), so it becomes
+    ///     <paramref name="fallback" /> plus a short stable code of the original: two such songs by one
+    ///     artist keep different files. The charter's own fix is a romanised title in Song metadata.
+    /// </summary>
+    private static string Segment(string part, string fallback)
+    {
+        if (FileName(part).Any(char.IsAsciiLetterOrDigit)) return part;
+        var code = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(part.Trim())), 0, 2);
+        return fallback + "-" + code;
+    }
+
+    /// <summary>
+    ///     <paramref name="outputPath" /> re-pointed from the derived package name <paramref name="oldPcName" /> to
+    ///     <paramref name="newPcName" /> (both the PC form), keeping its folder, its Mac suffix and its extended-range tag;
+    ///     null when the file name is the user's own (not derived from the old one) and keeps its name.
+    /// </summary>
+    public static string? Retarget(string outputPath, string oldPcName, string newPcName)
+    {
+        if (string.IsNullOrWhiteSpace(outputPath) || oldPcName.Length == 0 || oldPcName == newPcName) return null;
+        var file = Path.GetFileName(outputPath);
+        var untagged = ExtendedRangePackageName.Apply(file, false);
+        var tagged = file != untagged;
+        var mac = untagged.Equals(MacName(oldPcName), StringComparison.OrdinalIgnoreCase);
+        if (!mac && !untagged.Equals(oldPcName, StringComparison.OrdinalIgnoreCase)) return null;
+        var renamed = ExtendedRangePackageName.Apply(mac ? MacName(newPcName) : newPcName, tagged && !mac);
+        return Path.Combine(Path.GetDirectoryName(outputPath) ?? "", renamed);
+    }
+
+    private static string MacName(string pcName) => pcName[..^"_p.psarc".Length] + "_m.psarc";
 
     /// <summary>
     ///     <paramref name="outputPath" /> with the release name of <paramref name="newVersion" /> in place of that of
@@ -48,15 +80,16 @@ public static class RocksmithReleaseName
     {
         if (string.IsNullOrWhiteSpace(outputPath)) return null;
         var file = Path.GetFileName(outputPath);
-        var oldStem = For(project, oldVersion);
-        if (!file.Equals(oldStem + "_p.psarc", StringComparison.OrdinalIgnoreCase) &&
-            !file.Equals(oldStem + "_m.psarc", StringComparison.OrdinalIgnoreCase))
+        var untagged = ExtendedRangePackageName.Apply(file, false);
+        var tagged = file != untagged;
+        if (!untagged.Equals(RocksmithPackageName.For(project, oldVersion), StringComparison.OrdinalIgnoreCase) &&
+            !file.Equals(RocksmithPackageName.For(project, oldVersion, mac: true), StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
 
-        return ExportPathDefaults.WithPlatformSuffix(
-            Path.Combine(Path.GetDirectoryName(outputPath) ?? "", For(project, newVersion) + ".psarc"), mac);
+        return Path.Combine(Path.GetDirectoryName(outputPath) ?? "",
+            RocksmithPackageName.For(project, newVersion, mac, tagged));
     }
 
     private static bool Authored(string sort, string name) =>

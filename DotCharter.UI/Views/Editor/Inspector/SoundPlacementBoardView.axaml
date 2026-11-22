@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundPlacementBoardView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Placement page's BOARD card (#751 P4, design D's "Place a note"): the fretboard with the note's dot
+         at its STAGED string and fret; a click stages the clicked cell (Staged.Placement.SetTarget) and the
+         footer's Apply writes it. Clear mask beside the heading; the mask warning under the board. -->
+    <StackPanel Spacing="{StaticResource SpaceSm}">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource SpaceSm}">
+            <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                       Text="{localization:Loc Inspector_Staged_PlaceNote}" VerticalAlignment="Center" />
+            <Button x:Name="PlacementClearMask" Grid.Column="1" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                    Content="{localization:Loc Inspector_Scope_ClearMask}"
+                    Command="{Binding StringMask.ClearStringMaskCommand}"
+                    AutomationProperties.Name="{localization:Loc Inspector_Scope_ClearMask}"
+                    ToolTip.Tip="{localization:Loc Inspector_Scope_ClearMaskTip}" />
+        </Grid>
+        <Border Classes="FretboardWell">
+            <ctl:ChordBoxControl x:Name="PlacementBoard" Height="120"
+                                 Role="MoveNote"
+                                 Chord="{Binding Staged.Placement.PreviewChord}"
+                                 StringCount="{Binding NoteStringCount}"
+                                 FlipStrings="{Binding ProjectState.FlipStrings}"
+                                 TuningNames="{Binding NoteTuningNames}"
+                                 Mask="{Binding ProjectState.StringEditMask}"
+                                 ToggleMaskCommand="{Binding StringMask.ToggleStringMaskCommand}"
+                                 ToggleNoteCommand="{Binding Staged.Placement.SetTargetCommand}"
+                                 ToolTip.Tip="{localization:Loc Inspector_FretboardPickHint}" />
+        </Border>
+        <!-- The note's own string is outside the mask: the keyboard verbs skip it, so say so. -->
+        <Border Classes="FieldIssue Warn" IsVisible="{Binding NoteStringIsOutsideMask}">
+            <Grid ColumnDefinitions="Auto,*">
+                <PathIcon Grid.Column="0" Data="{DynamicResource IconInfo}" Margin="{StaticResource GapRightSm}" />
+                <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Scope_NoteOutsideMask}" TextWrapping="Wrap" />
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>

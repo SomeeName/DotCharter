@@ -181,13 +181,11 @@ public static class ArrangementPropertiesDeriver
     /// </summary>
     public static bool IsStandardTuning(Arrangement arrangement)
     {
-        var stringCount = arrangement.StringCount > 0 ? arrangement.StringCount : arrangement.TuningPitches.Count;
-        if (stringCount <= 0) return true;
-
-        for (var i = 0; i < stringCount; i++)
+        var offsets = TuningOffsetResolution.Resolve(arrangement);
+        var stringCount = arrangement.StringCount > 0 ? arrangement.StringCount : offsets.Count;
+        for (var i = 0; i < Math.Min(stringCount, offsets.Count); i++)
         {
-            if (i >= arrangement.TuningPitches.Count) continue;
-            if (arrangement.TuningPitches[i].Step != 0) return false;
+            if (offsets[i] != 0) return false;
         }
 
         return true;

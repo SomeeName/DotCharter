@@ -1,5 +1,6 @@
 using DotCharter.Rendering.Timeline2D;
 using DotCharter.Rendering.Vulkan;
+using DotCharter.Rendering.Vulkan.Composed;
 using Silk.NET.Vulkan;
 using VkBuffer = Silk.NET.Vulkan.Buffer;
 using VkImage = Silk.NET.Vulkan.Image;
@@ -97,7 +98,7 @@ public sealed unsafe class Timeline2DHeadlessRenderer : IDisposable
                     out _readbackBuffer, out _readbackMemory);
             }
             void* mapped;
-            _context.Api.MapMemory(_context.Device, _readbackMemory, 0, byteCount, 0, &mapped);
+            VulkanCheck.Ok(_context.Api.MapMemory(_context.Device, _readbackMemory, 0, byteCount, 0, &mapped), "Timeline2DHeadlessRenderer.MapMemory");
             _readbackMapped = (byte*)mapped;
         }
         catch
@@ -189,8 +190,11 @@ public sealed unsafe class Timeline2DHeadlessRenderer : IDisposable
 
         var submit = new SubmitInfo
         { SType = StructureType.SubmitInfo, CommandBufferCount = 1, PCommandBuffers = &cmd };
-        api.QueueSubmit(_context.GraphicsQueue, 1, in submit, _frames.Fences[0]);
-        api.WaitForFences(_context.Device, 1, in _frames.Fences[0], true, 5_000_000_000);
+        var submitResult = api.QueueSubmit(_context.GraphicsQueue, 1, in submit, _frames.Fences[0]);
+        if (FrameFencePolicy.NeedsRecreateSignaled(submitResult))
+            FrameFencePolicy.RecreateSignaled(api, _context.Device, ref _frames.Fences[0]);
+        else
+            api.WaitForFences(_context.Device, 1, in _frames.Fences[0], true, 5_000_000_000);
 
         var byteCount = Width * Height * 4;
         var pixels = reusePixels is { } r && r.Length == byteCount ? r : new byte[byteCount];

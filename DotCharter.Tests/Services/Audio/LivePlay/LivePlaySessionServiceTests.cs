@@ -51,6 +51,33 @@ public sealed class LivePlaySessionServiceTests
         session.Offer(one, [], timeMs, LiveTechniqueFlags.None, 0f);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SongCompletion_ResolvesTheFinalOpenJudgmentWindow(bool confirmed)
+    {
+        var session = StartSession(SimpleArr(), new LivePlaySessionOptions
+        {
+            ChartVerify = _ => new ChartVerifyOutcome(confirmed, confirmed ? 1f : 0f)
+        });
+        // The last note is at 4500 ms. Its late window is still open at audio EOF.
+        session.HandleTick(4500, true, new LivePlayTickResult(), externalSeek: false);
+        var matcher = Assert.IsType<LiveNoteMatcher>(session.Matcher);
+        Assert.Null(matcher.Expected[^1].Verdict);
+        var complete = typeof(LivePlaySessionService).GetMethod("CompleteAt");
+        Assert.NotNull(complete);
+
+        var tick = Assert.IsType<LivePlayTickResult>(complete.Invoke(session, [4500.0]));
+
+        Assert.NotEmpty(tick.Events);
+        Assert.All(matcher.Expected, sound => Assert.NotNull(sound.Verdict));
+        Assert.Equal(8, session.Sections.Sum(s => s.Hits + s.Misses));
+        var result = session.Stop(1.0);
+        Assert.Equal(confirmed ? 8 : 0, result.Hits);
+        Assert.Equal(confirmed ? 0 : 8, result.Misses);
+        Assert.Equal(confirmed, result.IsFullCombo);
+    }
+
     /// <summary>Drives HandleTick along song time in fixed steps, collecting results.</summary>
     private static List<LivePlayTickResult> Drive(LivePlaySessionService session,
         double fromMs, double toMs, double stepMs)
@@ -59,6 +86,48 @@ public sealed class LivePlaySessionServiceTests
         for (var t = fromMs; t <= toMs; t += stepMs)
             results.Add(session.HandleTick(t, isPlaying: true));
         return results;
+    }
+
+    [Theory]
+    [InlineData(null, LiveChordVoicingStrictness.Standard)]
+    [InlineData("", LiveChordVoicingStrictness.Standard)]
+    [InlineData("unknown", LiveChordVoicingStrictness.Standard)]
+    [InlineData("1", LiveChordVoicingStrictness.Standard)]
+    [InlineData(" standard ", LiveChordVoicingStrictness.Standard)]
+    [InlineData(" STRICT ", LiveChordVoicingStrictness.Strict)]
+    [InlineData("lenient", LiveChordVoicingStrictness.Lenient)]
+    public void SessionOptions_ParseStoredChordStrictness(string? value, LiveChordVoicingStrictness expected)
+    {
+        var parse = typeof(LivePlaySessionOptions).GetMethod("ParseChordStrictness");
+        Assert.NotNull(parse);
+        Assert.Equal(expected, (LiveChordVoicingStrictness)parse.Invoke(null, [value])!);
+    }
+
+    [Fact]
+    public void ElapsedPhrase_IncludesTheMissResolvedOnItsCompletionTick()
+    {
+        var arr = new Arrangement { ArrangementType = ArrangementType.Lead };
+        var level = new ChartLevel();
+        level.Notes.Add(Note(1, fret: 3));
+        level.Notes.Add(Note(3, fret: 3, halfBeatLater: true)); // 1750 ms, near the 2000 ms boundary
+        arr.Levels.Add(level);
+        arr.Phrases.Add("first");
+        arr.Phrases.Add("last");
+        arr.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(0), 0));
+        arr.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(4), 1));
+        var session = StartSession(arr, new LivePlaySessionOptions { DynamicDifficulty = true });
+        OfferHit(session, 500);
+        session.HandleTick(1900, true, new LivePlayTickResult(), externalSeek: false);
+
+        var tick = session.HandleTick(2300, true, new LivePlayTickResult(), externalSeek: false);
+
+        Assert.Equal(LivePlayVerdict.Miss, Assert.Single(tick.Events).Verdict);
+        var outcome = Assert.Single(session.Difficulty!.SnapshotOutcomes());
+        Assert.Equal("first", outcome.PhraseName);
+        Assert.Equal(1, outcome.Hits);
+        Assert.Equal(1, outcome.Misses);
+        session.HandleTick(2400, true);
+        Assert.Equal(1, Assert.Single(session.Difficulty.SnapshotOutcomes()).Misses);
     }
 
     [Fact]

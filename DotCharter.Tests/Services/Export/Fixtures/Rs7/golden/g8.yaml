@@ -1,0 +1,27 @@
+song:
+  key: RS7Gold8
+  file: rs7g8
+  title: Golden 8
+  artist: DotCharter
+  album: Golden
+  year: 2026
+  length: 60
+  audio: control
+  date: 10-13-26 12:00
+tempo: 80
+beats_per_measure: 4
+strings: 8
+tuning: [0, 0, 0, 0, 0, 0, -2, -1]
+chord_mode: projection
+sections: auto
+anchors: auto
+notes:
+- {beat: 4, string: 7, fret: 0}
+- {beat: 5, string: 7, fret: 3}
+- {beat: 6, string: 6, fret: 2}
+- {beat: 7, string: 0, fret: 5}
+chords:
+- {beat: 10, name: F#5, frets: {7: 0, 6: 2, 0: 2}, fingers: {6: 1, 0: 3}}
+- {beat: 14, name: D, frets: {7: 2, 0: 2}, fingers: {7: 1, 0: 3}}
+- {beat: 18, name: F#5, frets: {7: 0, 6: 2, 0: 2}, fingers: {6: 1, 0: 3}}
+- {beat: 22, name: G, frets: {7: 3, 6: 2, 0: 2}, fingers: {7: 2, 6: 1, 0: 3}}

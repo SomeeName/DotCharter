@@ -168,6 +168,15 @@ The designer never sees a PATH: the validator resolves an id to the file name an
   DPAPI file and cost the user a full browser sign-in. Same doctrine as the
   degraded-read rule for JSON stores: failing to read an answer is never
   authority to delete.
+  Refresh completion also checks the captured session generation under the
+  session lock before saving or clearing credentials (#577). Sign-out,
+  invalidation and a new account's sign-in obsolete the old response: neither
+  a successful refresh nor a rejected grant can change the replacement session.
+  The browser and AI capture source capture that identity epoch across search and download, discard
+  obsolete replies, and binds server-triggered invalidation to it under the same
+  lock. A discarded browser reply still refreshes auth bindings; a rejected
+  refresh shows the signed-out session-expired state. A successful token refresh
+  preserves the epoch of its account.
   (2) **`Tone3000OAuth.TryParseCallback` validates `state` FIRST.** It read the
   provider's `error` ahead of the CSRF check, so any page the user had open
   could `GET` the loopback prefix with `?error=access_denied` and end a sign-in
@@ -175,7 +184,10 @@ The designer never sees a PATH: the validator resolves an id to the file name an
   callback path whose query carries THIS flow's `state` (`Tone3000OAuth.CarriesState`,
   passed to `IOAuthCallbackListener.WaitForCallbackAsync` as its gate); every other
   request gets a 404 and the wait runs on to the timeout, so a stray page cannot end
-  the sign-in either.
+  the sign-in either. The listener binds synchronously before its first await;
+  its timeout uses an injectable `TimeProvider`. `HttpListenerOAuthCallbackListenerTests`
+  sends the stray request before advancing `StepTimeProvider`, so gate load cannot
+  close the listener before the client connects.
   (3) **A sign-in is cancellable and single-flight.** The listener owns port
   47821 for the whole five-minute `CallbackTimeout`;
   `UI/ViewModels/Online/Tone3000SettingsViewModel` owns the flow's CTS, refuses
@@ -193,6 +205,10 @@ The designer never sees a PATH: the validator resolves an id to the file name an
   (`NamCaptureIndex.BuildFileName`, untrusted remote titles never reach the
   filesystem raw), `.partial` + size-sanity + atomic rename like
   `StemModelManager`. Pure library filtering in `NamCaptureIndex`.
+  Sidecar `FileName` values must pass `FileReferencePolicy.IsBareFileName` before
+  probing a target. A rooted name, directory component, device or stream is
+  skipped by scans, extension migration and deletion; bundled destination names
+  obey the same rule. `NamCaptureLibraryMigrationTests` preserves outside files.
   **File EXTENSION is load-bearing:** NeuralAudio dispatches its loader by the
   file's LOWERCASE, case-sensitive extension, so a NAM stored as `.bin`/`.NAM`
   loads silently as nothing (the owner's `.bin` marshall bug). `BuildFileName`
@@ -254,7 +270,10 @@ The designer never sees a PATH: the validator resolves an id to the file name an
   info AND ≤1 req/s and blocks you for skipping either**; the gate uses an
   injected clock so the rule is tested without sleeping. The recording search
   (`FindRecordingAsync`) is private: it only supplies the title and album half of
-  the suggestion. There is no Spotify lookup, no Cover Art Archive lookup and no
+  the suggestion. The title is the best hit's own when that is Latin, else the Latin title of a twin recording or
+  an English alias within a few score points (`MusicBrainzMatch.LatinTitle`), and an original-script search accepts
+  a Latin-credited top hit (score 90+) that matched through an alias — otherwise "Use official names" filled only
+  the artist (`Services/Online/LatinTitleSuggestionTests`). There is no Spotify lookup, no Cover Art Archive lookup and no
   CustomsForge upload plan any more (#866): the site's form changed too often to
   keep a filler, so the app never touches CustomsForge.
 

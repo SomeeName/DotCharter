@@ -272,14 +272,57 @@ public sealed class MidiPreviewSchedulerTests
     {
         var audio = Path.Combine(TestPaths.RepoRoot(), "DotCharter.Tone", "Audio");
         var service = string.Concat(PlaybackServiceSourceFiles.All().Select(File.ReadAllText));
-        Assert.Contains("MidiPreviewScheduler.SchedulesOnRenderClock(_instrumentPlugin != null, _sandboxInstrumentLoaded, midi)", service);
-        Assert.DoesNotContain("!_sandboxInstrumentLoaded && midi is JuceInstrumentMidiOutput", service);
+        Assert.Contains("MidiPreviewScheduler.SchedulesOnRenderClock(_instrumentPlugin != null, SandboxInstrumentLoaded, midi)", service);
+        Assert.DoesNotContain("!SandboxInstrumentLoaded && midi is JuceInstrumentMidiOutput", service);
         Assert.Contains("anchor = new MidiRenderAnchor(frame, sr);", service);
         Assert.Contains("_midiScheduler.BeginTick(_previewSink, nowMs, _playbackSpeed, anchor)", service);
         Assert.DoesNotContain("_activeMidiNotes", service); // one bookkeeping, the scheduler's
 
         var sink = File.ReadAllText(Path.Combine(audio, "Midi", "JuceInstrumentMidiOutput.cs"));
         Assert.Contains("_engine.SendMidi(status, (byte)(data1 & 0x7F), (byte)(data2 & 0x7F), renderFrame)", sink);
+    }
+
+    [Fact]
+    public void RestartedRenderClock_DoesNotKeepTheOldKeysReleaseFrame()
+    {
+        var rig = new Rig();
+        rig.Tick(1000, 10_000_000);
+        rig.Play(1010, 1020, 60);
+        rig.EndTick();
+        rig.Flush();
+        rig.Scheduler.ResetForEngine();
+        rig.Events.Clear();
+
+        rig.Tick(1000, 0);
+        rig.Play(1010, 1040, 60);
+
+        Assert.Equal(Rate / 100, rig.FrameOf(0x90, 60));
+    }
+
+    [Fact]
+    public async Task DelayedTickOnTheSameEngine_DoesNotResetHeldOrParkedNotes()
+    {
+        var rig = new Rig();
+        rig.Tick(1000, 1000);
+        rig.Play(1020, 2000, 60);
+        rig.EndTick();
+        using var release = new ManualResetEventSlim();
+        var sampled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var delayed = Task.Run(() =>
+        {
+            sampled.SetResult();
+            Assert.True(release.Wait(TimeSpan.FromSeconds(60)), "tick barrier was not released");
+            rig.Tick(1002, 1100);
+        }, TestContext.Current.CancellationToken);
+        await sampled.Task.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        rig.Tick(1004, 1200);
+        rig.Events.Clear();
+        release.Set();
+        await delayed.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        Assert.Equal(1, rig.Scheduler.ActiveCount);
+        Assert.DoesNotContain(rig.Events, e => e.Status == 0xB0 && e.Data1 == 120);
+        rig.Flush();
+        Assert.Contains(rig.Events, e => e.Status == 0x80 && e.Data1 == 60 && e.Frame > 0);
     }
 
     // ---- harness -------------------------------------------------------------

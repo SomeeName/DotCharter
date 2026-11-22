@@ -67,7 +67,7 @@ public class InspectorIssueFieldMapTests
         foreach (var key in declared)
             Assert.Contains(key, errorKeys);
 
-        Assert.Equal(12, declared.Count);
+        Assert.Equal(14, declared.Count);
     }
 
     [Theory]

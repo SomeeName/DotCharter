@@ -22,62 +22,50 @@ public sealed class StemToolChildProcessTests : IDisposable
 
     public void Dispose() => BestEffortDelete.Directory(_dir);
 
+    /// <summary>~120 KB: 3,000 lines of 40 characters, far past the ~4 KB pipe buffer.</summary>
+    private string FloodFile()
+    {
+        var path = Path.Combine(_dir, "flood.txt");
+        File.WriteAllText(path, string.Concat(Enumerable.Repeat(new string('z', 40) + "\r\n", 3000)));
+        return path;
+    }
+
     /// <summary>
     /// S1e. Cancelling an encode must KILL the child — and the whole tree, since
     /// the tool is normally launched behind a shell. <c>using var proc</c>
     /// disposes only the managed WRAPPER, so the real process kept running and
     /// kept writing into a destination the caller had already abandoned.
     /// <para>
-    /// Observed on the grandchild (<c>ping</c>) rather than on a marker file: it
-    /// makes the assertion immediate when the kill works and unambiguous when it
-    /// does not, with no dependence on shell quoting. The ping is given ~119 s of
-    /// life rather than ~14: BOTH windows below have to sit comfortably inside
-    /// it, and on a saturated box a 14 s child leaves no room for the one that
-    /// waits for the grandchild to appear.
+    /// #607: the tree is an <see cref="OwnedChildTree" />. The cancel comes only once
+    /// ITS ping grandchild is running (the old version returned PASSED when no ping
+    /// had been seen, and found "its" pings by diffing the machine's process list,
+    /// which another test's or the user's ping could satisfy), and the test then
+    /// waits for that grandchild to be gone: a kill that spares the descendants
+    /// leaves it holding its file. Every wait is a deadlock detector.
     /// </para>
     /// </summary>
     [Fact]
     public async Task CancellingAnEncode_KillsTheChildProcessTree()
     {
-        if (!OperatingSystem.IsWindows()) return;
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Uses a .cmd script.");
+        var ct = TestContext.Current.CancellationToken;
 
-        var before = PingProcessIds();
-
+        var tree = OwnedChildTree.Create(_dir);
         using var cts = new CancellationTokenSource();
-        // Start() runs synchronously before the first await, so the child tree is
-        // already alive by the time the task handle is back.
-        var run = FfmpegStemEncoder.RunProcessAsync("cmd.exe", ["/c", "ping -n 120 127.0.0.1"], cts.Token);
-
-        // POLL for the ping grandchild rather than sleeping a fixed 600 ms for
-        // it. The cap is a deadlock detector — reaching it only means the shell
-        // never got that far, which the early return below already tolerates —
-        // but a fixed sleep on a saturated box takes that early return far more
-        // often than it should, and every one of those is a case that asserted
-        // nothing while reporting PASSED.
-        var spawnDeadline = Stopwatch.StartNew();
-        HashSet<int> spawned;
-        do
+        var run = FfmpegStemEncoder.RunProcessAsync("cmd.exe", ["/c", tree.Script], cts.Token);
+        try
         {
-            spawned = PingProcessIds();
-            spawned.ExceptWith(before);
-            if (spawned.Count > 0) break;
-            await Task.Delay(50, TestContext.Current.CancellationToken);
-        } while (spawnDeadline.Elapsed < TimeSpan.FromSeconds(30));
+            await tree.WaitUntilRunningAsync(ct);
+        }
+        finally
+        {
+            await cts.CancelAsync();
+        }
 
-        await cts.CancelAsync();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
-
-        if (spawned.Count == 0) return; // the shell never got that far; nothing to assert on
-
-        // A killed tree is gone within a moment. An UNkilled ping runs ~119 s
-        // more, so it is still alive well past this window and the test cannot
-        // pass by the child simply timing out.
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
-        while (DateTime.UtcNow < deadline && AnyAlive(spawned))
-            await Task.Delay(100, TestContext.Current.CancellationToken);
-
-        Assert.False(AnyAlive(spawned),
-            "The cancelled encode left its child process tree running — only the managed wrapper was disposed.");
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            BoundedWait.ForAsync(run, "the cancelled encode to return", ct));
+        await tree.WaitUntilGoneAsync(
+            "The cancelled encode left its child process tree running — only the managed wrapper was disposed.", ct);
     }
 
     /// <summary>
@@ -105,20 +93,21 @@ public sealed class StemToolChildProcessTests : IDisposable
         // so either one left undrained wedges the whole call on its own. (One
         // child writing to both would need cmd's `&`, whose precedence inside a
         // `for` body silently makes it 9,000,000 lines.)
-        var line = new string('z', 40);
+        // `type` of a 3,000-line file writes it in one go; the `for /L ... echo` loop it
+        // replaces moved the same bytes but ran for minutes on a saturated box.
+        var flood = FloodFile();
 
-        // The ceiling is the deadlock detector this test hands in: a saturated box runs the
-        // 3,000-line shell loop for minutes, and the product's own two-minute ceiling is a
-        // budget for a real decoder, not for this fixture.
+        // The ceiling is the deadlock detector this test hands in; the product's own
+        // two-minute ceiling is a budget for a real decoder, not for this fixture.
         var ceiling = TimeSpan.FromMinutes(10);
 
         Assert.True(
-            AudioFormatConverter.RunProcess("cmd.exe", ["/c", $"for /L %i in (1,1,3000) do @echo {line}"], ceiling),
+            AudioFormatConverter.RunProcess("cmd.exe", ["/c", "type", flood], ceiling),
             "a child flooding STDOUT must be drained and reaped, not left blocked on a full pipe " +
             "until the ceiling kills it.");
 
         Assert.True(
-            AudioFormatConverter.RunProcess("cmd.exe", ["/c", $"for /L %i in (1,1,3000) do @echo {line} 1>&2"], ceiling),
+            AudioFormatConverter.RunProcess("cmd.exe", ["/c", "type", flood, "1>&2"], ceiling),
             "a child flooding STDERR must be drained too — vgmstream is the chatty one there.");
     }
 
@@ -134,31 +123,6 @@ public sealed class StemToolChildProcessTests : IDisposable
         // A missing executable is a normal outcome, not an exception.
         Assert.False(AudioFormatConverter.RunProcess(
             Path.Combine(_dir, "no-such-tool.exe"), ["--version"]));
-    }
-
-    private static HashSet<int> PingProcessIds()
-    {
-        var ids = new HashSet<int>();
-        foreach (var p in Process.GetProcessesByName("PING"))
-        {
-            ids.Add(p.Id);
-            p.Dispose();
-        }
-        return ids;
-    }
-
-    private static bool AnyAlive(HashSet<int> ids)
-    {
-        foreach (var id in ids)
-        {
-            try
-            {
-                using var p = Process.GetProcessById(id);
-                if (!p.HasExited) return true;
-            }
-            catch (ArgumentException) { /* already gone */ }
-        }
-        return false;
     }
 
     /// <summary>A normal (uncancelled) run still reports the child's exit code.</summary>
@@ -199,7 +163,7 @@ public sealed class StemToolChildProcessTests : IDisposable
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
         var sw = Stopwatch.StartNew();
         var ok = await FfmpegStemEncoder.RunProcessAsync(
-            "cmd.exe", ["/c", "for /L %i in (1,1,3000) do @echo " + new string('z', 40)], cts.Token);
+            "cmd.exe", ["/c", "type", FloodFile()], cts.Token);
         sw.Stop();
 
         Assert.True(ok, "A flooding child must be drained and reaped, not left blocked on a full pipe.");

@@ -59,13 +59,29 @@ RS_ASIO.ini, quit) is public too: see Lifecycle below.
 |---|---|
 | Wire format, typed results (`TonelabOutcome`: Ok, Rejected, UnknownGear, Timeout, NotConnected, Malformed, Invalid, UnsupportedVersion) | `DotCharter.Tone/Audio/Tonelab/TonelabProtocol.cs` |
 | Pipe client: one command in flight, per-command timeouts (apply-file and dump longer), a timeout or I/O fault DROPS the connection so a late reply is never read as the next answer; the next call reconnects | `DotCharter.Tone/Audio/Tonelab/TonelabPipeClient.cs` |
-| Session (`ITonelabSession`, DI singleton): discovery of `tonelab-<pid>` pipes, the newest when there are several, `status` → Disconnected / Starting / Ready, a backoff poll while Starting (`ReadyBackoff`, ~60 s), Reconnect, Launch through an optional `IGameToneLauncher`, drops itself when the game goes away. The `IExternalProcessInsert` opens only while at least one OWNER routes (`RouteAudio(owner, true)`) AND the game is ready: each in-game preview (the designer's, the editor's) claims the route with its first ACCEPTED tone and lets go on restore, the insert closes when the LAST owner lets go (owners are a set: a second claim by one owner is still one), so attaching (the Tone Designer probes on open) never takes the guitar from the rig and the designer and the editor never close each other's route; it closes when the game goes away | `DotCharter.Tone/Audio/Tonelab/TonelabSession.cs` |
+| Session (`ITonelabSession`, DI singleton): discovery of `tonelab-<pid>` pipes, the newest when there are several, `status` → Disconnected / Starting / Ready, a backoff poll while Starting (`ReadyBackoff`, ~60 s), Reconnect, Launch through an optional `IGameToneLauncher`, drops itself when the game goes away. The `IExternalProcessInsert` opens only while at least one OWNER routes (`RouteAudio(owner, true)`) AND the game is ready: each in-game preview (the designer's, the editor's) claims the route with its first ACCEPTED tone and lets go on restore, the insert closes when the LAST owner lets go (owners are a set: a second claim by one owner is still one), so attaching (the Tone Designer probes on open) never takes the guitar from the rig and the designer and the editor never close each other's route; it closes when the game goes away. The app's session watches the attached PROCESS for its whole life (`WaitForExit`, #599): a game closed while Ready drops the state, the insert and every route claim at once, not at the next failing command | `DotCharter.Tone/Audio/Tonelab/TonelabSession.cs` |
 | The launcher seam and its public implementation (Lifecycle below) | `DotCharter.Tone/Audio/Tonelab/IGameToneLauncher.cs`, `TonelabGameLauncher.cs` |
 | Latest-wins debounce (40 ms, inside the protocol's 30-50 ms) over an injected `ITonelabScheduler` | `DotCharter.Tone/Audio/Tonelab/TonelabDebouncer.cs` |
-| Temp tone files under `UserDataFolders.LocalAppData\DotCharter\tonelab`: the previous file is deleted once the game answered, all on restore; a new run sweeps files another process id left | `DotCharter.Tone/Audio/Tonelab/TonelabToneFiles.cs` |
+| Temp tone files under `UserDataFolders.LocalAppData\DotCharter\tonelab`, named `tone-<pid>-<instance>-<n>.json` so two owners in one process never share or release each other's file (#599): the previous file is deleted once the game answered, all on restore; a new run sweeps files another process id left | `DotCharter.Tone/Audio/Tonelab/TonelabToneFiles.cs` |
 | Knob-only vs whole-tone diff (pure): only knob values moved → `tone knob` per knob; anything else (gear, a knob set, Volume) → `apply-file` | `DotCharter.Tone/Audio/Tonelab/TonelabToneDiff.cs` |
-| The in-game `ITonePreviewTarget`: validate → debounce → knob or file → report, at most ONE send in flight (drags during a pending reply coalesce into one more send of the latest tone); `Stop` → `tone restore` (only if the game accepted something) | `DotCharter.Tone/Audio/Tonelab/TonelabTonePreview.cs` |
+| The in-game `ITonePreviewTarget`: validate → debounce → knob or file → report, at most ONE send in flight (drags during a pending reply coalesce into one more send of the latest tone); `Stop` → `tone restore` (only if the game accepted something, and only when no other preview is applying or holds the tone: the session-wide ownership queue retains the ONE restore obligation until its final owner leaves) | `DotCharter.Tone/Audio/Tonelab/TonelabTonePreview.cs` |
 | The switch (a router over both targets), the catalogue check (`RsToneCatalogValidation` is in Services, so it is handed to Tone as a delegate), Reconnect, the status line, the ASIO note | `DotCharter.Presentation/Screens/Dialogs/TonePreviewTargets.cs` |
+
+**Preview ownership and ordering.** `TonelabPreviewOwnership` is shared by the session's
+preview targets. A flush registers its owner before waiting for its command turn, so a
+pending first reply already prevents another preview from restoring. Accepted replies
+alone claim audio routing. Applies, knob edits and final-owner restore share one queue;
+the offline renderer's lease holds that queue through its own final restore. A pending
+preview interrupts that lease and waits for it to finish. Failed applies release their
+owner; the shared restore obligation survives other owners leaving and is consumed once
+by the final release. Timeouts and malformed replies may have changed the game, so a
+reachable session gets one best-effort restore. Loss of the session clears claims/routes
+and invalidates late replies without restoring into a later session. A returning owner
+sends its whole tone if another owner replaced its cached baseline. Stop/Apply generations
+retain their local ordering: an already-reserved Stop turn finishes before a later
+application by the same target. A queued write checks that generation again when its
+turn arrives, so Stop/Dispose skips work that has not started. None of these operations
+quits a game.
 
 - **The preview contract does not change.** The clone path (`TonePreviewSession`, the
   default) and the in-game path both implement `ITonePreviewTarget`: the first apply of a
@@ -90,12 +106,12 @@ RS_ASIO.ini, quit) is public too: see Lifecycle below.
   session and probes again (`ReconnectCommand` → `ITonelabSession.ReconnectAsync`).
 - **Not ready yet.** `status` says `ok starting v1` until a profile is loaded (the
   launcher drives the game to the main menu itself). The session then polls `status` with
-  backoff (`TonelabSession.ReadyBackoff`: 0.25, 0.5, 1, 2 s, then 4 s steps, ~60 s in all)
+  backoff (`TonelabSession.ReadyBackoff`: 0.25, 0.5, 1, 2 s, then 4 s steps, ~120 s in all)
   and turns Ready on the first `ok ready` (after a launch DotCharter started, the poll is
   `TonelabSession.LaunchReadyPoll` instead: every 250 ms for 60 s, tonelab's HANDOVER step 4);
   meanwhile Rocksmith stays disabled with
-  "Rocksmith is starting… preview there once its profile is loaded". Out of steps it stays
-  Starting; Reconnect asks again. Tonelab's launcher (`tonelab-launch.exe`) either starts
+  "Rocksmith is starting… preview there once its profile is loaded". Out of steps it becomes
+  Disconnected with `StartTimedOut`; Reconnect clears the reason and starts a new bounded poll. Tonelab's launcher (`tonelab-launch.exe`) either starts
   the game or injects into the running one (live attach works); either way the pipe it
   leaves is the one this code finds.
 - **The audio device in control-only mode (decided: a message, no device release).**
@@ -124,6 +140,10 @@ RS_ASIO.ini, quit) is public too: see Lifecycle below.
   leaked a few KB in M2, fixed since): the host debounces (40 ms, latest wins), sends
   `tone knob` rather than a whole file when only knobs moved, and never re-sends an
   unchanged tone.
+- **Stuck tone load (#479).** Now and then the game's tone build never finishes: its load-pending
+  flag (manager `+0x82`) stays set and every later request only queues, so the game keeps the old
+  (clean) tone while the approximated rig switches. tonelab 0c62d5e clears a flag that stays set
+  over 2 s and queues the slot again, up to 3 times (log `tone: load pending > 2000 ms; cleared it`).
 
 Tests (all in the default gate except the headless one): `TonelabProtocolTests`,
 `TonelabPipeClientTests`, `TonelabSessionTests`, `TonelabDebouncerTests`,
@@ -131,7 +151,19 @@ Tests (all in the default gate except the headless one): `TonelabProtocolTests`,
 and `Perf/ToneDesignerPreviewTargetUiPerfSmokeTests` (headless). The game side is
 `DotCharter.Tests/Audio/Tonelab/TonelabGameMock.cs`: a real pipe server (`tonelab-<pid>`,
 fake pids) and a real shared-memory block that answer like protocol v1 and render input ×
-gain, delayed. It is test-only and never ships.
+gain, delayed. It is test-only and never ships. Mock identities hold a named kernel reservation
+across hosts; tone/dump paths live in a separate temp directory per mock. The mock reads and closes
+an applied tone before replying. `TonelabGameMockTests` forces an identity collision and checks
+exclusive access to the tone after an apply reply.
+
+Session tests pass a manual `TimeProvider` through `TonelabSession` to its pipe client; connect and reply
+deadlines advance only when the test advances that clock. Ready polling has a separate injected
+`Delay`: hold it while asserting the reconnect's Starting state and cleared failure, then release
+and await `ReadyPoll` before checking exhaustion. `TonelabTonePreviewTests` holds an apply reply
+across Stop and verifies restore is last; the existing semaphore ordering needs no product fix.
+Launcher tests await `TonelabGameLauncher.ExitWatch` through the INI restore instead of spinning
+for a file change. Their fake process wait is explicitly released to verify quit grace before kill;
+it does not measure elapsed wall time. Real-time wait caps only detect deadlocks (60 s).
 
 ## The editor's playhead preview (#7)
 
@@ -334,6 +366,10 @@ Rocksmith once the session is ready. Both go through `ITonelabSession.LaunchAsyn
 4. **Live-folder fallback (`SteamRocksmithStarter`, `UsesLiveGameFolder`).** `RsAsioIniGuard.Apply`
    (below), `steam://rungameid/221680`, wait for the process (`StartTimeout`, 180 s), inject; the
    ini goes back after the exit. rs7string and RSMods load in this mode.
+   A start that is not possible (`NoGame`, cross-volume) answers `Unavailable` and the live-folder start (4.) takes over; every
+   decision is logged. There is no failure marker: a game that never gets ready is a boot hang (below), not a mirror problem
+   (#463 removed `MirrorFailureMarker` and `IGameToneLauncher.MirrorFailed`).
+**Boot hazard (#461).** ANY connection to `\\.\pipe\tonelab-<pid>` while the game boots hangs it before its title screen (tonelab's pipe server thread; fixing that belongs to tonelab). So after a launch DotCharter started the session makes NO pipe use until tonelab's own log says the game is past boot: `TonelabBootGate` reads `tonelab.log` beside the injected `tonelab.dll` (`IGameToneLaunch.BootLogPath`), shared (`FileShare.ReadWrite | Delete`), every 500 ms, for `tonelab M2 loaded into pid <pid>` then `ready: profile loaded` (a log of another pid is ignored), and only then asks the first `status`. Meanwhile the state is Starting and `ProbeAsync`/`ReconnectAsync` answer Starting without connecting (`TonelabSession._bootPid`). **Boot hang retry (#463).** The hang is intermittent and lives in the game's boot (a good boot takes 23-31 s; no pipe use needed). **Root cause (#476):** the title screen asks for its Flash movie while the game is still rebuilding its file index, the request is never answered and nothing asks again (the soft lock RSMods also retries; the mirror start loads no RSMods). It comes in streaks (13 of 14 starts hung for over an hour on 2026-11-09). tonelab c3fe9a5 asks again every 250 ms, up to 30 s (`[startup] menu_retry`, log lines `menu retry: 'titlescreen_view' ...`); with it 10 of 10 starts were ready on the first attempt. The retry below stays as a backstop. No ready line within `TonelabBootGate.Timeout` (45 s) quits that game (`QuitAsync`: `quit` or, failing that, the process is ended) and launches again, as attempt 2 and then 3 of `TonelabSession.MaxAttempts` (3); each attempt is logged. `ITonelabSession.LaunchAttempt` drives the status text ("Rocksmith is starting… attempt 2 of 3", resx `Dialog_Tones_InGameStartingRetry`). After the third hang the state is Disconnected with `StartTimedOut` until Reconnect or Start; a Start that finds the game this launcher started still running reuses that launch (already injected, `StartedByApp` stays true), so Quit still ends it (#599). Nothing is remembered between launches, so no later start skips the mirror. A game DotCharter did not start is attached as before. The #455 "mirror never ready" was this hang, not a broken mirror. Tests: `TonelabBootGateTests` (injected log reader and clock: retry, ready on attempt 2, give up after 3).
 5. A failed injection into a game DotCharter started ENDS that game (it has no pipe to quit
    through); in the fallback the ini goes back too.
 
@@ -351,19 +387,25 @@ an "is the game running" probe; the game folder comes from Steam's uninstall key
 
 - **Apply:** refused while the game runs; a backup an earlier session left goes back FIRST (so
   the backup is always the user's own file); no `RS_ASIO.ini` means RS ASIO is not installed,
-  nothing to do; otherwise copy it byte for byte to `RS_ASIO.ini.tonelab-backup` (tonelab's own
-  name, so either launcher cleans up after the other), THEN write the driverless ini (ASIO off,
+  nothing to do; otherwise publish it atomically to `RS_ASIO.ini.tonelab-backup` (tonelab's own
+  name, so either launcher cleans up after the other), THEN atomically publish the driverless ini (ASIO off,
   WASAPI endpoints off, every driver empty). A failed write puts the original back at once.
-- **Restore:** copy the backup back byte for byte, then delete it; refused while the game
+- **Restore:** validate and atomically publish the backup byte for byte, then delete it; refused while the game
   runs (the backup stays). Runs after a game DotCharter started exits (a watcher on the
   process, whatever ended it), and at EVERY app start
   (`TonelabGameLauncher.RestoreLeftIniAtStartup`, the crash case; off in the headless host
   through `DisableStartupRestoreSwitch`).
+- DotCharter publishes a `.sha256` receipt before its backup and checks it on
+  restore. A damaged backup or receipt is kept for recovery and never replaces
+  the INI. Legacy backups without a receipt must contain a recognizable config
+  and may replace a driverless INI or an identical original; they cannot replace
+  another intact config. `RsAsioIniGuardTests` covers partial writes, changed
+  backups and legacy restoration.
 
 **End** (`ITonelabSession.QuitAsync`, then `IGameToneLaunch.EndAsync`):
 
 - **A game DotCharter started:** `quit` over the session's pipe, up to `QuitGrace` (10 s) for
-  the process to exit, only then it is ended (`IRocksmithProcesses.Kill`), then (fallback only)
+  the process to exit, only then it is ended (`IRocksmithProcesses.Kill`), then (live folder only)
   RS_ASIO.ini goes back. A quit that could not be sent skips the wait. A mirror game restores
   nothing.
 - **A game the user started is only DETACHED:** nothing is sent, nothing is ended.

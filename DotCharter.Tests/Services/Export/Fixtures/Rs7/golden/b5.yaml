@@ -1,0 +1,26 @@
+song:
+  key: RS7Bass5
+  file: rs7b5
+  title: Golden bass 5
+  artist: DotCharter
+  album: Golden
+  year: 2026
+  length: 60
+  audio: control
+  date: 10-13-26 12:00
+tempo: 80
+beats_per_measure: 4
+instrument: bass
+strings: 5
+tuning: [0, 0, 0, 0, -2]
+chord_mode: projection
+sections: auto
+anchors: auto
+notes:
+- {beat: 4, string: 4, fret: 0}
+- {beat: 5, string: 4, fret: 3}
+- {beat: 6, string: 0, fret: 2}
+- {beat: 7, string: 3, fret: 5}
+chords:
+- {beat: 10, name: "B5", frets: {4: 2, 0: 2, 1: 4}, fingers: {4: 1, 0: 1, 1: 3}}
+- {beat: 14, name: "Bs", frets: {4: 0, 3: 5}, fingers: {3: 3}}

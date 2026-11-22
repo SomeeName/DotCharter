@@ -134,15 +134,12 @@ public sealed class AnchorIndexEquivalenceTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    ///     The per-call cost the scans carried: <c>level.Anchors</c> is an
-    ///     <c>ObservableCollection</c>, whose <c>foreach</c> goes through
-    ///     <c>Collection&lt;T&gt;</c>'s explicitly implemented
-    ///     <c>IEnumerable&lt;T&gt;.GetEnumerator()</c> — so every one of the
-    ///     ~15,000 lookups a validation pass makes BOXED an enumerator. The index
-    ///     is built once and its lookups allocate nothing at all.
+    ///     The index is built once and its lookups allocate nothing at all. (The scan used to box
+    ///     an enumerator per call through <c>ObservableCollection</c>'s <c>foreach</c>; it now
+    ///     indexes the list, so the index's gain is the O(log n) lookup, pinned by the rules guard below.)
     /// </summary>
     [Fact]
-    public void AnIndexedLookupAllocatesNothing_WhereTheScanBoxedAnEnumeratorPerCall()
+    public void AnIndexedLookupAllocatesNothing()
     {
         var level = new ChartLevel();
         for (var i = 0; i < 500; i++) level.Anchors.Add(Anchor(i, 0, 1, 1 + i % 18));
@@ -151,15 +148,6 @@ public sealed class AnchorIndexEquivalenceTests(ITestOutputHelper output)
         var probe = new FractionalPosition(250);
         context.ActiveAnchor(level, probe); // build the index outside the meter
 
-        // Cheapest of several batches on the per-thread counter (AllocationProbe): a single
-        // window flaked under a loaded full gate, 2026-09-22, and passed alone.
-        var scanned = AllocationProbe.MeasureCheapest(() => () =>
-        {
-            for (var i = 0; i < 2_000; i++) ArrangementValidationContext.FindActiveAnchor(level, probe);
-        });
-
-        output.WriteLine($"2,000 lookups: linear scan {scanned} bytes (cheapest batch).");
-        Assert.True(scanned > 0, "the linear scan no longer boxes — re-derive what this test is comparing.");
         AllocationProbe.AssertAllocationFree("2,000 indexed anchor lookups", () =>
         {
             for (var i = 0; i < 2_000; i++) context.ActiveAnchor(level, probe);

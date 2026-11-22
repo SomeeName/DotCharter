@@ -31,7 +31,6 @@ public sealed partial class ChartMaintenanceService
         }
 
         var handShapes = level.HandShapes;
-        var templates = arrangement.ChordTemplates;
         var targets = new List<Chord>();
         var newStates = new List<Chord>();
 
@@ -54,7 +53,7 @@ public sealed partial class ChartMaintenanceService
             }
             if (containing == null || containing.TemplateId < 0) continue;
 
-            var template = templates.FirstOrDefault(t => t.Id == containing.TemplateId);
+            var template = arrangement.FindChordTemplate(containing.TemplateId);
             if (template == null) continue;
             if (chord.TemplateId == template.Id) continue;
 
@@ -111,55 +110,7 @@ public sealed partial class ChartMaintenanceService
         var startPos = TimelineMath.PositionFromMs(tapMs, beats);
         var endPos = TimelineMath.PositionFromMs(tapMs + 250.0, beats);
 
-        // Reuse the open phrase at the playhead if one exists; otherwise create
-        // a new phrase wrapping the placeholder lyric.
-        LyricPhrase? targetPhrase = null;
-        foreach (var phrase in track.Phrases)
-        {
-            if (phrase.Position <= startPos && phrase.EndPosition >= startPos)
-            {
-                targetPhrase = phrase;
-                break;
-            }
-        }
-
-        var newLyric = new LyricEvent
-        {
-            Text = "+",
-            IsWordPart = false,
-            Position = startPos,
-            EndPosition = endPos
-        };
-
-        if (targetPhrase == null)
-        {
-            var newPhrase = new LyricPhrase
-            {
-                Position = startPos,
-                EndPosition = endPos
-            };
-            newPhrase.Lyrics.Add(newLyric);
-            _historyService.Do(new AddElementsAction<LyricPhrase>(track.Phrases, new[] { newPhrase }, p => p.Position));
-        }
-        else
-        {
-            // ONE gesture is ONE undo node, so the phrase-end stretch the insert
-            // forces travels in the SAME node as the lyric. The stretch must not be a
-            // bare assignment after the add: Ctrl+Z would take the placeholder back out and
-            // leave the phrase permanently longer, and because nothing on screen shows
-            // a phrase end moving by a fraction of a beat, repeating the gesture would creep
-            // the phrase forward invisibly, one insert at a time.
-            var actions = new List<IChartAction>
-            {
-                new AddElementsAction<LyricEvent>(targetPhrase.Lyrics, new[] { newLyric }, l => l.Position)
-            };
-            // Extend the phrase end if the new lyric goes past it.
-            if (targetPhrase.EndPosition < endPos)
-                actions.Add(new ResizeLyricPhraseAction(targetPhrase, targetPhrase.EndPosition, endPos));
-
-            var composite = actions.Count == 1 ? actions[0] : new CompositeAction(actions);
-            _historyService.Do(composite);
-        }
+        _historyService.Do(VocalInsertion.Create(track, startPos, endPos));
 
         _projectState.MainDisplayMessage = L("Status_VocalInserted", $"{tapMs:0} ms");
         _chartEditor.RequestRedraw();

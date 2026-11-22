@@ -18,6 +18,26 @@ namespace DotCharter.Tests.Services.Editing;
 /// </summary>
 public sealed class StructureGenerationServiceUndoTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnOccupiedCountPosition_IsNotReportedOrRecordedAsAChange(bool hasEnd)
+    {
+        var rig = Build(a =>
+        {
+            a.EventPoints.Add(new EventPoint { Position = FractionalPosition.Zero, Phrase = "intro" });
+            if (hasEnd)
+                a.EventPoints.Add(new EventPoint { Position = new FractionalPosition(40), Phrase = "END" });
+        });
+
+        var result = rig.Service.Generate();
+
+        Assert.Equal(0, result.CountPhrases);
+        Assert.Equal(hasEnd ? 0 : 1, result.EndPhrases);
+        Assert.Equal(!hasEnd, rig.History.CanUndo);
+        Assert.Equal("intro", rig.Arrangement.EventPoints[0].Phrase);
+    }
+
     private static List<BeatMarker> Beats(int count = 200)
     {
         var beats = new List<BeatMarker>(count);

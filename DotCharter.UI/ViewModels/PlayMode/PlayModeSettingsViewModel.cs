@@ -91,6 +91,7 @@ public sealed partial class PlayModeSettingsViewModel : ObservableObject, IDispo
     {
         _projectState = projectState;
         _localization = localization;
+        StringColorPresetOptions = StringColorPresets.Localized(localization);
         _configService = configService;
         _transport = transport;
         _audio = audio;
@@ -137,7 +138,7 @@ public sealed partial class PlayModeSettingsViewModel : ObservableObject, IDispo
                 // manual arm's keepsake, so seeding from config would show a
                 // slider that disagrees with the screen behind it.
                 GameplayUiScale = Services.UiScaleController.Scale;
-                SelectedStringColorPreset = StringColorPresets.GetById(config.StringColorPresetId);
+                SelectedStringColorPreset = StringColorPresetOption(config.StringColorPresetId);
             }
         }
         finally
@@ -544,8 +545,13 @@ public sealed partial class PlayModeSettingsViewModel : ObservableObject, IDispo
     }
 
     /// <summary>Colour-blind-safe string-colour presets (highway readability) —
-    /// the same list Settings → Appearance offers.</summary>
-    public IReadOnlyList<StringColorPreset> StringColorPresetOptions { get; } = StringColorPresets.All;
+    /// the same list Settings → Appearance offers, captioned in the UI language.</summary>
+    public IReadOnlyList<StringColorPreset> StringColorPresetOptions { get; }
+
+    /// <summary>The option the picker shows for a persisted id; an unknown id is the default.</summary>
+    private StringColorPreset StringColorPresetOption(string? id) =>
+        StringColorPresetOptions.FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase))
+        ?? StringColorPresetOptions.First(p => p.Id == StringColorPresets.DefaultId);
 
     /// <summary>Applied + persisted immediately on change (mirrors Settings →
     /// Appearance): re-applies the live theme with the preset's <c>String*</c>
@@ -827,7 +833,7 @@ public sealed partial class PlayModeSettingsViewModel : ObservableObject, IDispo
                 _projectState.EnableShowlightBeams = defaults.EnableShowlightBeams;
                 _projectState.EnableShowlightFog = defaults.EnableShowlightFog;
                 _projectState.EnableCrowdBackground = defaults.EnableCrowdBackground;
-                SelectedStringColorPreset = StringColorPresets.GetById(StringColorPresets.DefaultId);
+                SelectedStringColorPreset = StringColorPresetOption(StringColorPresets.DefaultId);
                 // Reset-to-defaults means the DEFAULT MODE too, and that is Auto.
                 // Resetting to a bare 1.0 would put a 1440p user back on exactly
                 // the small UI this setting exists to fix. SetAutoMode makes the

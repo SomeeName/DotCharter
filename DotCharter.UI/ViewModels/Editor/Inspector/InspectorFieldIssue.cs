@@ -14,7 +14,8 @@ namespace DotCharter.UI.ViewModels.Editor.Inspector;
 /// One row is one PROBLEM, not one note: the lint emits a finding
 ///         per chord note, so a three-note chord outside its anchor would print
 ///         the same sentence three times. <see cref="Fold" /> merges findings with
-///         the same rule and sentence, and <see cref="Detail" /> names the strings
+///         the same rule and English sentence (the finding's language-independent identity; the row shows the
+///         translation), and <see cref="Detail" /> names the strings
 ///         they came from.
 ///     </para>
 /// </summary>
@@ -41,6 +42,9 @@ public readonly record struct InspectorFieldIssue(
     /// fills it from its localization.</summary>
     public string BlocksExportLabel { get; init; } = string.Empty;
 
+    /// <summary>The first lint finding the row folds: where the Findings page's "Open this issue" and "Jump to sound" go.</summary>
+    public ArrangementIssue? Source { get; init; }
+
     /// <summary>Tooltip text: the code, the message, and the export consequence
     /// FIRST when there is one.</summary>
     public string Tooltip => BlocksExport
@@ -50,7 +54,7 @@ public readonly record struct InspectorFieldIssue(
     private string DetailSuffix => Detail.Length == 0 ? string.Empty : " " + Detail;
 
     /// <summary>
-    ///     The selection's findings, one row per (rule, sentence), in the order
+    ///     The selection's findings, one row per (rule, English sentence), in the order
     ///     the lint first reported each. Pure, so the default gate pins it.
     /// </summary>
     /// <param name="issues">The findings that back-reference the selection.</param>
@@ -62,10 +66,12 @@ public readonly record struct InspectorFieldIssue(
         Func<IReadOnlyList<int>, string> stringList,
         ILocalizationService localization)
     {
-        var groups = new List<(ArrangementIssue First, List<ArrangementIssue> All)>();
+        var groups = new List<(ArrangementIssue First, string Text, List<ArrangementIssue> All)>();
         var index = new Dictionary<(ArrangementIssueType, string), int>();
         foreach (var issue in issues)
         {
+            // Grouped by the English sentence, which every language shares, so two findings whose
+            // translations happen to read alike stay two rows in every language.
             var key = (issue.Type, issue.Message);
             if (index.TryGetValue(key, out var at))
             {
@@ -74,13 +80,13 @@ public readonly record struct InspectorFieldIssue(
             }
 
             index[key] = groups.Count;
-            groups.Add((issue, [issue]));
+            groups.Add((issue, ArrangementIssueText.Of(issue, localization), [issue]));
         }
 
         var rows = new InspectorFieldIssue[groups.Count];
         for (var g = 0; g < groups.Count; g++)
         {
-            var (first, all) = groups[g];
+            var (first, text, all) = groups[g];
             var strings = all.Where(i => i.StringIndex.HasValue).Select(i => i.StringIndex!.Value)
                 .Distinct().Order().ToArray();
             var detail = strings.Length > 1
@@ -90,12 +96,13 @@ public readonly record struct InspectorFieldIssue(
                 InspectorIssueFieldMap.Map(first.Type),
                 InspectorIssueFieldMap.BlocksExport(first.Type),
                 first.Type.GetCode(),
-                first.Message,
+                text,
                 strings.Length == 1 ? strings[0] : null,
                 all.Count,
                 detail)
             {
                 BlocksExportLabel = localization["Inspector_Issue_BlocksExport"],
+                Source = first
             };
         }
 

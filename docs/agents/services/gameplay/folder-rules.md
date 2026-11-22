@@ -6,6 +6,19 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
 
 ## Two rules for the whole folder — read these first
 
+Profile imports bound `profile.json` to 1 MiB of actually inflated bytes through
+`BoundedZipExtractor.ReadEntryText` before JSON parsing or data extraction.
+The existing 16 MiB data-expansion ceiling remains independent; an oversized
+manifest registers no profile and creates no data directory.
+
+- **Profile exports preserve an existing backup on failure (#551).**
+  `PlayerProfileService.ExportProfile` captures source paths before creating a
+  unique sibling stage, closes the complete archive, then publishes through
+  `AtomicFile.Write`. An export inside the data directory excludes its own final
+  path and stage. Failure returns false; the status-bar view model shows the
+  localized error through the app-wide message prompt, including in Play Mode
+  where the status rail is hidden.
+
 - **`player-profiles.json` is the only map from `profiles/<id>/` back to a
   person, so it is NEVER written over on a failed READ.** `PlayerProfileService`
   now tells the three outcomes apart exactly the way
@@ -172,7 +185,7 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   Repeater disarms mid-run, and editor practice / free play / listen-back
   never arm at all.
   **Gameplay count-in (0.14.4 C):** `CountInPlan` is the pure schedule for the
-  pre-gameplay metronome count-in (`AppConfig.GameplayCountInBeats` off/4/8) —
+  pre-gameplay metronome count-in (`AppConfig.GameplayCountInBeats` off/2/4/8) —
   click spacing = start tempo scaled by practice speed, measure downbeats
   accented; the UI (`PlayModeViewModel.RunCountInThenStartAsync`) just awaits
   each click and plays the native metronome click, then starts the transport.

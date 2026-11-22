@@ -32,7 +32,14 @@ Moved verbatim from the root `AGENTS.md` (which keeps a one-line pointer). Read 
   worktree. Under the Agent tool's `isolation: "worktree"` that is refused; copy
   the main checkout's `JuceSharp/` instead (excluding `.git`) and delete the
   copied `JuceSharp/.git` pointer file. Such a worktree cannot commit to the
-  submodule. The `dotcharter-worktree` skill has the full recipe.
+  submodule. The `dotcharter-worktree` skill has the full recipe. Its script
+  uses a complete local native pair for the gitlink or installs the pinned pair
+  with the new tree's `tools/setup/Get-NativeRuntime.ps1 -Force`, then checks
+  both hashes. Missing pins and install failures warn with a reason and a final
+  `native-pair: <JSON>` outcome. After a gitlink move and on every reused train,
+  the train checks the merged tree's manifest and both installed hashes before
+  gates, attempts the pinned install once if needed, and stops if unresolved.
+  The JuceSharp marker and an equal ABI do not establish that the pair matches.
 - **NEVER `git stash` while other agents are running** — the stash is one stack
   shared by every worktree. A/B against a clean tree with `git show HEAD:<path>`.
 - **A file split breaks every lint that locates source BY PATH — silently.**

@@ -168,6 +168,8 @@ public static class HighwayNoteHeadRenderer
             Span<float> standingSteps = stackalloc float[maxStandingBendLabels];
             var standing = 0;
             var firstLabel = deferredLabels.Count;
+            // One label per bend GESTURE, at its peak or landing, arrow by direction (BendGestures).
+            var gestures = ClassifyBends(rc, in data, stackalloc BendGesture[MaxLabelledBendPoints]);
             for (var b = 0; b < data.BendCount; b++)
             {
                 var bend = rc.Snapshot.BendValues[data.BendOffset + b];
@@ -183,9 +185,9 @@ public static class HighwayNoteHeadRenderer
                 prevY = bendY;
                 lastBendY = bendY;
 
-                if (bend.Step > 0 && rc.DrawNoteLabels)
+                if (b < gestures.Length && gestures[b].Kind != BendGestureKind.None && rc.DrawNoteLabels)
                 {
-                    var label = RenderStringCache.BendArrowLabel(bend.Step, FormatBendLabel(bend.Step));
+                    var label = BendGestures.Text(gestures[b]);
                     var textScale = ChartEditorConstants.RenderMetrics.BendTextScale;
                     var th = (batcher.FontAtlas?.RowHeight ?? ChartEditorConstants.RenderMetrics.DefaultFontSize) *
                              textScale;
@@ -206,7 +208,7 @@ public static class HighwayNoteHeadRenderer
                     if (!BendLabelPlacement.FitsBeforeNextHead(labelX, boxW, nextHeadX, outerR)) continue;
 
                     var collision = BendLabelPlacement.ResolveAgainst(standingRights[..standing],
-                        standingSteps[..standing], labelX, bend.Step, out var keep);
+                        standingSteps[..standing], labelX, gestures[b].Amount, out var keep);
                     if (collision == BendLabelPlacement.Collision.SkipThis) continue;
                     if (collision == BendLabelPlacement.Collision.ReplacePrevious)
                     {
@@ -230,7 +232,7 @@ public static class HighwayNoteHeadRenderer
                     };
                     deferredLabels.Add(placed);
                     standingRights[standing] = labelX + boxW;
-                    standingSteps[standing] = bend.Step;
+                    standingSteps[standing] = gestures[b].Amount;
                     standing++;
                 }
             }
@@ -532,12 +534,18 @@ public static class HighwayNoteHeadRenderer
         batcher.AddSprite(x - 1.2f, iconY - ph * 0.5f - 4f, 2.4f, 2.4f, popColor, 1f);
     }
 
-    private static string FormatBendLabel(float step)
+    /// <summary>Bend points past this many carry no label (the curve still draws them).</summary>
+    private const int MaxLabelledBendPoints = 64;
+
+    /// <summary>The label of each of the note's first <see cref="MaxLabelledBendPoints" /> bend points.</summary>
+    private static Span<BendGesture> ClassifyBends(ChartRenderContext rc, in NoteDrawData data, Span<BendGesture> gestures)
     {
-        return Math.Abs(step - 1f) < 0.01f ? "1/2" :
-            Math.Abs(step - 2f) < 0.01f ? "Full" :
-            Math.Abs(step - 3f) < 0.01f ? "1 1/2" :
-            Math.Abs(step - 4f) < 0.01f ? "2" :
-            RenderStringCache.BendStepLabel(step);
+        var count = Math.Min(data.BendCount, MaxLabelledBendPoints);
+        Span<float> steps = stackalloc float[count];
+        for (var b = 0; b < count; b++) steps[b] = rc.Snapshot.BendValues[data.BendOffset + b].Step;
+        var firstAtOnset = count > 0 && Math.Abs(rc.Snapshot.BendValues[data.BendOffset].Time - data.Time) < 1.0;
+        float? carriedIn = (data.Flags & NoteFlags.LinkPrevious) != 0 ? data.BendCarry : null;
+        BendGestures.Classify(steps, firstAtOnset, carriedIn, gestures);
+        return gestures[..count];
     }
 }

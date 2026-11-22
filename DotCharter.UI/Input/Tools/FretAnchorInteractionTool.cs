@@ -1,6 +1,8 @@
 ﻿using Avalonia.Input;
 using DotCharter.Services.Editing.Anchors;
 using DotCharter.UI.Constants;
+using DotCharter.UI.ViewModels.Editor;
+using DotCharter.Presentation.Contracts.Dialogs;
 
 namespace DotCharter.UI.Input.Tools;
 
@@ -10,52 +12,59 @@ public class FretAnchorInteractionTool : IEditorTool
     private readonly IHighwayEditingService _highwayEditingService;
     private readonly IHistoryService _historyManager;
     private readonly IAppLogger _logger;
+    private readonly ProjectState _state;
+    private readonly ChartEditorViewModel _editor;
+    private readonly IFhpEditLauncher _fhpEditor;
 
     private List<FretAnchor> _dragOriginalAnchors = [];
     private List<Chord> _dragOriginalChords = [];
     private List<GuitarNote> _dragOriginalNotes = [];
     private TrackEditorContext? _dragTrack;
-    private FretAnchor? _lastClickedAnchor;
 
     private FractionalPosition? _lastClickedPos;
-    private long _lastClickTicks;
     private FractionalPosition _lastHoverTime;
 
     public FretAnchorInteractionTool(
         IHighwayEditingService highwayEditingService,
         IHistoryService historyManager,
-        IAppLogger logger)
+        IAppLogger logger, ProjectState state, ChartEditorViewModel editor, IFhpEditLauncher fhpEditor)
     {
         _highwayEditingService = highwayEditingService;
         _historyManager = historyManager;
         _logger = logger;
+        _state = state;
+        _editor = editor;
+        _fhpEditor = fhpEditor;
     }
 
     public void OnPointerPressed(PointerPressedEventArgs e, ToolContext context)
     {
-        var vm = context.ViewModel;
         var track = context.Track;
+        var snappedPosition = _editor.SnapToGrid(context.ExactTimeMs, track);
         var selection = track.Selection;
         track.FocusArea = EditorFocusArea.NoteHighway;
-        vm.ChartEditor.FocusArea = EditorFocusArea.NoteHighway;
-        selection.SelectedEventPoints.Clear();
-        selection.SelectedTones.Clear();
-
+        _editor.FocusArea = EditorFocusArea.NoteHighway;
         var laneAreaHeight = context.Viewport.ViewportHeight - context.Viewport.TopMargin -
                              context.Viewport.BottomMargin;
         var fhpY = context.Viewport.TopMargin + laneAreaHeight +
                    ChartEditorConstants.RenderMetrics.FhpYOffset;
 
         var anchor = ChartHitTester.HitTestAnchor(context.Position, track.Anchors,
-            vm.ProjectState.TimelineViewAnchorEffectiveMs,
-            vm.ProjectState.PixelsPerMs, context.Viewport.ViewportWidth, fhpY, track.Beats);
+            _state.TimelineViewAnchorEffectiveMs,
+            _state.PixelsPerMs, context.Viewport.ViewportWidth, fhpY, track.Beats, _state.CurrentTimeMs);
+
+        var editAnchor = ChartHitTester.HitTestAnchorHead(context.Position, track.Anchors,
+            _state.TimelineViewAnchorEffectiveMs, _state.PixelsPerMs,
+            context.Viewport.ViewportWidth, fhpY, track.Beats, context.Viewport.MeasureTimelineLabelWidth, _state.CurrentTimeMs);
 
         if (context.Properties.IsRightButtonPressed)
         {
-            var newAnchor = AddAnchorAtSnappedPosition(context, track);
-            if (newAnchor != null) vm.ShellDialogs.OpenFhp(context.ExactTimeMs, newAnchor);
+            selection.SelectedEventPoints.Clear();
+            selection.SelectedTones.Clear();
+            // The editor adds the anchor on commit, so Esc leaves no edit behind.
+            OpenEditor(context, editAnchor, snappedPosition);
             _logger.Info(AppLogCategory.Editing,
-                $"Right-click FHP lane at {FormatPosition(context.SnappedPosition, track)}. CreatedAnchor={newAnchor != null}, previewFret={vm.ProjectState.PreviewAnchorFret}.");
+                $"Right-click FHP lane at {FormatPosition(snappedPosition, track)}. ExistingAnchor={editAnchor != null}, previewFret={_state.PreviewAnchorFret}.");
             context.Viewport.RequestNextFrameRendering();
             return;
         }
@@ -64,42 +73,26 @@ public class FretAnchorInteractionTool : IEditorTool
         {
             if (anchor != null)
             {
-                var now = DateTime.UtcNow.Ticks;
-                if (now - _lastClickTicks < TimeSpan.FromMilliseconds(500).Ticks && _lastClickedAnchor == anchor)
+                var plainClick = (context.Modifiers & (KeyModifiers.Control | KeyModifiers.Shift)) == KeyModifiers.None;
+                if (plainClick && e.ClickCount == 2)
                 {
-                    // FIX: Pass the exact mouse time so the dialog snaps to your cursor.
-                    // If you clicked the head, it edits it. If you clicked the tail, it makes a new one!
-                    vm.ShellDialogs.OpenFhp(context.ExactTimeMs, anchor);
+                    // Only the fret badge names an edit target; the tail places at the snapped pointer.
+                    OpenEditor(context, editAnchor, snappedPosition);
                     _logger.Info(AppLogCategory.Editing,
-                        $"Double-clicked FHP anchor; opening dialog for fret={anchor.Fret}, width={anchor.Width}, position={FormatPosition(anchor.Position, track)}.");
+                        $"Double-clicked FHP lane at {FormatPosition(snappedPosition, track)}. ExistingAnchor={editAnchor != null}.");
                     _dragState.Stop();
                     selection.SelectedAnchors.Clear();
                     context.Viewport.RequestNextFrameRendering();
                     return;
                 }
 
-                _lastClickTicks = now;
-                _lastClickedAnchor = anchor;
-
-                if (!context.Modifiers.HasFlag(KeyModifiers.Control) && !context.Modifiers.HasFlag(KeyModifiers.Shift))
-                {
-                    if (!selection.SelectedAnchors.Contains(anchor))
-                        selection.SelectedAnchors.Clear();
-                }
-
-                if (context.Modifiers.HasFlag(KeyModifiers.Shift) && _lastClickedPos != null)
-                {
-                    var hitPos = anchor.Position;
-                    var minTime = FractionalPosition.Min(_lastClickedPos.Value, hitPos);
-                    var maxTime = FractionalPosition.Max(_lastClickedPos.Value, hitPos);
-
-                    SelectionBulkOps.AddRange(selection.SelectedAnchors,
-                        track.Anchors.Where(a => a.Position >= minTime && a.Position <= maxTime));
-                }
-                else
-                {
-                    SelectionBulkOps.AddRange(selection.SelectedAnchors, [anchor]);
+                FretAnchorSelection.Apply(track, anchor, context.Modifiers, _lastClickedPos, _logger);
+                if (!context.Modifiers.HasFlag(KeyModifiers.Shift) || _lastClickedPos == null)
                     _lastClickedPos = anchor.Position;
+                if (!selection.SelectedAnchors.Contains(anchor))
+                {
+                    ResetState(context);
+                    return;
                 }
 
                 _dragOriginalAnchors = selection.SelectedAnchors.Select(a => a.Clone()).ToList();
@@ -118,6 +111,8 @@ public class FretAnchorInteractionTool : IEditorTool
                 // and selects it. The dialog stays one right-click or
                 // double-click away — forcing a modal on every placement
                 // made charting FHP runs painfully slow.
+                selection.SelectedEventPoints.Clear();
+                selection.SelectedTones.Clear();
                 selection.SelectedAnchors.Clear();
                 var newAnchor = AddAnchorAtSnappedPosition(context, track);
                 if (newAnchor != null)
@@ -127,7 +122,7 @@ public class FretAnchorInteractionTool : IEditorTool
                 }
 
                 _logger.Info(AppLogCategory.Editing,
-                    $"Left-click empty FHP lane at {FormatPosition(context.SnappedPosition, track)}. CreatedAnchor={newAnchor != null} (silent placement).");
+                    $"Left-click empty FHP lane at {FormatPosition(snappedPosition, track)}. CreatedAnchor={newAnchor != null} (silent placement).");
             }
 
             context.Viewport.RequestNextFrameRendering();
@@ -136,8 +131,8 @@ public class FretAnchorInteractionTool : IEditorTool
 
     public void OnPointerMoved(PointerEventArgs e, ToolContext context)
     {
-        var vm = context.ViewModel;
         var track = context.Track;
+        var snappedPosition = _editor.SnapToGrid(context.ExactTimeMs, track);
         var selection = track.Selection;
         selection.PreviewEventPoints.Clear();
 
@@ -153,30 +148,35 @@ public class FretAnchorInteractionTool : IEditorTool
             var fhpY = context.Viewport.TopMargin + laneAreaHeight +
                        ChartEditorConstants.RenderMetrics.FhpYOffset;
 
-            var hoveredAnchor = ChartHitTester.HitTestAnchor(context.Position, track.Anchors,
-                vm.ProjectState.TimelineViewAnchorEffectiveMs, vm.ProjectState.PixelsPerMs, context.Viewport.ViewportWidth, fhpY,
-                track.Beats);
+            var hoveredAnchor = ChartHitTester.HitTestAnchorHead(context.Position, track.Anchors,
+                _state.TimelineViewAnchorEffectiveMs, _state.PixelsPerMs, context.Viewport.ViewportWidth, fhpY,
+                track.Beats, context.Viewport.MeasureTimelineLabelWidth, _state.CurrentTimeMs)
+                ?? track.Anchors.FirstOrDefault(a => a.Position == snappedPosition);
 
             selection.HoveredAnchor = hoveredAnchor;
 
-            if (_lastHoverTime != context.SnappedPosition || !selection.PreviewAnchors.Any())
+            if (hoveredAnchor != null)
+            {
+                selection.PreviewAnchors.Clear();
+            }
+            else if (_lastHoverTime != snappedPosition || !selection.PreviewAnchors.Any())
             {
                 selection.PreviewAnchors.Clear();
 
-                var prevAnchor = track.Anchors.LastOrDefault(a => a.Position <= context.SnappedPosition);
-                var defaultFret = vm.ProjectState.PreviewAnchorFret > 0
-                    ? vm.ProjectState.PreviewAnchorFret
+                var prevAnchor = FretAnchorLookup.InEffectAt(track.Anchors, snappedPosition);
+                var defaultFret = _state.PreviewAnchorFret > 0
+                    ? _state.PreviewAnchorFret
                     : prevAnchor?.Fret ?? 1;
                 var defaultWidth = prevAnchor?.Width ?? 4;
 
                 selection.PreviewAnchors.Add(new FretAnchor
                 {
-                    Position = context.SnappedPosition,
+                    Position = snappedPosition,
                     Fret = defaultFret,
                     Width = defaultWidth
                 });
 
-                _lastHoverTime = context.SnappedPosition;
+                _lastHoverTime = snappedPosition;
             }
         }
 
@@ -279,7 +279,7 @@ public class FretAnchorInteractionTool : IEditorTool
     }
 
     private FretAnchor? AddAnchorAtSnappedPosition(ToolContext context, TrackEditorContext track) =>
-        AddAnchorAt(context.SnappedPosition, context.ViewModel.ProjectState.PreviewAnchorFret,
+        AddAnchorAt(_editor.SnapToGrid(context.ExactTimeMs, track), _state.PreviewAnchorFret,
             track, _historyManager, _logger);
 
     /// <summary>
@@ -297,7 +297,7 @@ public class FretAnchorInteractionTool : IEditorTool
         var existingExact = track.Anchors.FirstOrDefault(a => a.Position == snappedPosition);
         if (existingExact != null) return null;
 
-        var prevAnchor = track.Anchors.LastOrDefault(a => a.Position <= snappedPosition);
+        var prevAnchor = FretAnchorLookup.InEffectAt(track.Anchors, snappedPosition);
 
         // An explicit preview fret is the user having already said which fret
         // they want (they wheeled it before clicking), so it always wins.
@@ -324,6 +324,12 @@ public class FretAnchorInteractionTool : IEditorTool
             $"Created FHP anchor position={FormatPosition(newAnchor.Position, track)}, fret={newAnchor.Fret}, width={newAnchor.Width}, previousAnchorFret={prevAnchor?.Fret.ToString() ?? "none"}.");
         return newAnchor;
     }
+
+    private void OpenEditor(ToolContext context, FretAnchor? anchor, FractionalPosition position) =>
+        _fhpEditor.EditFhpInPlace(context.Viewport,
+            new FhpRequest(context.ExactTimeMs, anchor, new FhpTrackTarget(context.Track, position)));
+
+    public void Cancel(ToolContext context) => ResetState(context);
 
     private void ResetState(ToolContext context)
     {

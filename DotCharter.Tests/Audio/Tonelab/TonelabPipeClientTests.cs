@@ -28,14 +28,30 @@ public sealed class TonelabPipeClientTests
     public async Task TheDefaultTimeouts_WaitForASlowHiddenGame()
     {
         using var game = new TonelabGameMock();
-        game.Responder = line =>
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reply = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        game.ReplyAsync = async (line, token) =>
         {
-            Thread.Sleep(1500);
+            entered.TrySetResult();
+            await reply.Task.WaitAsync(token);
             return line == "status" ? "ok ready v1 48000 128 -1" : "ok";
         };
-        using var client = new TonelabPipeClient(game.PipeName);
+        var clock = new ManualTimeProvider();
+        using var client = new TonelabPipeClient(game.PipeName, time: clock);
 
-        var status = await client.StatusAsync(Ct);
+        var pending = client.StatusAsync(Ct);
+        try
+        {
+            await entered.Task.WaitAsync(Unbounded, Ct);
+            clock.Advance(TimeSpan.FromMilliseconds(1500));
+            Assert.False(pending.IsCompleted);
+            Assert.Equal(1, clock.PendingTimers);
+        }
+        finally
+        {
+            reply.TrySetResult();
+        }
+        var status = await pending.WaitAsync(Unbounded, Ct);
 
         Assert.Equal(TonelabOutcome.Ok, status.Result.Outcome);
         Assert.Equal(TonelabGameState.Ready, status.State);
@@ -47,7 +63,7 @@ public sealed class TonelabPipeClientTests
     {
         using var game = new TonelabGameMock();
         using var client = new TonelabPipeClient(game.PipeName, Patient);
-        var file = Path.Combine(Path.GetTempPath(), $"tonelab-client-{game.ProcessId}.json");
+        var file = game.TonePath;
         await File.WriteAllTextAsync(file, """{ "GearList": { "Amp": { "Key": "Amp_A" } }, "Key": "my_tone" }""", Ct);
         try
         {
@@ -80,7 +96,9 @@ public sealed class TonelabPipeClientTests
             ["status", "tone apply-file " + file, "tone dump " + file + ".dump", "tone knob Amp Amp_A_Gain 40", "tone restore", "mix mute on", "mix mute off",
                 "window hide", "window show", "perf hidden_fps 10", "quit"],
             game.Commands());
-        Assert.Equal(1, game.Connections);
+        // One connection carried the whole exchange: the client reconnects only after a fault. Never a count of what the
+        // game accepted, which a stray probe from another test host's session would raise.
+        Assert.Single(game.Exchanges.Select(exchange => exchange.Connection).Distinct());
     }
 
     [Fact]
@@ -119,34 +137,117 @@ public sealed class TonelabPipeClientTests
         var answer = false;
         using var game = new TonelabGameMock();
         game.Responder = _ => answer ? "ok applied my_tone" : null;
-        // Only the Command (reply) timeout is short: it is what the first command runs into. The next
-        // command is an apply-file, which runs on the long ApplyFile bound, so a slow reconnect or reply
-        // on a loaded machine cannot turn the second half into a timeout of its own.
-        using var client = new TonelabPipeClient(game.PipeName, new TonelabTimeouts(Unbounded, TimeSpan.FromMilliseconds(150), Unbounded));
+        // The reply deadline runs on a manual clock: the test advances it once the game HAS the command,
+        // so no wall time is involved. The next command is an apply-file on the long ApplyFile bound.
+        var clock = new ManualTimeProvider();
+        using var client = new TonelabPipeClient(game.PipeName, new TonelabTimeouts(Unbounded, TimeSpan.FromSeconds(5), Unbounded), clock);
 
-        var timedOut = await client.MixMuteAsync(true, Ct);
+        var pending = client.MixMuteAsync(true, Ct);
+        await WaitUntilAsync(() => clock.PendingTimers == 1 && game.Commands().Length == 1);
+        clock.Advance(TimeSpan.FromSeconds(5));
+        var timedOut = await pending;
         Assert.Equal(TonelabOutcome.Timeout, timedOut.Outcome);
         Assert.False(client.IsConnected);   // a late reply must never be read as the next command's
 
         answer = true;
         Assert.True((await client.ApplyFileAsync(@"C:\x.json", Ct)).IsOk);
-        Assert.Equal(2, game.Connections);
+
+        // The reconnect is proven by WHICH connection each command arrived on, never by how many the game
+        // accepted: under load the game can accept a connect attempt that was abandoned before it sent a
+        // byte, so the count is 2 or more (seen as 3 and 4 on a loaded machine).
+        Assert.NotEqual(game.ConnectionOf("mix mute on"), game.ConnectionOf(@"tone apply-file C:\x.json"));
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        // Ordering gate, not an assertion on elapsed time: bounded only by the test's cancellation.
+        while (!condition()) await Task.Delay(5, Ct);
+    }
+
+    /// <summary>A clock that only moves when the test says so; its timers fire when <see cref="Advance" /> passes their due time.</summary>
+    internal sealed class ManualTimeProvider : TimeProvider
+    {
+        private readonly List<ManualTimer> _timers = [];
+        private TimeSpan _elapsed;
+
+        public int PendingTimers
+        {
+            get
+            {
+                lock (_timers) return _timers.Count(t => !t.Done);
+            }
+        }
+
+        public override DateTimeOffset GetUtcNow() => new DateTimeOffset(2026, 11, 6, 0, 0, 0, TimeSpan.Zero) + _elapsed;
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = new ManualTimer(callback, state, _elapsed + dueTime);
+            lock (_timers) _timers.Add(timer);
+            return timer;
+        }
+
+        public void Advance(TimeSpan by)
+        {
+            ManualTimer[] due;
+            lock (_timers)
+            {
+                _elapsed += by;
+                due = [.. _timers.Where(t => !t.Done && t.Due <= _elapsed)];
+            }
+
+            foreach (var timer in due) timer.Fire();
+        }
+
+        private sealed class ManualTimer(TimerCallback callback, object? state, TimeSpan due) : ITimer
+        {
+            public TimeSpan Due { get; private set; } = due;
+
+            public bool Done { get; private set; }
+
+            public bool Change(TimeSpan dueTime, TimeSpan period)
+            {
+                Due = dueTime;
+                return true;
+            }
+
+            public void Fire()
+            {
+                Done = true;
+                callback(state);
+            }
+
+            public void Dispose() => Done = true;
+
+            public ValueTask DisposeAsync()
+            {
+                Done = true;
+                return ValueTask.CompletedTask;
+            }
+        }
     }
 
     [Fact]
     public async Task NoGame_IsNotConnected()
     {
-        using var client = new TonelabPipeClient(TonelabProtocol.PipeNameFor(1_999_999_001),
-            new TonelabTimeouts(TimeSpan.FromMilliseconds(100), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1)));
+        using var identity = TonelabMockIdentity.Reserve();
+        var clock = new ManualTimeProvider();
+        using var client = new TonelabPipeClient(TonelabProtocol.PipeNameFor(identity.ProcessId),
+            new TonelabTimeouts(TimeSpan.FromMilliseconds(100), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1)), clock);
 
-        Assert.Equal(TonelabOutcome.NotConnected, (await client.RestoreAsync(Ct)).Outcome);
-        Assert.Equal(TonelabOutcome.NotConnected, (await client.StatusAsync(Ct)).Result.Outcome);
+        var pending = client.RestoreAsync(Ct);
+        await WaitUntilAsync(() => clock.PendingTimers == 1 || pending.IsCompleted);
+        Assert.Equal(1, clock.PendingTimers);
+        clock.Advance(TimeSpan.FromMilliseconds(100));
+        Assert.Equal(TonelabOutcome.NotConnected, (await pending.WaitAsync(Unbounded, Ct)).Outcome);
+        Assert.False(client.IsConnected);
     }
 
     [Fact]
     public async Task AGameThatDies_IsNotConnected_AndOneThatComesBack_IsReconnected()
     {
-        var pid = 1_999_999_002;
+        using var identity = TonelabMockIdentity.Reserve();
+        var pid = identity.ProcessId;
         using var client = new TonelabPipeClient(TonelabProtocol.PipeNameFor(pid),
             new TonelabTimeouts(Unbounded, Unbounded, Unbounded));
 
@@ -157,7 +258,7 @@ public sealed class TonelabPipeClientTests
 
         using var again = new TonelabGameMock(pid);
         Assert.True((await client.MixMuteAsync(true, Ct)).IsOk);
-        Assert.Equal(1, again.Connections);
+        Assert.Contains("mix mute on", again.Commands());   // the new game got it: the client reconnected
     }
 
     [Fact]
@@ -171,6 +272,127 @@ public sealed class TonelabPipeClientTests
         await cts.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        Assert.False(client.IsConnected);
+    }
+
+    /// <summary>
+    ///     The session's exit watch disposes the client while a command is past its connect. The
+    ///     command must answer NotConnected from the pipe it connected, not dereference the cleared fields
+    ///     (a NullReferenceException under a loaded gate before the fix).
+    /// </summary>
+    [Fact]
+    public async Task ADisposeDuringASend_IsNotConnected_NotANullReference()
+    {
+        using var game = new TonelabGameMock();
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var dropped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var client = new TonelabPipeClient(game.PipeName, Patient)
+        {
+            BeforeSendAsync = async token =>
+            {
+                connected.TrySetResult();
+                await dropped.Task.WaitAsync(token);
+            }
+        };
+
+        var pending = client.StatusAsync(Ct);
+        try
+        {
+            await connected.Task.WaitAsync(Unbounded, Ct);
+            client.Dispose();
+        }
+        finally
+        {
+            dropped.TrySetResult();
+        }
+        var status = await pending.WaitAsync(Unbounded, Ct);
+
+        Assert.Equal(TonelabOutcome.NotConnected, status.Result.Outcome);
+        Assert.False(client.IsConnected);
+        Assert.Empty(game.Commands());
+    }
+
+    /// <summary>
+    ///     A command queued behind one in flight when the client is disposed starts no connect: it
+    ///     passed the disposed check before it waited its turn, so the turn itself must check again.
+    /// </summary>
+    [Fact]
+    public async Task ACommandQueuedBehindADispose_NeverStartsAConnect()
+    {
+        using var game = new TonelabGameMock();
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var client = new TonelabPipeClient(game.PipeName, Patient, new ManualTimeProvider())
+        {
+            BeforeSendAsync = async _ =>
+            {
+                connected.TrySetResult();
+                await released.Task;
+            }
+        };
+
+        var first = client.StatusAsync(Ct);
+        await connected.Task.WaitAsync(Unbounded, Ct);
+        var queued = client.RestoreAsync(Ct);
+        Assert.Equal(1, client.ConnectAttempts);
+        client.Dispose();
+        released.TrySetResult();
+
+        Assert.Equal(TonelabOutcome.NotConnected, (await first.WaitAsync(Unbounded, Ct)).Result.Outcome);
+        Assert.Equal(TonelabOutcome.NotConnected, (await queued.WaitAsync(Unbounded, Ct)).Outcome);
+        Assert.Equal(1, client.ConnectAttempts);
+        Assert.False(client.IsConnected);
+    }
+
+    /// <summary>
+    ///     A dispose while the reply is pending ends the read at once, and closing the pipe under that read
+    ///     is NotConnected, not a Timeout: the injected clock never moves, so no deadline could have fired.
+    /// </summary>
+    [Fact]
+    public async Task ADisposeDuringAPendingRead_IsNotConnected_NotATimeout()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reply = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var game = new TonelabGameMock
+        {
+            ReplyAsync = async (_, token) =>
+            {
+                entered.TrySetResult();
+                await reply.Task.WaitAsync(token);
+                return "ok ready v1 48000 128 0";
+            }
+        };
+        using var client = new TonelabPipeClient(game.PipeName, Patient, new ManualTimeProvider());
+
+        var pending = client.StatusAsync(Ct);
+        TonelabStatus status;
+        try
+        {
+            await entered.Task.WaitAsync(Unbounded, Ct);
+            client.Dispose();
+            status = await pending.WaitAsync(Unbounded, Ct);
+        }
+        finally
+        {
+            reply.TrySetResult();
+        }
+
+        Assert.Equal(TonelabOutcome.NotConnected, status.Result.Outcome);
+        Assert.False(client.IsConnected);
+    }
+
+    /// <summary>A dispose while no game answers the connect ends it at once instead of waiting out the connect deadline.</summary>
+    [Fact]
+    public async Task ADisposeDuringAPendingConnect_EndsItAsNotConnected()
+    {
+        using var identity = TonelabMockIdentity.Reserve();
+        using var client = new TonelabPipeClient(TonelabProtocol.PipeNameFor(identity.ProcessId), Patient, new ManualTimeProvider());
+
+        var pending = client.StatusAsync(Ct);
+        Assert.Equal(1, client.ConnectAttempts);
+        client.Dispose();
+
+        Assert.Equal(TonelabOutcome.NotConnected, (await pending.WaitAsync(Unbounded, Ct)).Result.Outcome);
         Assert.False(client.IsConnected);
     }
 }

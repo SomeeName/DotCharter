@@ -1,0 +1,74 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundChordWholeView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Technique page of a chord, its WHOLE CHORD card (#751 P4, design D): strum, accent, ignore, pass other,
+         split notes / no notes (never both) and Reset, STAGED (Staged.ChordTechnique) on every chord the footer's
+         "Apply to" ladder reaches. A mixed selection's note card edits its notes; the chords are edited alone. -->
+    <StackPanel Spacing="{StaticResource SpaceXs}">
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                   Text="{localization:Loc Inspector_WholeChord}" />
+        <StackPanel x:Name="ChordMixedSelection" Spacing="{StaticResource SpaceXs}" IsVisible="{Binding Sections.ShowNoteTechnique}">
+            <TextBlock Text="{localization:Loc Inspector_Staged_ChordsHint}" TextWrapping="Wrap"
+                       FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextMuted}" />
+            <Button x:Name="ChordEditSelectedChords" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                    HorizontalAlignment="Left" Content="{localization:Loc Inspector_Staged_EditChords}"
+                    Command="{Binding Staged.ChordTechnique.EditSelectedChordsCommand}"
+                    AutomationProperties.Name="{localization:Loc Inspector_Staged_EditChords}" />
+        </StackPanel>
+        <StackPanel x:Name="ChordWholeChordGroup" Spacing="3" IsVisible="{Binding !Sections.ShowNoteTechnique}">
+            <Grid ColumnDefinitions="*,1.3*" ColumnSpacing="{StaticResource SpaceSm}">
+                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel"
+                           Text="{localization:Loc Inspector_Strum}" />
+                <ComboBox Grid.Column="1" x:Name="ChordStrumPicker" HorizontalAlignment="Stretch"
+                          SelectedIndex="{Binding Staged.ChordTechnique.Strum}"
+                          AutomationProperties.Name="{localization:Loc Inspector_Strum}">
+                    <ComboBoxItem Content="{localization:Loc Inspector_None}" />
+                    <ComboBoxItem Content="{localization:Loc Inspector_PickDown}" />
+                    <ComboBoxItem Content="{localization:Loc Inspector_PickUp}" />
+                </ComboBox>
+            </Grid>
+            <UniformGrid Columns="3" ColumnSpacing="{StaticResource SpaceXs}" RowSpacing="3">
+                <ToggleButton x:Name="ChordAccentChip" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                              HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_Accent}"
+                              IsChecked="{Binding Staged.ChordTechnique.Accent}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Accent}"
+                              ToolTip.Tip="{localization:Loc Inspector_Chord_AccentTip}" />
+                <ToggleButton x:Name="ChordIgnoreChip" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                              HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_Ignore}"
+                              IsChecked="{Binding Staged.ChordTechnique.ChordIgnore}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Ignore}"
+                              ToolTip.Tip="{localization:Loc Inspector_ChordIgnoreTip}" />
+                <ToggleButton x:Name="ChordPassOtherChip" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                              HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_PassOther}"
+                              IsChecked="{Binding Staged.ChordTechnique.PassOtherNotes}"
+                              AutomationProperties.Name="{localization:Loc Inspector_PassOther}"
+                              ToolTip.Tip="{localization:Loc Inspector_Chord_PassOtherTip}" />
+                <ToggleButton x:Name="ChordSplitNotesChip" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                              HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_SplitNotes}"
+                              IsChecked="{Binding Staged.ChordTechnique.SplitIntoNotes}"
+                              AutomationProperties.Name="{localization:Loc Inspector_SplitNotes}"
+                              ToolTip.Tip="{localization:Loc Inspector_SplitNotesTip}" />
+                <ToggleButton x:Name="ChordNoNotesChip" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                              HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_NoNotes}"
+                              IsChecked="{Binding Staged.ChordTechnique.ForceNoNotes}"
+                              IsEnabled="{Binding Staged.ChordTechnique.CanForceNoNotes}"
+                              AutomationProperties.Name="{localization:Loc Inspector_NoNotes}"
+                              ToolTip.Tip="{localization:Loc Inspector_NoNotesTip}" ToolTip.ShowOnDisabled="True" />
+                <Button x:Name="ChordTechniqueReset" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                        HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_Staged_Reset}"
+                        Command="{Binding Staged.ChordTechnique.ResetCommand}"
+                        AutomationProperties.Name="{localization:Loc Inspector_Chord_ResetFlags}"
+                        ToolTip.Tip="{localization:Loc Inspector_Staged_ResetTip}" />
+            </UniformGrid>
+            <TextBlock x:Name="ChordNoNotesDisabledHint" Text="{localization:Loc Inspector_NoNotesDisabledTip}" TextWrapping="Wrap"
+                       IsVisible="{Binding !Staged.ChordTechnique.CanForceNoNotes}"
+                       FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextMuted}" />
+            <TextBlock x:Name="ChordRepeatVerdictLine" Text="{Binding ChordRepeatVerdict}" TextWrapping="Wrap"
+                       IsVisible="{Binding HasChordRepeatVerdict}" ToolTip.Tip="{localization:Loc Inspector_RepeatVerdictTip}"
+                       FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextMuted}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

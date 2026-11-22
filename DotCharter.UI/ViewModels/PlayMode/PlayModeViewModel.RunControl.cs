@@ -5,21 +5,16 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace DotCharter.UI.ViewModels.PlayMode;
 
-/// <summary>
-///     The verbs that CONTROL a run once it is going: pause and its backdrop
-///     freeze-frame, resume, riff repeater, restart, the two aborts, ending from
-///     the pause menu, and the rock-meter fail-out with its retry. The events the
-///     shell listens to (exit to editor, open settings, surface swaps) live here
-///     too, because every one of them is raised by one of those verbs.
-///     <para>
-///         Part of <see cref="PlayModeViewModel" />. Injected dependencies and
-///         plain private fields live in the ROOT file; see
-///         <c>PlayModeViewModel.cs</c> for the full field rule and
-///         why the split exists.
-///     </para>
-/// </summary>
+/// <summary>Controls run exits, pause/resume, retry and failure routing.</summary>
 public sealed partial class PlayModeViewModel
 {
+    /// <summary>Releases the old run before the shell presents a newly opened project.</summary>
+    public void EndForProjectOpen()
+    {
+        _countdownTimer.Stop();
+        AbortRun(PlayModeScreen.SongSelect);
+    }
+
     public string ActiveProfileName => _profiles.ActiveProfile.DisplayName;
 
     /// <summary>Raised when the user leaves Play Mode for the editor.</summary>
@@ -72,6 +67,7 @@ public sealed partial class PlayModeViewModel
     public void PauseGameplay()
     {
         if (CurrentScreen != PlayModeScreen.Playing) return;
+        _livePlay?.ArmSongEnd(0);
         _transport?.PauseCommand.Execute(null);
         ClearPauseBackdrop();
         PauseBackdrop = PauseBackdropProvider?.Invoke();
@@ -80,6 +76,17 @@ public sealed partial class PlayModeViewModel
         CapturePausedRun();
         CurrentScreen = PlayModeScreen.Paused;
         ShowPauseSurfaceRequested?.Invoke();
+    }
+
+    private void OnGameplayPlaybackStarted()
+    {
+        if (!_runSideEffectsApplied || _livePlay is not { IsActive: true }) return;
+        _livePlay.RearmCompletion();
+        if (CurrentScreen != PlayModeScreen.Paused) return;
+        ClearPauseBackdrop();
+        CurrentScreen = PlayModeScreen.Playing;
+        ShowEditorSurfaceRequested?.Invoke();
+        _endWatchTimer.Start();
     }
 
     [RelayCommand]

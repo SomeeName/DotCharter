@@ -138,36 +138,21 @@ public sealed partial class TonelabReleaseLintTests
         File.WriteAllText(file, script, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         var info = new System.Diagnostics.ProcessStartInfo("pwsh")
         {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8
         };
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-File", file })
             info.ArgumentList.Add(argument);
 
-        System.Diagnostics.Process? process;
-        try
-        {
-            process = System.Diagnostics.Process.Start(info);
-        }
-        catch (System.ComponentModel.Win32Exception)
+        // #608: both pipes drain concurrently under one cap (a deadlock detector for a hung child, never a budget).
+        var result = BoundedProcess.TryRun(info, TimeSpan.FromMinutes(2), "pwsh (tonelab release step)");
+        if (result is null)
         {
             Assert.Skip("pwsh (PowerShell 7+) is not on PATH, so New-Release.ps1's tonelab step cannot be executed here.");
             return default;
         }
 
-        Assert.NotNull(process);
-        using (process)
-        {
-            var stdout = process!.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
-            var stderr = process.StandardError.ReadToEnd();
-            // A deadlock detector for a hung child, never a budget.
-            Assert.True(process.WaitForExit(120_000), "pwsh did not finish within 120 s.");
-            return (process.ExitCode, stdout.GetAwaiter().GetResult() + stderr);
-        }
+        return (result.ExitCode, result.StandardOutput + result.StandardError);
     }
 
     [GeneratedRegex("^tonelab", RegexOptions.IgnoreCase)]

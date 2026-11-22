@@ -57,7 +57,7 @@ internal static class PracticeSongRekey
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             logger?.Warning(AppLogCategory.Audio,
-                $"Practice store '{filePath}' was not re-keyed for the renamed project ({ex.GetType().Name}: {ex.Message}); it is left as it is.");
+                $"Practice store '{filePath}' was not re-keyed for the renamed project; it is left as it is.", ex);
             return 0;
         }
     }

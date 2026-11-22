@@ -142,4 +142,26 @@ public sealed class InspectorTabStripLayoutTests
     [Fact]
     public void AStripTooNarrowForAnything_StillShowsTheActiveTab() =>
         Assert.Equal([5], Decide(60, 5).Shown);
+
+    /// <summary>
+    ///     #751 (design D): a strip of captions only never turns into icons. Seven labelled tabs of 60 px with
+    ///     2 px between need 432 px; at 310 px a 56 px More button and its 2 px gap leave 252, where four (240 + 6) fit.
+    ///     The active tab always stands in the strip and the count holds whichever tab is active.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    public void ACaptionsOnlyStrip_StaysLabelled_AndOverflowsIntoMore(int active)
+    {
+        TabStripTab[] captions = [.. Enumerable.Repeat(new TabStripTab(60, 60), 7)];
+        var fits = TabStripLayout.Decide(432, Spacing, captions, active, More, iconsFallback: false);
+        Assert.Equal(TabStripMode.Labelled, fits.Mode);
+        Assert.Empty(fits.Overflow);
+
+        var plan = TabStripLayout.Decide(310, Spacing, captions, active, More, iconsFallback: false);
+        Assert.Equal(TabStripMode.Labelled, plan.Mode);
+        Assert.Equal(4, plan.Shown.Count);
+        Assert.Contains(active, plan.Shown);
+        Assert.Equal(7, plan.Shown.Count + plan.Overflow.Count);
+    }
 }

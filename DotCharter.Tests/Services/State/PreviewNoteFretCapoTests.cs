@@ -1,3 +1,5 @@
+using DotCharter.Services.Editing;
+
 namespace DotCharter.Tests.Services.State;
 
 /// <summary>
@@ -19,6 +21,40 @@ namespace DotCharter.Tests.Services.State;
 /// </summary>
 public sealed class PreviewNoteFretCapoTests
 {
+    [Theory]
+    [InlineData(0, 5, 3, 5)]
+    [InlineData(5, 0, 3, 3)]
+    [InlineData(5, 7, 0, 0)]
+    public void PreviewUsesTheFocusedEditTargetsCapo(int activeCapo, int focusedCapo, int fret, int expected)
+    {
+        var state = new ProjectState { ActiveArrangement = Capoed(activeCapo) };
+        var focused = Capoed(focusedCapo);
+        var level = new ChartLevel();
+        focused.Levels.Add(level);
+        var scope = new EditingScope(state);
+        scope.SetResolver(() => new EditingTarget(focused, level));
+
+        state.PreviewNoteFret = fret;
+
+        Assert.Equal(expected, state.PreviewNoteFret);
+    }
+
+    [Fact]
+    public void ChangingFocusReclampsAnAlreadyArmedPreview()
+    {
+        var state = new ProjectState { ActiveArrangement = Capoed(0), PreviewNoteFret = 3 };
+        var focused = Capoed(0);
+        var level = new ChartLevel();
+        focused.Levels.Add(level);
+        var scope = new EditingScope(state);
+        scope.SetResolver(() => new EditingTarget(focused, level));
+
+        focused = Capoed(5);
+        focused.Levels.Add(level);
+
+        Assert.Equal(5, state.PreviewNoteFret);
+    }
+
     [Fact]
     public void ArmingAFretBehindTheCapoLandsOnTheCapo()
     {

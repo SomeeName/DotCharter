@@ -22,7 +22,8 @@ public interface IAudioChartLintService
     /// <summary>Offline audio-verified chart lint (v0.29): decodes the song
     /// audio, projects the arrangement's HIGHEST level to sounding pitches
     /// (the fully-leveled convention gameplay uses) and asks the offline CQT
-    /// verifier about every pitched sound. Background-threaded; cancellable;
+    /// verifier about every pitched sound. Call on the chart's owner thread:
+    /// projection is captured before background decode/analysis. Cancellable;
     /// never throws except for cancellation.</summary>
     Task<AudioChartLintOutcome> LintAsync(Arrangement arrangement, IList<BeatMarker> beats,
         string? audioPath, CancellationToken cancellationToken = default);
@@ -50,9 +51,17 @@ public sealed class AudioChartLintService : IAudioChartLintService
 
     public Task<AudioChartLintOutcome> LintAsync(Arrangement arrangement, IList<BeatMarker> beats,
         string? audioPath, CancellationToken cancellationToken = default)
-        => Task.Run(() => LintCore(arrangement, beats, audioPath, cancellationToken), cancellationToken);
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(audioPath) || !File.Exists(audioPath))
+            return Task.FromResult(AudioChartLintOutcome.Failed("no-audio"));
 
-    private AudioChartLintOutcome LintCore(Arrangement arrangement, IList<BeatMarker> beats,
+        // Project on the owner thread: these values retain no live chart or beat references.
+        var sounds = ProjectExpectedSounds(arrangement, beats).ToArray();
+        return Task.Run(() => LintCore(sounds, audioPath, cancellationToken), cancellationToken);
+    }
+
+    private AudioChartLintOutcome LintCore(IReadOnlyList<LintExpectedSound> sounds,
         string? audioPath, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(audioPath) || !File.Exists(audioPath))
@@ -63,9 +72,9 @@ public sealed class AudioChartLintService : IAudioChartLintService
         {
             pcm = PcmAudioLoader.Load(audioPath, []);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Audio lint: decode failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Audio lint: decode failed", ex);
             return AudioChartLintOutcome.Failed("decode-failed");
         }
 
@@ -75,12 +84,15 @@ public sealed class AudioChartLintService : IAudioChartLintService
         var frames = pcm.FrameCount;
         var mono = new float[frames];
         for (var f = 0; f < frames; f++)
+        {
+            if (f % 8192 == 0) ct.ThrowIfCancellationRequested();
             mono[f] = (pcm.Samples[f * 2] + pcm.Samples[f * 2 + 1]) / (2f * 32768f);
+        }
 
-        var sounds = ProjectExpectedSounds(arrangement, beats);
         ct.ThrowIfCancellationRequested();
 
-        var result = ChartAudioLintAnalyzer.Analyze(mono, pcm.SampleRate, sounds);
+        var result = ChartAudioLintAnalyzer.Analyze(mono, pcm.SampleRate, sounds, cancellationToken: ct);
+        ct.ThrowIfCancellationRequested();
         _logger?.Info(AppLogCategory.Audio,
             $"Audio lint: {result.SoundsVerified}/{result.SoundsChecked} sounds verified, " +
             $"{result.Findings.Count} finding(s) ('{Path.GetFileName(audioPath)}').");
@@ -108,8 +120,7 @@ public sealed class AudioChartLintService : IAudioChartLintService
     internal static List<LintExpectedSound> ProjectExpectedSounds(Arrangement arrangement, IList<BeatMarker> beats)
     {
         var sounds = new List<LintExpectedSound>();
-        if (arrangement.Levels.Count == 0) return sounds;
-        var level = arrangement.Levels[^1];
+        if (ChartLevels.Hardest(arrangement) is not { } level) return sounds;
 
         foreach (var note in level.Notes)
         {

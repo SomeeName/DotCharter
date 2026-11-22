@@ -8,7 +8,7 @@ namespace DotCharter.Tone.Audio;
 /// </summary>
 internal sealed class NoteLegatoIndex
 {
-    private const int StringCount = 6;
+    private const int StringCount = StandardOpenStrings.MaxStringCount;
     private readonly List<double>[] _startsByString = new List<double>[StringCount];
     // Parallel to _startsByString once sorted: the note is a hammer-on, pull-off or tap.
     private readonly List<bool>[] _hopoByString = new List<bool>[StringCount];
@@ -34,7 +34,8 @@ internal sealed class NoteLegatoIndex
         {
             foreach (var n in notes)
             {
-                var s = ((n.StringIndex % StringCount) + StringCount) % StringCount;
+                var s = n.StringIndex;
+                if (s is < 0 or >= StringCount) continue;
                 entries[s].Add((n.GetTimeMs(beats), n.Hopo != HopoType.None));
             }
         }
@@ -45,7 +46,8 @@ internal sealed class NoteLegatoIndex
                 var startMs = c.Position.GetPositionMs(beats);
                 foreach (var cn in c.ChordNotes)
                 {
-                    var s = ((cn.StringIndex % StringCount) + StringCount) % StringCount;
+                    var s = cn.StringIndex;
+                    if (s is < 0 or >= StringCount) continue;
                     entries[s].Add((startMs, cn.Hopo != HopoType.None));
                 }
             }
@@ -77,7 +79,8 @@ internal sealed class NoteLegatoIndex
     /// </summary>
     public (double Start, bool Hopo)? NextOnString(int stringIndex, double afterMs)
     {
-        var s = ((stringIndex % StringCount) + StringCount) % StringCount;
+        if (stringIndex is < 0 or >= StringCount) return null;
+        var s = stringIndex;
         var list = _startsByString[s];
         if (list.Count == 0) return null;
 

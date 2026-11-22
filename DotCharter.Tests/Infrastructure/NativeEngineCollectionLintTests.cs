@@ -38,12 +38,14 @@ public sealed class NativeEngineCollectionLintTests
     ///     Opening a real engine, or arming the guards the engine reads when it
     ///     opens. <c>NullDeviceRigHost</c> (product code) builds an engine (on the
     ///     null device, through the per-engine <c>EnableNullDevice</c> flag since
-    ///     #85), so a test that constructs one never names <c>JuceAudioEngine</c>. <c>JuceDspChainService</c> is deliberately NOT here: it wraps
+    ///     #85), so a test that constructs one never names <c>JuceAudioEngine</c>;
+    ///     <c>NullDeviceEnvScope</c> is how a test arms the two variables (#606), so
+    ///     its user never names them. <c>JuceDspChainService</c> is deliberately NOT here: it wraps
     ///     the interop and reads the module catalogue out of the DLL, but it
     ///     builds no engine and touches no device.
     /// </summary>
     private static readonly Regex NativeEngineUse = new(
-        @"new\s+JuceAudioEngine\s*\(|new\s+NullDeviceRigHost\s*\(|DCA_ENABLE_NULL_DEVICE|DCA_NULL_DEVICE_MANUAL",
+        @"new\s+JuceAudioEngine\s*\(|new\s+NullDeviceRigHost\s*\(|DCA_ENABLE_NULL_DEVICE|DCA_NULL_DEVICE_MANUAL|NullDeviceEnvScope\s*\.",
         RegexOptions.Compiled);
 
     private static readonly Regex ClassDeclaration = new(

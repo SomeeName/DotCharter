@@ -10,6 +10,8 @@ internal sealed class MemoryTonelabFileSystem : ITonelabFileSystem
     /// <summary>Throws <see cref="IOException" /> from a write to this path when set.</summary>
     public Func<string, byte[], bool>? FailWrite { get; set; }
 
+    public bool TearWrites { get; set; }
+
     public bool Exists(string path)
     {
         lock (_files) return _files.ContainsKey(path);
@@ -22,7 +24,19 @@ internal sealed class MemoryTonelabFileSystem : ITonelabFileSystem
 
     public void WriteAllBytes(string path, byte[] bytes)
     {
+        if (TearWrites)
+        {
+            lock (_files) _files[path] = bytes[..(bytes.Length / 2)];
+            throw new IOException("partial write (test)");
+        }
         if (FailWrite?.Invoke(path, bytes) == true) throw new IOException("disk full (test)");
+        lock (_files) _files[path] = [.. bytes];
+    }
+
+    public void WriteAllBytesAtomically(string path, byte[] bytes)
+    {
+        // A failed staged write never publishes the partial bytes.
+        if (TearWrites || FailWrite?.Invoke(path, bytes) == true) throw new IOException("staged write failed (test)");
         lock (_files) _files[path] = [.. bytes];
     }
 
@@ -78,12 +92,14 @@ internal sealed class FakeRocksmith : IRocksmithProcesses, IRocksmithStarter
 
     public int? FindGame() => _running ? Pid : null;
 
+    public Func<TimeSpan, Task<bool>>? ExitWait { get; set; }
+
     public async Task<bool> WaitForExitAsync(int processId, TimeSpan timeout, CancellationToken ct)
     {
         if (!_running) return true;
         var exited = _exited.Task;
         if (timeout == Timeout.InfiniteTimeSpan) await exited.WaitAsync(ct);
-        else await Task.WhenAny(exited, Task.Delay(timeout, ct));
+        else return ExitWait is { } wait && await wait(timeout).WaitAsync(ct);
         return !_running;
     }
 
@@ -127,10 +143,14 @@ internal sealed class FakeHelperRunner(HelperProcessRun answer) : IHelperProcess
 
     public Exception? Throw { get; init; }
 
-    public Task<HelperProcessRun> RunAsync(string exe, IReadOnlyList<string> arguments, TimeSpan timeout, CancellationToken ct)
+    public Task? Hold { get; init; }
+
+    public async Task<HelperProcessRun> RunAsync(string exe, IReadOnlyList<string> arguments, TimeSpan timeout, CancellationToken ct)
     {
         Calls.Add((exe, arguments, timeout));
-        return Throw is { } ex ? Task.FromException<HelperProcessRun>(ex) : Task.FromResult(answer);
+        if (Hold is { } hold) await hold.WaitAsync(ct);
+        if (Throw is { } ex) throw ex;
+        return answer;
     }
 
     public static FakeHelperRunner Ok() => new(new HelperProcessRun(0, "ok\r\n", false));

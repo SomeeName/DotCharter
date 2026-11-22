@@ -35,6 +35,31 @@
   `AtomicFileTests.AFailedSwap_ReportsAndLeavesNoStagedFileBehind` +
   `.ReplaceWithRetry_ThatGivesUp_SweepsTheStageItWasHanded`.
 
+  **Preserving relocation uses `AtomicFile.MoveAside(..., overwrite: false)`.**
+  It atomically refuses a competing destination and keeps the original on failure.
+  It does not flush, retry or sweep a live source. The two-argument quarantine
+  overload still replaces the aside; `PublishNew` is for owned disposable stages.
+
+  **Create-only publication uses `AtomicFile.PublishNew` (#634).** It flushes
+  the stage and atomically moves without overwrite; an existing destination,
+  including a concurrent publisher, always wins. A refused or failed publication
+  sweeps its owned stage. It rejects using the destination as its own stage.
+  Stem-cache saves use this seam; their encoder-race test and `AtomicFileTests`
+  protect the durable archive without widening any bare-move allowance.
+
+  **Exports use the same staging contract (#551).** `WriteAllText` and
+  `WriteAllBytes` route through `Write`, including cleanup when serialization or
+  flush fails. `WriteAllTextAsync` writes UTF-8 without a BOM, checks cancellation
+  before publication, and removes its owned stage on any failure. Preset text,
+  profile archives, diagnostics bundles, standalone vocal XML, lyric-sync text
+  and JSON, and WEM cache files publish only complete, flushed sibling stages.
+  Cancellation is checked before each replacement attempt and interrupts the existing
+  backoff. Vocal XML passes the token through rendering and into atomic publication;
+  warning output must not leave a cancellation gap before the XML write.
+  `WemWriter.WriteFile` stages explicitly because its PCM span cannot be captured
+  by a delegate. A failed export preserves the destination; cleanup never deletes
+  it. `ExportTargetWriter` reads through the share-delete counterparts too.
+
 - **A new project's folder is resolved through
   `Infrastructure/Storage/NewProjectFolder`, never `Directory.CreateDirectory`.**
   All three create-project flows (New Project, EOF import,
@@ -123,7 +148,8 @@
     output (`GpFormatBounds.MaxUnfoldedBars`, `MaxNotesPerTrack`) and an EOF track's
     note and section counts on the bytes that remain.
 
-- **A path read out of a file is DATA, and only `Infrastructure/Storage/ProjectRelativePath`
+- **A path read out of a file is DATA. `DotCharter.Tone/Infrastructure/Storage/FileReferencePolicy`
+  owns the shared check; Services exposes it through `Infrastructure/Storage/ProjectRelativePath`, which
   turns it into a location (#107).** That covers an `.rscp`'s `musicFileName`,
   `dcCoverArt`, stem paths and `arrangementFiles`, an `.eof`'s companion audio and
   an imported profile's `AvatarFileName`. The check is pure string work and runs
@@ -141,7 +167,8 @@
     attached to an unsaved session, crash snapshots) or a `..` stem path. Such a
     path is READ as audio; a UNC, device, drive-relative or network-drive one is
     refused unprobed and the normal "audio missing" flow takes over
-    (`ProjectAudioLocator`, `StemFolderProbe.ResolveStemPath`,
+    (`ProjectAudioLocator`, the save companions' `SaveCompanionService.ResolveAudio`,
+    `StemFolderProbe.ResolveStemPath`,
     `ProjectSilencePadder`, `ToneGenerationRun`, `ExportPathDefaults.ProjectAudio`).
   - **Nothing a file declares is a write directory.** `ProjectAudioLocator.ResolveOutputDirectory`
     returns the project folder unless the audio is a plain relative name; only an
@@ -149,6 +176,40 @@
     writes beside its audio. The parent-folder walk is for a BARE name only.
   Tests: `ProjectRelativePathTests` (the table), `DeclaredPathSinkTests` (one per
   sink; remote paths never reach the real file system there).
+
+  NAM sidecars require `FileReferencePolicy.IsBareFileName` before any target probe,
+  migration, load or delete. Imported tone `modelPath` / `irPath` values must be
+  local absolute paths or safe library-relative paths; an unsafe reference refuses
+  the import. Guitar-role sidecars resolve both file references strictly under
+  their derived-stems folder before checking sizes.
+
+  Audio resolvers use `ProjectAudioLocator`, including the `.dcsong` export probe,
+  tone generation, crash snapshots and export defaults. Every location actually
+  probed must pass the readable-media policy: a plain relative name does not make
+  a remote project directory safe. A refused rooted reference may still resolve
+  through its safe bare filename under a local project, as the loader permits.
+
+  `RscpChartSerializer.Save` streams through `AtomicFile.Write`: random sibling,
+  `FileMode.CreateNew`, flush, then replace. `ProjectSaver` and
+  `RecoverySnapshotStore` also use random staging names. The project save stage
+  keeps its real extension before `.saving` (`song.<GUID>.dcproj.saving`) so
+  format detection can read it. `ProjectDocumentService.PrepareSave` chooses the
+  serializer and XML document kind from the original destination before staging,
+  then passes that kind explicitly to the XML writer; auto-backup likewise ends
+  its temporary chart in `.dcproj`. Recovery calls its selected
+  serializer directly. Pre-existing fixed
+  `.saving` / `.tmp` files are never opened for writing. Sheet PDF export uses
+  the same exclusive staging rule and cleans up only a stage it created.
+
+## Recycle path identity and shell hooks
+
+`RecyclePathSafety` validates Windows local-path strings independently of the host
+platform. `WindowsRecycleBinProbe` expands actual long names before comparing cloud
+roots; unresolved paths, short-name uncertainty and ambiguous volume mount aliases
+refuse unattended recycling. Cloud-root namespace validation precedes metadata lookup.
+`RecycleBin` sets the full no-UI flags plus `FOFX_NOCOPYHOOKS`, so registered copy
+hooks cannot add their own dialogs. `RecyclePathSafetyTests` covers canonical path
+exclusion and unknown configurations; `RecycleBinTests` pins the operation flags.
 
 ## User folders: `UserDataFolders` is the only way to `%APPDATA%` / `%LOCALAPPDATA%` (#439)
 

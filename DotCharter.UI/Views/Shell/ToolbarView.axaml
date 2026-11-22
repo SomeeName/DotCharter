@@ -1,4 +1,4 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
@@ -29,11 +29,13 @@
         </Style>
     </UserControl.Styles>
 
-    <!-- 0.16 (plan 6.4) layout: one fixed CORE row (transport, grid snap,
-         undo/redo/save, zoom, arrangement picker) plus four grouped flyouts
-         (Mix / Tempo / Tools / Tracks) holding everything else, so the row
-         never horizontally scrolls at 1440 px. The ScrollViewer stays as a
-         safety net for extreme window widths only. -->
+    <!-- Layout, left to right. PLAYBACK: Play/Pause as ONE button, Stop, loop,
+         metronome, claps, play-the-chart, the speed chip (opens the Playback speed
+         popover), then the Mix and Practice tools popovers. EDIT: grid snap, undo, redo,
+         save. VIEW: zoom, follow playhead, Tracks. The right end is pinned: the tone
+         preview as ONE split button (click toggles, the caret picks the target), the tuner,
+         the panel toggles as their own group, and Export. The core rail scrolls only as a
+         safety net; the overflow popover takes over when it would. -->
     <Border Theme="{StaticResource FireToolbarBorder}" Classes="FireToolbar" MinHeight="44">
         <!-- The core groups stay in a horizontally-scrolling rail (col 0, star)
              so extreme narrow widths degrade by scrolling rather than wrapping;
@@ -44,31 +46,29 @@
                       HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 
-                <!-- Transport + grid snap -->
+                <!-- PLAYBACK -->
                 <StackPanel Classes="TbGroup" ToolTip.Tip="{localization:Loc Toolbar_GroupTransport}">
-                    <Button Theme="{StaticResource ToolbarBtn}" Command="{Binding Transport.PlayCommand}"
-                            AutomationProperties.Name="{localization:Loc Toolbar_Play}">
+                    <!-- Play and Pause are ONE button: the press goes through the same
+                         TogglePlayPause the key and the palette use (it asks the ENGINE,
+                         never the cached flag), and the glyph, the accessible name and the
+                         tooltip follow Transport.IsPlaying. -->
+                    <Button x:Name="PlayPauseButton" Theme="{StaticResource ToolbarBtn}"
+                            Command="{Binding Transport.TogglePlayPauseCommand}"
+                            AutomationProperties.Name="{Binding Transport.PlayPauseLabel}">
                         <ToolTip.Tip>
                             <MultiBinding Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
-                                <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
-                                         Path="[Toolbar_Play_Hint]" />
+                                <Binding Path="Transport.PlayPauseTip" />
                                 <Binding Path="ProjectState.Keybinds.PlayPause" />
                             </MultiBinding>
                         </ToolTip.Tip>
-                        <PathIcon Data="{DynamicResource IconPlay}"
-                                  Foreground="{DynamicResource SuccessColor}" />
-                    </Button>
-                    <Button Theme="{StaticResource ToolbarBtn}" Command="{Binding Transport.PauseCommand}"
-                            AutomationProperties.Name="{localization:Loc Toolbar_Pause}">
-                        <ToolTip.Tip>
-                            <MultiBinding Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
-                                <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
-                                         Path="[Toolbar_Pause_Hint]" />
-                                <Binding Path="ProjectState.Keybinds.PlayPause" />
-                            </MultiBinding>
-                        </ToolTip.Tip>
-                        <PathIcon Data="{DynamicResource IconPause}"
-                                  Foreground="{DynamicResource WarningColor}" />
+                        <Panel>
+                            <PathIcon Data="{DynamicResource IconPlay}"
+                                      Foreground="{DynamicResource SuccessColor}"
+                                      IsVisible="{Binding !Transport.IsPlaying}" />
+                            <PathIcon Data="{DynamicResource IconPause}"
+                                      Foreground="{DynamicResource WarningColor}"
+                                      IsVisible="{Binding Transport.IsPlaying}" />
+                        </Panel>
                     </Button>
                     <Button Theme="{StaticResource ToolbarBtn}" Command="{Binding Transport.StopCommand}"
                             ToolTip.Tip="{localization:Loc Toolbar_Stop}"
@@ -76,7 +76,143 @@
                         <PathIcon Data="{DynamicResource IconStop}"
                                   Foreground="{DynamicResource DangerColor}" />
                     </Button>
+
+            <!-- Editor loop region: pressed while the marked region is looping,
+                 disabled until one is marked. The loop silently re-seeks the
+                 transport, so it must never be invisible state — this control
+                 and the band the 2D timeline draws are the two visible halves. -->
+            <ToggleButton x:Name="LoopToolbarToggle"
+                          Theme="{StaticResource ToolbarToggleBtn}"
+                          IsChecked="{Binding ProjectState.LoopEnabled, Mode=OneWay}"
+                          IsEnabled="{Binding ProjectState.HasLoopRegion}"
+                          Command="{Binding Transport.ToggleLoopCommand}"
+                          ToolTip.ShowOnDisabled="True"
+                          AutomationProperties.Name="{localization:Loc Toolbar_ToggleLoop}">
+                <ToolTip.Tip>
+                    <MultiBinding Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
+                        <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
+                                 Path="[Toolbar_ToggleLoop_Hint]" />
+                        <Binding Path="ProjectState.Keybinds.ToggleLoop" />
+                    </MultiBinding>
+                </ToolTip.Tip>
+                <PathIcon Data="{DynamicResource IconRepeat}" />
+            </ToggleButton>
+
+            <!-- Metronome: one-click toggle (moved out of the Mix flyout). -->
+            <ToggleButton Theme="{StaticResource ToolbarToggleBtn}"
+                          IsChecked="{Binding Transport.MetronomeEnabled}"
+                          AutomationProperties.Name="{localization:Loc Toolbar_ToggleMetronome}">
+                <ToolTip.Tip>
+                    <MultiBinding Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
+                        <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
+                                 Path="[Toolbar_ToggleMetronome_Hint]" />
+                        <Binding Path="ProjectState.Keybinds.ToggleMetronome" />
+                    </MultiBinding>
+                </ToolTip.Tip>
+                <PathIcon Data="{DynamicResource IconBell}" />
+            </ToggleButton>
+
+            <!-- Claps: one-click toggle next to its sibling the metronome. -->
+            <ToggleButton Theme="{StaticResource ToolbarToggleBtn}"
+                          IsChecked="{Binding Transport.ClapsEnabled}"
+                          AutomationProperties.Name="{localization:Loc Toolbar_ToggleClaps}">
+                <ToolTip.Tip>
+                    <MultiBinding Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
+                        <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
+                                 Path="[Toolbar_ToggleClaps_Hint]" />
+                        <Binding Path="ProjectState.Keybinds.ToggleClaps" />
+                    </MultiBinding>
+                </ToolTip.Tip>
+                <PathIcon Data="{DynamicResource IconSparkles}" />
+            </ToggleButton>
+
+            <!-- Play the chart (#574): the ONE MIDI Out / chart-synth switch the
+                 Mixer's "Play the chart" checkbox and Tools ▸ MIDI instrument ▸ Out
+                 also write (Transport.MidiEnabled). Lit while on; disabled while
+                 nothing could sound (no engine), and the tip — shown on a disabled
+                 button too — says why, or that a stand-in voice plays. -->
+            <ToggleButton x:Name="ChartSynthToolbarToggle" Theme="{StaticResource ToolbarToggleBtn}"
+                          IsChecked="{Binding Transport.MidiEnabled, Mode=OneWay}"
+                          Command="{Binding Transport.ToggleChartSynthCommand}"
+                          ToolTip.ShowOnDisabled="True"
+                          AutomationProperties.Name="{localization:Loc Toolbar_ToggleChartSynth}">
+                <ToolTip.Tip>
+                    <MultiBinding Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
+                        <Binding Path="Transport.ChartSynthToggleTip" />
+                        <Binding Path="ProjectState.Keybinds.ToggleChartSynth" />
+                    </MultiBinding>
+                </ToolTip.Tip>
+                <PathIcon Data="{DynamicResource IconPiano}" />
+            </ToggleButton>
+
+                    <!-- The speed chip: the CURRENT playback speed at rest, one click to the
+                         Playback speed popover (speed, pitch, the drop-tune pedal). -->
+                    <Button AutomationProperties.Name="{localization:Loc Toolbar_TempoFlyout}" x:Name="TempoFlyoutButton" Theme="{StaticResource ToolbarBtn}"
+                            ToolTip.Tip="{localization:Loc Toolbar_TempoFlyout_Tip}">
+                        <Button.Content>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <PathIcon Data="{DynamicResource IconClock}" />
+                                <TextBlock x:Name="TempoLabel" Text="{Binding Transport.PlaybackSpeed, StringFormat=\{0:P0\}}" />
+                                <PathIcon Classes="TbCaret" Data="{DynamicResource IconChevronDown}" />
+                            </StackPanel>
+                        </Button.Content>
+                        <Button.Flyout>
+                            <shell:PrewarmableFlyout Placement="Bottom">
+                                <popovers:TempoPopoverView />
+                            </shell:PrewarmableFlyout>
+                        </Button.Flyout>
+                    </Button>
                     <Border Classes="GroupSep" />
+
+                    <!-- Mix: master / input levels, metronome, claps -->
+                    <Button AutomationProperties.Name="{localization:Loc Toolbar_MixFlyout}" x:Name="MixFlyoutButton" Theme="{StaticResource ToolbarBtn}"
+                            ToolTip.Tip="{localization:Loc Toolbar_MixFlyout_Tip}">
+                        <Button.Content>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <PathIcon Data="{DynamicResource IconVolumeHigh}" />
+                                <TextBlock x:Name="MixLabel" Text="{localization:Loc Toolbar_MixFlyout}" />
+                                <PathIcon Classes="TbCaret" Data="{DynamicResource IconChevronDown}" />
+                            </StackPanel>
+                        </Button.Content>
+                        <Button.Flyout>
+                            <shell:PrewarmableFlyout Placement="Bottom">
+                                <popovers:MixPopoverView />
+                            </shell:PrewarmableFlyout>
+                        </Button.Flyout>
+                    </Button>
+
+                    <!-- Tools: tuner, drop-tune pedal, MIDI instrument, live FX chain -->
+                    <Button AutomationProperties.Name="{localization:Loc Toolbar_ToolsFlyout}" x:Name="ToolsFlyoutButton" Theme="{StaticResource ToolbarBtn}"
+                            ToolTip.Tip="{localization:Loc Toolbar_ToolsFlyout_Tip}">
+                        <Button.Content>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <PathIcon Data="{DynamicResource IconTuneVertical}" />
+                                <TextBlock x:Name="ToolsLabel" Text="{localization:Loc Toolbar_ToolsFlyout}" />
+                                <!-- Glanceable FX-slot count (was the FX Chain button badge). -->
+                                <Border Background="{DynamicResource AccentColor}"
+                                        CornerRadius="8" Padding="6,0" MinWidth="22"
+                                        IsVisible="{Binding Transport.GuitarVstChain.Count}">
+                                    <TextBlock Text="{Binding Transport.GuitarVstChain.Count}"
+                                               Foreground="{DynamicResource TextOnAccent}"
+                                               FontSize="{StaticResource FontSizeXs}"
+                                               HorizontalAlignment="Center" />
+                                </Border>
+                                <PathIcon Classes="TbCaret" Data="{DynamicResource IconChevronDown}" />
+                            </StackPanel>
+                        </Button.Content>
+                        <Button.Flyout>
+                            <shell:PrewarmableFlyout Placement="Bottom">
+                                <popovers:ToolsPopoverView />
+                            </shell:PrewarmableFlyout>
+                        </Button.Flyout>
+                    </Button>
+                </StackPanel>
+
+                <Border Classes="GroupDivider" />
+
+                <!-- EDIT: grid snap, undo, redo, save (commands pre-exist: menu + keybinds
+                     route to the same ones). -->
+                <StackPanel Classes="TbGroup" ToolTip.Tip="{localization:Loc Toolbar_GroupEdit}">
                     <TextBlock Theme="{StaticResource LabelText}" Classes="Label" Text="{localization:Loc Toolbar_GridSnap}"
                                ToolTip.Tip="{localization:Loc Toolbar_GridSnap_Tip}" />
                     <!-- Beat-fraction labels, not bare integers (P1-9). The
@@ -106,13 +242,7 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                </StackPanel>
-
-                <Border Classes="GroupDivider" />
-
-                <!-- Edit: undo / redo / save (commands pre-exist — menu + keybinds
-                     route to the same ones). -->
-                <StackPanel Classes="TbGroup" ToolTip.Tip="{localization:Loc Toolbar_GroupEdit}">
+                    <Border Classes="GroupSep" />
                     <!-- Undo/redo carry a hover HISTORY PREVIEW: a scrollable
                          flyout listing exactly what repeated presses will
                          revert/replay (tooltips can't scroll, so these are
@@ -172,7 +302,7 @@
 
                 <Border Classes="GroupDivider" />
 
-                <!-- Zoom -->
+                <!-- VIEW -->
                 <StackPanel Classes="TbGroup" ToolTip.Tip="{localization:Loc Toolbar_GroupZoom}">
                     <Button Theme="{StaticResource ToolbarBtn}" Command="{Binding ZoomOutCommand}"
                             AutomationProperties.Name="{localization:Loc Menu_ZoomOut}">
@@ -207,82 +337,7 @@
                                   AutomationProperties.Name="{localization:Loc Menu_FollowPlayhead}">
                         <PathIcon Data="{DynamicResource IconFollowPlayhead}" />
                     </ToggleButton>
-                </StackPanel>
-
-                <Border Classes="GroupDivider" />
-
-                <!-- The arrangement picker used to sit here, as its own toolbar
-                     group. It moved INTO the Tracks flyout (0.42.2, owner): which
-                     arrangement you are editing and which other ones you are
-                     looking at are one decision, and splitting them left the row's
-                     widest control permanently occupying space for a choice most
-                     charts never make (a single-arrangement project has exactly
-                     one option). The Tracks button now carries the active
-                     arrangement's name, so nothing became less glanceable. -->
-
-                <!-- Grouped flyouts: everything that used to sprawl across the
-                     row stays reachable, one click deep. -->
-                <StackPanel Classes="TbGroup">
-
-                    <!-- Mix: master / input levels, metronome, claps -->
-                    <Button AutomationProperties.Name="{localization:Loc Toolbar_MixFlyout}" x:Name="MixFlyoutButton" Theme="{StaticResource ToolbarBtn}"
-                            ToolTip.Tip="{localization:Loc Toolbar_MixFlyout_Tip}">
-                        <Button.Content>
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <PathIcon Data="{DynamicResource IconVolumeHigh}" />
-                                <TextBlock Text="{localization:Loc Toolbar_MixFlyout}" />
-                                <PathIcon Classes="TbCaret" Data="{DynamicResource IconChevronDown}" />
-                            </StackPanel>
-                        </Button.Content>
-                        <Button.Flyout>
-                            <shell:PrewarmableFlyout Placement="Bottom">
-                                <popovers:MixPopoverView />
-                            </shell:PrewarmableFlyout>
-                        </Button.Flyout>
-                    </Button>
-
-                    <!-- Tempo: playback speed + digital drop-tune pedal -->
-                    <Button AutomationProperties.Name="{localization:Loc Toolbar_TempoFlyout}" x:Name="TempoFlyoutButton" Theme="{StaticResource ToolbarBtn}"
-                            ToolTip.Tip="{localization:Loc Toolbar_TempoFlyout_Tip}">
-                        <Button.Content>
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <PathIcon Data="{DynamicResource IconClock}" />
-                                <TextBlock Text="{localization:Loc Toolbar_TempoFlyout}" />
-                                <PathIcon Classes="TbCaret" Data="{DynamicResource IconChevronDown}" />
-                            </StackPanel>
-                        </Button.Content>
-                        <Button.Flyout>
-                            <shell:PrewarmableFlyout Placement="Bottom">
-                                <popovers:TempoPopoverView />
-                            </shell:PrewarmableFlyout>
-                        </Button.Flyout>
-                    </Button>
-
-                    <!-- Tools: tuner, drop-tune pedal, MIDI instrument, live FX chain -->
-                    <Button AutomationProperties.Name="{localization:Loc Toolbar_ToolsFlyout}" x:Name="ToolsFlyoutButton" Theme="{StaticResource ToolbarBtn}"
-                            ToolTip.Tip="{localization:Loc Toolbar_ToolsFlyout_Tip}">
-                        <Button.Content>
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <PathIcon Data="{DynamicResource IconTuneVertical}" />
-                                <TextBlock Text="{localization:Loc Toolbar_ToolsFlyout}" />
-                                <!-- Glanceable FX-slot count (was the FX Chain button badge). -->
-                                <Border Background="{DynamicResource AccentColor}"
-                                        CornerRadius="8" Padding="6,0" MinWidth="22"
-                                        IsVisible="{Binding Transport.GuitarVstChain.Count}">
-                                    <TextBlock Text="{Binding Transport.GuitarVstChain.Count}"
-                                               Foreground="{DynamicResource TextOnAccent}"
-                                               FontSize="{StaticResource FontSizeXs}"
-                                               HorizontalAlignment="Center" />
-                                </Border>
-                                <PathIcon Classes="TbCaret" Data="{DynamicResource IconChevronDown}" />
-                            </StackPanel>
-                        </Button.Content>
-                        <Button.Flyout>
-                            <shell:PrewarmableFlyout Placement="Bottom">
-                                <popovers:ToolsPopoverView />
-                            </shell:PrewarmableFlyout>
-                        </Button.Flyout>
-                    </Button>
+                    <Border Classes="GroupSep" />
 
                     <!-- Tracks: multi-track ghosts, stacked timelines, vocal track -->
                     <Button AutomationProperties.Name="{localization:Loc Toolbar_TracksFlyout}" x:Name="TracksFlyoutButton" Theme="{StaticResource ToolbarBtn}"
@@ -290,12 +345,12 @@
                         <Button.Content>
                             <StackPanel Orientation="Horizontal" Spacing="4">
                                 <PathIcon Data="{DynamicResource IconLibraryMusic}" />
-                                <TextBlock Text="{localization:Loc Toolbar_TracksFlyout}" />
+                                <TextBlock x:Name="TracksLabel" Text="{localization:Loc Toolbar_TracksFlyout}" />
                                 <!-- The active arrangement's name, so moving the
                                      picker into the flyout costs no glanceability:
                                      the one fact the old toolbar group actually
                                      conveyed at rest is still on the row. -->
-                                <TextBlock Theme="{StaticResource LabelText}" Classes="Label" Opacity="0.75" MaxWidth="110"
+                                <TextBlock x:Name="TracksArrangementName" Theme="{StaticResource LabelText}" Classes="Label" Opacity="0.75" MaxWidth="110"
                                            TextTrimming="CharacterEllipsis"
                                            Text="{Binding ChartEditor.ActiveArrangement.Name}" />
                                 <!-- An easier level than the hardest is not every note: say so at rest. -->
@@ -324,7 +379,6 @@
                             </shell:PrewarmableFlyout>
                         </Button.Flyout>
                     </Button>
-
                 </StackPanel>
 
             </StackPanel>
@@ -355,75 +409,38 @@
                 </Button.Flyout>
             </Button>
 
-            <Border Classes="GroupDivider" />
-
-            <!-- Metronome: one-click toggle (moved out of the Mix flyout). -->
-            <ToggleButton Theme="{StaticResource ToolbarToggleBtn}"
-                          IsChecked="{Binding Transport.MetronomeEnabled}"
-                          AutomationProperties.Name="{localization:Loc Toolbar_ToggleMetronome}">
-                <ToolTip.Tip>
-                    <MultiBinding Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
-                        <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
-                                 Path="[Toolbar_ToggleMetronome_Hint]" />
-                        <Binding Path="ProjectState.Keybinds.ToggleMetronome" />
-                    </MultiBinding>
-                </ToolTip.Tip>
-                <PathIcon Data="{DynamicResource IconBell}" />
+            <!-- TONE PREVIEW: ONE split button in place of the two toggles. The MAIN half
+                 turns the preview on and off with the last-used target, one click as before
+                 (the two toggles were used 162 and 88 times in two months); the glyph says
+                 which target that is. The CARET opens a popup that picks the target: the
+                 DotCharter rig or Rocksmith. The live guitar is heard through the tone the
+                 PLAYHEAD sits in, tone changes included; the tip carries the reason when it
+                 is unavailable (no project, no native rig, no authored tone), so the
+                 disabled state is never mute. -->
+            <ToggleButton x:Name="TonePreviewButton" Theme="{StaticResource ToolbarToggleBtn}"
+                          IsChecked="{Binding ToneRig.IsTonePreviewOn, Mode=OneWay}"
+                          IsEnabled="{Binding ToneRig.IsTonePreviewAvailable}"
+                          Command="{Binding ToneRig.ToggleTonePreviewCommand}"
+                          ToolTip.Tip="{Binding ToneRig.TonePreviewTip}" ToolTip.ShowOnDisabled="True"
+                          AutomationProperties.Name="{localization:Loc Toolbar_TonePreview}">
+                <Panel>
+                    <PathIcon Data="{DynamicResource IconHeadphones}"
+                              IsVisible="{Binding !ToneRig.IsTonePreviewInRocksmith}" />
+                    <PathIcon Data="{DynamicResource IconGamepad}"
+                              IsVisible="{Binding ToneRig.IsTonePreviewInRocksmith}" />
+                </Panel>
             </ToggleButton>
-
-            <!-- Claps: one-click toggle next to its sibling the metronome. -->
-            <ToggleButton Theme="{StaticResource ToolbarToggleBtn}"
-                          IsChecked="{Binding Transport.ClapsEnabled}"
-                          AutomationProperties.Name="{localization:Loc Toolbar_ToggleClaps}">
-                <ToolTip.Tip>
-                    <MultiBinding Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
-                        <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
-                                 Path="[Toolbar_ToggleClaps_Hint]" />
-                        <Binding Path="ProjectState.Keybinds.ToggleClaps" />
-                    </MultiBinding>
-                </ToolTip.Tip>
-                <PathIcon Data="{DynamicResource IconSparkles}" />
-            </ToggleButton>
-
-            <!-- Play the chart (#574): the ONE MIDI Out / chart-synth switch the
-                 Mixer's "Play the chart" checkbox and Tools ▸ MIDI instrument ▸ Out
-                 also write (Transport.MidiEnabled). Lit while on; disabled while
-                 nothing could sound (no engine), and the tip — shown on a disabled
-                 button too — says why, or that a stand-in voice plays. -->
-            <ToggleButton x:Name="ChartSynthToolbarToggle" Theme="{StaticResource ToolbarToggleBtn}"
-                          IsChecked="{Binding Transport.MidiEnabled, Mode=OneWay}"
-                          Command="{Binding Transport.ToggleChartSynthCommand}"
-                          ToolTip.ShowOnDisabled="True"
-                          AutomationProperties.Name="{localization:Loc Toolbar_ToggleChartSynth}">
-                <ToolTip.Tip>
-                    <MultiBinding Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
-                        <Binding Path="Transport.ChartSynthToggleTip" />
-                        <Binding Path="ProjectState.Keybinds.ToggleChartSynth" />
-                    </MultiBinding>
-                </ToolTip.Tip>
-                <PathIcon Data="{DynamicResource IconPiano}" />
-            </ToggleButton>
-
-            <!-- Editor loop region: pressed while the marked region is looping,
-                 disabled until one is marked. The loop silently re-seeks the
-                 transport, so it must never be invisible state — this control
-                 and the band the 2D timeline draws are the two visible halves. -->
-            <ToggleButton x:Name="LoopToolbarToggle"
-                          Theme="{StaticResource ToolbarToggleBtn}"
-                          IsChecked="{Binding ProjectState.LoopEnabled, Mode=OneWay}"
-                          IsEnabled="{Binding ProjectState.HasLoopRegion}"
-                          Command="{Binding Transport.ToggleLoopCommand}"
-                          ToolTip.ShowOnDisabled="True"
-                          AutomationProperties.Name="{localization:Loc Toolbar_ToggleLoop}">
-                <ToolTip.Tip>
-                    <MultiBinding Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
-                        <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
-                                 Path="[Toolbar_ToggleLoop_Hint]" />
-                        <Binding Path="ProjectState.Keybinds.ToggleLoop" />
-                    </MultiBinding>
-                </ToolTip.Tip>
-                <PathIcon Data="{DynamicResource IconRepeat}" />
-            </ToggleButton>
+            <Button x:Name="TonePreviewTargetButton" Theme="{StaticResource ToolbarBtn}"
+                    Margin="-6,0,0,0" Padding="{StaticResource FirePadBadge}"
+                    ToolTip.Tip="{localization:Loc Toolbar_TonePreviewTarget_Tip}"
+                    AutomationProperties.Name="{localization:Loc Toolbar_TonePreviewTarget}">
+                <PathIcon Classes="TbCaret" Data="{DynamicResource IconChevronDown}" />
+                <Button.Flyout>
+                    <shell:PrewarmableFlyout Placement="Bottom">
+                        <popovers:TonePreviewTargetPopoverView />
+                    </shell:PrewarmableFlyout>
+                </Button.Flyout>
+            </Button>
 
             <!-- Rig tuner (also in the Tools flyout). It wears IconSineWave, not
                  IconTune: the inspector toggle below took the slider glyph back
@@ -438,7 +455,7 @@
                 <PathIcon Data="{DynamicResource IconSineWave}" />
             </Button>
 
-            <Border Classes="GroupSep" />
+            <Border Classes="GroupDivider" />
 
             <!-- PANEL TOGGLES (0.50). They are the half of the deleted icon rail
                  that was worth keeping, and this is where they belong: the same
@@ -490,45 +507,28 @@
                 <PathIcon Data="{DynamicResource IconChat}" />
             </ToggleButton>
 
-            <!-- No Rig toggle here: the activity rail's Rig row sits beside this
-                 toolbar in the editor and toggles the same overlay (2026-09-23; one
-                 control per verb, as with the title bar's transport). -->
+            <Border Classes="GroupDivider" />
 
-            <!-- Tone preview: the live guitar through the tone the PLAYHEAD sits
-                 in, tone changes included — Play Mode's in-game-tone path over
-                 the project's OWN authored tones. The tip carries the
-                 reason when it is unavailable (no project, no native rig, no
-                 authored tone the arrangement references), so the disabled state
-                 is never mute. -->
-            <ToggleButton Theme="{StaticResource ToolbarToggleBtn}"
-                          IsChecked="{Binding ToneRig.IsTonePreviewOn, Mode=OneWay}"
-                          IsEnabled="{Binding ToneRig.IsTonePreviewAvailable}"
-                          Command="{Binding ToneRig.ToggleTonePreviewCommand}"
-                          ToolTip.Tip="{Binding ToneRig.TonePreviewTip}"
-                          AutomationProperties.Name="{localization:Loc Toolbar_TonePreview}">
-                <PathIcon Data="{DynamicResource IconHeadphones}" />
-            </ToggleButton>
-
-            <!-- Preview in: DotCharter rig (off) / Rocksmith (on). The preview and the
-                 chart synth play through the game's own tone via tonelab. Disabled
-                 with its reason on the tip while no tonelab session is ready. -->
-            <ToggleButton Theme="{StaticResource ToolbarToggleBtn}"
-                          IsChecked="{Binding ToneRig.IsTonePreviewInRocksmith, Mode=OneWay}"
-                          IsEnabled="{Binding ToneRig.IsTonePreviewRocksmithAvailable}"
-                          Command="{Binding ToneRig.ToggleTonePreviewRocksmithCommand}"
-                          ToolTip.Tip="{Binding ToneRig.TonePreviewRocksmithTip}"
-                          AutomationProperties.Name="{localization:Loc Toolbar_TonePreviewRocksmith}">
-                <PathIcon Data="{DynamicResource IconGamepad}" />
-            </ToggleButton>
-
-            <!-- Session Health diagnostics (also in Help). -->
-            <Button Theme="{StaticResource ToolbarBtn}"
-                    Command="{Binding Help.ShowDiagnosticsCommand}"
-                    ToolTip.Tip="{localization:Loc Toolbar_SessionHealth_Tip}"
-                    AutomationProperties.Name="{localization:Loc Toolbar_SessionHealth}">
-                <PathIcon Data="{DynamicResource IconPulse}" />
+            <!-- EXPORT: the goal of the workflow gets a button. It opens the File >
+                 Export rows (Rocksmith package first) through the same commands. -->
+            <Button x:Name="ExportFlyoutButton" Theme="{StaticResource ToolbarBtn}"
+                    ToolTip.Tip="{localization:Loc Toolbar_Export_Tip}"
+                    AutomationProperties.Name="{localization:Loc Toolbar_Export}">
+                <Button.Content>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <PathIcon Data="{DynamicResource IconExport}" />
+                        <TextBlock x:Name="ExportLabel" Text="{localization:Loc Toolbar_Export}" />
+                        <PathIcon Classes="TbCaret" Data="{DynamicResource IconChevronDown}" />
+                    </StackPanel>
+                </Button.Content>
+                <Button.Flyout>
+                    <shell:PrewarmableFlyout Placement="Bottom">
+                        <popovers:ExportPopoverView />
+                    </shell:PrewarmableFlyout>
+                </Button.Flyout>
             </Button>
         </StackPanel>
         </Grid>
     </Border>
 </UserControl>
+

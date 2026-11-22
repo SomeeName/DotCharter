@@ -38,6 +38,7 @@ public class RscpVocalsParser
 
                     var vt = new VocalTrack { Name = parentName };
                     ParseLyricEvents(group.ToList(), vt);
+                    NormalizePhraseEnds(vt);
                     project.VocalTracks.Add(vt);
                     count++;
                 }
@@ -61,6 +62,7 @@ public class RscpVocalsParser
             }
 
             ApplyExplicitPhraseSpans(vp, vt);
+            NormalizePhraseEnds(vt);
 
             project.VocalTracks.Add(vt);
         }
@@ -75,6 +77,17 @@ public class RscpVocalsParser
         if (byte.TryParse(colorNode.Element("green")?.Value, CultureInfo.InvariantCulture, out var g)) vt.ColorG = g;
         if (byte.TryParse(colorNode.Element("blue")?.Value, CultureInfo.InvariantCulture, out var b)) vt.ColorB = b;
         if (byte.TryParse(colorNode.Element("alpha")?.Value, CultureInfo.InvariantCulture, out var a)) vt.ColorA = a;
+    }
+
+    // Normalize only AFTER dcPhrases has restored the original containers. Old
+    // projects could store mid-line flags or omit a final flag; containers win.
+    private static void NormalizePhraseEnds(VocalTrack track)
+    {
+        foreach (var phrase in track.Phrases)
+        {
+            for (var i = 0; i < phrase.Lyrics.Count; i++)
+                phrase.Lyrics[i].IsPhraseEnd = i == phrase.Lyrics.Count - 1;
+        }
     }
 
     /// <summary>
@@ -120,8 +133,8 @@ public class RscpVocalsParser
                 break;
             }
 
-            if (FractionalPosition.TryParse(entry.Attribute("p")?.Value, out var p)) phrase.Position = p;
-            if (FractionalPosition.TryParse(entry.Attribute("ep")?.Value, out var ep)) phrase.EndPosition = ep;
+            if (RscpParsingUtilities.TryParseFraction(entry.Attribute("p")?.Value, out var p)) phrase.Position = p;
+            if (RscpParsingUtilities.TryParseFraction(entry.Attribute("ep")?.Value, out var ep)) phrase.EndPosition = ep;
             track.Phrases.Add(phrase);
         }
 
@@ -162,8 +175,8 @@ public class RscpVocalsParser
                 phrase.EndPosition = phrase.Lyrics[^1].EndPosition;
             }
 
-            if (FractionalPosition.TryParse(entries[i].Attribute("p")?.Value, out var p)) phrase.Position = p;
-            if (FractionalPosition.TryParse(entries[i].Attribute("ep")?.Value, out var ep)) phrase.EndPosition = ep;
+            if (RscpParsingUtilities.TryParseFraction(entries[i].Attribute("p")?.Value, out var p)) phrase.Position = p;
+            if (RscpParsingUtilities.TryParseFraction(entries[i].Attribute("ep")?.Value, out var ep)) phrase.EndPosition = ep;
             track.Phrases.Add(phrase);
         }
 
@@ -207,8 +220,8 @@ public class RscpVocalsParser
             if (textAttr != null || !string.IsNullOrEmpty(text))
             {
                 double noteVal = int.TryParse(vocalNode.Attribute("note")?.Value, CultureInfo.InvariantCulture, out var nv) ? nv : 255;
-                currentPhrase.Lyrics.Add(new LyricEvent
-                { Position = t, EndPosition = ep, Text = text, IsWordPart = isWordPart, IsPhraseEnd = isPhraseEnd, Note = (int)noteVal });
+                currentPhrase.Lyrics.Add(LyricReviewSerialization.Read(vocalNode, new LyricEvent
+                { Position = t, EndPosition = ep, Text = text, IsWordPart = isWordPart, IsPhraseEnd = isPhraseEnd, Note = (int)noteVal }));
             }
 
             if (isPhraseEnd)

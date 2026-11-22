@@ -1,0 +1,132 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:inspector="using:DotCharter.UI.ViewModels.Editor.Inspector"
+             xmlns:inspectorViews="using:DotCharter.UI.Views.Editor.Inspector"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.IssuesListView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Issues tab's "Arrangement findings" card (design D): the counted headline with the worst
+         severity's dot, the easier-levels toggle (#397), the click-to-jump rows and, pinned under them,
+         Refresh and the auto-fix. The card pins its head and foot; only the rows scroll.
+         The rows keep the severity GROUPS (Important above Warning, IssueGrouping.Build) without a header of
+         their own: the code's colour says which is which. A row is the jump (the finding becomes the one on
+         the Fixes card, its spine lit); a finding of a rule the fix menu repairs carries a Fix beside it
+         (InspectorIssuesViewModel.FixIssue, one undo step). The location is the finding's own time against
+         the beat map, and stays empty for an arrangement-wide finding. -->
+    <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="{StaticResource FireSpaceXs}">
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSm}">
+            <!-- TopIssueSeverity, never IssueGroups[0].Severity: that collection is cleared on every recompute. -->
+            <Border Grid.Column="0" x:Name="IssueDot" Width="7" Height="7" CornerRadius="{StaticResource FireRadiusPill}" Margin="0,0,0,4"
+                    VerticalAlignment="Center"
+                    IsVisible="{Binding Issues.IssueCount}"
+                    Background="{Binding Issues.TopIssueSeverity, Converter={x:Static converters:SeverityToBrushConverter.Instance}}" />
+            <TextBlock Grid.Column="1" x:Name="IssuesHeadline" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                       Text="{Binding Issues.IssueSummary}" ToolTip.Tip="{localization:Loc Issues_Findings_Title}" />
+        </Grid>
+        <StackPanel Grid.Row="1" Spacing="{StaticResource FireSpaceXxs}">
+            <!-- Design D's Difficulty filter: every level, or one level's findings (an arrangement-wide finding always shows). -->
+            <Grid x:Name="IssueLevelFilterRow" ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSm}"
+                  IsVisible="{Binding Issues.Rows.HasLevelChoices}">
+                <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{localization:Loc Inspector_Issues_Difficulty}" />
+                <ComboBox Grid.Column="1" x:Name="IssueLevelFilter" Classes="ColumnFlowField"
+                          AutomationProperties.Name="{localization:Loc Inspector_Issues_Difficulty}"
+                          ToolTip.Tip="{localization:Loc Inspector_Issues_DifficultyTip}"
+                          ItemsSource="{Binding Issues.Rows.LevelChoices}"
+                          SelectedItem="{Binding Issues.Rows.SelectedLevel, Mode=TwoWay}" />
+            </Grid>
+            <!-- Easier difficulty levels (#397): listed on request; the hardest level and the one on screen always. -->
+            <StackPanel x:Name="EasierLevelIssuesRow" Spacing="{StaticResource FireSpaceXxs}"
+                        IsVisible="{Binding Issues.HasEasierLevelIssues}">
+                <CheckBox x:Name="ShowEasierLevelIssuesBox"
+                          Content="{localization:Loc Dialog_QualityReport_ShowEasierLevels}"
+                          AutomationProperties.Name="{localization:Loc Dialog_QualityReport_ShowEasierLevels}"
+                          ToolTip.Tip="{localization:Loc Dialog_QualityReport_ShowEasierLevelsTip}"
+                          IsChecked="{Binding Issues.ShowEasierLevelIssues, Mode=TwoWay}" />
+                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                           Text="{Binding Issues.EasierLevelIssuesNote}" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- All-clear. -->
+        <StackPanel Grid.Row="2" x:Name="IssuesAllClear" Classes="InspectorEmpty" IsVisible="{Binding !Issues.IssueCount}">
+            <PathIcon Data="{DynamicResource IconCheck}" />
+            <TextBlock Text="{localization:Loc Inspector_NoIssues}" />
+        </StackPanel>
+        <!-- ONE flat list of row models (InspectorIssueRows): a row binds its own jump, Fix, location and spine (no
+             $parent lookups, no converter per row), and its message, stamp and Fix check are computed when first read.
+             VIRTUALIZED: a song can hold hundreds of findings. The list owns its scrolling (the ScrollViewer is its
+             template), and its height is bounded by this Grid's star row: the card disables its own scroller, so the
+             card's slot height reaches here. An outer ScrollViewer would hand the list an unbounded height, and a
+             virtualizing panel then sized its viewport from the one row it had realized. -->
+        <ItemsControl Grid.Row="2" x:Name="IssueGroupList" IsVisible="{Binding Issues.IssueCount}"
+                      ItemsSource="{Binding Issues.Rows.Items}">
+            <ItemsControl.Template>
+                <ControlTemplate>
+                    <ScrollViewer x:Name="IssuesRowsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <ItemsPresenter ItemsPanel="{TemplateBinding ItemsPanel}" />
+                    </ScrollViewer>
+                </ControlTemplate>
+            </ItemsControl.Template>
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="inspector:IssueListRow">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceXs}" Margin="0,0,0,2">
+                        <Button Grid.Column="0" x:Name="IssueRow" Theme="{StaticResource ColumnFlowRow}" Classes="ColumnFlowRow"
+                                AutomationProperties.Name="{Binding Message}"
+                                ToolTip.Tip="{Binding Message}"
+                                Command="{Binding Jump}"
+                                CommandParameter="{Binding Issue}">
+                            <Grid ColumnDefinitions="Auto,Auto,Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                <!-- the finding on the Fixes card -->
+                                <Border Grid.Column="0" Grid.RowSpan="2" x:Name="IssueSpine" Width="3" Height="14" CornerRadius="{StaticResource FireRadiusPill}"
+                                        VerticalAlignment="Top" Margin="0,2,0,0"
+                                        Background="{DynamicResource FireAccent}" IsVisible="{Binding IsOnFixesCard}" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp" VerticalAlignment="Top"
+                                           Text="{Binding Stamp}" />
+                                <TextBlock Grid.Column="2" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowValue" VerticalAlignment="Top"
+                                           Text="{Binding Issue.Code}"
+                                           Foreground="{Binding Issue.Severity, Converter={x:Static converters:SeverityToBrushConverter.Instance}}" />
+                                <!-- two lines before the ellipsis: the Small pane's column is narrow -->
+                                <TextBlock Grid.Column="3" x:Name="IssueMessage" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody"
+                                           TextWrapping="Wrap" MaxLines="2" Text="{Binding Message}" />
+                                <TextBlock Grid.Row="1" Grid.Column="3" x:Name="IssueLevel" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                           IsVisible="{Binding HasLevel}" Text="{Binding Level}" />
+                            </Grid>
+                        </Button>
+                        <Button Grid.Column="1" x:Name="IssueRowFix" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                VerticalAlignment="Top"
+                                Content="{localization:Loc Issues_Row_Fix}"
+                                AutomationProperties.Name="{localization:Loc Issues_Row_Fix}"
+                                ToolTip.Tip="{localization:Loc Issues_Row_FixTip}"
+                                IsVisible="{Binding HasFix}"
+                                Command="{Binding Fix}"
+                                CommandParameter="{Binding Issue}" />
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Grid Grid.Row="3" ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+            <Button Grid.Column="0" x:Name="IssuesRefresh" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc Action_Refresh}"
+                    AutomationProperties.Name="{localization:Loc Action_Refresh}"
+                    ToolTip.Tip="{localization:Loc Inspector_Issues_RefreshTip}"
+                    Command="{Binding Issues.RefreshIssuesCommand}" />
+            <!-- Nothing to fix, nothing to offer. -->
+            <Button Grid.Column="1" x:Name="IssuesAutoFix" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    IsVisible="{Binding Issues.IssueCount}"
+                    Content="{localization:Loc Inspector_Issues_AutoFix}"
+                    AutomationProperties.Name="{localization:Loc Inspector_Issues_AutoFix}"
+                    ToolTip.Tip="{localization:Loc Inspector_Issues_AutoFixTip}"
+                    Command="{Binding Issues.AutoFixIssuesCommand}" />
+        </Grid>
+        <!-- "Auto-fix 14 visible arrangement findings?" with Confirm / Cancel (design D). -->
+        <inspectorViews:InspectorConfirmRow Grid.Row="4" x:Name="AutoFixConfirmRow" DataContext="{Binding Issues.AutoFixConfirm}" />
+    </Grid>
+</UserControl>

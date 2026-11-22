@@ -65,12 +65,9 @@ public sealed class ChordRule : IArrangementRule
         // difficulty level, which is exactly how I29 buried every real finding.
         if (untemplated > 0)
         {
-            var counted = untemplated == 1 ? "1 chord names" : $"{untemplated} chords name";
-            issues.Add(new ArrangementIssue(
-                ArrangementIssueType.ChordWithoutTemplate,
-                $"{counted} no chord template, and no template in this arrangement matches the notes they " +
-                "play, so the chord-fingering checks (I44/I45, L06–L08) cannot judge them. Saving mints a " +
-                "template with GUESSED fingering for each."));
+            issues.Add(ArrangementIssues.Make(ArrangementIssueType.ChordWithoutTemplate,
+                untemplated == 1 ? "Validation_ChordWithoutTemplate_One" : "Validation_ChordWithoutTemplate_Many",
+                args: [untemplated]));
         }
     }
 
@@ -80,19 +77,19 @@ public sealed class ChordRule : IArrangementRule
         if (context.TotalAudioLengthMs is { } endMs && timeMs >= endMs)
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.NoteAfterSongEnd, chord, timeMs,
-                "Chord is placed after the end of the song audio."));
+                "Validation_ChordAfterSongEnd"));
         }
 
         if (context.IsInsideNoguitar(timeMs))
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.NoteInsideNoguitarSection, chord, timeMs,
-                "Chord is placed inside a no-guitar section."));
+                "Validation_ChordInsideNoguitarSection"));
         }
 
         if (context.IsOnToneChange(timeMs))
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.ToneChangeOnNote, chord, timeMs,
-                "A tone change happens at the same time as this chord."));
+                "Validation_ToneChangeOnChord"));
         }
     }
 
@@ -131,7 +128,7 @@ public sealed class ChordRule : IArrangementRule
         if (mutedCount > 0 && mutedCount < chordNotes.Count)
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.MutedStringInNonMutedChord, chord, timeMs,
-                "Chord has some — but not all — strings fret-hand muted."));
+                "Validation_MutedStringInNonMutedChord"));
         }
 
         return new ChordNoteSummary(anyLinks, anyFrettedPullOff);
@@ -143,14 +140,13 @@ public sealed class ChordRule : IArrangementRule
         if (cn.Fret > 24)
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.FretNumberMoreThan24, chord, timeMs,
-                $"Chord note fret {cn.Fret} exceeds the maximum of 24.", stringIndex: cn.StringIndex));
+                "Validation_ChordFretNumberMoreThan24", cn.StringIndex, [cn.Fret]));
         }
 
         if (isBass && cn.StringIndex >= 4)
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.InvalidBassArrangementString, chord, timeMs,
-                $"Bass arrangements only have 4 strings (chord uses string {cn.StringIndex}).",
-                stringIndex: cn.StringIndex));
+                "Validation_ChordInvalidBassArrangementString", cn.StringIndex, [cn.StringIndex]));
         }
 
         var sustainMs = cn.Sustain == FractionalPosition.Zero
@@ -160,32 +156,32 @@ public sealed class ChordRule : IArrangementRule
         if (cn.Harmonic == HarmonicType.Normal && cn.BendValues.Count > 0)
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.NaturalHarmonicWithBend, chord, timeMs,
-                "Chord note has natural harmonic + bend.", stringIndex: cn.StringIndex));
+                "Validation_ChordNaturalHarmonicWithBend", cn.StringIndex));
         }
 
         if (cn.Harmonic == HarmonicType.Normal && cn.Fret == 7 && sustainMs > 0)
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.SeventhFretHarmonicWithSustain, chord, timeMs,
-                "Chord 7th-fret natural harmonic with sustain.", stringIndex: cn.StringIndex));
+                "Validation_ChordSeventhFretHarmonicWithSustain", cn.StringIndex));
         }
 
         if (cn.BendValues.Count > 0 && !cn.BendValues.Any(bv => bv.Step != 0.0))
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.MissingBendValue, chord, timeMs,
-                "Chord note marked as bend but all steps are 0.", stringIndex: cn.StringIndex));
+                "Validation_ChordMissingBendValue", cn.StringIndex));
         }
 
         var requiresSustain = cn.Tremolo || cn.Vibrato || cn.SlideTo.HasValue || cn.UnpitchedSlide;
         if (requiresSustain && sustainMs < TechniqueMinSustainMs)
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.TechniqueNoteWithoutSustain, chord, timeMs,
-                "Chord technique note needs sustain.", stringIndex: cn.StringIndex));
+                "Validation_ChordTechniqueNoteWithoutSustain", cn.StringIndex));
         }
 
         if (cn.LinkNext && cn.UnpitchedSlide)
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.UnpitchedSlideWithLinkNext, chord, timeMs,
-                "Chord note: unpitched slide + LinkNext.", stringIndex: cn.StringIndex));
+                "Validation_ChordUnpitchedSlideWithLinkNext", cn.StringIndex));
         }
     }
 
@@ -207,8 +203,7 @@ public sealed class ChordRule : IArrangementRule
         if (summary.AnyLinks && chord.ForceNoNotes)
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.MissingLinkNextChordNotes, chord, timeMs,
-                "Chord links into the next sound but is set to force no chord notes, so the export " +
-                "has nothing to attach the link to."));
+                "Validation_MissingLinkNextChordNotes"));
         }
 
         if (!summary.AnyFrettedPullOff) return;
@@ -220,7 +215,7 @@ public sealed class ChordRule : IArrangementRule
         if (prevAnchor != null && prevAnchor.Fret != here.Fret)
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.PositionShiftIntoPullOff, chord, timeMs,
-                "Pull-off chord coincides with an anchor change."));
+                "Validation_PositionShiftIntoPullOffChord"));
         }
     }
 
@@ -256,13 +251,13 @@ public sealed class ChordRule : IArrangementRule
         if (verdict.Strange)
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.PossiblyWrongChordFingering, chord, timeMs,
-                "Chord fingering looks wrong: a fretted string is below the lowest non-thumb finger."));
+                "Validation_PossiblyWrongChordFingering"));
         }
 
         if (verdict.BarreOverOpen)
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.BarreOverOpenStrings, chord, timeMs,
-                "Chord has a barre that crosses an open string."));
+                "Validation_BarreOverOpenStrings"));
         }
 
         return true;

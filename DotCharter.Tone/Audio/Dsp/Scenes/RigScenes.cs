@@ -12,6 +12,10 @@ namespace DotCharter.Tone.Audio.Dsp.Scenes;
 /// </summary>
 public sealed record RigSceneModule(string ModuleTypeId, IReadOnlyDictionary<string, float> Params, bool Bypassed);
 
+/// <summary>One chain node as the scenes see it: the runtime node id (stable while
+/// the node lives, across moves) and its catalogue type.</summary>
+public readonly record struct RigSceneSlot(int NodeId, string ModuleTypeId);
+
 /// <summary>
 ///     One scene (a Helix "snapshot", a Quad Cortex scene): a name the player
 ///     gave it and, once it has been used, every module's params and bypass.
@@ -182,6 +186,86 @@ public static class RigScenes
         }
 
         return projected;
+    }
+
+    /// <summary>
+    ///     Re-keys every stored scene after a structural edit (move, remove, add)
+    ///     so each pedal keeps ITS OWN stored values. A stored scene is a
+    ///     list matched to the chain by type and occurrence; this resolves that
+    ///     list against the chain as it was (<paramref name="before" />), pins
+    ///     each entry to its node id, and rebuilds the list in the order of the
+    ///     chain as it is (<paramref name="after" />). A node the scene never
+    ///     knew (just added) gets the values it holds now (<paramref name="liveAfter" />,
+    ///     parallel to <paramref name="after" />); a removed node's entry is dropped.
+    ///     The result lists exactly one entry per node, in chain order.
+    /// </summary>
+    public static RigSceneSet? Reconcile(RigSceneSet? set, IReadOnlyList<RigSceneSlot> before,
+        IReadOnlyList<RigSceneSlot> after, IReadOnlyList<DcRigModule> liveAfter)
+    {
+        if (set is null) return null;
+        set = Normalize(set);
+        var slots = set.Slots.ToArray();
+        for (var i = 0; i < slots.Length; i++)
+        {
+            if (slots[i].Modules is not { } stored) continue;
+
+            var queues = new Dictionary<string, Queue<RigSceneModule>>(StringComparer.Ordinal);
+            foreach (var module in stored)
+            {
+                if (module is null) continue;
+                if (!queues.TryGetValue(module.ModuleTypeId, out var queue))
+                    queues[module.ModuleTypeId] = queue = new Queue<RigSceneModule>();
+                queue.Enqueue(module);
+            }
+
+            var byNode = new Dictionary<int, RigSceneModule>();
+            foreach (var node in before)
+            {
+                if (queues.TryGetValue(node.ModuleTypeId, out var queue) && queue.Count > 0)
+                    byNode[node.NodeId] = queue.Dequeue();
+            }
+
+            var rebuilt = new List<RigSceneModule>(after.Count);
+            for (var k = 0; k < after.Count; k++)
+            {
+                var live = k < liveAfter.Count ? liveAfter[k] : null;
+                if (byNode.TryGetValue(after[k].NodeId, out var known) && known.ModuleTypeId == after[k].ModuleTypeId)
+                    rebuilt.Add(known);
+                else if (live is not null)
+                    rebuilt.Add(Capture([live])[0]);
+            }
+
+            slots[i] = slots[i] with { Modules = rebuilt };
+        }
+
+        return new RigSceneSet(slots, set.Active);
+    }
+
+    /// <summary>After <see cref="Reconcile" />: makes node <paramref name="toNodeId" />
+    /// carry node <paramref name="fromNodeId" />'s stored values in every scene
+    /// (a duplicate behaves like its source in every scene).</summary>
+    public static RigSceneSet? CopyEntry(RigSceneSet? set, IReadOnlyList<RigSceneSlot> chain, int fromNodeId, int toNodeId)
+    {
+        if (set is null) return null;
+        var from = -1;
+        var to = -1;
+        for (var k = 0; k < chain.Count; k++)
+        {
+            if (chain[k].NodeId == fromNodeId) from = k;
+            if (chain[k].NodeId == toNodeId) to = k;
+        }
+
+        if (from < 0 || to < 0) return set;
+        var slots = set.Slots.ToArray();
+        for (var i = 0; i < slots.Length; i++)
+        {
+            if (slots[i].Modules is not { } stored || stored.Count != chain.Count) continue;
+            var copy = stored.ToList();
+            copy[to] = copy[from];
+            slots[i] = slots[i] with { Modules = copy };
+        }
+
+        return new RigSceneSet(slots, set.Active);
     }
 
     /// <summary>

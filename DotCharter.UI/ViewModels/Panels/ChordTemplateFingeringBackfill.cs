@@ -102,7 +102,7 @@ internal static class ChordTemplateFingeringBackfill
         foreach (var template in arrangement.ChordTemplates)
         {
             if (!NewChordNames.MayFill(template) || template.Frets.Count == 0 || template.IsPinned) continue;
-            var name = ChordNameSuggester.SuggestFirstChordName(arrangement, template.Frets, naming: naming);
+            var name = NewChordNames.For(arrangement, template.Frets, naming);
             if (string.IsNullOrEmpty(name)) continue;
             actions.Add(new SetTemplateNameAction(template, template.Name, name, editor));
         }

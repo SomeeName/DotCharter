@@ -292,8 +292,10 @@ public sealed partial class ToneRigViewModel : ViewModelBase, IDisposable, IChar
             tones, _projectState, _localization, _transport, _logger, _history, rocksmith);
         // The synth's tone source before anything asks it to play.
         controller.SetChartSynthUsesOwnRig(_transport.ChartSynthPlaysOwnRig);
+        _restoreTonePreview = new TonePreviewRestore(_transport.SavedTonePreview);
         controller.PropertyChanged += (_, _) =>
         {
+            RestoreTonePreviewOnce(controller);
             OnPropertyChanged(nameof(IsTonePreviewOn));
             OnPropertyChanged(nameof(IsTonePreviewAvailable));
             OnPropertyChanged(nameof(TonePreviewTip));
@@ -325,6 +327,12 @@ public sealed partial class ToneRigViewModel : ViewModelBase, IDisposable, IChar
     /// <summary>Flat, never-null projections of <see cref="TonePreview" /> for the
     /// toolbar: a binding through a null controller would leave the toggle looking
     /// enabled.</summary>
+    private TonePreviewRestore _restoreTonePreview = new((false, false));
+
+    private void RestoreTonePreviewOnce(ChartTonePreviewController controller) =>
+        _restoreTonePreview.Apply(controller.IsAvailable, controller.Rocksmith is { IsAvailable: true },
+            () => controller.Rocksmith?.Choose(true), () => controller.TurnOn());
+
     public bool IsTonePreviewOn => TonePreview?.IsOn == true;
 
     /// <inheritdoc cref="IsTonePreviewOn" />
@@ -335,7 +343,12 @@ public sealed partial class ToneRigViewModel : ViewModelBase, IDisposable, IChar
         TonePreview?.Tip ?? _localization["Toolbar_TonePreview_NoProject"];
 
     [RelayCommand]
-    private void ToggleTonePreview() => TonePreview?.Toggle();
+    private void ToggleTonePreview()
+    {
+        _restoreTonePreview.Cancel();
+        TonePreview?.Toggle();
+        if (TonePreview is { } preview) _transport.RememberTonePreview(preview.IsOn, IsTonePreviewInRocksmith);
+    }
 
     /// <summary>The preview plays through Rocksmith (tonelab) rather than the DotCharter rig.</summary>
     public bool IsTonePreviewInRocksmith => TonePreview?.Rocksmith?.IsChosen == true;
@@ -359,7 +372,21 @@ public sealed partial class ToneRigViewModel : ViewModelBase, IDisposable, IChar
             return;
         }
 
+        _restoreTonePreview.Cancel();
         rocksmith.Choose(!rocksmith.IsChosen);
+        _transport.RememberTonePreview(IsTonePreviewOn, rocksmith.IsChosen);
+        OnPropertyChanged(nameof(IsTonePreviewInRocksmith));
+    }
+
+    /// <summary>The caret menu's "DotCharter rig" row: the preview plays through the app's own rig again.
+    /// It sets the TARGET only; the split button's main half still turns the preview on and off.</summary>
+    [RelayCommand]
+    private void SelectTonePreviewRig()
+    {
+        if (TonePreview?.Rocksmith is not { IsChosen: true } rocksmith) return;
+        _restoreTonePreview.Cancel();
+        rocksmith.Choose(false);
+        _transport.RememberTonePreview(IsTonePreviewOn, false);
         OnPropertyChanged(nameof(IsTonePreviewInRocksmith));
     }
 

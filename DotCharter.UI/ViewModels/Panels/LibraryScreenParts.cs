@@ -1,4 +1,5 @@
 // The Library contract's rows, columns and chips over the song browser's own types.
+using System.ComponentModel;
 using System.Globalization;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -29,6 +30,11 @@ public sealed class LibraryRow : ObservableObject, ILibraryRow
             {
                 OnPropertyChanged(nameof(GroupHeader));
                 OnPropertyChanged(nameof(HasGroupHeader));
+            }
+            else if (e.PropertyName == nameof(PsarcSongListItem.TuningCellLabel))
+            {
+                OnPropertyChanged(nameof(TuningLabel));
+                OnPropertyChanged(nameof(TuningTip));
             }
         };
     }
@@ -102,11 +108,17 @@ public sealed class LibraryFilterOption : ObservableObject, ILibraryFilterOption
     {
         _option = option;
         Label = prefix is null ? option.Label : $"{prefix} · {option.Label}";
-        option.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(BrowserFacetOption.Count)) OnPropertyChanged(nameof(CountLabel));
-            else if (e.PropertyName == nameof(BrowserFacetOption.IsChecked)) OnPropertyChanged(nameof(IsSelected));
-        };
+        option.PropertyChanged += OnOptionChanged;
+    }
+
+    /// <summary>Stops following the option when the column drops this row,
+    /// so the long-lived option cannot retain a discarded row.</summary>
+    internal void Detach() => _option.PropertyChanged -= OnOptionChanged;
+
+    private void OnOptionChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(BrowserFacetOption.Count)) OnPropertyChanged(nameof(CountLabel));
+        else if (e.PropertyName == nameof(BrowserFacetOption.IsChecked)) OnPropertyChanged(nameof(IsSelected));
     }
 
     public string Label { get; }
@@ -124,18 +136,22 @@ public sealed class LibraryLessonsOption : ObservableObject, ILibraryFilterOptio
 {
     private readonly SongBrowserViewModel _browser;
 
-    public LibraryLessonsOption(SongBrowserViewModel browser, string label)
+    private readonly string _labelKey;
+
+    public LibraryLessonsOption(SongBrowserViewModel browser, string labelKey)
     {
         _browser = browser;
-        Label = label;
+        _labelKey = labelKey;
         browser.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(SongBrowserViewModel.HideLessons)) OnPropertyChanged(nameof(IsSelected));
         };
     }
 
-    public string Label { get; }
+    public string Label => _browser.Localization[_labelKey];
     public string CountLabel => "";
+
+    internal void Relabel() => OnPropertyChanged(nameof(Label));
 
     public bool IsSelected
     {
@@ -151,19 +167,31 @@ public sealed class LibraryLessonsOption : ObservableObject, ILibraryFilterOptio
 /// </summary>
 public sealed class LibraryColumn : ObservableObject, ILibraryColumn
 {
-    private readonly IReadOnlyList<(BrowserFacet Facet, string? Prefix)> _facets;
+    private readonly IReadOnlyList<(BrowserFacet Facet, string? PrefixKey)> _facets;
     private readonly ILibraryFilterOption? _extra;
+    private readonly ILocalizationService _localization;
+    private readonly string _titleKey;
     private IReadOnlyList<ILibraryFilterOption> _options = [];
+    private Dictionary<BrowserFacetOption, LibraryFilterOption> _wrappers = new(ReferenceEqualityComparer.Instance);
 
-    public LibraryColumn(SongBrowserViewModel browser, string title, string? sortKey, Func<string> glyph,
-        IReadOnlyList<(BrowserFacet Facet, string? Prefix)> facets, ICommand? clear = null, ILibraryFilterOption? extra = null)
+    /// <summary>The title and the facet prefixes are resx KEYS, read in the current language on every read.</summary>
+    public LibraryColumn(SongBrowserViewModel browser, string titleKey, string? sortKey, Func<string> glyph,
+        IReadOnlyList<(BrowserFacet Facet, string? PrefixKey)> facets, ICommand? clear = null, ILibraryFilterOption? extra = null)
+        : this(browser.Localization, () => browser.SortByColumnCommand.Execute(sortKey), titleKey, sortKey, glyph, facets, clear, extra)
     {
-        Title = title;
+    }
+
+    /// <summary>The column over the two things it needs from the browser: its words and its sort.</summary>
+    internal LibraryColumn(ILocalizationService localization, Action sort, string titleKey, string? sortKey, Func<string> glyph,
+        IReadOnlyList<(BrowserFacet Facet, string? PrefixKey)> facets, ICommand? clear, ILibraryFilterOption? extra)
+    {
+        _localization = localization;
+        _titleKey = titleKey;
         IsSortable = sortKey != null;
         Glyph = glyph;
         _facets = facets;
         _extra = extra;
-        SortCommand = new RelayCommand(() => browser.SortByColumnCommand.Execute(sortKey), () => sortKey != null);
+        SortCommand = new RelayCommand(sort, () => sortKey != null);
         ClearFilterCommand = clear ?? (facets.Count == 1 ? facets[0].Facet.ClearFacetCommand : new RelayCommand(() => { }));
         foreach (var (facet, _) in facets)
         {
@@ -179,7 +207,7 @@ public sealed class LibraryColumn : ObservableObject, ILibraryColumn
     }
 
     internal Func<string> Glyph { get; }
-    public string Title { get; }
+    public string Title => _localization[_titleKey];
     public bool IsSortable { get; }
 
     /// <summary>The browser draws ▲ / ▼; the Library's header draws arrows, so a sort never reads as a second funnel.</summary>
@@ -193,9 +221,42 @@ public sealed class LibraryColumn : ObservableObject, ILibraryColumn
 
     internal void RefreshSort() => OnPropertyChanged(nameof(SortGlyph));
 
+    /// <summary>
+    ///     After a language switch: the title, the prefixed option rows and the lessons row read
+    ///     again. A row's label holds its prefix, so every row is rebuilt in the new language.
+    /// </summary>
+    internal void Relabel()
+    {
+        OnPropertyChanged(nameof(Title));
+        (_extra as LibraryLessonsOption)?.Relabel();
+        foreach (var row in _wrappers.Values) row.Detach();
+        _wrappers = new(ReferenceEqualityComparer.Instance);
+        RebuildOptions();
+    }
+
+    /// <summary>
+    ///     Runs on every change of a facet's option list (once per option while a facet resets).
+    ///     A row is reused for an option it already wraps, and a row whose option is gone is
+    ///     detached, so the options hold exactly one row each however often the list rebuilds.
+    /// </summary>
     private void RebuildOptions()
     {
-        var options = _facets.SelectMany(f => f.Facet.Options.Select(o => (ILibraryFilterOption)new LibraryFilterOption(o, f.Prefix))).ToList();
+        var previous = _wrappers;
+        var next = new Dictionary<BrowserFacetOption, LibraryFilterOption>(ReferenceEqualityComparer.Instance);
+        var options = new List<ILibraryFilterOption>();
+        foreach (var (facet, prefixKey) in _facets)
+        {
+            var prefix = prefixKey is { } key ? _localization[key] : null;
+            foreach (var option in facet.Options)
+            {
+                if (!previous.Remove(option, out var row)) row = new LibraryFilterOption(option, prefix);
+                next[option] = row;
+                options.Add(row);
+            }
+        }
+
+        foreach (var discarded in previous.Values) discarded.Detach();
+        _wrappers = next;
         if (_extra != null) options.Add(_extra);
         _options = options;
         OnPropertyChanged(nameof(FilterOptions));

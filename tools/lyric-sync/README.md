@@ -53,8 +53,12 @@ have no columns in it and the run will tell you so rather than produce nonsense.
 | `--lang auto\|en\|romaji` | Override the language router. Default `auto`. |
 | `--no-ensemble` | Run one model instead of blending two. Faster, measurably less accurate. |
 | `--span-word-gap` | Hold the last syllable of a word until the next word starts. Syllables *inside* a word always do this. |
+| `--bpm <n>` | Space syllables on a constant-tempo beat grid instead of the beats tracked from the audio. See [Syllable spacing](#syllable-spacing). |
+| `--offset <seconds>` | Time of the first downbeat of the `--bpm` grid. Default `0`. Needs `--bpm`. |
+| `--beats-per-bar <n>` | Beats per measure of the `--bpm` grid. Default `4`. Needs `--bpm`. |
+| `--no-beat-detect` | Do not track beats from the audio. Without `--bpm` the fixed 30 ms gap applies. |
 | `--note <0-255>` | The `note` attribute in the vocals XML. Default `254` (no pitch); EOF's own exports write `255`. Both mean "no pitch". |
-| `--json` | Also dump the syllable table with per-syllable confidences. |
+| `--json` | Also dump the syllable table with per-syllable confidences and review reasons, including findings retained after a repair. |
 | `--about` | The measured accuracy figures. |
 | `--help` | Usage and licences. |
 
@@ -71,8 +75,9 @@ found automatically** — no flag needed. The name test is exact: a file called
 | 3 | The acoustic model is missing and could not be fetched, or failed to load. |
 | 4 | The audio could not be decoded. |
 
-Warnings (a low-confidence run, a stem whose name does not say "vocals", a
-degraded ensemble) go to **stderr**; the report goes to **stdout**. So
+Warnings (a low-confidence run, a stem whose name does not say "vocals", a stem
+whose length differs from the audio, a degraded ensemble, beat tracking that
+failed) go to **stderr**; the report goes to **stdout**. So
 `dotcharter-lyricsync … > report.txt` keeps the two apart.
 
 ---
@@ -148,19 +153,48 @@ to the next stamp. If you need ends, use the XML.
 
 ---
 
-## Times are seconds, not beats
+## Syllable spacing
 
-This tool has no beat map, so every time it writes is a plain offset into the
-audio file. **DotCharter itself additionally snaps each syllable to the chart's
-beat grid** and applies its note-spacing rules; nothing here does. That is a
-feature for EOF and RSCharter, which both position against their own beat map on
-import.
+Every time the tool writes is a plain offset in **seconds** into the audio file;
+EOF and RSCharter position it against their own beat map on import. How long each
+syllable lasts follows **the same rule as DotCharter, through the same code**:
 
-`--span-word-gap` is the one place this differs in kind from DotCharter: the app
-extends a syllable to the next onset minus a *fraction of a measure*, which needs
-a tempo map. Here the gap is a flat 30 ms.
+- **Inside a phrase a syllable ends one note gap before the next one starts.** The
+  gap is DotCharter's default note spacing, 1/64 of a measure, measured on a beat
+  grid. Inside a word this always applies; at a word boundary only with
+  `--span-word-gap` (otherwise the heard end stays, trimmed to the same gap if it
+  runs into the next word). A phrase end is never stretched across a phrase break.
+- **The beat grid** is tracked from the audio by DotCharter's own beat tracker,
+  unless you pass `--bpm` (with `--offset` and `--beats-per-bar`) for a constant
+  tempo. The report says which grid was used.
+- **No beat grid** (`--no-beat-detect`, or tracking found no tempo or failed, which
+  is said on stderr): the same rule with a fixed **30 ms** gap.
+- With a vocal stem, a held note's end follows the voice, as in DotCharter.
+- Starts are placed on DotCharter's fine grid position (1/192 of a beat), as the app
+  stores them, so they can move by about a millisecond.
 
----
+## Review flags
+
+The syllables DotCharter would mark for review are marked here too: a low score,
+an interpolated syllable, a squeezed run, a long silence inside a phrase, a hold cut
+at 4 s, and a local repair (`LowScore`, `Interpolated`, `Compressed`, `Gap`,
+`CapHit`, `Repaired`).
+
+- **The report** (stdout) counts them by reason and lists the first 20 with their
+  time, line and text.
+- **The vocals XML** carries a comment line `<!-- review: Gap, Compressed -->`
+  before each flagged syllable. EOF's importer skips comment lines and XML readers
+  ignore them, so the file imports as before.
+- **`--json`** lists every syllable's `reviewReasons`, plus `reviewCount` and the
+  `spacing` that was used.
+- **The `.lrc` has no flags**: LRC has no comment syntax that players agree to skip.
+
+### What DotCharter does that this tool does not
+
+DotCharter's lyric pipeline has one more step after alignment: when the chart's
+tempo map changes while a sync runs, the phrases are moved onto the new grid. That
+needs a chart and does not apply here. Everything else after alignment (ends,
+spacing, review flags) is the shared code above.
 
 ## Accuracy
 
@@ -171,6 +205,7 @@ listening to a **separated vocal stem**:
 |---|---|---|
 | romaji | **91.3 %** | 4 hand-synced arrangements, 2,036 syllables; p90 92 ms |
 | English | **79.2 %** | 40 official Rocksmith vocal arrangements, ~14,300 syllables; p90 292 ms |
+| JamendoLyrics, word onsets | en **84.8 %**, fr 86.2 %, de 93.5 %, es 92.3 % | 79 songs, 21,580 words; English was 74.0 % before its blend bias was re-measured (2026-11-22) |
 
 The two disagree because of how the songs are **mixed**, not because of the
 language: the romaji set has sparse, vocal-forward mixes.

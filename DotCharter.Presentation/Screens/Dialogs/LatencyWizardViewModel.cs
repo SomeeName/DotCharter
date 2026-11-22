@@ -231,7 +231,8 @@ public sealed partial class LatencyWizardViewModel : DialogViewModel<double?>, I
     private void ApplyResults()
     {
         StopEverything();
-        if (!ResultsTrusted || _recommendedVisualLeadMs <= 0.0)
+        // A trusted 0 is a recommendation too: it clears a lead an earlier run left.
+        if (!ResultsTrusted)
         {
             Close(null);
             return;

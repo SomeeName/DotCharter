@@ -143,6 +143,12 @@ public class RigConfig
     public double MidiDelayMs { get; set; }
     public int MidiOutputDevice { get; set; } = -1; // -1 = system MIDI mapper (GS Wavetable on Windows)
 
+    /// <summary>The saved MIDI output device's name. WinMM indices shift when a
+    /// device is plugged or unplugged, so the name wins over
+    /// <see cref="MidiOutputDevice"/> whenever it is set
+    /// (<c>MidiDeviceResolver</c>).</summary>
+    public string MidiOutputDeviceName { get; set; } = string.Empty;
+
     /// <summary>
     /// LEGACY: the built-in chart synth's app-wide GUITAR — a
     /// <c>ChartSynthModel</c> NAME, a <c>ChartSynthPickup</c> NAME and the coil
@@ -291,6 +297,16 @@ public class RigConfig
     // Tone-rig pedalboard rack zoom (Play Mode Pedalboard overlay). Scales the
     // pedal chain via a LayoutTransform; clamped to 0.5..1.5 on apply. 1.0 = 100%.
     public double PedalboardZoom { get; set; } = 1.0;
+
+    // Remembered file-picker folders for the tone side (each is the folder of the last
+    // pick of that kind; empty = none yet). Read through PickerFolders, which falls
+    // back to the dialog's own default when the folder is missing.
+    public string LastToneFileDir { get; set; } = string.Empty;
+    public string LastPsarcToneDir { get; set; } = string.Empty;
+    public string LastNamCaptureDir { get; set; } = string.Empty;
+    public string LastIrDir { get; set; } = string.Empty;
+    public string LastPresetDir { get; set; } = string.Empty;
+    public string LastReampDiDir { get; set; } = string.Empty;
     /// <summary>Optional MIDI control input, restored by device name after engine rebuilds.</summary>
     public string? RigMidiInputDevice { get; set; }
 

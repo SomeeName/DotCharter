@@ -4,6 +4,7 @@ using DotCharter.Services.Gameplay.Profiles;
 using DotCharter.Services.Gameplay.Scoring;
 using DotCharter.Services.Gameplay.Stats;
 using DotCharter.Services.Library;
+using DotCharter.Services.Infrastructure.Input;
 using DotCharter.Tone.Infrastructure.Storage;
 using DotCharter.UI.ViewModels.Panels;
 using DotCharter.UI.ViewModels.PlayMode;
@@ -30,6 +31,50 @@ public sealed class PlayModeViewModelTests : IDisposable
         var vm = NewVm(out _);
         Assert.Equal(PlayModeScreen.Start, vm.CurrentScreen);
         Assert.True(vm.IsStartScreen);
+    }
+
+    [Theory]
+    [InlineData("rig")]
+    [InlineData("amp")]
+    [InlineData("settings")]
+    public void GetReadyKeys_AreSuspendedWhileAnOverlayOwnsInput(string overlay)
+    {
+        var vm = NewVm(out _);
+        var keys = new KeySource();
+        vm.AttachKeySource(keys);
+        vm.CurrentScreen = PlayModeScreen.TuningCheck;
+        if (overlay == "rig") vm.ToneRig.IsPedalboardOpen = true;
+        else if (overlay == "settings") vm.Settings.IsGameplaySettingsOpen = true;
+        else vm.IsAmpFxOpen = true;
+        var tunerAsked = 0;
+        vm.TunerRequested += () => tunerAsked++;
+        try
+        {
+            Assert.False(keys.Press(ScreenKey.Enter).Handled);
+            Assert.False(keys.Press(ScreenKey.T).Handled);
+            Assert.Equal(0, tunerAsked);
+            Assert.Equal(PlayModeScreen.TuningCheck, vm.CurrentScreen);
+            Assert.True(vm.TryCloseOverlay());
+            Assert.True(keys.Press(ScreenKey.T).Handled);
+            Assert.Equal(1, tunerAsked);
+        }
+        finally
+        {
+            vm.DetachKeySource(keys);
+            vm.CurrentScreen = PlayModeScreen.SongSelect;
+        }
+    }
+
+    private sealed class KeySource : IKeyGestureSource
+    {
+        public event EventHandler<ScreenKeyEventArgs>? KeyPressed;
+
+        public ScreenKeyEventArgs Press(ScreenKey key)
+        {
+            var args = new ScreenKeyEventArgs(key, textInputFocused: false);
+            KeyPressed?.Invoke(this, args);
+            return args;
+        }
     }
 
     [Fact]

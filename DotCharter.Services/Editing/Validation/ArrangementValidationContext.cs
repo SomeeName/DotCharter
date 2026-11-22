@@ -71,7 +71,8 @@ public sealed class ArrangementValidationContext
         IReadOnlySet<long> toneChangeTimes,
         IReadOnlySet<long> phraseTimes,
         IReadOnlySet<long> moverPhraseTimes,
-        ChartProject? project)
+        ChartProject? project,
+        IReadOnlyList<PhraseMarkers.PhraseMarker> phrases)
     {
         Arrangement = arrangement;
         Beats = beats;
@@ -82,7 +83,6 @@ public sealed class ArrangementValidationContext
         PhraseTimesMs = phraseTimes;
         MoverPhraseTimesMs = moverPhraseTimes;
 
-        var phrases = PhraseMarkers.All(arrangement);
         Phrases = phrases;
         var playable = new List<PhraseMarkers.PhraseMarker>(phrases.Count);
         foreach (var phrase in phrases)
@@ -107,15 +107,17 @@ public sealed class ArrangementValidationContext
         Arrangement arrangement, IList<BeatMarker> beats, double? totalAudioLengthMs,
         ChartProject? project = null)
     {
+        var phrases = PhraseMarkers.All(arrangement);
         return new ArrangementValidationContext(
             arrangement,
             beats,
             totalAudioLengthMs,
-            BuildNoguitarIntervals(arrangement, beats),
+            BuildNoguitarIntervals(arrangement, beats, phrases),
             BuildToneChangeTimes(arrangement, beats),
-            BuildPhraseTimes(arrangement, beats, includeMover: false),
-            BuildPhraseTimes(arrangement, beats, includeMover: true, moverOnly: true),
-            project);
+            BuildPhraseTimes(phrases, beats, includeMover: false),
+            BuildPhraseTimes(phrases, beats, includeMover: true, moverOnly: true),
+            project,
+            phrases);
     }
 
     // ---- queries ---------------------------------------------------------
@@ -149,11 +151,11 @@ public sealed class ArrangementValidationContext
             if (_nonMoverPhraseTimesMs is not null) return _nonMoverPhraseTimesMs;
 
             var times = new List<double>();
-            foreach (var ep in Arrangement.EventPoints)
+            foreach (var phrase in Phrases)
             {
-                if (string.IsNullOrEmpty(ep.Phrase)) continue;
-                if (ep.Phrase.StartsWith("mover", StringComparison.OrdinalIgnoreCase)) continue;
-                times.Add(ep.Position.GetPositionMs(Beats));
+                if (string.IsNullOrEmpty(phrase.Name)) continue;
+                if (phrase.Name.StartsWith("mover", StringComparison.OrdinalIgnoreCase)) continue;
+                times.Add(phrase.Position.GetPositionMs(Beats));
             }
 
             times.Sort();
@@ -203,7 +205,7 @@ public sealed class ArrangementValidationContext
     ///     <para>
     ///         <b>It is the RAW index and does not answer "what shape does this
     ///         sound play".</b> It does NOT reproduce
-    ///         <c>ChordTemplateResolver.FindById</c>'s "negative id means
+    ///         <c>Arrangement.FindChordTemplate</c>'s "negative id means
     ///         untemplated" rule — <c>-1</c> is <c>ChordTemplate.Id</c>'s own
     ///         default, so an unnumbered template really can sit in the
     ///         collection and a negative lookup really does find it. Ask
@@ -222,12 +224,12 @@ public sealed class ArrangementValidationContext
     ///         They did. <c>HandShapeRule</c> (I46) called
     ///         <see cref="ChordTemplateById" /> with no negative guard while
     ///         <c>HandShapeContentRule</c> (E05) called
-    ///         <c>ChordTemplateResolver.FindById</c>, which is null for any
+    ///         <c>Arrangement.FindChordTemplate</c>, which is null for any
     ///         negative id — so on an untemplated shape (<c>TemplateId == -1</c>,
     ///         the field's own default) E05 went silent while I46 judged the
     ///         shape against whichever UNNUMBERED template happened to sit first
     ///         in the collection. A false negative and a false positive on the
-    ///         same input. <c>FindById</c>'s rule wins: a negative id declares
+    ///         same input. <c>FindChordTemplate</c>'s rule wins: a negative id declares
     ///         nothing, and the shape is reported as such (D07) rather than
     ///         skipped.
     ///     </para>
@@ -333,17 +335,8 @@ public sealed class ArrangementValidationContext
     ///     a rule that calls these reintroduces the O(sounds × anchors) pass, and
     ///     <c>NoValidationRule_ScansTheAnchorListLinearly</c> fails if one does.
     /// </summary>
-    public static FretAnchor? FindActiveAnchor(ChartLevel level, FractionalPosition time)
-    {
-        FretAnchor? best = null;
-        foreach (var a in level.Anchors)
-        {
-            if (a.Position <= time && (best == null || a.Position > best.Position))
-                best = a;
-        }
-
-        return best;
-    }
+    public static FretAnchor? FindActiveAnchor(ChartLevel level, FractionalPosition time) =>
+        FretAnchorLookup.InEffectAt(level.Anchors, time);
 
     /// <inheritdoc cref="FindActiveAnchor" />
     public static FretAnchor? FindPreviousAnchor(ChartLevel level, FractionalPosition time)
@@ -679,9 +672,14 @@ public sealed class ArrangementValidationContext
 
     private static bool IsNear(IReadOnlySet<long> set, double timeMs)
     {
-        // Allow 1 ms slop so floating-point round-trips don't generate false misses.
-        var rounded = (long)Math.Round(timeMs);
-        return set.Contains(rounded) || set.Contains(rounded - 1) || set.Contains(rounded + 1);
+        // The slop and rounding are ValidationTimeMatch's, shared with the I30 fix.
+        var rounded = ValidationTimeMatch.RoundMs(timeMs);
+        for (var d = -ValidationTimeMatch.SlopMs; d <= ValidationTimeMatch.SlopMs; d++)
+        {
+            if (set.Contains(rounded + d)) return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -693,27 +691,27 @@ public sealed class ArrangementValidationContext
     ///     the section and gives the phrase any name.
     /// </summary>
     private static List<(double startMs, double endMs)> BuildNoguitarIntervals(
-        Arrangement arr, IList<BeatMarker> beats)
+        Arrangement arr, IList<BeatMarker> beats, IReadOnlyList<PhraseMarkers.PhraseMarker> phrases)
     {
         var result = new List<(double, double)>();
-        AddNoguitarIntervals(arr, beats, e => e.Phrase, IsNoguitarPhrase, result);
-        AddNoguitarIntervals(arr, beats, e => e.Section,
+        AddNoguitarIntervals(phrases.Select(p => (p.Position, p.Name)), beats, IsNoguitarPhrase, result);
+        AddNoguitarIntervals(arr.EventPoints.Select(e => (e.Position, e.Section)), beats,
             s => s.StartsWith("noguitar", StringComparison.OrdinalIgnoreCase), result);
         return result;
     }
 
-    private static void AddNoguitarIntervals(Arrangement arr, IList<BeatMarker> beats,
-        Func<EventPoint, string> marker, Func<string, bool> isNoguitar, List<(double, double)> result)
+    private static void AddNoguitarIntervals(IEnumerable<(FractionalPosition Position, string Name)> markers,
+        IList<BeatMarker> beats, Func<string, bool> isNoguitar, List<(double, double)> result)
     {
-        var orderedEvents = arr.EventPoints
-            .Where(e => !string.IsNullOrEmpty(marker(e)))
+        var orderedEvents = markers
+            .Where(e => !string.IsNullOrEmpty(e.Name))
             .OrderBy(e => e.Position)
             .ToList();
 
         for (var i = 0; i < orderedEvents.Count; i++)
         {
             var ep = orderedEvents[i];
-            if (!isNoguitar(marker(ep))) continue;
+            if (!isNoguitar(ep.Name)) continue;
             var startMs = ep.Position.GetPositionMs(beats);
             var endMs = i + 1 < orderedEvents.Count
                 ? orderedEvents[i + 1].Position.GetPositionMs(beats)
@@ -726,7 +724,7 @@ public sealed class ArrangementValidationContext
     {
         var set = new HashSet<long>();
         foreach (var tc in arr.ToneChanges)
-            set.Add((long)Math.Round(tc.Position.GetPositionMs(beats)));
+            set.Add(ValidationTimeMatch.RoundMs(tc.Position.GetPositionMs(beats)));
         return set;
     }
 
@@ -735,16 +733,17 @@ public sealed class ArrangementValidationContext
         || phrase.Equals("ng", StringComparison.OrdinalIgnoreCase);
 
     private static HashSet<long> BuildPhraseTimes(
-        Arrangement arr, IList<BeatMarker> beats, bool includeMover, bool moverOnly = false)
+        IReadOnlyList<PhraseMarkers.PhraseMarker> phrases, IList<BeatMarker> beats, bool includeMover,
+        bool moverOnly = false)
     {
         var set = new HashSet<long>();
-        foreach (var ep in arr.EventPoints)
+        foreach (var phrase in phrases)
         {
-            if (string.IsNullOrEmpty(ep.Phrase)) continue;
-            var isMover = ep.Phrase.StartsWith("mover", StringComparison.OrdinalIgnoreCase);
+            if (string.IsNullOrEmpty(phrase.Name)) continue;
+            var isMover = phrase.Name.StartsWith("mover", StringComparison.OrdinalIgnoreCase);
             if (moverOnly && !isMover) continue;
             if (!includeMover && isMover) continue;
-            set.Add((long)Math.Round(ep.Position.GetPositionMs(beats)));
+            set.Add((long)Math.Round(phrase.Position.GetPositionMs(beats)));
         }
         return set;
     }

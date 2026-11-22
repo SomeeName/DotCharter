@@ -45,6 +45,9 @@ public sealed class ChartSynthFeederTests
 
         public bool CanRouteInstrumentToRig => true;
         public bool RouteInstrumentToRig { get; set; }
+        public bool CanRouteChartToSeats => false;
+        public ChartSoundSeatRoute ChartSeatRoute { get; set; }
+        public bool ChartSynthPlaysSongTones { get; set; } = true;
 
         public bool TryGetChartSynthStatus(out ChartSynthStatus status)
         {

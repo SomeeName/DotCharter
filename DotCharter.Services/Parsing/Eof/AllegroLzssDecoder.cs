@@ -38,9 +38,12 @@ public static class AllegroLzssDecoder
     /// asserted separately.</summary>
     internal static byte[] Decode(byte[] raw, int maxDecodedBytes)
     {
-        if (raw.Length < 4) return raw;
+        var nopack = raw.Length >= 4 && HasMagic(raw, EofConstants.AllegroNopackMagic);
+        var packed = raw.Length >= 4 && HasMagic(raw, EofConstants.AllegroPackMagic);
+        if (!packed && raw.Length - (nopack ? 4 : 0) > maxDecodedBytes)
+            throw new InvalidDataException($"Uncompressed EOF payload exceeds {maxDecodedBytes} bytes.");
 
-        if (HasMagic(raw, EofConstants.AllegroNopackMagic))
+        if (nopack)
         {
             // Uncompressed-with-magic variant: skip 4 magic bytes and return rest.
             var copy = new byte[raw.Length - 4];
@@ -48,7 +51,7 @@ public static class AllegroLzssDecoder
             return copy;
         }
 
-        if (!HasMagic(raw, EofConstants.AllegroPackMagic))
+        if (!packed)
             return raw; // Assume already uncompressed.
 
         return Decompress(raw, 4, maxDecodedBytes);

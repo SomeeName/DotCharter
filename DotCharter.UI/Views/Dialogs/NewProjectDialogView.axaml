@@ -4,6 +4,7 @@
              xmlns:converters="using:DotCharter.UI.Converters"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             xmlns:views="using:DotCharter.UI.Views.Dialogs"
              x:Class="DotCharter.UI.Views.Dialogs.NewProjectDialogView"
              x:DataType="contracts:INewProjectScreen"
              x:CompileBindings="True">
@@ -98,26 +99,6 @@
                                          AutomationProperties.Name="{localization:Loc Dialog_SongTitle}"
                                          PlaceholderText="{localization:Loc Dialog_SongTitlePlaceholder}" />
                             </Grid>
-                            <!-- The ORIGINAL script, beside the Latin names rather
-                                 than instead of them. Filled automatically when the
-                                 tags are non-Latin, and this is where the originals
-                                 LAND when an online suggestion is applied — without
-                                 these rows that transfer is invisible and the
-                                 charter cannot correct it. Rocksmith has no
-                                 Japanese ALBUM field, so there is no row for one. -->
-                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
-                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
-                                           Text="{localization:Loc Inspector_Project_JapaneseArtist}" />
-                                <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding JapaneseArtist}"
-                                         AutomationProperties.Name="{localization:Loc Inspector_Project_JapaneseArtist}" />
-                            </Grid>
-                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
-                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
-                                           Text="{localization:Loc Inspector_Project_JapaneseSong}" />
-                                <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding JapaneseTitle}"
-                                         AutomationProperties.Name="{localization:Loc Inspector_Project_JapaneseSong}" />
-                            </Grid>
-
                             <!-- The online name suggestion. A ROW, not a popup:
                                  it appears while the form is being read, it is
                                  never applied on its own, and it collapses to
@@ -148,13 +129,14 @@
                                          AutomationProperties.Name="{localization:Loc Dialog_AlbumYear}"
                                          PlaceholderText="{localization:Loc Dialog_AlbumYearPlaceholder}" />
                             </Grid>
-                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,240">
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
                                 <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
                                            Text="{localization:Loc Dialog_Genre}" />
                                 <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding Genre}"
                                          AutomationProperties.Name="{localization:Loc Dialog_Genre}"
                                          PlaceholderText="{localization:Loc Dialog_GenrePlaceholder}" />
                             </Grid>
+                        <views:SongNamesFieldsBlock FieldWidth="240" />
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>

@@ -1,9 +1,10 @@
 using DotCharter.UI.Controls;
+using DotCharter.UI.Controls.Layers;
 
 namespace DotCharter.Tests.UI;
 
 /// <summary>
-///     The chord box lays its strings out the way the HIGHWAY does.
+///     Chord-box rows follow the timeline's string order, independently of handedness.
 ///     <para>
 ///         It did not. <c>ChartRenderContext.LaneTopFor</c> is
 ///         <c>flip ? count - 1 - index : index</c> with lane 0 at the TOP, so
@@ -16,11 +17,34 @@ namespace DotCharter.Tests.UI;
 ///     <para>
 ///         And the flip toggle has to move BOTH: "generally there is a
 ///         flip/invert toggle and that should invert these as well so they are
-///         always consistent".
+///         always consistent". All row-style 2D surfaces use InvertStrings alone;
+///         profile handedness changes only the 3D fret axis (#523).
 ///     </para>
 /// </summary>
 public sealed class ChordBoxStringOrderTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LeftyProfile_KeepsChordBoxRowsOnTheTimelineLanes(bool invert)
+    {
+        var state = new ProjectState { InvertStrings = invert };
+        var righty = new ChordBoxGeometry(400, 200, 6, 0, 5, state.FlipStrings);
+        state.LeftyFlip = true;
+        var lefty = new ChordBoxGeometry(400, 200, 6, 0, 5, state.FlipStrings);
+        var timeline = new ChartRenderContext
+        {
+            TopMargin = 0, LaneHeight = 1, StringCount = 6,
+            LeftyFlip = state.LeftyFlip, InvertStrings = state.InvertStrings
+        };
+
+        for (var s = 0; s < 6; s++)
+        {
+            Assert.Equal(timeline.LaneTopFor(s), lefty.LaneOf(s));
+            Assert.Equal(righty.LaneOf(s), lefty.LaneOf(s));
+        }
+    }
+
     /// <summary>
     ///     The claim, stated against the renderer's own formula so the two cannot
     ///     drift apart.

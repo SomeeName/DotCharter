@@ -24,6 +24,9 @@ public sealed record AiStructureRequest(
 {
     /// <summary>Fix with AI: the phrase findings the WHOLE proposal must remove; null for none.</summary>
     public IReadOnlyList<AiChartFindingTarget>? Targets { get; init; }
+
+    /// <summary>The names of the arrangements an event marker edit applies to by default; null allows no event edit.</summary>
+    public IReadOnlyList<string>? EventArrangements { get; init; }
 }
 
 /// <summary>
@@ -62,7 +65,10 @@ public sealed class AiStructurePass
         var clock = Stopwatch.StartNew();
         var arrangement = request.Facts.Arrangement;
         var beats = request.Project.Beats;
-        var context = AiStructureContext.Of(arrangement, beats, request.From, request.To);
+        var events = request.EventArrangements is { Count: > 0 } set
+            ? new AiStructureEventScope(set, [.. request.Project.Arrangements.Select(a => a.Name)])
+            : null;
+        var context = AiStructureContext.Of(arrangement, beats, request.From, request.To, events, request.Project.Arrangements);
         var prompt = AiStructurePrompt.Build(request.Facts, request.Level, beats, context, request.Instruction);
 
         int inTokens = 0, outTokens = 0, retried = 0;

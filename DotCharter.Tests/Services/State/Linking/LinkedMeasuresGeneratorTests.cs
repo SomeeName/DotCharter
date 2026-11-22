@@ -55,7 +55,7 @@ public sealed class LinkedMeasuresGeneratorTests
         var group = LinkAcross(h);
         var before = h.Snapshot();
         var anchors = Enumerable.Range(1, 7).Select(m => new AiAnchorPlacement(At(m, 0), FretFor(m), 4)).ToList();
-        var plan = new AiChartChunkPlan(0, At(1, 0), At(8, 0), anchors, []);
+        var plan = new AiChartChunkPlan(0, At(1, 0), At(8, 0), anchors, [], null);
 
         var action = AiChartApplier.Build(h.Lead, LinkHarness.Hardest(h.Lead), [plan], new FingeringGenerationService(),
             out _, checkGuards: false);

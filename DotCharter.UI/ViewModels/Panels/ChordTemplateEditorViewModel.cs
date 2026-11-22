@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -12,14 +12,14 @@ using DotCharter.Services.Editing.ChordShapes;
 
 namespace DotCharter.UI.ViewModels.Panels;
 
-public partial class ChordTemplateEditorViewModel : ViewModelBase
+public partial class ChordTemplateEditorViewModel : ViewModelBase, IChordFingerSurface
 {
     // UX5: named values for the per-string Finger ComboBox. Matches the
     // tokens that FingerTextCodec accepts ("" = unspecified, T = thumb,
     // 1..4 = fingers). Exposed as a static collection so the XAML
     // binding doesn't allocate per-row.
-    /// <summary>Forwarded from the editor so this panel's chord box and its
-    /// per-string rows follow the same flip toggle the highway does.</summary>
+    /// <summary>Shared InvertStrings order from the editor, so the chord box and
+    /// per-string rows match timeline lanes independently of profile handedness.</summary>
     public bool FlipStrings => _editor.FlipStrings;
 
     public static IReadOnlyList<string> FingerOptions { get; } =
@@ -29,6 +29,10 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
     private readonly IFingeringGenerationService _fingeringService;
     private readonly IHistoryService _historyService;
     private readonly ChordTemplateEditPlanner _edits;
+    private readonly ChordApplyScopeController _scope;
+    private readonly ChordFingerDraftEditor _fingerDraft;
+    private readonly ChordBoxEditHandler _box;
+    private readonly ChordFingeringBatch _batch;
 
     [ObservableProperty] private string _chordName = string.Empty;
 
@@ -60,7 +64,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
     /// keeps every automatic namer off it; unchecked puts back the name it cleared, else suggests one.</summary>
     [ObservableProperty] private bool _isUnnamed;
 
-    private string _nameBeforeUnnamed = string.Empty;
+    private readonly Dictionary<ChordTemplate, string> _namesBeforeUnnamed = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>EOF's Fingerless flag, <see cref="ChordTemplate.Fingerless" />: the grip has no
     /// fingering on purpose. Turning it on clears the fingers; a finger set later turns it off.</summary>
@@ -80,81 +84,33 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
     public string FingerStripTip => Ladder.Localization[IsFingerless ? "ChordTemplate_FingerlessStripTip" : "ChordTemplate_FingerTip"];
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSaveFingering))]
+    [NotifyCanExecuteChangedFor(nameof(SaveAndNextFingeringCommand))]
     private bool _hasPendingFingerEdits;
 
     /// <summary>Save has work: a typed finger, or — on "+ the same grip
     /// elsewhere" — a grip fingered differently from this shape.</summary>
-    public bool CanSaveFingering => HasPendingFingerEdits || Ladder.GripsNeedFingering;
+    public bool CanSaveFingering => Template != null && (HasPendingFingerEdits || Ladder.GripsNeedFingering);
     private bool _isUpdatingUi;
     [ObservableProperty] private Chord? _previewChord;
     [ObservableProperty] private TemplateListItem? _selectedDropdownTemplate;
     private bool _selectionUpdateQueued;
     private readonly IUiDispatcher _ui;
-    [ObservableProperty] private ChordTemplate? _template;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSaveFingering))]
+    [NotifyCanExecuteChangedFor(nameof(SaveAndNextFingeringCommand))]
+    private ChordTemplate? _template;
     [ObservableProperty] private ChordTemplate? _draftTemplate;
     private readonly IConfigurationService? _configService;
     private readonly IAppLogger? _logger;
     private readonly ProjectState? _projectState;
-
-    /// <summary>
-    ///     The selection this panel edits, with each sound's companion hand shape
-    ///     folded in — see <see cref="AppConfig.SyncHandShapeToChordTemplate" />.
-    ///     The ladder's "this chord + its hand shape" and its counts state that
-    ///     fold, so it is never invisible.
-    ///     <para>
-    ///         Every entry point below promotes a covering hand shape, not ONLY
-    ///         when nothing at all is selected (a bare NOTE). Select
-    ///         a chord — which is what selecting a chord in the highway does, and
-    ///         the overwhelmingly common gesture — and the bar above it would be
-    ///         left out of the target list, so a fingering edit that minted a private
-    ///         template would leave that bar on the old one.
-    ///     </para>
-    /// </summary>
-    private ChordApplySounds SelectedSounds()
-    {
-        var chords = _editor.Selection.SelectedChords.ToList();
-        var handShapes = _editor.Selection.SelectedHandShapes.ToList();
-
-        // A bare note still finds its bar: with no chord and no shape selected,
-        // the note IS the only handle the user has on the shape.
-        if (chords.Count == 0 && handShapes.Count == 0)
-        {
-            handShapes.AddRange(SoundCompanions.CoveringHandShapes(
-                _editor.Selection.SelectedNotes.Select(n => n.Position),
-                _editor.HandShapes, handShapes));
-        }
-
-        if (chords.Count > 0 && SyncsHandShapes)
-        {
-            handShapes.AddRange(SoundCompanions.CoveringHandShapes(
-                chords.Select(c => c.Position), _editor.HandShapes, handShapes));
-        }
-
-        return new ChordApplySounds(chords, handShapes);
-    }
-
-    /// <summary>The ladder's "this chord": the chord the panel shows (the first
-    /// selected) with its own bar when the sync is on; else the first hand shape.</summary>
-    private ChordApplySounds ThisSounds()
-    {
-        var selected = SelectedSounds();
-        if (selected.Chords.Count == 0)
-            return new ChordApplySounds([], selected.HandShapes.Take(1).ToList());
-
-        var chord = selected.Chords[0];
-        var handShapes = SyncsHandShapes
-            ? SoundCompanions.CoveringHandShapes([chord.Position], _editor.HandShapes, []).ToList()
-            : [];
-        return new ChordApplySounds([chord], handShapes);
-    }
-
-    private bool SyncsHandShapes => _configService?.LoadAppConfig().SyncHandShapeToChordTemplate != false;
+    private readonly HandShapeGripGrid _gripGrid;
 
     public ChordTemplateEditorViewModel(ChartEditorViewModel editor, IHistoryService historyService,
         IFingeringGenerationService fingeringService, ILocalizationService localization, IUiDispatcher? ui = null,
         IConfigurationService? configService = null, IAppLogger? logger = null, ProjectState? projectState = null)
     {
         _editor = editor;
+        _gripGrid = new HandShapeGripGrid(editor, historyService, fingeringService);
         _historyService = historyService;
         _fingeringService = fingeringService;
         _configService = configService;
@@ -162,10 +118,16 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         _projectState = projectState;
         _ui = ui ?? new Tone.UI.Platform.AvaloniaUiDispatcher();
         _edits = new ChordTemplateEditPlanner(editor, historyService, fingeringService, configService, logger);
+        _scope = new ChordApplyScopeController(editor, _edits, () => Template, () => ApplyRung,
+            () => configService?.LoadAppConfig().SyncHandShapeToChordTemplate != false);
+        _fingerDraft = new ChordFingerDraftEditor(this);
+        _box = new ChordBoxEditHandler(this, _fingerDraft, historyService, RestoreFretRunOrigin);
         Ladder = new ChordApplyLadder(localization);
         Preview = new ChordApplyPreview(editor, Ladder.Localization);
         Names = new ChordTemplateNameOffers(editor, configService);
-        ShapeEditor = new ChordShapeEditOpener(editor, () => Template, () => ThisSounds().Chords.FirstOrDefault());
+        _batch = new ChordFingeringBatch(editor, fingeringService, historyService, this, _fingerDraft,
+            arr => Names.ChordNaming(arr), () => LoadTemplate(Template!, StringInputs.Count), ShowBatchTemplate);
+        ShapeEditor = new ChordShapeEditOpener(editor, () => Template, () => _scope.ThisSounds().Chords.FirstOrDefault());
 
         _historyService.HistoryChanged += OnHistoryChanged;
 
@@ -213,6 +175,13 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
     private void OnHistoryChanged()
     {
         var loaded = Template;
+        if (_editor.Selection.SelectedChords.Count == 0 &&
+            _editor.Selection.SelectedHandShapes.FirstOrDefault() is { } shape && loaded?.Id != shape.TemplateId)
+        {
+            UpdateFromSelection();
+            return;
+        }
+
         if (loaded == null) return;
 
         var arr = _editor.ActiveArrangement;
@@ -248,12 +217,12 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         var arr = _editor.ActiveArrangement;
         if (arr == null)
         {
-            LoadTemplate(new ChordTemplate(), 6);
+            UpdateFromSelection();
             return;
         }
 
         var chord = _editor.Selection.SelectedChords.FirstOrDefault();
-        var named = chord == null ? null : arr.ChordTemplates.FirstOrDefault(t => t.Id == chord.TemplateId);
+        var named = chord == null ? null : arr.FindChordTemplate(chord.TemplateId);
         if (named == null)
         {
             UpdateFromSelection();
@@ -284,7 +253,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
     public ObservableCollection<TemplateListItem> AvailableTemplates { get; } = [];
 
     public int Capo => _editor.ActiveArrangement?.Capo ?? 0;
-    public IReadOnlyList<string>? TuningNames => _editor.ActiveArrangement?.Tuning;
+    public IReadOnlyList<string>? TuningNames => TuningDisplayNames.For(_editor.ActiveArrangement);
 
     /// <summary>The "Apply to" ladder, read off the scope the edit itself is
     /// resolved on (<see cref="ChordTemplateEditPlanner.ResolveReach" />).</summary>
@@ -296,18 +265,17 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
     /// <summary>Opens the Edit shape dialog on the shown shape.</summary>
     public ChordShapeEditOpener ShapeEditor { get; }
 
-    private ChordApplyScope? CurrentScope() =>
-        Template == null ? null : _edits.ResolveReach(Template, ThisSounds(), SelectedSounds());
-
     private void RefreshScope()
     {
-        var scope = CurrentScope();
+        var scope = _scope.CurrentScope();
         Ladder.ShowsReshapeHint = false;
-        Ladder.Update(scope, ApplyRung, DraftTemplate, ApplyFamily);
-        Preview.Update(scope, ApplyRung, SelectedSounds(), ApplyFamily);
+        var rung = _gripGrid.IsolateSharedBar(Template, ApplyRung);
+        Ladder.Update(scope, rung, DraftTemplate, ApplyFamily);
+        Preview.Update(scope, rung, _scope.SelectedSounds(), ApplyFamily);
         OnPropertyChanged(nameof(FingeringTargetCount));
         OnPropertyChanged(nameof(SaveFingeringLabel));
         OnPropertyChanged(nameof(CanSaveFingering));
+        SaveAndNextFingeringCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnApplyRungChanged(ChordApplyRung value) => RefreshScope();
@@ -316,7 +284,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
 
     /// <summary>The chords a technique or playback edit reaches on the lit rung, resolved
     /// on the same scope as the ladder and its preview; null without a shown shape.</summary>
-    internal ChordTechniqueTargets? TechniqueTargets() => CurrentScope()?.TechniqueTargets(ApplyRung);
+    internal ChordTechniqueTargets? TechniqueTargets() => _scope.CurrentScope()?.TechniqueTargets(ApplyRung);
 
     partial void OnDraftTemplateChanged(ChordTemplate? value)
     {
@@ -367,7 +335,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         UpdateAvailableTemplates();
 
         var arr = _editor.ActiveArrangement;
-        var selection = SelectedSounds();
+        var selection = _scope.SelectedSounds();
         var selectedChords = selection.Chords;
         var selectedHandShapes = selection.HandShapes;
 
@@ -382,7 +350,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         // matches; otherwise build the display template from the chord's notes.
         if (selectedChords.Count > 0 && arr != null)
         {
-            var display = ResolveChordDisplayTemplate(selectedChords[0], arr);
+            var display = ChordDisplayTemplates.Resolve(selectedChords[0], arr, _fingeringService, Names.ChordNaming);
             SelectedDropdownTemplate = AvailableTemplates.FirstOrDefault(t => t.Template.Id == display.Id);
             LoadTemplate(display, arr.Tuning.Length);
             _isUpdatingUi = false;
@@ -392,12 +360,13 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         if (selectedHandShapes.Count > 0 && arr != null)
         {
             var hs = selectedHandShapes[0];
-            var temp = arr.ChordTemplates.FirstOrDefault(t => t.Id == hs.TemplateId);
+            var temp = arr.FindChordTemplate(hs.TemplateId);
             if (temp != null)
             {
                 SelectedDropdownTemplate = AvailableTemplates.FirstOrDefault(t => t.Template.Id == temp.Id);
                 LoadTemplate(temp, arr.Tuning.Length);
-                OverlayNotesInHandshape(hs);
+                ChordDisplayTemplates.OverlayNotes(hs, _editor, StringInputs);
+                RefreshPreviewChord();
             }
             else
             {
@@ -417,7 +386,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
                 CanTogglePin = false;
                 Template = null;
                 Names.Clear();
-                OverlayNotesInHandshape(hs);
+                ChordDisplayTemplates.OverlayNotes(hs, _editor, StringInputs);
                 RefreshPreviewChord();
             }
             _isUpdatingUi = false;
@@ -432,38 +401,39 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
             SelectedDropdownTemplate = AvailableTemplates.FirstOrDefault(t => t.Template.Id == temp.Id);
             LoadTemplate(temp, arr.Tuning.Length);
         }
+        else
+        {
+            ClearTarget(arr?.StringCount ?? 6);
+        }
 
         RefreshScope();
         _isUpdatingUi = false;
     }
 
-    /// <summary>
-    /// The template to DISPLAY for a selected chord. Returns the chord's own
-    /// template when it exists and its frets match the chord's notes; otherwise
-    /// reflects the chord's ACTUAL notes — reusing an equivalent real template
-    /// (its name + fingering win) or synthesising a display-only template
-    /// (Id -1) with a suggested fingering and name so the finger column and the
-    /// 3D preview agree. The synthesised template is never added to the
-    /// arrangement here — reconciliation happens on the first edit
-    /// (<c>ChordTemplateEditPlanner</c>), so merely selecting a
-    /// still-untemplated chord neither dirties the project nor bloats the list.
-    /// </summary>
-    private ChordTemplate ResolveChordDisplayTemplate(Chord chord, Arrangement arr)
+    private void ClearTarget(int stringCount)
     {
-        var assigned = arr.ChordTemplates.FirstOrDefault(t => t.Id == chord.TemplateId);
-        if (assigned != null && !assigned.IsArpeggio && ChordTemplateEditPlanner.TemplateMatchesChord(assigned, chord))
-            return assigned;
+        Template = null;
+        DraftTemplate = null;
+        SelectedDropdownTemplate = null;
+        HasPendingFingerEdits = false;
+        CanTogglePin = false;
+        IsPinned = false;
+        IsUnnamed = false;
+        IsFingerless = false;
+        IsArpeggio = false;
+        IsNop = false;
+        ChordName = string.Empty;
+        Names.Clear();
+        EnsureStringInputs(stringCount);
+        foreach (var input in StringInputs)
+        {
+            input.FretText = string.Empty;
+            input.FingerText = string.Empty;
+        }
 
-        var seed = new ChordTemplate { Id = -1, Name = string.Empty };
-        foreach (var cn in chord.ChordNotes)
-            seed.Frets[cn.StringIndex] = cn.Fret;
-
-        var equiv = _fingeringService.FindEquivalentTemplate(arr, seed);
-        if (equiv != null) return equiv;
-
-        ArrangementFingeringStyle.SetSuggestedFingers(arr, seed, arr.StringCount);
-        seed.Name = NewChordNames.For(arr, seed.Frets);
-        return seed;
+        RefreshPreviewChord();
+        OnPropertyChanged(nameof(CanSaveFingering));
+        SaveAndNextFingeringCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>One row per string. The DISPLAY mirror is rebuilt whenever the
@@ -481,6 +451,13 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
             StringInputs.RemoveAt(StringInputs.Count - 1);
         RefreshStringNames();
         if (DisplayStringInputs.Count != StringInputs.Count) RefreshDisplayOrder();
+    }
+
+    internal StringFingeringInput? AdjacentStringInput(int stringIndex, int direction)
+    {
+        var index = DisplayStringInputs.ToList().FindIndex(input => input.StringIndex == stringIndex);
+        var next = index + Math.Sign(direction);
+        return index >= 0 && next >= 0 && next < DisplayStringInputs.Count ? DisplayStringInputs[next] : null;
     }
 
     private void RefreshDisplayOrder()
@@ -501,40 +478,34 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
     private void RefreshStringNames()
     {
         var arr = _editor.ActiveArrangement;
-        var tuning = arr?.Tuning;
+        var tuning = TuningDisplayNames.For(arr);
+        OnPropertyChanged(nameof(TuningNames));
         for (var i = 0; i < StringInputs.Count; i++)
         {
             StringInputs[i].StringName = tuning != null && i < tuning.Length ? tuning[i] : "";
             StringInputs[i].Arrangement = arr;
+            StringInputs[i].RefreshPitch();
         }
     }
 
-    private void OverlayNotesInHandshape(HandShape hs)
+    /// <summary>
+    ///     The Library's pick: shows <paramref name="template" /> on the panel for browsing and for the
+    ///     Edit shape dialog, even with nothing selected, and never re-templates a chord (the dropdown's switch does).
+    /// </summary>
+    internal void Browse(ChordTemplate template)
     {
-        // Walk every note + chord-note inside the handshape's range and make
-        // sure each (string, fret) pair shows up on the fretboard preview. The
-        // template might be empty (handshape created via right-click) or hold
-        // only a subset; we never overwrite explicit template frets.
-        bool InRange(FractionalPosition p) => p >= hs.Position && p < hs.EndPosition;
-
-        foreach (var n in _editor.Notes.Where(n => InRange(n.Position)))
-            ApplyOverlayFret(n.StringIndex, n.Fret);
-
-        foreach (var ch in _editor.Chords.Where(c => InRange(c.Position)))
+        if (Template is { } shown && ReferenceEquals(shown, template)) return;
+        _isUpdatingUi = true;
+        try
         {
-            foreach (var cn in ch.ChordNotes)
-                ApplyOverlayFret(cn.StringIndex, cn.Fret);
+            UpdateAvailableTemplates();
+            SelectedDropdownTemplate = AvailableTemplates.FirstOrDefault(t => t.Template.Id == template.Id);
+            LoadTemplate(template, _editor.ActiveArrangement?.StringCount ?? StringInputs.Count);
         }
-
-        RefreshPreviewChord();
-    }
-
-    private void ApplyOverlayFret(int stringIndex, int fret)
-    {
-        if (stringIndex < 0 || stringIndex >= StringInputs.Count) return;
-        var input = StringInputs[stringIndex];
-        if (!string.IsNullOrEmpty(input.FretText)) return;
-        input.FretText = fret.ToString();
+        finally
+        {
+            _isUpdatingUi = false;
+        }
     }
 
     private void UpdateAvailableTemplates()
@@ -580,8 +551,9 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         IsNop = template.NopInRs;
         IsUnnamed = template.Unnamed;
         IsFingerless = template.Fingerless;
-        IsPinned = template.IsPinned;
-        CanTogglePin = template.GhostMask == 0 &&
+        var hasGhosts = _gripGrid.HasGhosts(template);
+        IsPinned = template.IsPinned || hasGhosts;
+        CanTogglePin = !hasGhosts && template.GhostMask == 0 &&
                        _editor.ActiveArrangement?.ChordTemplates.Any(t => ReferenceEquals(t, template)) == true;
 
         foreach (var input in StringInputs)
@@ -638,7 +610,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         newTemplate.Id = newId;
         newTemplate.Name = string.IsNullOrEmpty(Template.Name) ? "New Chord" : Template.Name + " (Copy)";
 
-        var targets = SwitchTargets();
+        var targets = _scope.SwitchTargets();
         var selectedChords = targets.Chords.ToList();
         var selectedHandShapes = targets.HandShapes.ToList();
 
@@ -694,7 +666,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
     /// </summary>
     private void SwitchToTemplate(ChordTemplate newTemplate)
     {
-        var targets = SwitchTargets();
+        var targets = _scope.SwitchTargets();
         if (targets.Count > 0)
             _edits.SwitchSelection(newTemplate, [.. targets.Chords], [.. targets.HandShapes]);
 
@@ -703,37 +675,37 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         _isUpdatingUi = false;
     }
 
-    /// <summary>The sounds a template switch moves: the ladder's rung, resolved
-    /// for a switch (the "same grip" rung moves every use, never other grips).
-    /// Empty with nothing selected.</summary>
-    private ChordApplySounds SwitchTargets()
-    {
-        var scope = CurrentScope();
-        if (scope is not { HasSelection: true }) return ChordApplySounds.None;
-        var targets = scope.Resolve(ApplyRung, ChordTemplateEditKind.Switch);
-        return targets.Path == ChordApplyPath.Rebind ? targets.Sounds : ChordApplySounds.None;
-    }
-
     /// <summary>
     ///     Commits <paramref name="newState" /> on the ladder's rung through
     ///     <see cref="ChordTemplateEditPlanner.ApplyEdit" />, shows the template it
     ///     answers and says on the status rail what changed; a refused edit leaves
     ///     the panel as it is.
     /// </summary>
-    private void ApplyTemplateEdit(ChordTemplate newState, ChordTemplateEditKind? kind = null)
+    private bool ApplyTemplateEdit(ChordTemplate newState, ChordTemplateEditKind? kind = null)
     {
         if (Template == null || _isUpdatingUi)
         {
-            return;
+            return false;
         }
 
-        var scope = CurrentScope();
-        var result = scope == null ? null : _edits.ApplyEdit(Template, newState, scope, ApplyRung, kind);
+        var editKind = kind ?? ChordTemplateEditPlanner.KindOf(Template, newState);
+        if (_gripGrid.Apply(Template, newState, editKind, ApplyRung) is { } grip)
+        {
+            LoadTemplate(grip, StringInputs.Count);
+            UpdateAvailableTemplates();
+            SelectedDropdownTemplate = AvailableTemplates.FirstOrDefault(t => t.Template.Id == grip.Id);
+            return true;
+        }
+
+        var scope = _scope.CurrentScope();
+        var rung = editKind is ChordTemplateEditKind.Shape or ChordTemplateEditKind.Fingering
+            ? _gripGrid.IsolateSharedBar(Template, ApplyRung) : ApplyRung;
+        var result = scope == null ? null : _edits.ApplyEdit(Template, newState, scope, rung, editKind);
         if (result == null)
         {
             if (scope is { HasSelection: false } && !FingersDictHelper.Equal(Template.Frets, newState.Frets))
                 RefuseReshape(Template);
-            return;
+            return false;
         }
 
         _projectState?.SetMessage(Ladder.Describe(result.Targets));
@@ -743,6 +715,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         UpdateAvailableTemplates();
         SelectedDropdownTemplate = AvailableTemplates.FirstOrDefault(t => t.Template.Id == shown.Id);
         _isUpdatingUi = false;
+        return true;
     }
 
     /// <summary>
@@ -761,71 +734,6 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         Ladder.ShowsReshapeHint = true;
     }
 
-    [RelayCommand]
-    private void GenerateAllFingerings()
-    {
-        var arrangement = _editor.ActiveArrangement;
-        if (arrangement == null) return;
-
-        var actions = ChordTemplateFingeringBackfill.Plan(arrangement, _fingeringService, _editor, Names.ChordNaming(arrangement));
-        if (actions.Count == 0) return;
-        _historyService.Do(new CompositeAction(actions) { LabelKey = "History_GenerateFingerings", LinkPolicyOverride = LinkPolicy.ShareFirstChanged });
-
-        if (Template != null) LoadTemplate(Template, StringInputs.Count);
-    }
-
-    [RelayCommand]
-    private void SelectNextMissingFingering()
-    {
-        // Auto-save any in-progress finger edits before jumping away — matches
-        // the user's mental model of "save & next" tied to this single button.
-        // Only TYPED ones: on "+ same grip" Save has work with nothing typed,
-        // and walking on to the next shape must not copy this one's fingering.
-        if (HasPendingFingerEdits) CommitPendingFingerEdits();
-
-        var arrangement = _editor.ActiveArrangement;
-        if (arrangement == null) return;
-
-        var pending = _fingeringService.FindTemplatesNeedingFingering(arrangement);
-        if (pending.Count == 0) return;
-
-        // Skip past the current template so repeated clicks walk the whole list.
-        var startId = Template?.Id ?? -1;
-        var next = pending.FirstOrDefault(t => t.Id > startId) ?? pending[0];
-
-        _isUpdatingUi = true;
-        UpdateAvailableTemplates();
-        SelectedDropdownTemplate = AvailableTemplates.FirstOrDefault(t => t.Template.Id == next.Id);
-        LoadTemplate(next, _editor.ActiveArrangement?.Tuning.Length ?? StringInputs.Count);
-        _isUpdatingUi = false;
-
-        // Jump the timeline to the first chord/handshape that uses this template
-        // so the user sees the unset chord on the highway, EOF-style.
-        SeekToFirstUsage(arrangement, next);
-    }
-
-    private void SeekToFirstUsage(Arrangement arrangement, ChordTemplate template)
-    {
-        FractionalPosition? earliest = null;
-        foreach (var level in arrangement.Levels)
-        {
-            foreach (var c in level.Chords)
-            {
-                if (c.TemplateId == template.Id && (earliest == null || c.Position < earliest))
-                    earliest = c.Position;
-            }
-
-            foreach (var h in level.HandShapes)
-            {
-                if (h.TemplateId == template.Id && (earliest == null || h.Position < earliest))
-                    earliest = h.Position;
-            }
-        }
-        if (earliest == null) return;
-        var ms = earliest.Value.GetPositionMs(_editor.Beats);
-        _editor.ExecuteSeek(ms);
-    }
-
     private void Input_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (Template == null || sender is not StringFingeringInput input || _isUpdatingUi) return;
@@ -841,7 +749,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
             // capo 5 into "52". The template holds the legal fret; the box
             // re-reads it on the next load.
             if (int.TryParse(input.FretText, out var fret))
-                newState.Frets[input.StringIndex] = SnapFretToNeck(fret);
+                newState.Frets[input.StringIndex] = _fingerDraft.SnapFretToNeck(fret);
             else newState.Frets.Remove(input.StringIndex);
             ApplyTemplateEdit(newState);
             return;
@@ -855,290 +763,39 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
             // propagate. Avoids per-keystroke history spam and accidental
             // propagation when the user mistypes mid-chord.
             HasPendingFingerEdits = true;
-            UpdateDraftFingersFromInputs();
+            _fingerDraft.UpdateDraftFingersFromInputs();
         }
-    }
-
-    /// <summary>
-    ///     The strings the loaded shape frets ABOVE the capo — the only strings a
-    ///     fingering can be about. Empty (not null) when nothing is loaded, so an
-    ///     "every string" edit onto no shape touches nothing rather than
-    ///     everything.
-    /// </summary>
-    private HashSet<int> FrettedStringsOfLoadedShape()
-    {
-        var result = new HashSet<int>();
-        if (Template == null) return result;
-        var capo = Capo;
-        foreach (var (stringIndex, fret) in Template.Frets)
-        {
-            if (fret > capo)
-                result.Add(stringIndex);
-        }
-
-        return result;
-    }
-
-    private void UpdateDraftFingersFromInputs()
-    {
-        if (Template == null) return;
-        // Re-clone to force binding refresh on MiniFretboardControl (which
-        // reads Template.Fingers eagerly and won't observe dict mutations).
-        var draft = Template.Clone();
-        foreach (var input in StringInputs)
-        {
-            var fingerId = FingerTextCodec.Parse(input.FingerText);
-            if (fingerId >= 0) draft.Fingers[input.StringIndex] = fingerId;
-            else draft.Fingers.Remove(input.StringIndex);
-        }
-        DraftTemplate = draft;
     }
 
     [RelayCommand]
-    private void SaveFingerEdits() => CommitPendingFingerEdits();
+    private void SaveFingerEdits() => _fingerDraft.CommitPendingFingerEdits();
 
-    /// <summary>
-    /// Bulk-set the fingering value (-1 = unspecified / 0 = thumb / 1..4 = fingers)
-    /// on the named strings of the currently-loaded chord template, then commit
-    /// just like the user clicked "Save fingerings". Used by the
-    /// global SetFinger keybinds (Inspector → ChordTemplateEditor → here).
-    /// If <paramref name="stringIndices"/> is empty the change is applied to
-    /// every string in the template.
-    /// </summary>
-    public bool SetFingerForStrings(int fingerId, IReadOnlyCollection<int>? stringIndices)
-    {
-        if (!SetFingerDraftForStrings(fingerId, stringIndices)) return false;
-        return CommitPendingFingerEdits();
-    }
+    [RelayCommand(CanExecute = nameof(CanSaveFingering))]
+    private void SaveAndNextFingering() => _batch.SaveAndNextFingering();
 
-    /// <summary>
-    ///     Fills the finger DRAFT without committing — the buffered half of
-    ///     <see cref="SetFingerForStrings" />, shared so the chord box's
-    ///     hover-typing and the keybinds cannot drift apart. Returns whether
-    ///     anything actually changed.
-    /// </summary>
-    private bool SetFingerDraftForStrings(int fingerId, IReadOnlyCollection<int>? stringIndices)
-    {
-        if (Template == null) return false;
+    internal void ToggleNote((int stringIdx, int fret) pos) => _box.ToggleNote(pos);
 
-        // null means EVERY string; an EMPTY collection means NONE. They are not
-        // the same value, and the caller produces an empty list for two
-        // opposite answers - the string-edit mask being empty ("all strings",
-        // the documented convention) and the mask being SET but intersecting
-        // none of this chord's strings ("no strings"). Treating them alike
-        // would invert the second and write the finger to every string of the chord.
-        if (stringIndices is { Count: 0 }) return false;
-        // "EVERY STRING" means every string the loaded SHAPE actually frets, not
-        // every row on the panel. A 6-row panel over a three-string grip wrote
-        // the finger onto the three strings the chord does not play, and onto
-        // any OPEN one — the first is data no export can spell (RS-XML would
-        // emit `fingerN` beside `fret="-1"`) and, because the L06/L07 rule walks
-        // `Frets`, is invisible to the inspector that would otherwise report it;
-        // the second IS L06. A caller that NAMES a string still gets exactly the
-        // string it asked for.
-        //
-        // …but only when SETTING one. CLEARING ("no finger", fingerId < 0) has to
-        // reach every row, because the strings that need repairing are exactly
-        // the ones this narrowing excludes: a finger an older build left standing
-        // on an open string is an L06 the panel reports and the keybind must be
-        // able to take off. Setting is guarded twice over — here, and per row
-        // below — so nothing writes onto a string the shape does not fret.
-        var targetSet = stringIndices != null
-            ? [.. stringIndices]
-            : fingerId >= 0
-                ? FrettedStringsOfLoadedShape()
-                : null;
-        if (targetSet is { Count: 0 }) return false;
+    internal void SetHoveredFret(ChordBoxFretEdit edit) => _box.SetHoveredFret(edit);
 
-        var changed = false;
-        foreach (var input in StringInputs)
-        {
-            if (targetSet != null && !targetSet.Contains(input.StringIndex)) continue;
-            // A finger only goes on a string the grip actually FRETS. A finger on
-            // an open string is inspector rule L06 (FingerSetForOpenString) and
-            // "open" is fret <= capo, not fret 0; a finger on a string the shape
-            // does not play at all has nothing to hold down. ToggleNote,
-            // SetHoveredFret and ClearString — the three shape-authoring gestures
-            // — each strip it for exactly this reason, and so does
-            // ChordTemplateFingerSetter.SetSuggestedFingers; the FINGER-authoring
-            // gestures did not, so SetFinger1..4 (the keybinds, with no mask =
-            // "every string of the chord") and the chord box's hover-typing minted
-            // the very finding the panel's own Issues tab reports. CLEARING
-            // (fingerId < 0) is always allowed — that is how an existing one is
-            // repaired.
-            if (fingerId > 0 && !IsFretted(input.StringIndex)) continue;
-            var newText = fingerId < 0 ? string.Empty : FingerTextCodec.Format(fingerId);
-            if (input.FingerText == newText) continue;
-            input.FingerText = newText;
-            changed = true;
-        }
+    internal void SetHoveredFinger(ChordBoxFingerEdit edit) => _box.SetHoveredFinger(edit);
 
-        if (!changed) return false;
-
-        HasPendingFingerEdits = true;
-        UpdateDraftFingersFromInputs();
-        return true;
-    }
-
-    /// <summary>
-    ///     Does the loaded shape hold this string down? Absent from
-    ///     <c>Frets</c> means the shape does not play it; a fret at or below the
-    ///     capo means it sounds OPEN. Either way there is no finger on it — the
-    ///     same predicate <c>TemplateAndOverlapRule</c> uses to report L06.
-    /// </summary>
-    private bool IsFretted(int stringIndex) =>
-        Template != null && Template.Frets.TryGetValue(stringIndex, out var fret) && fret > Capo;
-
-    /// <summary>
-    ///     Snaps an authored fret onto the frets the neck actually HAS —
-    ///     <c>{0} ∪ [capo, 24]</c>, the same legal set every other fret-writing
-    ///     verb lands in (<see cref="SoundingPitch.SnapToNeck" />).
-    ///     <para>
-    ///         The chord box's POINTER path could never produce an illegal fret
-    ///         (<c>ChordBoxGeometry</c> floors its window at <c>capo + 1</c> and
-    ///         its open rail returns the capo), so this reads like dead defence
-    ///         until you notice that the two KEYBOARD paths bypass that geometry
-    ///         entirely: hover-typing a digit builds a <c>ChordBoxFretEdit</c>
-    ///         straight from the accumulator, and the per-row fret box parses
-    ///         whatever was typed. Typing <c>3</c> on a capo-5 chart therefore
-    ///         wrote fret 3 into a SHARED template — inspector rule <c>L01</c>
-    ///         (<c>NoteFretBelowCapo</c>) on every chord bound to it, from a
-    ///         gesture the charter cannot see is illegal. The fret box also took
-    ///         any int at all: <c>99</c> and <c>-4</c> both landed verbatim on a
-    ///         24-fret neck.
-    ///     </para>
-    ///     <para>
-    ///         Direction is always <c>0</c> (absolute): every caller here is a
-    ///         typed or clicked ABSOLUTE fret, so a sub-capo value lands ON the
-    ///         capo — the answer <c>ArrangementAutoFixService.FixCapoFrets</c>
-    ///         gives. Only a fret-DOWN run may fall through to open, and the
-    ///         panel has no such verb.
-    ///     </para>
-    /// </summary>
-    private int SnapFretToNeck(int fret) => SoundingPitch.SnapToNeck(fret, Math.Max(0, Capo));
-
-    private bool CommitPendingFingerEdits()
-    {
-        if (Template == null || !CanSaveFingering) return false;
-
-        var newState = Template.Clone();
-
-        foreach (var input in StringInputs)
-        {
-            var fingerId = FingerTextCodec.Parse(input.FingerText);
-            // A finger only exists on a string the shape DECLARES. The per-row
-            // finger strip is bound straight to `FingerText`, so it reaches this
-            // without passing SetFingerDraftForStrings — and a finger on a
-            // string with no fret is unexportable junk the L06/L07 rule cannot
-            // see, because that rule walks `Frets`.
-            if (fingerId >= 0 && newState.Frets.ContainsKey(input.StringIndex))
-                newState.Fingers[input.StringIndex] = fingerId;
-            else newState.Fingers.Remove(input.StringIndex);
-        }
-
-        // ONE undo node for the gesture, the "same grip" templates included
-        // when that rung is lit (editing-invariants.md).
-        ApplyTemplateEdit(newState, ChordTemplateEditKind.Fingering);
-
-        HasPendingFingerEdits = false;
-        DraftTemplate = Template?.Clone();
-        return true;
-    }
+    internal void ClearString(int stringIdx) => _box.ClearString(stringIdx);
 
     [RelayCommand]
-    private void ToggleNote((int stringIdx, int fret) pos)
-    {
-        if (Template == null || _isUpdatingUi) return;
+    private void GenerateAllFingerings() => _batch.GenerateAllFingerings();
 
-        var newState = Template.Clone();
-        var fret = SnapFretToNeck(pos.fret);
-
-        if (newState.Frets.TryGetValue(pos.stringIdx, out var existingFret) && existingFret == fret)
-        {
-            newState.Frets.Remove(pos.stringIdx);
-            newState.Fingers.Remove(pos.stringIdx);
-        }
-        else
-        {
-            newState.Frets[pos.stringIdx] = fret;
-            // A finger on an OPEN string is inspector rule L06
-            // (FingerSetForOpenString), and "open" is fret <= capo, not fret 0
-            // (frets are absolute; Core's capo invariant). Clicking an open
-            // string does not stamp finger 1 on it, since the primary shape-authoring
-            // gesture would otherwise mint the exact finding the panel's own Issues tab
-            // reports — the same "never invent a finding the editor never
-            // showed" rule the phrase-anchor fixer is held to.
-            // ChordTemplateFingerSetter.SetSuggestedFingers strips open-string
-            // fingers for this reason; do not diverge from it.
-            if (fret > Capo) newState.Fingers[pos.stringIdx] = 1;
-            else newState.Fingers.Remove(pos.stringIdx);
-        }
-
-        ApplyTemplateEdit(newState);
-    }
-
-    // ---- chord-box hover gestures (0.36) ----------------------------------
-    //
-    // Typing over a hovered string on the chord box. These reuse the existing
-    // write paths verbatim — ApplyTemplateEdit for the shape, the buffered
-    // finger draft for fingering — so nothing here is a second editing route.
-
-    /// <summary>History node the open fret-typing run produced. A run is only
-    /// reopened while it is still the CURRENT state, so a digit can never undo
-    /// somebody else's work (the anchoring rule the keyboard pen uses).</summary>
-    private int _fretRunNodeId = -1;
-
-    /// <summary>The shape the open fret-typing run started from, so a continuation digit extends
-    /// THAT shape rather than the one the previous digit landed on.</summary>
-    private ChordTemplate? _fretRunOrigin;
-
-    /// <summary>
-    ///     Hover-typed fret. ONE typing run is ONE history node: a continuation
-    ///     digit undoes the run's own node before committing the extended value,
-    ///     so <c>Ctrl+Z</c> after typing "12" lands on the fret you had BEFORE
-    ///     the run, never on an intermediate "fret 1". That is exactly the
-    ///     granularity <c>ChartPenService</c> already applies to typed frets,
-    ///     and it is what stops the per-keystroke reshape the audit found.
-    /// </summary>
     [RelayCommand]
-    private void SetHoveredFret(ChordBoxFretEdit edit)
+    private void SelectNextMissingFingering() => _batch.SelectNextMissingFingering();
+
+    /// <summary>Bulk-sets the fingering (-1 unspecified, 0 thumb, 1..4 fingers) on the named
+    /// strings and commits it, as the SetFinger keybinds do; no strings named means every string.</summary>
+    public bool SetFingerForStrings(int fingerId, IReadOnlyCollection<int>? stringIndices) =>
+        _fingerDraft.SetFingerForStrings(fingerId, stringIndices);
+
+    /// <summary>Restores the shape a fret-typing run started from, when the arrangement still holds it.</summary>
+    private void RestoreFretRunOrigin(ChordTemplate origin)
     {
-        if (Template == null || _isUpdatingUi) return;
-
-        if (edit.ContinuesRun && _fretRunNodeId >= 0 && _historyService.CurrentNodeId == _fretRunNodeId &&
-            _historyService.CanUndo)
-        {
-            _historyService.Undo();
-            ReloadFretRunOrigin();
-        }
-        else
-        {
-            _fretRunOrigin = Template;
-        }
-
-        var newState = Template.Clone();
-        var fret = SnapFretToNeck(edit.Fret);
-        newState.Frets[edit.StringIndex] = fret;
-        // Typing the string down to an OPEN fret leaves whatever finger was on
-        // it standing on an open string — inspector rule L06. Same rule as
-        // ToggleNote; the two are the only shape-authoring gestures.
-        if (fret <= Capo) newState.Fingers.Remove(edit.StringIndex);
-        var before = _historyService.CurrentNodeId;
-        ApplyTemplateEdit(newState);
-        // A REFUSED digit pushed nothing: the current node is somebody else's
-        // work, and anchoring the run on it let the next digit undo it.
-        _fretRunNodeId = _historyService.CurrentNodeId != before ? _historyService.CurrentNodeId : -1;
-    }
-
-    /// <summary>
-    ///     Puts the shape the run started from back on screen after the run's own node is undone.
-    ///     A first digit that matched an existing shape joined it, and the undo leaves that shape
-    ///     loaded while the chord is back on its old one: the ladder then drops the chord from the
-    ///     edit (it does not carry the shown shape) and the next digit is refused.
-    /// </summary>
-    private void ReloadFretRunOrigin()
-    {
-        if (_fretRunOrigin is not { } origin || _editor.ActiveArrangement is not { } arrangement) return;
+        if (_editor.ActiveArrangement is not { } arrangement) return;
         if (!ChordTemplateCollectionOps.ContainsInstance(arrangement.ChordTemplates, origin)) return;
 
         var wasUpdatingUi = _isUpdatingUi;
@@ -1148,34 +805,26 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         _isUpdatingUi = wasUpdatingUi;
     }
 
-    /// <summary>
-    ///     Hover-typed finger. Fills the DRAFT only — the buffered path the
-    ///     panel has always used — so the user still presses Save to commit and
-    ///     propagate. What changes is that the draft is now visible on the chord
-    ///     box instead of expressed as a disabled button somewhere else.
-    /// </summary>
-    [RelayCommand]
-    private void SetHoveredFinger(ChordBoxFingerEdit edit)
+    /// <summary>Shows a template the batch walk landed on, without echoing the load back as an edit.</summary>
+    private void ShowBatchTemplate(ChordTemplate next)
     {
-        if (Template == null || _isUpdatingUi) return;
-        SetFingerDraftForStrings(edit.Finger, new[] { edit.StringIndex });
+        _isUpdatingUi = true;
+        UpdateAvailableTemplates();
+        SelectedDropdownTemplate = AvailableTemplates.FirstOrDefault(t => t.Template.Id == next.Id);
+        LoadTemplate(next, _editor.ActiveArrangement?.Tuning.Length ?? StringInputs.Count);
+        _isUpdatingUi = false;
     }
 
-    /// <summary>Remove a string from the shape (hover + <c>Del</c>, or a
-    /// right-click). Its fingering goes with it — a finger on an unused string
-    /// is inspector rule L06.</summary>
-    [RelayCommand]
-    private void ClearString(int stringIdx)
-    {
-        if (Template == null || _isUpdatingUi) return;
-        if (!Template.Frets.ContainsKey(stringIdx)) return;
+    IReadOnlyList<StringFingeringInput> IChordEditSurface.StringInputs => StringInputs;
 
-        var newState = Template.Clone();
-        newState.Frets.Remove(stringIdx);
-        newState.Fingers.Remove(stringIdx);
-        _fretRunNodeId = -1;
-        ApplyTemplateEdit(newState);
+    bool IChordEditSurface.IsUpdatingUi
+    {
+        get => _isUpdatingUi;
+        set => _isUpdatingUi = value;
     }
+
+    bool IChordEditSurface.ApplyTemplateEdit(ChordTemplate newState, ChordTemplateEditKind? kind) =>
+        ApplyTemplateEdit(newState, kind);
 
     /// <summary>
     ///     Strings of the SELECTED CHORD that are fully muted — what the chord
@@ -1248,11 +897,13 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         var arr = _editor.ActiveArrangement;
         var newState = Template.Clone();
         newState.Unnamed = value;
-        if (value) _nameBeforeUnnamed = Template.Name;
+        if (value) _namesBeforeUnnamed[Template] = Template.Name;
         newState.Name = value ? string.Empty
-            : _nameBeforeUnnamed.Length > 0 ? _nameBeforeUnnamed
-            : arr == null ? string.Empty : ChordNameSuggester.SuggestFirstChordName(arr, Template.Frets);
+            : _namesBeforeUnnamed.TryGetValue(Template, out var remembered) && remembered.Length > 0 ? remembered
+            : arr == null ? string.Empty : NewChordNames.For(arr, Template.Frets, Names.ChordNaming(arr));
+        var previousName = Template.Name;
         ApplyTemplateEdit(newState, ChordTemplateEditKind.Name);
+        if (value && Template is { Unnamed: true }) _namesBeforeUnnamed[Template] = previousName;
         if (Template == null || Template.Unnamed == value) return;
         _isUpdatingUi = true;
         IsUnnamed = Template.Unnamed;
@@ -1304,7 +955,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         var arr = _editor.ActiveArrangement;
         if (target == null || arr == null) return;
 
-        var targets = SwitchTargets();
+        var targets = _scope.SwitchTargets();
         if (targets.Count == 0) return;
         List<Chord> chords = [.. targets.Chords];
         List<HandShape> handShapes = [.. targets.HandShapes];

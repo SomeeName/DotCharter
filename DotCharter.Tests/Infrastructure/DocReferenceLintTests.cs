@@ -611,7 +611,7 @@ public sealed class DocReferenceLintTests
         string[] skip =
         [
             "bin", "obj", ".git", ".vs", ".idea", ".claude", ".codex", "node_modules", "TestData",
-            "packages", "build", "_deps"
+            "packages", "build", "_deps", "artifacts"
         ];
         var wanted = extensions ?? CheckedExtensions;
         var stack = new Stack<string>();
@@ -636,6 +636,7 @@ public sealed class DocReferenceLintTests
     [Theory]
     [InlineData(".codex")]
     [InlineData(".claude")]
+    [InlineData("artifacts")]
     public void SourceWalker_ExcludesNestedAgentWorktrees(string agentDirectory)
     {
         var root = Path.Combine(Path.GetTempPath(), "dotcharter-source-walk-" + Guid.NewGuid());

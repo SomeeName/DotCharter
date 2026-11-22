@@ -30,7 +30,7 @@ public sealed class SongMetadataArtistSortTests
             Chart = new ChartData { Artist = artist, ArtistSort = artistSort, SongName = "Come Together" }
         };
         state.ActiveProject = project;
-        return (new SongMetadataViewModel(state, history, FakeLocalization.English(), logger),
+        return (new SongMetadataViewModel(state, history, FakeLocalization.English(), logger, new InertNewProjectSources(), new DotCharter.Tests.Infrastructure.FakeSongKeyAudioEstimator()),
             project.Chart, history);
     }
 

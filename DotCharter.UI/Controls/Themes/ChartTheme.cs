@@ -1,6 +1,5 @@
 // ReSharper disable InconsistentNaming -- private static brush/pen fields use _camelCase to pair with same-named public PascalCase properties.
 using System.Globalization;
-using Avalonia;
 using Avalonia.Media;
 using DotCharter.Rendering.Data;
 using DotCharter.UI.Theming;
@@ -347,13 +346,6 @@ public static class ChartTheme
         }
 
         return ft;
-    }
-
-    public static void DrawCenteredText(DrawingContext context, FormattedText ft, Rect bounds)
-    {
-        var x = bounds.X + (bounds.Width - ft.Width) / 2.0;
-        var y = bounds.Y + (bounds.Height - ft.Height) / 2.0;
-        context.DrawText(ft, new Point(x, y));
     }
 
     private record struct TextCacheKey(string Text, double Size, uint Color, bool IsBold);

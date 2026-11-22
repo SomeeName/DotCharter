@@ -31,6 +31,39 @@ namespace DotCharter.Tests.UI;
 /// </summary>
 public sealed class LocalizationSweepTests
 {
+    // These are established German musical section names borrowed unchanged from English.
+    // Only these exact section keys and words are exempt; Japanese still translates every one.
+    private static readonly IReadOnlyDictionary<string, string> SharedGermanSections = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["Dialog_SectionName_intro"] = "Intro",
+        ["Dialog_SectionName_hook"] = "Hook",
+        ["Dialog_SectionName_bridge"] = "Bridge",
+        ["Dialog_SectionName_solo"] = "Solo",
+        ["Dialog_SectionName_outro"] = "Outro",
+        ["Dialog_SectionName_ambient"] = "Ambient",
+        ["Dialog_SectionName_breakdown"] = "Breakdown",
+        ["Dialog_SectionName_riff"] = "Riff",
+        ["Dialog_SectionName_variation"] = "Variation",
+        ["Dialog_SectionName_head"] = "Head",
+        ["Dialog_SectionName_vamp"] = "Vamp",
+        ["Dialog_SectionName_tapping"] = "Tapping"
+    };
+
+    [Fact]
+    public void SharedGermanSectionWords_AreExactAndNeverExemptJapanese()
+    {
+        var directory = Path.Combine(TestPaths.RepoRoot(), "DotCharter.Localization");
+        var english = ReadResxValues(Path.Combine(directory, "Resources.resx"));
+        var german = ReadResxValues(Path.Combine(directory, "Resources.de-DE.resx"));
+        var japanese = ReadResxValues(Path.Combine(directory, "Resources.ja-JP.resx"));
+        foreach (var (key, word) in SharedGermanSections)
+        {
+            Assert.Equal(word, english[key]);
+            Assert.Equal(word, german[key]);
+            Assert.NotEqual(word, japanese[key]);
+        }
+    }
+
     // Attributes that carry user-visible text. A literal (non-binding) value on
     // any of these that contains a real word must come from a resx key.
     //
@@ -54,6 +87,8 @@ public sealed class LocalizationSweepTests
         "Powered by TONE3000",
         // Key names, spelled as the palette's own rows spell a chord ("Ctrl+N").
         "Ctrl+Shift+P", "Esc",
+        // SI unit symbols (hertz, decibel), the same glyphs in every language, like the unit in AllowedFormats.
+        "Hz", "dB",
         // (The five log-level names lived here until 2026-08-29, on the reason
         // that a German dropdown selecting "Warnung" would write "Warning" to
         // disk. That was never true of this control: the settings combo binds
@@ -254,6 +289,8 @@ public sealed class LocalizationSweepTests
         var untranslated = english
             .Where(pair => translated.TryGetValue(pair.Key, out var value)
                            && value == pair.Value
+                           && !(fileName == "Resources.de-DE.resx"
+                                && SharedGermanSections.TryGetValue(pair.Key, out var shared) && pair.Value == shared)
                            && Regex.IsMatch(pair.Value, "[A-Za-z]{3,}"))
             .Select(pair => pair.Key)
             .OrderBy(key => key, StringComparer.Ordinal)
@@ -618,6 +655,10 @@ public sealed class LocalizationSweepTests
     public void EveryComputedKeyFamily_IsCompleteInEveryLanguage()
     {
         var expected = new List<string>();
+
+        // Event-dialog captions are derived from the complete stored catalogues.
+        expected.AddRange(RsSectionCatalog.Names.Select(name => "Dialog_SectionName_" + name));
+        expected.AddRange(RsEventCatalog.Events.Select(item => "Dialog_EventName_" + item.Code));
 
         // Inspector EQ (ABI v29): the band-type chip's short label and the
         // selected band's long name.

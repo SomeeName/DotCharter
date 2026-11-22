@@ -56,7 +56,7 @@ public sealed class ChordTemplateBrowseModeGuardTests
 
         var vm = h.CreateChordEditor();
 
-        vm.ToggleNoteCommand.Execute((stringIdx: 2, fret: 9));
+        vm.ToggleNote((stringIdx: 2, fret: 9));
 
         Assert.Equal(2, bound.ChordNotes.Count);
         Assert.Equal(2, arr.ChordTemplates[0].Frets.Count);

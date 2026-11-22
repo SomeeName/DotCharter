@@ -4,10 +4,8 @@ using System.Xml.Linq;
 namespace DotCharter.Tests.UI;
 
 /// <summary>
-///     Every activity-rail row's accessible name includes the caption it shows. The Settings row said
-///     "Settings" and was named "Project settings" (tooltip too) — it opens the app's Settings, and a
-///     screen reader or UI Automation looking for "Settings" found only the caption text, not the
-///     button (live app, 2026-09-23). Checked in every shipped language.
+///     Activity-rail rows use matching captions and accessible names in every shipped language.
+///     Settings keeps its full accessible name and uses a short caption for the narrow rail slot.
 /// </summary>
 public sealed class ActivityRailNamesTests
 {
@@ -28,11 +26,34 @@ public sealed class ActivityRailNamesTests
 
         foreach (Match row in rows)
         {
-            var name = strings[row.Groups["name"].Value];
-            var caption = strings[row.Groups["caption"].Value];
+            var nameKey = row.Groups["name"].Value;
+            var captionKey = row.Groups["caption"].Value;
+            if (captionKey == "Nav_Settings_Rail")
+            {
+                Assert.Equal("Nav_Settings", nameKey);
+                continue;
+            }
+
+            var name = strings[nameKey];
+            var caption = strings[captionKey];
             Assert.True(name.Contains(caption, StringComparison.CurrentCultureIgnoreCase),
                 $"[{(culture == "" ? "en" : culture)}] the rail row captioned \"{caption}\" is named \"{name}\"");
         }
+    }
+
+    [Fact]
+    public void Settings_UsesTheShortRailCaptionAndFullAccessibleName()
+    {
+        var markup = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(),
+            "DotCharter.UI", "Views", "Shell", "ActivityRailView.axaml")));
+        var rail = XDocument.Parse(markup);
+        var settings = rail.Descendants().Single(e =>
+            (string?)e.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "RailSettings");
+        var caption = settings.Descendants().Single(e => e.Name.LocalName == "TextBlock"
+            && (string?)e.Attribute("Classes") == "FireRailCaption");
+
+        Assert.Equal("{localization:Loc Nav_Settings_Rail}", (string?)caption.Attribute("Text"));
+        Assert.Equal("{localization:Loc Nav_Settings}", (string?)settings.Attribute("AutomationProperties.Name"));
     }
 
     /// <summary>The window's top-left corner carries the app's mark on every surface (owner,

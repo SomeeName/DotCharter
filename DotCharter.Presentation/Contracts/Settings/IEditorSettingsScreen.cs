@@ -18,6 +18,9 @@ public interface IEditorSettingsScreen : INotifyPropertyChanged
 
     bool SyncAnchorToChordFingering { get; set; }
 
+    /// <summary>The note inspector's edits wait for its Apply (a draft) instead of being written at once. Off by default.</summary>
+    bool InspectorApplyStep { get; set; }
+
     bool AutoNameNewChords { get; set; }
 
     bool SuppressDoubleStopChordNames { get; set; }
@@ -60,6 +63,8 @@ public interface IEditorSettingsScreen : INotifyPropertyChanged
     int MinNoteDistanceDivisor { get; set; }
 
     // ── copy and paste ───────────────────────────────────────────────────
+
+    bool PasteReplacesExisting { get; set; }
 
     bool PasteIncludeNotes { get; set; }
 

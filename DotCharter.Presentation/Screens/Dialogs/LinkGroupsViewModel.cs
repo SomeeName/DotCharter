@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -17,21 +18,35 @@ namespace DotCharter.Presentation.Screens.Dialogs;
 ///     Tools ▸ Linked measures. The rows are rebuilt from the project after every edit, and every
 ///     edit goes through <see cref="LinkGroupEdits" /> and the history, so each is one undo step.
 /// </summary>
-public sealed class LinkGroupsViewModel : DialogViewModel<bool>, ILinkGroupsScreen, IDialogSetup<LinkGroupsRequest>
+public sealed class LinkGroupsViewModel : DialogViewModel<bool>, ILinkGroupsScreen, IDialogSetup<LinkGroupsRequest>, IDisposable
 {
     private readonly ChartEditDialogServices _edit;
+    private readonly Func<ChartProject, MeasureContentOptions, CancellationToken, Action<string>, IReadOnlyList<LinkSuggestion>> _detect;
+    private readonly AsyncRelayCommand _detectCommand;
     private readonly RelayCommand _linkSelected;
     private IReadOnlyList<ILinkGroupRow> _groups = [];
     private IReadOnlyList<ILinkSuggestionRow> _suggestions = [];
+    private bool _isDetecting;
+    private bool _showDetectionRetry;
+    private string _detectionStatus = string.Empty;
     private bool _changed;
 
-    public LinkGroupsViewModel(ChartEditDialogServices edit)
+    public LinkGroupsViewModel(ChartEditDialogServices edit) : this(edit,
+        (project, rule, token, reportLimit) => LinkSuggestionFinder.Find(project, project.Arrangements, null, rule, token, reportLimit))
+    {
+    }
+
+    internal LinkGroupsViewModel(ChartEditDialogServices edit,
+        Func<ChartProject, MeasureContentOptions, CancellationToken, Action<string>, IReadOnlyList<LinkSuggestion>> detect)
     {
         _edit = edit;
+        _detect = detect;
         RenameCommand = new RelayCommand<ILinkGroupRow>(Rename);
         DeleteCommand = new RelayCommand<ILinkGroupRow>(Delete);
         GoToCommand = new RelayCommand<ILinkPlacementRow>(GoTo);
         _linkSelected = new RelayCommand(LinkSelected, () => _suggestions.Any(s => s.IsSelected));
+        _detectCommand = new AsyncRelayCommand(DetectAsync);
+        CancelDetectionCommand = new RelayCommand(_detectCommand.Cancel);
         CloseCommand = new RelayCommand(() => Close(_changed));
         Refresh();
     }
@@ -69,19 +84,116 @@ public sealed class LinkGroupsViewModel : DialogViewModel<bool>, ILinkGroupsScre
 
     public ICommand LinkSelectedCommand => _linkSelected;
 
+    public bool IsDetecting
+    {
+        get => _isDetecting;
+        private set => SetProperty(ref _isDetecting, value);
+    }
+
+    public string DetectionStatus
+    {
+        get => _detectionStatus;
+        private set => SetProperty(ref _detectionStatus, value);
+    }
+
+    public bool ShowDetectionRetry
+    {
+        get => _showDetectionRetry;
+        private set => SetProperty(ref _showDetectionRetry, value);
+    }
+
+    public ICommand DetectCommand => _detectCommand;
+    public ICommand CancelDetectionCommand { get; }
+
     public ICommand CloseCommand { get; }
+
+    public void Dispose() => EndOpenWork();
 
     public void Configure(LinkGroupsRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (request.Suggestions.Count > 0) ShowSuggestions(request.Suggestions);
+        else _detectCommand.Execute(null);
+    }
+
+    private void ShowSuggestions(IReadOnlyList<LinkSuggestion> suggestions)
+    {
         var l = _edit.Localization;
         Suggestions =
         [
-            .. request.Suggestions.Select(ILinkSuggestionRow (s) => new SuggestionRow(s,
+            .. suggestions.Select(ILinkSuggestionRow (s) => new SuggestionRow(s,
                 l.Format("LinkGroups_SuggestionTitle", LinkGroupText.Name(l, s.Name),
                     l.Plural("LinkGroups_MeasuresOne", "LinkGroups_Measures", s.MeasureCount)),
                 SuggestionDetail(s), _linkSelected.NotifyCanExecuteChanged))
         ];
+    }
+
+    private async Task DetectAsync(CancellationToken cancellation)
+    {
+        if (IsDetecting || OpenToken.IsCancellationRequested || _edit.State.ActiveProject is not { } project) return;
+        using var run = CancellationTokenSource.CreateLinkedTokenSource(OpenToken, cancellation);
+        var token = run.Token;
+        var completed = false;
+        void CancelOnProjectSwitch(object? sender, PropertyChangedEventArgs args)
+        {
+            if (args.PropertyName == nameof(ProjectState.ActiveProject)) run.Cancel();
+        }
+
+        _edit.State.ProjectChanged += run.Cancel;
+        _edit.State.PropertyChanged += CancelOnProjectSwitch;
+        _edit.History.HistoryChanged += run.Cancel;
+        IsDetecting = true;
+        ShowDetectionRetry = false;
+        DetectionStatus = string.Empty;
+        Suggestions = [];
+        try
+        {
+            await Task.Yield();
+            token.ThrowIfCancellationRequested();
+            var snapshot = ChartProjectCloner.Clone(project, retainIdentities: true);
+            var live = snapshot.Arrangements.Zip(project.Arrangements).ToDictionary(a => a.First, a => a.Second);
+            var rule = LinkSuggestionFinder.RuleFor(_edit.Config.LoadAppConfig());
+            var (proposals, limited) = await Task.Run(() => Search(snapshot, rule, token), token);
+            token.ThrowIfCancellationRequested();
+            ShowSuggestions([.. proposals.Select(s => s with
+            {
+                Runs = [.. s.Runs.Select(r => r with { Arrangement = live[r.Arrangement] })]
+            })]);
+            if (limited) DetectionStatus = _edit.Localization["LinkGroups_DetectionLimit"];
+            completed = !limited;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _edit.Logger.Warning(AppLogCategory.Editing, "Linked measures detection failed.", ex);
+            if (!token.IsCancellationRequested)
+            {
+                var reason = ex.Message.Split(['\r', '\n'], 2)[0].Trim();
+                DetectionStatus = _edit.Localization.Format("LinkGroups_DetectionFailed", reason.Length > 160 ? reason[..157] + "..." : reason);
+            }
+        }
+        finally
+        {
+            _edit.History.HistoryChanged -= run.Cancel;
+            _edit.State.PropertyChanged -= CancelOnProjectSwitch;
+            _edit.State.ProjectChanged -= run.Cancel;
+            ShowDetectionRetry = !completed && !OpenToken.IsCancellationRequested;
+            IsDetecting = false;
+        }
+    }
+
+    private (IReadOnlyList<LinkSuggestion> Suggestions, bool Limited) Search(
+        ChartProject snapshot, MeasureContentOptions rule, CancellationToken token)
+    {
+        var limited = false;
+        var suggestions = _detect(snapshot, rule, token, message =>
+        {
+            limited = true;
+            _edit.Logger.Warning(AppLogCategory.Editing, message);
+        });
+        return (suggestions, limited);
     }
 
     private string SuggestionDetail(LinkSuggestion suggestion)
@@ -90,6 +202,7 @@ public sealed class LinkGroupsViewModel : DialogViewModel<bool>, ILinkGroupsScre
         var ranges = string.Join(", ", suggestion.FirstMeasures.Distinct().Order()
             .Select(m => LinkGroupText.Bars(m, suggestion.MeasureCount)));
         var detail = $"{LinkGroupText.PerArrangement(l, suggestion.Runs.Select(r => r.Arrangement))} · {ranges}";
+        if (suggestion.RequiresReview) return $"{detail} · {l["LinkGroups_DifferentContent"]}";
         return suggestion.FromRepeats ? $"{detail} · {l["LinkGroups_FromRepeats"]}" : detail;
     }
 
@@ -187,7 +300,7 @@ public sealed class LinkGroupsViewModel : DialogViewModel<bool>, ILinkGroupsScre
     private sealed class SuggestionRow(LinkSuggestion suggestion, string title, string detail, Action changed)
         : ObservableObject, ILinkSuggestionRow
     {
-        private bool _isSelected = true;
+        private bool _isSelected = !suggestion.RequiresReview;
 
         public LinkSuggestion Suggestion { get; } = suggestion;
 
@@ -196,6 +309,7 @@ public sealed class LinkGroupsViewModel : DialogViewModel<bool>, ILinkGroupsScre
             get => _isSelected;
             set
             {
+                if (Suggestion.RequiresReview) return;
                 if (SetProperty(ref _isSelected, value)) changed();
             }
         }

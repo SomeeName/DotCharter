@@ -29,8 +29,8 @@ namespace DotCharter.Rendering.Scene;
 ///     </para>
 ///     <para>
 ///         A struct in a `RenderContext`-owned, GC-reused array: the per-frame path
-///         allocates nothing (the label strings are precomputed in
-///         <c>BendRenderer.BendLabels</c>).
+///         allocates nothing (the label strings are cached by
+///         <c>DotCharter.Core.Domain.Guitar.BendGestures.Text</c>).
 ///     </para>
 /// </summary>
 public readonly record struct Deferred3DLabel(string Text, Vector3 Position, Color Color, float Scale);

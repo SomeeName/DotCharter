@@ -15,6 +15,10 @@ public interface IProjectDocumentService
     /// </param>
     void SaveChart(string filePath, ChartProject project, double? audioLengthMs = null);
 
+    /// <summary>Selects the destination's format before writing to a staging path.</summary>
+    Action<string> PrepareSave(string destinationPath, ChartProject project, double? audioLengthMs = null)
+        => stagePath => SaveChart(stagePath, project, audioLengthMs);
+
     void RefreshArrangementFileManifest(ChartProject project);
 
     /// <summary>Writes the DLC-Builder-importable <c>DTRS XML</c> bundle next to the project.</summary>
@@ -27,6 +31,10 @@ public interface IProjectDocumentService
     ///     length is used (EOF's no-audio-loaded branch).
     /// </param>
     void SaveDlcBuilderXmlBundle(string projectPath, ChartProject project, double? audioLengthMs = null);
+
+    /// <summary>Writes a bundle to the exact directory selected for an explicit export.</summary>
+    void SaveDlcBuilderXmlBundleToDirectory(string directory, ChartProject project, double? audioLengthMs = null) =>
+        throw new NotSupportedException("This document host does not export XML bundles to a selected directory.");
 
     ChartProject AssembleProject(ChartProject? baseProject, double bpm, string audioFileName,
         IEnumerable<LyricPhrase> lyrics);

@@ -221,7 +221,7 @@ public sealed class AppServiceGraphTests
     [
         "DotCharter.Presentation.Screens.Settings.ISettingsChangeSource x13",
         "DotCharter.Presentation.Screens.Settings.ISettingsTab x13",
-        "DotCharter.Services.Editing.Validation.IArrangementRule x16",
+        "DotCharter.Services.Editing.Validation.IArrangementRule x20",
         .. DotCharter.Services.Plugins.PluginLoader.Declared(typeof(DotCharter.UI.App).Assembly).Count == 0
             ? Array.Empty<string>()
             : ["DotCharter.Services.Library.ILibraryPackageSource x2"],

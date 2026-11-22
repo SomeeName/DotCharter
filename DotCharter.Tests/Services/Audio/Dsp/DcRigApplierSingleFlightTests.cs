@@ -1,4 +1,6 @@
-﻿using DotCharter.Tone.Audio.Dsp;
+﻿using System.Reflection;
+using DotCharter.Services.Audio.Coordination;
+using DotCharter.Tone.Audio.Dsp;
 using DotCharter.Tone.Audio.Dsp.RsToneConversion;
 
 namespace DotCharter.Tests.Services.Audio.Dsp;
@@ -114,36 +116,89 @@ public sealed class DcRigApplierSingleFlightTests
     /// the outgoing run's tone. Recorded here so the next reader does not repeat the tidy-up.
     /// </summary>
     [Fact]
-    public void TheCoordinatorsOwnApplyGateStaysBecauseItOrdersAppliesAgainstTheRestore()
+    public async Task TheCoordinatorsOwnApplyGateStaysBecauseItOrdersAppliesAgainstTheRestore()
     {
-        var src = File.ReadAllText(Path.Combine(TestPaths.RepoRoot(),
-            Path.Combine("DotCharter.Services", "Audio", "Coordination", "RsTonePlaybackCoordinator.cs")));
-        Assert.Contains("lock (_applyGate) result = _applier.Apply(", src, StringComparison.Ordinal);
+        var chain = new FakeDspChainService();
+        chain.AddNode("reverb");
+        var project = new ChartProject();
+        for (var i = 0; i < 8; i++) project.Beats.Add(new BeatMarker { Time = i * 1000, IsMeasure = i % 4 == 0 });
+        var arrangement = new Arrangement { ToneBase = "clean" };
+        project.Arrangements.Add(arrangement);
+        project.ToneDefinitions.Add(new ToneDefinition
+        {
+            Key = "clean", Name = "clean",
+            Json = """{"Key":"clean","Name":"clean","GearList":{"Amp":{"Type":"Amps","Key":"Amp_TwinReverb","KnobValues":{}}}}"""
+        });
+        var state = new ProjectState { ActiveProject = project, ActiveArrangement = arrangement };
+        var coordinator = new RsTonePlaybackCoordinator(chain, new DcRigApplier(chain), state, new FakeConfigurationService());
+        coordinator.PrepareForProject(project, arrangement);
+        var gate = typeof(RsTonePlaybackCoordinator).GetField("_applyGate", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(coordinator)!;
+        var applies = 0;
+        chain.BeforeAddNode = () =>
+        {
+            Assert.True(Monitor.IsEntered(gate), "Tone applies and player restores must own the coordinator's ordering gate.");
+            applies++;
+        };
+
+        Assert.True(coordinator.BeginPreview());
+        Assert.True(applies > 0);
+        applies = 0;
+        coordinator.EndPreview();
+        await coordinator.RestoreCompletion.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        Assert.True(applies > 0);
+        Assert.Equal("reverb", Assert.Single(chain.GetNodes()).ModuleTypeId);
     }
 
     /// <summary>Seat 1's tone must not wait behind seat 0's: the gate is
-    /// per-applier, and an applier is per chain.</summary>
+    /// per-applier, and an applier is per chain.
+    /// <para>#607: seat 1 used to be parked by a 60 s spin whose result was
+    /// ignored, so with ONE global gate seat 0 simply waited the spin out and the
+    /// test passed. Now seat 1 stays parked until the test releases it, which
+    /// happens only after seat 0 has RETURNED (60 s deadlock detector); seat 1's
+    /// own hold outlives that detector, so it cannot let seat 0 through first.</para></summary>
     [Fact]
     public async Task TheSingleFlightIsPerApplierNotGlobal()
     {
+        var ct = TestContext.Current.CancellationToken;
         var catalog = new[] { Module("amp") };
         var seat0 = new DcRigApplier(new FakeDspChainService(catalog));
 
-        var inside = new ManualResetEventSlim(false);
-        var release = new ManualResetEventSlim(false);
-        var chain1 = new FakeDspChainService(catalog) { BeforeAddNode = () => { inside.Set(); SpinUntil(() => release.IsSet); } };
+        var inside = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim(false);
+        var heldPastTheDetector = false;
+        var chain1 = new FakeDspChainService(catalog)
+        {
+            BeforeAddNode = () =>
+            {
+                inside.TrySetResult();
+                heldPastTheDetector = !release.Wait(SeatOneHold);
+            }
+        };
         var seat1 = new DcRigApplier(chain1);
 
-        var busy = Task.Run(() => seat1.Apply(Rig("amp")));
-        Assert.True(SpinUntil(() => inside.IsSet), "seat 1's apply never started");
+        var busy = Task.Run(() => seat1.Apply(Rig("amp")), ct);
+        try
+        {
+            await BoundedWait.ForAsync(Task.WhenAny(inside.Task, busy), "seat 1's apply to park mid-plan", ct);
+            Assert.False(busy.IsCompleted, "seat 1's apply finished without parking mid-plan");
 
-        // Seat 0 goes right through while seat 1 is parked mid-plan.
-        var r = seat0.Apply(Rig("amp"));
-        Assert.False(r.NoOp);
+            // Seat 0 goes right through while seat 1 is parked mid-plan.
+            var r = await BoundedWait.ForAsync(Task.Run(() => seat0.Apply(Rig("amp")), ct),
+                "seat 0's apply while seat 1 is parked (a global gate waits here)", ct);
+            Assert.False(r.NoOp);
+        }
+        finally
+        {
+            release.Set();
+        }
 
-        release.Set();
-        await busy;
+        await BoundedWait.ForAsync(busy, "seat 1's apply after its release", ct);
+        Assert.False(heldPastTheDetector, "seat 1's hold expired: seat 0 was let through by the hold, not by the gate");
     }
+
+    /// <summary>Longer than <see cref="BoundedWait.DeadlockCap" />, so seat 0 waiting
+    /// behind seat 1 fails on the detector before this hold could end it.</summary>
+    private static readonly TimeSpan SeatOneHold = TimeSpan.FromMinutes(5);
 
     // ----- helpers -----------------------------------------------------------
 

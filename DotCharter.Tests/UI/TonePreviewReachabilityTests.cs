@@ -44,6 +44,8 @@ public sealed class TonePreviewReachabilityTests
         Assert.Contains("IsEnabled=\"{Binding ToneRig.IsTonePreviewAvailable}\"", cluster);
         Assert.Contains("ToolTip.Tip=\"{Binding ToneRig.TonePreviewTip}\"", cluster);
         Assert.Contains("Loc Toolbar_TonePreview}", cluster);
+        // #492: the same toggle is the MAIN half of the split button; its caret picks the target.
+        Assert.Contains("x:Name=\"TonePreviewButton\"", cluster);
 
         // Its own glyph — the cluster's smoke test asserts every icon in it is
         // distinct, and a shared one is not a strip.
@@ -271,11 +273,14 @@ public sealed class TonePreviewReachabilityTests
     {
         var toolbar = Read("DotCharter.UI", "Views", "Shell", "ToolbarView.axaml");
         var cluster = toolbar[toolbar.IndexOf("x:Name=\"ToolbarQuickGroup\"", StringComparison.Ordinal)..];
-        Assert.Contains("Command=\"{Binding ToneRig.ToggleTonePreviewRocksmithCommand}\"", cluster);
-        Assert.Contains("IsChecked=\"{Binding ToneRig.IsTonePreviewInRocksmith, Mode=OneWay}\"", cluster);
-        Assert.Contains("IsEnabled=\"{Binding ToneRig.IsTonePreviewRocksmithAvailable}\"", cluster);
-        Assert.Contains("ToolTip.Tip=\"{Binding ToneRig.TonePreviewRocksmithTip}\"", cluster);
+        // #492: the Rocksmith choice is a row of the split button's caret popup, and the main
+        // half wears the gamepad glyph while Rocksmith is the target.
+        Assert.Contains("TonePreviewTargetPopoverView", cluster);
         Assert.Contains("{DynamicResource IconGamepad}", cluster);
+        var popover = Read("DotCharter.UI", "Views", "Shell", "Popovers", "TonePreviewTargetPopoverView.axaml");
+        Assert.Contains("Command=\"{Binding ToneRig.ToggleTonePreviewRocksmithCommand}\"", popover);
+        Assert.Contains("IsEnabled=\"{Binding ToneRig.IsTonePreviewRocksmithAvailable}\"", popover);
+        Assert.Contains("ToolTip.Tip=\"{Binding ToneRig.TonePreviewRocksmithTip}\"", popover);
 
         var toneRig = SourceText.StripCommentLines(Read("DotCharter.UI", "ViewModels", "Shell", "ToneRigViewModel.cs"));
         Assert.Contains("new EditorRocksmithTonePreview(tones, session, _localization, _logger, _ui)", toneRig);

@@ -146,6 +146,6 @@ public class SoundQueueStepFromSelectionTests
             () => Issues,
             Selection,
             _ => { },
-            FakeLocalization.English());
+            FakeLocalization.English(), _ => (ChordNamingOptions.Default, DoubleStopNameOptions.Default));
     }
 }

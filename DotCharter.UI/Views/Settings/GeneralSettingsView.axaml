@@ -290,6 +290,45 @@
                         </Grid>
                     </StackPanel>
                 </Border>
+
+                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.group.3}">
+                    <StackPanel>
+                        <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_RocksmithExport_Title}" />
+                            </StackPanel>
+                        </Grid>
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.autoVolumeTarget}"
+                              Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_ExportAutoVolumeTarget_RowLabel}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_ExportAutoVolumeTarget}" />
+                            </StackPanel>
+                            <NumericUpDown x:Name="AutoVolumeTargetInput" VerticalAlignment="Top" Grid.Column="1"
+                                           AutomationProperties.Name="{localization:Loc Settings_ExportAutoVolumeTarget_RowLabel}"
+                                           Value="{Binding ExportAutoVolumeTargetLufs, Mode=TwoWay}"
+                                           Minimum="-20" Maximum="-10" Increment="1" FormatString="0" ClipValueToMinMax="True" />
+                        </Grid>
+                        <Grid x:Name="DefaultTestExportFolderRow" Theme="{StaticResource FormRowGrid}"
+                              IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.testExportDefaultFolder}"
+                              Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_ExportTestDefaultFolder}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_ExportTestDefaultFolder}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="6">
+                                <TextBox x:Name="DefaultTestExportFolderInput" Text="{Binding ExportTestDefaultFolder, Mode=TwoWay}"
+                                         AutomationProperties.Name="{localization:Loc Settings_ExportTestDefaultFolder}" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button Classes="RowAction" Content="{localization:Loc Action_Browse}"
+                                            Command="{Binding BrowseTestExportDefaultFolderCommand}" />
+                                    <Button Classes="RowAction" Content="{localization:Loc Action_Clear}"
+                                            Command="{Binding ClearTestExportDefaultFolderCommand}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
             </StackPanel>
 
         </ctl:MasonryPanel>

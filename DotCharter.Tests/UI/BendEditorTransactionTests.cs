@@ -1,4 +1,5 @@
-using System.Text.RegularExpressions;
+using Avalonia.Input;
+using DotCharter.UI.Controls;
 using DotCharter.UI.ViewModels.Panels;
 
 namespace DotCharter.Tests.UI;
@@ -8,7 +9,7 @@ namespace DotCharter.Tests.UI;
 ///     could never be closed, and the editor went silently dead for the rest of
 ///     the session.
 ///     <para>
-///         <c>OnCanvasPointerPressed</c> called <c>BeginTransaction()</c> and set
+///         The old bend graph's <c>OnCanvasPointerPressed</c> called <c>BeginTransaction()</c> and set
 ///         <c>_dragActive</c> BEFORE working out what the press had hit. A press
 ///         in the canvas padding — inside the control, outside the plot — hits no
 ///         point and yields no slot, so no drag point was created and the pointer
@@ -58,26 +59,49 @@ public sealed class BendEditorTransactionTests
     }
 
     /// <summary>
-    ///     The fix, where it lives: the press decides what it grabbed FIRST, and
-    ///     a press that grabbed nothing returns without opening a transaction.
-    ///     The capture is unconditional afterwards, because by then there is
-    ///     always a drag point to release.
+    ///     The fix, where it lives now: the Note tab's bend plot (<see cref="ColumnFlowBendPlot" />, #751) opens a
+    ///     transaction only on a left press, and that press ALWAYS hands back a point to drag (the one it hit, or the
+    ///     one it added), so the caller captures the pointer and its release closes the transaction. A press that
+    ///     grabbed nothing would strand the transaction and kill the editor.
     /// </summary>
     [Fact]
-    public void ThePressPath_OpensNoTransactionUntilItHasSomethingToDrag()
+    public void ALeftPress_AlwaysGrabsThePointItsTransactionIsClosedBy()
     {
-        var body = BodyOf(ControlSource(),
-            "private void OnCanvasPointerPressed(object? sender, PointerPressedEventArgs e)");
+        var writes = 0;
+        var vm = Editor(() => writes++);
 
-        var bail = body.IndexOf("if (hit == null && !slot.HasValue)", StringComparison.Ordinal);
-        var begin = body.IndexOf("_vm.BeginTransaction();", StringComparison.Ordinal);
-        Assert.True(bail >= 0, "The press path no longer bails out on a press that grabbed nothing.");
-        Assert.True(begin > bail,
-            "BeginTransaction runs before the press knows whether it grabbed anything — " +
-            "a press in the padding then strands the transaction and kills the editor.");
+        var added = ColumnFlowBendPlot.Press(vm, null, 3, 2.0, PointerUpdateKind.LeftButtonPressed, false);
+        Assert.NotNull(added);
+        vm.EndTransaction();
+        Assert.Equal(1, writes);
 
-        Assert.DoesNotContain("if (_dragPoint != null) e.Pointer.Capture(_canvas);", body);
-        Assert.Contains("e.Pointer.Capture(_canvas);", body);
+        var hit = ColumnFlowBendPlot.Press(vm, added, 3, 2.0, PointerUpdateKind.LeftButtonPressed, false);
+        Assert.Same(added, hit);
+        vm.EndTransaction();
+        var closed = writes;
+        vm.AddOrMovePoint(6, 1.0);
+        Assert.Equal(closed + 1, writes); // nothing stranded: the next edit writes at once
+
+        Assert.Null(ColumnFlowBendPlot.Press(vm, null, 9, 1.0, PointerUpdateKind.MiddleButtonPressed, false));
+        vm.AddOrMovePoint(9, 1.0);
+        Assert.Equal(closed + 2, writes); // a press that grabs nothing opens no transaction
+    }
+
+    /// <summary>The mechanism the cleanup relies on: a second EndTransaction after
+    /// the gesture closed (release, then the capture-loss it raises) is a no-op.</summary>
+    [Fact]
+    public void ASecondEnd_AfterTheGestureClosed_DoesNotCommitAgain()
+    {
+        var writes = 0;
+        var vm = Editor(() => writes++);
+
+        vm.BeginTransaction();
+        vm.AddOrMovePoint(3, 2.0);
+        vm.EndTransaction();
+        vm.EndTransaction();
+        vm.AddOrMovePoint(6, 1.0);
+
+        Assert.Equal(2, writes);
     }
 
     private static BendEditorViewModel Editor(Action onWrite) =>
@@ -85,28 +109,5 @@ public sealed class BendEditorTransactionTests
             _ => onWrite(),
             () => new FractionalPosition(0),
             () => new FractionalPosition(4),
-            () => { });
-
-    private static string ControlSource()
-    {
-        var path = UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Panels", "BendEditorControl.axaml.cs"));
-        Assert.True(File.Exists(path), $"{path} moved — repoint this lint.");
-        return Regex.Replace(UiSourceTree.ReadAllText(path), @"^\s*//.*$", "", RegexOptions.Multiline);
-    }
-
-    private static string BodyOf(string src, string signature)
-    {
-        var start = src.IndexOf(signature, StringComparison.Ordinal);
-        Assert.True(start >= 0, $"BendEditorControl no longer declares '{signature}' — repoint this lint.");
-
-        var open = src.IndexOf('{', start);
-        var depth = 0;
-        for (var i = open; i < src.Length; i++)
-        {
-            if (src[i] == '{') depth++;
-            else if (src[i] == '}' && --depth == 0) return src[open..i];
-        }
-
-        throw new InvalidOperationException($"Unbalanced braces after '{signature}'.");
-    }
+            () => { }, FakeLocalization.English());
 }

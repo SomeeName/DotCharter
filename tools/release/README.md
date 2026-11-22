@@ -14,7 +14,9 @@ pwsh tools/release/New-Release.ps1 -SkipTools      # UI pack WITHOUT the bundled
 pwsh tools/release/New-Release.ps1 -SkipTonelab    # UI pack WITHOUT tools/tonelab/ (no pinned tonelab build here)
 pwsh tools/release/New-Release.ps1 -AllowMissingTools  # pack even if a pinned media tool can't be fetched (default: FAIL)
 pwsh tools/release/New-Release.ps1 -SkipHeadlessUi # skip the blocking UI test gate (escape hatch)
-pwsh tools/release/New-Release.ps1 -ForceHeadlessUi # re-run its main pass even when a green run of this tree is on record
+pwsh tools/release/New-Release.ps1 -ForceHeadlessUi # re-run the headless suite + layout sweeps even when a green run of this tree is on record
+pwsh tools/release/New-Release.ps1 -ForceGate      # re-run the default gate even when a green run of this tree is on record
+pwsh tools/release/New-Release.ps1 -AllCores       # every core, 8 shards: ONLY when the owner says the machine is free (default CPUs 8-15)
 pwsh tools/release/New-Release.ps1 -SkipLaunchSmoke # skip starting the packed exe (escape hatch)
 pwsh tools/release/New-Release.ps1 -Tone3000ClientId t3k_pub_...  # bake the rig's TONE3000 key (never commit it)
 pwsh tools/release/New-Release.ps1 -SkipRigLab     # DotCharter only, no standalone rig
@@ -156,16 +158,41 @@ What you see when you run it:
 `-SkipHeadlessUi` exists for iterating on the asset build. It prints a WARNING
 naming what is now unchecked. Do not use it to cut a real release.
 
-**One test run per tree.** When the working tree is exactly `HEAD` (no change, no
-untracked file, the submodule at its gitlink) and a green headless run of that TREE
-is on record (`ReleaseCache.psm1` `Find-GateRecord`), the main pass is not run
-again: the step prints `headless UI main pass NOT re-run: reusing the green run
-recorded for tree <id> (commit, source, date)`. The records come from
-`tools/agent/Merge-Train.ps1` (a green train with the headless suite), from an
-earlier release run (a green main pass is recorded), and, for a scratch export,
-from the dev tree it was cut from (`export-origin.json`, below). The test build
-and the localized layout sweeps run either way; `-ForceHeadlessUi` runs the main
-pass whatever is on record.
+**One test run per tree.** A release runs four blocking gates, in this order: the
+default gate (`Invoke-Gate.ps1 -Gate`), the headless en-US pass, the localized
+layout sweeps (de-DE and ja-JP, started together with `-HeadlessShards` testhosts each,
+at most twice that in all, `ReleaseGates.psm1` `Get-CultureShardSplit`: measured 3:19
+side by side against 5:50 one after the other), and the release lane. When the
+working tree is exactly `HEAD` (no change, no untracked file, the submodule at its
+gitlink), each gate with a green run of that TREE on record (`ReleaseCache.psm1`
+`Find-GateRecord`) is not run again: the step prints `... NOT re-run: reusing the green
+run recorded for tree <id> (commit, source, date)`. The decision is the pure
+`ReleaseGates.psm1` `Get-ReleaseGatePlan`; when every gate is on record,
+DotCharter.Tests is not even built. The records come from `tools/agent/Merge-Train.ps1`
+(the default gate and the release lane on every green train, the headless en-US pass
+when the train ran it), from an earlier release run (every gate it ran green, the
+sweeps per culture), and, for a scratch export, from the dev tree it was cut from
+(`export-origin.json`, below). `-ForceGate`, `-ForceHeadlessUi` (the en-US pass and
+the sweeps) and `-ForceReleaseLane` run their gate whatever is on record. A tree no
+train tested now gets the default gate here too, before the slower suites.
+
+**Fast release recipe.** Run the LAST train before a release with `-Headless`
+(`Merge-Train.ps1 -Prs <n> -Merge -Headless`): the train runs the headless suite next
+to its gate and records it, so `New-Release.ps1` on that tree reuses the default gate,
+the en-US headless pass and the release lane, and runs only the layout sweeps (~3.5
+min, from ~10). The second build of the same tree (the public build after the add-on build, or
+a retry after a late failure) reuses the sweeps as well and runs no test at all.
+
+**Fail fast.** Preflight runs before any gate, cheapest first: the git-only checks
+(public commits imported, JuceSharp version bump), the hash checks of pinned files
+(tonelab, VC++ runtime), then the checks that build or restore (the signing key's sign
+tool, the licence inventory `-Check -Restore`), then the ones that may rebuild or
+download (voice packs, media tools). `ReleaseCacheTests` pins the order.
+
+**CPUs.** `New-Release.ps1` pins itself (and every gate it starts) to CPUs 8-15 at
+BelowNormal, 4 shards (`tools/agent/DevBuild.psm1` `Set-DevCpuPlan`). `-AllCores`
+uses every core and 8 shards, and is passed on to `Invoke-Gate.ps1`: only when the
+owner says the machine is free.
 
 **The release lane is a second blocking gate.** The default gate leaves the slowest
 corpus / integration / determinism classes out (`tools/ci/release-lane.json`, a reason
@@ -186,7 +213,7 @@ the tests always do):
 |---|---|---|
 | `redist\ffmpeg\<key>\` | `ffmpeg.exe`, `ffmpeg-LICENSE.txt`, `ffmpeg-BUILDINFO.txt` | `Get-FfmpegPinKey`: SHA-256 over `Build-MinimalFfmpeg.ps1` and every file under `ffmpeg-min/` (line endings ignored) |
 | `redist\yt-dlp\<sha256>\` | `yt-dlp.exe` | its pinned SHA-256 (`yt-dlp.json`) |
-| `gate-results\<tree>.json` | a green default gate and/or headless run, with commit, source and time | the git TREE id |
+| `gate-results\<tree>.json` | a green default gate, headless run, release lane and/or localized layout sweeps (`headlessCultures`, the cultures that passed), with commit, source and time | the git TREE id |
 
 The app-local VC++ runtime for ONNX Runtime (`VcRedist.psm1`, pin `vcredist.json`: version
 plus a SHA-256 per file) is taken from the installed Visual Studio's
@@ -256,17 +283,17 @@ DotCharter-v<ver>-win-x64/
 ├── README.txt
 ├── app/               the published app, ~390 files, and app/payload-manifest.json
 ├── voices/            the voice sample packs (moved up from the publish)
-├── tools/             ffmpeg, yt-dlp, their notices
-└── DotCharter.runtimeconfig.json, DotCharter.deps.json, hostfxr.dll, coreclr.dll
+└── tools/             ffmpeg, yt-dlp, their notices
 ```
 
-The last four are `LegacyUpdaterShim`: byte copies of the app's own files, there
-only because the updater inside every v0.62-and-older install validates the
-payload root with the flat rule. Without them no such install can update to this
-release. The app deletes them on its first start (`SplitInstallCleanup`), and the
-current updater never copies them. `Test-InstallLayout` refuses any other entry at
-the top; `ValidateReleaseZip.cs` validates `app/` with the current rule AND the top
-with the old one; `-SelfTest` builds a split payload both ways. `Publish-Launcher`
+Zips up to 1.3.0 (and the add-on 1.4.0 zip) also carried four byte copies of the
+app's runtime files at the top (`DotCharter.runtimeconfig.json`,
+`DotCharter.deps.json`, `hostfxr.dll`, `coreclr.dll`) for pre-0.63 updaters; no
+pre-0.63 build was ever public, so #322 dropped them. `Test-InstallLayout` refuses
+any other entry at the top; `ValidateReleaseZip.cs` and `BuildPayloadManifest.cs`
+refuse a payload that has one of the four at the top (`SplitInstallCleanup.FindShimAtTop`);
+`-SelfTest` proves it per name. The app still deletes them from installs that
+have them on first start (`SplitInstallCleanup`). `Publish-Launcher`
 publishes the launcher NativeAOT with the app's `-p:Version` (the old updater
 reads the target version off the top exe) and puts `vswhere.exe` on `PATH`, which
 the ILCompiler needs to find the MSVC linker. The launch smoke starts the

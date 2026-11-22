@@ -203,6 +203,8 @@ public class EventLayer : ITimelineRenderLayer
 
                 var fill = word.IsSelected || word.IsHovered ? LyricFillEmph : LyricFill;
                 DrawChip(batcher, startX, rc.Ribbon.LyricY, width, fill, word.IsSelected || word.IsHovered);
+                if (word.NeedsReview)
+                    batcher.AddRect(startX, pillY + height - 3, width, 3, HudEventBadges.PhraseColor);
                 // Left out when even a tight inset cannot hold it (LyricPillLayout); a
                 // syllable that began off-screen left keeps its text on the part showing.
                 if (pill.ShowText)
@@ -333,7 +335,8 @@ public class EventLayer : ITimelineRenderLayer
                 var y = rc.Ribbon.ToneY;
                 // The in-flow chip is suppressed while pinned, so this copy carries its selected /
                 // hovered look — it was drawn plain, and a selection vanished when it pinned.
-                var emph = t.IsSelected || t.IsHovered;
+                var emph = t.IsSelected || t.IsHovered ||
+                           _pinnedRegistry.IsHovered(_owner, PinnedLabelHitRegistry.PinnedLabelKind.Tone);
                 DrawBadge(batcher, t.ToneName, x, y, emph ? ToneFillHover : ToneFill, OnColorText, emph,
                     pinned: true);
                 _pinnedRegistry.Add(_owner, new PinnedLabelHitRegistry.Entry(
@@ -353,7 +356,8 @@ public class EventLayer : ITimelineRenderLayer
                 // The pinned section is usually the ACTIVE one: give it the
                 // same emphasis as its in-flow chip.
                 var isActive = _polish && ep.Time == _activeSectionTime;
-                var emph = ep.IsSelected || ep.IsHovered;
+                var emph = ep.IsSelected || ep.IsHovered ||
+                           _pinnedRegistry.IsHovered(_owner, PinnedLabelHitRegistry.PinnedLabelKind.Section);
                 DrawBadge(batcher, text, x, y, SectionColors.ChipFill(emph || isActive),
                     OnColorText, emph, pinned: true);
                 _pinnedRegistry.Add(_owner, new PinnedLabelHitRegistry.Entry(
@@ -369,7 +373,8 @@ public class EventLayer : ITimelineRenderLayer
             if (StickyLabel.IsVisible(x, w))
             {
                 var y = rc.Ribbon.PhraseY;
-                var emph = ep.IsSelected || ep.IsHovered;
+                var emph = ep.IsSelected || ep.IsHovered ||
+                           _pinnedRegistry.IsHovered(_owner, PinnedLabelHitRegistry.PinnedLabelKind.Phrase);
                 DrawBadge(batcher, ep.Phrase, x, y, emph ? PhraseFillHover : PhraseFill, OnPhraseText, emph,
                     pinned: true);
                 _pinnedRegistry.Add(_owner, new PinnedLabelHitRegistry.Entry(

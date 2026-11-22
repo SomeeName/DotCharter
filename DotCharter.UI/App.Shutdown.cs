@@ -14,8 +14,8 @@ public partial class App
     // MainWindow and other shutdown sites to short-circuit destructive
     // teardown (VST plugin unload in particular is a frequent crash source
     // — AGPF / BIAS / Helix all access-violate during their unload path
-    // on some Windows builds). With this flag set we just flush logs +
-    // TerminateProcess; the OS reclaims memory and handles.
+    // on some Windows builds). With this flag set we drain queued saves,
+    // flush logs and TerminateProcess; the OS reclaims memory and handles.
     public static bool IsExiting;
 
     /// <summary>
@@ -30,14 +30,8 @@ public partial class App
     {
         if (Interlocked.Exchange(ref _terminateOnce, 1) != 0) return;
         IsExiting = true;
-        // Same reason as the usage flush below: this path TERMINATES the
-        // process, so ProjectSessionService.Dispose — the only other caller of
-        // NotifyCleanShutdown — never runs, and every ordinary close therefore
-        // left its snapshot behind as false crash evidence. Reaching here means
-        // the unsaved-changes gate in MainWindow.OnClosing already let the close
-        // proceed (saved, or explicitly discarded), so the snapshot describes
-        // nothing the user still wants. Runs BEFORE the log flush so its own
-        // line reaches the file.
+        // The close guard already saved or explicitly discarded the open work.
+        // Dispose never runs here, so clear recovery evidence before flushing logs.
         try { (Services?.GetService<ICrashRecoveryService>())?.NotifyCleanShutdown(); }
         catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Shutdown] Recovery clear failed: {ex.Message}"); }
         // Config saves are COALESCED (JsonConfigurationService arms a debounced
@@ -50,6 +44,10 @@ public partial class App
         // The chart synth's instrument picks save on their own queue; a pick
         // made just before closing would die with the process.
         FlushChartSynthInstruments(_chartSynthInstruments, Services?.GetService<IAppLogger>());
+        // Dispose never runs on this path. Drain the save queue while leaving
+        // in-process VST instances alone.
+        try { (Services?.GetService<DotCharter.Services.Session.IProjectSessionService>())?.DrainSaveCompanions(); }
+        catch (Exception ex) { Services?.GetService<IAppLogger>()?.Warning(AppLogCategory.Project, "Shutdown: save companions could not be drained.", ex); }
         try { (Services?.GetService<IAppLogger>())?.Flush(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Shutdown] Flush failed: {ex.Message}"); }
         // This path TERMINATES the process, so it is the only place the session's
         // usage counts can still reach disk — Dispose never runs.

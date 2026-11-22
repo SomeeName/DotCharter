@@ -1,0 +1,756 @@
+{
+ "g7": {
+  "package": "rs7g7_p.psarc",
+  "tuning": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   -2
+  ],
+  "stringMask": 67,
+  "blockHex": "52533758010010005000000003000000535452530100010005000000000701000643484454010001000a00000003000000020100ff020143484e54010000000d0000000100000004000000ffff000000",
+  "ext": {
+   "instrument": 0,
+   "string_count": 7,
+   "strings": [
+    6
+   ],
+   "templates": [
+    [
+     [
+      2,
+      1
+     ]
+    ],
+    [
+     [
+      0,
+      -1
+     ]
+    ],
+    [
+     [
+      2,
+      1
+     ]
+    ]
+   ],
+   "chord_notes": [
+    [
+     {
+      "mask": 4,
+      "slide_to": -1,
+      "slide_unpitch_to": -1,
+      "vibrato": 0,
+      "bends": []
+     }
+    ]
+   ],
+   "unknown": [],
+   "order": [
+    "53545253",
+    "43484454",
+    "43484e54"
+   ]
+  },
+  "chords": [
+   {
+    "frets": [
+     4,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "fingers": [
+     3,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "notes": [
+     44,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "name": "C#5"
+   },
+   {
+    "frets": [
+     2,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "fingers": [
+     1,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "notes": [
+     42,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "name": "B5"
+   },
+   {
+    "frets": [
+     2,
+     4,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "fingers": [
+     1,
+     3,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "notes": [
+     42,
+     49,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "name": "X"
+   }
+  ],
+  "chordNotes": 1,
+  "notes": [
+   {
+    "string": 6,
+    "fret": 3,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388608
+   },
+   {
+    "string": 0,
+    "fret": 5,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388608
+   },
+   {
+    "string": 6,
+    "fret": 0,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388612
+   },
+   {
+    "string": -1,
+    "fret": -1,
+    "chordId": 0,
+    "chordNotesId": -1,
+    "mask": 2181038082
+   },
+   {
+    "string": -1,
+    "fret": -1,
+    "chordId": 1,
+    "chordNotesId": 0,
+    "mask": 2197815298
+   },
+   {
+    "string": -1,
+    "fret": -1,
+    "chordId": 0,
+    "chordNotesId": -1,
+    "mask": 2181038082
+   },
+   {
+    "string": -1,
+    "fret": -1,
+    "chordId": 2,
+    "chordNotesId": -1,
+    "mask": 2147483650
+   }
+  ],
+  "manifestTuning": {
+   "string0": 0,
+   "string1": 0,
+   "string2": 0,
+   "string3": 0,
+   "string4": 0,
+   "string5": 0,
+   "Rs7String6": -2
+  },
+  "hsanTuning": {
+   "string0": 0,
+   "string1": 0,
+   "string2": 0,
+   "string3": 0,
+   "string4": 0,
+   "string5": 0,
+   "Rs7String6": -2
+  }
+ },
+ "g8": {
+  "package": "rs7g8_p.psarc",
+  "tuning": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   -2,
+   -1
+  ],
+  "stringMask": 193,
+  "blockHex": "5253375801001000600000000300000053545253010001000600000000080200060743484454010001001000000003000000020100ffffff02010201030243484e5401000000160000000100000000000000ffff00000004000000ffff000000",
+  "ext": {
+   "instrument": 0,
+   "string_count": 8,
+   "strings": [
+    6,
+    7
+   ],
+   "templates": [
+    [
+     [
+      2,
+      1
+     ],
+     [
+      0,
+      -1
+     ]
+    ],
+    [
+     [
+      -1,
+      -1
+     ],
+     [
+      2,
+      1
+     ]
+    ],
+    [
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      2
+     ]
+    ]
+   ],
+   "chord_notes": [
+    [
+     {
+      "mask": 0,
+      "slide_to": -1,
+      "slide_unpitch_to": -1,
+      "vibrato": 0,
+      "bends": []
+     },
+     {
+      "mask": 4,
+      "slide_to": -1,
+      "slide_unpitch_to": -1,
+      "vibrato": 0,
+      "bends": []
+     }
+    ]
+   ],
+   "unknown": [],
+   "order": [
+    "53545253",
+    "43484454",
+    "43484e54"
+   ]
+  },
+  "chords": [
+   {
+    "frets": [
+     2,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "fingers": [
+     3,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "notes": [
+     42,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "name": "F#5"
+   },
+   {
+    "frets": [
+     2,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "fingers": [
+     3,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "notes": [
+     42,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "name": "D"
+   },
+   {
+    "frets": [
+     2,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "fingers": [
+     3,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "notes": [
+     42,
+     -1,
+     -1,
+     -1,
+     -1,
+     -1
+    ],
+    "name": "G"
+   }
+  ],
+  "chordNotes": 1,
+  "notes": [
+   {
+    "string": 7,
+    "fret": 0,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388612
+   },
+   {
+    "string": 7,
+    "fret": 3,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388608
+   },
+   {
+    "string": 6,
+    "fret": 2,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388608
+   },
+   {
+    "string": 0,
+    "fret": 5,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388608
+   },
+   {
+    "string": -1,
+    "fret": -1,
+    "chordId": 0,
+    "chordNotesId": 0,
+    "mask": 2164260866
+   },
+   {
+    "string": -1,
+    "fret": -1,
+    "chordId": 1,
+    "chordNotesId": -1,
+    "mask": 2181038082
+   },
+   {
+    "string": -1,
+    "fret": -1,
+    "chordId": 0,
+    "chordNotesId": 0,
+    "mask": 2164260866
+   },
+   {
+    "string": -1,
+    "fret": -1,
+    "chordId": 2,
+    "chordNotesId": -1,
+    "mask": 2147483650
+   }
+  ],
+  "manifestTuning": {
+   "string0": 0,
+   "string1": 0,
+   "string2": 0,
+   "string3": 0,
+   "string4": 0,
+   "string5": 0,
+   "Rs7String6": -2,
+   "Rs7String7": -1
+  },
+  "hsanTuning": {
+   "string0": 0,
+   "string1": 0,
+   "string2": 0,
+   "string3": 0,
+   "string4": 0,
+   "string5": 0,
+   "Rs7String6": -2,
+   "Rs7String7": -1
+  }
+ },
+ "b5": {
+  "package": "rs7b5_p.psarc",
+  "tuning": [
+   0,
+   0,
+   0,
+   0,
+   -2,
+   0
+  ],
+  "stringMask": 27,
+  "blockHex": "5253375801001000200000000100000053545253010001000400000001050000",
+  "chords": [
+   {
+    "frets": [
+     2,
+     4,
+     -1,
+     -1,
+     2,
+     -1
+    ],
+    "fingers": [
+     1,
+     3,
+     -1,
+     -1,
+     1,
+     -1
+    ],
+    "notes": [
+     30,
+     37,
+     -1,
+     -1,
+     23,
+     -1
+    ]
+   },
+   {
+    "frets": [
+     -1,
+     -1,
+     -1,
+     5,
+     0,
+     -1
+    ],
+    "fingers": [
+     -1,
+     -1,
+     -1,
+     3,
+     -1,
+     -1
+    ],
+    "notes": [
+     -1,
+     -1,
+     -1,
+     48,
+     21,
+     -1
+    ]
+   }
+  ],
+  "chordNotes": 1,
+  "notes": [
+   {
+    "string": 4,
+    "fret": 0,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388612
+   },
+   {
+    "string": 4,
+    "fret": 3,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388608
+   },
+   {
+    "string": 0,
+    "fret": 2,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388608
+   },
+   {
+    "string": 3,
+    "fret": 5,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388608
+   },
+   {
+    "string": -1,
+    "fret": -1,
+    "chordId": 0,
+    "chordNotesId": -1,
+    "mask": 2147483650
+   },
+   {
+    "string": -1,
+    "fret": -1,
+    "chordId": 1,
+    "chordNotesId": 0,
+    "mask": 2197815298
+   }
+  ],
+  "manifestTuning": {
+   "string0": 0,
+   "string1": 0,
+   "string2": 0,
+   "string3": 0,
+   "string4": -2,
+   "string5": 0,
+   "Rs7String4": -2
+  },
+  "hsanTuning": {
+   "string0": 0,
+   "string1": 0,
+   "string2": 0,
+   "string3": 0,
+   "string4": -2,
+   "string5": 0,
+   "Rs7String4": -2
+  }
+ },
+ "b6": {
+  "package": "rs7b6_p.psarc",
+  "tuning": [
+   0,
+   0,
+   0,
+   0,
+   -2,
+   -1
+  ],
+  "stringMask": 63,
+  "blockHex": "5253375801001000200000000100000053545253010001000400000001060000",
+  "chords": [
+   {
+    "frets": [
+     3,
+     3,
+     -1,
+     -1,
+     -1,
+     5
+    ],
+    "fingers": [
+     1,
+     1,
+     -1,
+     -1,
+     -1,
+     3
+    ],
+    "notes": [
+     31,
+     36,
+     -1,
+     -1,
+     -1,
+     52
+    ]
+   },
+   {
+    "frets": [
+     -1,
+     -1,
+     -1,
+     -1,
+     2,
+     3
+    ],
+    "fingers": [
+     -1,
+     -1,
+     -1,
+     -1,
+     1,
+     2
+    ],
+    "notes": [
+     -1,
+     -1,
+     -1,
+     -1,
+     23,
+     50
+    ]
+   },
+   {
+    "frets": [
+     -1,
+     2,
+     2,
+     4,
+     -1,
+     7
+    ],
+    "fingers": [
+     -1,
+     1,
+     1,
+     3,
+     -1,
+     4
+    ],
+    "notes": [
+     -1,
+     35,
+     40,
+     47,
+     -1,
+     54
+    ]
+   }
+  ],
+  "chordNotes": 0,
+  "notes": [
+   {
+    "string": 4,
+    "fret": 0,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388612
+   },
+   {
+    "string": 5,
+    "fret": 3,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388608
+   },
+   {
+    "string": 0,
+    "fret": 2,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388608
+   },
+   {
+    "string": 5,
+    "fret": 12,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388608
+   },
+   {
+    "string": 4,
+    "fret": 12,
+    "chordId": -1,
+    "chordNotesId": -1,
+    "mask": 8388608
+   },
+   {
+    "string": -1,
+    "fret": -1,
+    "chordId": 0,
+    "chordNotesId": -1,
+    "mask": 2147483650
+   },
+   {
+    "string": -1,
+    "fret": -1,
+    "chordId": 1,
+    "chordNotesId": -1,
+    "mask": 2181038082
+   },
+   {
+    "string": -1,
+    "fret": -1,
+    "chordId": 2,
+    "chordNotesId": -1,
+    "mask": 2147483650
+   }
+  ],
+  "manifestTuning": {
+   "string0": 0,
+   "string1": 0,
+   "string2": 0,
+   "string3": 0,
+   "string4": -2,
+   "string5": -1,
+   "Rs7String4": -2,
+   "Rs7String5": -1
+  },
+  "hsanTuning": {
+   "string0": 0,
+   "string1": 0,
+   "string2": 0,
+   "string3": 0,
+   "string4": -2,
+   "string5": -1,
+   "Rs7String4": -2,
+   "Rs7String5": -1
+  }
+ }
+}

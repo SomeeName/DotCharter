@@ -1,3 +1,4 @@
+using System.Globalization;
 using DotCharter.Services.Export.Lyrics;
 
 namespace DotCharter.LyricSync;
@@ -61,6 +62,21 @@ public sealed record LyricSyncArguments(string AudioPath, string LyricsPath)
     /// </summary>
     public bool SpanWordGap { get; init; }
 
+    /// <summary>
+    ///     A constant tempo for the spacing grid. Null tracks the beats from the
+    ///     audio unless <see cref="NoBeatDetect" /> is set.
+    /// </summary>
+    public double? Bpm { get; init; }
+
+    /// <summary>Seconds of the first downbeat of the <see cref="Bpm" /> grid.</summary>
+    public double OffsetSeconds { get; init; }
+
+    /// <summary>Beats per measure of the <see cref="Bpm" /> grid; the default gap is a fraction of a measure.</summary>
+    public int BeatsPerBar { get; init; } = 4;
+
+    /// <summary>Skip beat tracking: with no <see cref="Bpm" /> the fixed fallback gap applies.</summary>
+    public bool NoBeatDetect { get; init; }
+
     /// <summary>Also dump the raw syllable table, with confidences, as JSON.</summary>
     public bool Json { get; init; }
 
@@ -113,6 +129,7 @@ public static class LyricSyncArgumentParser
         var language = LyricSyncLanguage.Auto;
         bool noEnsemble = false, spanWordGap = false, json = false, help = false, about = false;
         var note = RsVocalsSecondsWriter.PitchlessNote;
+        var grid = new GridOptions();
 
         for (var i = 0; i < args.Count; i++)
         {
@@ -134,6 +151,12 @@ public static class LyricSyncArgumentParser
                 case "--json":
                     json = true;
                     break;
+                case "--no-beat-detect" or "--bpm" or "--offset" or "--beats-per-bar":
+                {
+                    var error = grid.Read(args, ref i);
+                    if (error != null) return new LyricSyncParse(null, error);
+                    break;
+                }
                 case "--stem":
                     if (!TryValue(args, ref i, arg, out stem)) return Missing(arg);
                     break;
@@ -201,6 +224,9 @@ public static class LyricSyncArgumentParser
                 "Usage: dotcharter-lyricsync <audio> <lyrics.txt> [options]. Try --help.");
         }
 
+        if (grid.Bpm == null && grid.TempoOptionsGiven)
+            return new LyricSyncParse(null, "--offset and --beats-per-bar need --bpm.");
+
         if (positional.Count > 2)
         {
             return new LyricSyncParse(null,
@@ -218,7 +244,11 @@ public static class LyricSyncArgumentParser
                 NoEnsemble = noEnsemble,
                 SpanWordGap = spanWordGap,
                 Json = json,
-                Note = note
+                Note = note,
+                Bpm = grid.Bpm,
+                OffsetSeconds = grid.OffsetSeconds,
+                BeatsPerBar = grid.BeatsPerBar,
+                NoBeatDetect = grid.NoBeatDetect
             },
             null);
     }
@@ -239,4 +269,52 @@ public static class LyricSyncArgumentParser
 
     private static LyricSyncParse Missing(string option) =>
         new(null, $"{option} needs a value.");
+
+    /// <summary>The beat-grid options, read apart so <see cref="Parse" /> stays one switch.</summary>
+    private sealed class GridOptions
+    {
+        public double? Bpm { get; private set; }
+
+        public double OffsetSeconds { get; private set; }
+
+        public int BeatsPerBar { get; private set; } = 4;
+
+        public bool NoBeatDetect { get; private set; }
+
+        public bool TempoOptionsGiven { get; private set; }
+
+        /// <summary>Reads the option at <paramref name="i" />; returns the refusal, or null.</summary>
+        public string? Read(IReadOnlyList<string> args, ref int i)
+        {
+            var option = args[i];
+            if (option == "--no-beat-detect")
+            {
+                NoBeatDetect = true;
+                return null;
+            }
+
+            if (!TryValue(args, ref i, option, out var value)) return $"{option} needs a value.";
+            var number = double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : double.NaN;
+            switch (option)
+            {
+                case "--bpm":
+                    if (number is not (>= 20 and <= 400)) return $"--bpm must be 20..400 (got '{value}').";
+                    Bpm = number;
+                    return null;
+                case "--offset":
+                    if (number is not (>= 0 and <= 3600)) return $"--offset must be 0..3600 seconds (got '{value}').";
+                    OffsetSeconds = number;
+                    TempoOptionsGiven = true;
+                    return null;
+                default:
+                    if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var beats) || beats is < 1 or > 32)
+                        return $"--beats-per-bar must be 1..32 (got '{value}').";
+                    BeatsPerBar = beats;
+                    TempoOptionsGiven = true;
+                    return null;
+            }
+        }
+    }
 }

@@ -5,10 +5,8 @@ using DotCharter.Services.Audio.Lyrics;
 namespace DotCharter.Tests.Tools.LyricSync;
 
 /// <summary>
-///     The CLI and the app end a sheet's syllables the same way: given the same aligned
-///     spans and the same vocal envelope, <c>LyricSyncCommand.SpanEnds</c> and
-///     <c>LyricAutoSyncService.BuildPhrases</c> put every end where the voice stops. Where
-///     the voice decides, neither the CLI's fixed gap nor the app's beat-grid gap does.
+///     The CLI runs the app's own fold (<see cref="LyricSyncSpacing" />): on the same beat
+///     grid every end matches the app's, and with no grid only the gap differs (a fixed 30 ms).
 /// </summary>
 public sealed class LyricSyncEndParityTests
 {
@@ -40,38 +38,53 @@ public sealed class LyricSyncEndParityTests
         return [.. phrases.SelectMany(p => p.Lyrics).Select(l => l.EndPosition.GetPositionMs(Beats()) / 1000.0)];
     }
 
-    private static double[] CliEnds(VocalEnvelope? envelope)
+    private static LyricSyncResult Result(VocalEnvelope? envelope)
     {
         var sheet = LyricSheetParser.Parse("i-tsu\nka-ze");
+        var aligned = Spans.Select((t, i) => new AlignedSyllable(i, t.Start, t.End, 0.9, IsInterpolated: false)).ToList();
         var syllables = sheet.Syllables
             .Select((s, i) => new LyricSyncSyllable(i, s.Text, s.ContinuesWord, s.EndsLine, s.LineIndex, Spans[i].Start, Spans[i].End, 0.9, false))
             .ToList();
-        return [.. LyricSyncCommand.SpanEnds(syllables, spanWordGap: true, envelope).Select(s => s.EndSeconds)];
+        return new LyricSyncResult(true, null, sheet, aligned, syllables, 0, 0, "vocal stem", "v.wav", "m", false, 0, 6.0, [], envelope);
     }
 
+    private static double[] CliEnds(VocalEnvelope? envelope, LyricSyncBeatGrid grid) =>
+    [
+        .. LyricSyncSpacing.Apply(Result(envelope), grid,
+            LyricSyncCommand.SpacingOptions(new LyricSyncArguments("a", "b") { SpanWordGap = true })).Select(s => s.EndSeconds)
+    ];
+
     [Fact]
-    public void WithAStem_TheCliAndTheAppEndEverySyllableWhereTheVoiceStops()
+    public void OnTheSameGrid_TheAppAndCliEndEverySyllableAlike()
     {
         // "i" breathes before "tsu"; "tsu" holds to 2.6 s; "ka" stops at 3.3 s; "ze" fades at 4.2 s.
         var envelope = Voiced(6.0, (1.0, 1.4), (2.0, 2.6), (3.0, 3.3), (3.6, 4.2));
 
         var app = AppEnds(envelope);
-        var cli = CliEnds(envelope);
+        var cli = CliEnds(envelope, new LyricSyncBeatGrid(Beats(), LyricSyncGridSource.Tempo));
 
-        Assert.Equal([1.4, 2.6, 3.3, 4.2], cli.Select(e => Math.Round(e, 2)));
-        Assert.Equal(app.Length, cli.Length);
-        for (var i = 0; i < app.Length; i++)
-            Assert.True(Math.Abs(app[i] - cli[i]) < 0.002, $"syllable {i}: app {app[i]:0.000} s, CLI {cli[i]:0.000} s");
+        Assert.Equal(app, cli);
+        Assert.Equal(2.0 - 0.03125, app[0], 6);
+        var beats = Beats();
+        var nextAlignedStart = TimelineMath.PositionFromMs(3600, beats).GetPositionMs(beats) / 1000.0;
+        Assert.Equal(nextAlignedStart - 0.03125, app[2], 6);
+        Assert.Equal([2.6, 4.2], new[] { cli[1], cli[3] }.Select(e => Math.Round(e, 2)));
     }
 
     [Fact]
-    public void WithoutAStem_TheCliKeepsItsFixedGapSpans()
+    public void WithoutAGrid_TheCliKeepsTheMeasuredPhraseEndsAndTheFixedGap()
     {
-        var cli = CliEnds(null);
+        var envelope = Voiced(6.0, (1.0, 1.4), (2.0, 2.6), (3.0, 3.3), (3.6, 4.2));
+        var gap = LyricSyncSpacing.FallbackGapMilliseconds / 1000.0;
 
-        Assert.Equal(2.0 - LyricSyncCommand.MinGapSeconds, cli[0], 6);
-        Assert.Equal(2.1, cli[1], 6);
-        Assert.Equal(3.6 - LyricSyncCommand.MinGapSeconds, cli[2], 6);
-        Assert.Equal(3.65, cli[3], 6);
+        var cli = CliEnds(envelope, LyricSyncBeatGrid.None);
+        var plain = CliEnds(null, LyricSyncBeatGrid.None);
+
+        Assert.Equal(2.0 - gap, cli[0], 4);
+        Assert.Equal(2.6, cli[1], 2);
+        Assert.Equal(3.6 - gap, cli[2], 4);
+        Assert.Equal(4.2, cli[3], 2);
+        Assert.Equal(2.1, plain[1], 4);
+        Assert.Equal(3.65, plain[3], 4);
     }
 }

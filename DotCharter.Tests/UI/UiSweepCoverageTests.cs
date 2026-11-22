@@ -2,7 +2,6 @@ using System.Text.RegularExpressions;
 using DotCharter.Tests.Perf;
 using DotCharter.UI.Views.Editor;
 using DotCharter.UI.Views.Editor.Inspector;
-using DotCharter.UI.Views.Panels;
 using DotCharter.UI.Views.Shell.Menus;
 
 namespace DotCharter.Tests.UI;
@@ -24,7 +23,7 @@ public sealed class UiSweepCoverageTests
     ///     A view that does not include its own style grammar must be handed its
     ///     HOST's, or the sweep lays it out bare.
     ///     <para>
-    ///         Six of the seven inspector tabs and <c>ChordTemplateEditorView</c>
+    ///         Six of the seven inspector tabs and <c>SoundLibraryTemplateView</c>
     ///         carry no <c>StyleInclude</c> at all — <c>InspectorView</c> includes
     ///         <c>InspectorStyles.axaml</c> once, for all of them. Swept alone
     ///         they matched no selector, and the difference is not cosmetic: the
@@ -50,7 +49,17 @@ public sealed class UiSweepCoverageTests
     [InlineData(typeof(SoundNoteTechniqueView))]
     [InlineData(typeof(SoundChordTechniqueView))]
     [InlineData(typeof(SoundApplyBarView))]
-    [InlineData(typeof(ChordTemplateEditorView))]
+    [InlineData(typeof(SoundLibraryView))]
+    [InlineData(typeof(SoundLibraryTemplateView))]
+    [InlineData(typeof(SoundLibraryGripView))]
+    [InlineData(typeof(SoundLibraryUsesView))]
+    [InlineData(typeof(SoundBendsCurveView))]
+    [InlineData(typeof(SoundBendsPresetsView))]
+    [InlineData(typeof(SoundBendsScopeView))]
+    [InlineData(typeof(SoundFindingsDetailView))]
+    [InlineData(typeof(SoundFindingsReviewView))]
+    [InlineData(typeof(SoundTaskReadinessView))]
+    [InlineData(typeof(SoundTaskPlayheadView))]
     public void EveryViewThatInheritsTheInspectorGrammar_IsGivenItByTheSweep(Type viewType)
     {
         var supplied = UiSweepCatalog.InheritedStyleIncludes(viewType);
@@ -69,7 +78,7 @@ public sealed class UiSweepCoverageTests
     ///     product in the opposite direction.
     /// </summary>
     /// <summary>
-    ///     The menu bar's eight menu files (#653) include no grammar of their own:
+    ///     The menu bar's seven menu files (#653) include no grammar of their own:
     ///     <c>MainMenuView</c> includes <c>ShellChromeStyles.axaml</c> for all of
     ///     them, so the sweep must lay each one out under it, not bare.
     /// </summary>
@@ -78,7 +87,6 @@ public sealed class UiSweepCoverageTests
     [InlineData(typeof(EditMenu))]
     [InlineData(typeof(TempoMapMenu))]
     [InlineData(typeof(ArrangementsMenu))]
-    [InlineData(typeof(VocalsMenu))]
     [InlineData(typeof(ToolsMenu))]
     [InlineData(typeof(ViewMenu))]
     [InlineData(typeof(HelpMenu))]
@@ -93,7 +101,6 @@ public sealed class UiSweepCoverageTests
     [InlineData(typeof(MixerInspectorView))]
     [InlineData(typeof(InspectorView))]
     [InlineData(typeof(PhraseCatalogView))]
-    [InlineData(typeof(StemMixerView))]
     public void AViewThatIncludesItsOwnGrammar_IsGivenNothing(Type viewType) =>
         Assert.Empty(UiSweepCatalog.InheritedStyleIncludes(viewType));
 

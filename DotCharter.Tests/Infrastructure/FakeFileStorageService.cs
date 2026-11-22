@@ -14,6 +14,7 @@ public sealed class FakeFileStorageService : IFileStorageService
     public IReadOnlyList<string>? NextOpenFiles { get; set; }
     public string? NextSaveFile { get; set; }
     public List<string> RequestedTitles { get; } = [];
+    public List<string> SuggestedFileNames { get; } = [];
 
     /// <summary>The <c>startingDirectory</c> each picker was opened at, in call
     /// order (null when the caller passed none). A picker that starts nowhere
@@ -50,16 +51,21 @@ public sealed class FakeFileStorageService : IFileStorageService
         return NextOpenFiles;
     }
 
+    /// <summary>Runs while the folder picker is "open", before it answers.</summary>
+    public Action? DuringFolderPicker { get; set; }
+
     public Task<string?> OpenFolderPickerAsync(string title, string? startingDirectory = null)
     {
         RequestedTitles.Add(title);
         RequestedStartDirectories.Add(startingDirectory);
+        DuringFolderPicker?.Invoke();
         return Task.FromResult(NextFolder);
     }
 
     public Task<string?> SaveFilePickerAsync(string title, string suggestedFileName,
         IReadOnlyList<FilePickerFilter>? filters = null, string? startingDirectory = null)
     {
+        SuggestedFileNames.Add(suggestedFileName);
         RequestedTitles.Add(title);
         RequestedStartDirectories.Add(startingDirectory);
         return Task.FromResult(NextSaveFile);

@@ -51,6 +51,13 @@ public readonly record struct KeyChord(Key Key, KeyModifiers Modifiers = KeyModi
     /// </summary>
     public string ToDisplayString(ILocalizationService localization) => Render(localization);
 
+    /// <summary>
+    ///     This chord's modifiers with the digit key <paramref name="digit" /> (0 to 9): how a digit family such as
+    ///     <c>BookmarkBase</c> reaches one slot. An UNBOUND base gives an unbound slot: a cleared family binds no
+    ///     digit at all, never the bare digits.
+    /// </summary>
+    public KeyChord WithDigit(int digit) => IsBound ? new KeyChord((Key)((int)Key.D0 + digit), Modifiers) : None;
+
     private string Render(ILocalizationService? localization)
     {
         if (Key == Key.None) return "—";

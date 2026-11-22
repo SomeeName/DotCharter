@@ -5,12 +5,14 @@ using DotCharter.Presentation.Dialogs;
 namespace DotCharter.Presentation.Contracts.Dialogs;
 
 /// <summary>
-/// Tempo map ▸ Align to recording: warps the chart's beat grid onto its recording. Bars,
-///     time signatures and every note stay as written; only the beat times move, so every
-///     arrangement and the vocals follow. The charter picks the range and whether hand-placed
-///     (anchored) beats stay, runs the analysis (off the UI thread, cancellable), then sees a
-///     confidence per section and unticks any section to leave it stretched between its aligned
-///     neighbours. Apply is ONE undo step. <see cref="IDialogScreen{TResult}.Result" /> is true once applied.
+/// Tempo map ▸ Fit the tab's tempo to the recording: warps the chart's beat grid onto its
+///     recording by matching the chart's NOTES against the audio, so a chart without notes gets a
+///     problem status instead of a run. Bars, time signatures and every note stay as written; only
+///     the beat times move, so every arrangement and the vocals follow. The charter picks the range
+///     and whether hand-placed (anchored) beats stay, runs the analysis (off the UI thread,
+///     cancellable), then sees a confidence per section and unticks any section to leave it
+///     stretched between its aligned neighbours. Apply is ONE undo step.
+///     <see cref="IDialogScreen{TResult}.Result" /> is true once applied.
 /// </summary>
 public interface IAlignToRecordingScreen : IDialogScreen<bool>
 {
@@ -46,14 +48,24 @@ public interface IAlignToRecordingScreen : IDialogScreen<bool>
     /// <summary>What the run is doing, why it cannot run, or what it found.</summary>
     string StatusText { get; }
 
-    /// <summary>The status is a problem (no audio, locked map, failed decode), not progress.</summary>
+    /// <summary>The status is a problem (no audio, no notes, locked map, failed decode, a recording that
+    ///     does not match the tab), not progress.</summary>
     bool StatusIsProblem { get; }
 
-    bool HasResult { get; }
+    /// <summary>The analysis ran and no section reached the confidence threshold: the status says the
+    ///     recording and the tab do not match, and the rows start hidden behind <see cref="ShowSections" />.</summary>
+    bool IsWeakMatch { get; }
+
+    /// <summary>Whether the section rows and the summary are shown. True after an analysis that matched;
+    ///     false after a weak match, where the charter opens the rows by hand; false without a result.</summary>
+    bool ShowSections { get; set; }
+
+    /// <summary>The label of the weak match's "show the rows" toggle, with the section count.</summary>
+    string SectionsToggleText { get; }
 
     IReadOnlyList<IAlignSectionRow> Sections { get; }
 
-    /// <summary>How many sections will move and what was listened to.</summary>
+    /// <summary>How many of the sections that can move will, and what was listened to.</summary>
     string SummaryText { get; }
 
     ICommand AnalyzeCommand { get; }
@@ -74,18 +86,22 @@ public interface IAlignSectionRow : INotifyPropertyChanged
     /// <summary>0..1, for the meter; 0 when the section has no notes.</summary>
     double Confidence { get; }
 
-    /// <summary>The confidence as a percentage, or "no notes".</summary>
+    /// <summary>The confidence as a percentage; empty when the section has no notes.</summary>
     string ConfidenceText { get; }
 
     /// <summary>Below the threshold: offered unticked.</summary>
     bool IsLow { get; }
 
-    /// <summary>How far its beats move on average, formatted.</summary>
+    /// <summary>How far its beats move on average, formatted; empty when the section has no notes.</summary>
     string ShiftText { get; }
 
     /// <summary>Whether this section's alignment is applied; a skipped one is stretched between its neighbours.</summary>
     bool IsApplied { get; set; }
 
-    /// <summary>False when the section has no beat in the range (nothing to apply).</summary>
+    /// <summary>False when the section has no notes: there is nothing to match, so the row has no tick box,
+    ///     no meter and <see cref="IsApplied" /> stays false.</summary>
     bool CanApply { get; }
+
+    /// <summary>Why the row cannot be applied ("no notes: follows its neighbors"); empty when it can.</summary>
+    string SkipReason { get; }
 }

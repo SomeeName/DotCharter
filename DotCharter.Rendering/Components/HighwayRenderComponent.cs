@@ -160,9 +160,9 @@ public class HighwayRenderComponent : IRenderable
         var x2 = x + lineThickness0;
         var x3 = x + lineThickness1;
 
-        context.QuadBatcher.AddSafeFlatQuad(x0, x1, z0, z1, y, alpha, color);
+        context.QuadBatcher.AddSafeFlatQuadAcrossX(x0, x1, z0, z1, y, alpha, color);
         context.QuadBatcher.AddSafeFlatQuad(x1, x2, z0, z1, y, color, color);
-        context.QuadBatcher.AddSafeFlatQuad(x2, x3, z0, z1, y, color, alpha);
+        context.QuadBatcher.AddSafeFlatQuadAcrossX(x2, x3, z0, z1, y, color, alpha);
     }
 
     private void RenderHandShapes(RenderContext context)
@@ -207,9 +207,8 @@ public class HighwayRenderComponent : IRenderable
                 ? AnchorFretSpan.WorldSpan(anchor.Value.Fret, anchor.Value.Width)
                 : AnchorFretSpan.WorldSpan(1, AnchorFretSpan.DefaultWidth);
 
-            var template = context.Snapshot.TemplateCount > hs.TemplateId && hs.TemplateId >= 0
-                ? context.Snapshot.Templates[hs.TemplateId]
-                : default;
+            var templateIndex = context.Snapshot.FindTemplateIndex(hs.TemplateId);
+            var template = templateIndex >= 0 ? context.Snapshot.Templates[templateIndex] : default;
             // RsCharter PREVIEW_3D_ARPEGGIO (192,64,255) and PREVIEW_3D_LANE_BORDER (7,146,143)
             var color = template.Arpeggio
                 ? Color.FromArgb(255, 192, 64, 255)

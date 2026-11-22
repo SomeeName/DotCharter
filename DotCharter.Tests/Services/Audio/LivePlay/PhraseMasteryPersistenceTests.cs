@@ -218,6 +218,51 @@ public sealed class PhraseMasteryPersistenceTests : IDisposable
     }
 
     [Fact]
+    public void FreePlayStop_RecordsTheOpenEndedLastPhraseOnce()
+    {
+        var session = new LivePlaySessionService();
+        session.Start(TwoLevelArr(), null, Beats(), new LivePlaySessionOptions { DynamicDifficulty = true });
+        session.SyncTo(0);
+        Span<LivePitch> one = [new LivePitch(43, 0f, 1f)];
+        session.Offer(one, [], 2000, LiveTechniqueFlags.None, 0f);
+        session.HandleTick(5000, true, new LivePlayTickResult(), externalSeek: false);
+
+        session.Stop(1.0);
+
+        var outcome = Assert.Single(session.LastPhraseOutcomes);
+        Assert.Equal("riff", outcome.PhraseName);
+        Assert.Equal(1, outcome.Hits);
+        Assert.Equal(3, outcome.Misses);
+        var stored = NewService().Record("song", "lead", SomeResult(), phraseOutcomes: session.LastPhraseOutcomes);
+        Assert.Equal(0.25, stored.PhraseMastery["riff"].DecayedAccuracy, 6);
+    }
+
+    [Fact]
+    public void Stop_DoesNotRetallyCompletedPhrasesOrCountUnplayedFutureNotes()
+    {
+        var arr = TwoLevelArr();
+        arr.Phrases.Add("outro");
+        arr.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(8), 1));
+        arr.Levels[0].Notes.Add(NoteAt(10));
+        arr.Levels[0].Notes.Add(NoteAt(12));
+        var session = new LivePlaySessionService();
+        session.Start(arr, null, Beats(), new LivePlaySessionOptions { DynamicDifficulty = true });
+        session.SyncTo(0);
+        session.HandleTick(4500, true, new LivePlayTickResult(), externalSeek: false);
+        Span<LivePitch> one = [new LivePitch(43, 0f, 1f)];
+        session.Offer(one, [], 5000, LiveTechniqueFlags.None, 0f);
+
+        session.Stop(1.0);
+
+        Assert.Equal(2, session.LastPhraseOutcomes.Count);
+        var riff = Assert.Single(session.LastPhraseOutcomes, o => o.PhraseName == "riff");
+        Assert.Equal(4, riff.Misses);
+        var outro = Assert.Single(session.LastPhraseOutcomes, o => o.PhraseName == "outro");
+        Assert.Equal(1, outro.Hits);
+        Assert.Equal(0, outro.Misses);
+    }
+
+    [Fact]
     public void SessionStop_ExposesPhraseOutcomesForPersistence()
     {
         var session = new LivePlaySessionService();

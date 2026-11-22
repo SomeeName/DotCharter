@@ -153,6 +153,19 @@ public sealed class RigMicStage : FireDrawnControl
         if (_dragging) PlaceAt(e.GetPosition(this));
     }
 
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        _dragging = false;
+        Repaint();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _dragging = false;
+        base.OnDetachedFromVisualTree(e);
+    }
+
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);

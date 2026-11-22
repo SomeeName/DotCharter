@@ -83,7 +83,8 @@ public sealed class UnknownTuningNameTests
         {
             ArrangementType = ArrangementType.Lead,
             StringCount = 6,
-            TuningType = "CUSTOM"
+            TuningType = "CUSTOM",
+            Tuning = []
         };
         Assert.Empty(arrangement.TuningPitches);
 
@@ -109,14 +110,14 @@ public sealed class UnknownTuningNameTests
         };
         foreach (var step in new[] { -3, -1, -1, -1, -1, -1 })
             byOffsets.TuningPitches.Add(new TuningOffset(step));
-        Assert.Equal(["C#", "G#", "C#", "F#", "A#", "D#"],
+        Assert.Equal(["Db", "Ab", "Db", "Gb", "Bb", "Eb"],
             TimelineGutterControl.StringNamesFor(byOffsets, 6));
 
         var byName = new Arrangement
         {
-            ArrangementType = ArrangementType.Lead, StringCount = 6, TuningType = "E_FLAT_DROP_D_FLAT"
+            ArrangementType = ArrangementType.Lead, StringCount = 6, TuningType = "E_FLAT_DROP_D_FLAT", Tuning = []
         };
-        Assert.Equal(["C#", "G#", "C#", "F#", "A#", "D#"],
+        Assert.Equal(["Db", "Ab", "Db", "Gb", "Bb", "Eb"],
             TimelineGutterControl.StringNamesFor(byName, 6));
     }
 

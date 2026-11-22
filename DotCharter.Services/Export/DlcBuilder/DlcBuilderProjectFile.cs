@@ -18,25 +18,29 @@ internal static class DlcBuilderProjectFile
     ///     <paramref name="directory" /> when they sit inside it, absolute otherwise.
     /// </summary>
     public static Rs2DlcProjectDto Build(AppConfig config, ChartProject snapshot, string directory, string? audioPath,
-        string? coverArtPath, double? audioLengthMs) =>
-        Rs2DlcProjectBuilder.Build(snapshot, new Rs2DlcProjectBuilder.Rs2DlcBuildOptions(
+        string? coverArtPath, double? audioLengthMs)
+    {
+        var dto = Rs2DlcProjectBuilder.Build(snapshot, new Rs2DlcProjectBuilder.Rs2DlcBuildOptions(
             AudioFileName: RelativeToProject(directory, audioPath),
             CoverArtFileName: RelativeToProject(directory, coverArtPath),
             AudioLengthMs: audioLengthMs,
             FallbackCharter: config.DefaultCharterName,
             IncludeVocals: VocalsExportPolicy.IncludeVocals(config),
             SixStringProjection: config.RsXmlSixStringProjection));
+        if (!File.Exists(Path.Combine(directory, dto.AudioPreviewFile.Path))) dto.AudioPreviewFile.Path = "";
+        return dto;
+    }
 
     /// <summary>A resolved absolute path expressed the way the project stores it:
     /// a bare file name when it is inside the project folder, otherwise absolute.</summary>
     private static string RelativeToProject(string directory, string? absolutePath)
     {
-        if (string.IsNullOrWhiteSpace(absolutePath)) return "";
+        if (string.IsNullOrWhiteSpace(absolutePath) || !File.Exists(absolutePath)) return "";
 
         var parent = Path.GetDirectoryName(Path.GetFullPath(absolutePath));
         return string.Equals(parent, Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar),
             StringComparison.OrdinalIgnoreCase)
             ? Path.GetFileName(absolutePath)
-            : absolutePath;
+            : "";
     }
 }

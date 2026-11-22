@@ -2,7 +2,6 @@ using DotCharter.Presentation.Contracts.Editor;
 using DotCharter.Presentation.Dialogs;
 using DotCharter.Core.Domain.Guitar;
 using DotCharter.Core.Domain.Project;
-using DotCharter.Core.Utilities;
 using DotCharter.Services.Editing.ChordShapes;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.Services.State;
@@ -110,40 +109,7 @@ public sealed partial class ShapesPanelViewModel
 
     void IShapeRowOwner.NextUse(ShapePanelRowViewModel row)
     {
-        var level = _state.ActiveLevel;
-        if (level is null) return;
-
-        var id = row.Template.Id;
-        var beats = _editor.Beats;
-        var uses = level.Chords.Where(c => c.TemplateId == id).Select(c => ((ITimedElement)c, c.GetTimeMs(beats)))
-            .Concat(level.HandShapes.Where(h => h.TemplateId == id).Select(h => ((ITimedElement)h, h.GetTimeMs(beats))))
-            .OrderBy(u => u.Item2)
-            .ToList();
-        if (uses.Count == 0)
-        {
-            Say(_localization["ChordShapes_Status_NoUseOnLevel"], StatusSeverity.Warning);
-            return;
-        }
-
-        var now = _state.CurrentTimeMs;
-        var index = uses.FindIndex(u => u.Item2 > now + 0.5);
-        if (index < 0) index = 0;
-        var (element, timeMs) = uses[index];
-
-        var selection = _editor.Selection;
-        selection.ClearSelections();
-        if (element is Chord chord)
-        {
-            selection.SelectedChords.Add(chord);
-            selection.SelectedChord = chord;
-        }
-        else if (element is HandShape shape)
-        {
-            selection.SelectedHandShapes.Add(shape);
-        }
-
-        _editor.ExecuteSeek(timeMs);
-        Say(_localization.Format("ChordShapes_Status_NextUse", index + 1, uses.Count));
+        if (_usesList.Next(row.Template) is var (text, severity)) Say(text, severity);
     }
 
     void IShapeRowOwner.Split(ShapePanelRowViewModel row)
@@ -180,7 +146,7 @@ public sealed partial class ShapesPanelViewModel
     {
         if (_editor.ActiveArrangement is not { } arrangement) return;
         // Taking No name back offers the suggested name while naming is on, like any new shape.
-        var restored = value ? "" : NewChordNames.For(arrangement, row.Template.Frets);
+        var restored = value ? "" : NewChordNames.For(arrangement, row.Template.Frets, _naming(arrangement));
         var plan = ChordShapeEdits.PlanSetName(arrangement, row.Template, restored, value, _editor);
         if (!Commit(plan)) return;
         Say(value

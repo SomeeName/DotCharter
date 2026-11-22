@@ -115,6 +115,29 @@ public sealed class ChartDiffHeaderTests
         Assert.Equal(-1, entry.DifficultyIndex); // arrangement-scoped
     }
 
+    [Theory]
+    [InlineData(nameof(ArrangementProperties.FingerPicking))]
+    [InlineData(nameof(ArrangementProperties.TwoFingerPicking))]
+    [InlineData(nameof(ArrangementProperties.PickDirection))]
+    [InlineData(nameof(ArrangementProperties.Syncopation))]
+    public void AuthoredArrangementFlagsAreSeen(string field)
+    {
+        var property = typeof(ArrangementProperties).GetProperty(field)!;
+        var entry = HeaderEntryFor(a => property.SetValue(a.Properties, 1));
+
+        Assert.Equal(new[] { field }, entry.ChangedFields);
+    }
+
+    [Fact]
+    public void AnUnpinnedDerivedFlagDoesNotInventAHeaderChange()
+    {
+        var oldArrangement = Build();
+        var newArrangement = Build();
+        newArrangement.Properties.PalmMutes = 1;
+
+        Assert.True(ChartDiffEngine.Diff(oldArrangement, newArrangement).IsEmpty);
+    }
+
     /// <summary>The two sides are PAIRED by name, so a differing name is the
     /// premise of the comparison rather than a finding.</summary>
     [Fact]

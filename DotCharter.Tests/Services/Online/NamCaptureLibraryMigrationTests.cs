@@ -37,6 +37,44 @@ public sealed class NamCaptureLibraryMigrationTests : IDisposable
 
     private NamCaptureLibrary NewLibrary() => new(new StubTone3000Service(), rootDirectoryOverride: _libDir.FullName);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnOutsideManifestTarget_IsNeverListedMovedOrDeleted(bool absolute)
+    {
+        var library = SeedEntry("capture.bin");
+        var manifest = Assert.Single(library.GetAll()).Manifest;
+        var outside = Path.Combine(_srcDir.FullName, "outside.bin");
+        File.WriteAllText(outside, NamBody);
+        var reference = absolute ? outside : Path.GetRelativePath(_libDir.FullName, outside);
+        var sidecar = Path.Combine(_libDir.FullName, NamCaptureIndex.ManifestFileName(manifest.FileName));
+        File.WriteAllText(sidecar, System.Text.Json.JsonSerializer.Serialize(manifest with { FileName = reference }));
+
+        Assert.Empty(library.GetAll());
+        Assert.Equal(0, library.MigrateFileExtensions());
+        Assert.False(library.Delete(manifest.ModelId));
+        Assert.Equal(NamBody, File.ReadAllText(outside));
+        Assert.True(File.Exists(sidecar));
+    }
+
+    [Fact]
+    public void AManifestTarget_MustBeBareEvenWhenTheSubfolderIsInsideTheLibrary()
+    {
+        var library = SeedEntry("capture.bin");
+        var entry = Assert.Single(library.GetAll());
+        var nested = Path.Combine(_libDir.FullName, "nested", "capture.bin");
+        Directory.CreateDirectory(Path.GetDirectoryName(nested)!);
+        File.Move(entry.FilePath, nested);
+        var sidecar = Path.Combine(_libDir.FullName, NamCaptureIndex.ManifestFileName(entry.Manifest.FileName));
+        File.WriteAllText(sidecar, System.Text.Json.JsonSerializer.Serialize(
+            entry.Manifest with { FileName = "nested/capture.bin" }));
+
+        Assert.Empty(library.GetAll());
+        Assert.Equal(0, library.MigrateFileExtensions());
+        Assert.False(library.Delete(entry.Manifest.ModelId));
+        Assert.Equal(NamBody, File.ReadAllText(nested));
+    }
+
     // A minimal but schema-shaped modern NAM body: the loader sniff keys on
     // "architecture"; the content need not be a real model for the rename test.
     private const string NamBody =

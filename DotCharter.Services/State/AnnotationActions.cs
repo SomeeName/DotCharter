@@ -2,6 +2,39 @@ using System.Collections.ObjectModel;
 
 namespace DotCharter.Services.State;
 
+/// <summary>Checks off or reopens an annotation as persisted chart content.</summary>
+public sealed class SetAnnotationResolvedAction(ChartAnnotation annotation, bool resolved) : IChartAction, ILinkPolicyAction
+{
+    private readonly bool _before = annotation.Resolved;
+
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+    public bool HasEffect => _before != resolved;
+    public void Execute() => annotation.Resolved = resolved;
+    public void Undo() => annotation.Resolved = _before;
+}
+
+/// <summary>Rewords an annotation (the Annotations tab's details card).</summary>
+public sealed class SetAnnotationTextAction(ChartAnnotation annotation, string text) : IChartAction, ILinkPolicyAction
+{
+    private readonly string _before = annotation.Text;
+
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+    public bool HasEffect => !string.Equals(_before, text, StringComparison.Ordinal);
+    public void Execute() => annotation.Text = text;
+    public void Undo() => annotation.Text = _before;
+}
+
+/// <summary>Retypes an annotation: a note, a reminder or a mark.</summary>
+public sealed class SetAnnotationKindAction(ChartAnnotation annotation, ChartAnnotationKind kind) : IChartAction, ILinkPolicyAction
+{
+    private readonly ChartAnnotationKind _before = annotation.Kind;
+
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+    public bool HasEffect => _before != kind;
+    public void Execute() => annotation.Kind = kind;
+    public void Undo() => annotation.Kind = _before;
+}
+
 /// <summary>
 /// Adds a charting annotation to the project's time-ordered list. Annotations
 /// are PERSISTED chart content (the cloner and <c>ChartProjectRestorer</c> both

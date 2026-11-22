@@ -25,8 +25,9 @@ public sealed class IssueFixRowUiPerfSmokeTests
             var vm = (App.Services ?? throw new InvalidOperationException("the headless app session did not boot."))
                 .GetRequiredService<InspectorViewModel>();
             var (arr, level, chord, anchor) = Fixture();
-            vm.Issues.IssueFix.Offer(new ArrangementIssue(ArrangementIssueType.IndexFingerNotOnAnchorFret, "E04", 0,
-                Chord: chord, Anchor: anchor), arr, level);
+            var finding = new ArrangementIssue(ArrangementIssueType.IndexFingerNotOnAnchorFret, "E04", 0, Chord: chord, Anchor: anchor);
+            vm.Issues.IssueFix.Offer(finding, arr, level);
+            vm.Issues.IssueAi.Offer(finding, arr, level, [finding]); // design D's Fixes card shows the jumped-to finding
 
             var view = new IssuesInspectorView { DataContext = vm };
             var host = new UserControl { Content = view };
@@ -53,6 +54,55 @@ public sealed class IssueFixRowUiPerfSmokeTests
             finally
             {
                 vm.Issues.IssueFix.Offer(null, null, null);
+                vm.Issues.IssueAi.Offer(null, null, null, []);
+                window.Close();
+            }
+        }, CancellationToken.None);
+
+    /// <summary>#759: an I30 whose 16th-earlier move is blocked shows the disabled fix and its reason, both measured.</summary>
+    [Fact]
+    public async Task ABlockedToneFix_ShowsItsReason_AndMeasures() =>
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var vm = (App.Services ?? throw new InvalidOperationException("the headless app session did not boot."))
+                .GetRequiredService<InspectorViewModel>();
+            var beats = Enumerable.Range(0, 8).Select(i => new BeatMarker { Time = i * 500, Bpm = 120 }).ToList();
+            var arr = new Arrangement();
+            arr.Levels.Add(new ChartLevel());
+            var at = new FractionalPosition(0, new Fraction(1, 8));
+            var note = new GuitarNote { Position = at, Fret = 5 };
+            arr.Levels[0].Notes.Add(note);
+            arr.ToneChanges.Add(new ToneChange { Position = at, ToneName = "lead" });
+            var finding = new ArrangementIssue(ArrangementIssueType.ToneChangeOnNote, "I30", at.GetPositionMs(beats), Note: note);
+            vm.Issues.IssueFix.Offer(finding, arr, arr.Levels[0], beats);
+            vm.Issues.IssueAi.Offer(finding, arr, arr.Levels[0], [finding]); // design D's Fixes card shows the jumped-to finding
+
+            var view = new IssuesInspectorView { DataContext = vm };
+            var host = new UserControl { Content = view };
+            host.Styles.Add(new Avalonia.Markup.Xaml.Styling.StyleInclude(new Uri("avares://DotCharter/"))
+            {
+                Source = new Uri("avares://DotCharter/Views/Editor/InspectorStyles.axaml")
+            });
+            var window = new Window { Width = 420, Height = 900, Content = host };
+            window.Show();
+            try
+            {
+                window.UpdateLayout();
+                foreach (var name in new[] { "IssueFixRow", "IssueFixDefaultButton", "IssueFixBlockedReason" })
+                {
+                    var control = view.GetVisualDescendants().OfType<Control>().Single(c => c.Name == name);
+                    Assert.True(control.IsEffectivelyVisible, $"{name} is hidden with a blocked tone fix on offer.");
+                    Assert.True(control.Bounds is { Width: > 1, Height: > 1 }, $"{name} laid out as {control.Bounds} — it rendered nothing.");
+                }
+
+                var fix = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "IssueFixDefaultButton");
+                Assert.False(fix.IsEffectivelyEnabled);
+                Capture(window, "issue-fix-row-759-blocked.png");
+            }
+            finally
+            {
+                vm.Issues.IssueFix.Offer(null, null, null);
+                vm.Issues.IssueAi.Offer(null, null, null, []);
                 window.Close();
             }
         }, CancellationToken.None);

@@ -70,13 +70,20 @@ tuning, naming).
   their finger from the chord template.
 - `Domain/Events/` — timeline markers: `BeatMarker` (the beat grid), `EventPoint`
   (phrases/sections), `ToneChange`, `Showlight`, `Bookmark`, `ChartAnnotation`,
-  `FretAnchor`, `FretHandMute`. `EventPoint.Status` (`SectionStatus`, v0.29
+  `FretAnchor`, `FretHandMute`; `FretAnchorLookup.InEffectAt` is the anchor in effect at a
+  point BY POSITION (anchors are not sorted mid-session, so never "the last stored one",
+  #585). `EventPoint.Status` (`SectionStatus`, v0.29
   section tracker) is a DotCharter-only rscp extension: additive `ss`
   attribute, lowercase NAME, absent when `None` (untracked charts stay
   byte-identical), tolerant parse both ways (`RscpParsingUtilities.
   ParseSectionStatus` — unknown/garbage/numeric reads `None`, old apps ignore
   the attribute; pinned by `RscpSectionStatusTests`).
 - `Domain/Vocals/` — `VocalTrack` → `LyricPhrase` → `LyricEvent`.
+  `LyricEvent.AlignmentConfidence` is nullable (no model ran for a manually
+  authored syllable); `ReviewReasons` carries advisory `LyricReviewReason`
+  flags, including findings retained after local repair. Native projects store
+  these in optional `dcAlignConfidence` / `dcAlignReview` vocal attributes.
+  Snapshots copy both fields; lyric interchange exports omit them.
 - `Domain/Validation/` — result types only: `ArrangementIssue`,
   `ArrangementIssueType` (~60 codes), `ArrangementIssueSeverity`. (The validation
   *service* lives in `DotCharter.Services`.)
@@ -112,7 +119,8 @@ tuning, naming).
   higher string down and dropped the top string, naming the shape confidently
   wrong), `ChordTemplateFingerSetter`, `ShowlightCatalog`,
   `ChartDifficultyEstimator` (pure, deterministic 1–10 rating over the hardest
-  level: density / chord-change rate / technique mix / tempo),
+  level: density / chord-change rate / technique mix / tempo; untemplated shapes
+  hash each string/fret pair before combining members, independent of member order),
   `ArrangementPropertiesDeriver` (the one owner of what an export ships in
   `ArrangementProperties` — see the invariant below),
   `ChartProjectPositions` (the ONE exhaustive walk over every absolute
@@ -135,7 +143,18 @@ tuning, naming).
   grouping is reader-specific (EOF stores each marker as its own text event, so
   a lossless round trip legitimately returns one authored point as two).
   Chord templates have no position and are compared as a multiset via
-  `ChordTemplate.Equals`.
+  `ChordTemplate.Equals`. Chord and hand-shape references resolve each side's
+  template by `Id` and compare its value, so renumbering is not an edit.
+  Standalone `DiffLevel` has no arrangement context and retains numeric reference
+  comparison. Authored sound fields include fingering, pick/strum direction,
+  explicit chord-note sustain and notation hints; import-transient `GraceSlide`
+  and save-time `IgnoreDerived` provenance are excluded. `PhraseInfos` compare
+  by phrase name (an absent sidecar means solo=false and the highest available
+  level, matching live play; an explicit zero ceiling is distinct), independently
+  of iterations; iteration labels resolve against their own side. Header comparison
+  includes the four authored `Properties` flags (`FingerPicking`, `TwoFingerPicking`,
+  `PickDirection`, `Syncopation`), excluding derived summaries. Phrase metadata
+  rows retain their phrase name and have no timestamp in `ChartDiffViewModel`.
 - `Linking/` — the linked-measures foundation (#76). **`MeasureContentIndex` is
   THE measure-content comparison — detection, link verification, the load check
   and the stored hash all go through it; never write a second one.** Content is
@@ -163,6 +182,9 @@ tuning, naming).
   tuning, capo, cents; never vocals or play-only) for shared runs. Groups are
   named by letter (`Letter`); the detector's results are `LinkCandidateGroup` /
   `LinkCandidatePlacement`, not the model.
+  `MaxPairs` bounds all potential comparisons, including unequal keys and rests inside a
+  run, before `LongestCommonRuns` allocates its dictionary. Exceeding it
+  returns an empty result with `Truncated = true`.
   The MODEL is `Domain/Project/LinkGroup` + `LinkPlacement` on
   `ChartProject.LinkGroups` (real copies in every placement; the arrangement by
   reference, the run as absolute barlines; the restorer, `ChartProjectPositions`

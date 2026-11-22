@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using DotCharter.UI.Gallery.Pages;
 
@@ -27,13 +28,7 @@ internal static class GalleryCapture
                 // has no style scope, so every DynamicResource would resolve against
                 // nothing and the capture would show an unstyled page (the same trap
                 // as realizing a popover while it is detached).
-                var window = new Window
-                {
-                    Width = Width,
-                    Height = Height,
-                    ShowInTaskbar = false,
-                    Content = variant.Create()
-                };
+                var window = CreateWindow(variant.Create());
 
                 window.Show();
                 try
@@ -50,6 +45,25 @@ internal static class GalleryCapture
                 }
             }
         }
+    }
+
+    public static Window CreateWindow(Control content)
+    {
+        var app = Application.Current;
+        if (app is null || !app.TryFindResource("AppBackground", app.ActualThemeVariant, out var brush) ||
+            brush is not IBrush background)
+        {
+            throw new InvalidOperationException("AppBackground did not resolve for the gallery capture window.");
+        }
+
+        return new Window
+        {
+            Width = Width,
+            Height = Height,
+            ShowInTaskbar = false,
+            Background = background,
+            Content = content
+        };
     }
 
     /// <summary>Same slugs as the goldens (<c>ScreenEntry.GoldenPath</c>), so a gallery PNG and its golden name the same screen.</summary>

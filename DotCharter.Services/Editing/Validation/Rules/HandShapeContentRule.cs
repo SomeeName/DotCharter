@@ -105,13 +105,13 @@ public sealed class HandShapeContentRule : IArrangementRule
                 foreach (var note in level.Notes)
                 {
                     if (!handShape.Covers(note.Position)) continue;
-                    var issue = Check(template, note.StringIndex, note.Fret, handShape);
+                    var issue = Check(template, note, handShape);
                     if (issue == null) continue;
 
-                    issues.Add(new ArrangementIssue(
-                        ArrangementIssueType.SoundViolatesHandShape, issue,
+                    issues.Add(ArrangementIssues.Make(
+                        ArrangementIssueType.SoundViolatesHandShape, issue.Value.Key,
                         note.Position.GetPositionMs(beats),
-                        Note: note, HandShape: handShape, StringIndex: note.StringIndex));
+                        note: note, handShape: handShape, stringIndex: note.StringIndex, args: issue.Value.Args));
                 }
 
                 foreach (var chord in level.Chords)
@@ -122,13 +122,14 @@ public sealed class HandShapeContentRule : IArrangementRule
                     // three-string disagreement is one mistake, not three.
                     foreach (var chordNote in chord.ChordNotes)
                     {
-                        var issue = Check(template, chordNote.StringIndex, chordNote.Fret, handShape);
+                        var issue = Check(template, chordNote, handShape);
                         if (issue == null) continue;
 
-                        issues.Add(new ArrangementIssue(
-                            ArrangementIssueType.SoundViolatesHandShape, issue,
+                        issues.Add(ArrangementIssues.Make(
+                            ArrangementIssueType.SoundViolatesHandShape, issue.Value.Key,
                             chord.Position.GetPositionMs(beats),
-                            Chord: chord, HandShape: handShape, StringIndex: chordNote.StringIndex));
+                            chord: chord, handShape: handShape, stringIndex: chordNote.StringIndex,
+                            args: issue.Value.Args));
                         break;
                     }
                 }
@@ -136,27 +137,24 @@ public sealed class HandShapeContentRule : IArrangementRule
         }
     }
 
-    private static string? Check(ChordTemplate template, int stringIndex, int fret, HandShape handShape)
+    private static (string Key, object[] Args)? Check(ChordTemplate template, IGuitarSound sound, HandShape handShape)
     {
-        // A ghost gem's string is HELD, not played: a tapped harmonic sounds at fret 17
-        // over a grip that holds fret 5 there, so whatever the string plays says nothing.
-        if (template.IsGhost(stringIndex)) return null;
-
+        var stringIndex = sound.StringIndex;
         if (!template.Frets.TryGetValue(stringIndex, out var declared))
         {
-            return $"This sound plays string {stringIndex + 1}, which the hand shape " +
-                   $"'{Describe(handShape, template)}' covering it does not use — the shape drawn in-game " +
-                   "cannot play it.";
+            return ("Validation_SoundViolatesHandShape_String", [stringIndex + 1, Describe(handShape, template)]);
         }
 
-        return declared == fret
-            ? null
-            : $"This sound plays string {stringIndex + 1} at fret {fret}, but the hand shape " +
-              $"'{Describe(handShape, template)}' covering it declares fret {declared} there.";
+        if (declared == sound.Fret) return null;
+        if (sound is { Harmonic: HarmonicType.Normal, Hopo: HopoType.Tap } && handShape.IsGhost(template, stringIndex))
+            return null;
+
+        return ("Validation_SoundViolatesHandShape_Fret",
+            [stringIndex + 1, sound.Fret, Describe(handShape, template), declared]);
     }
 
-    private static string Describe(HandShape handShape, ChordTemplate template) =>
+    private static object Describe(HandShape handShape, ChordTemplate template) =>
         !string.IsNullOrWhiteSpace(template.Name) ? template.Name
         : !string.IsNullOrWhiteSpace(handShape.Name) ? handShape.Name
-        : "unnamed";
+        : new IssueTextRef("Validation_UnnamedHandShape");
 }

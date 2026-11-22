@@ -161,15 +161,26 @@ public class Preview3DStatsLineTests
         Assert.EndsWith(tail, Format(10, 10, Active));
     }
 
-    /// <summary>The editor's preview always shows the line, an immersive run only with the
-    /// detection monitor open, and DOTCHARTER_3D_HIDE_STATS (the README captures) never.</summary>
+    /// <summary>The editor's preview shows the line only with the diagnostics setting on, an immersive
+    /// run only with the detection monitor open, and DOTCHARTER_3D_HIDE_STATS (the README captures) never.</summary>
     [Theory]
-    [InlineData(false, false, false, true)]
-    [InlineData(true, false, false, false)]
-    [InlineData(true, true, false, true)]
-    [InlineData(false, false, true, false)]
-    [InlineData(true, true, true, false)]
-    public void Stats_line_shows_in_the_editor_hides_in_a_run_and_when_the_environment_hides_it(
-        bool gameplay, bool monitorOpen, bool hidden, bool shown) =>
-        Assert.Equal(shown, Preview3DStatsLine.Shown(gameplay, monitorOpen, hidden));
+    [InlineData(false, false, false, true, true)]
+    [InlineData(false, false, false, false, false)]
+    [InlineData(true, false, false, true, false)]
+    [InlineData(true, true, false, false, true)]
+    [InlineData(false, false, true, true, false)]
+    [InlineData(true, true, true, false, false)]
+    public void Stats_line_follows_the_diagnostics_setting_in_the_editor_and_the_monitor_in_a_run(
+        bool gameplay, bool monitorOpen, bool hidden, bool diagnostics, bool shown) =>
+        Assert.Equal(shown, Preview3DStatsLine.Shown(gameplay, monitorOpen, hidden, diagnostics));
+
+    /// <summary>The existing diagnostics setting is the minimum log level: Debug and Trace mean "diagnosing".</summary>
+    [Theory]
+    [InlineData(AppLogLevel.Trace, true)]
+    [InlineData(AppLogLevel.Debug, true)]
+    [InlineData(AppLogLevel.Info, false)]
+    [InlineData(AppLogLevel.Warning, false)]
+    [InlineData(AppLogLevel.Error, false)]
+    public void Diagnostics_is_on_at_debug_or_lower(AppLogLevel level, bool on) =>
+        Assert.Equal(on, Preview3DStatsLine.DiagnosticsOn(level));
 }

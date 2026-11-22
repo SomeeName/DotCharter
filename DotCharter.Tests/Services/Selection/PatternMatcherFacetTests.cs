@@ -183,6 +183,76 @@ public sealed class PatternMatcherFacetTests
             Assert.Single(PatternMatcher.Find(pattern, SeedChords(seed), SourceOf(level)).Chords));
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    public void TransposableHandShapes_KeepCapoOpenStringsOutOfTheTransposeBase(int openFret)
+    {
+        var arrangement = ArrangementWith(
+            new ChordTemplate { Id = 0, Frets = new Dictionary<int, int> { [0] = openFret, [1] = 7, [2] = 9 } },
+            new ChordTemplate { Id = 1, Frets = new Dictionary<int, int> { [0] = 3 - openFret, [1] = 10, [2] = 12 } },
+            new ChordTemplate { Id = 2, Frets = new Dictionary<int, int> { [0] = 6, [1] = 10, [2] = 12 } });
+        arrangement.Capo = 3;
+        var level = new ChartLevel();
+        var seed = new HandShape { Position = At(0), EndPosition = At(2), TemplateId = 0 };
+        level.HandShapes.Add(seed);
+        level.HandShapes.Add(new HandShape { Position = At(4), EndPosition = At(6), TemplateId = 1 });
+        level.HandShapes.Add(new HandShape { Position = At(8), EndPosition = At(10), TemplateId = 2 });
+        var pattern = new MatchPattern { Scope = PatternScope.HandShapes, Fret = FretRule.Transposable };
+
+        var matches = PatternMatcher.Find(pattern, new PatternSeed([], [], [seed], []), SourceOf(level, arrangement));
+
+        Assert.Same(level.HandShapes[1], Assert.Single(matches.HandShapes));
+    }
+
+    [Theory]
+    [InlineData(FretRule.Transposable)]
+    [InlineData(FretRule.Ignore)]
+    public void MaxFretDistance_HandShapesUseEverySeedsNeckPosition(FretRule fretRule)
+    {
+        var arrangement = new Arrangement();
+        var level = new ChartLevel();
+        var roots = new[] { 5, 17, 8, 18, 12, 21 };
+        for (var i = 0; i < roots.Length; i++)
+        {
+            arrangement.ChordTemplates.Add(new ChordTemplate
+            {
+                Id = i, Frets = new Dictionary<int, int> { [0] = 0, [1] = roots[i], [2] = roots[i] + 2 }
+            });
+            level.HandShapes.Add(new HandShape { Position = At(i * 4), EndPosition = At(i * 4 + 2), TemplateId = i });
+        }
+
+        var seed = new PatternSeed([], [], [level.HandShapes[0], level.HandShapes[1]], []);
+        var pattern = new MatchPattern { Scope = PatternScope.HandShapes, Fret = fretRule };
+        Assert.Equal(4, PatternMatcher.Find(pattern, seed, SourceOf(level, arrangement)).HandShapes.Count);
+
+        pattern.MaxFretDistance = 3;
+        var matches = PatternMatcher.Find(pattern, seed, SourceOf(level, arrangement));
+
+        Assert.Equal(new[] { level.HandShapes[2], level.HandShapes[3] }, matches.HandShapes);
+    }
+
+    [Theory]
+    [InlineData(FretRule.Transposable)]
+    [InlineData(FretRule.Ignore)]
+    public void MaxFretDistance_AnchorsUseEverySeedsNeckPosition(FretRule fretRule)
+    {
+        var level = new ChartLevel();
+        var roots = new[] { 5, 17, 8, 18, 12, 21 };
+        for (var i = 0; i < roots.Length; i++) level.Anchors.Add(new FretAnchor(At(i * 4), roots[i], 4));
+        var seed = SeedAnchors(level.Anchors[0], level.Anchors[1]);
+        var pattern = new MatchPattern
+        {
+            Scope = PatternScope.Anchors, Fret = fretRule, MatchAnchorSpan = false
+        };
+        Assert.Equal(4, PatternMatcher.Find(pattern, seed, SourceOf(level)).Anchors.Count);
+
+        pattern.MaxFretDistance = 3;
+        var matches = PatternMatcher.Find(pattern, seed, SourceOf(level));
+
+        Assert.Equal(new[] { level.Anchors[2], level.Anchors[3] }, matches.Anchors);
+    }
+
     [Fact]
     public void MatchArpeggio_SeparatesAnArpeggioFromAPlainStrumOfTheSameFrets()
     {

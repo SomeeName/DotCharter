@@ -1,3 +1,5 @@
+using CommunityToolkit.Mvvm.Input;
+using DotCharter.Core.Linking;
 using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Screens.Dialogs;
 using DotCharter.Services.Editing;
@@ -116,15 +118,15 @@ public sealed class LinkGroupsViewModelTests
         Assert.True(vm.HasSuggestions);
         Assert.All(vm.Suggestions, s => Assert.True(s.IsSelected));
         foreach (var row in vm.Suggestions.Skip(1)) row.IsSelected = false;
-        Assert.Equal("chorus · 1 measure", vm.Suggestions[0].Title);
-        Assert.Contains("from the score's repeats", vm.Suggestions[0].Detail, StringComparison.Ordinal);
+        Assert.Equal("Unnamed · 4 measures", vm.Suggestions[0].Title);
         var steps = h.Steps;
 
         vm.LinkSelectedCommand.Execute(null);
 
         var group = Assert.Single(h.Link.Project.LinkGroups);
-        Assert.Equal("chorus", group.Name);
-        Assert.Equal(6, group.Placements.Count);
+        Assert.Equal(suggestions[0].Name, group.Name);
+        Assert.Equal(suggestions[0].Runs.Select(r => (r.Arrangement, r.Start, r.End)),
+            group.Placements.Select(p => (p.Arrangement!, p.Position, p.EndPosition)));
         Assert.Equal(steps + 1, h.Steps);
         Assert.Single(vm.Groups);
         Assert.Equal(suggestions.Count - 1, vm.Suggestions.Count);
@@ -134,7 +136,7 @@ public sealed class LinkGroupsViewModelTests
     }
 
     [Fact]
-    public void The_summary_says_what_the_parts_share_and_what_repeats()
+    public void The_summary_says_what_the_parts_share()
     {
         var h = new Harness();
         var suggestions = h.Suggestions();
@@ -148,9 +150,137 @@ public sealed class LinkGroupsViewModelTests
         var shared = suggestions
             .Where(s => s.Runs.Any(r => ReferenceEquals(r.Arrangement, h.Link.Rhythm)))
             .Sum(s => s.MeasureCount * s.Runs.Count(r => ReferenceEquals(r.Arrangement, h.Link.Lead)));
-        Assert.Equal([$"Lead and Rhythm share {shared} of 9 measures.", "chorus repeats 3× in each."], vm.Details);
+        Assert.Equal([$"Lead and Rhythm share {shared} of 9 measures."], vm.Details);
 
         vm.ReviewCommand.Execute(null);
         Assert.Equal(LinkSuggestionsChoice.Review, ChartEditHarness.Answer(vm.Result));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Project_edits_discard_in_flight_results(bool undoable)
+    {
+        var h = new Harness();
+        h.Link.Link((h.Link.Lead, 1), (h.Link.Lead, 4));
+        var cancellation = TestContext.Current.CancellationToken;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var vm = new LinkGroupsViewModel(h.Services, (snapshot, rule, _, _) =>
+        {
+            var proposals = LinkSuggestionFinder.Find(snapshot, snapshot.Arrangements, PatternRepeats, rule);
+            entered.SetResult();
+            release.Task.Wait(cancellation);
+            return proposals;
+        });
+        var detection = (IAsyncRelayCommand)vm.DetectCommand;
+        vm.Configure(new LinkGroupsRequest([]));
+        await entered.Task.WaitAsync(cancellation);
+        try
+        {
+            if (undoable)
+            {
+                Assert.True(h.Link.History.Do(LinkGroupEdits.Rename(h.Link.Project, h.Link.Project.LinkGroups[0].Id, "Edited")!));
+            }
+            else
+            {
+                h.Link.Project.LinkGroups[0].Name = "Edited";
+                h.Link.State.NotifyProjectChanged(h.Link.Project);
+            }
+        }
+        finally
+        {
+            release.SetResult();
+        }
+
+        await detection.ExecutionTask!.WaitAsync(cancellation);
+        Assert.Empty(vm.Suggestions);
+        Assert.True(vm.ShowDetectionRetry);
+    }
+
+    [Fact]
+    public async Task Cancel_stops_the_run_and_retry_uses_a_fresh_token()
+    {
+        var h = new Harness();
+        var cancellation = TestContext.Current.CancellationToken;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        using var vm = new LinkGroupsViewModel(h.Services, (snapshot, rule, token, _) =>
+        {
+            if (++calls == 1)
+            {
+                entered.SetResult();
+                release.Task.Wait(cancellation);
+            }
+
+            token.ThrowIfCancellationRequested();
+            return LinkSuggestionFinder.Find(snapshot, snapshot.Arrangements, PatternRepeats, rule);
+        });
+        var detection = (IAsyncRelayCommand)vm.DetectCommand;
+        vm.Configure(new LinkGroupsRequest([]));
+        await entered.Task.WaitAsync(cancellation);
+        vm.CancelDetectionCommand.Execute(null);
+        release.SetResult();
+        await detection.ExecutionTask!.WaitAsync(cancellation);
+
+        Assert.False(vm.Result.IsCompleted);
+        Assert.Empty(vm.Suggestions);
+        Assert.True(vm.ShowDetectionRetry);
+        await Retry(vm);
+        Assert.NotEmpty(vm.Suggestions);
+        Assert.Equal(2, calls);
+    }
+
+    [Theory]
+    [InlineData(true, "Search stopped at the limit, results may be incomplete")]
+    [InlineData(false, "Detection failed: Bad chart data")]
+    public async Task Limit_and_failure_explain_why_detection_stopped(bool limited, string expectedStatus)
+    {
+        var h = new Harness();
+        using var vm = new LinkGroupsViewModel(h.Services, (snapshot, rule, token, report) =>
+            SearchUntilLimitOrFailure(snapshot, rule, token, report, limited));
+        vm.Configure(new LinkGroupsRequest([]));
+        await ((IAsyncRelayCommand)vm.DetectCommand).ExecutionTask!;
+
+        Assert.Equal(expectedStatus, vm.DetectionStatus);
+        Assert.False(vm.IsDetecting);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Detection_can_be_retried_after_a_limit_or_failure(bool limited)
+    {
+        var h = new Harness();
+        var calls = 0;
+        using var vm = new LinkGroupsViewModel(h.Services, (snapshot, rule, token, report) => ++calls == 1
+            ? SearchUntilLimitOrFailure(snapshot, rule, token, report, limited)
+            : LinkSuggestionFinder.Find(snapshot, snapshot.Arrangements, PatternRepeats, rule));
+        vm.Configure(new LinkGroupsRequest([]));
+        await ((IAsyncRelayCommand)vm.DetectCommand).ExecutionTask!;
+
+        Assert.True(vm.ShowDetectionRetry);
+        await Retry(vm);
+
+        Assert.Equal(2, calls);
+        Assert.Empty(vm.DetectionStatus);
+        Assert.False(vm.ShowDetectionRetry);
+        Assert.NotEmpty(vm.Suggestions);
+    }
+
+    private static IReadOnlyList<LinkSuggestion> SearchUntilLimitOrFailure(ChartProject snapshot,
+        MeasureContentOptions rule, CancellationToken token, Action<string> report, bool limited)
+    {
+        if (!limited) throw new InvalidOperationException("Bad chart data\nMore details");
+        return LinkSuggestionFinder.Find(snapshot, snapshot.Arrangements, PatternRepeats, rule,
+            LinkDetectionScope.UnlinkedOnly, new LinkDetectionWork(token, 0), report);
+    }
+
+    private static async Task Retry(LinkGroupsViewModel vm)
+    {
+        Assert.True(vm.DetectCommand.CanExecute(null));
+        vm.DetectCommand.Execute(null);
+        await ((IAsyncRelayCommand)vm.DetectCommand).ExecutionTask!;
     }
 }

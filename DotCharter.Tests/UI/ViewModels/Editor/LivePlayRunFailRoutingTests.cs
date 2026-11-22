@@ -261,7 +261,7 @@ public sealed class LivePlayRunFailRoutingTests
             IReadOnlyList<PhraseMasteryOutcome>? phraseOutcomes = null,
             IReadOnlyList<SectionResult>? sections = null,
             IReadOnlyList<TechniqueResult>? techniques = null,
-            double? chartDifficulty = null, bool failed = false)
+            double? chartDifficulty = null, bool failed = false, PracticeRunIdentity? run = null)
         {
             var key = songKey + "|" + arrangementName;
             if (!_profiles.TryGetValue(key, out var profile)) _profiles[key] = profile = new PracticeArrangementProfile();

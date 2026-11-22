@@ -18,6 +18,28 @@ namespace DotCharter.Tests.Services.Editing.Highway;
 public sealed class HandShapeSplitSyncTests
 {
     [Fact]
+    public void SplitKeepsTheHeadGhostsAndDerivesTheTailFromItsOwnNotes()
+    {
+        var h = new Harness();
+        var grip = h.AddTemplate(0, (0, 3), (1, 5));
+        h.AddNote(1, 0, 3);
+        var pivot = h.AddNote(4, 2, 7);
+        var original = h.AddHandShape(0, 8, grip.Id);
+        original.GhostMask = 1 << 1;
+        h.Selection.SelectedNotes.Add(pivot);
+
+        h.Splitter.SplitAtSelection(h.Track);
+
+        var bars = h.Level.HandShapes.OrderBy(b => b.Position).ToList();
+        Assert.Equal(2, bars.Count);
+        Assert.Equal(grip.Id, bars[0].TemplateId);
+        Assert.Equal(1 << 1, bars[0].GhostMask);
+        Assert.Null(bars[1].GhostMask);
+        h.History.Undo();
+        Assert.Equal(1 << 1, Assert.Single(h.Level.HandShapes).GhostMask);
+    }
+
+    [Fact]
     public void TheTail_TakesTheTemplateOfTheChordUnderIt_NotAnEqualFretDuplicate()
     {
         var h = new Harness();

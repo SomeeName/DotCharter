@@ -1,4 +1,6 @@
 using DotCharter.RigLab;
+using DotCharter.Tone.Audio.Dsp.Presets;
+using DotCharter.Tone.Audio.Dsp.RsToneConversion;
 using DotCharter.Tone.Infrastructure.Storage;
 
 namespace DotCharter.Tests.RigLab;
@@ -101,4 +103,46 @@ public sealed class RigLabConfigServiceTests : IDisposable
         Assert.Equal("ASIO", reread.AudioDriver);
         Assert.Equal(64, reread.AudioBufferFrames);
     }
+
+    [Fact]
+    public void UnknownEnumValue_ResetsOnlyThatSetting_KeepsTheRest_AndIsReported()
+    {
+        File.WriteAllText(ConfigPath, """{ "LanguageCulture": "ja-JP", "MinimumLogLevel": "FromANewerBuild", "EnableInput": false }""");
+        using var service = new RigLabConfigService(ConfigPath);
+
+        var config = service.Load();
+
+        Assert.Equal("ja-JP", config.LanguageCulture);
+        Assert.False(config.EnableInput);
+        Assert.Equal(new RigLabConfig().MinimumLogLevel, config.MinimumLogLevel);
+        Assert.Empty(Directory.GetFiles(_dir, "riglab.corrupt-*.json"));
+        Assert.Contains(service.IgnoredSettings, m => m.Contains("MinimumLogLevel"));
+    }
+
+    [Fact]
+    public void AUserTonePreset_IsOnDiskWhenUpsertReturns()
+    {
+        using var service = new RigLabConfigService(ConfigPath);
+        var store = new UserTonePresetStore(service);
+
+        Assert.NotNull(store.Upsert(Preset()));
+
+        Assert.Contains("my-tone", File.ReadAllText(ConfigPath));
+    }
+
+    [Fact]
+    public void AUserTonePresetWhoseWriteFails_IsNotReportedAsSaved()
+    {
+        // The config's folder is a FILE, so the atomic write throws on the writer.
+        var blocker = Path.Combine(_dir, "not-a-folder");
+        File.WriteAllText(blocker, "a file where the config folder should be");
+        using var service = new RigLabConfigService(Path.Combine(blocker, RigLabConfigService.FileName));
+        var store = new UserTonePresetStore(service);
+
+        Assert.Null(store.Upsert(Preset()));
+        Assert.NotNull(service.LastWriteError);
+    }
+
+    private static DspTonePreset Preset() =>
+        new("my-tone", "My tone", DspToneCategory.Clean, "", new DcRigPreset([]), DspToneOrigin.User);
 }

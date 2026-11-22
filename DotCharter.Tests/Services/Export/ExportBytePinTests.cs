@@ -59,6 +59,7 @@ namespace DotCharter.Tests.Services.Export;
 public sealed class ExportBytePinTests
 {
     /// <summary>The conversion stamp the pins were captured with.</summary>
+    // #565: instrumental and historical-projection pins use the shared XML/SNG song-end policy.
     private static readonly DateTime PinnedConversionTime = new(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc);
 
     private const string NoCorpus =
@@ -196,35 +197,35 @@ public sealed class ExportBytePinTests
 
     [Theory]
     [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 0,
-        "c47d0ff42801871dd09f931e5592deba")] // #621: 4 split-only templates out; accent rule
+        "da76642c4db9a44151bfe2651c581e33")] // #621: 4 split-only templates out; accent rule
     [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 1,
-        "653513c3d7e43f188c81a67437dcfbea")] // closing noguitar
+        "b770014709cde46675d12d032f1a574d")] // closing noguitar
     [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 2,
-        "85042bf10f4de0ac6ebaebea33c32065")] // #621: 4 split-only templates out; closing noguitar
+        "85f884fcccbf3f562c3e598fb47bccf4")] // #621: 4 split-only templates out; closing noguitar
     // The 1,071-chord / 199-hand-shape arrangement — the worst case for the
     // quadratic scans the binary search replaced.
     [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 3,
-        "689db23e64b4aefaebdd8e57cbf7215a")] // #621: 1 split-only template out; closing noguitar, accent rule
+        "402050afe805d4953d50529fd81ef28d")] // #621: 1 split-only template out; closing noguitar, accent rule
     [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 0,
-        "b0103dd5a30eef6bdc868a28af0388ae")] // #621: 2 split-only templates out; closing noguitar, accent rule
+        "91585e4076d8d607544a19a18092e40e")] // #621: 2 split-only templates out; closing noguitar, accent rule
     [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 1,
-        "b0103dd5a30eef6bdc868a28af0388ae")] // #621: 2 split-only templates out; closing noguitar, accent rule
+        "91585e4076d8d607544a19a18092e40e")] // #621: 2 split-only templates out; closing noguitar, accent rule
     [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 2,
-        "1e5dcc860baac20b7dc530a159e237d3")] // closing noguitar, accent rule
+        "0a5aaea95e04d3d7c77d960b8744b268")] // closing noguitar, accent rule
     [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 0,
-        "9cd633e90755460d8a0f652f95c7ba8d")] // closing noguitar
+        "c223307bfe27c286a1fcb98b80a5d348")] // closing noguitar
     [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 1,
-        "2559eae43199839cfded4e2e5494e251")] // #621: 3 split-only templates out; closing noguitar
+        "78952f93ba9f650a97e2934b382d5fcc")] // #621: 3 split-only templates out; closing noguitar
     [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 2,
-        "eec81ee5ed2fedfe3d88b1dcb0eb9677")] // closing noguitar, accent rule
+        "0aed0f1b25c906189faf8d622232d465")] // closing noguitar, accent rule
     [InlineData(@"RsCharter\Atarayo - Natsu ga Kuru Tabi\project.rscp", 0,
-        "8e6f924559e3cb5f0fb4e660920581dd")]
+        "a751fad7a2847288877b922c2445ecbd")]
     [InlineData(@"RsCharter\Atarayo - Natsu ga Kuru Tabi\project.rscp", 1,
-        "2c327c0b4bb4d67949894e10eec8fe87")]
+        "03dcbe04dacf4195448accd5f7e38f75")]
     [InlineData(@"RsCharter\Atarayo - Natsu ga Kuru Tabi\project.rscp", 2,
-        "ecbd57227cd40f2abe99958edfba5bc5")]
+        "c34f9d553f985735d1deab6d63c3a972")]
     [InlineData(@"RsCharter\Atarayo - Natsu ga Kuru Tabi\project.rscp", 3,
-        "920a93a71a72ffc56a3ff17b799cf125")]
+        "ba84bf169435b0b4906df3194fcd00d4")]
     public void UnpackedSng_IsByteIdenticalToThePreOptimisationBuilder(
         string relative, int arrangementIndex, string expected)
     {
@@ -257,9 +258,9 @@ public sealed class ExportBytePinTests
     ///     them (see the pins above).
     /// </summary>
     [Theory]
-    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 1, "db86cd6596086ea94087752cafe90bfc")]
-    [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 0, "4b6850c83ff0a8e7194e87b302700b02")]
-    [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 1, "e4ba5a16dcfb96584a12adc7e77341f0")]
+    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 1, "cdf9a340e97beb63e602ff99f712f7ea")]
+    [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 0, "17c895f2d28433fa4a25e22a5efb3ea7")]
+    [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 1, "a5fcb9b14b8634bdfe10a448675c7f58")]
     public void UnpackedSng_WithoutTheClosingNoGuitarSection_IsTheHashBeforeIt(
         string relative, int arrangementIndex, string before)
     {
@@ -306,12 +307,12 @@ public sealed class ExportBytePinTests
     ///     numbering (see the pins above); the put-back still has to land on them.
     /// </summary>
     [Theory]
-    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 0, 4, "8500346d5b6eb8c6da7806d430fc6657")]
-    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 2, 4, "88b97934946ffea9035b174380c753bf")]
-    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 3, 1, "b87b9554ab5d81bba9ffad43a6dbc037")]
-    [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 0, 2, "8da0a7e1c23edcd20e699407e8294352")]
-    [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 1, 2, "8da0a7e1c23edcd20e699407e8294352")]
-    [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 1, 3, "ea72aec2c2e63b678c4d12bd03332b83")]
+    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 0, 4, "9da56abeff06602515b436eeeb3416b0")]
+    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 2, 4, "4b7bff2fcb221bb47463aa6ff8f48537")]
+    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 3, 1, "caa76e4bf4570eb02859f35396a706ad")]
+    [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 0, 2, "28c4e5474dc75f1225a1a50de65b0c68")]
+    [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 1, 2, "28c4e5474dc75f1225a1a50de65b0c68")]
+    [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 1, 3, "08f437da6933e78123ca44efd195a097")]
     public void UnpackedSng_WithTheSplitOnlyTemplatesPutBack_IsTheHashBefore621(
         string relative, int arrangementIndex, int dropped, string before)
     {
@@ -439,18 +440,34 @@ public sealed class ExportBytePinTests
     // note, accents are read, a slide-in no longer imports as a slide out of the
     // note, and one chord template's fingering. Musica Caelestis
     // and Parade are unchanged.
+    //
+    // Musica Caelestis and Parade RE-CAPTURED for the single neck limits: the generated
+    // anchors used to be clamped at root 22 whatever their width, so a width-4 hand on 22
+    // or 23 ran past fret 24 (inspector rule AnchorTopFretTooHigh). The clamp is now
+    // 24 - width + 1; only those anchors moved.
+    //
+    // Musica Caelestis, Parade and TABS.gp5 RE-CAPTURED for #712: a dead note with a slide-out
+    // imports as a muted note with an unpitched slide on fret 0, its sustain ending 1/32 beat
+    // before the next sound; only those notes (and the one anchor derived at such a note) moved.
+    //
+    // Musica Caelestis RE-CAPTURED for #729: one generated chordTemplate chordName
+    // changes from A#sus2 to Bbsus2. Reverting just that attribute restores the old hash.
+    //
+    // Musica Caelestis RE-CAPTURED for the bend gesture labels: a plain Guitar Pro bend or release no longer
+    // keeps its middle point when it lies on the straight line between origin and destination. With that
+    // drop switched off the bytes hash to the old pin exactly; the other three files carry no such bend.
 
     [Theory]
     [InlineData(@"EOF\Yorushika - Fireworks Beneath My Shoes\Yorushika - Firworks Beneath My Shoes.gp",
         "b0580ffeaeee835d361b81ef0006503f")] // Guitar Pro import fixes
     [InlineData(@"EOF\Ave Mujica - Musica Caelestis\Ave Mujica - Musica Caelestis.gp",
-        "8e5c3dff3d9b58aefdd2043444188c76")]
+        "7808ddc6867f81010ca542f2709b64fc")]
     [InlineData(@"EOF\Yorushika - Parade\Yorushika - Parade.gp",
-        "804f9eced05add7e76b43755da51c5ab")]
+        "6c6a8e971f14691efb3a94fba9535278")]
     // The GP3-5 BINARY reader, which shares none of the gpif property code —
     // here so a change to one importer that silently moves the other is caught.
     [InlineData("TABS.gp5",
-        "e7816cb6ba2ea21ed529b844d4541931")] // Guitar Pro import fixes
+        "e3153bfe4fefeaa0026ba0f5826eb2c1")] // Legacy swing placement, including derived anchors and hand shapes.
     public void GuitarProImport_IsByteIdenticalToThePreOptimisationParser(string relative, string expected)
     {
         var path = Resolve(relative);

@@ -50,7 +50,7 @@ public sealed class StatusBarLintBadgeTests
         var service = new StatusBarService(dispatcher);
         var vm = new StatusBarViewModel(service, new ProjectState(),
             new FakeAudioPlaybackService(), dispatcher, new StubProfiles(),
-            new FakeFileStorageService(), FakeLocalization.English());
+            new FakeFileStorageService(), FakeLocalization.English(), new FakeConfigurationService());
         return (vm, service);
     }
 

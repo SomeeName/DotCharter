@@ -5,6 +5,15 @@
     commit each, and runs the leak check on the result. A local dry run by default.
 
 .DESCRIPTION
+    Reused green evidence is never re-saved by this attempt. It is re-read on
+    its original tree and inputs before acceptance and, after push-plan preflight,
+    directly before each ref update;
+    lost evidence stops the operation and names the lane to re-run.
+
+    Gate-record reads/updates use one exclusive store lock (10-second bounded
+    contention). Planned lanes revoke before execution and unaccepted lanes
+    revoke again in finally: a later red completion removes concurrent greens.
+
     1. JuceSharp: the tree of the dev gitlink commit (rename map applied) is committed
        onto the public JuceSharp line in a scratch repo.
     2. DotCharter: the tree of -DevRef with the excluded paths dropped
@@ -35,12 +44,15 @@
        incremental.
     4. -Build builds the snapshot the public way (tools/agent/Invoke-Gate.ps1 -Build
        -Public in the scratch tree, the dev native pair copied in); -Gate also runs
-       the default gate there, unless a green gate is on record (ReleaseCache.psm1) for
+       the default Release gate there, unless a green gate is on record (ReleaseCache.psm1) for
        this exact snapshot tree or the dev tree it was cut from: then it builds only and
        names the record. -ForceGate runs the gate anyway. A green run is recorded.
     5. Prints the scratch paths, the commits, the native publish command, the leak report
-       and what -Push would refuse. Exit code 1 when the leak check has findings or the
-       push preflight refuses.
+       and what -Push would refuse. Exit code 1 when the leak check has findings, the
+       push preflight refuses, a requested -Build/-Gate fails or gitleaks ran and did not
+       pass (Get-SnapshotExportFailures), dry run included.
+    Two exports never share a scratch root: each holds '<ScratchRoot>.lock' exclusively
+    (Enter-SnapshotScratchLock) before it touches the folder, and a second one refuses.
 
     Each snapshot's parent is the tip of `main` at -PublicDotCharterUrl /
     -PublicJuceSharpUrl (fetched, never pushed to), or none (a root commit) when no URL
@@ -87,6 +99,8 @@ param(
     [string]$PublicJuceSharpUrl,
     # Folder holding juce_sharp.dll + juce_vst_host.exe built from the exported JuceSharp tree: pins real hashes.
     [string]$NativeDir,
+    # Build record produced with this native pair.
+    [string]$ProvenancePath,
     [switch]$Build,
     [switch]$Gate,
     # Run the default gate even when a green one is on record for this tree or its dev tree.
@@ -104,6 +118,8 @@ if ($Push -and -not $Gate) {
     throw '-Push needs -Gate in the same run: what it pushes must build the public way (Invoke-Gate.ps1 -Public) in this scratch tree and have passed the default gate (in this run, or a green run on record for this exact tree or the dev tree it was cut from).'
 }
 Import-Module (Join-Path $PSScriptRoot 'PublicSnapshot.psm1') -Force
+# A requested gate revokes both public/dev aliases before execution; Release
+# configuration and lane-list hash must match any record reused or saved.
 Import-Module (Join-Path $PSScriptRoot 'ReleaseCache.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'PublicSync.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot '../setup/NativeRuntime.psm1') -Force
@@ -139,6 +155,10 @@ $abi = [int]([regex]::Match((Git "--git-dir=$DevJuceSharpGitDir" show "${devJuce
 
 # --- scratch ------------------------------------------------------------------------
 $ScratchRoot = [System.IO.Path]::GetFullPath($ScratchRoot)
+# One export per scratch root: a second one stops here, before it deletes or rewrites
+# anything the first is building or checking. Held until the process ends.
+$scratchLock = Enter-SnapshotScratchLock -ScratchRoot $ScratchRoot
+trap { if ($scratchLock) { $scratchLock.Dispose() }; break }
 $marker = Join-Path $ScratchRoot '.dotcharter-public-export'
 $juceRepo = Join-Path $ScratchRoot 'JuceSharp.git'
 $dcRepo = Join-Path $ScratchRoot 'DotCharter'
@@ -200,7 +220,11 @@ if ($NativeDir) {
     foreach ($file in Get-NativeRuntimePairFiles) { $pins[$file] = Get-FileSha256 (Join-Path $NativeDir $file) }
     $dllAbi = Read-DllAbiVersion (Join-Path $NativeDir 'juce_sharp.dll')
     if ($dllAbi -ne $abi) { throw "$NativeDir holds an ABI $dllAbi DLL; the exported JuceSharp header says $abi." }
-    $pinSource = 'the -NativeDir pair'
+    if (-not $ProvenancePath) { $ProvenancePath = Get-NativeBuildProvenancePath $DevRepo }
+    $sourceTree = Git "--git-dir=$juceRepo" rev-parse "${juceTree}:src/JuceSharp.Native"
+    $provenanceProblems = @(Test-NativeBuildProvenance -Path $ProvenancePath -NativeSourceTree $sourceTree -Hashes $pins)
+    if ($provenanceProblems.Count -gt 0) { throw ("The -NativeDir pair has no matching build provenance:`n  - " + ($provenanceProblems -join "`n  - ")) }
+    $pinSource = 'the -NativeDir pair with matching build provenance'
 }
 else {
     # The public JuceSharp tree is the dev gitlink's whenever the rename map changed nothing:
@@ -326,6 +350,7 @@ if ($Push -and $pushBlockers.Count -gt 0) {
 
 # --- 4. build ------------------------------------------------------------------------------
 $buildLine = 'build: not run (-Build builds the snapshot the public way)'
+$buildExit = $null
 if ($Build -or $Gate) {
     $nativeSource = if ($NativeDir) { $NativeDir } else { Join-Path $DevRepo 'JuceSharp/src/JuceSharp/runtimes/win-x64/native' }
     $nativeTarget = Join-Path $dcRepo 'JuceSharp/src/JuceSharp/runtimes/win-x64/native'
@@ -338,20 +363,32 @@ if ($Build -or $Gate) {
     # One test run per tree: a green default gate on record for this exact snapshot tree, or
     # for the dev tree it was cut from (the merge train records those), is reused. The
     # public variant is still BUILT here; only the identical test run is skipped.
-    $recordedGate = $null
-    if ($Gate -and -not $ForceGate) { $recordedGate = Find-GateRecord -Trees @($dcTree, $devTree) -Kind gate }
-    $gateArgs = @('-NoProfile', '-File', (Join-Path $dcRepo 'tools/agent/Invoke-Gate.ps1'), '-Public')
-    $gateArgs += if ($Gate -and -not $recordedGate) { '-Gate' } else { '-Build' }
-    $previousSkip = $env:DotCharterSkipNativeFetch
-    $env:DotCharterSkipNativeFetch = 'true'
-    try { & pwsh @gateArgs; $buildExit = $LASTEXITCODE }
-    finally { $env:DotCharterSkipNativeFetch = $previousSkip }
-    $buildLine = "build: Invoke-Gate.ps1 $($gateArgs[-2..-1] -join ' ') exited $buildExit"
-    if ($recordedGate) { $buildLine += "; the gate was NOT re-run: reusing the green gate recorded for $(Format-GateRecord $recordedGate) (-ForceGate re-runs it)" }
-    if ($Push -and $buildExit -ne 0) { Stop-Push 'refused' @("$buildLine (the snapshot must build and pass the gate)") }
-    if ($Gate -and -not $recordedGate -and $buildExit -eq 0) {
-        [void](Save-GateRecord -Tree $dcTree -Commit $dc.Commit -Gate -Source 'Export-PublicSnapshot.ps1 -Gate (the public variant)')
-        $buildLine += "; recorded for tree $dcTree"
+    $recordedGate = $null; $reusedRecords = @{}
+    $scope = Get-GateRecordInputs -RepoRoot $dcRepo -Configuration Release
+    if ($Gate -and -not $ForceGate) { $recordedGate = Find-GateRecord -Trees @($dcTree, $devTree) -Kind gate @scope }
+    if ($recordedGate) { $reusedRecords.gate = $recordedGate }
+    $attemptedGate = $Gate -and -not $recordedGate
+    $acceptedKinds = @()
+    if ($attemptedGate) { Start-GateRecordRun -Trees @($dcTree, $devTree) -Kinds @('gate') @scope }
+    try {
+        $gateArgs = @('-NoProfile', '-File', (Join-Path $dcRepo 'tools/agent/Invoke-Gate.ps1'), '-Configuration', 'Release', '-Public')
+        $gateArgs += if ($Gate -and -not $recordedGate) { '-Gate' } else { '-Build' }
+        $previousSkip = $env:DotCharterSkipNativeFetch
+        $env:DotCharterSkipNativeFetch = 'true'
+        try { & pwsh @gateArgs; $buildExit = $LASTEXITCODE }
+        finally { $env:DotCharterSkipNativeFetch = $previousSkip }
+        $buildLine = "build: Invoke-Gate.ps1 $($gateArgs[-2..-1] -join ' ') exited $buildExit"
+        Assert-GateRecordsCurrent -Records $reusedRecords @scope
+        if ($recordedGate) { $buildLine += "; the gate was NOT re-run: reusing the green gate recorded for $(Format-GateRecord $recordedGate) (-ForceGate re-runs it)" }
+        if ($Push -and $buildExit -ne 0) { Stop-Push 'refused' @("$buildLine (the snapshot must build and pass the gate)") }
+        if ($Gate -and -not $recordedGate -and $buildExit -eq 0) {
+            [void](Save-GateRecord -Tree $dcTree -Commit $dc.Commit -Gate -Source 'Export-PublicSnapshot.ps1 -Gate (the public variant)' @scope)
+            $acceptedKinds = @('gate')
+            $buildLine += "; recorded for tree $dcTree"
+        }
+    }
+    finally {
+        if ($attemptedGate) { Complete-GateRecordRun -Trees @($dcTree, $devTree) -Kinds @('gate') -AcceptedKinds $acceptedKinds @scope }
     }
 }
 
@@ -376,7 +413,7 @@ else {
 }
 $asset = Get-NativeRuntimeAssetName $juce.Commit
 Write-Host "native-prebuilt publish (NOT run; once the public JuceSharp repo exists, from the exported tree):"
-Write-Host "    cd `"$dcRepo`"; pwsh -NoProfile -File tools/release/Publish-NativeRuntime.ps1 -NativeDir <pair folder> -Upload    # uploads $asset"
+Write-Host "    cd `"$dcRepo`"; pwsh -NoProfile -File tools/release/Publish-NativeRuntime.ps1 -NativeDir <pair folder> -ProvenancePath <that build's record> -Upload    # uploads $asset"
 Write-Host ''
 Write-Host $report
 Write-Host "full report: $reportPath"
@@ -405,6 +442,8 @@ if ($Push) {
     foreach ($p in $plans) {
         if ($p.Refspecs.Count -eq 0) { Write-Host "$($p.Label): $($p.Commit) and tag $($p.Tag) are already public; nothing to push."; continue }
         $refspecs = [string[]]$p.Refspecs
+        # Recheck each update: an earlier repo push may have taken seconds.
+        Assert-GateRecordsCurrent -Records $reusedRecords @scope
         Git -C $p.Repo push --atomic $p.Url @refspecs | Out-Null
         Write-Host "pushed $($p.Label) ($($p.Refspecs -join ', ')) -> $($p.Commit)"
     }
@@ -418,4 +457,13 @@ else {
         foreach ($blocker in $pushBlockers) { Write-Host "    $blocker" }
     }
 }
-exit $(if ($findings.Count -gt 0 -or $preflightProblems.Count -gt 0) { 1 } else { 0 })
+# Every check this run made counts, dry run included: a failed build or gate, or a gitleaks
+# run that did not pass, fails the export like a leak finding does.
+$failures = @(Get-SnapshotExportFailures -LeakFindings $findings.Count -PreflightProblems $preflightProblems.Count `
+        -BuildRequested:($Build -or $Gate) -BuildExit $buildExit -GitleaksExit $gitleaksExit)
+if ($failures.Count -gt 0) {
+    Write-Host 'export FAILED:'
+    foreach ($failure in $failures) { Write-Host "    $failure" }
+}
+$scratchLock.Dispose()
+exit $(if ($failures.Count -gt 0) { 1 } else { 0 })

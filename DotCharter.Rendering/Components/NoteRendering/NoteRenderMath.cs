@@ -1,7 +1,6 @@
 using System.Numerics;
 using Avalonia.Media;
 using DotCharter.Rendering.Data;
-using DotCharter.Rendering.Data.Render;
 using DotCharter.Rendering.Scene;
 
 namespace DotCharter.Rendering.Components.NoteRendering;
@@ -68,28 +67,6 @@ internal static class NoteRenderMath
         return (float)prevVal;
     }
 
-    public static (int minFret, int maxFret)? GetTemplateFretRange(RenderContext context, int templateId)
-    {
-        if (templateId < 0) return null;
-        var min = int.MaxValue;
-        var max = int.MinValue;
-        for (var t = 0; t < context.Snapshot.TemplateCount; t++)
-        {
-            if (context.Snapshot.Templates[t].Id != templateId) continue;
-            var tmpl = context.Snapshot.Templates[t];
-            for (var s = 0; s < context.Snapshot.StringCount; s++)
-            {
-                var f = tmpl.GetFret(s);
-                if (f <= 0) continue;
-                if (f < min) min = f;
-                if (f > max) max = f;
-            }
-            break;
-        }
-        if (min == int.MaxValue) return null;
-        return (min, max);
-    }
-
     /// <summary>The anchor span the hand is in at <paramref name="atTime" />.
     /// Delegates to <see cref="AnchorFretSpan" /> so every "where is the hand"
     /// answer on the highway comes out of ONE clamp.</summary>
@@ -98,20 +75,6 @@ internal static class NoteRenderMath
 
     public static (float x0, float x1) GetAnchorSpan(RenderContext context, double atTime)
         => AnchorFretSpan.WorldSpanAt(context.Snapshot.Anchors, context.Snapshot.AnchorCount, atTime);
-
-    public static void IncludeChordFrets(RenderContext context, RenderChord chord, ref int minFret, ref int maxFret)
-    {
-        for (var j = 0; j < chord.NoteCount; j++)
-        {
-            var cn = context.Snapshot.ChordNotes[chord.NoteOffset + j];
-            if (cn.Fret <= context.Snapshot.Capo || cn.Fret <= 0) continue;
-
-            minFret = Math.Min(minFret, cn.Fret);
-            maxFret = Math.Max(maxFret, cn.Fret);
-        }
-
-        maxFret = Math.Min(24, Math.Max(minFret, maxFret));
-    }
 
     public static float GetNoteX(RenderContext context, double time, int fret)
     {

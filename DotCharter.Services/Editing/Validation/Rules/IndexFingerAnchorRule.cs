@@ -50,7 +50,7 @@ public sealed class IndexFingerAnchorRule : IArrangementRule
 
             foreach (var chord in level.Chords)
             {
-                // The negative-id guard is ChordTemplateResolver.FindById's, kept
+                // The negative-id guard is Arrangement.FindChordTemplate's, kept
                 // here because the context's index does not carry it.
                 var template = chord.TemplateId < 0 ? null : context.ChordTemplateById(chord.TemplateId);
                 if (template == null || template.Fingers.Count == 0) continue;
@@ -69,18 +69,15 @@ public sealed class IndexFingerAnchorRule : IArrangementRule
                 if (index.Inferred && UnderReportedShape(context, level, chord, anchor)) continue;
 
                 var stated = index.Inferred
-                    ? $"This chord has no finger 1, but its finger {index.FromFinger} on fret {index.FromFret} puts " +
-                      $"the index finger on {index.Frets} (inferred)"
-                    : $"This chord is fingered with the index finger on fret {index.Fret}";
-                issues.Add(new ArrangementIssue(
+                    ? new IssueTextRef("Validation_IndexFingerStated_Inferred",
+                        [index.FromFinger, index.FromFret, IndexFretText.Of(index)])
+                    : new IssueTextRef("Validation_IndexFingerStated_Authored", [index.Fret]);
+                issues.Add(ArrangementIssues.Make(
                     ArrangementIssueType.IndexFingerNotOnAnchorFret,
-                    $"{stated}, but the fret-hand " +
-                    $"position is on fret {anchor.Fret}. Rocksmith derives the playing finger from the " +
-                    "anchor, so it will show a different fingering than the chart states — move the " +
-                    "anchor to match, or re-finger the chord.",
+                    "Validation_IndexFingerNotOnAnchorFret",
                     chord.Position.GetPositionMs(beats),
-                    Chord: chord,
-                    Anchor: anchor));
+                    chord: chord,
+                    anchor: anchor, args: [stated, anchor.Fret]));
             }
         }
     }

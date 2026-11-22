@@ -96,8 +96,13 @@ public sealed class LinkedMeasuresToolPolicyTests
         _ = group;
     }
 
+    /// <summary>
+    ///     Insert Beat makes only the pivot's bar one beat longer and moves no bar line, so the
+    ///     placements after it still start on their bar lines: the group survives with them, one
+    ///     beat later. One undo brings the group back as it was.
+    /// </summary>
     [Fact]
-    public void Inserting_a_beat_inside_a_placement_unlinks_it_and_shifts_the_others()
+    public void Inserting_a_beat_inside_a_placement_keeps_the_later_placements_linked()
     {
         var t = new LinkToolHarness();
         var group = t.H.Link((t.H.Lead, 1), (t.H.Lead, 4), (t.H.Lead, 7));
@@ -105,24 +110,44 @@ public sealed class LinkedMeasuresToolPolicyTests
 
         t.Maintenance.InsertBeatAtPlayhead();
 
-        LinkHarness.AssertLinkedAndEqual(t.H, group, 2);
-        Assert.Equal([new FractionalPosition(4), new FractionalPosition(29)], group.Placements.Select(p => p.Position));
+        var survivor = Assert.Single(t.H.Project.LinkGroups);
+        Assert.Contains(new FractionalPosition(4), survivor.Placements.Select(p => p.Position));
+        Assert.Contains(new FractionalPosition(29), survivor.Placements.Select(p => p.Position));
+        // The bar that grew no longer matches its copies: it alone unlinks.
+        Assert.DoesNotContain(new FractionalPosition(16), survivor.Placements.Select(p => p.Position));
 
         t.H.History.Undo();
         LinkHarness.AssertLinkedAndEqual(t.H, t.H.Project.LinkGroups.Single(), 3);
+        _ = group;
     }
 
     [Fact]
-    public void Removing_a_beat_inside_a_placement_unlinks_it()
+    public void Removing_a_beat_inside_a_placement_keeps_the_later_placements_linked()
     {
         var t = new LinkToolHarness();
-        var group = t.H.Link((t.H.Lead, 1), (t.H.Lead, 4), (t.H.Lead, 7));
+        t.H.Link((t.H.Lead, 1), (t.H.Lead, 4), (t.H.Lead, 7));
         t.H.State.CurrentTimeMs = t.H.Project.Beats[6].Time; // bar 1, beat 3
 
         t.Maintenance.RemoveBeatAtPlayhead();
 
-        LinkHarness.AssertLinkedAndEqual(t.H, group, 2);
-        Assert.DoesNotContain(group.Placements, p => p.Position == At(1, 0));
+        var survivor = Assert.Single(t.H.Project.LinkGroups);
+        Assert.Equal([new FractionalPosition(15), new FractionalPosition(27)],
+            survivor.Placements.Select(p => p.Position).Where(p => p != new FractionalPosition(4)));
+    }
+
+    /// <summary>Whole measures inserted before a placement keep every bar line on its beat, so the
+    /// group survives with every later placement moved by the inserted beats.</summary>
+    [Fact]
+    public void Inserting_measures_before_a_placement_keeps_the_group_and_shifts_the_later_ones()
+    {
+        var t = new LinkToolHarness();
+        var group = t.H.Link((t.H.Lead, 1), (t.H.Lead, 4), (t.H.Lead, 7));
+        t.H.State.CurrentTimeMs = t.H.Project.Beats[18].Time; // bar 4, beat 3
+
+        t.Maintenance.InsertMeasuresAtPlayhead(1);
+
+        LinkHarness.AssertLinkedAndEqual(t.H, group, 3);
+        Assert.Equal([At(1, 0), At(5, 0), At(8, 0)], group.Placements.Select(p => p.Position));
     }
 
     /// <summary>A time-signature change inside a placement unlinks it — even under the

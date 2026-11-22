@@ -26,3 +26,26 @@ Mechanical backstops:
   back into god files.
 - `Infrastructure/MethodComplexityBudgetTests` does the same for methods.
 - Nothing mechanical covers the numbers or the prose. Re-measure; don't carry.
+
+## Writing style for user docs
+
+Applies to `README.md` and `docs/guide/` (and the callout texts in `docs/guide/manifests/*.json`,
+which generate the numbered lists in the guide pages: edit the manifest, then the page).
+Readers are guitar and bass players and chart makers, many not native English speakers.
+
+- Main point first in every section, details after. Answer what this is, what to do, what happens.
+- Short sentences, under 20 to 25 words, one idea each. Active voice, present tense, "you" for the reader.
+- Everyday words. Explain a technical term the first time it appears, in one short clause.
+- Full sentences, not telegraph style. Tables and lists may stay short.
+- Say why when the reader would wonder. Numbered steps for procedures, one action per step.
+- One name per thing throughout. Contractions are fine. American spelling in prose.
+- Never change code, setting names, file names or menu labels.
+
+Sound ordinary, not polished. Avoid clauses glued with colons or semicolons, parenthetical asides in
+running prose, em dashes, bold lead-ins on every bullet, "In short:", "Note that", "seamlessly", "out of
+the box", "under the hood", reflexive "X, not Y" contrasts, rule-of-three lists and saying the same
+thing twice. Don't expand sentences that are already clear.
+
+A rewrite must not change facts (numbers, versions, defaults, shortcuts, menu paths, names, commands,
+URLs), code blocks, inline code, link targets or heading text. Compare the file with `main` before
+opening the PR: inline code spans, fenced blocks, link targets and headings must match.

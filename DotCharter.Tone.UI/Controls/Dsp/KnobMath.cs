@@ -282,7 +282,7 @@ public static class KnobMath
     /// mapped back through <see cref="ValueFromDisplay"/> then clamped to
     /// [min, max]. Accepts both the invariant and current-culture decimal
     /// separators. Returns false (and leaves <paramref name="value"/> at 0) when
-    /// the text is null/blank or not a number.
+    /// the text is null/blank, invalid, or non-finite.
     /// </summary>
     public static bool TryParseEntry(
         string? text, double min, double max, bool tenScale, out double value)
@@ -296,6 +296,8 @@ public static class KnobMath
         {
             return false;
         }
+
+        if (!double.IsFinite(display)) return false;
 
         var real = ValueFromDisplay(display, min, max, tenScale);
         value = Math.Clamp(real, Math.Min(min, max), Math.Max(min, max));

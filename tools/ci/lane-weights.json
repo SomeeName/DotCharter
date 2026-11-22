@@ -1,0 +1,8 @@
+{
+  "_comment": "Per lane, from ONE run of the lanes together (tools/agent/Invoke-Gate.ps1 -Gate -Headless -ReleaseLane -UpdateShardWeights, as Merge-Train.ps1 runs them): seconds = the shards' wall times summed, longest = the longest class. Splits the testhosts between the lanes (tools/ci/GateShards.psm1 Get-LaneShardCounts); a stale file costs balance, never coverage.",
+  "lanes": {
+    "gate": { "seconds": 690, "longest": 100.2 },
+    "headless": { "seconds": 1360, "longest": 136.5 },
+    "release": { "seconds": 673, "longest": 269.9 }
+  }
+}

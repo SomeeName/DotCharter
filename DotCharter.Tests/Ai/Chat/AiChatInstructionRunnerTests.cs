@@ -108,6 +108,44 @@ public sealed partial class AiChatInstructionRunnerTests
         Assert.False(factory.Settings.WebResearch);
     }
 
+    [Theory]
+    [InlineData(ChordNamingStyle.Eof)]
+    [InlineData(ChordNamingStyle.Musical)]
+    public async Task The_chord_names_job_runs_the_menu_rows_pass_in_the_requested_style(ChordNamingStyle style)
+    {
+        var model = new FakeChartModel((prompt, _) =>
+        {
+            var ms = int.Parse(ChunkStart().Match(prompt.Messages[0].Text).Groups[1].Value, CultureInfo.InvariantCulture);
+            return _f.EchoReply(_f.Chunks(AiChartFixture.PerPhrase).Single(c => c.StartMs == ms), AiChartJob.ChordNames).Json();
+        });
+        var (runner, _, _) = Runner(model);
+
+        await runner.RunInstructionAsync(
+            new AiChatInstructionRequest("Name the chords.", AiChatScope.WholeArrangement(), null, null, AiChartJob.ChordNames)
+            {
+                Style = style
+            }, CancellationToken.None);
+
+        Assert.NotEmpty(model.Prompts);
+        Assert.All(model.Prompts, p => Assert.Equal(AiChartPrompt.System(AiChartJob.ChordNames, style), p.System));
+        Assert.NotEqual(AiChartPrompt.System(AiChartJob.ChordNames, ChordNamingStyle.Eof),
+            AiChartPrompt.System(AiChartJob.ChordNames, ChordNamingStyle.Musical));
+    }
+
+    [Theory]
+    [InlineData(ChordNamingStyle.Eof, "Gb Db Gb", "Gb5")]
+    [InlineData(ChordNamingStyle.Musical, "F# C# F#", "F#5")]
+    public void The_chord_names_prompt_spells_notes_and_distinct_offers(ChordNamingStyle style, string notes, string offer)
+    {
+        _f.Arrangement.Tuning = ["Eb", "Ab", "Db", "Gb", "Bb", "Eb"];
+        var chunk = _f.Chunks()[0];
+        var facts = _f.Facts with { NamingKey = new ChordKeySignature(6, false) };
+        var prompt = AiChartPrompt.Build(AiChartJob.ChordNames, style, facts, _f.Level, _f.Beats, chunk,
+            new AiChartInstruction("Name the chords."));
+
+        Assert.Contains($"notes {notes} namer [{offer}] name \"G5\"", Assert.Single(prompt.Messages).Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Without_an_instruction_the_prompt_is_the_menu_verbs_byte_for_byte()
     {
@@ -332,13 +370,10 @@ public sealed partial class AiChatInstructionRunnerTests
     }
 
     [Fact]
-    public async Task The_chat_cannot_ask_for_chord_names_or_send_an_empty_instruction()
+    public async Task The_chat_cannot_send_an_empty_instruction()
     {
         var (runner, _, factory) = Runner(Model());
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => runner.RunInstructionAsync(
-            new AiChatInstructionRequest(Octaves, AiChatScope.WholeArrangement(), Job: AiChartJob.ChordNames),
-            CancellationToken.None));
         await Assert.ThrowsAsync<ArgumentException>(() => runner.RunInstructionAsync(
             new AiChatInstructionRequest(" \n ", AiChatScope.WholeArrangement()), CancellationToken.None));
         Assert.Equal(0, factory.Created);

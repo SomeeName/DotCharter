@@ -101,6 +101,40 @@ public sealed class QualityReportSnapshot
     }
 
     /// <summary>
+    ///     Runs <paramref name="validate" /> over the copy, on any thread, and notes where each element
+    ///     its issues name sits in the copy. The inspector's Issues tab uses this instead of validating
+    ///     the live arrangement on the UI thread.
+    /// </summary>
+    public ArrangementIssueCheck CheckIssues(Func<ChartProject, IReadOnlyList<ArrangementIssue>> validate)
+    {
+        ArgumentNullException.ThrowIfNull(validate);
+        ObjectDisposedException.ThrowIf(_released, this);
+        var issues = validate(Copy);
+        return new ArrangementIssueCheck(issues, Locate(issues));
+    }
+
+    /// <summary>
+    ///     The same issues, in the same order, naming the LIVE chart's elements (matched by position; an
+    ///     element that has gone or moved is dropped from its issue, which keeps its time). Null when
+    ///     the live chart's arrangements or levels do not line up with the copy.
+    /// </summary>
+    public IReadOnlyList<ArrangementIssue>? RebindIssues(ArrangementIssueCheck check)
+    {
+        ArgumentNullException.ThrowIfNull(check);
+        ObjectDisposedException.ThrowIf(_released, this);
+        if (!StillLinesUp()) return null;
+        var places = check.Places;
+        return check.Issues.Select(i => i with
+        {
+            Note = Live(i.Note, places) as GuitarNote,
+            Chord = Live(i.Chord, places) as Chord,
+            HandShape = Live(i.HandShape, places) as HandShape,
+            Anchor = Live(i.Anchor, places) as FretAnchor,
+            HandShapes = i.HandShapes?.Select(s => Live(s, places)).OfType<HandShape>().ToList()
+        }).ToList();
+    }
+
+    /// <summary>
     ///     Hands the copy back to be reused. Call it on the thread that rebinds, once the check over
     ///     the copy has finished and its report has been rebound or dropped: a rebound report names
     ///     only the live chart, so nothing holds the copy after. <see cref="Check" /> and
@@ -162,6 +196,37 @@ public sealed class QualityReportSnapshot
 
         foreach (var summary in report.Arrangements) Want(summary.Arrangement);
 
+        return Place(wanted);
+
+        void Want(object? item)
+        {
+            if (item != null) wanted.Add(item);
+        }
+    }
+
+    /// <summary>Where each issue's back-referenced element sits in the copy.</summary>
+    private Dictionary<object, QualityPlace> Locate(IReadOnlyList<ArrangementIssue> issues)
+    {
+        var wanted = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var issue in issues)
+        {
+            Want(issue.Note);
+            Want(issue.Chord);
+            Want(issue.HandShape);
+            Want(issue.Anchor);
+            foreach (var shape in issue.HandShapes ?? []) Want(shape);
+        }
+
+        return Place(wanted);
+
+        void Want(object? item)
+        {
+            if (item != null) wanted.Add(item);
+        }
+    }
+
+    private Dictionary<object, QualityPlace> Place(HashSet<object> wanted)
+    {
         var places = new Dictionary<object, QualityPlace>(ReferenceEqualityComparer.Instance);
         for (var a = 0; a < Copy.Arrangements.Count; a++)
         {
@@ -179,11 +244,6 @@ public sealed class QualityReportSnapshot
         }
 
         return places;
-
-        void Want(object? item)
-        {
-            if (item != null) wanted.Add(item);
-        }
 
         void Find<T>(IList<T> items, int a, int l) where T : class
         {
@@ -206,6 +266,21 @@ public sealed class QualityReportCheck
 
     /// <summary>The report as built: it names the copy's arrangements, levels and elements.</summary>
     public ChartQualityReport Report { get; }
+
+    internal IReadOnlyDictionary<object, QualityPlace> Places { get; }
+}
+
+/// <summary>Issues built over a <see cref="QualityReportSnapshot" />'s copy, waiting to be rebound to the live chart.</summary>
+public sealed class ArrangementIssueCheck
+{
+    internal ArrangementIssueCheck(IReadOnlyList<ArrangementIssue> issues, IReadOnlyDictionary<object, QualityPlace> places)
+    {
+        Issues = issues;
+        Places = places;
+    }
+
+    /// <summary>The issues as validated: they name the copy's elements.</summary>
+    public IReadOnlyList<ArrangementIssue> Issues { get; }
 
     internal IReadOnlyDictionary<object, QualityPlace> Places { get; }
 }

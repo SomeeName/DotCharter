@@ -78,6 +78,58 @@ public sealed class ClipboardPasteCompatibilityTests
         Assert.Equal(2, b.Levels[0].Notes.Count);
     }
 
+    [Theory]
+    [InlineData("note", false)]
+    [InlineData("chord", false)]
+    [InlineData("anchor", false)]
+    [InlineData("note", true)]
+    [InlineData("chord", true)]
+    [InlineData("anchor", true)]
+    public void SubCapoSlideTargetsAndAnchors_AreRefusedWithoutCommitting(string content, bool special)
+    {
+        var h = new Harness();
+        var source = h.AddArrangement("Lead", strings: 6, capo: 0);
+        var target = h.AddArrangement("Rhythm", strings: 6, capo: 3);
+        if (content == "note")
+        {
+            var note = Note(2, 0, 5);
+            note.SlideTo = 2;
+            source.Levels[0].Notes.Add(note);
+            h.Selection.SelectedNotes.Add(note);
+        }
+        else if (content == "chord")
+        {
+            var chord = new Chord { Position = new FractionalPosition(2) };
+            chord.ChordNotes.Add(new ChordNote { StringIndex = 0, Fret = 5, SlideTo = 2 });
+            chord.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 7 });
+            source.Levels[0].Chords.Add(chord);
+            h.Selection.SelectedChords.Add(chord);
+        }
+        else
+        {
+            var anchor = new FretAnchor { Position = new FractionalPosition(2), Fret = 1 };
+            source.Levels[0].Anchors.Add(anchor);
+            h.Selection.SelectedAnchors.Add(anchor);
+        }
+        h.Clipboard.Copy(h.Track(source), EditorFocusArea.NoteHighway);
+        h.Selection.ClearAll();
+        var before = h.History.CurrentNodeId;
+
+        var outcome = special
+            ? h.Clipboard.PasteSpecial(h.Track(target), 8000, 4, PasteSpecialMode.Preserve)
+            : h.Clipboard.Paste(h.Track(target), 8000, 4);
+
+        Assert.Equal(PhrasePasteResult.Blocked, outcome!.Result);
+        var expectedKey = content == "anchor"
+            ? PhrasePasteCompatibility.KeyAnchorOnOrBelowCapo
+            : PhrasePasteCompatibility.KeyFretBelowCapo;
+        Assert.Contains(outcome.Check!.Issues, i => i.LocalizationKey == expectedKey);
+        Assert.Empty(target.Levels[0].Notes);
+        Assert.Empty(target.Levels[0].Chords);
+        Assert.Empty(target.Levels[0].Anchors);
+        Assert.Equal(before, h.History.CurrentNodeId);
+    }
+
     private static GuitarNote Note(int beat, int stringIndex, int fret) =>
         new() { Position = new FractionalPosition(beat), StringIndex = stringIndex, Fret = fret };
 

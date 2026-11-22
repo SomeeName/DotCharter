@@ -8,10 +8,10 @@ namespace DotCharter.Core.Utilities;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The suggestion is a PURE FUNCTION OF THE FRET SHAPE. Templates dedupe
-///         by frets, so one shape can only ever carry one fingering — the same
-///         shape played in two different musical contexts (different preceding
-///         hand position) must still get a single answer here. Measured with
+///         The suggestion is a PURE FUNCTION OF THE FRET SHAPE. Authored templates
+///         may carry different fingerings, but the same shape played in different
+///         musical contexts (different preceding hand position) must still get a
+///         single suggestion here. Measured with
 ///         <c>tools/chart-eval</c> over the owner's 86 finished charts (43,517
 ///         fingered chords): 81.0% exact, 88.1% per string, against a ceiling
 ///         of 92.4% for ANY function of the fret shape (each shape's most
@@ -206,7 +206,7 @@ public class ChordTemplateFingerSetter
         }
 
         var len = highestString - lowestNonzeroString + 1;
-        if (len is < 2 or > 6) return;
+        if (len < 2 || len > maxStrings) return;
 
         var frets = new int[len];
         for (var i = 0; i < len; i++)
@@ -229,7 +229,9 @@ public class ChordTemplateFingerSetter
             return;
         }
 
-        var matchingShape = RecognizedShapes[frets.Length].FirstOrDefault(s => s.Matches(frets));
+        var matchingShape = frets.Length < RecognizedShapes.Count
+            ? RecognizedShapes[frets.Length].FirstOrDefault(s => s.Matches(frets))
+            : null;
         if (matchingShape != null)
         {
             matchingShape.Apply(template, lowestNonzeroString);

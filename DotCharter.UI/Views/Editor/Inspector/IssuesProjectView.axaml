@@ -1,0 +1,183 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspector="using:DotCharter.UI.ViewModels.Editor.Inspector"
+             xmlns:dialogVms="clr-namespace:DotCharter.UI.ViewModels.Dialogs;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.IssuesProjectView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Issues tab's "Whole project" card (design D): Refresh, the audio check and the export check as
+         its three verbs; the project's verdict and a row per arrangement (a click makes it the active one and
+         opens its findings); then what each on-demand check found, every finding a jump, an export finding with
+         a fix carrying Fix BESIDE it (never inside the jump). The export verdict is the validator's own sentence
+         in the colour of what it means: muted until the check has run, then success or danger. -->
+    <StackPanel Spacing="{StaticResource FireSpaceXs}">
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" Text="{localization:Loc Inspector_Issues_WholeProject}" />
+        <WrapPanel x:Name="WholeProjectVerbs" ItemSpacing="{StaticResource FireSpaceXs}" LineSpacing="{StaticResource FireSpaceXs}">
+            <Button x:Name="WholeProjectRefresh" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                    Content="{localization:Loc Action_Refresh}"
+                    AutomationProperties.Name="{localization:Loc Action_Refresh}"
+                    ToolTip.Tip="{localization:Loc Inspector_Issues_RefreshTip}"
+                    Command="{Binding Issues.RefreshIssuesCommand}" />
+            <Button x:Name="AudioLintRun" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                    Content="{localization:Loc Inspector_AudioLint_Run}"
+                    AutomationProperties.Name="{localization:Loc Inspector_AudioLint_Run}"
+                    ToolTip.Tip="{localization:Loc Inspector_AudioLint_RunTip}"
+                    Command="{Binding AudioLint.RunCommand}"
+                    IsEnabled="{Binding !AudioLint.IsRunning}"
+                    IsVisible="{Binding AudioLint.CanRun}" />
+            <Button x:Name="ExportCheckRun" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                    Content="{localization:Loc Inspector_Export_Check}"
+                    AutomationProperties.Name="{localization:Loc Inspector_Export_Check}"
+                    ToolTip.Tip="{localization:Loc Inspector_Export_CheckTip}"
+                    Command="{Binding ExportReadiness.CheckExportReadinessCommand}" />
+        </WrapPanel>
+
+        <StackPanel x:Name="WholeProjectSection" Spacing="{StaticResource FireSpaceXs}">
+            <ProgressBar x:Name="WholeProjectBusyBar" IsIndeterminate="True" IsVisible="{Binding ExportReadiness.IsProjectChecking}" />
+            <StackPanel x:Name="WholeProjectVerdictRow" Spacing="{StaticResource FireSpaceXxs}" IsVisible="{Binding ExportReadiness.HasProjectReport}">
+                <TextBlock x:Name="WholeProjectVerdictText" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody" TextWrapping="Wrap"
+                           TextTrimming="None" Text="{Binding ExportReadiness.ProjectVerdict}" />
+                <TextBlock x:Name="WholeProjectCountsText" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                           Text="{Binding ExportReadiness.ProjectCounts}" />
+                <TextBlock x:Name="WholeProjectEasierText" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                           IsVisible="{Binding ExportReadiness.HasProjectEasierLevelsNote}"
+                           Text="{Binding ExportReadiness.ProjectEasierLevelsNote}" />
+            </StackPanel>
+            <!-- Design D: the project's findings for one arrangement or all of them; Jump makes the finding's arrangement
+                 the active one, Fix applies the default fix and only for a finding of the arrangement on screen. -->
+            <StackPanel x:Name="ProjectFindingsSection" Spacing="{StaticResource FireSpaceXs}" IsVisible="{Binding ExportReadiness.HasProjectReport}">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSm}">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{localization:Loc Inspector_Issues_Arrangement}" />
+                    <ComboBox Grid.Column="1" x:Name="ProjectArrangementFilter" Classes="ColumnFlowField"
+                              AutomationProperties.Name="{localization:Loc Inspector_Issues_Arrangement}"
+                              ItemsSource="{Binding ExportReadiness.ProjectFindings.ArrangementChoices}"
+                              SelectedItem="{Binding ExportReadiness.ProjectFindings.SelectedArrangement, Mode=TwoWay}" />
+                </Grid>
+                <TextBlock x:Name="ProjectFindingsEmpty" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                           IsVisible="{Binding !ExportReadiness.ProjectFindings.HasItems}" Text="{localization:Loc Inspector_Issues_ProjectNoFindings}" />
+                <ListBox x:Name="ProjectFindingsList" MaxHeight="160" IsVisible="{Binding ExportReadiness.ProjectFindings.HasItems}"
+                         AutomationProperties.Name="{localization:Loc Inspector_Issues_ProjectFindings}"
+                         ItemsSource="{Binding ExportReadiness.ProjectFindings.Items}"
+                         SelectedItem="{Binding ExportReadiness.ProjectFindings.Selected, Mode=TwoWay}">
+                    <ListBox.Styles>
+                        <Style Selector="ListBoxItem" x:DataType="inspector:ProjectFindingRow">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+                            <Setter Property="Padding" Value="4,2" />
+                            <Setter Property="MinHeight" Value="0" />
+                        </Style>
+                    </ListBox.Styles>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="inspector:ProjectFindingRow">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSm}" ToolTip.Tip="{Binding Title}">
+                                <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp" Text="{Binding Stamp}" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody">
+                                    <Run Text="{Binding Title}" /><Run Text=" · " /><Run Text="{Binding ArrangementName}" />
+                                </TextBlock>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+                    <Button Grid.Column="0" x:Name="ProjectFindingJump" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                            Content="{localization:Loc Inspector_Issues_Jump}"
+                            AutomationProperties.Name="{localization:Loc Inspector_Issues_Jump}"
+                            ToolTip.Tip="{localization:Loc Inspector_Issues_ProjectJumpTip}"
+                            Command="{Binding ExportReadiness.ProjectFindings.JumpCommand}" />
+                    <Button Grid.Column="1" x:Name="ProjectFindingFix" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                            Content="{localization:Loc Issues_Row_Fix}"
+                            AutomationProperties.Name="{localization:Loc Issues_Row_Fix}"
+                            ToolTip.Tip="{Binding ExportReadiness.ProjectFindings.FixTip}"
+                            ToolTip.ShowOnDisabled="True"
+                            Command="{Binding ExportReadiness.ProjectFindings.FixCommand}" />
+                </Grid>
+            </StackPanel>
+            <ItemsControl x:Name="ArrangementDifficultyList" ItemsSource="{Binding ExportReadiness.ProjectArrangements}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="inspector:ProjectArrangementRow">
+                        <Button Theme="{StaticResource ColumnFlowRow}" Classes="ColumnFlowRow" Margin="0,0,0,2"
+                                AutomationProperties.Name="{Binding Name}"
+                                ToolTip.Tip="{Binding Tip}"
+                                Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).ExportReadiness.SelectProjectArrangementCommand}"
+                                CommandParameter="{Binding}">
+                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody" Text="{Binding Name}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp" Text="{Binding Difficulty}" />
+                                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                           TextWrapping="Wrap" Text="{Binding Counts}" />
+                            </Grid>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- the audio check -->
+        <StackPanel x:Name="AudioLintSection" Spacing="{StaticResource FireSpaceXxs}">
+            <TextBlock x:Name="AudioCheckTitle" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" Text="{localization:Loc Inspector_AudioLint_Title}" />
+            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                       Text="{Binding AudioLint.SummaryLine}" IsVisible="{Binding AudioLint.HasResult}" />
+            <ItemsControl x:Name="AudioLintFindings" ItemsSource="{Binding AudioLint.AudioFindings}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="viewModels:AudioLintFindingRow">
+                        <Button Theme="{StaticResource ColumnFlowRow}" Classes="ColumnFlowRow" Margin="0,0,0,2"
+                                AutomationProperties.Name="{Binding Description}"
+                                Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).AudioLint.JumpToCommand}"
+                                CommandParameter="{Binding}">
+                            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody" Text="{Binding Description}" />
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- the export check: three verdict states, each on a real flag -->
+        <StackPanel x:Name="ExportCheckSection" Spacing="{StaticResource FireSpaceXxs}">
+            <TextBlock x:Name="ExportCheckTitle" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" Text="{localization:Loc Inspector_Export_Section}" />
+            <Panel x:Name="ExportVerdict">
+                <TextBlock x:Name="ExportVerdictPending" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                           IsVisible="{Binding !ExportReadiness.HasExportCheckRun}"
+                           Text="{Binding ExportReadiness.ExportReadinessSummary}" />
+                <Panel IsVisible="{Binding ExportReadiness.HasExportCheckRun}">
+                    <TextBlock x:Name="ExportVerdictOk" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                               Foreground="{DynamicResource FireSuccess}"
+                               IsVisible="{Binding !ExportReadiness.HasExportFindings}"
+                               Text="{Binding ExportReadiness.ExportReadinessSummary}" />
+                    <TextBlock x:Name="ExportVerdictBad" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                               Foreground="{DynamicResource FireDanger}"
+                               IsVisible="{Binding ExportReadiness.HasExportFindings}"
+                               Text="{Binding ExportReadiness.ExportReadinessSummary}" />
+                </Panel>
+            </Panel>
+            <ItemsControl x:Name="ExportFindings" ItemsSource="{Binding ExportReadiness.ExportFindings}" IsVisible="{Binding ExportReadiness.HasExportFindings}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="dialogVms:ExportValidationItem">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceXs}" Margin="0,0,0,2">
+                            <Button Grid.Column="0" Theme="{StaticResource ColumnFlowRow}" Classes="ColumnFlowRow"
+                                    AutomationProperties.Name="{Binding Message}"
+                                    ToolTip.Tip="{Binding Message}"
+                                    Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).ExportReadiness.JumpToExportFindingCommand}"
+                                    CommandParameter="{Binding}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                    <Panel Grid.Column="0" Width="7" VerticalAlignment="Center">
+                                        <Ellipse Width="7" Height="7" Fill="{DynamicResource FireDanger}" IsVisible="{Binding IsError}" />
+                                        <Ellipse Width="7" Height="7" Fill="{DynamicResource FireWarning}" IsVisible="{Binding !IsError}" />
+                                    </Panel>
+                                    <TextBlock Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody" Text="{Binding Message}" />
+                                    <TextBlock Grid.Column="2" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp" Text="{Binding Location}" />
+                                </Grid>
+                            </Button>
+                            <Button Grid.Column="1" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    Content="{localization:Loc Dialog_Export_Fix}"
+                                    ToolTip.Tip="{Binding FixDescription}"
+                                    AutomationProperties.Name="{Binding FixDescription}"
+                                    IsVisible="{Binding HasFix}"
+                                    Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).ExportReadiness.FixExportFindingCommand}"
+                                    CommandParameter="{Binding}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

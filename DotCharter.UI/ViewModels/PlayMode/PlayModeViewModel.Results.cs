@@ -64,6 +64,7 @@ public sealed partial class PlayModeViewModel
     /// backing-track mutes).</summary>
     private void EndRunSideEffects()
     {
+        _endWatchTimer.Stop();
         // The run chain ends here: the next BeginGameplay captures fresh
         // pre-run baselines (see _runSideEffectsApplied).
         var hadRunSideEffects = _runSideEffectsApplied;
@@ -106,8 +107,9 @@ public sealed partial class PlayModeViewModel
     /// <summary>Editor bridge: drop into the editor at the first failed
     /// section of the last run (or the start when everything was clean).</summary>
     [RelayCommand]
-    private void OpenInEditor()
+    private async Task OpenInEditor()
     {
+        await ListenBack.StopAsync();
         EndRunSideEffects();
         var target = _lastReport?.WorstSection?.StartMs ?? 0;
         _transport?.SeekTo(target);
@@ -125,9 +127,10 @@ public sealed partial class PlayModeViewModel
     /// and the scroll speed and pitch shift would then read as permanent settings.
     /// </para></summary>
     [RelayCommand]
-    private void OpenSectionInEditor(SectionRow? row)
+    private async Task OpenSectionInEditor(SectionRow? row)
     {
         if (row == null) return;
+        await ListenBack.StopAsync();
         EndRunSideEffects();
         _transport?.SeekTo(row.StartMs);
         ExitToEditorRequested?.Invoke();

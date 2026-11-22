@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
              x:Class="DotCharter.UI.Views.Dialogs.KeyboardShortcutsDialogView"
              x:DataType="contracts:IKeyboardShortcutsScreen"
              x:CompileBindings="True">
@@ -34,7 +35,7 @@
                 <Grid Theme="{DynamicResource DlgRowGrid}" Grid.Row="1" Classes="DlgRow" ColumnDefinitions="*,180">
                     <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
                                Text="{localization:Loc Dialog_Shortcuts_Search}" />
-                    <TextBox VerticalAlignment="Center" Grid.Column="1"
+                    <TextBox VerticalAlignment="Center" Grid.Column="1" dlgv:FocusOnOpen.IsTarget="True"
                              Text="{Binding FilterText, Mode=TwoWay}"
                              PlaceholderText="{localization:Loc Dialog_Shortcuts_SearchWatermark}"
                              AutomationProperties.Name="{localization:Loc Dialog_Shortcuts_Search}" />

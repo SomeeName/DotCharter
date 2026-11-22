@@ -48,6 +48,13 @@ internal sealed class DdPhraseData
         var endTime = iterationIndex + 1 == arr.PhraseIterations.Count
             ? arr.SongLength
             : arr.PhraseIterations[iterationIndex + 1].Time;
+        // The F# ends the last phrase at the song length and starts the first at its marker,
+        // so a sound past either (an END written after the song length, a note after END,
+        // one before the first marker) fell into no phrase and out of every generated level.
+        // The first and last phrases reach over every sound the level holds.
+        if (iterationIndex == 0 && FirstSoundTime(level) is { } first && first < startTime) startTime = first;
+        var isLast = iterationIndex + 1 == arr.PhraseIterations.Count;
+        if (isLast && LastSoundTime(level) is { } last && last >= Math.Max(startTime, endTime)) endTime = last + 1;
 
         var notes = Range(level.Notes, n => n.Time, startTime, endTime);
         var chords = Range(level.Chords, c => c.Time, startTime, endTime);
@@ -61,7 +68,7 @@ internal sealed class DdPhraseData
         int Count(Func<DdNote, bool> pred) =>
             notes.Count(pred) + chords.Count(c => c.HasChordNotes && c.ChordNotes!.Exists(n => pred(n)));
         var isSolo = phrase.IsSolo
-                     || arr.Sections.Find(s => s.Time == startTime) is { } section && (section.Name == "solo" || section.Name == "tapping");
+                     || arr.Sections.Find(s => s.Time == iteration.Time) is { } section && (section.Name == "solo" || section.Name == "tapping");
 
         return new DdPhraseData
         {
@@ -92,6 +99,12 @@ internal sealed class DdPhraseData
             SoloPhrase = isSolo,
         };
     }
+
+    private static int? FirstSoundTime(DdLevel level) =>
+        level.Notes.Select(n => (int?)n.Time).Concat(level.Chords.Select(c => (int?)c.Time)).Min();
+
+    private static int? LastSoundTime(DdLevel level) =>
+        level.Notes.Select(n => (int?)n.Time).Concat(level.Chords.Select(c => (int?)c.Time)).Max();
 
     /// <summary><c>Utils.getRange</c>: the elements in [start, end), in list order.</summary>
     private static List<T> Range<T>(List<T> items, Func<T, int> time, int startTime, int endTime) =>

@@ -5,8 +5,7 @@ Wave 2 of the UI rewrite ([target-architecture.md](../target-architecture.md)
 `DialogContainerView`'s `RegisterLazy` and onto the Presentation architecture.
 **Moved so far (2026-09-22):** slice 1 — Unsaved changes, Set BPM, Tempo-map
 operation, Update available, Fret-hand position, Generate levels, Beat; slice 2 —
-Paste special, Arrangement sync, Keyboard shortcuts, Vocal track settings, Chart
-from audio, Rocksmith XML import, MIDI import, Editor on Fire import; slice 3 —
+Paste special, Arrangement sync, Keyboard shortcuts, Vocal track settings, Rocksmith XML import, MIDI import, Editor on Fire import; slice 3 —
 History, Library doctor, Chart diff, Batch lint, Showlights, Checkpoints, Guitar
 Pro import, About; slice 4 — Song metadata, Crash recovery, Tuner, Event, Arrangement settings, New project, Pattern builder, Latency calibration, Tone designer, Rocksmith export, Audio from YouTube (which replaced the deleted Songsterr import, #820); and the text-document dialog (`ITextDocumentScreen`), new on the host: Help ▸ Usage statistics and the licence (Help ▸ License & notices, About's link) are read in the app. Both handed a file (.txt, .md) to the system, which raised Windows' "choose an app" box where no viewer is set (2026-09-24); "Show the file" selects the copy on disk instead of opening it. The first-run wizard is still legacy and lives beside them (and the generic message dialog stays legacy, below); both halves share one Esc route, one
 `HasOpenDialog` and one drawing order.
@@ -24,16 +23,24 @@ Pro import, About; slice 4 — Song metadata, Crash recovery, Tuner, Event, Arra
 | Registration | `DotCharter.Presentation/Dialogs/DialogsModule.cs` | `services.AddScoped<I<Name>Screen, <Name>ViewModel>()`. |
 | Callers | wherever `Dialogs.<Name>.Open…()` was | `IDialogs.ShowAsync<TContract, TResult>()` or `ShowAsync(new <Name>Request(…))`. The shell's doors are `ViewModels/Shell/ShellDialogsViewModel.cs` (`MainWindowViewModel.ShellDialogs`; Tools ▸ Calibrate latency takes `ILatencyCalibrationPrompt` through its constructor, and `ShellDialogsViewModelTests` fails on any `App.Services` lookup under `ViewModels/Shell/`); a dialog nobody awaits goes through `Launch(…)`, which logs a fault (`DialogRequests.Observe`) and a missing host. |
 | Delete | | the legacy view model, its `AppDialogService` property / ctor parameter / `AllDialogs` entry, its `RegisterLazy`, its `App.ViewModelServices` singleton. |
-| State between opens | `Screens/Dialogs/DialogMemory` | The view model lives only while it is open, so anything the legacy SINGLETON remembered across opens goes here (Paste special's mode and mouse flag; Chart from audio's WAV, keyed to the project it was chosen for). Never a static. |
+| State between opens | `Screens/Dialogs/DialogMemory` | The view model lives only while it is open, so anything the legacy SINGLETON remembered across opens goes here (Paste special's mode and mouse flag). Never a static. |
 | Work BEFORE the dialog | `Screens/Dialogs/<Name>Launcher` | A dialog that used to do work before `IsOpen` went true (a file picker, a parse off the UI thread under a status-bar pill) gets a singleton launcher: `PickAsync()` for the menu, `OpenAsync(path)` for a dropped file, each ending in one `ShowAsync(new <Name>Request(…))`. Registered in `App.ViewModelServices`; the shell holds it and its verbs call it through `LaunchImport`. |
 | Live state another surface shares | a Services singleton with LEASES | The Tuner's detection also drives the Tools popover's readout, so the poll, the detector and each string's memory live in `Services/Audio/Tuning/LiveTuner`: `Acquire(fresh)` returns a lease (null when there is nothing to tune), the first lease starts the poll (`IUiDispatcher.SchedulePeriodic`) and the last one stops it. The dialog takes a FRESH lease in its constructor and disposes it in `Dispose` (the host disposes the scope on close); the popover holds its own through `Presentation/Shared/TunerReadout`. |
 | Work AFTER the dialog | Services | A dialog that used to keep working after it closed (the EOF import's folder picker, save and adopt) ANSWERS what it produced instead — `EofImportSelection` — and the launcher hands that to a Services class (`Import/Eof/EofProjectCreator`). A closed dialog's scope is gone; nothing may run on it. |
+
+## Fix chart (#497)
+
+`IFixChartScreen` / `FixChartViewModel` (`FixChartRequest` carries the preselected group): one dialog
+over Fix chart errors ("Errors") and Polish chart ("Polish"). It lists what each group would change
+before anything does (counts per kind from a run on a snapshot, off the UI thread), and Apply is ONE undo
+step. Opened by Tools > Fix & clean up > Fix chart and by the palette ids `tools.fixChart`, `tools.improveChart`
+(Polish ticked) and `tools.autoFixChart` (Errors ticked): `ShellDialogsViewModel.OpenFixChart`.
 
 ## The Rocksmith export dialog's findings (#184)
 
 `RocksmithExportDialogView` opens with **Validation FIRST** — the findings decide
 whether Export can run, and below the fold they were 25 clicks of menus away
-from their fixes. **Review report** is an outlined `FireGhost` button on the
+from their fixes. **Show in Issues tab** (`ShowInIssuesCommand`; closes the dialog, then `ChartIssuesDoor.TryOpen()` brings up the Inspector's Issues tab, which the window wires; disabled while a build runs and in hosts with no Inspector) is an outlined `FireGhost` button on the
 summary's line, and each finding a **Fix** beside
 **Go to** (`IExportFinding.HasFix` / `FixDescription` / `FixCommand`). The rows
 are `ExportFindingRow` + `ExportFindingFix` (the record stays inside seven
@@ -42,6 +49,21 @@ Inspector. Pinned by `Perf/RocksmithExportFixUiPerfSmokeTests` (Fix measures
 where there is a verb and is absent where there is none, the findings sit above
 the target section) and `RocksmithExportDialogViewModelTests`. Rules behind the
 verbs: [dlc-builder-fixes.md](../../services/editing-invariants/dlc-builder-fixes.md).
+
+The main-audio placeholder binds `IRocksmithExportScreen.MainAudioWatermark`, formatted
+with injected localization and `ExportAudioFormats.DisplayText`. Main and preview Browse
+use the same catalog's picker patterns and the localized `Picker_AudioFiles` label. The
+hint follows language changes through `WeakLanguageSubscription` and its tooltip exposes
+the full format list when the input clips the placeholder; the view only consumes
+the screen contract. The hint and picker title templates are present in all three locales.
+
+Default package names come from `RocksmithPackageName`: artist/title/version for releases,
+artist/title plus `_test` when the game is closed, and `_test_vN` while it runs. The extended
+tag precedes the PC suffix and is never applied to Mac names. Version edits rename a derived
+release filename while keeping a user's filename. Test planning reads the private snapshot
+before its title suffix is applied; DLC keys and the internal `test` version keep their rules.
+Test publication and stale cleanup use the project/folder-scoped ownership helper; release
+publication keeps its existing picker confirmation.
 
 Two layout rules (#214), pinned at 1280x720 and 1920x1080 on every fake variant by
 `Perf/RocksmithExportLayoutUiPerfSmokeTests` (in the release's de-DE / ja-JP pass):
@@ -70,7 +92,7 @@ File ▸ Export ▸ DotCharter song (`IDcSongExportScreen`, `DcSongExportViewMod
   nothing ticked, no file).
 - **Stems are off by default and only live when the song has separated stems on
   disk** (`IncludeStems` coerces to false otherwise; the row's description names
-  them and what they add, or says Tools ▸ Separate stems makes them).
+  them and what they add, or says File ▸ Audio ▸ Separate stems makes them).
 - **The estimate sits in the footer's meta slot** (`SizeValue`), so it is in view at
   any scroll; once a package is written the slot holds Open output folder.
 - The default file is `<Library folder>/<Artist> - <Title>.dcsong` (else the export
@@ -96,8 +118,7 @@ never paint on under the footer. Two shapes, both keeping the footer fixed:
   all-tuned verdict stay in view). Such a list shows its bar
   (`AllowAutoHide="False"`) so a cut-off row reads as "scrolls".
 - **Several parts grow: the whole body is a `ScrollViewer.DialogBody`** with its
-  bar in the card gutter (`Padding="0,0,16,0" Margin="0,0,-16,0"`). Chart from audio
-  (#710), the Rocksmith export.
+  bar in the card gutter (`Padding="0,0,16,0" Margin="0,0,-16,0"`). The Rocksmith export (#710).
 
 Pinned for EVERY hosted dialog in EVERY fake variant by
 `Perf/DialogWindowFitUiPerfSmokeTests` (in the release's de-DE / ja-JP pass): every
@@ -153,26 +174,9 @@ Batch lint, Showlights and Guitar Pro import `Full`, the Tuner `Full` and
 - **`Contracts/Shell/IShortcutCatalog`** — Help ▸ Keyboard shortcuts reads the
   palette catalog, which needs the whole shell; the shell implements the seam
   (`MainWindowViewModel.CurrentShortcuts`, same shape as `IShellDestinations`).
-- **`Services/Import/Audio/IChartFromAudioAnalyzer`** — the analyzer lives in
-  `DotCharter.Analysis`, which Presentation may not reference; the seam returns
-  Core `GuitarNote`s. `ChartFromAudioOptions` moved beside it.
-- **`Services/Audio/StemSeparation/ISongStemSeparation`** — chart from audio's
-  **Separate stems** (#641) runs the app's ONE separation verb, which lives on the
-  shell's `StemSeparationViewModel` (UI) and is registered as that same singleton.
-  The outcome carries a reason; `GetAvailabilityAsync` greys the button with its
-  reason (not the song's audio, no model). `IChartFromAudioStemLocator` is a DI
-  singleton the analyzer and the dialog share. The run is the APP's, not the
-  dialog's (#710): closing the dialog never cancels it (no dialog-owned token is
-  cancelled, and the closed view model's progress target is closed, so a late
-  report or the completion touches nothing), it runs on in the status bar and its
-  stems land in the cache. While it runs the strip says so
-  (`SeparationKeepsRunningNote`). A dialog opened while the app separates the
-  same file FOLLOWS `ISongStemSeparation.Running` (a `SongStemSeparationRun`:
-  progress, completion, cancel) instead of starting a second run; **Cancel
-  separation** cancels whichever run the strip shows. The body is a
-  `ScrollViewer.DialogBody` and the view scrolls the strip into view when the
-  note appears: at 1280x720 the separating stack does not fit unscrolled
-  (`ChartFromAudioStemStripUiPerfSmokeTests` checks nothing paints under the footer).
+- **`Services/Audio/StemSeparation/ISongStemSeparation`** — the app's ONE separation verb, which lives on the
+  shell's `StemSeparationViewModel` (UI) (the seam a hosted dialog would take). It is NOT registered in DI since
+  Chart from audio, its only consumer, was removed (#445): register it again with the first screen that takes it. A run is the APP's, not a dialog's (#710).
 - A contract carries COLOURS as hex strings: `VocalTrackSettingsView` converts
   with `HexColorConverter` (picker) and `HexBrushConverter` (swatch fills).
 

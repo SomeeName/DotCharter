@@ -1,3 +1,4 @@
+using Avalonia.Input;
 using DotCharter.UI.Input;
 
 namespace DotCharter.Tests.UI.Input;
@@ -13,7 +14,7 @@ namespace DotCharter.Tests.UI.Input;
 /// </summary>
 public sealed class TimelineContextMenuBuilderTests
 {
-    private sealed class Recorder
+    private sealed class Recorder(int notes = 1, int chords = 1, Func<string, bool>? canRun = null)
     {
         public readonly List<string> Invoked = [];
 
@@ -28,51 +29,208 @@ public sealed class TimelineContextMenuBuilderTests
             Paste: () => Invoked.Add("paste"),
             SelectAllInView: () => Invoked.Add("selectview"),
             AddEventAtTime: () => Invoked.Add("event"),
-            ApplyDlcBuilderFixes: () => Invoked.Add("dlcbuilder"),
-            LinkIdentical: () => Invoked.Add("link"));
+            Run: id => Invoked.Add("run:" + id),
+            ChordOf: id => id == "edit.cut" ? new KeyChord(Key.X, KeyModifiers.Control) : KeyChord.None,
+            CanRun: canRun ?? (_ => true),
+            SelectedNotes: notes,
+            SelectedChords: chords,
+            DisabledReason: _ => "Unavailable for this selection.");
     }
 
+    private static string[] Keys(IEnumerable<TimelineMenuItem> items) =>
+        items.Select(i => i.LocKey ?? "(separator)").ToArray();
+
+    private static IEnumerable<TimelineMenuItem> Flatten(IEnumerable<TimelineMenuItem> items) =>
+        items.SelectMany(i => i.Children == null ? [i] : Flatten(i.Children).Prepend(i));
+
     [Fact]
-    public void TheSoundMenu_CarriesTheEightVerbsInOrder()
+    public void TheSoundMenu_CarriesEverySelectionEditInOrder()
     {
         var items = TimelineContextMenuBuilder.ForSound(new Recorder().Actions);
 
         Assert.Equal(
         [
-            "Timeline_Ctx_Delete", "Timeline_Ctx_Duplicate", "Timeline_Ctx_OpenInspector",
-            "Timeline_Ctx_SetFret", "(separator)",
-            "Timeline_Ctx_AddHandShape", "Timeline_Ctx_AddFhpAnchor", "(separator)", "LinkIdentical_Title"
-        ], items.Select(i => i.LocKey ?? "(separator)").ToArray());
-        Assert.True(items[4].IsSeparator);
+            "Menu_Cut", "Menu_Copy", "Timeline_Ctx_Duplicate", "Timeline_Ctx_Delete", "(separator)",
+            "Timeline_Ctx_SetFret", "Menu_GroupTechnique", "Menu_GroupChords", "Menu_GroupMoveResize", "(separator)",
+            "Timeline_Ctx_AddHandShape", "Menu_HandShapesFromLetRing", "Menu_Generate_Arpeggio", "Timeline_Ctx_AddFhpAnchor", "(separator)",
+            "Menu_Refret", "LinkIdentical_Title", "Timeline_Ctx_OpenInspector"
+        ], Keys(items));
     }
 
     [Fact]
-    public void TheEmptyHighwayMenu_CarriesTheFourVerbsInOrder()
+    public void TheTechniqueSubmenu_HasTheTenTogglesOfEditTechnique()
+    {
+        var technique = TimelineContextMenuBuilder.ForSound(new Recorder().Actions)
+            .Single(i => i.LocKey == "Menu_GroupTechnique");
+
+        Assert.Equal(
+        [
+            "Menu_Tech_Hopo", "Menu_Tech_Harmonic", "Menu_Tech_Mute", "Menu_Tech_LinkNext", "Menu_Tech_Vibrato",
+            "Menu_Tech_Tremolo", "Menu_PickSlide", "Menu_Tech_Picking", "Menu_Tech_Accent", "Menu_Tech_Ignore",
+            "Menu_Tech_PassOtherNotes"
+        ], Keys(technique.Children!));
+    }
+
+    [Fact]
+    public void TheChordSubmenu_OnNotesAndChords_HasEveryEditChordRow()
+    {
+        var chord = TimelineContextMenuBuilder.ForSound(new Recorder(notes: 2, chords: 1).Actions)
+            .Single(i => i.LocKey == "Menu_GroupChords");
+
+        Assert.Equal(
+        [
+            "Menu_ConvertToPowerChordSmall", "Menu_ConvertToPowerChordBig", "Menu_MergeNotesIntoChord",
+            "Menu_SplitChordsIntoNotes", "Menu_ToggleOctaveFingering", "Menu_TogglePowerChordFingering",
+            "Menu_MutedStrumsToChord", "Menu_ToggleGhostGems", "Menu_TappedHarmonic"
+        ], Keys(chord.Children!));
+    }
+
+    [Fact]
+    public void ARowThatCannotActOnTheSelection_StaysDisabledWithItsReason()
+    {
+        // One lone note: no merge (needs 2), no split / fingering rows (no chord).
+        var lone = Flatten(TimelineContextMenuBuilder.ForSound(new Recorder(notes: 1, chords: 0).Actions))
+            .Where(i => i.LocKey != null).ToDictionary(i => i.LocKey!);
+        Assert.False(lone["Menu_MergeNotesIntoChord"].IsEnabled);
+        Assert.Equal("Status_MergeChord_NoCandidates", lone["Menu_MergeNotesIntoChord"].DisabledReasonLocKey);
+        Assert.False(lone["Menu_SplitChordsIntoNotes"].IsEnabled);
+        Assert.Equal("Status_NoChordsSelected", lone["Menu_SplitChordsIntoNotes"].DisabledReasonLocKey);
+        Assert.False(lone["Menu_ToggleOctaveFingering"].IsEnabled);
+        Assert.True(lone["Menu_ConvertToPowerChordSmall"].IsEnabled);
+
+        // A chord alone: note-only commands explain what to select.
+        var chordOnly = Flatten(TimelineContextMenuBuilder.ForSound(new Recorder(notes: 0, chords: 1).Actions))
+            .Where(i => i.LocKey != null).ToDictionary(i => i.LocKey!);
+        Assert.False(chordOnly["Menu_ConvertToPowerChordSmall"].IsEnabled);
+        Assert.Equal("Timeline_Ctx_SelectNotes", chordOnly["Menu_ConvertToPowerChordSmall"].DisabledReasonLocKey);
+        Assert.True(chordOnly["Menu_SplitChordsIntoNotes"].IsEnabled);
+
+        // Even a group with no enabled commands stays discoverable.
+        var none = TimelineContextMenuBuilder.ForSound(new Recorder(canRun: id => !id.StartsWith("note.")).Actions);
+        var technique = none.Single(i => i.LocKey == "Menu_GroupTechnique");
+        Assert.All(technique.Children!, i => Assert.False(i.IsEnabled));
+        var noRefret = TimelineContextMenuBuilder.ForSound(new Recorder(canRun: id => id != "tools.refret").Actions)
+            .Single(i => i.LocKey == "Menu_Refret");
+        Assert.False(noRefret.IsEnabled);
+        Assert.Equal("Unavailable for this selection.", noRefret.DisabledReason);
+    }
+
+    [Fact]
+    public void ACommandThatBecomesUnavailableWhileTheMenuIsOpen_DoesNotRun()
+    {
+        var canRun = true;
+        var recorder = new Recorder(canRun: _ => canRun);
+        var row = TimelineContextMenuBuilder.ForSound(recorder.Actions).Single(i => i.LocKey == "Menu_Refret");
+        Assert.True(row.IsEnabled);
+        canRun = false;
+        row.Invoke!();
+        Assert.Empty(recorder.Invoked);
+    }
+
+    [Fact]
+    public void ARowShowsTheCurrentChordOfItsVerb()
+    {
+        var items = TimelineContextMenuBuilder.ForSound(new Recorder().Actions);
+        Assert.Equal(new KeyChord(Key.X, KeyModifiers.Control), items.Single(i => i.LocKey == "Menu_Cut").Chord);
+        Assert.Null(items.Single(i => i.LocKey == "Menu_Copy").Chord);
+    }
+
+    [Fact]
+    public void TheEmptyHighwayMenu_CarriesTheFourVerbsInOrder_AndNoLongerTheDlcBuilderFixes()
     {
         var items = TimelineContextMenuBuilder.ForEmptyHighway(new Recorder().Actions);
 
         Assert.Equal(
         [
             "Timeline_Ctx_AddNoteHere", "Timeline_Ctx_Paste", "Timeline_Ctx_SelectAllInView",
-            "(separator)", "Timeline_Ctx_AddEventAtTime", "(separator)", "Timeline_Ctx_ApplyDlcBuilderFixes"
-        ], items.Select(i => i.LocKey ?? "(separator)").ToArray());
+            "(separator)", "Timeline_Ctx_AddEventAtTime"
+        ], Keys(items));
     }
 
     [Fact]
     public void EveryLeafInvokesItsOwnAction()
     {
-        var recorder = new Recorder();
-        foreach (var item in TimelineContextMenuBuilder.ForSound(recorder.Actions)
-                     .Concat(TimelineContextMenuBuilder.ForEmptyHighway(recorder.Actions)))
+        var recorder = new Recorder(notes: 2);
+        foreach (var item in Flatten(TimelineContextMenuBuilder.ForSound(recorder.Actions)
+                     .Concat(TimelineContextMenuBuilder.ForEmptyHighway(recorder.Actions))))
         {
-            if (item.IsSeparator || item.Children != null) continue;
+            if (item.IsSeparator || item.Children != null || item.LiteralHeader != null) continue;
             Assert.NotNull(item.Invoke);
             item.Invoke!();
         }
 
         Assert.Equal(
-            ["delete", "duplicate", "inspector", "handshape", "fhp", "link", "addnote", "paste", "selectview", "event", "dlcbuilder"],
-            recorder.Invoked);
+        [
+            "run:edit.cut", "run:edit.copy", "duplicate", "delete",
+            "run:note.toggleHopo", "run:note.toggleHarmonic", "run:note.toggleMute", "run:note.toggleLinkNext",
+            "run:note.toggleVibrato", "run:note.toggleTremolo", "run:note.pickSlide", "run:note.togglePicking", "run:note.toggleAccent",
+            "run:note.toggleIgnore", "run:note.togglePassOtherNotes",
+            "run:tools.powerChordSmall", "run:tools.powerChordBig", "run:tools.mergeNotesIntoChord",
+            "run:tools.splitChordsIntoNotes", "run:tools.toggleOctaveFingering",
+            "run:tools.togglePowerChordFingering", "run:tools.mutedStrumsToChord", "run:tools.toggleGhostGems",
+            "run:tools.tappedHarmonic",
+            "run:edit.snapSelected", "run:edit.increaseLength", "run:edit.decreaseLength",
+            "run:note.nudgeEarlier", "run:note.nudgeLater", "run:note.nudgeEarlier10Ms", "run:note.nudgeLater10Ms",
+            "run:note.nudgeEarlier1Ms", "run:note.nudgeLater1Ms",
+            "run:tools.generateHandShape", "run:tools.handShapesFromLetRing", "run:tools.generateArpeggio", "fhp",
+            "run:tools.refret", "run:edit.linkIdentical", "inspector",
+            "addnote", "paste", "selectview", "event"
+        ], recorder.Invoked);
+    }
+
+    /// <summary>Every row that runs a palette id must run a command the menu bar also binds: the id
+    /// exists in <c>CommandCatalog</c>, the builder emits it, and the verb's menu-bar command is bound.</summary>
+    [Theory]
+    [InlineData("edit.cut", "CutCommand", "Views/Shell/Menus/EditMenu.axaml")]
+    [InlineData("edit.copy", "CopyCommand", "Views/Shell/Menus/EditMenu.axaml")]
+    [InlineData("tools.powerChordSmall", "ConvertToPowerChordSmallCommand", "Views/Shell/Menus/EditMenu.axaml")]
+    [InlineData("tools.powerChordBig", "ConvertToPowerChordBigCommand", "Views/Shell/Menus/EditMenu.axaml")]
+    [InlineData("tools.mergeNotesIntoChord", "MergeNotesIntoChordCommand", "Views/Shell/Menus/EditMenu.axaml")]
+    [InlineData("tools.splitChordsIntoNotes", "SplitChordsIntoNotesCommand", "Views/Shell/Menus/EditMenu.axaml")]
+    [InlineData("tools.toggleOctaveFingering", "ToggleOctaveFingeringCommand", "Views/Shell/Menus/EditMenu.axaml")]
+    [InlineData("tools.togglePowerChordFingering", "TogglePowerChordFingeringCommand", "Views/Shell/Menus/EditMenu.axaml")]
+    [InlineData("tools.mutedStrumsToChord", "MutedStrumsToChordCommand", "Views/Shell/Menus/EditMenu.axaml")]
+    [InlineData("tools.toggleGhostGems", "ToggleGhostGemsCommand", "Views/Shell/Menus/EditMenu.axaml")]
+    [InlineData("tools.tappedHarmonic", "TappedHarmonicCommand", "Views/Shell/Menus/EditMenu.axaml")]
+    [InlineData("tools.generateHandShape", "GenerateHandShapeCommand", "Views/Shell/Menus/ToolsMenu.axaml")]
+    [InlineData("tools.handShapesFromLetRing", "HandShapesFromLetRingCommand", "Views/Shell/Menus/EditMenu.axaml")]
+    [InlineData("tools.generateArpeggio", "GenerateArpeggioCommand", "Views/Shell/Menus/ToolsMenu.axaml")]
+    [InlineData("tools.refret", "RefretCommand", "Views/Shell/Menus/ToolsMenu.axaml")]
+    [InlineData("edit.linkIdentical", "ChartEditor.LinkedMeasures.LinkIdenticalCommand", "Views/Shell/Menus/ToolsMenu.axaml")]
+    [InlineData("edit.delete", "DeleteSelectionCommand", "Views/Shell/Menus/EditMenu.axaml")]
+    public void ARowRunsTheSameCommandTheMenuBarBinds(string paletteId, string menuCommand, string menuFile)
+    {
+        var catalog = UiSourceTree.ReadAllText(RepoPath("DotCharter.UI/ViewModels/CommandPalette/CommandCatalog.cs"));
+        Assert.Contains($"\"{paletteId}\"", catalog);
+        var menu = UiSourceTree.ReadAllText(RepoPath("DotCharter.UI/" + menuFile));
+        Assert.Contains("Command=\"{Binding " + menuCommand, menu);
+
+        var builder = UiSourceTree.ReadAllText(RepoPath("DotCharter.UI/Input/TimelineContextMenu.cs"));
+        Assert.Contains($"\"{paletteId}\"", builder);
+    }
+
+    [Fact]
+    public void EveryTechniqueRowIsTheMenuBarsToggleCommand()
+    {
+        var menu = UiSourceTree.ReadAllText(RepoPath("DotCharter.UI/Views/Shell/Menus/EditMenu.axaml"));
+        var catalog = UiSourceTree.ReadAllText(RepoPath("DotCharter.UI/ViewModels/CommandPalette/CommandCatalog.cs"));
+        foreach (var (locKey, id) in TimelineContextMenuBuilder.TechniqueRows)
+        {
+            Assert.Contains($"\"{id}\"", catalog);
+            var row = menu.IndexOf($"Loc {locKey}}}\" Command=\"{{Binding SelectionEdits.", StringComparison.Ordinal);
+            Assert.True(row >= 0, $"Edit > Technique has no '{locKey}' row bound to SelectionEdits.");
+        }
+    }
+
+    [Fact]
+    public void ApplyDlcBuilderFixes_LeftTheRightClick_ButStaysReachableFromTheToolsMenu()
+    {
+        var all = Flatten(TimelineContextMenuBuilder.ForSound(new Recorder().Actions)
+            .Concat(TimelineContextMenuBuilder.ForEmptyHighway(new Recorder().Actions))).Select(i => i.LocKey);
+        Assert.DoesNotContain("Timeline_Ctx_ApplyDlcBuilderFixes", all);
+
+        var tools = UiSourceTree.ReadAllText(RepoPath("DotCharter.UI/Views/Shell/Menus/ToolsMenu.axaml"));
+        Assert.Contains("Command=\"{Binding ApplyDlcBuilderFixesCommand}\"", tools);
     }
 
     /// <summary>The Set-fret submenu spans the same 0..24 clamp every fret verb
@@ -103,13 +261,13 @@ public sealed class TimelineContextMenuBuilderTests
     ///     runtime with no warning.
     /// </summary>
     [Fact]
-    public void EveryMenuLocKey_ExistsInBothResxFiles()
+    public void EveryMenuLocKey_ExistsInAllThreeResxFiles()
     {
         var recorder = new Recorder();
-        var keys = TimelineContextMenuBuilder.ForSound(recorder.Actions)
-            .Concat(TimelineContextMenuBuilder.ForEmptyHighway(recorder.Actions))
-            .Where(i => i.LocKey != null)
-            .Select(i => i.LocKey!)
+        var keys = Flatten(TimelineContextMenuBuilder.ForSound(recorder.Actions)
+                .Concat(TimelineContextMenuBuilder.ForEmptyHighway(recorder.Actions)))
+            .SelectMany(i => new[] { i.LocKey, i.DisabledReasonLocKey })
+            .OfType<string>()
             .Distinct()
             .ToList();
         Assert.NotEmpty(keys);
@@ -117,7 +275,8 @@ public sealed class TimelineContextMenuBuilderTests
         foreach (var resx in new[]
                  {
                      "DotCharter.Localization/Resources.resx",
-                     "DotCharter.Localization/Resources.de-DE.resx"
+                     "DotCharter.Localization/Resources.de-DE.resx",
+                     "DotCharter.Localization/Resources.ja-JP.resx"
                  })
         {
             var content = UiSourceTree.ReadAllText(RepoPath(resx));

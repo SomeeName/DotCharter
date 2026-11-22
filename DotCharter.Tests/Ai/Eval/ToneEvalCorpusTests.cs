@@ -167,4 +167,22 @@ public sealed class ToneEvalCorpusTests
             Environment.SetEnvironmentVariable(ToneEvalCorpus.CorpusRootVariable, previous);
         }
     }
+
+    [Fact]
+    public void ACorruptCorpusFile_FailsLoudly_InsteadOfShrinkingTheCorpus()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "dotcharter-eval-corpus-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "broken.rs2dlc"), "{ not json");
+
+            var ex = Assert.Throws<InvalidDataException>(() => ToneEvalCorpus.LoadLocalFrom(root));
+            Assert.Contains("broken.rs2dlc", ex.Message);
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch (IOException) { }
+        }
+    }
 }

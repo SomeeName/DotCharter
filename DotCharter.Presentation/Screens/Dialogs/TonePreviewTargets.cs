@@ -35,6 +35,7 @@ public sealed class TonePreviewTargets : ObservableObject, IToneDesignerPreviewT
     private readonly TonelabTonePreview _inGame;
     private readonly EventHandler _sessionRelay;
     private bool _isInGame;
+    private bool _previewRequested;
     private RsTone? _last;
     private string _status = "";
     private bool _disposed;
@@ -76,7 +77,7 @@ public sealed class TonePreviewTargets : ObservableObject, IToneDesignerPreviewT
             if (value == _isInGame) return;
             // A running preview moves with the switch: the old target restores, the new one takes the tone.
             var old = Current;
-            var wasActive = old.IsActive;
+            var wasActive = old.IsActive || _previewRequested;
             old.Stop();
             SetProperty(ref _isInGame, value);
             if (wasActive && _last is { } tone && Current.IsAvailable) Current.Apply(tone);
@@ -101,10 +102,11 @@ public sealed class TonePreviewTargets : ObservableObject, IToneDesignerPreviewT
 
     public string InGameUnavailableReason =>
         CanUseInGame ? ""
-        : _session.State == TonelabSessionState.Starting ? _loc["Dialog_Tones_InGameStarting"]
+        : _session.State == TonelabSessionState.Starting ? StartingReason()
         : _session.LastStatus?.Result is { Outcome: TonelabOutcome.UnsupportedVersion } old
             ? string.Format(CultureInfo.CurrentCulture, _loc["Dialog_Tones_InGameVersion"], old.Detail, "v" + TonelabProtocol.Version)
         : _session.LastLaunchFailure == GameToneLaunchFailure.SteamNotRunning ? _loc["Dialog_Tones_InGameSteamNotRunning"]
+        : _session.LastLaunchFailure == GameToneLaunchFailure.StartTimedOut ? _loc["Dialog_Tones_InGameStartTimedOut"]
         : _session.LastLaunchFailure != GameToneLaunchFailure.None ? _loc["Dialog_Tones_InGameLaunchFailed"]
         : _session.CanLaunch ? _loc["Dialog_Tones_InGameNotRunning"]
         : _loc["Dialog_Tones_InGameNotConnected"];
@@ -152,11 +154,13 @@ public sealed class TonePreviewTargets : ObservableObject, IToneDesignerPreviewT
     {
         _last = tone;
         Current.Apply(tone);
+        _previewRequested = Current.IsActive;
     }
 
     public bool Stop()
     {
         _last = null;
+        _previewRequested = false;
         return Current.Stop();
     }
 
@@ -186,6 +190,10 @@ public sealed class TonePreviewTargets : ObservableObject, IToneDesignerPreviewT
         TonelabOutcome.Malformed => _loc["Dialog_Tones_InGameMalformed"],
         _ => Format("Dialog_Tones_InGameRejected", (result.ErrorCode + " " + result.Detail).Trim())
     };
+
+    private string StartingReason() => _session.LaunchAttempt > 1
+        ? string.Format(CultureInfo.CurrentCulture, _loc["Dialog_Tones_InGameStartingRetry"], _session.LaunchAttempt, _session.MaxLaunchAttempts)
+        : _loc["Dialog_Tones_InGameStarting"];
 
     private string Format(string key, string arg) => string.Format(CultureInfo.CurrentCulture, _loc[key], arg);
 
@@ -246,6 +254,7 @@ public sealed class TonePreviewTargets : ObservableObject, IToneDesignerPreviewT
         Post(() =>
         {
             if (_disposed || !_isInGame) return;
+            if (!result.IsOk) _previewRequested = _inGame.IsActive;
             SetStatus(Describe(result, audio));
         });
     }

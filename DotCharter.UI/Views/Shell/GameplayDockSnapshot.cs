@@ -22,6 +22,9 @@ internal sealed class GameplayDockSnapshot
         _preRun = state.Panes.Count == 0 ? null : state;
     }
 
+    /// <summary>A layout reset rebuilds the docks; the previous placement must not return at run end.</summary>
+    public void Reset() => _preRun = null;
+
     /// <summary>Call AFTER the run has put the visibility flags back.</summary>
     public void AfterGameplay(params DockLayoutController?[] controllers)
     {

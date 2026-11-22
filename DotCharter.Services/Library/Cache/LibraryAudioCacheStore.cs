@@ -215,7 +215,7 @@ public sealed class LibraryAudioCacheStore
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Import, $"PSARC audio cache measure failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Import, "PSARC audio cache measure failed", ex);
             return LibraryAudioCacheUsage.Empty;
         }
     }
@@ -242,7 +242,7 @@ public sealed class LibraryAudioCacheStore
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Import, $"PSARC audio cache clear failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Import, "PSARC audio cache clear failed", ex);
         }
 
         if (deleted > 0)
@@ -287,7 +287,7 @@ public sealed class LibraryAudioCacheStore
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Import, $"PSARC audio cache sweep failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Import, "PSARC audio cache sweep failed", ex);
             return LibraryAudioCacheEvictionPlan.Empty;
         }
     }
@@ -475,7 +475,7 @@ public sealed class LibraryAudioCacheStore
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Import,
-                $"PSARC audio cache skipped '{Path.GetFileName(directory)}': {ex.Message}");
+                $"PSARC audio cache skipped '{Path.GetFileName(directory)}'", ex);
             return false;
         }
     }

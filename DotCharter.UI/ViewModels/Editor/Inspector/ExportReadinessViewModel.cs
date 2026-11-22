@@ -4,7 +4,9 @@ using CommunityToolkit.Mvvm.Input;
 using DotCharter.Presentation.Dialogs;
 using DotCharter.Presentation.Shared;
 using DotCharter.Services.Editing.Maintenance;
+using DotCharter.Services.Editing.Quality;
 using DotCharter.Services.Export.Validation;
+using DotCharter.Tone.Diagnostics;
 using DotCharter.Tone.UI.ViewModels.Shell;
 using DotCharter.UI.ViewModels.Dialogs;
 
@@ -43,7 +45,9 @@ public sealed partial class ExportReadinessViewModel : ViewModelBase
         ILocalizationService localization,
         IChartMaintenanceService maintenance,
         IDialogs dialogs,
-        IAppLogger logger)
+        IAppLogger logger,
+        ChartQualityReporter reporter,
+        IUiDispatcher ui)
     {
         _projectState = projectState;
         _documentService = documentService;
@@ -51,6 +55,7 @@ public sealed partial class ExportReadinessViewModel : ViewModelBase
         _chartEditor = chartEditor;
         _localization = localization;
         _fixes = new RocksmithFixes(maintenance, chartEditor, projectState, dialogs, localization, logger);
+        InitializeChartReport(dialogs, logger, reporter, ui);
     }
 
 
@@ -90,6 +95,7 @@ public sealed partial class ExportReadinessViewModel : ViewModelBase
             return;
         }
 
+        _chartEditor.CommitPendingEdits();
         _documentService.AssembleProject(project, _transport.Bpm,
             _projectState.CurrentAudioFileName, _chartEditor.LyricPhrases);
         HasExportCheckRun = true;
@@ -160,7 +166,7 @@ public sealed partial class ExportReadinessViewModel : ViewModelBase
         }
         else
         {
-            var findings = _exportValidator.Validate(project);
+            var findings = _exportValidator.Validate(project, _projectState.TotalAudioLengthMs);
             foreach (var finding in findings
                          .OrderByDescending(f => f.Severity)
                          .ThenBy(f => f.TimeMs ?? double.MaxValue))
@@ -202,6 +208,7 @@ public sealed partial class ExportReadinessViewModel : ViewModelBase
     {
         HasExportCheckRun = false;
         ExportFindings.Clear();
+        ResetChartReport();
         OnPropertyChanged(nameof(HasExportFindings));
         OnPropertyChanged(nameof(ExportReadinessSummary));
     }

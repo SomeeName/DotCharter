@@ -97,7 +97,7 @@ public class BoardGeometryComponent : IRenderable
 
         if (maxFret <= 0) maxFret = 4;
         if (maxFret - minFret < 3) maxFret = minFret + 3;
-        return Math.Min(24, maxFret);
+        return Math.Min(FretLimits.MaxFret, maxFret);
     }
 
     /// <summary>

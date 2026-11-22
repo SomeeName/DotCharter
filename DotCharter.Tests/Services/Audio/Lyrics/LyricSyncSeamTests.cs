@@ -1,5 +1,6 @@
 using DotCharter.Analysis.Lyrics;
 using DotCharter.Services.Audio.Lyrics;
+using DotCharter.Services.Editing.Lyrics;
 using DotCharter.Tone.Infrastructure.Storage;
 using JuceSharp.StemSeparation.Onnx;
 
@@ -118,15 +119,44 @@ public sealed class LyricSyncSeamTests : IDisposable
         CtcEmissions? emissions = null,
         LyricAcousticSessionOpener? opener = null,
         Func<string, IList<string>, float[]>? audio = null,
-        Func<string, string?>? stemLocator = null)
+        Func<string, string?>? stemLocator = null,
+        FakeAppLogger? logger = null)
         => new(
             FakeLocalization.English(),
-            logger: null,
+            logger: logger,
             modelDirectoryOverride: null,
             vocalStemLocator: stemLocator ?? (_ => null),
             sessionOpener: opener ?? ((_, _, _) => new FakeSession(emissions ?? Spell("ab"))),
             audioLoader: audio ?? ((_, _) => new float[16000]),
-            modelRoots: [modelsRoot]);
+            modelRoots: [modelsRoot],
+            providerMemory: new LyricProviderMemory());
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AFailedSecondaryUsesTheSameTimingAndDescriptionAsASoloRun(bool english)
+    {
+        var roots = InstallModel();
+        InstallModel(LyricModelCatalog.EnglishId);
+        var primaryId = english ? LyricModelCatalog.EnglishId : LyricModelCatalog.MultilingualId;
+        var core = Core(roots, opener: (model, _, _) => model.Id == primaryId
+            ? new FakeSession(Spell("baba"))
+            : throw new InvalidOperationException("broken secondary"));
+        var options = Exact() with { ForceEnglishModel = english };
+        var audio = Touch("song.wav");
+
+        var degraded = await core.AlignAsync("b-a-b-a", audio, options, cancellationToken: Ct);
+        var solo = await core.AlignAsync("b-a-b-a", audio, options with { AllowEnsemble = false }, cancellationToken: Ct);
+
+        Assert.True(degraded.Ran, degraded.Error);
+        Assert.True(solo.Ran, solo.Error);
+        // The GPU-to-CPU notice is not a degradation: only the one-model line counts.
+        Assert.Single(degraded.Warnings, w => !w.Contains("GPU", StringComparison.Ordinal));
+        Assert.False(degraded.IsEnsemble);
+        Assert.Equal(solo.Model, degraded.Model);
+        Assert.Equal(solo.OnsetBiasSeconds, degraded.OnsetBiasSeconds);
+        Assert.Equal(solo.Aligned, degraded.Aligned);
+    }
 
     /// <summary>
     ///     The headline: a known emission matrix produces known syllable seconds.
@@ -194,15 +224,235 @@ public sealed class LyricSyncSeamTests : IDisposable
         var stem = Touch("stems/vocals.wav");
         var decoded = new List<string>();
 
+        var mix = Touch("song.wav");
         var result = await Core(roots, audio: (path, _) => { decoded.Add(path); return new float[16000]; })
-            .AlignAsync("a-b", Touch("song.wav"), new LyricSyncOptions { VocalStemPath = stem },
+            .AlignAsync("a-b", mix, new LyricSyncOptions { VocalStemPath = stem },
                 cancellationToken: Ct);
 
         Assert.True(result.Ran, result.Error);
-        Assert.Equal([stem], decoded);
+        Assert.Equal([mix, stem], decoded);
         Assert.Equal("vocal stem", result.AudioSource);
         Assert.Equal(stem, result.AudioPath);
         Assert.Empty(result.Warnings);
+    }
+
+    [Fact]
+    public async Task TheEditorListensToTheDeclaredPaddedStemInsteadOfTheOriginalBesideTheMix()
+    {
+        var roots = InstallModel();
+        var mix = Touch("song-silence2.wav");
+        var original = Touch(Path.Combine("stems", "vocals.wav"));
+        var padded = Touch(Path.Combine("stems", "silence-2", "vocals.wav"));
+        var decoded = new List<string>();
+        float[]? heard = null;
+        var samples = new float[16000 * 11];
+        var service = Core(roots, audio: (path, _) =>
+            {
+                decoded.Add(path);
+                return path == original ? new float[16000] : samples;
+            }, stemLocator: VocalStemLocator.TryLocate,
+            opener: (_, _, _) => new CapturingSession(Spell("ab"), audio => heard = audio));
+        var state = new ProjectState
+        {
+            ActiveProject = new ChartProject(),
+            CurrentProjectPath = Path.Combine(_dir, "chart.dcproj"),
+            CurrentAudioFileName = Path.GetFileName(mix)
+        };
+        state.ActiveProject!.Stems.Add(new Stem { Name = "vocals", Path = Path.GetRelativePath(_dir, padded) });
+        var beats = new List<BeatMarker> { new() { Time = 0, Bpm = 120, BeatsInMeasure = 4 } };
+
+        var result = await new LyricAutoSyncRunner(service, null, null, state)
+            .RunAsync("a-b", beats, _ => { }, new Progress<string>());
+
+        Assert.Equal(LyricAutoSyncRunStatus.Synced, result.Status);
+        Assert.Equal([mix, padded], decoded);
+        Assert.Same(samples, heard);
+        Assert.Equal("vocal stem", result.Outcome!.AudioSource);
+        Assert.Equal(padded, typeof(LyricAutoSyncOutcome).GetProperty("AudioPath")?.GetValue(result.Outcome));
+        Assert.Empty(Assert.IsAssignableFrom<IReadOnlyList<string>>(
+            typeof(LyricAutoSyncOutcome).GetProperty("Warnings")?.GetValue(result.Outcome)));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AStemInAnotherTimeBaseFallsBackToTheMixWithDurationsInTheWarningAndLog(bool explicitStem)
+    {
+        var roots = InstallModel();
+        var mix = Touch("song-silence2.wav");
+        var stem = Touch("stems/vocals.wav");
+        var mixSamples = new float[16000 * 11];
+        var logger = new FakeAppLogger();
+        float[]? heard = null;
+        var result = await Core(roots, audio: (path, _) => path == mix ? mixSamples : new float[16000],
+                stemLocator: _ => stem, logger: logger,
+                opener: (_, _, _) => new CapturingSession(Spell("ab"), audio => heard = audio))
+            .AlignAsync("a-b", mix, new LyricSyncOptions { VocalStemPath = explicitStem ? stem : null },
+                cancellationToken: Ct);
+
+        Assert.True(result.Ran, result.Error);
+        Assert.Equal("mix", result.AudioSource);
+        Assert.Equal(mix, result.AudioPath);
+        Assert.Null(result.Envelope);
+        Assert.Same(mixSamples, heard);
+        var warning = Assert.Single(result.Warnings);
+        Assert.Contains(stem, warning, StringComparison.Ordinal);
+        Assert.Contains(mix, warning, StringComparison.Ordinal);
+        Assert.Contains("1.000 s", warning, StringComparison.Ordinal);
+        Assert.Contains("11.000 s", warning, StringComparison.Ordinal);
+        Assert.True(logger.HasEntryContaining("WARN", warning));
+    }
+
+    [Theory]
+    [InlineData(1601)]
+    [InlineData(-1601)]
+    public async Task TheDurationGuardAllowsOnlyOneHundredMillisecondsOfCodecRounding(int sampleDifference)
+    {
+        var roots = InstallModel();
+        var mix = Touch("song.wav");
+        var stem = Touch("stems/vocals.wav");
+
+        var withinTolerance = await Core(roots, audio: (path, _) => new float[16000 + (path == stem ? 1600 : 0)],
+                stemLocator: _ => stem)
+            .AlignAsync("a-b", mix, cancellationToken: Ct);
+        Assert.True(withinTolerance.Ran, withinTolerance.Error);
+        Assert.Equal("vocal stem", withinTolerance.AudioSource);
+        Assert.Empty(withinTolerance.Warnings);
+
+        var result = await Core(roots, audio: (path, _) => new float[16000 + (path == stem ? sampleDifference : 0)],
+                stemLocator: _ => stem)
+            .AlignAsync("a-b", mix, cancellationToken: Ct);
+
+        Assert.True(result.Ran, result.Error);
+        Assert.Equal("mix", result.AudioSource);
+        Assert.Single(result.Warnings);
+    }
+
+    [Fact]
+    public async Task TheChartOutcomeKeepsTheFallbackWarningAndActualAudioPath()
+    {
+        var roots = InstallModel();
+        var mix = Touch("song-silence2.wav");
+        var stem = Touch("stems/vocals.wav");
+        var beats = new List<BeatMarker> { new() { Time = 0, Bpm = 120, BeatsInMeasure = 4 } };
+
+        var result = await Core(roots, audio: (path, _) => new float[path == mix ? 16000 * 11 : 16000],
+                stemLocator: _ => stem)
+            .SyncAsync("a-b", mix, beats, cancellationToken: Ct);
+
+        Assert.True(result.Ran, result.Error);
+        Assert.Equal("mix", result.AudioSource);
+        Assert.Equal(mix, typeof(LyricAutoSyncOutcome).GetProperty("AudioPath")?.GetValue(result));
+        Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<string>>(
+            typeof(LyricAutoSyncOutcome).GetProperty("Warnings")?.GetValue(result)));
+    }
+
+    private sealed class CapturingSession(CtcEmissions emissions, Action<float[]> hear) : ILyricAcousticSession
+    {
+        public LyricVocabulary Vocabulary { get; } = Vocab();
+
+        public CtcEmissions Encode(float[] mono16k, CancellationToken cancellationToken = default)
+        {
+            hear(mono16k);
+            return emissions;
+        }
+
+        public void Dispose() { }
+    }
+
+    [Theory]
+    [InlineData(0.5, "offset 0.5")]
+    [InlineData(-0.5, "offset -0.5")]
+    public async Task ADeclaredVocalOffsetUsesTheMixEvenWhenRawDurationsMatch(double offset, string offsetText)
+    {
+        var roots = InstallModel();
+        var mix = Touch("song.wav");
+        var stem = Touch("stems/vocals.wav");
+        var decoded = new List<string>();
+        var logger = new FakeAppLogger();
+        var service = Core(roots, audio: (path, _) => { decoded.Add(path); return new float[16000]; },
+            stemLocator: VocalStemLocator.TryLocate, logger: logger);
+        var state = new ProjectState
+        {
+            ActiveProject = new ChartProject(),
+            CurrentProjectPath = Path.Combine(_dir, "chart.dcproj"),
+            CurrentAudioFileName = "song.wav"
+        };
+        state.ActiveProject!.Stems.Add(new Stem { Name = "vocals", Path = stem, Offset = offset });
+        var beats = new List<BeatMarker> { new() { Time = 0, Bpm = 120, BeatsInMeasure = 4 } };
+
+        var result = await new LyricAutoSyncRunner(service, null, null, state)
+            .RunAsync("a-b", beats, _ => { }, new Progress<string>());
+
+        Assert.Equal(LyricAutoSyncRunStatus.Synced, result.Status);
+        Assert.Equal("mix", result.Outcome!.AudioSource);
+        Assert.Equal([mix], decoded);
+        var warning = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<string>>(
+            typeof(LyricAutoSyncOutcome).GetProperty("Warnings")?.GetValue(result.Outcome)));
+        Assert.Contains(stem, warning, StringComparison.Ordinal);
+        Assert.Contains(offsetText, warning, StringComparison.Ordinal);
+        Assert.True(logger.HasEntryContaining("WARN", warning));
+    }
+
+    [Theory]
+    [InlineData("Imported voice", "vocals.wav", true)]
+    [InlineData("Imported voice", "song_vocals.wav", true)]
+    [InlineData("vocals", "no_vocals.wav", false)]
+    [InlineData("no_vocals", "vocals.wav", false)]
+    [InlineData("vocals", "instrumental.wav", false)]
+    public async Task DeclaredVocalSelectionAcceptsFileNamesButExcludesTheInstrumentalHalf(string name, string fileName, bool usesVoice)
+    {
+        var roots = InstallModel();
+        var mix = Touch("song.wav");
+        Touch("stems/vocals.wav");
+        var declared = Touch(Path.Combine("stems", "silence-2", fileName));
+        var decoded = new List<string>();
+        var service = Core(roots, audio: (path, _) => { decoded.Add(path); return new float[16000]; },
+            stemLocator: VocalStemLocator.TryLocate);
+        var state = new ProjectState
+        {
+            ActiveProject = new ChartProject(),
+            CurrentProjectPath = Path.Combine(_dir, "chart.dcproj"),
+            CurrentAudioFileName = "song.wav"
+        };
+        state.ActiveProject!.Stems.Add(new Stem { Name = name, Path = Path.GetRelativePath(_dir, declared) });
+        var beats = new List<BeatMarker> { new() { Time = 0, Bpm = 120, BeatsInMeasure = 4 } };
+
+        var result = await new LyricAutoSyncRunner(service, null, null, state)
+            .RunAsync("a-b", beats, _ => { }, new Progress<string>());
+
+        Assert.Equal(LyricAutoSyncRunStatus.Synced, result.Status);
+        Assert.Equal(usesVoice ? "vocal stem" : "mix", result.Outcome!.AudioSource);
+        if (usesVoice) Assert.Equal([mix, declared], decoded);
+        else Assert.Equal([mix], decoded);
+    }
+
+    [Theory]
+    [InlineData("bass", "stems/bass.wav")]
+    [InlineData("vocals", "stems/silence-2/missing.wav")]
+    public async Task ADeclaredListNeverFallsBackToAnUnlistedVocalStem(string name, string path)
+    {
+        var roots = InstallModel();
+        var mix = Touch("song.wav");
+        var oldStem = Touch("stems/vocals.wav");
+        var decoded = new List<string>();
+        var beats = new List<BeatMarker> { new() { Time = 0, Bpm = 120, BeatsInMeasure = 4 } };
+        var state = new ProjectState
+        {
+            ActiveProject = new ChartProject(),
+            CurrentProjectPath = Path.Combine(_dir, "chart.dcproj"),
+            CurrentAudioFileName = "song.wav"
+        };
+        state.ActiveProject!.Stems.Add(new Stem { Name = name, Path = path });
+
+        var service = Core(roots, audio: (file, _) => { decoded.Add(file); return new float[16000]; },
+            stemLocator: _ => oldStem);
+        var result = await new LyricAutoSyncRunner(service, null, null, state)
+            .RunAsync("a-b", beats, _ => { }, new Progress<string>());
+
+        Assert.Equal(LyricAutoSyncRunStatus.Synced, result.Status);
+        Assert.Equal("mix", result.Outcome!.AudioSource);
+        Assert.Equal([mix], decoded);
     }
 
     /// <summary>
@@ -396,7 +646,7 @@ public sealed class LyricSyncSeamTests : IDisposable
     }
 
     [Fact]
-    public void OnlyTheMultilingualHeadCarriesTheVowelInitialShift()
+    public void EachMeasuredCombinationCarriesItsOwnVowelInitialShift()
     {
         var roots = InstallModel();
         InstallModel(LyricModelCatalog.EnglishId);
@@ -405,11 +655,36 @@ public sealed class LyricSyncSeamTests : IDisposable
         var romaji = LyricModelCatalog.SelectForSheet(sheet, [roots], forceEnglish: false);
         var english = LyricModelCatalog.SelectForSheet(sheet, [roots], forceEnglish: true);
         var soloRomaji = LyricModelCatalog.SelectForSheet(sheet, [roots], forceEnglish: false, allowEnsemble: false);
+        var soloEnglish = LyricModelCatalog.SelectForSheet(sheet, [roots], forceEnglish: true, allowEnsemble: false);
 
-        // The measured value; changing it means re-running the romaji probe.
+        // The measured values; changing one means re-running its probe.
         Assert.Equal(-0.050, romaji.VowelInitialOnsetBiasSeconds, 6);
         Assert.Equal(-0.050, soloRomaji.VowelInitialOnsetBiasSeconds, 6);
-        Assert.Equal(0.0, english.VowelInitialOnsetBiasSeconds);
+        Assert.Equal(-0.030, english.VowelInitialOnsetBiasSeconds, 6);
+        Assert.Equal(0.0, soloEnglish.VowelInitialOnsetBiasSeconds);
+    }
+
+    /// <summary>
+    ///     <b>The English-primary blend fired ~52 ms late on word onsets.</b>
+    ///     Its old +10 ms bias was fitted to a reference that itself sits late; the
+    ///     JamendoLyrics sweep put the optimum at −35 ms. The app and the CLI both
+    ///     read the bias from this selection, so pinning it here covers both.
+    /// </summary>
+    [Fact]
+    public void TheEnglishEnsembleMovesOnsetsEarlierByTheMeasuredBias()
+    {
+        var roots = InstallModel();
+        InstallModel(LyricModelCatalog.EnglishId);
+        var sheet = LyricSheetParser.Parse("c a b");
+
+        var english = LyricModelCatalog.SelectForSheet(sheet, [roots], forceEnglish: true);
+        var romaji = LyricModelCatalog.SelectForSheet(sheet, [roots], forceEnglish: false);
+        var soloEnglish = LyricModelCatalog.SelectForSheet(sheet, [roots], forceEnglish: true, allowEnsemble: false);
+
+        Assert.True(english.IsEnsemble);
+        Assert.Equal(-0.035, english.OnsetBiasSeconds, 6);
+        Assert.Equal(0.0, romaji.OnsetBiasSeconds, 6);
+        Assert.Equal(-0.010, soloEnglish.OnsetBiasSeconds, 6);
     }
 
     /// <summary>

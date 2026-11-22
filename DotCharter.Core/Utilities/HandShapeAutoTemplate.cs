@@ -1,4 +1,5 @@
 using DotCharter.Core.Domain.Guitar;
+using DotCharter.Core.Domain.Project;
 
 namespace DotCharter.Core.Utilities;
 
@@ -22,6 +23,13 @@ namespace DotCharter.Core.Utilities;
 /// </summary>
 public static class HandShapeAutoTemplate
 {
+    /// <summary>Ownership is arrangement-wide: every difficulty and notation voice shares the template list.</summary>
+    public static bool OwnsItsTemplateAloneInArrangement(HandShape shape, Arrangement arrangement) =>
+        OwnsItsTemplateAlone(shape,
+            arrangement.Levels.SelectMany(level => level.Chords)
+                .Concat(arrangement.NotationVoices.SelectMany(voice => voice.Chords)),
+            arrangement.Levels.SelectMany(level => level.HandShapes));
+
     /// <summary>
     ///     True when <paramref name="shape" />'s template is referenced by nothing
     ///     else — no chord, and no other hand shape — so rewriting it in place
@@ -77,13 +85,14 @@ public static class HandShapeAutoTemplate
             Id = current?.Id ?? -1,
             Name = current?.Name ?? string.Empty,
             Arpeggio = current?.Arpeggio ?? false,
+            Fingerless = current?.Fingerless ?? false,
             Frets = new Dictionary<int, int>(seed.Frets)
         };
 
         // A hand-authored finger on a string whose FRET did not move is kept —
         // re-deriving the whole fingering would throw away the charter's own
         // answer every time the bar grew by one note.
-        if (current != null)
+        if (current is { Fingerless: false })
         {
             foreach (var (stringIndex, finger) in current.Fingers)
             {
@@ -95,7 +104,7 @@ public static class HandShapeAutoTemplate
             }
         }
 
-        if (NeedsFingers(rebuilt))
+        if (!rebuilt.Fingerless && NeedsFingers(rebuilt))
         {
             var suggestion = rebuilt.Clone();
             ChordTemplateFingerSetter.SetSuggestedFingers(suggestion, Math.Max(1, stringCount), pairHint?.Invoke(suggestion));

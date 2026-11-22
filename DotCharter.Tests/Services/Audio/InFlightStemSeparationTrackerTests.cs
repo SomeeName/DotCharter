@@ -70,14 +70,19 @@ public class InFlightStemSeparationTrackerTests
     [Fact]
     public async Task WaitForCompletion_TimesOut_WhenRunNeverEnds()
     {
-        var t = new InFlightStemSeparationTracker();
+        var clock = new StepTimeProvider();
+        var t = new InFlightStemSeparationTracker(clock);
         using var _ = t.BeginRun();
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        await t.WaitForCompletionAsync(TimeSpan.FromMilliseconds(80));
-        sw.Stop();
-        // Returned by the timeout, not because the run completed.
-        Assert.True(sw.ElapsedMilliseconds >= 60,
-            $"Expected timeout ~80 ms, got {sw.ElapsedMilliseconds} ms");
+
+        var wait = t.WaitForCompletionAsync(TimeSpan.FromSeconds(30));
+        // The run is in flight, so the wait genuinely waits on the delay...
+        Assert.False(wait.IsCompleted);
+        clock.Advance(TimeSpan.FromSeconds(29));
+        Assert.False(wait.IsCompleted);
+
+        // ...and only the delay elapsing releases it, while the run is still in flight.
+        clock.Advance(TimeSpan.FromSeconds(1));
+        await wait.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
         Assert.Equal(1, t.InFlight);
     }
 

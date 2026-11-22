@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using DotCharter.Core.Linking;
+using DotCharter.Services.Parsing.GuitarPro;
 using DotCharter.Services.State;
 
 namespace DotCharter.Services.Editing.Linking;
@@ -14,16 +16,23 @@ public sealed record LinkSuggestion(
     int MeasureCount,
     IReadOnlyList<LinkRunRequest> Runs,
     IReadOnlyList<int> FirstMeasures,
-    bool FromRepeats);
+    bool FromRepeats)
+{
+    public int AlignedEdges { get; init; }
+    public bool RequiresReview { get; init; }
+}
+
+public enum LinkDetectionScope
+{
+    UnlinkedOnly,
+    All
+}
 
 /// <summary>
 ///     Finds what can be linked in arrangements that were just imported, and links it as one undo step.
 ///     <para>
-///         Two tiers. The reliable one is the score's own repeat structure: measures that play the same
-///         WRITTEN bar (the source bars handed to <see cref="Find" />) are repeats by construction.
-///         Then <see cref="LinkCandidateDetector" /> over each <see cref="LinkCompatibility" /> class of
-///         hardest levels. Every run is whole measures, never empty, overlaps no other suggestion and no
-///         existing placement, and every suggestion is one <see cref="LinkGroupCreator" /> would accept.
+///         Searches compatible arrangements for the longest repeated runs, with clean barline edges.
+///         Each ranked proposal includes all free copies and records its supporting boundaries and source repeats.
 ///     </para>
 /// </summary>
 public static class LinkSuggestionFinder
@@ -34,17 +43,31 @@ public static class LinkSuggestionFinder
     public static MeasureContentOptions RuleFor(AppConfig config) =>
         MeasureContentOptions.Detection with { Spacing = ChartSpacingEnforcer.SpacingGapOf(config) };
 
+    /// <summary>Detects ranked runs in one arrangement without changing the chart.</summary>
+    public static IReadOnlyList<LinkSuggestion> Detect(ChartProject project, Arrangement arrangement,
+        LinkDetectionScope scope, MeasureContentOptions rule) => Find(project, [arrangement], null, rule, scope);
+
     /// <summary>
     ///     The suggestions in <paramref name="arrangements" /> (those the import added).
     ///     <paramref name="sourceBars" /> holds, per measure of the project's grid, the written bar it
-    ///     plays (-1 unknown); null, or a list of another length, skips the repeat tier.
+    ///     plays (-1 unknown). Null uses the project's saved provenance if still aligned.
     /// </summary>
     public static IReadOnlyList<LinkSuggestion> Find(ChartProject project, IReadOnlyList<Arrangement> arrangements,
-        IReadOnlyList<int>? sourceBars, MeasureContentOptions rule)
+        IReadOnlyList<int>? sourceBars, MeasureContentOptions rule) => Find(project, arrangements, sourceBars, rule, CancellationToken.None);
+
+    public static IReadOnlyList<LinkSuggestion> Find(ChartProject project, IReadOnlyList<Arrangement> arrangements,
+        IReadOnlyList<int>? sourceBars, MeasureContentOptions rule, CancellationToken cancellation, Action<string>? report = null) =>
+        Find(project, arrangements, sourceBars, rule, LinkDetectionScope.UnlinkedOnly, new LinkDetectionWork(cancellation), report);
+
+    internal static IReadOnlyList<LinkSuggestion> Find(ChartProject project, IReadOnlyList<Arrangement> arrangements,
+        IReadOnlyList<int>? sourceBars, MeasureContentOptions rule, LinkDetectionScope scope, LinkDetectionWork? work = null,
+        Action<string>? report = null)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(arrangements);
         ArgumentNullException.ThrowIfNull(rule);
+        work ??= new LinkDetectionWork(CancellationToken.None);
+        work.Charge(0);
         var measures = MeasureGrid.Build(project.Beats);
         var classes = arrangements
             .Where(a => project.Arrangements.Contains(a) && LinkCompatibility.Signature(a) != null)
@@ -54,26 +77,48 @@ public static class LinkSuggestionFinder
             .ToList();
         if (measures.Count == 0 || classes.Count == 0) return [];
 
-        var finder = new Finder(project, measures, rule);
-        if (sourceBars != null && sourceBars.Count == measures.Count)
+        IReadOnlyList<GpSourceBar> provenance = sourceBars is { Count: 0 } || !GpSourceMap.Matches(project.GpSourceBars, measures)
+            ? [] : project.GpSourceBars;
+        var source = sourceBars ?? (provenance.Count > 0 ? provenance.Select(b => b.WrittenBar).ToArray() : null);
+        if (source?.Count != measures.Count) source = null;
+        var suggestions = new List<LinkSuggestion>();
+        foreach (var part in classes)
         {
-            foreach (var (first, length, starts) in RepeatRuns(sourceBars))
+            if (!WithinBudget(part.Count, measures.Count))
             {
-                foreach (var part in classes)
-                    finder.AddBuckets(part.SelectMany(a => starts.Select(s => (a, s))), length, fromRepeats: true);
+                Report(report, $"Link detection skipped a compatibility class ({part.Count} arrangements, {measures.Count} measures) over MaxPairs ({LinkCandidateDetector.MaxPairs}).");
+                continue;
+            }
+
+            try
+            {
+                work.Charge((int)((long)part.Count * measures.Count));
+                suggestions.AddRange(new RankedLinkSuggestions(project, measures, part, source, provenance, rule, scope).Find(work));
+            }
+            catch (LinkDetectionWork.LimitReached)
+            {
+                Report(report, "Link detection reached its search limit. Returning the verified proposals found so far.");
+                break;
             }
         }
 
-        foreach (var part in classes)
-        {
-            var indexes = part.Select(finder.Index).ToList();
-            var detected = LinkCandidateDetector.Detect(indexes);
-            if (detected.Truncated) continue;
-            foreach (var group in detected.Groups)
-                finder.AddFreeSegments([.. group.Placements.Select(p => (part[p.Part], p.FirstMeasure))], group.MeasureCount);
-        }
+        return [.. suggestions
+            .OrderByDescending(s => s.MeasureCount)
+            .ThenByDescending(s => s.AlignedEdges)
+            .ThenByDescending(s => s.Runs.Count)
+            .ThenByDescending(s => s.FromRepeats)];
+    }
 
-        return finder.Suggestions;
+    private static void Report(Action<string>? report, string message)
+    {
+        if (report != null) report(message);
+        else Trace.TraceWarning(message);
+    }
+
+    private static bool WithinBudget(int parts, int measures)
+    {
+        var count = (long)parts * measures + parts - 1;
+        return count <= 1 || count <= (2L * LinkCandidateDetector.MaxPairs + 1) / (count - 1);
     }
 
     /// <summary>
@@ -86,13 +131,19 @@ public static class LinkSuggestionFinder
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(suggestions);
+        var measures = MeasureGrid.Build(project.Beats);
+        if (measures.Count == 0) return null;
+        var edges = new Dictionary<Arrangement, AutoLinkEdges>();
+        var verification = new Dictionary<Arrangement, AutoLinkVerification>();
         var actions = new List<IChartAction>();
         try
         {
             // Each group must see the ones before it, for its letter and the overlap check.
             foreach (var suggestion in suggestions)
             {
-                if (LinkGroupCreator.TryBuild(project, suggestion.Runs, suggestion.Name, rule, out var action) !=
+                if (suggestion.RequiresReview || !suggestion.Runs.All(r => Safe(r, edges, measures))) continue;
+                if (!Verified(project, suggestion.Runs, measures, rule, verification)) continue;
+                if (LinkGroupCreator.TryBuildWithoutEdgeEdits(project, suggestion.Runs, suggestion.Name, rule, out var action) !=
                     LinkCreateRefusal.None)
                 {
                     continue;
@@ -110,162 +161,29 @@ public static class LinkSuggestionFinder
         return actions.Count == 0 ? null : new CompositeAction(actions) { LabelKey = HistoryLabelKey };
     }
 
-    /// <summary>
-    ///     The repeated runs of written bars, left to right: each the longest run of measures whose
-    ///     written bars recur, in the same order, at every later start of its first bar, without the
-    ///     occurrences overlapping each other.
-    /// </summary>
-    internal static List<(int First, int Length, List<int> Starts)> RepeatRuns(IReadOnlyList<int> sourceBars)
+    private static bool Safe(LinkRunRequest run, Dictionary<Arrangement, AutoLinkEdges> edges,
+        IReadOnlyList<MeasureSpan> measures)
     {
-        var n = sourceBars.Count;
-        var covered = new bool[n];
-        var runs = new List<(int, int, List<int>)>();
-        for (var i = 0; i < n; i++)
-        {
-            if (covered[i] || sourceBars[i] < 0) continue;
-            var starts = new List<int> { i };
-            for (var j = i + 1; j < n; j++)
-            {
-                if (!covered[j] && sourceBars[j] == sourceBars[i]) starts.Add(j);
-            }
-
-            if (starts.Count < 2) continue;
-            var length = 1;
-            while (Extends(sourceBars, covered, starts, length)) length++;
-            foreach (var start in starts)
-            {
-                for (var m = start; m < start + length; m++) covered[m] = true;
-            }
-
-            runs.Add((i, length, starts));
-        }
-
-        return runs;
+        if (!edges.TryGetValue(run.Arrangement, out var safe))
+            edges[run.Arrangement] = safe = new AutoLinkEdges(run.Arrangement, measures);
+        return safe.IsSafe(run.Start) && safe.IsSafe(run.End);
     }
 
-    /// <summary>Every occurrence can grow by one more measure: same written bar, still free, and short of the next occurrence.</summary>
-    private static bool Extends(IReadOnlyList<int> bars, bool[] covered, List<int> starts, int length)
+    private static bool Verified(ChartProject project, IReadOnlyList<LinkRunRequest> runs,
+        IReadOnlyList<MeasureSpan> measures, MeasureContentOptions rule, Dictionary<Arrangement, AutoLinkVerification> cache)
     {
-        for (var k = 0; k < starts.Count; k++)
+        (MeasureContentKey Rule, MeasureContentKey Exact)? previous = null;
+        foreach (var run in runs)
         {
-            var at = starts[k] + length;
-            if (at >= bars.Count || covered[at] || bars[at] < 0 || bars[at] != bars[starts[0] + length]) return false;
-            if (k + 1 < starts.Count && at >= starts[k + 1]) return false;
+            var placement = new LinkPlacement { Position = run.Start, EndPosition = run.End };
+            if (!LinkRuns.TryResolve(measures, placement, out var first, out var count)) return false;
+            if (!cache.TryGetValue(run.Arrangement, out var verification))
+                cache[run.Arrangement] = verification = new AutoLinkVerification(run.Arrangement, project.Beats, rule);
+            var key = verification.KeyFor(first, count);
+            if (key.Rule.IsEmpty || previous is { } prior && !prior.Equals(key)) return false;
+            previous = key;
         }
 
-        return true;
+        return previous != null;
     }
-
-    /// <summary>The suggestions found so far, and which measures of which arrangement they (or existing groups) hold.</summary>
-    private sealed class Finder
-    {
-        private readonly ChartProject _project;
-        private readonly IReadOnlyList<MeasureSpan> _measures;
-        private readonly MeasureContentOptions _rule;
-        private readonly Dictionary<Arrangement, MeasureContentIndex> _indexes = [];
-        private readonly Dictionary<Arrangement, bool[]> _taken = [];
-
-        public Finder(ChartProject project, IReadOnlyList<MeasureSpan> measures, MeasureContentOptions rule)
-        {
-            _project = project;
-            _measures = measures;
-            _rule = rule;
-            foreach (var placement in project.LinkGroups.SelectMany(g => g.Placements))
-            {
-                if (placement.Arrangement is { } arrangement && LinkRuns.TryResolve(measures, placement, out var first, out var count))
-                    Take(arrangement, first, count);
-            }
-        }
-
-        public List<LinkSuggestion> Suggestions { get; } = [];
-
-        public MeasureContentIndex Index(Arrangement arrangement)
-        {
-            if (!_indexes.TryGetValue(arrangement, out var index))
-                _indexes[arrangement] = index = MeasureContentIndex.ForHardestLevel(arrangement, _project.Beats, _rule);
-            return index;
-        }
-
-        /// <summary>Groups the free, non-empty runs by content and time signatures; each bucket of two or more is a suggestion.</summary>
-        public void AddBuckets(IEnumerable<(Arrangement Arrangement, int First)> runs, int length, bool fromRepeats)
-        {
-            var buckets = new Dictionary<string, List<(Arrangement Arrangement, int First)>>(StringComparer.Ordinal);
-            var order = new List<string>();
-            foreach (var (arrangement, first) in runs)
-            {
-                if (first < 0 || first + length > _measures.Count || IsTaken(arrangement, first, length)) continue;
-                var key = Index(arrangement).KeyFor(first, length);
-                if (key.IsEmpty) continue;
-                var bucket = key.Canonical + "|" + Geometry(first, length);
-                if (!buckets.TryGetValue(bucket, out var list))
-                {
-                    buckets[bucket] = list = [];
-                    order.Add(bucket);
-                }
-
-                if (list.Any(r => ReferenceEquals(r.Arrangement, arrangement) && r.First < first + length && first < r.First + length)) continue;
-                list.Add((arrangement, first));
-            }
-
-            foreach (var list in order.Select(b => buckets[b]).Where(l => l.Count >= 2))
-            {
-                var requests = list.Select(r => new LinkRunRequest(r.Arrangement, _measures[r.First].Start,
-                    _measures[r.First + length - 1].End)).ToList();
-                var name = SectionAt(list[0].Arrangement, requests[0].Start);
-                if (LinkGroupCreator.TryBuild(_project, requests, name, _rule, out _) != LinkCreateRefusal.None) continue;
-                Suggestions.Add(new LinkSuggestion(name, length, requests, [.. list.Select(r => r.First)], fromRepeats));
-                foreach (var (arrangement, first) in list) Take(arrangement, first, length);
-            }
-        }
-
-        /// <summary>
-        ///     A detected run that crosses measures already taken (a repeat, an existing group) still
-        ///     offers what is left: each stretch of offsets where the same two or more placements are
-        ///     free, without empty measures at its edges.
-        /// </summary>
-        public void AddFreeSegments(List<(Arrangement Arrangement, int First)> runs, int length)
-        {
-            var offset = 0;
-            while (offset < length)
-            {
-                var free = FreeAt(runs, offset);
-                if (free.Count < 2)
-                {
-                    offset++;
-                    continue;
-                }
-
-                var end = offset + 1;
-                while (end < length && FreeAt(runs, end).SequenceEqual(free)) end++;
-                var (lead, index) = (runs[free[0]], Index(runs[free[0]].Arrangement));
-                var (start, stop) = (offset, end);
-                while (start < stop && index.KeyFor(lead.First + start).IsEmpty) start++;
-                while (stop > start && index.KeyFor(lead.First + stop - 1).IsEmpty) stop--;
-                if (stop > start) AddBuckets(free.Select(i => (runs[i].Arrangement, runs[i].First + start)), stop - start, fromRepeats: false);
-                offset = end;
-            }
-        }
-
-        private List<int> FreeAt(List<(Arrangement Arrangement, int First)> runs, int offset) =>
-            [.. Enumerable.Range(0, runs.Count).Where(i => !IsTaken(runs[i].Arrangement, runs[i].First + offset, 1))];
-
-        private string Geometry(int first, int length) =>
-            string.Join(",", Enumerable.Range(first, length).Select(i =>
-                $"{_measures[i].BeatsInMeasure}/{_measures[i].NoteDenominator}x{_measures[i].BeatCount}"));
-
-        private bool IsTaken(Arrangement arrangement, int first, int length) =>
-            _taken.TryGetValue(arrangement, out var taken) && Enumerable.Range(first, length).Any(m => taken[m]);
-
-        private void Take(Arrangement arrangement, int first, int length)
-        {
-            if (!_taken.TryGetValue(arrangement, out var taken)) _taken[arrangement] = taken = new bool[_measures.Count];
-            for (var m = first; m < first + length && m < taken.Length; m++) taken[m] = true;
-        }
-    }
-
-    /// <summary>The section in effect at <paramref name="at" />, or "".</summary>
-    internal static string SectionAt(Arrangement arrangement, FractionalPosition at) =>
-        arrangement.EventPoints
-            .Where(e => !string.IsNullOrEmpty(e.Section) && e.Position <= at)
-            .MaxBy(e => e.Position)?.Section ?? "";
 }

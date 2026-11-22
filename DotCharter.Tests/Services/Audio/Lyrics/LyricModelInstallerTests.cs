@@ -53,6 +53,64 @@ public sealed class LyricModelInstallerTests : IDisposable
         new(fetch, FakeLocalization.English(), new FakeAppLogger(), [_root]);
 
     [Fact]
+    public async Task RepairRemovesDamagedCopiesFromEverySearchRoot()
+    {
+        var fallback = Path.Combine(_root, "fallback");
+        foreach (var root in new[] { _root, fallback })
+        {
+            var directory = Directory.CreateDirectory(Path.Combine(root, Model.Id)).FullName;
+            File.WriteAllText(Path.Combine(directory, "model.onnx"), "damaged");
+            File.WriteAllText(Path.Combine(directory, "vocab.json"), "damaged");
+        }
+
+        var installer = new LyricModelInstaller((_, _) => Task.FromResult(Archive()),
+            FakeLocalization.English(), modelRoots: [_root, fallback]);
+
+        installer.Remove(Model.Id);
+
+        Assert.False(installer.IsInstalled(Model.Id));
+        Assert.False(Directory.Exists(Path.Combine(fallback, Model.Id)));
+        Assert.True(await installer.EnsureInstalledAsync(Model, ct: TestContext.Current.CancellationToken));
+        Assert.Equal("onnx", File.ReadAllText(Path.Combine(_root, Model.Id, "model.onnx")));
+    }
+
+    [Fact]
+    public async Task AnInstallNeverDeletesAnotherAttemptsStagingDirectory()
+    {
+        var staging = Directory.CreateDirectory(Path.Combine(_root, Model.Id + ".incoming")).FullName;
+        var marker = Path.Combine(staging, "other-attempt");
+        File.WriteAllText(marker, "keep");
+
+        Assert.True(await Installer((_, _) => Task.FromResult(Archive()))
+            .EnsureInstalledAsync(Model, ct: TestContext.Current.CancellationToken));
+
+        Assert.Equal("keep", File.ReadAllText(marker));
+        Assert.Empty(Directory.GetDirectories(_root, Model.Id + ".incoming-*"));
+    }
+
+    [Fact]
+    public async Task ConcurrentInstallerInstancesBothObserveACompletePublishedModel()
+    {
+        var bothFetching = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fetches = 0;
+        async Task<Stream> Fetch(string _, CancellationToken ct)
+        {
+            if (Interlocked.Increment(ref fetches) == 2) bothFetching.SetResult();
+            await bothFetching.Task.WaitAsync(TimeSpan.FromSeconds(60), ct);
+            return Archive();
+        }
+
+        var results = await Task.WhenAll(
+            Installer(Fetch).EnsureInstalledAsync(Model, ct: TestContext.Current.CancellationToken),
+            Installer(Fetch).EnsureInstalledAsync(Model, ct: TestContext.Current.CancellationToken));
+
+        Assert.All(results, result => Assert.True(result));
+        Assert.Equal("onnx", File.ReadAllText(Path.Combine(_root, Model.Id, "model.onnx")));
+        Assert.Equal("{}", File.ReadAllText(Path.Combine(_root, Model.Id, "vocab.json")));
+        Assert.Empty(Directory.GetDirectories(_root, Model.Id + ".incoming-*"));
+    }
+
+    [Fact]
     public async Task AMissingModelIsDownloadedAndBecomesInstalled()
     {
         var installer = Installer((_, _) => Task.FromResult(Archive()));

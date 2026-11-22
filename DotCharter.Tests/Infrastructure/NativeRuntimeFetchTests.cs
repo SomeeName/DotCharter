@@ -292,37 +292,19 @@ public sealed partial class NativeRuntimeFetchTests : IDisposable
         var file = Path.Combine(_scratch, "case-" + Guid.NewGuid().ToString("N") + ".ps1");
         File.WriteAllText(file, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
-        var info = new ProcessStartInfo("pwsh")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var info = new ProcessStartInfo("pwsh");
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-File", file })
             info.ArgumentList.Add(argument);
 
-        Process? process;
-        try
-        {
-            process = Process.Start(info);
-        }
-        catch (System.ComponentModel.Win32Exception)
+        // #608: both pipes drain concurrently under one cap (a deadlock detector for a hung child, never a budget).
+        var result = BoundedProcess.TryRun(info, TimeSpan.FromMinutes(2), "pwsh (NativeRuntime.psm1)");
+        if (result is null)
         {
             Assert.Skip("pwsh (PowerShell 7+) is not on PATH, so NativeRuntime.psm1 cannot be executed here.");
             return default;
         }
 
-        Assert.NotNull(process);
-        using (process)
-        {
-            var stdoutTask = process!.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
-            var stderr = process.StandardError.ReadToEnd();
-            // A deadlock detector for a hung child, never a budget.
-            Assert.True(process.WaitForExit(120_000), "pwsh did not finish within 120 s.");
-            var stdout = stdoutTask.GetAwaiter().GetResult();
-            Assert.True(process.ExitCode == 0, $"pwsh exited {process.ExitCode}.{Environment.NewLine}{stderr}{Environment.NewLine}{stdout}");
-        }
+        Assert.True(result.ExitCode == 0, $"pwsh exited {result.ExitCode}.{Environment.NewLine}{result.StandardError}{Environment.NewLine}{result.StandardOutput}");
 
         using var document = JsonDocument.Parse(File.ReadAllText(resultFile));
         return document.RootElement.Clone();
@@ -332,21 +314,15 @@ public sealed partial class NativeRuntimeFetchTests : IDisposable
     {
         try
         {
-            var info = new ProcessStartInfo("git")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+            var info = new ProcessStartInfo("git");
             foreach (var argument in new[] { "-C", root, "ls-tree", "HEAD", "JuceSharp" })
                 info.ArgumentList.Add(argument);
-            using var process = Process.Start(info)!;
-            var output = process.StandardOutput.ReadToEnd();
-            process.StandardError.ReadToEnd();
-            process.WaitForExit(30_000);
+
+            // #608: bounded, concurrent drain; a hung git fails instead of blocking.
+            var result = BoundedProcess.Run(info, TimeSpan.FromMinutes(2), "git ls-tree");
+            var output = result.StandardOutput;
             var match = Gitlink().Match(output);
-            return process.ExitCode == 0 && match.Success ? match.Groups[1].Value : null;
+            return result.ExitCode == 0 && match.Success ? match.Groups[1].Value : null;
         }
         catch (System.ComponentModel.Win32Exception)
         {

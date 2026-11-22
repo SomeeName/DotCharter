@@ -32,6 +32,75 @@ public sealed class AudioChartLintServiceTests : IDisposable
     private static List<BeatMarker> Beats()
         => Enumerable.Range(0, 16).Select(i => new BeatMarker { Time = i * 500.0 }).ToList();
 
+    [Fact]
+    public async Task LiveBeatsAreReadOnTheCallerAndTheirTimesAreCapturedBeforeReturning()
+    {
+        var beats = new CallerBeats(Beats());
+        var arrangement = ArrangementWithNote(7);
+        var pending = new AudioChartLintService().LintAsync(arrangement, beats, WriteToneWav(),
+            TestContext.Current.CancellationToken);
+        var readsBeforeReturn = beats.Reads;
+        beats.Items[2].Time = 2000;
+        arrangement.Levels[0].Notes.Clear();
+
+        var result = await pending;
+
+        Assert.True(readsBeforeReturn > 0, "The worker must never receive live beats or arrangements.");
+        Assert.True(result.Ran, result.Error);
+        Assert.Equal(1000, Assert.Single(result.Findings).TimeMs);
+    }
+
+    private sealed class CallerBeats(List<BeatMarker> items) : IList<BeatMarker>
+    {
+        private readonly Thread _owner = Thread.CurrentThread;
+
+        public List<BeatMarker> Items { get; } = items;
+        public int Reads { get; private set; }
+
+        private void Read()
+        {
+            Assert.Same(_owner, Thread.CurrentThread);
+            Reads++;
+        }
+
+        public BeatMarker this[int index]
+        {
+            get
+            {
+                Read();
+                return Items[index];
+            }
+            set => Items[index] = value;
+        }
+
+        public int Count
+        {
+            get
+            {
+                Read();
+                return Items.Count;
+            }
+        }
+
+        public bool IsReadOnly => false;
+
+        public IEnumerator<BeatMarker> GetEnumerator()
+        {
+            Read();
+            return Items.GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        public int IndexOf(BeatMarker item) => Items.IndexOf(item);
+        public void Insert(int index, BeatMarker item) => Items.Insert(index, item);
+        public void RemoveAt(int index) => Items.RemoveAt(index);
+        public void Add(BeatMarker item) => Items.Add(item);
+        public void Clear() => Items.Clear();
+        public bool Contains(BeatMarker item) => Items.Contains(item);
+        public void CopyTo(BeatMarker[] array, int arrayIndex) => Items.CopyTo(array, arrayIndex);
+        public bool Remove(BeatMarker item) => Items.Remove(item);
+    }
+
     /// <summary>1 s silence + 1.5 s of a 110 Hz-rooted tone + tail silence,
     /// as a 16-bit mono WAV (the in-process decoder conforms it to 48 kHz
     /// stereo; the service downmixes back).</summary>
@@ -130,6 +199,21 @@ public sealed class AudioChartLintServiceTests : IDisposable
 
         Assert.Equal(2, sounds.Count);
         Assert.All(sounds, s => Assert.False(s.IsPitched));
+    }
+
+    [Fact]
+    public void Projection_UsesTheGreatestDifficultyInsteadOfTheLastStoredLevel()
+    {
+        var arrangement = ArrangementWithNote(5);
+        arrangement.Levels[0].DifficultyIndex = 10;
+        var reduced = new ChartLevel { DifficultyIndex = 0 };
+        reduced.Notes.Add(new GuitarNote { Position = new FractionalPosition(4), StringIndex = 0, Fret = 7 });
+        arrangement.Levels.Add(reduced);
+
+        var sound = Assert.Single(AudioChartLintService.ProjectExpectedSounds(arrangement, Beats()));
+
+        Assert.Equal(1000, sound.TimeMs);
+        Assert.Equal([45], sound.SoundingMidis);
     }
 
     /// <summary>

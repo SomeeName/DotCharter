@@ -9,7 +9,7 @@ namespace DotCharter.Services.Update;
 ///         and its full-download path deletes nothing. So after the one-step
 ///         update the top folder holds the new launcher, <c>app/</c>,
 ///         <c>tools/</c> and <c>voices/</c> — and still every one of the ~390 files
-///         the flat release had there, plus <see cref="LegacyUpdaterShim" />'s four.
+///         the flat release had there, plus the four <see cref="ShimFiles" /> (copies the 1.3.0 and add-on 1.4.0 zips carried at the top).
 ///         The app now runs from <c>app/</c>, so none of them is loaded and all of
 ///         them are clutter: this removes them.
 ///     </para>
@@ -33,6 +33,39 @@ public static class SplitInstallCleanup
 {
     /// <summary>Top-level folders the split layout itself owns, never cleaned.</summary>
     private static readonly string[] KeptTopFolders = [AppPayload.AppFolderName, "tools", "voices"];
+
+    /// <summary>
+    ///     The four top-level names older split zips (up to 1.3.0, and the add-on
+    ///     1.4.0 zip) carried for pre-0.63 updaters. No release ships them any more
+    ///     (the release validators refuse them), but installs that unpacked an
+    ///     older zip still hold them, and this is the ONLY list of names the cleanup
+    ///     may delete for that reason.
+    /// </summary>
+    public static readonly string[] ShimFiles =
+    [
+        AppPayload.RuntimeConfigName,
+        AppPayload.DepsName,
+        AppPayload.HostFxrName,
+        AppPayload.CoreClrName,
+    ];
+
+    /// <summary>Whether a payload- or install-relative path is one of <see cref="ShimFiles" /> at the TOP.</summary>
+    public static bool IsShimPath(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath)) return false;
+        var p = relativePath.Replace('\\', '/').TrimStart('/');
+        return !p.Contains('/') && ShimFiles.Contains(p, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    ///     The first shim name a SPLIT release payload carries at its top, or null.
+    ///     The release script refuses a payload or zip where this is not null.
+    /// </summary>
+    public static string? FindShimAtTop(Func<string, bool> hasFile)
+    {
+        ArgumentNullException.ThrowIfNull(hasFile);
+        return ShimFiles.FirstOrDefault(hasFile);
+    }
 
     /// <summary>
     ///     Which top-level files to delete, as install-relative forward-slashed
@@ -77,7 +110,7 @@ public static class SplitInstallCleanup
             // candidate, whatever a manifest or app/ says about the name.
             if (PayloadReceiptFilter.IsLocalState(path)) continue;
 
-            if (LegacyUpdaterShim.IsShimPath(path))
+            if (IsShimPath(path))
             {
                 if (appHas(path)) deletions.Add(path);
                 continue;
@@ -110,7 +143,7 @@ public static class SplitInstallCleanup
         if (!AppPayload.IsSplitDirectory(installRoot)) return false;
         if (File.Exists(Path.Combine(installRoot, PayloadManifest.FileName))) return true;
         if (File.Exists(Path.Combine(installRoot, "DotCharter.dll"))) return true;
-        return LegacyUpdaterShim.Files.Any(name => File.Exists(Path.Combine(installRoot, name)));
+        return ShimFiles.Any(name => File.Exists(Path.Combine(installRoot, name)));
     }
 
     /// <summary>

@@ -385,6 +385,17 @@ public class PedalboardVisualsTests
         Assert.Equal(0.0, v, 5);
     }
 
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("1e999")]
+    public void TryParseEntry_rejects_nonfinite_values(string text)
+    {
+        Assert.False(KnobMath.TryParseEntry(text, 0, 1, tenScale: true, out var value));
+        Assert.Equal(0.0, value);
+    }
+
     [Fact]
     public void TryParseEntry_trims_and_accepts_invariant_decimal()
     {

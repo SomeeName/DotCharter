@@ -27,10 +27,20 @@ assembly's half with a `using DotCharter.Tone.…;`.
 
 ## The seams that made the split possible
 
+- Rig writes report success; a tone session advances its saved signature only
+  after success. Unreadable rig stores are retried without caching defaults;
+  corrupt JSON is moved aside before replacement. Queued presets carry the
+  shared store's scope generation and cannot apply after a profile rescope.
+- The AI secret store refuses writes and removals after a failed read or
+  decryption, preserving every provider's existing keys.
+
 - **`RigConfig`** holds the settings this assembly reads (audio device, logging,
   the tone library, TONE3000, the rig UI's zoom/favourites/tuner pitch).
   `AppConfig` (Services) DERIVES from it, so `appconfig.json` is unchanged.
   **Add a property to `RigConfig` only if code in Tone or Tone.UI reads it.**
+  Tone pickers remember their folder through `PickerFolders` (`StartFolder` /
+  `RememberFileFolder`, the `Last*Dir` settings); detail in
+  [infrastructure-update/config-and-json-stores.md](../docs/agents/services/infrastructure-update/config-and-json-stores.md).
 - **`IRigConfigService`** (`LoadRigConfig` / `UpdateRigConfig`) is what this
   assembly reads through. `IConfigurationService` extends it with default
   members; DotCharter's DI registers the SAME instance under both — never a
@@ -41,7 +51,66 @@ assembly's half with a `using DotCharter.Tone.…;`.
 - **`WritablePaths.UseAppFolderName`**: a non-DotCharter host renames the
   per-user folder before anything resolves a path (it throws afterwards).
 
+Session-wide preview ownership and I/O ordering live in `Audio/Tonelab/TonelabPreviewOwnership`;
+pending applies prevent restores, failed owners leave, and the last owner restores once.
+`Audio/Tonelab/TonelabTonePreview` reserves its local restore turn before
+accepting a new generation. A debounce firing during an old reply hands pending work
+to the current generation after that restore (`TonelabTonePreviewTests`, #530).
+Tests inject a session `TimeProvider` for pipe reply deadlines and await the launcher's
+`ExitWatch` through INI restoration; see tonelab-bridge.md for the load-safe mock harness (#647).
+
+Rebuild media publication is isolated in `Audio/Engine/MediaRebuildReplay`; VST
+capture/merge/restore in `Audio/Vst/VstRebuildState`. Their
+injected I/O and `Audio/ChartSynth/IChartSynthBackend` let `RebuildPublicationTests`
+exercise the actual decision paths without a device. VST state capture calls the wrapper's `SaveState()` once. Native audio imports belong only in JuceSharp.
+Keep the rebuild lock order
+in [../docs/agents/services/audio-engine.md](../docs/agents/services/audio-engine.md).
+
+`Audio/Engine/MediaRebuildRecovery` retains song and full stem-mix intent until
+rebuild replay succeeds; current mixer edits merge into retained missing-stem intent.
+Explicit stem clear discards that intent and invalidates a restoration in flight (a clear
+generation checked before replay and before publication); logical media changes invalidate
+obsolete recovery, but a take's hand-back keeps the song's stems (`_mediaLineage`).
+`IRigConfigService.UpdateRigConfigAndWrite` performs the write before returning, so
+`UserTonePresetStore.Upsert` answers null when a preset did not reach the disk and
+`SaveUser(…, out written)` reports it; the preset browser uses `StageUser` (in memory now, the write on its worker) and posts the answer to its status line.
+Guitar-chain workers reject older request generations after taking `_vstGate`.
+`Audio/Vst/VstInputOrder` detaches all effects before attaching active slots in
+requested order, including after bypass changes; plugin objects and state survive.
+
+## Sandbox ownership
+
+`Audio/JuceAudioPlaybackService.Sandbox.cs` owns four `VstSandboxSeat` contexts
+under `Audio/Vst/Sandbox/`: one child per seat, started with its first plugin
+and stopped after its last unload. The instrument belongs to seat 0 and counts
+toward that child's lifetime. Each context owns its slots, desired state,
+restart budget, heartbeat and state replay. Slot controls use the owner's
+channel; moves await the old unload before the new load. A crash recovers only
+that seat. Engine rebuilds re-arm every surviving child's own bridge and queue
+prepare for all of them; the instrument's MIDI sink is rebound on seat 0.
+Chain edits visit changed seats and retry missing desired slots except remembered
+rejections or missing files (cleared when that entry changes), complete unrelated
+edits before reporting aggregate failures, and hand captured state to a move's
+destination before unloading its source. A source that dies during unload cannot
+retain ownership. Health capture prunes state by desired ownership, preserving
+copies awaiting a destination load or retry. Unchanged seats in backoff or after
+giving up stay untouched. Pending restarts retain their host
+identity; an explicit edit cancels obsolete work before replacing a dead host.
+A failed rebuild re-arm kills and recovers only that seat. Mode switch off and
+dispose request every child's quit before one shared 10-second bound, then kill
+unfinished stops (`VstSandboxShutdown`, `IVstSandboxStopWait`). Host and
+engine interfaces let `VstSandboxPerSeatTests` exercise the real orchestration
+without launching a process.
+
 ## Rules
+
+- `StemLoadRequest.OffsetMs` is applied once during worker-side opening by
+  `Audio/StemPlaybackOffset`: positive offsets pad with silence, negative offsets
+  trim. Zero keeps the direct file open. Rebuild snapshots retain the offset;
+  no managed timing pump participates in playback.
+- Untrusted file references use `Infrastructure/Storage/FileReferencePolicy`
+  before any probe. NAM manifest targets require a bare filename; imported tone
+  file params accept local absolute or confined library-relative paths.
 
 - **References: Core, Localization, JuceSharp (+ `.Dsp`, `.AudioIo`) only.**
   Never Services, never Analysis. `AssemblyLayeringTests` has the row, and
@@ -49,7 +118,14 @@ assembly's half with a `using DotCharter.Tone.…;`.
   separators, AlphaTab, SQLite, the Wwise tools, the AI SDK, Avalonia or SkiaSharp.
 - `InternalsVisibleTo`: Services (the AI matcher reads `DcRigTargetCatalog`),
   RigLab (`CoalescedFileWriter`), Tests.
+- Portable preset file params are `modelPath`, `irPath`, `irPathB` and `irFile`;
+  keep resolution, export rewriting and non-portable warnings in
+  `DcRigPresetPreparation` using the same key set.
 - Everything the audio/DSP guides say still applies — they are
   [../docs/agents/services/audio-engine.md](../docs/agents/services/audio-engine.md)
   and [../docs/agents/services/dsp-tone-rig.md](../docs/agents/services/dsp-tone-rig.md);
   only the file paths moved.
+
+Preserving relocation of original files uses `AtomicFile.MoveAside(..., overwrite: false)`.
+It never replaces a competing destination or sweeps the live source. The two-argument
+quarantine overload retains replacement semantics; `PublishNew` owns and sweeps its stage.

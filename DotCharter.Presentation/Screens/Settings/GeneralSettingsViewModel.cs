@@ -3,16 +3,18 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Localization;
 using DotCharter.Presentation.Contracts.Settings;
+using DotCharter.Services.Export.Audio;
 using DotCharter.Services.Infrastructure.Configuration;
 using DotCharter.Services.Infrastructure.Shell;
 using DotCharter.Tone.Infrastructure.Configuration;
+using DotCharter.Tone.Infrastructure.Storage;
 using DotCharter.Tone.Logging;
 
 namespace DotCharter.Presentation.Screens.Settings;
 
 /// <summary>
 ///     Settings ▸ General: language, startup screen, the first-run wizard, the
-///     crash report and, behind Advanced, the log. Saving applies the language
+///     crash report and, behind Advanced, logging and Rocksmith export. Saving applies the language
 ///     and reloads the logger's filter; nothing here previews live.
 /// </summary>
 public sealed partial class GeneralSettingsViewModel : ObservableObject,
@@ -41,10 +43,13 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject,
             new("noiseControl", "Settings_NoiseControl", "Settings_Tip_NoiseControl"),
             new("repeatWindow", "Settings_WindowMs", "Settings_Tip_RepeatTiming"),
             new("repeatSummary", "Settings_SummaryMs", "Settings_RepeatTiming"),
-            new("categories", "Settings_Categories", "Settings_Tip_Categories"))
+            new("categories", "Settings_Categories", "Settings_Tip_Categories")),
+        new("Settings_RocksmithExport_Title", null,
+            new("autoVolumeTarget", "Settings_ExportAutoVolumeTarget_RowLabel", "Settings_Tip_ExportAutoVolumeTarget"),
+            new("testExportDefaultFolder", "Settings_ExportTestDefaultFolder", "Settings_Tip_ExportTestDefaultFolder"))
     ]);
 
-    /// <summary>Logging is the last group, behind the Advanced disclosure.</summary>
+    /// <summary>Logging and Rocksmith export sit behind the Advanced disclosure.</summary>
     private const int FirstAdvancedGroup = 2;
 
     /// <summary>The persisted values the footer counts: every settable contract property but the disclosure.</summary>
@@ -56,12 +61,14 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject,
         nameof(LogRepeatCoalesceWindowMs), nameof(LogRepeatSummaryIntervalMs), nameof(RotateLogFiles),
         nameof(LogFileMaxMb), nameof(LogFileMaxRollovers), nameof(LogApplication), nameof(LogProject),
         nameof(LogImport), nameof(LogEditing), nameof(LogInput), nameof(LogEvents), nameof(LogHistory),
-        nameof(LogSettings), nameof(LogAudio), nameof(LogErrors), nameof(LogExternal)
+        nameof(LogSettings), nameof(LogAudio), nameof(LogErrors), nameof(LogExternal), nameof(ExportAutoVolumeTargetLufs),
+        nameof(ExportTestDefaultFolder)
     ];
 
     private readonly IConfigurationService _config;
     private readonly ILocalizationService _localization;
     private readonly IFirstRunSetupPrompt _setup;
+    private readonly IFileStorageService _files;
     private readonly IAppLogger? _logger;
     private readonly SettingsChangeSet _changes = new();
 
@@ -91,19 +98,25 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject,
     [ObservableProperty] private bool _logAudio = true;
     [ObservableProperty] private bool _logErrors = true;
     [ObservableProperty] private bool _logExternal = true;
+    [ObservableProperty] private int _exportAutoVolumeTargetLufs = RocksmithAutoVolume.DefaultTargetLufs;
+    [ObservableProperty] private string _exportTestDefaultFolder = "";
     [ObservableProperty] private bool _isAdvancedOpen;
 
     public GeneralSettingsViewModel(
         IConfigurationService config,
         ILocalizationService localization,
         IFirstRunSetupPrompt setup,
+        IFileStorageService files,
         IAppLogger? logger = null)
     {
         _config = config;
         _localization = localization;
         _setup = setup;
+        _files = files;
         _logger = logger;
         RunSetupAgainCommand = new RelayCommand(() => _setup.Open());
+        BrowseTestExportDefaultFolderCommand = new AsyncRelayCommand(BrowseTestExportDefaultFolderAsync);
+        ClearTestExportDefaultFolderCommand = new RelayCommand(() => ExportTestDefaultFolder = "");
         _changes.TrackProperties(this, Rows.Prefix, Tracked, () => OnPropertyChanged(nameof(UnsavedSettings)));
         _changes.Rebaseline();
     }
@@ -111,6 +124,10 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject,
     public IReadOnlyList<string> LanguageOptions => [.. _localization.LanguageOptions.Select(o => o.DisplayName)];
 
     public ICommand RunSetupAgainCommand { get; }
+
+    public ICommand BrowseTestExportDefaultFolderCommand { get; }
+
+    public ICommand ClearTestExportDefaultFolderCommand { get; }
 
     public IReadOnlySet<string> HiddenKeys { get; private set; } = new HashSet<string>();
 
@@ -132,6 +149,8 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject,
         SelectedLanguageIndex = LanguageIndexOf(config.LanguageCulture);
         SelectedStartupScreenIndex = config.StartupScreen == StartupScreen.Editor ? 1 : 0;
         CrashReportOptIn = config.CrashReportOptIn;
+        ExportAutoVolumeTargetLufs = config.ExportAutoVolumeTargetLufs;
+        ExportTestDefaultFolder = config.ExportTestDefaultFolder?.Trim() ?? "";
 
         EnableConsoleLogging = config.EnableConsoleLogging;
         EnableConsoleColors = config.EnableConsoleColors;
@@ -167,6 +186,8 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject,
         config.LanguageCulture = SelectedLanguageCulture();
         config.StartupScreen = SelectedStartupScreenIndex == 1 ? StartupScreen.Editor : StartupScreen.PlayMode;
         config.CrashReportOptIn = CrashReportOptIn;
+        config.ExportAutoVolumeTargetLufs = ExportAutoVolumeTargetLufs;
+        config.ExportTestDefaultFolder = ExportTestDefaultFolder?.Trim() ?? "";
 
         config.EnableConsoleLogging = EnableConsoleLogging;
         config.EnableConsoleColors = EnableConsoleColors;
@@ -213,6 +234,13 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject,
         HiddenKeys = Rows.Hidden(_localization, query, out var kept);
         OnPropertyChanged(nameof(HiddenKeys));
         if (query.Length > 0 && kept.Skip(FirstAdvancedGroup).Any(k => k)) IsAdvancedOpen = true;
+    }
+
+    private async Task BrowseTestExportDefaultFolderAsync()
+    {
+        var start = string.IsNullOrWhiteSpace(ExportTestDefaultFolder) ? null : ExportTestDefaultFolder.Trim();
+        var folder = await _files.OpenFolderPickerAsync(_localization["Picker_SelectTestFolder"], start);
+        if (folder is not null) ExportTestDefaultFolder = folder;
     }
 
     private int LanguageIndexOf(string? culture)

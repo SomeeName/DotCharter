@@ -155,7 +155,8 @@ public sealed class SongBrowserScanRaceTests
         public Task LoadSilentTransportAsync(double projectLengthMs) => Task.CompletedTask;
 
         public Task OpenProject() => Task.CompletedTask;
-        public Task<bool> SaveProjectAsync() => Task.FromResult(true);
+        public bool HasUnsavedWork() => IsProjectDirty;
+        public Task<bool> SaveProjectAsync(SaveInitiator initiator) => Task.FromResult(true);
         public Task<bool> SaveProjectAsAsync() => Task.FromResult(true);
         public IReadOnlyList<RecentProjectEntry> GetRecentProjects() => [];
         public event Action? RecentProjectsChanged { add { } remove { } }

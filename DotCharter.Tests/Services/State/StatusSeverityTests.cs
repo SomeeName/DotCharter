@@ -90,7 +90,7 @@ public sealed class StatusSeverityTests
         var dispatcher = new InlineDispatcher();
         using var vm = new StatusBarViewModel(
             new StatusBarService(dispatcher), state, new NullAudioPlaybackService(),
-            dispatcher, new StubProfiles(), new FakeFileStorageService(), FakeLocalization.English());
+            dispatcher, new StubProfiles(), new FakeFileStorageService(), FakeLocalization.English(), new FakeConfigurationService());
 
         var raised = new List<string>();
         vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName!);
@@ -130,7 +130,7 @@ public sealed class StatusSeverityTests
         var dispatcher = new InlineDispatcher();
         using var vm = new StatusBarViewModel(
             new StatusBarService(dispatcher), state, new NullAudioPlaybackService(),
-            dispatcher, new StubProfiles(), new FakeFileStorageService(), FakeLocalization.English());
+            dispatcher, new StubProfiles(), new FakeFileStorageService(), FakeLocalization.English(), new FakeConfigurationService());
         var later = Environment.TickCount64 + StatusBarViewModel.MainMessageFadeMs + 1000;
 
         state.SetMessage("Loaded Chart: project.rscp", StatusSeverity.Info);
@@ -160,7 +160,7 @@ public sealed class StatusSeverityTests
         var dispatcher = new InlineDispatcher();
         using var vm = new StatusBarViewModel(
             new StatusBarService(dispatcher), state, new NullAudioPlaybackService(),
-            dispatcher, new StubProfiles(), new FakeFileStorageService(), FakeLocalization.English());
+            dispatcher, new StubProfiles(), new FakeFileStorageService(), FakeLocalization.English(), new FakeConfigurationService());
         var raised = new List<string?>();
         vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
         var runs = 0;
@@ -195,7 +195,7 @@ public sealed class StatusSeverityTests
         var dispatcher = new InlineDispatcher();
         using var vm = new StatusBarViewModel(
             new StatusBarService(dispatcher), new ProjectState(), new NullAudioPlaybackService(),
-            dispatcher, new StubProfiles(), new FakeFileStorageService(), FakeLocalization.English());
+            dispatcher, new StubProfiles(), new FakeFileStorageService(), FakeLocalization.English(), new FakeConfigurationService());
         var raised = new List<string?>();
         vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 

@@ -50,14 +50,14 @@ public sealed class InspectorPrewarmUiPerfSmokeTests(ITestOutputHelper output)
         {
             var hidden = inspector.HiddenSurfaces();
 
-            // Pinned against InspectorView.axaml's InspectorTabPanels Grid: nine
+            // Pinned against InspectorView.axaml's InspectorTabPanels Grid: seven
             // tab UserControls, one of them active. Re-count the markup when a
             // tab is added or removed — a hard-coded count over derived markup is
             // the failure mode this suite keeps having. After them come the hidden
-            // SECTIONS of the tabs with a rail (#601), every one named in
-            // InspectorView.NestedPaneNames.
+            // SECTIONS of the tabs with sections (the Mixer's strip, #751), every one
+            // named in InspectorView.NestedPaneNames.
             var tabs = hidden.Where(c => c.Parent is Grid { Name: "InspectorTabPanels" }).ToList();
-            Assert.Equal(8, tabs.Count);
+            Assert.Equal(7, tabs.Count);
             Assert.All(hidden, c => Assert.False(c.IsVisible));
             Assert.DoesNotContain(hidden, c => c is SoundInspectorView);
             var sections = hidden.Except(tabs).ToList();
@@ -238,6 +238,9 @@ public sealed class InspectorPrewarmUiPerfSmokeTests(ITestOutputHelper output)
                     "by name and a rename there is a SILENT no-op.");
                 card.IsVisible = false;
             }
+
+            // the Mixer's section strip shows ONE section, as in the app (its first, Stems)
+            foreach (var body in panels.OfType<MixerInspectorView>().Single().Bodies.Skip(1)) body.IsVisible = false;
 
             var window = new Window { Width = W, Height = H, Content = inspector };
             window.Show();

@@ -158,6 +158,14 @@ public sealed class PopoverPixelUiPerfSmokeTests
                     $"'{id}' laid out {popover.Bounds} — it rendered nothing, which is what a failed " +
                     "DynamicResource, a missing ControlTheme and a Space* token in a Padding all look like");
 
+                if (id == "mix")
+                {
+                    var chartSound = Assert.Single(view.GetVisualDescendants().OfType<Slider>(),
+                        slider => slider.Classes.Contains("Midi"));
+                    Assert.True(chartSound.Bounds is { Width: > 0, Height: > 0 });
+                    Assert.Equal(2.0, chartSound.Maximum);
+                }
+
                 // The mockup's width, within a pixel. A popover that grew is no
                 // longer the panel that was drawn.
                 Assert.Equal(width, popover.Bounds.Width, 1);

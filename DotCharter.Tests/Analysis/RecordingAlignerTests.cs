@@ -87,6 +87,29 @@ public sealed class RecordingAlignerTests
         Assert.All(scores.Where((_, i) => i != wrong), s => Assert.True(s >= RecordingAligner.LowConfidence, $"a matching section scored {s:0.00}"));
     }
 
+    [Theory]
+    [InlineData(false, 0.99, 1.0)]
+    [InlineData(true, 0.80, 0.85)]
+    public void ExtraUnchartedAttacks_LowerConfidenceDespitePerfectRecall(bool extraAttacks, double minimum, double maximum)
+    {
+        var samples = new float[AnalysisTestSignals.SampleRate * 10];
+        var grid = Enumerable.Range(0, 18).Select(i => new AlignmentBeat(500 + i * 500, i < 17)).ToArray();
+        var events = new List<AlignmentEvent>();
+        for (var i = 0; i < 16; i++)
+        {
+            events.Add(new AlignmentEvent(i, 0, []));
+            AnalysisTestSignals.AddClick(samples, grid[i].TimeMs / 1000, 0.9f);
+            if (extraAttacks) AnalysisTestSignals.AddClick(samples, (grid[i].TimeMs + 250) / 1000, 0.9f);
+        }
+
+        // Lock the scored section so alignment cannot explain away the extra attacks.
+        // One free beat outside it keeps the public entry point's scoring path active.
+        var result = new RecordingAligner().Align(samples, AnalysisTestSignals.SampleRate, grid, events, [0, 16], cancellationToken: Ct);
+
+        Assert.Equal(grid.Take(17).Select(b => b.TimeMs), result.BeatTimesMs.Take(17));
+        Assert.InRange(result.Sections[0].Confidence, minimum, maximum);
+    }
+
     [Fact]
     public void ACancelledRun_Throws()
     {

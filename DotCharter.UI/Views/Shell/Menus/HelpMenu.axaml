@@ -32,6 +32,8 @@
     <MenuItem Header="{localization:Loc Menu_CheckForUpdates}"
               Command="{Binding Help.CheckOrShowUpdateCommand}"
               ToolTip.Tip="{localization:Loc Menu_CheckForUpdates_Tip}" />
+    <Separator />
+    <!-- DIAGNOSTICS (#494): what the app records about itself sits below the separator, so Help opens on shortcuts, About and updates. Flat, because two rows are not worth a submenu (MainMenuLocalizationTests). -->
     <MenuItem Header="{localization:Loc Menu_UsageStatistics}"
               Command="{Binding Help.ShowUsageStatisticsCommand}"
               ToolTip.Tip="{localization:Loc Menu_UsageStatistics_Tip}" />

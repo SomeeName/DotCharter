@@ -176,7 +176,8 @@ public sealed partial class SngFromDomainMapperTests
 
     private static double TimeMs(IList<BeatMarker> beats, FractionalPosition position) => position.GetPositionMs(beats);
 
-    private const string PinnedInstrumentalBody = "d3d2743073fe559ce7708f20636dc6a293a538663805e507b4a298c9f22444eb";
+    // #565: instrumental metadata and tail events now end at the XML extent, 31.499 seconds.
+    private const string PinnedInstrumentalBody = "f8d9261ea00e7fd8ae87494dd337bde201f3828e41a8b332d8c79b55f936e235";
     private const string PinnedVocalsBody = "ca5ae467166a5691cc45328efe548d0c025e9379450afd61b5d271994476e323";
 
     /// <summary>The two-syllable track of <c>Vocals_track_builds_a_valid_vocals_sng</c>.</summary>

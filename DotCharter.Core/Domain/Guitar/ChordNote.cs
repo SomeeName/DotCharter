@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using DotCharter.Core.Domain.Primitives;
+using DotCharter.Core.Utilities;
 
 namespace DotCharter.Core.Domain.Guitar;
 
@@ -67,12 +68,19 @@ public class ChordNote : IGuitarSound
 
     public ChordNote Clone()
     {
+        using var identities = ChartSnapshotIdentities.BeginCapture();
         var clone = new ChordNote();
-        clone.CopyFrom(this);
-        return clone;
+        ChartProjectRestorer.RestoreChordNote(clone, this);
+        return ChartSnapshotIdentities.RememberNestedClone(this, clone);
     }
 
     public void CopyFrom(ChordNote other)
+    {
+        using var identities = ChartSnapshotIdentities.BeginCapture(snapshotDestinations: false);
+        ChartProjectRestorer.RestoreChordNote(this, other);
+    }
+
+    internal void CopyFieldsFrom(ChordNote other)
     {
         Accent = other.Accent;
         StringIndex = other.StringIndex;
@@ -91,8 +99,5 @@ public class ChordNote : IGuitarSound
         SlideTo = other.SlideTo;
         UnpitchedSlide = other.UnpitchedSlide;
         Ignore = other.Ignore;
-
-        BendValues.Clear();
-        foreach (var b in other.BendValues) BendValues.Add(b.Clone());
     }
 }

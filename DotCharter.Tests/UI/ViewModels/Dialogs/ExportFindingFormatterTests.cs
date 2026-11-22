@@ -13,6 +13,15 @@ public sealed class ExportFindingFormatterTests
     private static readonly ILocalizationService Loc = FakeLocalization.English();
 
     [Fact]
+    public void Location_preserves_elapsed_hours()
+    {
+        var finding = new ExportValidationFinding("Lead", ExportFindingSeverity.Warning,
+            ChartExportValidator.KeyOverlappingNotes, 3_723_456);
+
+        Assert.Equal("Lead · 1:02:03.456", ExportFindingFormatter.FormatLocation(finding));
+    }
+
+    [Fact]
     public void Message_interpolates_detail_payload()
     {
         var finding = new ExportValidationFinding(
@@ -55,11 +64,13 @@ public sealed class ExportFindingFormatterTests
             ChartExportValidator.KeyFretOutOfRange,
             ChartExportValidator.KeyStringOutOfRange,
             ChartExportValidator.KeyExtendedRangeGuitar,
-            ChartExportValidator.KeyEightStringMod,
+            ChartExportValidator.KeyExtendedRangeBass,
+            ChartExportValidator.KeyAudioShorterThanChart,
             ChartExportValidator.KeyNoteBelowCapo,
             ChartExportValidator.KeyFirstNoteTooEarly,
             ChartExportValidator.KeyFirstPhraseNotAtStart,
-            ChartExportValidator.KeyLyricTooLong
+            ChartExportValidator.KeyLyricTooLong,
+            ChartExportValidator.KeyLyricMarkerText
         ];
 
         foreach (var key in keys)
@@ -70,6 +81,19 @@ public sealed class ExportFindingFormatterTests
             // "Export.Validation.X" into the dialog.
             Assert.NotEqual(key, message);
         }
+    }
+
+    [Fact]
+    public void The_six_string_drop_fills_every_count_into_its_message()
+    {
+        var finding = new ExportValidationFinding("Lead", ExportFindingSeverity.Warning, ChartExportValidator.KeySixStringDrop, null, "7|406|244|12");
+
+        var message = ExportFindingFormatter.FormatMessage(finding, Loc);
+
+        Assert.Contains("406", message);
+        Assert.Contains("244", message);
+        Assert.Contains("12", message);
+        Assert.DoesNotContain("{", message);
     }
 
     [Fact]

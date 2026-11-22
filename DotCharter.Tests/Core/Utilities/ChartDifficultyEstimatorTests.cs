@@ -232,6 +232,47 @@ public class ChartDifficultyEstimatorTests
                     < ChartDifficultyEstimator.Estimate(Wrap(Level(true)), beats));
     }
 
+    [Theory]
+    [InlineData(3, 5)]
+    [InlineData(1, 2)]
+    [InlineData(7, 12)]
+    [InlineData(0, 2)]
+    public void UntemplatedChords_SwappingFretsBetweenStringsCountsAsAShapeChange(int firstFret, int secondFret)
+    {
+        var repeated = new ChartLevel();
+        var changing = new ChartLevel();
+        for (var beat = 0; beat < 16; beat++)
+        {
+            var baseline = PowerChord(beat, firstFret, -1);
+            baseline.ChordNotes[1].Fret = secondFret;
+            repeated.Chords.Add(baseline);
+            var chord = PowerChord(beat, beat % 2 == 0 ? firstFret : secondFret, -1);
+            chord.ChordNotes[1].Fret = beat % 2 == 0 ? secondFret : firstFret;
+            changing.Chords.Add(chord);
+        }
+
+        var beats = Beats(120);
+        Assert.True(ChartDifficultyEstimator.Estimate(repeated, beats)
+                    < ChartDifficultyEstimator.Estimate(changing, beats));
+    }
+
+    [Fact]
+    public void UntemplatedChordMemberOrder_DoesNotChangeTheRating()
+    {
+        var ordered = new ChartLevel();
+        var reordered = new ChartLevel();
+        for (var beat = 0; beat < 16; beat++)
+        {
+            ordered.Chords.Add(PowerChord(beat, 3, -1));
+            var chord = PowerChord(beat, 3, -1);
+            if (beat % 2 != 0) chord.ChordNotes.Move(0, 1);
+            reordered.Chords.Add(chord);
+        }
+
+        var beats = Beats(120);
+        Assert.Equal(ChartDifficultyEstimator.Estimate(ordered, beats), ChartDifficultyEstimator.Estimate(reordered, beats));
+    }
+
     [Fact]
     public void HardestLevel_IsTheOneRated()
     {

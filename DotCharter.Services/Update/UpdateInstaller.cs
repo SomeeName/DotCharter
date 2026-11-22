@@ -180,8 +180,6 @@ public sealed class UpdateInstaller
             // the script removes it. Reading this also takes it OUT of the
             // payload, so the list itself is never copied into the install.
             deletions = PayloadDeletions.TakeFrom(payloadDir);
-            // Only a pre-0.63 updater needs these; here they would be clutter.
-            LegacyUpdaterShim.RemoveFrom(payloadDir);
             if (deletions.Count > 0)
             {
                 _logger?.Info(AppLogCategory.Application,
@@ -262,7 +260,7 @@ public sealed class UpdateInstaller
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _logger?.Warning(AppLogCategory.Application,
-                $"Could not read the staged-update record: {ex.Message}");
+                "Could not read the staged-update record", ex);
             return null;
         }
     }

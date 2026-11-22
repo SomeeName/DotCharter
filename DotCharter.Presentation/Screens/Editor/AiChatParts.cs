@@ -5,6 +5,7 @@ using DotCharter.Localization;
 using DotCharter.Presentation.Contracts.Editor;
 using DotCharter.Tone.Ai;
 using DotCharter.Services.Ai.Chat;
+using DotCharter.Tone.Logging;
 using IAiChatHistory = DotCharter.Services.Ai.Chat.IAiChatHistory;
 
 namespace DotCharter.Presentation.Screens.Editor;
@@ -12,11 +13,52 @@ namespace DotCharter.Presentation.Screens.Editor;
 /// <summary>A model, scope or arrangement choice; <see cref="Key" /> is what the view model acts on.</summary>
 public sealed class AiChatOptionItem(string label, string detail, object key) : ObservableObject, IAiChatOption
 {
-    public string Label { get; } = label;
+    public string Label { get; private set; } = label;
 
     public string Detail { get; } = detail;
 
     public object Key { get; } = key;
+
+    /// <summary>The resx key the label is read from; null for a literal label (a model, an arrangement).</summary>
+    internal string? LabelKey { get; init; }
+
+    public override string ToString() => Label;
+
+    /// <summary>Reads the label again in the current language; the item, and so a selection of it, stays.</summary>
+    internal void Relabel(ILocalizationService localization)
+    {
+        if (LabelKey is null) return;
+        Label = localization[LabelKey];
+        OnPropertyChanged(nameof(Label));
+    }
+}
+
+/// <summary>A row of the arrangement picker; <see cref="Key" /> is the arrangement, null for "All arrangements".</summary>
+public sealed class AiChatArrangementChoice(string label, object? key, Action<AiChatArrangementChoice> toggled)
+    : ObservableObject, IAiChatArrangementChoice
+{
+    private bool _isChecked;
+
+    public string Label { get; } = label;
+
+    public string Detail => "";
+
+    public object? Key { get; } = key;
+
+    public bool IsAll => Key is null;
+
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set
+        {
+            if (!SetProperty(ref _isChecked, value)) return;
+            toggled(this);
+        }
+    }
+
+    /// <summary>Sets the box without telling the picker: the picker is the one changing it.</summary>
+    internal void Set(bool value) => SetProperty(ref _isChecked, value, nameof(IsChecked));
 
     public override string ToString() => Label;
 }
@@ -55,8 +97,10 @@ public sealed class AiChatTurnItem(bool isUser, string role, string text, string
 /// that turns an instruction into HELD proposals for the review card. One bundle so
 ///     the view model stays inside its constructor budget.
 /// </summary>
-public sealed class AiChatServices(IAiChatHistory history, IAiChatChartActions actions, TimeProvider? time = null)
+public sealed class AiChatServices(IAiChatHistory history, IAiChatChartActions actions, IAppLogger logger, TimeProvider? time = null)
 {
+    public IAppLogger Logger { get; } = logger;
+
     public IAiChatHistory History { get; } = history;
 
     public IAiChatChartActions Actions { get; } = actions;
@@ -165,6 +209,12 @@ internal static class AiChatText
             ? localization.Format("AiChat_Tokens", input.ToString("N0", CultureInfo.CurrentCulture),
                 output.ToString("N0", CultureInfo.CurrentCulture))
             : "";
+
+    /// <summary>"1 note · 3 chords": each count in its own singular or plural form.</summary>
+    public static string Counts(ILocalizationService localization, int notes, int chords) =>
+        localization.Format("AiChat_Count_Pair",
+            localization.Plural("AiChat_Count_NotesOne", "AiChat_Count_Notes", notes),
+            localization.Plural("AiChat_Count_ChordsOne", "AiChat_Count_Chords", chords));
 
     /// <summary>"14:02".</summary>
     public static string Time(DateTimeOffset at) =>

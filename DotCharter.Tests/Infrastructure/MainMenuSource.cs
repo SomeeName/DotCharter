@@ -27,7 +27,7 @@ internal static class MainMenuSource
 
     /// <summary>The fewest top-level menus the bar has ever had; fewer means the
     /// derivation broke, not that the bar shrank.</summary>
-    private const int MinimumMenus = 8;
+    private const int MinimumMenus = 7;
 
     public static string BarFile => UiSourceTree.Resolve(Path.Combine(
         TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Shell", "MainMenuView.axaml"));

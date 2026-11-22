@@ -18,17 +18,15 @@ public sealed class SplitInstallLayoutTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    /// <summary>A split release payload as the release script lays it out, shim included.</summary>
-    private static HashSet<string> SplitRelease(bool withShim = true)
+    /// <summary>A split release payload as the release script lays it out (no shim files at the top).</summary>
+    private static HashSet<string> SplitRelease()
     {
-        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        return new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "DotCharter.exe", "README.txt", "voices/guitar.dcvp", "tools/ffmpeg.exe",
             "app/DotCharter.exe", "app/DotCharter.dll", "app/DotCharter.runtimeconfig.json",
             "app/DotCharter.deps.json", "app/hostfxr.dll", "app/coreclr.dll", "app/payload-manifest.json",
         };
-        if (withShim) files.UnionWith(LegacyUpdaterShim.Files);
-        return files;
     }
 
     // ---- what the CURRENT updater validates ------------------------------------
@@ -36,19 +34,17 @@ public sealed class SplitInstallLayoutTests : IDisposable
     [Fact]
     public void Validate_SplitPayload_ReadsTheRuntimeFromApp()
     {
-        var files = SplitRelease(withShim: false);
+        var files = SplitRelease();
         Assert.Equal("app/", AppPayload.AppPrefix(files.Contains));
         Assert.Null(AppPayload.Validate(files.Contains, SelfContainedConfig, InstallLayout.SelfContained));
     }
 
     [Theory]
     [InlineData("DotCharter.exe")]                    // the launcher
-    [InlineData("app/hostfxr.dll")]                   // the app's own host, not the shim's copy
+    [InlineData("app/hostfxr.dll")]                   // the app's own host
     [InlineData("app/DotCharter.deps.json")]
     public void Validate_SplitPayloadMissingAPiece_IsRefusedByName(string missing)
     {
-        // The shim copies at the top must NOT stand in for the app's own files:
-        // the app in app/ could not start without them.
         var files = SplitRelease();
         files.Remove(missing);
 
@@ -95,38 +91,43 @@ public sealed class SplitInstallLayoutTests : IDisposable
         Assert.Null(AppPayload.ValidateArchive(archive, InstallLayout.SelfContained));
     }
 
-    // ---- the OLD updater ----------------------------------------------------------
+    // ---- the dropped pre-0.63 updater shim ----------------------------------
 
-    /// <summary>
-    ///     The reason the shim exists: a v0.62 updater validates the payload ROOT
-    ///     with the flat rule. Without the four copies it refuses the release that
-    ///     moves it into app/, and every old install is stranded on its version.
-    /// </summary>
     [Fact]
-    public void ASplitRelease_PassesTheV062UpdatersFlatRule_OnlyWithTheShim()
-    {
-        var withShim = SplitRelease();
-        Assert.Null(LegacyUpdaterShim.CheckLegacyUpdaterAccepts(withShim.Contains, SelfContainedConfig));
-        // …and that IS the old validator: the same flat Validate, blind to app/.
-        Assert.Null(AppPayload.Validate(
-            name => withShim.Contains(name) && !name.Contains('/'), SelfContainedConfig, InstallLayout.SelfContained));
+    public void ASplitRelease_CarriesNoShimFileAtItsTop()
+        => Assert.Null(SplitInstallCleanup.FindShimAtTop(SplitRelease().Contains));
 
-        foreach (var name in LegacyUpdaterShim.Files)
-        {
-            var without = SplitRelease();
-            without.Remove(name);
-            Assert.NotNull(LegacyUpdaterShim.CheckLegacyUpdaterAccepts(without.Contains, SelfContainedConfig));
-        }
+    [Theory]
+    [InlineData("DotCharter.runtimeconfig.json")]
+    [InlineData("DotCharter.deps.json")]
+    [InlineData("hostfxr.dll")]
+    [InlineData("coreclr.dll")]
+    public void FindShimAtTop_NamesAShimFileAPayloadCarriesAtItsTop(string shim)
+    {
+        var files = SplitRelease();
+        files.Add(shim);
+        Assert.Equal(shim, SplitInstallCleanup.FindShimAtTop(files.Contains));
     }
 
     [Fact]
     public void TheShimIsOnlyEverTheTopLevelNames()
     {
-        Assert.True(LegacyUpdaterShim.IsShimPath("hostfxr.dll"));
-        Assert.True(LegacyUpdaterShim.IsShimPath("DotCharter.runtimeconfig.json"));
-        Assert.False(LegacyUpdaterShim.IsShimPath("app/hostfxr.dll"));
-        Assert.False(LegacyUpdaterShim.IsShimPath("DotCharter.exe"));
-        Assert.False(LegacyUpdaterShim.IsShimPath("DotCharter.dll"));
+        Assert.True(SplitInstallCleanup.IsShimPath("hostfxr.dll"));
+        Assert.True(SplitInstallCleanup.IsShimPath("DotCharter.runtimeconfig.json"));
+        Assert.False(SplitInstallCleanup.IsShimPath("app/hostfxr.dll"));
+        Assert.False(SplitInstallCleanup.IsShimPath("DotCharter.exe"));
+        Assert.False(SplitInstallCleanup.IsShimPath("DotCharter.dll"));
+    }
+
+    [Fact]
+    public void TheReleaseScript_DoesNotCopyTheShimIntoTheLayout_AndTheTopAllowsOnlyTheLauncherAndReadme()
+    {
+        var script = File.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "tools", "release", "New-Release.ps1"));
+        Assert.Contains("$InstallTopFiles = @('DotCharter.exe', 'README.txt')", script, StringComparison.Ordinal);
+        var layout = script[script.IndexOf("function New-SplitInstallLayout", StringComparison.Ordinal)..];
+        layout = layout[..layout.IndexOf("function Test-InstallLayout", StringComparison.Ordinal)];
+        foreach (var name in SplitInstallCleanup.ShimFiles)
+            Assert.DoesNotContain(name, layout, StringComparison.Ordinal);
     }
 
     // ---- what the current updater FETCHES and COPIES -------------------------------
@@ -145,38 +146,7 @@ public sealed class SplitInstallLayoutTests : IDisposable
         // Unchanged files still ship when they are what the validator demands.
         var delta = PayloadDelta.Between(release, release);
         Assert.Equal(6, delta.Changed.Count);
-        Assert.DoesNotContain(delta.Changed, f => LegacyUpdaterShim.IsShimPath(f.Path));
-    }
-
-    [Fact]
-    public void StripFrom_DropsOnlyTheShim_AndLeavesAFlatManifestAlone()
-    {
-        var stripped = LegacyUpdaterShim.StripFrom(Manifest(SplitRelease()));
-        Assert.DoesNotContain(stripped.Files, f => LegacyUpdaterShim.IsShimPath(f.Path));
-        Assert.Equal(SplitRelease(withShim: false).Count, stripped.Files.Count);
-
-        var flat = Manifest(["DotCharter.exe", "DotCharter.runtimeconfig.json", "hostfxr.dll"]);
-        Assert.Same(flat, LegacyUpdaterShim.StripFrom(flat));
-    }
-
-    [Fact]
-    public void RemoveFrom_DeletesTheShimFromAStagedSplitPayload_NeverFromAFlatOne()
-    {
-        var split = Path.Combine(_temp.Path, "split");
-        WriteSplitInstall(split);
-        foreach (var name in LegacyUpdaterShim.Files) File.WriteAllText(Path.Combine(split, name), "copy");
-
-        Assert.Equal(4, LegacyUpdaterShim.RemoveFrom(split));
-        Assert.All(LegacyUpdaterShim.Files, name => Assert.False(File.Exists(Path.Combine(split, name))));
-        Assert.True(File.Exists(Path.Combine(split, "app", AppPayload.HostFxrName)));
-
-        // In a flat payload the same names are the app's own runtime.
-        var flat = Path.Combine(_temp.Path, "flat");
-        Directory.CreateDirectory(flat);
-        File.WriteAllText(Path.Combine(flat, AppPayload.ExeName), "MZ");
-        File.WriteAllText(Path.Combine(flat, AppPayload.HostFxrName), "MZ");
-        Assert.Equal(0, LegacyUpdaterShim.RemoveFrom(flat));
-        Assert.True(File.Exists(Path.Combine(flat, AppPayload.HostFxrName)));
+        Assert.DoesNotContain(delta.Changed, f => SplitInstallCleanup.IsShimPath(f.Path));
     }
 
     [Fact]

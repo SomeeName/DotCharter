@@ -166,7 +166,10 @@
         <Setter Property="Background" Value="{DynamicResource AccentColor}" />
         <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
     </Style>
-    <Style Selector="CheckBox:disabled">
+    <!-- Disabled: the BOX dims, the LABEL keeps the dim-but-readable text brush. Dimming
+         the whole control by opacity put the label at ~2:1 on the dark cards, and the
+         template's own disabled foreground (Fluent's near-black) was invisible (#343). -->
+    <Style Selector="CheckBox:disabled /template/ Border#NormalRectangle">
         <Setter Property="Opacity" Value="0.45" />
     </Style>
     <Style Selector="CheckBox /template/ Path#CheckGlyph">

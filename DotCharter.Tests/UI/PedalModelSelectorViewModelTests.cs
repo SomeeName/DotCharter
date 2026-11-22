@@ -23,7 +23,32 @@ public sealed class PedalModelSelectorViewModelTests
 
     private static PedalParamViewModel Param(string id, float min, float max, float value, string[] labels)
         => new(new NullDspChainService(), 1,
-            new DspParamInfo(id, id, min, max, min) { ValueLabels = labels }, value);
+            new DspParamInfo(id, id, min, max, min) { ValueLabels = labels }, value, FakeLocalization.KeysOnly());
+
+    [Fact]
+    public void ALanguageSwitch_RefreshesTheVisibleChoices_AndPreservesTheSelectedOption()
+    {
+        var localization = FakeLocalization.English();
+        var param = new PedalParamViewModel(new NullDspChainService(), 1,
+            new DspParamInfo("shape", "Waveform", 0, 1, 0) { ValueLabels = ["Sine", "Square"] }, 1, localization);
+        var selector = new PedalModelSelectorViewModel(param, PedalModelSelectorKind.Flat, localization);
+        var selected = selector.SelectedOption;
+        var options = selector.Options.ToArray();
+        var changed = new List<string?>();
+        selector.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        localization.SwitchTo("de-DE");
+
+        Assert.Same(selected, selector.SelectedOption);
+        Assert.Equal(options, selector.Options);
+        Assert.Equal(localization["DspLabel_Waveform"], selector.DisplayName);
+        Assert.Equal(localization["DspLabel_Square"], selector.CurrentLabel);
+        Assert.Equal(localization["DspLabel_Sine"], selector.Options[0].Label);
+        Assert.Equal(localization["DspLabel_Square"], selector.Options[1].Label);
+        Assert.Equal(1f, param.Value);
+        Assert.Contains(nameof(selector.DisplayName), changed);
+        Assert.Contains(nameof(selector.CurrentLabel), changed);
+    }
 
     [Fact]
     public void FlatSelector_BuildsOptions_AndSelectionWritesTheParamValue()

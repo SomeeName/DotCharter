@@ -11,7 +11,8 @@ public sealed record MusicBrainzMatch(
     string Artist,
     string? ReleaseId,
     string? ReleaseTitle,
-    int Score);
+    int Score,
+    string LatinTitle = "");
 
 /// <summary>
 ///     Anonymous MusicBrainz lookups for New project's Latin-name suggestion
@@ -198,8 +199,13 @@ public sealed class MusicBrainzClient : IDisposable
             var recording = await FindRecordingAsync(artist, title, cancellationToken).ConfigureAwait(false);
             if (recording.Ok)
             {
+                // The best match's own title first; else the Latin title another recording of the same song
+                // carries (MusicBrainz often lists the original-script title on the top hit and the Latin one
+                // on its twin, or as an English alias).
                 if (wantTitle && ScriptDetection.IsUsefulRomanization(title, recording.Value!.Title))
                     latinTitle = ScriptDetection.Clean(recording.Value.Title);
+                else if (wantTitle && ScriptDetection.IsUsefulRomanization(title, recording.Value!.LatinTitle))
+                    latinTitle = ScriptDetection.Clean(recording.Value.LatinTitle);
                 if (wantAlbum && ScriptDetection.IsUsefulRomanization(album, recording.Value!.ReleaseTitle))
                     latinAlbum = ScriptDetection.Clean(recording.Value.ReleaseTitle);
             }

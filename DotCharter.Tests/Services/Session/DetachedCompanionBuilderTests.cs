@@ -1,3 +1,5 @@
+using DotCharter.Core.Domain.Vocals;
+using DotCharter.Services.Infrastructure.Documents;
 using DotCharter.Services.Export;
 using DotCharter.Services.Session;
 using DotCharter.Tone.Diagnostics;
@@ -32,13 +34,123 @@ public sealed class DetachedCompanionBuilderTests
         await companions.FirstPsarcStarted.Task.WaitAsync(Detector, TestContext.Current.CancellationToken);
         var drain = builder.RunningDrain;
 
-        builder.Schedule("second.rscp", new ChartProject(), null);
-        builder.Schedule("third.rscp", new ChartProject(), null);
+        var second = new ChartProject();
+        var third = new ChartProject();
+        builder.Schedule("first.rscp", second, null);
+        builder.Schedule("first.rscp", third, null);
         companions.ReleaseFirstPsarc();
         await Drained(builder);
 
         Assert.Same(drain, builder.RunningDrain);
-        Assert.Equal(["first.rscp", "third.rscp"], companions.PsarcPaths);
+        // 3 saves, ONE queued pass after the running one, carrying the latest snapshot.
+        Assert.Equal(["first.rscp", "first.rscp"], companions.PsarcPaths);
+        Assert.Same(third, companions.PsarcSnapshots[1]);
+        Assert.DoesNotContain(second, companions.PsarcSnapshots);
+        Assert.Equal(2, companions.EofSnapshots.Count);
+    }
+
+    [Fact]
+    public async Task The_project_path_decides_what_coalesces_so_a_Save_As_loses_nothing()
+    {
+        var companions = new RecordingCompanions { HoldFirstPsarc = true };
+        var builder = NewBuilder(companions);
+
+        builder.Schedule("old.dcproj", new ChartProject(), null);
+        await companions.FirstPsarcStarted.Task.WaitAsync(Detector, TestContext.Current.CancellationToken);
+        builder.Schedule("new.dcproj", new ChartProject(), null);
+        companions.ReleaseFirstPsarc();
+        await Drained(builder);
+
+        Assert.Equal(["old.dcproj", "new.dcproj"], companions.PsarcPaths);
+    }
+
+    [Fact]
+    public async Task The_cheap_companions_are_written_in_order_before_the_psarc()
+    {
+        var companions = new RecordingCompanions();
+        var builder = NewBuilder(companions);
+
+        builder.Schedule("song.dcproj", new ChartProject(), null);
+        await builder.FlushAsync();
+
+        Assert.Equal([".rscp", "bundle", ".rs2dlc", ".eof", "psarc"], companions.Order);
+    }
+
+    [Fact]
+    public async Task A_failing_companion_is_logged_shown_and_does_not_stop_the_rest()
+    {
+        var companions = new RecordingCompanions { EofFailure = new IOException("locked") };
+        var logger = new FakeAppLogger();
+        var state = new ProjectState();
+        var builder = new DetachedCompanionBuilder(
+            companions, companions.Documents, new TestUiDispatcher(), state, logger, FakeLocalization.English(),
+            new RecordingStatusBarService());
+
+        builder.Schedule("song.dcproj", new ChartProject(), null);
+        await builder.FlushAsync();
+
+        Assert.True(logger.HasEntryContaining("ERROR", ".eof companion failed"));
+        Assert.Equal(StatusSeverity.Error, state.MainDisplaySeverity);
+        Assert.Equal([".rscp", "bundle", ".rs2dlc", ".eof", "psarc"], companions.Order);
+    }
+
+    [Fact]
+    public async Task Stop_lets_the_queued_cheap_companions_finish_but_builds_no_psarc()
+    {
+        var companions = new RecordingCompanions { HoldFirstPsarc = true };
+        var builder = NewBuilder(companions);
+
+        builder.Schedule("first.dcproj", new ChartProject(), null);
+        await companions.FirstPsarcStarted.Task.WaitAsync(Detector, TestContext.Current.CancellationToken);
+        builder.Schedule("second.dcproj", new ChartProject(), null);
+
+        builder.Stop();
+
+        Assert.Equal(["first.dcproj", "second.dcproj"], companions.EofPaths);
+        Assert.Equal(["first.dcproj"], companions.PsarcPaths);
+    }
+
+    [Fact]
+    public async Task Stop_drains_queued_files_even_when_a_status_dispatch_is_waiting_for_the_closing_ui()
+    {
+        var companions = new RecordingCompanions { PsarcResult = "song_p.psarc" };
+        var dispatcher = new HeldUiDispatcher();
+        var builder = NewBuilder(companions, dispatcher);
+        builder.Schedule("first.dcproj", new ChartProject(), null);
+        await dispatcher.Entered.Task.WaitAsync(Detector, TestContext.Current.CancellationToken);
+        builder.Schedule("second.dcproj", new ChartProject(), null);
+
+        try
+        {
+            builder.Stop();
+
+            Assert.Equal(["first.dcproj", "second.dcproj"], companions.EofPaths);
+            Assert.True(builder.RunningDrain!.IsCompleted);
+        }
+        finally
+        {
+            dispatcher.Release.TrySetResult();
+            await Drained(builder);
+        }
+    }
+
+    private sealed class HeldUiDispatcher : IUiDispatcher
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool CheckAccess() => false;
+        public void Post(Action action) => action();
+        public void PostNormal(Action action) => action();
+
+        public async Task InvokeAsync(Action action)
+        {
+            Entered.TrySetResult();
+            await Release.Task;
+            action();
+        }
+
+        public Task<T> InvokeAsync<T>(Func<T> func) => Task.FromResult(func());
+        public Task<T> InvokeAsync<T>(Func<Task<T>> func) => func();
     }
 
     [Fact]
@@ -60,7 +172,7 @@ public sealed class DetachedCompanionBuilderTests
     }
 
     [Fact]
-    public async Task Stop_cancels_the_build_in_flight_and_drops_the_queued_save()
+    public async Task Stop_cancels_the_build_in_flight_and_builds_no_queued_psarc()
     {
         var companions = new RecordingCompanions { HoldFirstPsarc = true };
         var builder = NewBuilder(companions);
@@ -99,9 +211,10 @@ public sealed class DetachedCompanionBuilderTests
     private static DetachedCompanionBuilder NewBuilder(
         ISaveCompanionService companions, IUiDispatcher? dispatcher = null, FakeAppLogger? logger = null)
     {
+        var documents = companions is RecordingCompanions recording ? recording.Documents : new RecordingDocuments(null);
         return new DetachedCompanionBuilder(
-            companions, dispatcher ?? new TestUiDispatcher(), new ProjectState(), logger ?? new FakeAppLogger(),
-            FakeLocalization.English());
+            companions, documents, dispatcher ?? new TestUiDispatcher(), new ProjectState(), logger ?? new FakeAppLogger(),
+            FakeLocalization.English(), new RecordingStatusBarService());
     }
 
     private static async Task Drained(DetachedCompanionBuilder builder)
@@ -110,8 +223,33 @@ public sealed class DetachedCompanionBuilderTests
         await builder.RunningDrain!.WaitAsync(Detector, TestContext.Current.CancellationToken);
     }
 
+    private sealed class RecordingDocuments(RecordingCompanions? owner) : IProjectDocumentService
+    {
+        public ChartProject LoadChart(string filePath) => throw new NotSupportedException();
+
+        public void SaveChart(string filePath, ChartProject project, double? audioLengthMs = null) { }
+
+        public void RefreshArrangementFileManifest(ChartProject project) { }
+
+        public void SaveDlcBuilderXmlBundle(string projectPath, ChartProject project, double? audioLengthMs = null) =>
+            owner?.Order.Add("bundle");
+
+        public ChartProject AssembleProject(ChartProject? baseProject, double bpm, string audioFileName,
+            IEnumerable<LyricPhrase> lyrics) => baseProject ?? new ChartProject();
+
+        public ChartProject CreateNewProject(string title, string artist, string audioFileName) => new();
+    }
+
     private sealed class RecordingCompanions : ISaveCompanionService
     {
+        public RecordingCompanions() => Documents = new RecordingDocuments(this);
+
+        public RecordingDocuments Documents { get; }
+        public List<string> Order { get; } = [];
+        public List<string> EofPaths { get; } = [];
+        public List<ChartProject> EofSnapshots { get; } = [];
+        public Exception? EofFailure { get; init; }
+
         private readonly TaskCompletionSource _releaseFirst =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -128,14 +266,31 @@ public sealed class DetachedCompanionBuilderTests
 
         public void ReleaseFirstPsarc() => _releaseFirst.TrySetResult();
 
-        public string? WriteEof(string projectPath, ChartProject snapshot) => null;
+        public string? WriteCharterProject(string projectPath, ChartProject snapshot)
+        {
+            Order.Add(".rscp");
+            return null;
+        }
 
-        public string? WriteDlcBuilderProject(string projectPath, ChartProject snapshot, double? audioLengthMs) => null;
+        public string? WriteEof(string projectPath, ChartProject snapshot)
+        {
+            Order.Add(".eof");
+            EofPaths.Add(projectPath);
+            EofSnapshots.Add(snapshot);
+            return EofFailure is null ? null : throw EofFailure;
+        }
+
+        public string? WriteDlcBuilderProject(string projectPath, ChartProject snapshot, double? audioLengthMs)
+        {
+            Order.Add(".rs2dlc");
+            return null;
+        }
 
         public async Task<string?> BuildPsarcAsync(string projectPath, ChartProject snapshot, double? audioLengthMs,
             CancellationToken cancellationToken)
         {
             var isFirst = PsarcPaths.Count == 0;
+            Order.Add("psarc");
             PsarcPaths.Add(projectPath);
             PsarcSnapshots.Add(snapshot);
 

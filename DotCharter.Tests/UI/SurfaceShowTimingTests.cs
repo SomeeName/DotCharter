@@ -13,6 +13,60 @@ namespace DotCharter.Tests.UI;
 public sealed class SurfaceShowTimingTests
 {
     [Fact]
+    public void SubscriberTimingRunsTheWorkOnceAndRecordsItsName()
+    {
+        var previous = SurfaceShowTiming.DetailSink;
+        try
+        {
+            var calls = 0;
+            var names = new List<string>();
+            SurfaceShowTiming.DetailSink = (name, _) =>
+            {
+                if (name == "Subscriber") names.Add(name);
+            };
+
+            SurfaceShowTiming.Measure("Subscriber", () => calls++);
+
+            Assert.Equal(1, calls);
+            Assert.Equal(["Subscriber"], names);
+        }
+        finally { SurfaceShowTiming.DetailSink = previous; }
+    }
+
+    [Fact]
+    public void AFailedDiagnosticPreservesTheSubscriberException()
+    {
+        var previous = SurfaceShowTiming.DetailSink;
+        try
+        {
+            var failure = new InvalidOperationException("subscriber failed");
+            SurfaceShowTiming.DetailSink = (_, _) => throw new InvalidOperationException("diagnostic failed");
+
+            Assert.Same(failure, Assert.Throws<InvalidOperationException>(() =>
+                SurfaceShowTiming.Measure("Subscriber", () => throw failure)));
+        }
+        finally { SurfaceShowTiming.DetailSink = previous; }
+    }
+
+    [Fact]
+    public void SubscriberTimingPreservesTheFunctionResult()
+    {
+        var previous = SurfaceShowTiming.DetailSink;
+        try
+        {
+            var names = new List<string>();
+            SurfaceShowTiming.DetailSink = (name, _) =>
+            {
+                if (name == "Function") names.Add(name);
+            };
+
+            Assert.Equal(123, DotCharter.Services.Diagnostics.UiWorkTiming.Measure("Function", () => 123));
+            Assert.Equal(["Function"], names);
+        }
+        finally { SurfaceShowTiming.DetailSink = previous; }
+    }
+
+    [Fact]
     public void Record_WithoutASink_IsANoOp_AndABadSinkNeverThrows()
     {
         var before = SurfaceShowTiming.Sink;

@@ -1,7 +1,23 @@
 # `Editing/` — the chart-model invariants (deep reference) — `ChartSpacingEnforcer`
 
+Settings ▸ Editor applies enforcement through `ProjectSpacingEdit.Plan`: enforce detached
+arrangement snapshots, then commit the changed arrangements as one history action. A no-op
+adds no history. The action retains collection membership and element identities as well as
+field snapshots, so undo restores removed anchors and template changes without detaching
+other history actions. The settings remain saved when the chart edit is undone.
+`EditorSettingsViewModelTests` covers the chart edit, dirty state and undo/redo.
+
 ## `ChartSpacingEnforcer` (runs on every save AND every committed edit)
 
+- **An exact anchor-to-sound match wins before neighbours** (#558).
+  `FindNearestSoundIndex` returns the exact match immediately; skipping it made
+  an already aligned anchor alternate between nearby sounds across enforce
+  passes. (`ChartSpacingEnforcerTests`)
+- **Derived Ignore provenance is recorded only when enforcement introduces
+  Ignore** (#558). An authored Ignore remains authored even at fret 24 or on
+  another structurally ignored sound; lowering the fret must not clear it.
+  Keep the note/chord overloads of `ApplyDerivedIgnore` identical.
+  (`IgnoreProvenanceTests`)
 - **Because it runs on the whole active level after EVERY committed edit, on the
   UI thread, anything it does per SOUND is done ~20,000 times per keystroke on a
   big chart.** `GetMinDistance` was one of those, and in the two FRACTION modes
@@ -66,7 +82,7 @@
   the outer one), `ExecutePostPass` hands its delegate + `owned` set to the
   scope instead of running; the composite runs each DISTINCT delegate once
   (delegate equality — `HighwayEditingService.GetLinkNextUpdater` is one
-  cached instance per service now, so the six copies fold) under ONE recorder
+  cached instance per level/beat-grid pair, so the six copies fold) under ONE recorder
   whose exclusion set is the union of the children's, and HOLDS that
   collateral (its children hold none; `Absorb` merges it like a child's).
   **On undo no pass runs at all**: the inverses + that one record restore the
@@ -81,6 +97,13 @@
   (once on execute/redo, zero on undo, distinct passes, nested, the real
   enforcer's collateral through the composite path, the restored-tail shape, a
   throwing child leaves no scope open).
+- **Beat edits own the complete project-wide enforcement result.**
+  `MutateBeatsAction` opens `BeatSpacingSnapshot` around its callback;
+  `EnforceArrangement` captures each arrangement before its first write.
+  Undo runs the callback for tempo/readout updates, then restores the captured
+  arrangements, including template metadata, derived flags and removed anchors.
+  The ordinary collateral recorder also covers callbacks using `EnforceLevel`.
+  `SetBpmViewModelTests` pins exact restoration before history returns clean.
 
 ### It is on the LOAD path too, and the win there is ALLOCATION
 

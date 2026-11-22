@@ -27,55 +27,101 @@ public class LivePlayDetectionPumpTests
         Assert.True(WaitFor(() => Volatile.Read(ref ticks) >= 3), "worker never ticked");
     }
 
+    private static readonly TimeSpan Cadence = TimeSpan.FromMilliseconds(10);
+
+    /// <summary>
+    ///     Lets the worker tick exactly once on the fake clock: waits (a condition gate, not a
+    ///     sleep) until the worker is parked on its next timer, then advances one cadence.
+    /// </summary>
+    private static void StepOneTick(StepTimeProvider clock, Func<int> ticks, int expectedTicks)
+    {
+        Assert.True(WaitFor(() => clock.PendingTimers >= 1), "worker never parked on its timer");
+        clock.Advance(Cadence);
+        Assert.True(WaitFor(() => ticks() >= expectedTicks), "worker did not tick");
+    }
+
     [Fact]
     public void Start_is_idempotent()
     {
+        var clock = new StepTimeProvider();
         var ticks = 0;
-        using var pump = new LivePlayDetectionPump(() => Interlocked.Increment(ref ticks), cadenceMs: 5);
+        var threads = new HashSet<int>();
+        using var pump = new LivePlayDetectionPump(() =>
+        {
+            lock (threads) threads.Add(Environment.CurrentManagedThreadId);
+            Interlocked.Increment(ref ticks);
+        }, cadenceMs: 10, timeProvider: clock);
         pump.Start();
         pump.Start(); // second Start must not spawn a second worker
         pump.Start();
-        Assert.True(WaitFor(() => Volatile.Read(ref ticks) >= 2));
-        pump.Stop();
 
-        // With a single worker every tick observed the stop flag before the
-        // join returned — a duplicate thread would keep incrementing.
-        var after = Volatile.Read(ref ticks);
-        Thread.Sleep(100);
-        Assert.Equal(after, Volatile.Read(ref ticks));
+        // Each step wakes every parked worker: one worker => exactly one tick per step.
+        for (var i = 1; i <= 3; i++) StepOneTick(clock, () => Volatile.Read(ref ticks), i);
+        Assert.True(WaitFor(() => clock.PendingTimers == 1));
+
+        Assert.Equal(3, Volatile.Read(ref ticks));
+        lock (threads) Assert.Single(threads);
+        pump.Stop();
+        Assert.False(pump.IsRunning);
     }
 
     [Fact]
     public void No_tick_begins_after_stop_returns()
     {
+        var clock = new StepTimeProvider();
         var ticks = 0;
-        using var pump = new LivePlayDetectionPump(() => Interlocked.Increment(ref ticks), cadenceMs: 1);
+        using var pump = new LivePlayDetectionPump(() => Interlocked.Increment(ref ticks), cadenceMs: 10, timeProvider: clock);
         pump.Start();
-        Assert.True(WaitFor(() => Volatile.Read(ref ticks) >= 5));
+        for (var i = 1; i <= 3; i++) StepOneTick(clock, () => Volatile.Read(ref ticks), i);
 
         pump.Stop();
         Assert.False(pump.IsRunning);
         var atStop = Volatile.Read(ref ticks);
-        Thread.Sleep(150); // many cadences worth of opportunity
+
+        // Time keeps moving after Stop returned, with plenty of cadences due: nothing may tick.
+        clock.Advance(Cadence * 50);
+        Assert.Equal(0, clock.PendingTimers);
         Assert.Equal(atStop, Volatile.Read(ref ticks));
     }
 
+    /// <summary>#607: the tick used to SLEEP 80 ms, which a loaded box could finish
+    /// before Stop was even called, so a Stop that does not join passed. Now the
+    /// tick stays parked until the test releases it, and Stop must be SEEN parked
+    /// (joining) before that release.</summary>
     [Fact]
-    public void Stop_joins_an_in_flight_tick()
+    public async Task Stop_joins_an_in_flight_tick()
     {
-        var entered = new ManualResetEventSlim(false);
+        var ct = TestContext.Current.CancellationToken;
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
         var completed = 0;
+        var parked = 0;
         using var pump = new LivePlayDetectionPump(() =>
         {
-            entered.Set();
-            Thread.Sleep(80);
+            if (Interlocked.Increment(ref parked) == 1)
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromMinutes(5));
+            }
+
             Interlocked.Increment(ref completed);
         }, cadenceMs: 1);
 
         pump.Start();
-        Assert.True(entered.Wait(60_000, TestContext.Current.CancellationToken), "tick never started");
-        pump.Stop();
+        ParkedCall? stop = null;
+        try
+        {
+            Assert.True(entered.Wait(60_000, ct), "tick never started");
+            stop = ParkedCall.Start(pump.Stop);
+            Assert.True(await stop.WaitUntilParkedOrReturnedAsync("Stop()", TimeSpan.FromSeconds(60), ct),
+                "Stop returned while a tick was still in flight");
+        }
+        finally
+        {
+            release.Set();
+        }
 
+        await stop!.Returned.WaitAsync(TimeSpan.FromSeconds(60), ct);
         // Stop returned ⇒ the in-flight tick ran to completion first.
         Assert.True(Volatile.Read(ref completed) >= 1, "Stop returned while a tick was still in flight");
     }

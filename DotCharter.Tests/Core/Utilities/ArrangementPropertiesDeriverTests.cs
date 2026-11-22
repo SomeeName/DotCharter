@@ -12,6 +12,20 @@ namespace DotCharter.Tests.Core.Utilities;
 /// </summary>
 public sealed class ArrangementPropertiesDeriverTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Letter_only_Drop_D_is_not_standard_even_with_pinned_properties(bool pinned)
+    {
+        var arrangement = NewArrangement();
+        arrangement.TuningPitches.Clear();
+        arrangement.Tuning = ["D", "A", "D", "G", "B", "E"];
+        arrangement.Properties.ManualOverride = pinned;
+
+        Assert.False(ArrangementPropertiesDeriver.IsStandardTuning(arrangement));
+        Assert.Equal(0, ArrangementPropertiesDeriver.Derive(arrangement).StandardTuning);
+    }
+
     private static Arrangement NewArrangement(ArrangementType type = ArrangementType.Lead, int strings = 6)
     {
         var arrangement = new Arrangement { ArrangementType = type, StringCount = strings };

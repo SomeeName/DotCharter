@@ -13,7 +13,7 @@ public struct RenderNote
     public byte Harmonic;
     public byte BassPicking;
     public byte SlideTo;
-    public byte BendCount;
+    public int BendCount;
     /// <summary>The bend (steps) this note's tail starts at because a linked sound
     /// ends there (the snapshot's link pass, <c>FrameSnapshot.JoinLinkedTails</c>);
     /// 0 when unlinked.</summary>
@@ -41,7 +41,7 @@ public struct RenderChordNote
     public byte Harmonic;
     public byte BassPicking;
     public byte SlideTo;
-    public byte BendCount;
+    public int BendCount;
     /// <summary>The bend (steps) this tail starts at because a linked sound ends
     /// there; 0 when unlinked.</summary>
     public float BendCarry;

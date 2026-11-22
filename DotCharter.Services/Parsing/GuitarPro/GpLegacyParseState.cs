@@ -9,8 +9,8 @@ namespace DotCharter.Services.Parsing.GuitarPro;
 ///
 /// Lifecycle: created once per <c>ParseFile</c> call, cleared up front, then
 /// fed by the per-note effect readers and consumed by the beat-flushing pass.
-/// All state is reference-keyed by the in-flight <see cref="GuitarNote"/>
-/// instances built during the parse.
+/// Buffers are keyed by in-flight <see cref="GuitarNote"/> instances or by
+/// track, voice and string so lookahead and emitted sounds keep separate state.
 /// </summary>
 internal sealed class GpLegacyParseState
 {
@@ -65,6 +65,83 @@ internal sealed class GpLegacyParseState
     /// </summary>
     public Dictionary<(int TrackId, int Voice, int StringIndex), IGuitarSound> LastSoundOnString { get; } = [];
 
+    public HashSet<GuitarNote> RawDeadNotes { get; } = [];
+
+    /// <summary>Notes with the ghost-note bit (note header 0x04), consumed when the note is emitted.</summary>
+    public HashSet<GuitarNote> GhostNotes { get; } = [];
+
+    private readonly Dictionary<(int TrackId, int Voice), GpBendContinuation> _bendContinuations = [];
+
+    /// <summary>The untied bend-continuation tracker of one (track, voice lane), the slot gpif keeps one per.</summary>
+    public GpBendContinuation BendContinuationFor(int trackId, int voice)
+    {
+        if (!_bendContinuations.TryGetValue((trackId, voice), out var continuation))
+            _bendContinuations[(trackId, voice)] = continuation = new GpBendContinuation();
+        return continuation;
+    }
+
+    /// <summary>The bend-continuation view of a note about to be emitted as <paramref name="sound" />
+    /// (consumes its ghost flag; read before its bend points are consumed).</summary>
+    public GpBendContinuation.Struck StrikeBend(GuitarNote parsed, IGuitarSound sound)
+    {
+        PendingBendOffsets.TryGetValue(parsed, out var points);
+        return new GpBendContinuation.Struck(sound, GpBendContinuation.LegacyBend(points),
+            TiedContinuations.Contains(parsed), GhostNotes.Remove(parsed));
+    }
+
+    /// <summary>Feeds an emitted chord to its lane's tracker. Call it after every string's tie retarget,
+    /// so a written tie already shows as <c>LinkNext</c> on the chord before.</summary>
+    public void ObserveBendChord(int trackId, int voice, Chord chord, IReadOnlyList<GpBendContinuation.Struck> struck)
+        => BendContinuationFor(trackId, voice).ObserveChord(chord, struck);
+
+    /// <summary>Feeds an emitted single note to its lane's tracker; an <paramref name="expanded" /> trill
+    /// is not one sound, so it breaks the string's line instead.</summary>
+    public void ObserveBendNote(int trackId, int voice, GuitarNote note, bool expanded)
+    {
+        var continuation = BendContinuationFor(trackId, voice);
+        var struck = StrikeBend(note, note);
+        if (expanded) continuation.Forget(note.StringIndex);
+        else continuation.ObserveNote(note, struck.Bend, struck.TieDestination, struck.Ghost);
+    }
+    private readonly Dictionary<GuitarNote, (int Flags, bool Version5)> _tieSlides = [];
+    private readonly Dictionary<(int TrackId, int Voice, int StringIndex), TieChain> _tieChains = [];
+
+    private sealed class TieChain(bool dead, GuitarNote first)
+    {
+        public bool Dead { get; } = dead;
+        public List<IGuitarSound> Sounds { get; } = [first];
+    }
+
+    public bool ApplySlide(GpLegacyBinaryReader reader, GuitarNote note, bool version5, int capo)
+    {
+        var flags = reader.ReadSByte();
+        var directional = version5 ? (flags & 12) != 0 && !GpPickScrape.IsPickScrape(flags) : flags is 3 or 4;
+        if (directional && TiedContinuations.Contains(note)) _tieSlides[note] = (flags, version5);
+        return GpLegacyNoteEffectsHelpers.ApplySlide(flags, note, version5, capo);
+    }
+
+    public void TrackReadNote(int trackId, int voice, GuitarNote note)
+    {
+        var key = (trackId, voice, note.StringIndex);
+        var dead = RawDeadNotes.Remove(note) && !GpPickScrape.IsScrape(note);
+        var hasSlide = _tieSlides.Remove(note, out var slide);
+        if (!TiedContinuations.Contains(note) || !_tieChains.TryGetValue(key, out var chain))
+            _tieChains[key] = chain = new TieChain(dead, note);
+        else
+            chain.Sounds.Add(note);
+        if (!chain.Dead) return;
+        if (hasSlide) GpDeadNoteSlide.Mark(note, slide.Version5 ? slide.Flags : slide.Flags == 3 ? 4 : 8);
+        if (!chain.Sounds.Any(GpDeadNoteSlide.IsPending)) return;
+        foreach (var sound in chain.Sounds) sound.Mute = MuteType.Full;
+    }
+
+    public void RetargetReadSound((int TrackId, int Voice, int StringIndex) key, GuitarNote parsed, IGuitarSound stored)
+    {
+        if (!_tieChains.TryGetValue(key, out var chain)) return;
+        var index = chain.Sounds.FindIndex(s => ReferenceEquals(s, parsed));
+        if (index >= 0) chain.Sounds[index] = stored;
+    }
+
     public void Reset()
     {
         PendingBendOffsets.Clear();
@@ -74,6 +151,11 @@ internal sealed class GpLegacyParseState
         HopoOrigins.Clear();
         PendingHopoDestinations.Clear();
         LastSoundOnString.Clear();
+        RawDeadNotes.Clear();
+        GhostNotes.Clear();
+        _bendContinuations.Clear();
+        _tieSlides.Clear();
+        _tieChains.Clear();
     }
 
     public HashSet<FractionalPosition> GetLetRingSet(ChartLevel level)

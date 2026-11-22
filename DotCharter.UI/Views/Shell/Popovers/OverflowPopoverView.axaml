@@ -25,6 +25,32 @@
         </controls:FirePopover.Footer>
 
         <StackPanel Theme="{StaticResource FirePopoverBodyPanel}" Classes="FirePopoverBody">
+            <!-- PLAYBACK: the transport and its two aids that are commands.
+                 2 x 2 for the reason the Groups section below is. The metronome and
+                 claps are properties, not commands: the Mix row below reaches them. -->
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                               Text="{localization:Loc Toolbar_GroupTransport}" />
+                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto"
+                          ColumnSpacing="{StaticResource FirePopoverGapTight}"
+                          RowSpacing="{StaticResource FirePopoverGapTight}">
+                        <Button Grid.Row="0" Grid.Column="0" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{Binding Transport.PlayPauseLabel}"
+                                Command="{Binding Transport.TogglePlayPauseCommand}" />
+                        <Button Grid.Row="0" Grid.Column="1" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Toolbar_Stop}"
+                                Command="{Binding Transport.StopCommand}" />
+                        <Button Grid.Row="1" Grid.Column="0" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Toolbar_ToggleLoop}"
+                                Command="{Binding Transport.ToggleLoopCommand}" />
+                        <Button Grid.Row="1" Grid.Column="1" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Toolbar_ToggleChartSynth}"
+                                Command="{Binding Transport.ToggleChartSynthCommand}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
             <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection">
                 <StackPanel Spacing="{StaticResource FirePopoverGap}">
                     <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"

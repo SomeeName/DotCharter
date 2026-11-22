@@ -83,6 +83,9 @@ public class ChartProject
     /// <c>dcLinkGroups</c> only when non-empty. See <see cref="LinkGroup" />.</summary>
     public ObservableCollection<LinkGroup> LinkGroups { get; set; } = [];
 
+    /// <summary>Written Guitar Pro bars on the imported beat grid, saved as <c>dcGpSource</c>.</summary>
+    public ObservableCollection<GpSourceBar> GpSourceBars { get; set; } = [];
+
     /// <summary>
     ///     Top-level project nodes a NEWER build wrote that this build does not
     ///     understand, each as one normalized XML fragment, in the order they
@@ -107,4 +110,13 @@ public class ChartProject
     ///     </para>
     /// </summary>
     public ObservableCollection<string> UnknownRscpNodes { get; set; } = [];
+
+    /// <summary>
+    ///     The writer version (or <c>format-N</c> when only the chart format is newer) of
+    ///     the NEWER build that wrote the file this project was loaded from, else null.
+    ///     Not persisted: it exists so the session can warn on open and the saver can keep
+    ///     a <c>.bak</c> of the original before the first overwrite drops what this build
+    ///     cannot re-attach.
+    /// </summary>
+    public string? NewerWriterVersion { get; set; }
 }

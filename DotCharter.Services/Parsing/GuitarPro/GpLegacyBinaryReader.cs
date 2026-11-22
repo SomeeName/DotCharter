@@ -42,13 +42,6 @@ internal sealed class GpLegacyBinaryReader
         return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
     }
 
-    public float ReadFloat()
-    {
-        Span<byte> buf = stackalloc byte[4];
-        for (var i = 0; i < 4; i++) buf[i] = ReadByte();
-        return BitConverter.ToSingle(buf);
-    }
-
     public double ReadDouble()
     {
         Span<byte> buf = stackalloc byte[8];
@@ -112,25 +105,5 @@ internal sealed class GpLegacyBinaryReader
         var skip = blockSize - 1 - actual;
         if (skip > 0) Skip(skip);
         return Latin1.GetString(bytes);
-    }
-
-    /// <summary>
-    ///     Reads a fixed-size string field (block size known from the format
-    ///     spec, no leading length byte).
-    /// </summary>
-    public string ReadStringFixed(int length)
-    {
-        var bytes = ReadBytes(length);
-        var actualLen = bytes.Length;
-        for (var i = 0; i < bytes.Length; i++)
-        {
-            if (bytes[i] == 0)
-            {
-                actualLen = i;
-                break;
-            }
-        }
-
-        return Latin1.GetString(bytes, 0, actualLen);
     }
 }

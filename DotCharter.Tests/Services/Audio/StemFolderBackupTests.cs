@@ -94,4 +94,31 @@ public sealed class StemFolderBackupTests : IDisposable
     }
 
     private void Write(string name, string content) => File.WriteAllText(Path.Combine(_dir, name), content);
+
+    [Fact]
+    public void MoveAside_AbortsWhenTheBackupDirectoryCannotBeCreated()
+    {
+        Write("guitar.wav", "keep guitar");
+        Write(".backup", "blocks directory creation");
+        var folder = StemFolderBackup.Open(_dir, new FakeAppLogger());
+
+        Assert.ThrowsAny<IOException>(() => folder.MoveAside(["guitar"]));
+
+        Assert.Equal("keep guitar", File.ReadAllText(Path.Combine(_dir, "guitar.wav")));
+    }
+
+    [Fact]
+    public void MoveAside_RollsBackEarlierMovesWhenALaterStemCannotBeBackedUp()
+    {
+        Write("guitar.wav", "keep guitar");
+        Write("piano.wav", "keep piano");
+        Directory.CreateDirectory(Path.Combine(_dir, ".backup", "piano.wav"));
+        var folder = StemFolderBackup.Open(_dir, new FakeAppLogger());
+
+        var failure = Record.Exception(() => folder.MoveAside(["guitar", "piano"]));
+        Assert.True(failure is IOException or UnauthorizedAccessException);
+
+        Assert.Equal("keep guitar", File.ReadAllText(Path.Combine(_dir, "guitar.wav")));
+        Assert.Equal("keep piano", File.ReadAllText(Path.Combine(_dir, "piano.wav")));
+    }
 }

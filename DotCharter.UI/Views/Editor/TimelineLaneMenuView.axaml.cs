@@ -97,7 +97,7 @@ public partial class TimelineLaneMenuView : UserControl
     private void Hint(ToggleButton row, RibbonLanes lane, RibbonContent? content)
     {
         var reason = _ribbon is { } ribbon && content is { } c
-            ? RibbonLaneRules.HiddenReason(lane, ribbon.Lanes(), ribbon.AutoHideEmpty, c)
+            ? RibbonLaneRules.HiddenReason(lane, ribbon.Lanes(), ribbon.AutoHideEmpty, c, ribbon.ForcedLanes())
             : RibbonLaneHiddenReason.Shown;
         row.Tag = reason switch
         {

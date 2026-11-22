@@ -24,6 +24,7 @@ public sealed partial class LinkedMeasuresViewModel : ObservableObject
     private readonly IConfigurationService _config;
     private LinkPropagationReport? _toastReport;
     private (LinkGroup Group, LinkPlacement Placement)? _bannerPlacement;
+    private bool _bannerOnLinkedLevel;
 
     public LinkedMeasuresViewModel(ChartEditorViewModel editor, ProjectState state, IHistoryService history,
         ILocalizationService localization, IConfigurationService config)
@@ -171,13 +172,23 @@ public sealed partial class LinkedMeasuresViewModel : ObservableObject
         var project = _state.ActiveProject;
         var at = FirstSelected();
         _bannerPlacement = at is { } position ? LinkLaneModel.PlacementAt(project, _editor.ActiveArrangement, position) : null;
+        // Links hold the HARDEST level (the reconciler reads and copies only it), so on another
+        // level an edit stays where it is made and "Only this one" has nothing to take out.
+        _bannerOnLinkedLevel = _editor.ActiveArrangement is { } arrangement &&
+                               ReferenceEquals(_state.ActiveLevel, ChartLevels.Hardest(arrangement));
         IsBannerVisible = _bannerPlacement != null;
         OnlyThisOneCommand.NotifyCanExecuteChanged();
         if (project == null || _bannerPlacement is not { } hit) return;
+        BannerBrush = new SolidColorBrush(LinkLaneModel.ColorOf(project, hit.Group));
+        if (!_bannerOnLinkedLevel)
+        {
+            BannerText = _localization["LinkBanner_OtherLevel"];
+            return;
+        }
+
         var others = hit.Group.Placements.Count;
         BannerText = _localization.Plural("LinkBanner_AppliesOne", "LinkBanner_AppliesFmt", others,
             LinkLaneModel.PerArrangement(project, hit.Group));
-        BannerBrush = new SolidColorBrush(LinkLaneModel.ColorOf(project, hit.Group));
     }
 
     private FractionalPosition? FirstSelected()
@@ -196,13 +207,13 @@ public sealed partial class LinkedMeasuresViewModel : ObservableObject
         return first;
     }
 
-    private bool CanOnlyThisOne() => _bannerPlacement != null;
+    private bool CanOnlyThisOne() => _bannerPlacement != null && _bannerOnLinkedLevel;
 
     /// <summary>Unlinks the placement the selection is in, before editing it.</summary>
     [RelayCommand(CanExecute = nameof(CanOnlyThisOne))]
     private void OnlyThisOne()
     {
-        if (_state.ActiveProject is not { } project || _bannerPlacement is not { } hit) return;
+        if (_state.ActiveProject is not { } project || _bannerPlacement is not { } hit || !_bannerOnLinkedLevel) return;
         if (LinkGroupEdits.Unlink(project, hit.Group.Id, [hit.Placement]) is not { } action) return;
         _history.EndGesture();
         _history.Do(action);
@@ -281,6 +292,7 @@ public sealed partial class LinkedMeasuresViewModel : ObservableObject
             Panel.Refresh();
         }
 
-        if (e.PropertyName is nameof(ProjectState.ActiveProject) or nameof(ProjectState.ActiveArrangement)) RefreshBanner();
+        if (e.PropertyName is nameof(ProjectState.ActiveProject) or nameof(ProjectState.ActiveArrangement) or nameof(ProjectState.ActiveLevel))
+            RefreshBanner();
     }
 }

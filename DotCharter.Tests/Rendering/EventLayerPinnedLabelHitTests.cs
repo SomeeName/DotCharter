@@ -271,4 +271,70 @@ public sealed class EventLayerPinnedLabelHitTests
 
         Assert.Equal(ChartEditorConstants.RenderMetrics.ActiveLabelFixedX, drawn.X, 3);
     }
+
+    [Fact]
+    public void AHoveredPinnedBadge_IsDrawnWithItsHoverLook_SoItReadsAsClickable()
+    {
+        var hover = EventLayer.OnLane(Color.FromArgb(240, 34, 156, 117));
+        var owner = new object();
+        var registry = new PinnedLabelHitRegistry();
+
+        var (plain, _, _) = RenderPinnedTone(owner, registry);
+        Assert.True(Paints(plain, ToneFill));
+        Assert.False(Paints(plain, hover));
+
+        Assert.True(registry.SetHover(owner, PinnedLabelHitRegistry.PinnedLabelKind.Tone));
+        Assert.False(registry.SetHover(owner, PinnedLabelHitRegistry.PinnedLabelKind.Tone), "unchanged hover must not repaint");
+        var (hovered, _, _) = RenderPinnedTone(owner, registry);
+        Assert.True(Paints(hovered, hover), "the hovered pinned badge kept its plain look");
+        Assert.False(Paints(hovered, ToneFill));
+
+        // Another viewport's hover does not light this one's badge.
+        var (other, _, _) = RenderPinnedTone(new object(), registry);
+        Assert.False(Paints(other, hover));
+
+        Assert.True(registry.SetHover(owner, null));
+        var (cleared, _, _) = RenderPinnedTone(owner, registry);
+        Assert.False(Paints(cleared, hover));
+    }
+
+    [Fact]
+    public void APressOnAPinnedBadge_OpensTheEventEditorOnTheMarkerInEffect_AndNotTheNextChip()
+    {
+        var (batcher, registry, owner) = RenderTones([ToneTimeMs, 14_000]);
+        // The bounding box spans the pinned chip AND the in-flow one; press inside the pinned one.
+        var drawn = DrawnRectOf(batcher, ToneFill);
+        var onPinned = new Point(ChartEditorConstants.RenderMetrics.ActiveLabelFixedX + 4, drawn.Center.Y);
+        var arrangement = new Arrangement();
+        var opened = new List<(double Ms, Arrangement? Target)>();
+
+        var handled = DotCharter.UI.Input.Tools.EventInteractionTool.TryOpenPinnedBadge(
+            registry, owner, onPinned, leftPressed: true, arrangement, (ms, a) => opened.Add((ms, a)));
+
+        Assert.True(handled);
+        Assert.Equal([(ToneTimeMs, (Arrangement?)arrangement)], opened);
+
+        opened.Clear();
+        Assert.False(DotCharter.UI.Input.Tools.EventInteractionTool.TryOpenPinnedBadge(
+            registry, owner, onPinned, leftPressed: false, arrangement, (ms, a) => opened.Add((ms, a))));
+        Assert.False(DotCharter.UI.Input.Tools.EventInteractionTool.TryOpenPinnedBadge(
+            registry, owner, new Point(drawn.Right + 400, drawn.Center.Y), leftPressed: true, arrangement,
+            (ms, a) => opened.Add((ms, a))));
+        Assert.Empty(opened);
+    }
+
+    [Fact]
+    public void ThePointerPress_AsksTheBadgeRegistryFirst_AndTheMoveFeedsTheHover()
+    {
+        var root = TestPaths.RepoRoot();
+        var tool = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(root, "DotCharter.UI", "Input", "Tools", "EventInteractionTool.cs")));
+        var press = tool[tool.IndexOf("public void OnPointerPressed", StringComparison.Ordinal)..];
+        Assert.True(press.IndexOf("TryOpenPinnedBadge(", StringComparison.Ordinal) is >= 0 and var at &&
+                    at < press.IndexOf("GetRowType(", StringComparison.Ordinal),
+            "the press must resolve a pinned badge before any row routing");
+
+        var manager = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(root, "DotCharter.UI", "Input", "TimelineInteractionManager.cs")));
+        Assert.Contains("SetHover(_renderer", manager);
+        Assert.Contains("overBadge", manager);
+    }
 }

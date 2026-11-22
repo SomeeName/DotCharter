@@ -21,6 +21,12 @@ internal static class NarrowWidthLayout
             ? dir
             : Path.Combine(AppContext.BaseDirectory, "TestResults", "narrow-width");
 
+    /// <summary>The logs go in this invocation's own folder under <see cref="ArtifactDirectory" />
+    /// (created on first use): shards running side by side would otherwise append into one file,
+    /// and a later run onto an earlier one's lines. The PNGs keep their fixed names, one per case
+    /// and culture, where the capture loop looks for them.</summary>
+    private static string LogDirectory => TestArtifactRun.Directory(ArtifactDirectory);
+
     /// <summary>The UI sweep's fixture (<c>UiSweepDataContexts.SeedProjectState</c>): the
     /// 240-sound stress chart as a three-path song, so every readout the shell derives from a
     /// song is populated.</summary>
@@ -98,14 +104,13 @@ internal static class NarrowWidthLayout
         ?? throw new Xunit.Sdk.XunitException($"no {typeof(T).Name} named '{name}' under {root.GetType().Name} — repoint this test.");
 
     /// <summary>A measurement line: to the console (shown for a FAILED case), and with
-    /// <c>DOTCHARTER_UI_SWEEP_DUMP=1</c> also to <c>measurements.log</c> beside the captures, so a
+    /// <c>DOTCHARTER_UI_SWEEP_DUMP=1</c> also to <c>measurements.log</c> in this run's folder beside the captures, so a
     /// green run's numbers can be read too.</summary>
     public static void Report(string line)
     {
         Console.WriteLine(line);
         if (!UiSweepRunner.CaptureEnabled) return;
-        Directory.CreateDirectory(ArtifactDirectory);
-        File.AppendAllText(Path.Combine(ArtifactDirectory, "measurements.log"),
+        File.AppendAllText(Path.Combine(LogDirectory, "measurements.log"),
             $"{HeadlessSessionFixture.SweptCulture} {line}{Environment.NewLine}");
     }
 
@@ -114,7 +119,7 @@ internal static class NarrowWidthLayout
         if (!UiSweepRunner.CaptureEnabled) return;
         Directory.CreateDirectory(ArtifactDirectory);
         using var frame = window.CaptureRenderedFrame();
-        File.AppendAllText(Path.Combine(ArtifactDirectory, "capture.log"),
+        File.AppendAllText(Path.Combine(LogDirectory, "capture.log"),
             $"{name}: window {window.Bounds}, frame {(frame is null ? "NONE" : frame.PixelSize.ToString())}{Environment.NewLine}");
         Assert.NotNull(frame);
         frame.Save(Path.Combine(ArtifactDirectory, $"{name}-{HeadlessSessionFixture.SweptCulture}.png"), new PngBitmapEncoderOptions());

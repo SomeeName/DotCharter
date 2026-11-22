@@ -1,4 +1,5 @@
 ﻿using DotCharter.Services.Editing.Catalog;
+using DotCharter.Services.Editing.Selection;
 using DotCharter.Services.Editing.Selection.Patterns;
 using DotCharter.UI.ViewModels.Editor;
 using DotCharter.Services.Editing;
@@ -77,7 +78,7 @@ public sealed class PhraseCatalogSearchFilterTests
         catalog.Store.Add(Entry("chorus-stab", "Chorus stab"));
         // Synchronous search pass; the editing/transport/state services are only
         // reached by capture and paste, which these tests never run.
-        var vm = new PhraseCatalogViewModel(catalog, null!, null!, null!, null!, FakeLocalization.English(), action => action());
+        var vm = new PhraseCatalogViewModel(catalog, null!, null!, null!, new ProjectState(), FakeLocalization.English(), action => action());
         vm.EnsureLoaded();
         return (vm, catalog);
     }
@@ -99,7 +100,7 @@ public sealed class PhraseCatalogSearchFilterTests
         Assert.Single(vm.Entries);
         vm.SelectedEntry = vm.Entries[0];
 
-        vm.NewPhraseName = "Bridge riff";
+        vm.RenameText = "Bridge riff";
         vm.RenameSelectedCommand.Execute(null);
 
         // The rename worked...
@@ -123,12 +124,33 @@ public sealed class PhraseCatalogSearchFilterTests
         vm.SearchText = "verse";
         vm.SelectedEntry = vm.Entries[0];
 
-        vm.NewPhraseName = "Verse lick B";
+        vm.RenameText = "Verse lick B";
         vm.RenameSelectedCommand.Execute(null);
 
         Assert.Equal("verse", vm.SearchText);
         Assert.Single(vm.Entries);
         Assert.Equal("Verse lick B", vm.SelectedEntry!.Name);
+    }
+
+    /// <summary>#584: the paste verdict is against the arrangement a paste would land in, but it
+    /// was re-announced only when the selected riff changed. Switching the destination arrangement
+    /// left the old verdict on screen.</summary>
+    [Fact]
+    public void AnotherDestinationArrangement_ReannouncesThePasteVerdict()
+    {
+        var catalog = new StubCatalog();
+        catalog.Store.Add(Entry("verse-lick", "Verse lick"));
+        var state = new ProjectState();
+        var vm = new PhraseCatalogViewModel(catalog, null!, null!, null!, state, FakeLocalization.English(), action => action());
+        vm.EnsureLoaded();
+        Assert.NotNull(vm.SelectedEntry);
+        var raised = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        state.ActiveArrangement = new Arrangement { Name = "Bass", ArrangementType = ArrangementType.Bass };
+
+        Assert.Contains(nameof(PhraseCatalogViewModel.CompatibilityMessage), raised);
+        Assert.Contains(nameof(PhraseCatalogViewModel.CompatibilityIsProblem), raised);
     }
 
     // ------------------------------------------------------------------
@@ -157,8 +179,8 @@ public sealed class PhraseCatalogSearchFilterTests
         public void PasteSpecial(double t, int g, PasteSpecialMode m) => throw new NotSupportedException();
         public void SelectAllEvents() => throw new NotSupportedException();
         public void SelectAllNotes() => throw new NotSupportedException();
-        public void SelectLikePattern() => throw new NotSupportedException();
-        public int SelectByPattern(MatchPattern pattern) => throw new NotSupportedException();
+        public SelectionAddition SelectLikePattern() => throw new NotSupportedException();
+        public SelectionAddition SelectByPattern(MatchPattern pattern) => throw new NotSupportedException();
         public double? MoveToPatternMatch(MatchPattern p, double f, int d) => throw new NotSupportedException();
         public int CountPatternMatches(MatchPattern pattern) => throw new NotSupportedException();
 
@@ -167,6 +189,8 @@ public sealed class PhraseCatalogSearchFilterTests
         public void GenerateArpeggioFromSelection() => throw new NotSupportedException();
         public void AcceptSuggestedHandShapesInSelection(bool arpeggio) => throw new NotSupportedException();
         public void SplitHandShapeAtSelection() => throw new NotSupportedException();
+        public void GripsFromHeldNotes() => throw new NotSupportedException();
+        public void HandShapesFromLetRing() => throw new NotSupportedException();
         public void DeleteSelected(EditorFocusArea focusArea) => throw new NotSupportedException();
         public void DeleteSelectedRelated(EditorFocusArea focusArea) => throw new NotSupportedException();
         public void SendSelectionToArrangement(Arrangement target) => throw new NotSupportedException();
@@ -228,5 +252,28 @@ public sealed class PhraseCatalogSearchFilterTests
         Assert.Single(editing.Pasted);
         Assert.Equal("chorus", editing.Pasted[0].Id);
         Assert.False(vm.StatusIsProblem);
+    }
+
+    /// <summary>Design D (#751): the details card's name box starts as the selected riff's name, follows the
+    /// selection, and an unchanged name renames nothing; the capture name is a separate box.</summary>
+    [Fact]
+    public void TheRenameBox_HoldsTheSelectedName_AndAnUnchangedNameRenamesNothing()
+    {
+        var (vm, catalog) = Create();
+        vm.SelectedEntry = vm.Entries.Single(e => e.Name == "Verse lick");
+        Assert.Equal("Verse lick", vm.RenameText);
+        vm.SelectedEntry = vm.Entries.Single(e => e.Name == "Chorus stab");
+        Assert.Equal("Chorus stab", vm.RenameText);
+
+        vm.NewPhraseName = "Capture name";
+        vm.RenameSelectedCommand.Execute(null);
+        Assert.Equal(["Verse lick", "Chorus stab"], catalog.Store.Select(e => e.Name));
+        Assert.Equal("", vm.StatusMessage);
+
+        vm.RenameText = "Chorus stab B";
+        vm.RenameSelectedCommand.Execute(null);
+        Assert.Contains(catalog.Store, e => e.Name == "Chorus stab B");
+        Assert.Equal("Chorus stab B", vm.RenameText);
+        Assert.Equal("Capture name", vm.NewPhraseName);
     }
 }

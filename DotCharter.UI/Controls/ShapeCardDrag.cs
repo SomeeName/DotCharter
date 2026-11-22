@@ -16,7 +16,7 @@ namespace DotCharter.UI.Controls;
 ///         A press on the card's blank area or its diagram arms a drag; a name box, a tick or an
 ///         action button never does. Moving past a few pixels begins it and takes the pointer, so a
 ///         drag that began on the diagram never also places the shape. The card under the pointer
-///         is found by hit test, because the pointer is captured by the card the drag began on.
+///         is found by hit test. Capture stays on the top level so recycled cards cannot end it.
 ///         Release drops on the card under the pointer; release anywhere else, or Esc, ends the drag.
 ///         Near the top or bottom of the list the scroll viewer follows the pointer.
 ///     </para>
@@ -81,6 +81,10 @@ public static class ShapeCardDrag
         private bool _armed;
         private bool _dragging;
         private Border? _over;
+        private TopLevel? _top;
+        private ScrollViewer? _scroll;
+        private ICommand? _begin;
+        private ICommand? _end;
 
         internal Session(Border card)
         {
@@ -94,7 +98,7 @@ public static class ShapeCardDrag
 
         private static bool StartsDrag(Visual? source, Visual card)
         {
-            // Only the blank card and the diagram button arm a drag; a text box, a tick or an action keeps its own press.
+            // Only the blank line and a diagram button arm a drag; a text box, a tick or an action keeps its own press.
             foreach (var visual in source?.GetSelfAndVisualAncestors() ?? [])
             {
                 if (ReferenceEquals(visual, card)) return true;
@@ -111,19 +115,27 @@ public static class ShapeCardDrag
             _armed = StartsDrag(e.Source as Visual, _card);
             if (!_armed) return;
             _pointer = e.Pointer;
-            _start = e.GetPosition(TopLevel.GetTopLevel(_card));
+            _top = TopLevel.GetTopLevel(_card);
+            _scroll = _card.FindAncestorOfType<ScrollViewer>();
+            _begin = GetBegin(_card);
+            _end = GetEnd(_card);
+            _start = e.GetPosition(_top);
         }
 
         private void OnMoved(object? sender, PointerEventArgs e)
         {
-            if (!_armed || TopLevel.GetTopLevel(_card) is not { } top) return;
+            if (!_armed || _top is not { } top) return;
             var at = e.GetPosition(top);
             if (!_dragging)
             {
                 if (Math.Abs(at.X - _start.X) < Threshold && Math.Abs(at.Y - _start.Y) < Threshold) return;
                 _dragging = true;
-                e.Pointer.Capture(_card);
-                Run(GetBegin(_card));
+                top.AddHandler(InputElement.PointerMovedEvent, OnMoved, RoutingStrategies.Tunnel, true);
+                top.AddHandler(InputElement.PointerReleasedEvent, OnReleased, RoutingStrategies.Tunnel, true);
+                top.AddHandler(InputElement.KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel, true);
+                top.AddHandler(InputElement.PointerCaptureLostEvent, OnCaptureLost, RoutingStrategies.Direct | RoutingStrategies.Bubble, true);
+                e.Pointer.Capture(top);
+                Run(_begin);
             }
 
             e.Handled = true;
@@ -139,40 +151,59 @@ public static class ShapeCardDrag
         {
             if (!_dragging)
             {
-                _armed = false;
+                Finish();
                 return;
             }
 
-            var target = TopLevel.GetTopLevel(_card) is { } top ? CardAt(top, e.GetPosition(top)) : null;
+            var target = _top is { } top ? CardAt(top, e.GetPosition(top)) : null;
+            var end = _end;
             Finish();
             if (target is not null) Run(GetDrop(target));
-            Run(GetEnd(_card));
+            Run(end);
             e.Handled = true;
         }
 
         private void OnKeyDown(object? sender, KeyEventArgs e)
         {
             if (!_dragging || e.Key != Key.Escape) return;
+            var end = _end;
             Finish();
-            Run(GetEnd(_card));
+            Run(end);
             e.Handled = true;
         }
 
         private void OnCaptureLost(object? sender, PointerCaptureLostEventArgs e)
         {
-            if (!_dragging || !ReferenceEquals(e.Source, _card)) return;
+            if (!_dragging || !ReferenceEquals(e.Source, _top)) return;
+            var end = _end;
             Finish();
-            Run(GetEnd(_card));
+            Run(end);
         }
 
-        /// <summary>Ends the gesture's own state and gives the pointer back, before any command runs.</summary>
+        /// <summary>
+        ///     Ends the gesture's own state, before any command runs. Only a DRAG took the pointer, so
+        ///     only a drag gives it back: a press that never moved is still the diagram button's
+        ///     click, and releasing its capture here (this runs first, tunnelling) would cancel it.
+        /// </summary>
         private void Finish()
         {
+            if (_dragging)
+            {
+                _top?.RemoveHandler(InputElement.PointerMovedEvent, OnMoved);
+                _top?.RemoveHandler(InputElement.PointerReleasedEvent, OnReleased);
+                _top?.RemoveHandler(InputElement.KeyDownEvent, OnKeyDown);
+                _top?.RemoveHandler(InputElement.PointerCaptureLostEvent, OnCaptureLost);
+                _pointer?.Capture(null);
+            }
+
             _dragging = false;
             _armed = false;
             _over = null;
-            _pointer?.Capture(null);
             _pointer = null;
+            _top = null;
+            _scroll = null;
+            _begin = null;
+            _end = null;
         }
 
         /// <summary>The card (any border wearing a Drop command) under the pointer.</summary>
@@ -181,7 +212,7 @@ public static class ShapeCardDrag
 
         private void ScrollWith(PointerEventArgs e)
         {
-            if (_card.FindAncestorOfType<ScrollViewer>() is not { } scroll) return;
+            if (_scroll is not { } scroll) return;
             var y = e.GetPosition(scroll).Y;
             var step = y < ScrollBand ? -(ScrollBand - y) / ScrollBand
                 : y > scroll.Bounds.Height - ScrollBand ? (y - (scroll.Bounds.Height - ScrollBand)) / ScrollBand

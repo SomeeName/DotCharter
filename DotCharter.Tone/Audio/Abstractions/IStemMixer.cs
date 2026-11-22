@@ -49,5 +49,6 @@ public interface IStemMixer
 
 /// <summary>Single stem to load. <paramref name="Name"/> identifies the stem
 /// across the mixer (drums, bass, vocals, …); <paramref name="Path"/> is an
-/// absolute audio file the JUCE format manager can decode.</summary>
-public readonly record struct StemLoadRequest(string Name, string Path);
+/// absolute audio file the JUCE format manager can decode. <paramref name="OffsetMs"/>
+/// delays the stem on the song timeline in milliseconds; negative values trim its start.</summary>
+public readonly record struct StemLoadRequest(string Name, string Path, double OffsetMs = 0);

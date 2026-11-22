@@ -8,6 +8,140 @@ namespace DotCharter.Tests.Services.Export;
 public sealed partial class SngFromDomainMapperTests
 {
     [Fact]
+    public void Phrases_without_info_use_their_own_highest_populated_level_in_both_formats()
+    {
+        var beats = CreateBeats();
+        var arrangement = CreateArrangement(beats);
+        arrangement.Phrases.Clear();
+        arrangement.Phrases.AddRange(["COUNT", "low", "high", "END"]);
+        arrangement.PhraseInfos.Clear();
+        arrangement.PhraseIterations.Clear();
+        foreach (var (time, id) in new[] { (0, 0), (2000, 1), (10000, 2), (28000, 3) })
+            arrangement.PhraseIterations.Add(new PhraseIteration(Pos(beats, time), id));
+        arrangement.Levels.Clear();
+        for (var difficulty = 0; difficulty < 3; difficulty++)
+        {
+            var level = new ChartLevel { DifficultyIndex = difficulty };
+            if (difficulty < 2)
+                level.Notes.Add(new GuitarNote { Position = Pos(beats, 2000), StringIndex = 0, Fret = 3 });
+            level.Notes.Add(new GuitarNote { Position = Pos(beats, 10000), StringIndex = 0, Fret = 5 });
+            arrangement.Levels.Add(level);
+        }
+
+        var project = new ChartProject();
+        project.Arrangements.Add(arrangement);
+        foreach (var beat in beats) project.Beats.Add(beat);
+
+        var xml = new RsXmlSongWriter().Write(project);
+        var sng = SngFromDomainMapper.BuildInstrumental(arrangement, beats, 32000).Sng;
+
+        Assert.Equal([0, 1, 2, 0], xml.Descendants("phrase").Select(p => (int)p.Attribute("maxDifficulty")!));
+        Assert.Equal([0, 1, 2, 0], sng.Phrases.Select(p => p.MaxDifficulty));
+        Assert.Equal([1, 1, 1], sng.PhraseIterations[1].Difficulty);
+        Assert.Equal([0, 1, 2], sng.PhraseIterations[2].Difficulty);
+        Assert.Empty(arrangement.PhraseInfos);
+    }
+
+    [Theory]
+    [InlineData(600000, false, 7.499f)]
+    [InlineData(6000, false, 5.999f)]
+    [InlineData(0, false, 7.499f)]
+    [InlineData(600000, true, 10.999f)]
+    public void Song_length_matches_the_xml_chart_and_audio_extent(double audioLengthMs, bool trailingSustain,
+        float expectedSeconds)
+    {
+        var project = new ChartProject();
+        foreach (var beat in CreateBeats(16)) project.Beats.Add(beat);
+        var arrangement = new Arrangement();
+        var level = new ChartLevel();
+        level.Notes.Add(new GuitarNote
+        {
+            Position = new FractionalPosition(2), StringIndex = 0, Fret = 3,
+            Sustain = new FractionalPosition(trailingSustain ? 20 : 1)
+        });
+        arrangement.Levels.Add(level);
+        project.Arrangements.Add(arrangement);
+
+        var xml = new RsXmlSongWriter().Write(project, audioLengthMs);
+        var sng = SngFromDomainMapper.BuildInstrumental(arrangement, project.Beats, audioLengthMs).Sng;
+
+        Assert.Equal(expectedSeconds, (float)xml.Root!.Element("songLength")!, 3);
+        Assert.Equal(expectedSeconds, sng.MetaData.SongLength, 3);
+        Assert.Equal(expectedSeconds, sng.PhraseIterations[^1].EndTime, 3);
+    }
+
+    [Fact]
+    public void An_ignore_only_chord_note_keeps_its_mask_and_record()
+    {
+        var beats = CreateBeats();
+        var arrangement = CreateArrangement(beats);
+        var level = arrangement.Levels[0];
+        level.Notes.Clear();
+        level.HandShapes.Clear();
+        level.Chords.RemoveAt(1);
+        var chord = level.Chords[0];
+        chord.Accent = false;
+        chord.ChordNotes[0].Fret = 3;
+        arrangement.ChordTemplates[0].Frets[1] = 3;
+        foreach (var note in chord.ChordNotes)
+        {
+            note.Sustain = FractionalPosition.Zero;
+            note.Mute = MuteType.None;
+        }
+
+        chord.ChordNotes[1].Ignore = true;
+        var project = new ChartProject();
+        project.Arrangements.Add(arrangement);
+        foreach (var beat in beats) project.Beats.Add(beat);
+
+        var xml = new RsXmlSongWriter().Write(project);
+        var result = SngFromDomainMapper.BuildInstrumental(arrangement, beats, 32000);
+        var written = Assert.Single(result.Sng.Levels[0].Notes);
+        var chordNotes = Assert.Single(result.Sng.ChordNotes);
+
+        Assert.Equal("1", xml.Descendants("chordNote").Single(n => (int)n.Attribute("string")! == 2)
+            .Attribute("ignore")?.Value);
+        Assert.Equal(0, written.ChordNotesId);
+        Assert.Equal(RsNoteMask.Ignore, chordNotes.Mask[2]);
+        Assert.Equal(0u, chordNotes.Mask[1]);
+        Assert.Equal(0u, written.Mask & RsNoteMask.Ignore);
+        Assert.Equal(0, result.NoteCounts.Ignored);
+    }
+
+    [Theory]
+    [InlineData(-250, false)]
+    [InlineData(-3, false)]
+    [InlineData(-2, true)]
+    [InlineData(0, true)]
+    [InlineData(2, true)]
+    [InlineData(3, false)]
+    public void Link_children_must_start_within_two_ms_of_the_parent_end(int offsetMs, bool linked)
+    {
+        var beats = CreateBeats();
+        var arrangement = CreateArrangement(beats);
+        var level = arrangement.Levels[0];
+        level.Chords.Clear();
+        level.HandShapes.Clear();
+        level.Notes.Clear();
+        level.Notes.Add(new GuitarNote
+        {
+            Position = new FractionalPosition(14), StringIndex = 0, Fret = 3,
+            Sustain = new FractionalPosition(1), LinkNext = true
+        });
+        level.Notes.Add(new GuitarNote
+        {
+            Position = new FractionalPosition(15, new Fraction(offsetMs, 500)), StringIndex = 0, Fret = 3
+        });
+
+        var notes = SngFromDomainMapper.BuildInstrumental(arrangement, beats, 32000).Sng.Levels[0].Notes;
+
+        Assert.Equal(2, notes.Count);
+        Assert.NotEqual(0u, notes[0].Mask & RsNoteMask.Parent);
+        Assert.Equal(linked, (notes[1].Mask & RsNoteMask.Child) != 0);
+        Assert.Equal((short)(linked ? 0 : -1), notes[1].ParentPrevNote);
+    }
+
+    [Fact]
     public void Anchors_handshapes_phrases_sections_and_tones_survive()
     {
         var beats = CreateBeats();
@@ -21,7 +155,7 @@ public sealed partial class SngFromDomainMapperTests
         Assert.Equal(1, sng.Phrases[1].IterationCount);
         // Iteration end times chain to the next start / song length.
         Assert.Equal(sng.PhraseIterations[1].StartTime, sng.PhraseIterations[0].EndTime, 3);
-        Assert.Equal(32f, sng.PhraseIterations[2].EndTime, 3);
+        Assert.Equal(31.499f, sng.PhraseIterations[2].EndTime, 3);
 
         // Sections carry numbers per repeated name and pi links.
         Assert.Equal(3, sng.Sections.Count);
@@ -76,7 +210,7 @@ public sealed partial class SngFromDomainMapperTests
         Assert.Equal(0, sng.MetaData.MaxDifficulty);
         Assert.Equal(0.5f, sng.MetaData.FirstBeatLength, 3);
         Assert.Equal(2.0f, sng.MetaData.FirstNoteTime, 2);
-        Assert.Equal(32f, sng.MetaData.SongLength, 3);
+        Assert.Equal(31.499f, sng.MetaData.SongLength, 3);
 
         // Beats: measure numbering and phrase iteration attribution.
         Assert.Equal(64, sng.Beats.Count);
@@ -215,7 +349,7 @@ public sealed partial class SngFromDomainMapperTests
         // TS from the beat map; intro applause 600 ms after the first note for
         // 2.5 s; outro applause 9 s before audio end until audio end.
         Assert.Equal(
-            [("TS:4/4", 0f), ("e1", 0f), ("E3", 2.6f), ("E13", 5.1f), ("D3", 23f), ("E13", 32f)],
+            [("TS:4/4", 0f), ("e1", 0f), ("E3", 2.6f), ("E13", 5.1f), ("D3", 22.499f), ("E13", 31.499f)],
             sng.Events.Select(e => (e.Name, e.Time)));
     }
 
@@ -314,7 +448,9 @@ public sealed partial class SngFromDomainMapperTests
         var sng = SngFromDomainMapper.BuildInstrumental(arrangement, beats, 32000).Sng;
 
         // Two levels: intermediate easy/medium hero levels crash score attack.
-        Assert.All(sng.PhraseIterations, pi => Assert.Equal([1, 1, 1], pi.Difficulty));
+        Assert.Equal([0, 0, 0], sng.PhraseIterations[0].Difficulty);
+        Assert.Equal([1, 1, 1], sng.PhraseIterations[1].Difficulty);
+        Assert.Equal([0, 0, 0], sng.PhraseIterations[2].Difficulty);
     }
 
     /// <summary>

@@ -43,7 +43,7 @@
   - **MENU-ONLY verbs are the coverage test's blind spot** — it walks
     `KeybindConfig`, so a menu row with a command but no keybind is structurally
     invisible to it. Five real gaps accumulated there until 2026-08-15
-    (the ten Edit ▸ Bookmarks rows, the five View ▸ Timeline Rows toggles —
+    (the ten bookmark toggles, whose menu door is Edit ▸ Bookmarks…, the five View ▸ Timeline Rows toggles —
     whose only other surface, the pill strip, had been deleted — Help ▸ Usage
     Statistics / Session Health, and a File ▸ Exit row that was bound to
     NOTHING at all). `CommandPaletteMenuVerbTests` pins those, deriving the

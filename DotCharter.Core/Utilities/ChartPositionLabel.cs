@@ -97,18 +97,8 @@ public static class ChartPositionLabel
     }
 
     /// <summary>
-    ///     <c>mm:ss.ff</c>, the format every other time readout in the editor
-    ///     prints (the status bar, the timeline ruler). Negative times clamp to
-    ///     zero rather than printing a negative clock.
+    ///     <c>mm:ss.ff</c> below an hour, <c>h:mm:ss.ff</c> thereafter, matching
+    ///     the editor's cached playhead readout. Negative times clamp to zero.
     /// </summary>
-    public static string Time(double timeMs)
-    {
-        var clamped = timeMs > 0 ? timeMs : 0;
-        // Quantize to 10 ms first so the hundredths never round UP into a second
-        // the playhead has not reached (TimeSpan formatting truncates, but the
-        // double it is handed can sit a fraction of a millisecond short).
-        var centis = (long)(clamped / 10.0);
-        return TimeSpan.FromMilliseconds(centis * 10.0)
-            .ToString(@"mm\:ss\.ff", CultureInfo.InvariantCulture);
-    }
+    public static string Time(double timeMs) => ElapsedTimeLabel.Format(timeMs, 2, padMinutes: true);
 }

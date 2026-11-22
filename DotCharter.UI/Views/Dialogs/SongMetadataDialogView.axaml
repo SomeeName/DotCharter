@@ -3,6 +3,7 @@
              xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             xmlns:views="using:DotCharter.UI.Views.Dialogs"
              x:Class="DotCharter.UI.Views.Dialogs.SongMetadataDialogView"
              x:DataType="contracts:ISongMetadataScreen"
              x:CompileBindings="True">
@@ -56,24 +57,6 @@
                                      AutomationProperties.Name="{localization:Loc Inspector_Project_Song}" />
                         </Grid>
 
-                        <!-- The ORIGINAL script, kept beside the Latin names
-                             rather than instead of them: Rocksmith carries both
-                             (JapaneseArtistName / JapaneseSongName) and shows the
-                             original in-game. No album counterpart exists in the
-                             manifest, so there is no row for one. -->
-                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
-                            <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
-                                       Text="{localization:Loc Inspector_Project_JapaneseArtist}" />
-                            <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding JapaneseArtist, Mode=TwoWay}"
-                                     AutomationProperties.Name="{localization:Loc Inspector_Project_JapaneseArtist}" />
-                        </Grid>
-                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
-                            <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
-                                       Text="{localization:Loc Inspector_Project_JapaneseSong}" />
-                            <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding JapaneseTitle, Mode=TwoWay}"
-                                     AutomationProperties.Name="{localization:Loc Inspector_Project_JapaneseSong}" />
-                        </Grid>
-
                         <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
                             <StackPanel VerticalAlignment="Center" Grid.Column="0">
                                 <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
@@ -95,17 +78,6 @@
                                      Text="{Binding AlbumYear, Mode=TwoWay}"
                                      PlaceholderText="{localization:Loc Dialog_AlbumYearPlaceholder}"
                                      AutomationProperties.Name="{localization:Loc Dialog_AlbumYear}" />
-                        </Grid>
-
-                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
-                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
-                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
-                                           Text="{localization:Loc Inspector_Project_Charter}" />
-                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
-                                           Text="{localization:Loc Dialog_SongMetadata_CharterHint}" />
-                            </StackPanel>
-                            <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding Charter, Mode=TwoWay}"
-                                     AutomationProperties.Name="{localization:Loc Inspector_Project_Charter}" />
                         </Grid>
 
                         <!-- Genre + quick-picks. The chips sit UNDER the field, not
@@ -143,6 +115,8 @@
                                 </ItemsControl>
                             </StackPanel>
                         </Grid>
+
+                        <views:SongNamesFieldsBlock FieldWidth="320" />
 
                         <!-- Key signature. The stepper is the control; beside it
                              is what the number MEANS ("2 ♯", "7 ♭"), because a
@@ -196,6 +170,26 @@
                                                    Text="{Binding KeySignatureLabel}" />
                                     </StackPanel>
                                 </Grid>
+
+                                <!-- what the notes (or, with none, the audio) say the
+                                     key is, its runner-up and how sure; one click adopts it.
+                                     The lock makes the key above the song's key, so chord
+                                     names are spelled in it even where the notes disagree. -->
+                                <Grid x:Name="KeyEstimateRow" ColumnDefinitions="*,Auto"
+                                      ColumnSpacing="{DynamicResource FireSpaceRow}">
+                                    <TextBlock Grid.Column="0" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                               x:Name="KeyEstimateText" Margin="{DynamicResource FirePadNone}"
+                                               VerticalAlignment="Center" TextWrapping="Wrap"
+                                               Text="{Binding KeyEstimateLabel}" />
+                                    <Button Grid.Column="1" Theme="{DynamicResource SubtleButton}" Classes="Subtle"
+                                            x:Name="UseKeyEstimateButton" VerticalAlignment="Center"
+                                            Content="{localization:Loc Dialog_SongMetadata_UseKeyEstimate}"
+                                            IsVisible="{Binding HasKeyEstimate}"
+                                            Command="{Binding UseKeyEstimateCommand}" />
+                                </Grid>
+                                <CheckBox x:Name="KeyLockedToggle"
+                                          Content="{localization:Loc Dialog_SongMetadata_KeyLocked}"
+                                          IsChecked="{Binding KeyLocked, Mode=TwoWay}" />
                             </StackPanel>
                         </Border>
                     </StackPanel>

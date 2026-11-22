@@ -8,7 +8,7 @@ namespace DotCharter.Services.Audio.Lyrics;
 ///     Which lyric models have to stay on the CPU for the rest of the process.
 ///     <para>
 ///         The provider ladder (<see cref="OnnxSessionFactory" />) only falls back
-///         when a session fails to CREATE. A graph can create on DirectML and still
+///         when a provider fails to ATTACH. A graph can create on DirectML and still
 ///         fail its first <c>Run</c> (the int8 MMS-FA export does, on a Reshape node
 ///         DirectML cannot execute), so the failure is learned at run time and has
 ///         to be remembered somewhere: without it every later sync would load the
@@ -44,7 +44,7 @@ public sealed class LyricProviderMemory
 }
 
 /// <summary>
-///     An <see cref="ILyricAcousticSession" /> that answers a failed run on a GPU
+///     An <see cref="ILyricAcousticSession" /> that answers a failed open or run on a GPU
 ///     provider by re-opening the same model on the CPU and encoding the WHOLE song
 ///     again, then stays on the CPU (<see cref="LyricProviderMemory" />).
 ///     <para>
@@ -60,7 +60,7 @@ internal sealed class LyricProviderFallbackSession : ILyricAcousticSession
     private readonly LyricAcousticSessionOpener _open;
     private readonly LyricProviderMemory _memory;
     private readonly Action<string>? _log;
-    private readonly Action<string>? _warn;
+    private readonly Action<string, Exception>? _warn;
     private ILyricAcousticSession? _inner;
 
     /// <param name="model">The model to open.</param>
@@ -68,17 +68,31 @@ internal sealed class LyricProviderFallbackSession : ILyricAcousticSession
     /// <param name="open">Opens one session.</param>
     /// <param name="memory">Which models stay on the CPU.</param>
     /// <param name="log">Session-level log sink, handed to the opener.</param>
-    /// <param name="warn">Receives the one line that says a GPU run failed and the CPU took over.</param>
+    /// <param name="warn">Receives the one line that says a GPU run failed and the CPU took over, with the exception that caused it.</param>
     public LyricProviderFallbackSession(
         LyricModel model, OnnxExecutionProvider requested, LyricAcousticSessionOpener open,
-        LyricProviderMemory memory, Action<string>? log, Action<string>? warn)
+        LyricProviderMemory memory, Action<string>? log, Action<string, Exception>? warn)
     {
         _model = model;
         _open = open;
         _memory = memory;
         _log = log;
         _warn = warn;
-        _inner = open(model, memory.IsCpuOnly(model.Id) ? OnnxExecutionProvider.Cpu : requested, log);
+        var provider = memory.IsCpuOnly(model.Id) ? OnnxExecutionProvider.Cpu : requested;
+        try
+        {
+            _inner = open(model, provider, log);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException && provider != OnnxExecutionProvider.Cpu)
+        {
+            if (memory.RememberCpu(model.Id))
+            {
+                warn?.Invoke(
+                    $"Lyric model '{model.Id}' could not open on {provider} ({ex.Message.Split('\n')[0].Trim()}); " +
+                    "opening it on the CPU, which it keeps for the rest of this session.", ex);
+            }
+            _inner = open(model, OnnxExecutionProvider.Cpu, log);
+        }
 
         // The alphabet belongs to the graph, not to the provider it runs on.
         Vocabulary = _inner.Vocabulary;
@@ -102,7 +116,7 @@ internal sealed class LyricProviderFallbackSession : ILyricAcousticSession
             {
                 _warn?.Invoke(
                     $"Lyric model '{_model.Id}' failed on {ActiveProvider} ({ex.Message.Split('\n')[0].Trim()}); " +
-                    "re-running it on the CPU, which it keeps for the rest of this session.");
+                    "re-running it on the CPU, which it keeps for the rest of this session.", ex);
             }
 
             // The GPU session is released before the CPU one opens: both hold the

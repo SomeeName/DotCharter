@@ -14,10 +14,10 @@ public sealed class MainMenuFilesTests
     private static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
 
     [Fact]
-    public void TheBar_ListsEightMenus_AndHoldsNoRowItself()
+    public void TheBar_ListsSevenMenus_AndHoldsNoRowItself()
     {
         Assert.Equal(
-            ["FileMenu", "EditMenu", "TempoMapMenu", "ArrangementsMenu", "VocalsMenu", "ToolsMenu", "ViewMenu", "HelpMenu"],
+            ["FileMenu", "EditMenu", "TempoMapMenu", "ArrangementsMenu", "ToolsMenu", "ViewMenu", "HelpMenu"],
             MainMenuSource.MenuFiles().Select(Path.GetFileNameWithoutExtension));
 
         // A row added to the bar file is a row on no menu's file — and the next

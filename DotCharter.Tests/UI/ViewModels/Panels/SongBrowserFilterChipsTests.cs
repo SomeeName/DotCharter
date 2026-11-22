@@ -500,7 +500,7 @@ public sealed class SongBrowserFilterChipsTests
 
         private readonly List<Action> _queue = [];
 
-        private Harness()
+        private Harness(DotCharter.Localization.ILocalizationService? localization = null)
         {
             var logger = new FakeAppLogger();
             var state = new ProjectState();
@@ -514,16 +514,18 @@ public sealed class SongBrowserFilterChipsTests
             Vm = new SongBrowserViewModel(
                 new FakeFileStorageService(), config, Library, logger,
                 new StubProjectSession(), state, editor, transport,
-                new DotCharter.Presentation.Dialogs.DialogsSlot(), DotCharter.Localization.LocalizationService.Instance,
+                new DotCharter.Presentation.Dialogs.DialogsSlot(), localization ?? DotCharter.Localization.LocalizationService.Instance,
                 _queue.Add);
         }
 
         public StubLibraryService Library { get; } = new() { Result = BuildLibrary() };
         public SongBrowserViewModel Vm { get; }
 
-        public static async Task<Harness> Scanned()
+        /// <summary>A scanned library; <paramref name="localization" /> replaces the app's words (a test that
+        /// switches the language hands in a <see cref="FakeLocalization" />).</summary>
+        public static async Task<Harness> Scanned(DotCharter.Localization.ILocalizationService? localization = null)
         {
-            var h = new Harness();
+            var h = new Harness(localization);
             h.Vm.PsarcLocation = @"C:\lib";
             await h.Vm.ScanCommand.ExecuteAsync(null);
             h.Drain();
@@ -612,7 +614,8 @@ public sealed class SongBrowserFilterChipsTests
         public Task<bool> AttachAudioAsync(string sourcePath) => Task.FromResult(true);
         public Task LoadSilentTransportAsync(double projectLengthMs) => Task.CompletedTask;
         public Task OpenProject() => Task.CompletedTask;
-        public Task<bool> SaveProjectAsync() => Task.FromResult(true);
+        public bool HasUnsavedWork() => IsProjectDirty;
+        public Task<bool> SaveProjectAsync(SaveInitiator initiator) => Task.FromResult(true);
         public Task<bool> SaveProjectAsAsync() => Task.FromResult(true);
         public IReadOnlyList<RecentProjectEntry> GetRecentProjects() => [];
         public event Action? RecentProjectsChanged { add { } remove { } }

@@ -67,6 +67,28 @@ public sealed class ChordTemplateHandShapeSelectionTests
         Assert.Equal(5, template.Frets[4]);
     }
 
+    [Fact]
+    public void AddingStringsToTheGripUsesTheFirstCoveredOnset()
+    {
+        var h = new Harness();
+        var arr = h.Editor.ActiveArrangement!;
+        var level = arr.Levels[0];
+        var grip = new ChordTemplate { Id = 0, Frets = { [1] = 0 } };
+        arr.ChordTemplates.Add(grip);
+        var shape = new HandShape { TemplateId = grip.Id, GhostMask = 0, EndPosition = new(4) };
+        level.HandShapes.Add(shape);
+        level.Notes.Add(new GuitarNote { Position = new(1), StringIndex = 2, Fret = 7 });
+        level.Notes.Add(new GuitarNote { Position = new(2), StringIndex = 3, Fret = 5 });
+        h.Selection.SelectedHandShapes.Add(shape);
+        var grid = new HandShapeGripGrid(h.Editor, h.History, new FingeringGenerationService());
+        var next = grip.Clone();
+        next.Frets[2] = 7;
+        next.Frets[3] = 5;
+
+        Assert.NotNull(grid.Apply(grip, next, ChordTemplateEditKind.Shape, ChordApplyRung.Selected));
+        Assert.Equal(1 << 3, shape.GhostMask);
+    }
+
     private sealed class Harness
     {
         public Harness()

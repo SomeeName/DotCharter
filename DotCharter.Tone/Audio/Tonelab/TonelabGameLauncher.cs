@@ -76,16 +76,16 @@ public sealed class TonelabGameLauncher : IGameToneLauncher
     {
         var processes = RocksmithProcesses.Instance;
         return new TonelabGameLauncher(new TonelabInjectHelper(install.HelperPath, install.DllPath, HiddenHelperProcessRunner.Instance),
-            [CreateMirrorStarter(TonelabGameMirror.DefaultRoot), new SteamRocksmithStarter(logger)], processes, IniGuardFor(processes), logger,
+            [CreateMirrorStarter(TonelabGameMirror.DefaultRoot, logger), new SteamRocksmithStarter(logger)], processes, IniGuardFor(processes, logger), logger,
             Task.Delay);
     }
 
     /// <summary>The direct start over the real disk, Steam and processes, mirroring into <paramref name="mirrorRoot" />.</summary>
-    public static IRocksmithStarter CreateMirrorStarter(string mirrorRoot)
+    public static IRocksmithStarter CreateMirrorStarter(string mirrorRoot, IAppLogger? logger = null)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("The tonelab mirror is Windows-only.");
-        return new MirrorRocksmithStarter(new TonelabGameMirror(Win32GameMirrorFileSystem.Instance, mirrorRoot), RocksmithGame.FindGameDirectory,
-            RocksmithGame.IsSteamRunning, Win32GameProcessCreator.Instance, Environment.GetEnvironmentVariables);
+        return new MirrorRocksmithStarter(new TonelabGameMirror(Win32GameMirrorFileSystem.Instance, mirrorRoot), () => RocksmithGame.FindGameDirectory(logger),
+            RocksmithGame.IsSteamRunning, Win32GameProcessCreator.Instance, Environment.GetEnvironmentVariables, logger);
     }
 
     /// <summary>Registers the launcher only when the install root on disk carries the tonelab pair; true when it did.</summary>
@@ -110,7 +110,7 @@ public sealed class TonelabGameLauncher : IGameToneLauncher
         {
             try
             {
-                LogRestore(IniGuardFor(RocksmithProcesses.Instance).Restore(), logger, "at startup");
+                LogRestore(IniGuardFor(RocksmithProcesses.Instance, null).Restore(), logger, "at startup");
             }
             catch (Exception ex)
             {
@@ -150,10 +150,19 @@ public sealed class TonelabGameLauncher : IGameToneLauncher
         }
     }
 
+    /// <summary>The exit watcher, including the INI restore, for a test to await.</summary>
+    internal Task ExitWatch { get; private set; } = Task.CompletedTask;
+
     public async Task<IGameToneLaunch?> LaunchAsync(CancellationToken ct)
     {
         LastFailure = GameToneLaunchFailure.None;
-        if (_processes.FindGame() is { } running) return await AttachAsync(running, ct).ConfigureAwait(false);
+        if (_processes.FindGame() is { } running)
+        {
+            // The game this launcher started is still up (its boot timed out and the session gave up):
+            // it stays OUR launch, already injected, so a later quit still ends it.
+            if (_current is { } own && own.ProcessId == running) return own;
+            return await AttachAsync(running, ct).ConfigureAwait(false);
+        }
 
         foreach (var starter in _starters)
         {
@@ -187,7 +196,7 @@ public sealed class TonelabGameLauncher : IGameToneLauncher
         }
 
         var opensNoDevice = !liveFolder || ini is RsAsioIniOutcome.Applied or RsAsioIniOutcome.NoIni;
-        var launch = new TonelabGameLaunch(processId, true, opensNoDevice, liveFolder, this);
+        var launch = new TonelabGameLaunch(processId, true, opensNoDevice, liveFolder, this, TonelabBootGate.LogPathFor(_helper.DllPath));
         _current = launch;
         var inject = await _helper.InjectAsync(processId, ct).ConfigureAwait(false);
         launch.WatchExit();
@@ -209,7 +218,7 @@ public sealed class TonelabGameLauncher : IGameToneLauncher
     private async Task<IGameToneLaunch?> AttachAsync(int pid, CancellationToken ct)
     {
         var inject = await _helper.InjectAsync(pid, ct).ConfigureAwait(false);
-        if (inject.IsOk) return new TonelabGameLaunch(pid, false, false, true, this);
+        if (inject.IsOk) return new TonelabGameLaunch(pid, false, false, true, this, null);
         return Fail(GameToneLaunchFailure.InjectFailed, $"injection into the running game failed ({inject.Outcome}, {inject.Reason})");
     }
 
@@ -224,8 +233,8 @@ public sealed class TonelabGameLauncher : IGameToneLauncher
         return null;
     }
 
-    private static RsAsioIniGuard IniGuardFor(IRocksmithProcesses processes) =>
-        new(PhysicalTonelabFileSystem.Instance, () => processes.FindGame() is not null, RocksmithGame.FindGameDirectory());
+    private static RsAsioIniGuard IniGuardFor(IRocksmithProcesses processes, IAppLogger? logger) =>
+        new(PhysicalTonelabFileSystem.Instance, () => processes.FindGame() is not null, RocksmithGame.FindGameDirectory(logger));
 
     private static void LogRestore(RsAsioIniOutcome outcome, IAppLogger? logger, string when)
     {
@@ -236,7 +245,7 @@ public sealed class TonelabGameLauncher : IGameToneLauncher
     }
 
     /// <summary>One launch; the quit sequence and, for the live folder, the ini restore after the game's exit live here.</summary>
-    private sealed class TonelabGameLaunch(int processId, bool startedByApp, bool opensNoDevice, bool liveFolder, TonelabGameLauncher owner)
+    private sealed class TonelabGameLaunch(int processId, bool startedByApp, bool opensNoDevice, bool liveFolder, TonelabGameLauncher owner, string? bootLogPath)
         : IGameToneLaunch
     {
         /// <summary>How long an ended process gets to go away before the ini is put back (or left for the next start).</summary>
@@ -244,6 +253,8 @@ public sealed class TonelabGameLauncher : IGameToneLauncher
 
         /// <summary>tonelab's own launcher waits this long after the exit before it restores.</summary>
         private static readonly TimeSpan ExitSettle = TimeSpan.FromMilliseconds(500);
+
+        public string? BootLogPath => bootLogPath;
 
         public int ProcessId => processId;
 
@@ -280,7 +291,7 @@ public sealed class TonelabGameLauncher : IGameToneLauncher
         }
 
         /// <summary>A game DotCharter started, ending any way at all (quit, the user, a crash), gets its ini back.</summary>
-        public void WatchExit() => _ = Task.Run(async () =>
+        public void WatchExit() => owner.ExitWatch = Task.Run(async () =>
         {
             await owner._processes.WaitForExitAsync(processId, Timeout.InfiniteTimeSpan, CancellationToken.None).ConfigureAwait(false);
             await FinishAsync().ConfigureAwait(false);

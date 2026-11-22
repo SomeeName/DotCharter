@@ -5,8 +5,8 @@
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              x:Class="DotCharter.UI.Views.Editor.SheetMusicPaneView"
              x:DataType="vm:SheetMusicPaneViewModel">
-    <Grid>
-        <sheetControls:SheetMusicView x:Name="Sheet"
+    <Grid RowDefinitions="Auto,Auto,*" Background="{DynamicResource PanelBackground}">
+        <sheetControls:SheetMusicView Grid.Row="2" x:Name="Sheet"
                                       ProjectState="{Binding ProjectState}"
                                       Selection="{Binding Selection}"
                                       History="{Binding History}"
@@ -14,16 +14,16 @@
                                       StavesMode="{Binding SheetStaves}"
                                       PageMode="{Binding SheetPageMode}" />
 
-        <!-- Floating note-value (duration) palette. Applies the authored notation
+        <!-- Wrapping note-value (duration) palette. Applies the authored notation
              duration to the selected note(s)/beat; dotted/triplet are input
              modifiers. +/- on the focused sheet halve/double it (GP muscle
              memory). Labels are note-value denominators (1 = whole … 64). -->
-        <Border HorizontalAlignment="Left" VerticalAlignment="Top"
-                Margin="18,6,0,0"
+        <Border Grid.Row="0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                Margin="18,6,18,0"
                 Background="{DynamicResource PanelBackground}"
                 BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1"
                 CornerRadius="{StaticResource RadiusSm}" Padding="2" Opacity="0.92">
-            <StackPanel Orientation="Horizontal" Spacing="2"
+            <WrapPanel Orientation="Horizontal" ItemSpacing="2" LineSpacing="2"
                         ToolTip.Tip="{localization:Loc SheetMusic_Duration_Tip}">
                 <Button Content="1" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" MinHeight="20" Padding="6,0"
                         FontSize="{StaticResource FontSizeXs}"
@@ -78,16 +78,16 @@
                         Command="{Binding ClearDurationCommand}"
                         ToolTip.Tip="{localization:Loc SheetMusic_Duration_Clear}"
                         AutomationProperties.Name="{localization:Loc SheetMusic_Duration_Clear}" />
-            </StackPanel>
+            </WrapPanel>
         </Border>
 
-        <!-- Floating stave + zoom controls (Ctrl+wheel zooms too). -->
-        <Border HorizontalAlignment="Right" VerticalAlignment="Top"
-                Margin="0,6,18,0"
+        <!-- Separate stave + zoom row (Ctrl+wheel zooms too). -->
+        <Border Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Top"
+                Margin="18,6,18,0"
                 Background="{DynamicResource PanelBackground}"
                 BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1"
                 CornerRadius="{StaticResource RadiusSm}" Padding="2" Opacity="0.92">
-            <StackPanel Orientation="Horizontal" Spacing="2">
+            <WrapPanel Orientation="Horizontal" ItemSpacing="2" LineSpacing="2">
                 <ToggleButton IsChecked="{Binding SheetPageMode, Mode=TwoWay}"
                               MinHeight="20" Padding="6,0"
                               FontSize="{StaticResource FontSizeXs}"
@@ -120,7 +120,7 @@
                         Padding="7,0" FontSize="{StaticResource FontSizeSm}" MinHeight="20"
                         ToolTip.Tip="{localization:Loc SheetMusic_ZoomReset}"
                         AutomationProperties.Name="{localization:Loc SheetMusic_ZoomReset}" />
-            </StackPanel>
+            </WrapPanel>
         </Border>
     </Grid>
 </UserControl>

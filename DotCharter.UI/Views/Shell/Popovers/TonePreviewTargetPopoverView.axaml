@@ -1,0 +1,61 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Shell.Popovers.TonePreviewTargetPopoverView"
+             x:CompileBindings="True"
+             x:DataType="viewModels:MainWindowViewModel">
+    <!-- TONE PREVIEW TARGET. The caret half of the toolbar's tone-preview split
+         button: it picks WHERE the preview plays; the button beside the caret turns the
+         preview on and off with whatever is picked here, so the toggle stays one click.
+         Two rows, one lit: the DotCharter rig, or Rocksmith (tonelab). Rocksmith is
+         disabled with its reason on the tip while no session can be reached. -->
+    <controls:FirePopover Width="280"
+                          Title="{localization:Loc Toolbar_TonePreviewTarget}"
+                          Icon="{DynamicResource IconHeadphones}">
+        <controls:FirePopover.Footer>
+            <Grid Theme="{StaticResource FirePopoverFooterGrid}" Classes="FirePopoverFooter" ColumnDefinitions="*">
+                <TextBlock VerticalAlignment="Center" Theme="{StaticResource FirePopoverNoteText}" Classes="FirePopoverNote"
+                           TextWrapping="Wrap"
+                           Text="{localization:Loc Toolbar_TonePreviewTarget_Tip}" />
+            </Grid>
+        </controls:FirePopover.Footer>
+
+        <StackPanel Theme="{StaticResource FirePopoverBodyPanel}" Classes="FirePopoverBody">
+            <Button Theme="{StaticResource FirePopoverOptionButton}" Classes="FirePopoverOption"
+                    Classes.Picked="{Binding !ToneRig.IsTonePreviewInRocksmith}"
+                    Command="{Binding ToneRig.SelectTonePreviewRigCommand}"
+                    AutomationProperties.Name="{localization:Loc Toolbar_TonePreviewTarget_Rig}"
+                    Click="OnRowClick">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FirePopoverGap}">
+                    <TextBlock Grid.Column="0" Classes="FirePopoverOptionName"
+                               Text="{localization:Loc Toolbar_TonePreviewTarget_Rig}" />
+                    <PathIcon Grid.Column="1" Width="10" Height="10"
+                              Data="{DynamicResource IconCheck}"
+                              Foreground="{DynamicResource FireAccentBright}"
+                              VerticalAlignment="Center"
+                              IsVisible="{Binding !ToneRig.IsTonePreviewInRocksmith}" />
+                </Grid>
+            </Button>
+            <Button Theme="{StaticResource FirePopoverOptionButton}" Classes="FirePopoverOption"
+                    Classes.Picked="{Binding ToneRig.IsTonePreviewInRocksmith}"
+                    Command="{Binding ToneRig.ToggleTonePreviewRocksmithCommand}"
+                    IsEnabled="{Binding ToneRig.IsTonePreviewRocksmithAvailable}"
+                    ToolTip.ShowOnDisabled="True"
+                    ToolTip.Tip="{Binding ToneRig.TonePreviewRocksmithTip}"
+                    AutomationProperties.Name="{localization:Loc Dialog_Tones_PreviewTargetInGame}"
+                    Click="OnRowClick">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FirePopoverGap}">
+                    <TextBlock Grid.Column="0" Classes="FirePopoverOptionName"
+                               Text="{localization:Loc Dialog_Tones_PreviewTargetInGame}" />
+                    <PathIcon Grid.Column="1" Width="10" Height="10"
+                              Data="{DynamicResource IconCheck}"
+                              Foreground="{DynamicResource FireAccentBright}"
+                              VerticalAlignment="Center"
+                              IsVisible="{Binding ToneRig.IsTonePreviewInRocksmith}" />
+                </Grid>
+            </Button>
+        </StackPanel>
+    </controls:FirePopover>
+</UserControl>

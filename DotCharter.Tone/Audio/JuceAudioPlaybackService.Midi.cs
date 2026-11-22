@@ -5,6 +5,18 @@ namespace DotCharter.Tone.Audio;
 
 public sealed partial class JuceAudioPlaybackService
 {
+    /// <summary>The WinMM index to open for <paramref name="config"/>: the saved name wins over the
+    /// saved index (indices shift when devices come and go), and a missing device falls back to
+    /// the mapper with a logged reason.</summary>
+    private int ResolveMidiDeviceIndex(RigConfig config)
+    {
+        if (!WinMMMidiOutput.IsSupported) return config.MidiOutputDevice;
+        var resolution = MidiDeviceResolver.Resolve(
+            config.MidiOutputDevice, config.MidiOutputDeviceName, WinMMMidiOutput.EnumerateDevices());
+        if (resolution.FallbackReason is { } reason) _logger?.Warning(AppLogCategory.Audio, reason);
+        return resolution.Index;
+    }
+
     private void ApplyMidiDevice(int deviceIndex)
     {
         if (!WinMMMidiOutput.IsSupported) return;
@@ -14,7 +26,7 @@ public sealed partial class JuceAudioPlaybackService
             // While an internal VSTi is attached (in-proc or in the sandbox
             // child), MIDI is routed there; don't tear it down — just
             // remember the desired WinMM index for when it is detached.
-            if (_instrumentPlugin != null || _instrumentReloadPending || _sandboxInstrumentLoaded) return;
+            if (_instrumentPlugin != null || _instrumentReloadPending || SandboxInstrumentLoaded) return;
             if (_midi is WinMMMidiOutput existing && existing.IsOpen && existing.DeviceIndex == deviceIndex)
                 return;
             try { _midi.Dispose(); } catch { /* ignored */ }
@@ -32,7 +44,7 @@ public sealed partial class JuceAudioPlaybackService
             }
             catch (Exception ex)
             {
-                _logger?.Warning(AppLogCategory.Audio, $"Failed to open MIDI output device {deviceIndex}: {ex.Message}");
+                _logger?.Warning(AppLogCategory.Audio, $"Failed to open MIDI output device {deviceIndex}", ex);
             }
         }
     }
@@ -63,10 +75,11 @@ public sealed partial class JuceAudioPlaybackService
     // Ample Guitar splits articulations per channel and expects strings on
     // channels 0..5 in reverse order (string 0 = high E / channel 5 in
     // some configs; original code used `5 - stringIndex`).
+    // Extra strings keep channels 6..8, distinct from those six in either mode.
     private int StringChannelForInstrument(int stringIndex)
     {
-        var s = ((stringIndex % 6) + 6) % 6;
-        return _instrumentIsAmpleGuitar ? 5 - s : s;
+        var s = Math.Clamp(stringIndex, 0, StandardOpenStrings.MaxStringCount - 1);
+        return _instrumentIsAmpleGuitar && s < 6 ? 5 - s : s;
     }
 
     // Send Ample Guitar's articulation keyswitch on its dedicated MIDI
@@ -222,18 +235,7 @@ public sealed partial class JuceAudioPlaybackService
         // and the shared mapping carries its sample offset to the child.
         // Only WinMM / GS Wavetable stays IMMEDIATE — a device outside the
         // engine, with no render clock to place anything on.
-        MidiRenderAnchor? anchor = null;
-        if (MidiPreviewScheduler.SchedulesOnRenderClock(_instrumentPlugin != null, _sandboxInstrumentLoaded, midi)
-            && _engine is { } engine && TryReadRenderAnchor(engine, out var frame, out var rawAtFrameMs))
-        {
-            var sr = engine.SampleRate;
-            if (sr > 0)
-            {
-                nowMs = rawAtFrameMs + axisShiftMs;
-                anchor = new MidiRenderAnchor(frame, sr);
-            }
-        }
-
+        var renderEngine = _engine;
         // Collection swap (arrangement/level change) or add/remove edit —
         // rescan from the start; the cursor advance below lands right again.
         if (!ReferenceEquals(_midiScanNotesRef, activeChartNotes) || _midiScanNotesCount != activeChartNotes.Count)
@@ -281,8 +283,20 @@ public sealed partial class JuceAudioPlaybackService
             {
                 // The sink was swapped (instrument attach/detach) since it was read:
                 // the swap flushed, and the next tick starts on the new sink.
-                if (!ReferenceEquals(midi, _midi)) return;
+                if (!ReferenceEquals(midi, _midi) || !ReferenceEquals(renderEngine, _engine)) return;
                 _previewSink.Target = midi;
+
+                MidiRenderAnchor? anchor = null;
+                if (MidiPreviewScheduler.SchedulesOnRenderClock(_instrumentPlugin != null, SandboxInstrumentLoaded, midi)
+                    && renderEngine is { } engine && TryReadRenderAnchor(engine, out var frame, out var rawAtFrameMs))
+                {
+                    var sr = engine.SampleRate;
+                    if (sr > 0)
+                    {
+                        nowMs = rawAtFrameMs + axisShiftMs;
+                        anchor = new MidiRenderAnchor(frame, sr);
+                    }
+                }
 
                 // Seek / loop wrap / first tick after a pause: everything off, rescan.
                 if (_midiScheduler.BeginTick(_previewSink, nowMs, _playbackSpeed, anchor))
@@ -426,7 +440,7 @@ public sealed partial class JuceAudioPlaybackService
         // same string can NoteOff the previous pitch cleanly and Ample
         // Guitar's per-channel articulation engine works. When sending to a
         // generic WinMM device (e.g. MS GS Wavetable) channel 0 is fine.
-        var throughInstrument = (_instrumentPlugin != null || _sandboxInstrumentLoaded)
+        var throughInstrument = (_instrumentPlugin != null || SandboxInstrumentLoaded)
                                   && _previewSink.Target is JuceInstrumentMidiOutput;
         var channel = throughInstrument ? StringChannelForInstrument(stringIndex) : 0;
 

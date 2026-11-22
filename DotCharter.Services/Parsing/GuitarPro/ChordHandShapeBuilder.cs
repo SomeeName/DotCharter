@@ -17,7 +17,7 @@ namespace DotCharter.Services.Parsing.GuitarPro;
 ///     Runs BEFORE <see cref="GpPostProcessor.AdjustSustains"/> so the span
 ///     reflects the AUTHORED length rather than a post-trim one. Chord templates
 ///     are find-or-create (never mutated in place); the created template carries
-///     the chord's fret shape with NO fingering data for now.
+///     the chord's fret shape, authored fingers and name (or suggestions when absent).
 ///     </para>
 /// </summary>
 public static class ChordHandShapeBuilder
@@ -43,16 +43,17 @@ public static class ChordHandShapeBuilder
     /// default lives on <see cref="GpImportSettings.PreserveShortRests" /> (on);
     /// this parameter defaults OFF so a direct caller keeps the historical
     /// merge.</param>
+    /// <param name="naming">The chord naming style and the imported score key.</param>
     public static void BuildAndTrim(ChartLevel level, Arrangement arrangement,
         GpAuthoredFingering? authoredFingers = null,
         GpAuthoredChordNames? authoredChordNames = null,
-        bool splitRunsOnRests = false)
+        bool splitRunsOnRests = false, ChordNamingOptions? naming = null)
     {
         // The grouping is the shared planner's — the editor's "Generate hand
         // shapes" runs the same one, so the two can never drift apart. What stays
         // HERE is what only an import does: the file's own fingering and names on a
         // minted template, and the strike trim.
-        var grips = new ImportGripSource(arrangement, authoredFingers, authoredChordNames);
+        var grips = new ImportGripSource(arrangement, authoredFingers, authoredChordNames, naming ?? NewChordNames.NamingFor(arrangement));
         var minted = new List<ChordTemplate>();
         var plan = ChordHandShapePlanner.Plan(level, grips, minted,
             new ChordHandShapePlanOptions(SplitRunsOnRests: splitRunsOnRests));
@@ -72,7 +73,11 @@ public static class ChordHandShapeBuilder
             // is DEAD on every tab import (owner report: a {5,7,7,6,5} barre
             // fingered 1 at fret 5 sat under an anchor at fret 4).
             foreach (var chord in bar.Chords)
+            {
+                // A merged follower can supply the run's first explicit fingers.
+                grips.RememberAuthored(bar.Template, chord);
                 chord.TemplateId = bar.Template.Id;
+            }
 
             // The hand shape now carries the duration; the chords become short
             // strikes — UNLESS one wears a sustain-visible technique OR is a slide's
@@ -111,15 +116,14 @@ public static class ChordHandShapeBuilder
     }
 
     /// <summary>
-    ///     The import path's grip source: reuse ANY non-arpeggio template with the
-    ///     chord's frets, whether hand-authored (its deliberate name and fingering win
-    ///     — existing templates are never mutated) or created by an earlier pass; else
-    ///     mint one, preferring the file's authored fingering and name.
+    ///     The import path's grip source: reuse a non-arpeggio template with the
+    ///     chord's frets only when the file's authored name and fingers agree too.
+    ///     Otherwise mint a separate template; existing templates are never mutated.
     /// </summary>
     private sealed class ImportGripSource(
         Arrangement arrangement,
         GpAuthoredFingering? authoredFingers,
-        GpAuthoredChordNames? authoredChordNames) : IHandShapeGripSource
+        GpAuthoredChordNames? authoredChordNames, ChordNamingOptions naming) : IHandShapeGripSource
     {
         // Minting must not re-scan every template for its Max(Id). Ids only ever grow
         // here, so carry the next one. `Count == 0 ? 0 : Max(Id) + 1` and this agree
@@ -128,23 +132,36 @@ public static class ChordHandShapeBuilder
             ? 0
             : arrangement.ChordTemplates.Max(t => t.Id) + 1;
 
-        public bool Holds(ChordTemplate grip, Chord chord) => FretsMatch(grip, chord);
+        public bool Holds(ChordTemplate grip, Chord chord)
+        {
+            if (!FretsMatch(grip, chord)) return false;
+            if (authoredChordNames != null && authoredChordNames.TryGet(chord.Position, out var name) && grip.Name != name)
+                return false;
+            foreach (var note in chord.ChordNotes)
+            {
+                if (authoredFingers != null && authoredFingers.TryGet(note.StringIndex, chord.Position, out var finger) &&
+                    grip.GetFinger(note.StringIndex) != finger)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
 
         public ChordTemplate GripFor(Chord chord, IList<ChordTemplate> minted)
         {
-            // Identical frets = identical chord. The arrangement first, then this
-            // pass's own mints — the order the list had when a mint was appended to
-            // the arrangement on the spot.
+            // Reuse only when the file's authored name and fingers agree too.
             foreach (var t in arrangement.ChordTemplates)
             {
-                if (!t.Arpeggio && FretsMatch(t, chord))
-                    return t;
+                if (!t.IsArpeggio && Holds(t, chord))
+                    return RememberAuthored(t, chord);
             }
 
             foreach (var t in minted)
             {
-                if (!t.Arpeggio && FretsMatch(t, chord))
-                    return t;
+                if (!t.IsArpeggio && Holds(t, chord))
+                    return RememberAuthored(t, chord);
             }
 
             var template = new ChordTemplate { Name = string.Empty };
@@ -182,15 +199,22 @@ public static class ChordHandShapeBuilder
             // name the arranger typed — a slash chord, an inversion, a "no-chord"
             // marker or a particular enharmonic spelling the pitch-class suggester
             // cannot know. Creation only, like the fingering: a template found by
-            // shape is shared and is never mutated, so the first name a shape is seen
-            // with wins.
+            // shape is shared and is never mutated; a different authored name
+            // therefore needs a separate template.
             if (authoredChordNames != null && authoredChordNames.TryGet(chord.Position, out var authoredName))
                 template.Name = authoredName;
             else
-                template.Name = NewChordNames.For(arrangement, template.Frets);
+                template.Name = NewChordNames.For(arrangement, template.Frets, naming);
 
             template.Id = _nextTemplateId++;
             minted.Add(template);
+            return template;
+        }
+
+        public ChordTemplate RememberAuthored(ChordTemplate template, Chord chord)
+        {
+            if (authoredFingers != null && chord.ChordNotes.Any(n => authoredFingers.TryGet(n.StringIndex, chord.Position, out _)))
+                authoredFingers.MarkAuthored(template);
             return template;
         }
     }

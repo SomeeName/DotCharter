@@ -126,8 +126,9 @@ public sealed class DiagnosticsBundleExporter : IDiagnosticsBundleExporter
             });
         }
 
-        using var stream = new FileStream(fullArchivePath, FileMode.Create, FileAccess.Write, FileShare.None);
-        return WriteBundle(stream, new DiagnosticsBundleRequest(entries));
+        DiagnosticsBundleResult? result = null;
+        AtomicFile.Write(fullArchivePath, stream => result = WriteBundle(stream, new DiagnosticsBundleRequest(entries)));
+        return result!;
     }
 
     public DiagnosticsBundleResult WriteBundle(Stream destination, DiagnosticsBundleRequest request)

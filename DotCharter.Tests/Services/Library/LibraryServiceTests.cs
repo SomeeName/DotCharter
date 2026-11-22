@@ -16,6 +16,10 @@ namespace DotCharter.Tests.Services.Library;
 /// </summary>
 public sealed class LibraryServiceTests : IDisposable
 {
+    /// <summary>A hang guard, never a budget: a wait on another thread's work fails only
+    /// when that work is truly stuck, far beyond any loaded run.</summary>
+    private static readonly TimeSpan HangGuard = TimeSpan.FromMinutes(5);
+
     private readonly string _dir = Directory.CreateTempSubdirectory("dotcharter_library_service_").FullName;
     private readonly FakeAppLogger _logger = new();
 
@@ -112,6 +116,9 @@ public sealed class LibraryServiceTests : IDisposable
 
         Assert.Equal(["Good"], songs.Select(s => s.SongKey));
         Assert.Contains(_logger.Entries, e => e.Level == "WARN" && e.Message.Contains(bad, StringComparison.Ordinal));
+        // The reason is in the message, not only on the exception: the log says WHY a file was skipped.
+        Assert.Contains(_logger.Entries, e => e.Level == "WARN" && e.Message.Contains(bad, StringComparison.Ordinal)
+            && e.Message.Contains("damaged", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -123,15 +130,21 @@ public sealed class LibraryServiceTests : IDisposable
         packages.Blocks.Add(slow);
         var found = new List<LibrarySongEntry>();
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        var scan = Task.Run(() => new LibraryService(_logger, [packages]) { ScanParallelismForTests = 1 }
-            .ScanAsync(Library, null, new Progress<IReadOnlyList<LibrarySongEntry>>(found.AddRange), cts.Token),
-            TestContext.Current.CancellationToken);
-        Assert.True(packages.Entered.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
+        // The scan runs on its own thread (the parser thread is dedicated already), so
+        // no stage up to the blocked read queues behind the thread pool; every wait
+        // below is a hang guard that names the stage it was waiting for.
+        using var scanThread = new DedicatedThreadScheduler();
+        var scan = new LibraryService(_logger, [packages]) { ScanParallelismForTests = 1, ScanSchedulerForTests = scanThread }
+            .ScanAsync(Library, null, new Progress<IReadOnlyList<LibrarySongEntry>>(found.AddRange), cts.Token);
+        Assert.True(packages.Begun.Wait(HangGuard, TestContext.Current.CancellationToken),
+            $"scan did not start: no source was asked to begin a scan within {HangGuard.TotalSeconds:0} s.");
+        Assert.True(packages.Entered.Wait(HangGuard, TestContext.Current.CancellationToken),
+            $"first read not entered: the scan began but never reached the package read within {HangGuard.TotalSeconds:0} s.");
 
         cts.Cancel();
-        var finished = await Task.WhenAny(scan, Task.Delay(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
 
-        Assert.Same(scan, finished);
+        Assert.True(((IAsyncResult)scan).AsyncWaitHandle.WaitOne(HangGuard),
+            $"cancel did not end the read: the scan was still running {HangGuard.TotalSeconds:0} s after the cancel.");
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => scan);
         Assert.Empty(found);
     }
@@ -191,6 +204,7 @@ public sealed class LibraryServiceTests : IDisposable
     {
         public Dictionary<string, IReadOnlyList<LibrarySongEntry>> Rows { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> Blocks { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public ManualResetEventSlim Begun { get; } = new();
         public ManualResetEventSlim Entered { get; } = new();
         public HashSet<string> Fails { get; } = new(StringComparer.OrdinalIgnoreCase);
         public ConcurrentQueue<string> ReadQueue { get; } = new();
@@ -199,7 +213,11 @@ public sealed class LibraryServiceTests : IDisposable
         public ChartProject Loaded { get; } = new();
         public IReadOnlyList<string> FileExtensions { get; } = [extension];
 
-        public void BeginScan() => ScansBegun++;
+        public void BeginScan()
+        {
+            ScansBegun++;
+            Begun.Set();
+        }
 
         public IReadOnlyList<LibrarySongEntry> ReadForIndex(string path, CancellationToken cancellationToken)
         {
@@ -208,7 +226,7 @@ public sealed class LibraryServiceTests : IDisposable
             if (Blocks.Contains(path))
             {
                 Entered.Set();
-                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(120));
+                cancellationToken.WaitHandle.WaitOne(HangGuard);
                 cancellationToken.ThrowIfCancellationRequested();
             }
 

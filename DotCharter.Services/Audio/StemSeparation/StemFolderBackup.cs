@@ -5,8 +5,8 @@ namespace DotCharter.Services.Audio.StemSeparation;
 ///     WAVs. Stems the user keeps are MOVED into <c>.backup</c> so the separator
 ///     cannot clobber them; after a cancel or a failure they go back as they were,
 ///     and after a successful run they replace whatever the model produced under
-///     the same name. The moved files are the LAST copy, so every step logs
-///     instead of throwing and leaves the file where it can be found.
+///     the same name. A staging failure restores earlier moves and aborts the
+///     replacement. Recovery failures log where the last copy can still be found.
 /// </summary>
 public sealed class StemFolderBackup
 {
@@ -62,7 +62,7 @@ public sealed class StemFolderBackup
             Directory.CreateDirectory(_backupDir);
             foreach (var name in names)
             {
-                if (!Existing.TryGetValue(name, out var src) || !File.Exists(src))
+                if (!Existing.TryGetValue(name, out var src))
                 {
                     continue;
                 }
@@ -78,13 +78,16 @@ public sealed class StemFolderBackup
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warning(AppLogCategory.Audio, $"Could not back up stem '{name}': {ex.Message}");
+                    _logger.Warning(AppLogCategory.Audio, $"Could not back up stem '{name}'", ex);
+                    throw;
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.Warning(AppLogCategory.Audio, $"Stem backup pre-staging failed: {ex.Message}");
+            _logger.Warning(AppLogCategory.Audio, "Stem backup pre-staging failed", ex);
+            Restore();
+            throw;
         }
     }
 
@@ -142,7 +145,7 @@ public sealed class StemFolderBackup
                 catch (Exception ex)
                 {
                     _logger.Warning(AppLogCategory.Audio,
-                        $"Could not drop the regenerated stem '{name}' before restoring the kept one: {ex.Message}");
+                        $"Could not drop the regenerated stem '{name}' before restoring the kept one", ex);
                 }
 
                 finalStems.RemoveAll(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -156,7 +159,7 @@ public sealed class StemFolderBackup
             }
             catch (Exception ex)
             {
-                _logger.Warning(AppLogCategory.Audio, $"Could not restore kept stem '{name}': {ex.Message}");
+                _logger.Warning(AppLogCategory.Audio, $"Could not restore kept stem '{name}'", ex);
             }
         }
 

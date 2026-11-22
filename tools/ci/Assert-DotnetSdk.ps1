@@ -10,12 +10,12 @@
     the newest runtime pack), but a hosted image that resolved an older one would
     ship an older runtime silently. The workflow calls this right after
     setup-dotnet so the floor is a failing step, not a hope. The floor is the
-    SDK/runtime pair the v0.71.0 release was built with.
+    SDK/runtime pair the v1.4.0 release is built with (10.0.14 closes GHSA-p3jp-9v83-76w9).
 #>
 [CmdletBinding()]
 param(
-    [version]$MinimumSdk = '10.0.402',
-    [version]$MinimumRuntime = '10.0.13'
+    [version]$MinimumSdk = '10.0.403',
+    [version]$MinimumRuntime = '10.0.15'
 )
 
 $ErrorActionPreference = 'Stop'

@@ -25,8 +25,9 @@ as-is so the text is byte-identical to what it replaced.
       `.axaml` under `Views/` whose root is not a `ResourceDictionary`/`Styles`
       is either swept or in `UiSweepCatalog.Exclusions` **with a reason**
       (`EveryExclusion_carriesAReason` enforces the reason). Two exclusions
-      today: `Preview3DView` (initializes a real Vulkan device) and `MainWindow`
-      (it owns the host window and the prewarm pipeline).
+      today: `Preview3DView` (initializes a real Vulkan device; its practice
+      strip is its own `Preview3DPracticeStripView` since #591 and IS swept) and
+      `MainWindow` (it owns the host window and the prewarm pipeline).
     - **It realizes the HIDDEN subtrees too, or it grades ~5% of Play Mode.**
       `PlayModeView` is 8,900 lines over sixteen named `*ScreenRoot`s behind 280
       `IsVisible` gates, and Avalonia skips `MeasureCore` for an invisible
@@ -49,7 +50,7 @@ as-is so the text is byte-identical to what it replaced.
       control is attributed to the OUTERMOST root that can see it, so a nested
       gated pane is not reported twice.
     - **A view that inherits its style grammar is GIVEN it.** Six of the seven
-      inspector tabs and `ChordTemplateEditorView` carry no `StyleInclude`:
+      inspector tabs and `SoundLibraryTemplateView` carry no `StyleInclude`:
       `InspectorView` includes `InspectorStyles.axaml` once for all of them.
       Swept alone they matched no selector and every size reported for them was
       of an unstyled tree — `NotesInspectorView` measured 723x135 bare against
@@ -127,6 +128,9 @@ as-is so the text is byte-identical to what it replaced.
       overlay. That one line took the sweep from 11k laid-out visuals to 21k.
       The VMs are DI singletons, so `IsOpen` is put back afterwards or one open
       dialog shows through every later capture.
+    - **A surface that needs a SELECTION is staged** (`Perf/UiSweepStages`): the Shape page
+      (`SoundShapeView`) is swept with a chord of the fixture selected, so the
+      accessibility audit walks its controls; the stage clears the selection after.
     - **A surface whose content is a LIST is seeded too, and until v0.44 it was
       not.** An `ItemsControl` with no items instantiates NO `ItemTemplate`, so
       the markup where a list surface keeps almost all of its layout was never

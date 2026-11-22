@@ -1,5 +1,12 @@
 # `Audio/Dsp/` — the in-house tone rig (deep reference)
 
+The rig translates parameter captions and ordinary value labels through `DspParamText`
+(`DspLabel_*` resources), retaining the native ids and values. Captions, model-picker
+choices and looper transport actions refresh in place on language changes. Gear model
+names and numeric/unit labels retain their native spelling. `RsToneSummaryBuilder`
+builds playback/preview badge summaries; prepare generations and publication share the
+coordinator's prepare gate, so an older conversion cannot replace the newest summary.
+
 Extracted verbatim from `DotCharter.Services/AGENTS.md` so it stops riding in every agent's auto-loaded context. **Read this before adding a DSP module, a param, a branch tag or a tone preset** — string-param marshalling, branch tags, enum labels, the RS in-game-tone conversion and the loudness contract all have traps.
 
 See also: [docs/tone-preset-authoring.md](../../tone-preset-authoring.md)
@@ -109,7 +116,19 @@ BOTH `RemoveNode` and `MoveNode` go through it. `DcRigApplier` is a minimal-diff
 planner, so an eight-module preset swap is on the order of sixteen of those:
 hundreds of milliseconds against the 150 ms switch budget, driven straight from a
 tone-card click. `Audio/Dsp/Presets/ToneApplyQueue` is the seam — one worker per
-seat, last-writer-wins, completion posted back — and `PedalboardViewModel` is
+seat, last-writer-wins, completion posted back. Completion versions are checked
+when the UI drains them, independently of the originating profile generation:
+only the latest request in the current profile may settle. A superseded apply cannot capture another tone's bypass
+flags or refresh the board. A thrown apply also posts a settlement with
+`FailedOps > 0`, so the final chain is synced and master bypass reasserted.
+The browser routes failures to `OnPresetApplyFailed`, which clears the deferred
+scene before `Sync`, preserving its intended
+bypass restore set; only success calls `OnPresetApplied` to adopt a new preset's
+bypass pattern, compare baseline and deferred scene. Success forgets the old
+comparison trim before capturing the incoming chain's comparison baseline.
+Deferred scenes carry the browser's apply generation: a newer request cannot
+inherit a scene from a superseded completion, even when that callback is dropped.
+`PedalboardViewModel` is
 what hands the browser a real `Task.Run` plus the dispatcher (an inline
 scheduler is precisely the old behaviour, so that wiring is linted by
 `Services/Audio/Dsp/ToneApplyQueueTests`).
@@ -174,8 +193,11 @@ at the end of this file, and in `JuceSharp/AGENTS.md`.
   metadata gains `DspModuleType.StringParams` (`DspStringParamInfo`: id /
   displayName / `FileFilter` — a `;`-separated picker wildcard list, empty = free
   text / no picker), read once from `dca_dsp_module_string_param_count/_info`.
-  Params: `namamp` `modelPath` (`*.nam;*.aidax`), `cab` / `acousticsim` `irPath`
-  (`*.wav`), `miku` `phrases` (free text). Marshalling belongs to the JuceSharp
+  Params: `namamp` `modelPath` (`*.nam;*.aidax`), `cab` / `acousticsim` `irPath`,
+  `cab` `irPathB`, convolution-reverb `irFile` (`*.wav`), `miku` `phrases`
+  (free text). `DcRigPresetPreparation` rewrites all four file keys for portable
+  save/export, resolves them on apply, and reports paths outside the library.
+  Marshalling belongs to the JuceSharp
   wrapper — `JuceDspNode.GetString`/`SetString`, which own the size-then-copy
   dance (null buffer / capacity 0 to size, returns the full UTF-8 byte length
   excluding the NUL, `-1` = unknown node/param; the copy is always
@@ -891,9 +913,32 @@ at the end of this file, and in `JuceSharp/AGENTS.md`.
     `AppConfig.UserTonePresets` (JSON `UserTonePresetDto` via
     `UserTonePresetStore`, same shape as `MatchPatternStore`). Factory presets
     are immutable (`DspToneOrigin.BuiltIn`, never overwritten/deleted);
-    everything is throw-free (bad store read ⇒ empty user list).
+    everything is throw-free (bad store read ⇒ empty user list). The store
+    writes through `IRigConfigService.UpdateRigConfigAndWrite`, so `Upsert`
+    returns null when the preset did not reach the disk. `SaveUser(…, out written)`
+    then hands back the session-only preset with `written == false`, and every
+    `PresetBrowserViewModel` save names it on the tone-file status line
+    (`Rig_ToneSaveFailed`). The write is synchronous, as the rig store's is
+    (`appconfig.json` / `riglab.json`, bounded by the writer's 3 s flush timeout).
 
 ---
+
+## Rig read authority and pending publication
+
+`ProfileToneRigStore.ReadRig` distinguishes an authoritative seat from an unreadable
+fallback, and a published rig from a pending edit. A fallback or partially applied
+saved rig cannot be persisted. Recovery restores the saved seat before accepting
+edits; every write checks the board's profile generation inside the store gate.
+Concurrent snapshots have publication generations so an older flush cannot undo
+a newer one. No gate spans an await.
+
+Failed primary writes retain their complete per-profile snapshot and write an
+atomic `.pending` sidecar. Later polls and shutdown promote pending snapshots even
+after a profile switch. Revisioned primary/journal reads select the newest valid
+copy; a leftover older journal cannot roll back a successfully published rig.
+Malformed maps/DTOs are quarantined, unreadable copies suspend writes. If both
+durable destinations reject writes, failure is returned and logged, never marked
+persisted; memory cannot guarantee durability through forced process termination.
 
 ## Attaching the rig to an engine (moved here from `DotCharter.Services/AGENTS.md`)
 
@@ -1023,9 +1068,10 @@ at the end of this file, and in `JuceSharp/AGENTS.md`.
   push is the reseat) and re-persists it; a roster merely ARRIVING must not.
   Rules in [../ui/pedalboard.md](../ui/pedalboard.md); pinned by
   `UI/VstChainSeatPickerTests` against the engine push and the persisted config.
-  **(g) the out-of-process VST sandbox bridge remains SEAT 0 only** — the shared
-  mapping carries one stereo stream per block, so a second seat needs a second
-  child process. Seat 2's in-process rig is unaffected.
+  **(g) the out-of-process VST sandbox serves every seat (bridge v4, #646)** —
+  one child, one mapping: each block every seat whose chain holds a sandboxed
+  plugin round-trips its OWN input with its seat number, and the child runs only
+  that seat's slots. Seat 0's trip alone carries MIDI and the instrument.
   **The DROP-TUNE pedal was the second half of this bullet until ABI v31 and is
   not any more.** It was one CSVD engine applied to the raw input ABOVE the
   per-player split, which made it unusable on a couch: dropping one guitar
@@ -1059,6 +1105,30 @@ people sharing a machine overwrote each other's pedals and knob positions.
   Living inside the `profiles` tree means the existing directory rules already
   EXCLUDE it from LAN update packages and INCLUDE it in whole-install backups —
   no allow-list change — and deleting a profile takes its rigs with it.
+- **A save is acknowledged only after publication.** `SetRig` returns success.
+  `RigPersistenceAuthority` owns the finite signature/live/pending/read-authority
+  decisions used by `ToneSessionService`. Failed publication invalidates the
+  signature certificate: publishing pending B must not make a live return to A
+  appear already saved. The signature includes sidechain routing. Unreadable
+  stores retry reads without overwriting them; an authoritative rig with failed
+  apply operations protects the full saved rig from edits to its partial chain.
+- **An explicit successful preset replacement establishes live authority.**
+  `DspTonePresetService.PresetApplied` carries seat and profile generation, including
+  an identical successful preset on an attached engine. Sessions ignore their own
+  restores, displaced song boards, other seats and stale generations. A replacement
+  after incomplete restore is saved with the full original in the same atomic
+  `tone-rig.json` revision (and `.pending` journal), in `RecoveryRigs[seat]`.
+  `GetRecoveryRig` returns a defensive copy for recovery; ordinary later saves
+  preserve that copy. A generic partial-chain edit or failed preset apply cannot
+  claim authority. Readable corrupt JSON is moved aside before replacement.
+  `RigPersistenceAuthorityTests` contains all 36 state partitions by all 15 events,
+  with literal next states/actions and a Cartesian coverage check;
+  `ToneSessionServiceTests` covers publication recovery and supported replacement.
+- **Queued presets belong to a profile generation.** The preset service receives
+  the same rig store as the sessions. `ToneApplyQueue` captures its monotonic
+  generation with each request; the applier checks it under the same per-seat
+  gate as profile restoration, and obsolete completions are discarded too. Switching away and back
+  does not resurrect old work (`ToneApplyQueueTests`).
 - **The store PINS its scope; it does not resolve the active profile per access,
   and that is load-bearing.** `IPlayerProfileService.ActiveProfileChanged` is
   raised AFTER the switch, and the rig is persisted by a 5 s POLL (a knob turn
@@ -1127,6 +1197,9 @@ success. `Editor` edits a selected node's assignments; MIDI learn consumes the
 first CC without moving a parameter. `LearningStarted` lets the UI MIDI bridge
 discard messages queued before arming. The bank accepts zero-based channels and
 7-bit CC/value integers on the UI thread and owns no MIDI device or audio pump.
+Accepted assignment saves, removals, clear-MIDI and learn notify the board's
+history after the chain mutation. Sidechain-source edits also record history;
+sync mirrors the restored source onto reused cards without writing it again.
 `RigControlAssignmentTests` and the control-assignment case in
 `JuceDspChainServiceTests` cover persistence, clearing, writes, learning, seat
 isolation, rebuild and defensive copies.

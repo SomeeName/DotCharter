@@ -5,11 +5,16 @@
 #                              yt-dlp: its pinned SHA-256). New-Release.ps1 still
 #                              runs every version / inventory / hash check on what
 #                              it copies out; a cache entry is never trusted unchecked.
-#   gate-results/<tree>.json   a GREEN full gate and/or headless run, recorded per git
+#   gate-results/<tree>.json   a GREEN full gate, headless run, localized headless layout
+#                              sweep (per culture) and/or release lane, recorded per git
 #                              TREE id (Save-GateRecord: Merge-Train.ps1, the export's
-#                              -Gate, New-Release's headless gate). Find-GateRecord lets
-#                              the next run on an identical tree skip the identical test
-#                              run; the build still runs.
+#                              -Gate, New-Release's gates). Find-GateRecord lets the next
+#                              run on an identical tree skip the identical test run.
+#
+# A record is the verdict of the last COMPLETED run of that lane for that tree,
+# configuration and lane inputs. A run killed/crashed before grading has no verdict:
+# it cannot record green and does not erase another completed verdict. A completed
+# red run erases the record.
 #
 # Root: $env:DOTCHARTER_RELEASE_CACHE, else %LOCALAPPDATA%\DotCharter-release-cache.
 # Windows PowerShell 5.1 compatible: tools/agent/Merge-Train.ps1 imports it.
@@ -110,46 +115,182 @@ function Read-GateRecord([string]$Path) {
     try { return ([System.IO.File]::ReadAllText($Path) | ConvertFrom-Json) } catch { return $null }
 }
 
+# All evidence transactions share ONE store lock, including reads across aliases.
+# A persistent lock file avoids delete/recreate races; the exclusive handle is
+# always disposed by the transaction's finally. Contention is bounded, not a hang.
+function Enter-GateRecordLock([int]$TimeoutMilliseconds) {
+    $root = Get-ReleaseCacheRoot
+    [void][IO.Directory]::CreateDirectory($root)
+    $path = Join-Path $root '.gate-records.lock'
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    while ($true) {
+        try { return [IO.File]::Open($path, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None) }
+        catch [IO.IOException] {
+            if ($clock.ElapsedMilliseconds -ge $TimeoutMilliseconds) { throw "Timed out waiting for the record store lock ($path; deadline $TimeoutMilliseconds ms)." }
+            [Threading.Thread]::Sleep([Math]::Min(25, [Math]::Max(1, $TimeoutMilliseconds - [int]$clock.ElapsedMilliseconds)))
+        }
+    }
+}
+
+# Private: caller holds the store lock from BEFORE reading until AFTER replacement.
+function Write-GateRecord([string]$Path, $Record) {
+    New-Item -ItemType Directory -Force -Path (Split-Path $Path -Parent) | Out-Null
+    $partial = "$Path.partial-" + [guid]::NewGuid().ToString('N')
+    [System.IO.File]::WriteAllText($partial, ($Record | ConvertTo-Json -Depth 4), (New-Object System.Text.UTF8Encoding($false)))
+    Move-Item -LiteralPath $partial -Destination $Path -Force
+}
+
 # Records that a GREEN run of -Gate (the default gate), -ReleaseLane (the slow classes of
-# tools/ci/release-lane.json) and/or -Headless (the headless UI suite) finished on $Tree. Merged into an existing record: a later save never erases
-# an earlier kind.
+# tools/ci/release-lane.json), -Headless (the headless UI suite) and/or the localized
+# layout sweep in each of -HeadlessCultures finished on $Tree. Merged into an existing
+# record: only accepted green lanes are saved, after Start-GateRecordRun revokes
+# the planned lanes. Cultures are a union only for the same configuration/inputs.
+# Configuration and InputKey identify a train lane's inputs (#614); legacy callers
+# leave them empty. A train never reuses those unqualified legacy entries.
 function Save-GateRecord {
     param(
         [Parameter(Mandatory)][string]$Tree,
         [string]$Commit,
+        [string]$Configuration,
+        [string]$InputKey,
         [switch]$Gate,
         [switch]$Headless,
         [switch]$ReleaseLane,
-        [Parameter(Mandatory)][string]$Source
+        [string[]]$HeadlessCultures = @(),
+        [Parameter(Mandatory)][string]$Source,
+        [ValidateRange(0, 60000)][int]$LockTimeoutMilliseconds = 10000
     )
-    if (-not $Gate -and -not $Headless -and -not $ReleaseLane) { throw 'Save-GateRecord needs -Gate, -Headless and/or -ReleaseLane.' }
-    $path = Get-GateRecordPath -Tree $Tree
-    $old = Read-GateRecord $path
-    $record = [ordered]@{ tree = $Tree; gate = $null; headless = $null; releaseLane = $null }
-    if ($old -and $old.tree -eq $Tree) { $record.gate = $old.gate; $record.headless = $old.headless; $record.releaseLane = $old.releaseLane }
-    $entry = [ordered]@{ commit = $Commit; source = $Source; at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
-    if ($Gate) { $record.gate = $entry }
-    if ($Headless) { $record.headless = $entry }
-    if ($ReleaseLane) { $record.releaseLane = $entry }
-    New-Item -ItemType Directory -Force -Path (Split-Path $path -Parent) | Out-Null
-    $partial = "$path.partial-" + [guid]::NewGuid().ToString('N')
-    [System.IO.File]::WriteAllText($partial, ($record | ConvertTo-Json -Depth 4), (New-Object System.Text.UTF8Encoding($false)))
-    Move-Item -LiteralPath $partial -Destination $path -Force
-    return $path
+    $cultures = @($HeadlessCultures | Where-Object { $_ })
+    if (-not $Gate -and -not $Headless -and -not $ReleaseLane -and $cultures.Count -eq 0) {
+        throw 'Save-GateRecord needs -Gate, -Headless, -ReleaseLane and/or -HeadlessCultures.'
+    }
+    $handle = Enter-GateRecordLock $LockTimeoutMilliseconds
+    try {
+        $path = Get-GateRecordPath -Tree $Tree
+        $old = Read-GateRecord $path
+        $record = [ordered]@{ tree = $Tree; gate = $null; headless = $null; releaseLane = $null; headlessCultures = $null }
+        if ($old -and $old.tree -eq $Tree) {
+            $record.gate = $old.gate; $record.headless = $old.headless; $record.releaseLane = $old.releaseLane
+            if ($old.PSObject.Properties['headlessCultures']) { $record.headlessCultures = $old.headlessCultures }
+        }
+        $entry = [ordered]@{ configuration = $Configuration; inputKey = $InputKey; commit = $Commit; source = $Source; at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+        if ($Gate) { $record.gate = $entry }
+        if ($Headless) { $record.headless = $entry }
+        if ($ReleaseLane) { $record.releaseLane = $entry }
+        if ($cultures.Count -gt 0) {
+            $known = @()
+            if ($record.headlessCultures -and $record.headlessCultures.configuration -eq $Configuration -and
+                $record.headlessCultures.inputKey -eq $InputKey -and $record.headlessCultures.cultures) { $known = @($record.headlessCultures.cultures) }
+            [string[]]$union = @(@($known) + $cultures | Sort-Object -Unique)
+            $record.headlessCultures = [ordered]@{ cultures = $union; configuration = $Configuration; inputKey = $InputKey; commit = $Commit; source = $Source; at = $entry.at }
+        }
+        Write-GateRecord $path $record
+        return $path
+    }
+    finally { $handle.Dispose() }
 }
 
-# The first of $Trees with a green $Kind ('gate', 'headless' or 'releaseLane') on record, as
-# { Tree, Commit, Source, At }; $null when none has one.
-function Find-GateRecord {
-    param([Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Trees, [Parameter(Mandatory)][ValidateSet('gate', 'headless', 'releaseLane')][string]$Kind)
+# Private lookup: the caller holds the record-store lock.
+function Find-GateRecordEntry {
+    param([string[]]$Trees, [string]$Kind, [string[]]$Cultures, [string]$Configuration, [string]$InputKey)
+    if ($Kind -eq 'headlessCultures' -and @($Cultures | Where-Object { $_ }).Count -eq 0) { throw 'Revalidating headlessCultures requires the complete requested culture list.' }
     foreach ($tree in $Trees) {
         if (-not $tree) { continue }
         $record = Read-GateRecord (Get-GateRecordPath -Tree $tree)
-        if (-not $record -or $record.tree -ne $tree) { continue }
+        if (-not $record -or $record.tree -ne $tree -or -not $record.PSObject.Properties[$Kind]) { continue }
         $entry = $record.$Kind
-        if ($entry) { return [pscustomobject]@{ Tree = $tree; Commit = $entry.commit; Source = $entry.source; At = $entry.at } }
+        if ($Configuration -and $entry.configuration -ne $Configuration) { continue }
+        if ($InputKey -and $entry.inputKey -ne $InputKey) { continue }
+        if ($entry -and $Kind -eq 'headlessCultures') {
+            $have = @($entry.cultures)
+            if (@($Cultures | Where-Object { $_ -and $have -notcontains $_ }).Count -gt 0) { continue }
+        }
+        if ($entry) { return [pscustomobject]@{ Tree = $tree; Commit = $entry.commit; Source = $entry.source; At = $entry.at; Configuration = $entry.configuration; InputKey = $entry.inputKey } }
     }
     return $null
+}
+
+# The first of $Trees with a green $Kind ('gate', 'headless', 'releaseLane' or
+# 'headlessCultures') on record, as { Tree, Commit, Source, At, Configuration, InputKey };
+# $null when none has one.
+# 'headlessCultures' is a hit only when EVERY one of -Cultures is on record for that tree.
+function Find-GateRecord {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Trees,
+        [Parameter(Mandatory)][ValidateSet('gate', 'headless', 'releaseLane', 'headlessCultures')][string]$Kind,
+        [string[]]$Cultures = @(), [string]$Configuration, [string]$InputKey,
+        [ValidateRange(0, 60000)][int]$LockTimeoutMilliseconds = 10000)
+    if ($Kind -eq 'headlessCultures' -and @($Cultures | Where-Object { $_ }).Count -eq 0) { throw "Find-GateRecord -Kind headlessCultures needs -Cultures." }
+    if (@($Trees | Where-Object { $_ }).Count -eq 0) { return $null }
+    $handle = Enter-GateRecordLock $LockTimeoutMilliseconds
+    try {
+        return Find-GateRecordEntry -Trees $Trees -Kind $Kind -Cultures $Cultures -Configuration $Configuration -InputKey $InputKey
+    }
+    finally { $handle.Dispose() }
+}
+
+# Check every reused kind in ONE locked snapshot, on the exact original tree.
+# A new completed green with matching inputs is valid; its timestamp/source need not match.
+function Get-LostGateRecordKinds {
+    param([System.Collections.IDictionary]$Records, [string[]]$Cultures = @(), [string]$Configuration, [string]$InputKey,
+        [ValidateRange(0, 60000)][int]$LockTimeoutMilliseconds = 10000)
+    if (-not $Records -or $Records.Count -eq 0) { return @() }
+    $handle = Enter-GateRecordLock $LockTimeoutMilliseconds
+    try {
+        foreach ($kind in @($Records.Keys | Sort-Object)) {
+            if ($kind -notin @('gate', 'headless', 'releaseLane', 'headlessCultures')) { throw "Unknown reused gate kind '$kind'." }
+            $record = $Records[$kind]
+            if (-not $record -or -not $record.Tree -or -not (Find-GateRecordEntry -Trees @($record.Tree) -Kind $kind -Cultures $Cultures -Configuration $Configuration -InputKey $InputKey)) { $kind }
+        }
+    }
+    finally { $handle.Dispose() }
+}
+
+function Assert-GateRecordsCurrent {
+    param([System.Collections.IDictionary]$Records, [string[]]$Cultures = @(), [string]$Configuration, [string]$InputKey)
+    $lost = @(Get-LostGateRecordKinds -Records $Records -Cultures $Cultures -Configuration $Configuration -InputKey $InputKey)
+    if ($lost.Count -gt 0) { throw "Reused $($lost -join ', ') evidence lost. Re-run will execute these lanes; no landing or publication is accepted." }
+}
+
+# Revoke every requested kind across its tree aliases under the store lock.
+function Start-GateRecordRun {
+    param([string[]]$Trees, [string[]]$Kinds, [string]$Configuration, [string]$InputKey,
+        [ValidateRange(0, 60000)][int]$LockTimeoutMilliseconds = 10000)
+    if (@($Trees | Where-Object { $_ }).Count -eq 0 -or @($Kinds).Count -eq 0) { return }
+    $handle = Enter-GateRecordLock $LockTimeoutMilliseconds
+    try {
+        foreach ($tree in @($Trees | Where-Object { $_ } | Select-Object -Unique)) {
+            $path = Get-GateRecordPath $tree
+            $record = Read-GateRecord $path
+            if (-not $record -or $record.tree -ne $tree) { continue }
+            $changed = $false
+            foreach ($kind in $Kinds) {
+                if ($kind -notin @('gate', 'headless', 'releaseLane', 'headlessCultures')) { throw "Unknown gate kind '$kind'." }
+                if (-not $record.PSObject.Properties[$kind] -or -not $record.$kind) { continue }
+                # Revoke older input hashes too; retain evidence for other configurations.
+                if ($Configuration -and $record.$kind.configuration -and $record.$kind.configuration -ne $Configuration) { continue }
+                $record.$kind = $null
+                $changed = $true
+            }
+            if ($changed) { Write-GateRecord $path $record }
+        }
+    }
+    finally { $handle.Dispose() }
+}
+
+# A graded red completion removes greens saved before that completion.
+# An attempt killed before grading does not call this completion operation.
+function Complete-GateRecordRun {
+    param([string[]]$Trees, [string[]]$Kinds, [string[]]$AcceptedKinds = @(), [string]$Configuration, [string]$InputKey,
+        [ValidateRange(0, 60000)][int]$LockTimeoutMilliseconds = 10000)
+    $failed = @($Kinds | Where-Object { $AcceptedKinds -notcontains $_ })
+    if ($failed.Count -gt 0) {
+        Start-GateRecordRun -Trees $Trees -Kinds $failed -Configuration $Configuration -InputKey $InputKey -LockTimeoutMilliseconds $LockTimeoutMilliseconds
+    }
+}
+
+function Get-GateRecordInputs {
+    param([string]$RepoRoot, [string]$Configuration = 'Debug')
+    return @{ Configuration = $Configuration; InputKey = (Get-PinKey -Root $RepoRoot -RelativePaths @('tools/ci/release-lane.json')) }
 }
 
 # HEAD's tree id when $Repo's working tree is exactly HEAD (no change, no untracked
@@ -242,4 +383,4 @@ function Format-GateRecord {
 
 Export-ModuleMember -Function Get-ReleaseCacheRoot, Get-PinKey, Get-FfmpegPinKey, Get-RedistCacheDir, Copy-RedistFromCache,
     Save-RedistToCache, Remove-RedistCacheEntry, Get-GateRecordPath, Save-GateRecord, Find-GateRecord, Get-CleanTreeId, Format-GateRecord,
-    Get-ExportOriginPath, Write-ExportOrigin, Read-ExportOrigin, Get-ReleaseLocalDir, Get-GateRecordTrees
+    Get-ExportOriginPath, Write-ExportOrigin, Read-ExportOrigin, Get-ReleaseLocalDir, Get-GateRecordTrees, Start-GateRecordRun, Complete-GateRecordRun, Get-GateRecordInputs, Get-LostGateRecordKinds, Assert-GateRecordsCurrent

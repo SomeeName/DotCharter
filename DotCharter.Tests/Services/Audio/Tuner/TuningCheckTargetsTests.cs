@@ -43,7 +43,7 @@ public sealed class TuningCheckTargetsTests
         Assert.Equal(new[] { 40, 45, 50, 55, 59, 64 },
             TuningCheckTargets.Build(standard).Select(t => t.Midi));
 
-        var dropD = new Arrangement { StringCount = 6, TuningType = "E_DROP_D" };
+        var dropD = new Arrangement { StringCount = 6, TuningType = "E_DROP_D", Tuning = [] };
         var targets = TuningCheckTargets.Build(dropD);
         Assert.Equal(38, targets[0].Midi);
         Assert.Equal(45, targets[1].Midi);

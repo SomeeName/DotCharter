@@ -94,6 +94,9 @@ public sealed class ExpectedSound
     /// Also what <see cref="LiveTechniqueTally" /> reads as "this sound is a
     /// bend": any value above 0.</summary>
     public int MaxBendSemis { get; init; }
+    /// <summary>Each pitched chord string's bend, aligned with MidiNotes. An unbent
+    /// string cannot borrow another string's range; MaxBendSemis remains the tally.</summary>
+    public int[] ChordBendSemis { get; init; } = [];
 
     /// <summary>Tremolo-picked. It does NOT change matching (the attack is an
     /// ordinary picked one) — it is carried so the technique report card can

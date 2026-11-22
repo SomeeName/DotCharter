@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using BeatMarker = DotCharter.Core.Domain.Events.BeatMarker;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
 using DotCharter.Services.Editing.Anchors;
@@ -12,10 +13,10 @@ using ProjectState = DotCharter.Services.State.ProjectState;
 
 namespace DotCharter.Services.Editing.Highway;
 
-public class HighwayEditingService : IHighwayEditingService
+public class HighwayEditingService : IHighwayEditingService, IDisposable
 {
     /// <summary>Neck ceiling, matching the model's 24-fret bound.</summary>
-    private const int MaxAnchorFret = 24;
+    private const int MaxAnchorFret = FretLimits.MaxAnchorFret;
 
     /// <summary>
     ///     Hand-span bounds for a nudge. 4 is Rocksmith's neutral span (the
@@ -53,29 +54,79 @@ public class HighwayEditingService : IHighwayEditingService
         _scope = scope;
         _targets = targets;
         _logger = logger;
+        _historyManager.HistoryChanged += ReconcileSelection;
+        _projectState.PropertyChanged += OnProjectChanged;
     }
 
     private Action? _linkNextUpdater;
+    private ChartLevel? _spacingLevel;
+    private IList<BeatMarker>? _spacingBeats;
 
     /// <summary>
-    ///     The whole-level spacing pass every collection action carries. ONE
-    ///     delegate per service — it reads the scope's level at invocation, so
-    ///     caching changes nothing semantically, and it lets a composite's
+    ///     The whole-level spacing pass every collection action carries. Cached
+    ///     for the edited level and beat grid, so history replay keeps its owner
+    ///     after focus moves, and a composite's
     ///     <see cref="DotCharter.Services.State.DeferredPostPassScope" /> dedupe
     ///     the six copies a drag-drop hands out into one pass per gesture.
     /// </summary>
     public Action GetLinkNextUpdater()
     {
-        return _linkNextUpdater ??= () =>
+        var level = _scope.Level;
+        var beats = _scope.Beats;
+        if (_linkNextUpdater != null && ReferenceEquals(_spacingLevel, level) && ReferenceEquals(_spacingBeats, beats))
+            return _linkNextUpdater;
+
+        _spacingLevel = level;
+        _spacingBeats = beats;
+        return _linkNextUpdater = () =>
         {
-            ChartSpacingEnforcer.EnforceLevel(_scope.Level, _scope.Beats, _configService.LoadAppConfig());
+            ChartSpacingEnforcer.EnforceLevel(level, beats, _configService.LoadAppConfig());
             _logger.Trace(AppLogCategory.Editing,
                 "Active level spacing/link-next enforcement completed after chart action.");
         };
     }
 
-    public Action GetLevelSpacingUpdater(ChartLevel level) =>
-        () => ChartSpacingEnforcer.EnforceLevel(level, _scope.Beats, _configService.LoadAppConfig());
+    public Action GetLevelSpacingUpdater(ChartLevel level)
+    {
+        var beats = _scope.Beats;
+        return () => ChartSpacingEnforcer.EnforceLevel(level, beats, _configService.LoadAppConfig());
+    }
+
+    public void Dispose()
+    {
+        _historyManager.HistoryChanged -= ReconcileSelection;
+        _projectState.PropertyChanged -= OnProjectChanged;
+        ClearSpacingCache();
+    }
+
+    private void OnProjectChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(ProjectState.ActiveProject)) ClearSpacingCache();
+    }
+
+    private void ClearSpacingCache()
+    {
+        _linkNextUpdater = null;
+        _spacingLevel = null;
+        _spacingBeats = null;
+    }
+
+    private void ReconcileSelection()
+    {
+        RetainLiveSelection(_selectionManager.SelectedNotes, _scope.Notes);
+        RetainLiveSelection(_selectionManager.SelectedChords, _scope.Chords);
+        RetainLiveSelection(_selectionManager.SelectedHandShapes, _scope.HandShapes);
+        RetainLiveSelection(_selectionManager.SelectedAnchors, _scope.Anchors);
+    }
+
+    private static void RetainLiveSelection<T>(ObservableCollection<T> selected, ObservableCollection<T> live)
+        where T : class
+    {
+        if (selected.Count == 0) return;
+        var present = new HashSet<T>(live, ReferenceEqualityComparer.Instance);
+        var retained = selected.Where(present.Contains).ToList();
+        if (retained.Count != selected.Count) SelectionBulkOps.ReplaceWith(selected, retained);
+    }
 
     public void HandleRightClickChord(Chord hitChord, int stringIndex)
     {
@@ -185,7 +236,7 @@ public class HighwayEditingService : IHighwayEditingService
         List<FretAnchor> targetAnchors, List<FretAnchor> newAnchors,
         IEnumerable<IChartAction>? additionalActions = null,
         IReadOnlyDictionary<int, ChordTemplate>? incomingTemplates = null,
-        IEnumerable<ChordTemplate>? mintedTemplates = null)
+        IEnumerable<ChordTemplate>? mintedTemplates = null, bool preserveUnpastedSounds = false)
     {
         var change = new HighwayDragDropChange(
             targetNotes, newNotes,
@@ -204,7 +255,8 @@ public class HighwayEditingService : IHighwayEditingService
             incomingTemplates,
             mintedTemplates)
         {
-            SyncedHandShapes = SyncedHandShapes()
+            SyncedHandShapes = SyncedHandShapes(),
+            PreserveUnpastedSounds = preserveUnpastedSounds
         };
 
         if (!ExecuteHighwayCommand(command))
@@ -274,7 +326,8 @@ public class HighwayEditingService : IHighwayEditingService
             _projectState.StringEditMask,
             GetLinkNextUpdater())
         {
-            SyncedHandShapes = SyncedHandShapes()
+            SyncedHandShapes = SyncedHandShapes(),
+            AnchorSelection = _selectionManager.SelectedAnchors
         };
     }
 
@@ -296,7 +349,46 @@ public class HighwayEditingService : IHighwayEditingService
             $"moved {(delta > 0 ? "one string up" : "one string down")} at the same pitch (maxStrings={maxStrings})");
     }
 
+    public void MoveSelectedFretsWhole(int delta) =>
+        RunMutation(t => SelectedNoteMutationCommands.MoveFretWhole(t, delta), $"moved {delta} fret(s) whole");
+
     public void MoveSelectedFretUp() => RunMutation(SelectedNoteMutationCommands.MoveFretUp, "fret +1");
+
+    public bool HasTechniqueTarget => !_targets.Resolve().HasNoSounds;
+
+    public bool HasTimeMovableSelection =>
+        _selectionManager.SelectedNotes.Count + _selectionManager.SelectedChords.Count
+        + _selectionManager.SelectedHandShapes.Count + _selectionManager.SelectedAnchors.Count > 0;
+
+    public TimeMoveResult MoveSelectedInTime(int direction, int milliseconds, int gridDivisor)
+    {
+        if (direction == 0 || !HasTimeMovableSelection)
+            return new TimeMoveResult(TimeMoveOutcome.NothingSelected, 0, 0);
+
+        var sign = Math.Sign(direction);
+        Func<IReadOnlyList<FractionalPosition>, TimeShiftPlan> planShift = milliseconds > 0
+            ? starts => TimeShift.PlanMilliseconds(starts, sign * milliseconds, _scope.Beats)
+            : starts => TimeShift.Plan(starts, p => TimeShift.ByGridSteps(p, sign, gridDivisor));
+        var command = new MoveSelectedInTimeCommand(
+            new MoveSelectedInTimeCommand.Scope(
+                _scope.Notes, _scope.Chords, _scope.HandShapes, _scope.Anchors,
+                _selectionManager.SelectedNotes.ToList(), _selectionManager.SelectedChords.ToList(),
+                _selectionManager.SelectedHandShapes.ToList(), _selectionManager.SelectedAnchors.ToList(),
+                _scope.Beats),
+            planShift,
+            GetLinkNextUpdater());
+        if (ExecuteHighwayCommand(command))
+        {
+            _logger.Info(AppLogCategory.Editing,
+                $"Moved {command.Result.ItemCount} item(s) in time by {command.Result.DeltaMs:+0.##;-0.##} ms ({command.Result.Outcome}).");
+        }
+        else
+        {
+            _logger.Info(AppLogCategory.Editing, $"Time nudge refused: {command.Result.Outcome}.");
+        }
+
+        return command.Result;
+    }
 
     public void MoveSelectedFretDown() => RunMutation(SelectedNoteMutationCommands.MoveFretDown, "fret -1");
 
@@ -320,6 +412,14 @@ public class HighwayEditingService : IHighwayEditingService
     public void ToggleSelectedVibrato() => RunTechniqueMutation(SelectedNoteMutationCommands.ToggleVibrato, "toggled vibrato");
 
     public void ToggleSelectedTremolo() => RunTechniqueMutation(SelectedNoteMutationCommands.ToggleTremolo, "toggled tremolo");
+
+    public void PickSlide()
+    {
+        var command = new PickSlideCommand(_scope, _targets.Resolve(), _selectionManager,
+            _projectState.StringEditMask, _targets.PenPosition, GetPreviewFret(),
+            _configService.LoadAppConfig(), GetLinkNextUpdater());
+        ExecuteHighwayCommand(command);
+    }
 
     public void ToggleSelectedPicking() => RunTechniqueMutation(SelectedNoteMutationCommands.TogglePicking, "toggled bass picking");
 
@@ -403,7 +503,7 @@ public class HighwayEditingService : IHighwayEditingService
         // FretAnchorGenerationService.MinAnchorFret: the capo spinner goes to
         // 24, and an unclamped floor of 25 inverts the Math.Clamp below —
         // which THROWS ArgumentException on the UI thread.
-        var minFret = Math.Clamp(capo + 1, 1, MaxAnchorFret);
+        var minFret = FretLimits.MinAnchorFret(capo);
 
         var targets = new List<FretAnchor>();
         var oldStates = new List<FretAnchor>();
@@ -444,6 +544,18 @@ public class HighwayEditingService : IHighwayEditingService
         return true;
     }
 
+    public IReadOnlyList<SustainStepOutcome> PreviewSelectedNotesSustain(int deltaGridSteps, double totalAudioLengthMs,
+        int gridDivisor, IList<BeatMarker> beats)
+    {
+        var target = _targets.Resolve();
+        return SustainCommand(target.Notes, target.Chords, deltaGridSteps, totalAudioLengthMs, gridDivisor, beats).Preview();
+    }
+
+    private AdjustSelectedSustainsCommand SustainCommand(IReadOnlyList<GuitarNote> notes, IReadOnlyList<Chord> chords,
+        int deltaGridSteps, double totalAudioLengthMs, int gridDivisor, IList<BeatMarker> beats) =>
+        new(_scope.Notes, _scope.Chords, notes, chords, new FractionalPosition(new Fraction(deltaGridSteps, gridDivisor)),
+            totalAudioLengthMs, beats, _configService.LoadAppConfig(), GetLinkNextUpdater());
+
     public bool AdjustSelectedNotesSustain(int deltaGridSteps, double totalAudioLengthMs, int gridDivisor,
         IList<BeatMarker> beats)
     {
@@ -454,16 +566,7 @@ public class HighwayEditingService : IHighwayEditingService
         var selectedChords = target.Chords;
         if (selectedNotes.Count == 0 && selectedChords.Count == 0) return false;
 
-        var command = new AdjustSelectedSustainsCommand(
-            _scope.Notes,
-            _scope.Chords,
-            selectedNotes,
-            selectedChords,
-            new FractionalPosition(new Fraction(deltaGridSteps, gridDivisor)),
-            totalAudioLengthMs,
-            beats,
-            _configService.LoadAppConfig(),
-            GetLinkNextUpdater());
+        var command = SustainCommand(selectedNotes, selectedChords, deltaGridSteps, totalAudioLengthMs, gridDivisor, beats);
 
         if (!ExecuteHighwayCommand(command)) return false;
 
@@ -547,7 +650,8 @@ public class HighwayEditingService : IHighwayEditingService
         return true;
     }
 
-    private int GetPreviewFret() => _projectState.PreviewNoteFret;
+    private int GetPreviewFret() => SoundingPitch.SnapToNeck(_projectState.PreviewNoteFret,
+        Math.Max(0, _scope.Arrangement?.Capo ?? 0));
 
     private bool ExecuteHighwayCommand(IHighwayEditCommand command) => command.Execute(_historyManager);
 

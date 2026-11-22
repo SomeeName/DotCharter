@@ -135,7 +135,7 @@ public sealed class FontAtlasProjectSwitchTests
     /// </summary>
     [Theory]
     [InlineData("DotCharter.UI/Controls/ChartRenderer.cs", "ResetToSeedCharacters")]
-    [InlineData("DotCharter.UI/Controls/Preview3DRenderDriver.cs", "ResetTextRegistrations")]
+    [InlineData("DotCharter.UI/Controls/Preview3DRenderDriver.cs", "Interlocked.Exchange(ref _resetTextRegistrations, 1)")]
     public void TheProjectSwitchHook_IsWiredInBothRenderers(string relativePath, string call)
     {
         // The 3D driver is a source SET since #656 (Preview3DRenderDriverSource);

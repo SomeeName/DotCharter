@@ -18,6 +18,83 @@ namespace DotCharter.Tests.Services.Editing.Maintenance;
 /// </summary>
 public sealed class ArrangementDeletionUndoTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UndoImportAfterDeletion_RestoresTheCleanBaselineWithoutDuplicates(bool vocals)
+    {
+        var h = new ChartPowerToolsTests.Harness();
+        var project = h.State.ActiveProject!;
+        var arrangement = new Arrangement { Name = "Imported" };
+        arrangement.Levels.Add(new ChartLevel());
+        var vocalTrack = new VocalTrack { Name = "Imported vocals" };
+        var phrase = new LyricPhrase();
+        phrase.Lyrics.Add(new LyricEvent { Text = "word" });
+        vocalTrack.Phrases.Add(phrase);
+        var plan = new DotCharter.Services.Parsing.Xml.RsXmlImportPlan
+        {
+            Kind = vocals ? DotCharter.Services.Parsing.Xml.RsXmlImportKind.Vocals : DotCharter.Services.Parsing.Xml.RsXmlImportKind.Song,
+            Arrangement = vocals ? null : arrangement,
+            VocalTrack = vocals ? vocalTrack : null
+        };
+        using var dirty = new ProjectDirtyTracker(h.History);
+        h.History.Do(new DotCharter.Services.Parsing.Xml.ImportRsXmlAction(project, plan, () => { }));
+        if (vocals)
+        {
+            h.Editor.ActiveVocalTrack = vocalTrack;
+            h.Maintenance.DeleteActiveVocalTrack();
+        }
+        else
+        {
+            h.State.ActiveArrangement = arrangement;
+            h.State.ActiveLevel = arrangement.Levels[0];
+            h.Maintenance.DeleteActiveArrangement();
+        }
+
+        h.History.Undo();
+        if (vocals) Assert.Same(vocalTrack, Assert.Single(project.VocalTracks));
+        else Assert.Same(arrangement, project.Arrangements[1]);
+        h.History.Undo();
+        Assert.False(dirty.IsDirty);
+        Assert.Single(project.Arrangements);
+        Assert.Empty(project.VocalTracks);
+        h.History.Redo();
+        if (vocals) Assert.Same(vocalTrack, Assert.Single(project.VocalTracks));
+        else Assert.Same(arrangement, project.Arrangements[1]);
+        Assert.Equal(vocals ? 1 : 2, project.Arrangements.Count);
+    }
+
+    [Fact]
+    public void SpacingUndoAfterDeletion_RestoresTheSustainAndNestedBendOwners()
+    {
+        var h = Populated();
+        var project = h.State.ActiveProject!;
+        var arrangement = project.Arrangements[1];
+        var level = arrangement.Levels[0];
+        var note = level.Notes[0];
+        note.Sustain = new FractionalPosition(1);
+        var bend = new BendValue { Position = new FractionalPosition(0, new Fraction(3, 4)), Step = 1 };
+        var endBend = new BendValue { Position = new FractionalPosition(1), Step = 2 };
+        note.BendValues.Add(bend);
+        note.BendValues.Add(endBend);
+        h.State.ActiveArrangement = arrangement;
+        h.State.ActiveLevel = level;
+        var config = new AppConfig { MinNoteDistanceMode = MinNoteDistanceMode.Milliseconds, MinNoteDistanceMs = 250 };
+        h.History.Do(DotCharter.Services.Editing.Collisions.ProjectSpacingEdit.Plan(project, config, () => { }));
+        Assert.Equal(new FractionalPosition(0, new Fraction(1, 2)), note.Sustain);
+        h.Maintenance.DeleteActiveArrangement();
+        h.History.Undo();
+        h.History.Undo();
+
+        Assert.Same(arrangement, project.Arrangements[1]);
+        Assert.Same(note, project.Arrangements[1].Levels[0].Notes[0]);
+        Assert.Equal(new FractionalPosition(1), note.Sustain);
+        Assert.Same(bend, note.BendValues[0]);
+        Assert.Same(endBend, note.BendValues[1]);
+        h.History.Redo();
+        Assert.Equal(new FractionalPosition(0, new Fraction(1, 2)), note.Sustain);
+    }
+
     /// <summary>The shared harness plus a second arrangement and a vocal track to delete.</summary>
     private static ChartPowerToolsTests.Harness Populated()
     {
@@ -39,6 +116,26 @@ public sealed class ArrangementDeletionUndoTests
         h.Editor.ActiveVocalTrack = vocals;
 
         return h;
+    }
+
+    [Fact]
+    public void DeleteArrangementBThenUndo_RestoresTheSameArrangementLevelAndNotes()
+    {
+        var h = Populated();
+        var project = h.State.ActiveProject!;
+        var arrangement = project.Arrangements[1];
+        var level = arrangement.Levels[0];
+        var notes = level.Notes.ToArray();
+        h.State.ActiveArrangement = arrangement;
+        h.State.ActiveLevel = level;
+
+        h.Maintenance.DeleteActiveArrangement();
+        Assert.DoesNotContain(arrangement, project.Arrangements);
+        h.History.Undo();
+
+        Assert.Same(arrangement, project.Arrangements[1]);
+        Assert.Same(level, arrangement.Levels[0]);
+        for (var i = 0; i < notes.Length; i++) Assert.Same(notes[i], level.Notes[i]);
     }
 
     [Fact]
@@ -90,6 +187,35 @@ public sealed class ArrangementDeletionUndoTests
         h.History.Redo();
 
         Assert.Single(h.State.ActiveProject!.Arrangements);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void UndoingDeletion_ReattachesTheNoteCapturedByAnEarlierEdit(int index)
+    {
+        var h = Populated();
+        var project = h.State.ActiveProject!;
+        var arrangement = project.Arrangements[index];
+        var level = arrangement.Levels[0];
+        var note = level.Notes[0];
+        var originalFret = note.Fret;
+        h.State.ActiveArrangement = arrangement;
+        h.State.ActiveLevel = level;
+        h.History.Do(new MutateNotesAction(level.Notes, [note], n => n.Fret = 21));
+
+        h.Maintenance.DeleteActiveArrangement();
+        h.History.Undo();
+        h.History.Undo();
+
+        Assert.Same(arrangement, project.Arrangements[index]);
+        Assert.Same(note, project.Arrangements[index].Levels[0].Notes[0]);
+        Assert.Equal(originalFret, project.Arrangements[index].Levels[0].Notes[0].Fret);
+
+        h.History.Redo();
+        Assert.Equal(21, project.Arrangements[index].Levels[0].Notes[0].Fret);
+        h.History.Redo();
+        Assert.DoesNotContain(arrangement, project.Arrangements);
     }
 
     /// <summary>

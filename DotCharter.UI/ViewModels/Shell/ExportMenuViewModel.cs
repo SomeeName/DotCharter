@@ -1,8 +1,6 @@
 // File exports: Guitar Pro, Editor on Fire, the sheet-music PDF and the
 // one-key highway screenshot.
 using CommunityToolkit.Mvvm.Input;
-using DotCharter.Presentation.Contracts.Dialogs;
-using DotCharter.Presentation.Dialogs;
 using DotCharter.Services.Export;
 using DotCharter.Services.Export.Sheet;
 using DotCharter.Services.Export.Validation;
@@ -24,29 +22,35 @@ public sealed partial class ExportMenuViewModel : ViewModelBase
 {
     private readonly ProjectState _projectState;
     private readonly SheetMusicPaneViewModel _sheetMusicPane;
+    private readonly IChartEditorSurface _chartEditor;
     private readonly IAppLogger _logger;
     private readonly ILocalizationService _localization;
     private readonly IFileStorageService? _fileStorage;
+    private readonly IConfigurationService _config;
     private readonly IExportTargetWriter _exportFiles;
-    private readonly IDialogs? _dialogs;
 
     public ExportMenuViewModel(
         ProjectState projectState,
         SheetMusicPaneViewModel sheetMusicPane,
+        IChartEditorSurface chartEditor,
         IAppLogger logger,
         ILocalizationService localization,
+        IConfigurationService config,
         IFileStorageService? fileStorage = null,
-        IExportTargetWriter? exportFiles = null,
-        IDialogs? dialogs = null)
+        IExportTargetWriter? exportFiles = null)
     {
+        _config = config;
         _projectState = projectState;
         _sheetMusicPane = sheetMusicPane;
+        _chartEditor = chartEditor;
         _logger = logger;
         _localization = localization;
         _fileStorage = fileStorage;
         _exportFiles = exportFiles ?? new ExportTargetWriter();
-        _dialogs = dialogs;
     }
+
+    /// <summary>Set by the window: brings the Issues tab up, where the Editor on Fire round trip lists what the export lost.</summary>
+    public Action? ShowChartReport { get; set; }
 
     /// <summary>Set by the window: PrintWindow capture of the 3D highway
     /// slot (the pedalboard freeze-frame machinery — the only way to read
@@ -93,15 +97,27 @@ public sealed partial class ExportMenuViewModel : ViewModelBase
             return;
         }
 
-        var chart = _projectState.ActiveProject?.Chart;
+        var project = _projectState.ActiveProject;
+        var chart = project?.Chart;
         var baseName = SafeFileName.Make(
             chart?.SongName is { Length: > 0 } song ? $"{song} - {arrangement.Name}" : arrangement.Name);
 
         var path = await _fileStorage.SaveFilePickerAsync(
             _localization["GpExport_Title"],
             baseName + ".gp",
-            new[] { new FilePickerFilter("Guitar Pro", new[] { "*.gp" }) });
+            new[] { new FilePickerFilter("Guitar Pro", new[] { "*.gp" }) },
+            _config.StartDirectory(c => c.LastExportDir));
         if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        _config.RememberDirectory(path, (c, d) => c.LastExportDir = d);
+
+        // A load while the picker is open replaces the beat map underneath the captured arrangement.
+        if (!ReferenceEquals(project, _projectState.ActiveProject) ||
+            !ReferenceEquals(arrangement, _projectState.ActiveArrangement) ||
+            !ReferenceEquals(level, _projectState.ActiveLevel))
         {
             return;
         }
@@ -137,6 +153,8 @@ public sealed partial class ExportMenuViewModel : ViewModelBase
     private async Task ExportEditorOnFire()
     {
         if (RefusedAsPlayOnly()) return;
+        // The .eof carries the vocals: a lyric draft still in its text box goes in first.
+        _chartEditor.CommitPendingEdits();
         var project = _projectState.ActiveProject;
         if (_fileStorage == null || project == null || _projectState.Beats.Count == 0)
         {
@@ -153,11 +171,14 @@ public sealed partial class ExportMenuViewModel : ViewModelBase
         var path = await _fileStorage.SaveFilePickerAsync(
             _localization["EofExport_Title"],
             baseName + ".eof",
-            new[] { new FilePickerFilter("Editor on Fire", new[] { "*.eof" }) });
+            new[] { new FilePickerFilter("Editor on Fire", new[] { "*.eof" }) },
+            _config.StartDirectory(c => c.LastExportDir));
         if (string.IsNullOrWhiteSpace(path))
         {
             return;
         }
+
+        _config.RememberDirectory(path, (c, d) => c.LastExportDir = d);
 
         try
         {
@@ -201,7 +222,7 @@ public sealed partial class ExportMenuViewModel : ViewModelBase
 
         var message = _localization.PluralWith("EofExport_DoneLossyOne", "EofExport_DoneLossy",
             losses.Total, fileName, losses.Total);
-        if (_dialogs is not { } dialogs)
+        if (ShowChartReport is not { } showReport)
         {
             _projectState.SetMessage(message, StatusSeverity.Warning);
             return;
@@ -209,9 +230,7 @@ public sealed partial class ExportMenuViewModel : ViewModelBase
 
         _projectState.SetMessage(message, StatusSeverity.Warning, new StatusMessageAction(
             _localization["EofExport_ShowLosses"],
-            () => DialogLaunch.Run(_logger,
-                () => dialogs.ShowAsync<IChartQualityReportScreen, bool>(screen => screen.FocusEofRoundTrip = true),
-                "chart quality report (EOF round trip)")));
+            showReport));
     }
 
     /// <summary>Exports the active arrangement level as a printable sheet-music PDF (A4/Letter).</summary>
@@ -227,15 +246,26 @@ public sealed partial class ExportMenuViewModel : ViewModelBase
             return;
         }
 
-        var chart = _projectState.ActiveProject?.Chart;
+        var project = _projectState.ActiveProject;
+        var chart = project?.Chart;
         var baseName = SafeFileName.Make(
             chart?.SongName is { Length: > 0 } song ? $"{song} - {arrangement.Name}" : arrangement.Name);
 
         var path = await _fileStorage.SaveFilePickerAsync(
             _localization["SheetPdf_Title"],
             baseName + ".pdf",
-            new[] { new FilePickerFilter("PDF", new[] { "*.pdf" }) });
+            new[] { new FilePickerFilter("PDF", new[] { "*.pdf" }) },
+            _config.StartDirectory(c => c.LastExportDir));
         if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        _config.RememberDirectory(path, (c, d) => c.LastExportDir = d);
+
+        if (!ReferenceEquals(project, _projectState.ActiveProject) ||
+            !ReferenceEquals(arrangement, _projectState.ActiveArrangement) ||
+            !ReferenceEquals(level, _projectState.ActiveLevel))
         {
             return;
         }
@@ -358,7 +388,7 @@ public sealed partial class ExportMenuViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            _logger.Warning(AppLogCategory.Application, $"Screenshot failed: {ex.Message}");
+            _logger.Warning(AppLogCategory.Application, "Screenshot failed", ex);
             _projectState.SetMessage(_localization["Status_ScreenshotFailed"], StatusSeverity.Error);
         }
     }

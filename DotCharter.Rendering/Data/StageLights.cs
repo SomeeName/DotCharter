@@ -72,7 +72,7 @@ public static class StageLights
             : (null, null);
 
         // With the beams toggle off but fog on, the rig still hangs there: dim heads.
-        if (fog is null && beam is null) return default;
+        if (fog is null && beam is null && laser is null) return default;
 
         // Each lane fades from its previous event over TransitionMs. The first
         // event of a lane has nothing to fade from and shows at once.

@@ -198,11 +198,36 @@ public sealed class ContractBindingLintTests
 
         return ReachedContracts(contract)
             .SelectMany(c => BindableMembers(c)
-                .Where(m => !(bound.TryGetValue(c, out var names) && names.Contains(m)))
+                .Where(m => !bound.Any(b => b.Key.IsAssignableFrom(c) && b.Value.Contains(m)))
                 .Select(m => $"{c.Name}.{m}"))
             .Order(StringComparer.Ordinal)
             .ToList();
     }
+
+    /// <summary>A binding under a BASE interface's <c>x:DataType</c> (a shared block hosted by several views) binds that
+    /// member on every contract extending it.</summary>
+    [Fact]
+    public void Probe_a_base_interface_binding_counts_for_the_derived_contract() =>
+        Assert.Equal(["IProbeDerived.Own"], UnboundMembers(typeof(IProbeDerived), BaseOnlyXaml));
+
+    public interface IProbeBase : System.ComponentModel.INotifyPropertyChanged
+    {
+        string Shared { get; }
+    }
+
+    public interface IProbeDerived : IProbeBase
+    {
+        string Own { get; }
+    }
+
+    private const string BaseOnlyXaml = """
+        <UserControl xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:p="clr-namespace:DotCharter.Tests.Presentation;assembly=DotCharter.Tests"
+                     x:DataType="p:ContractBindingLintTests+IProbeBase">
+            <TextBlock Text="{Binding Shared}" />
+        </UserControl>
+        """;
 
     /// <summary>The contract and every contract interface reachable through its properties (list elements included).</summary>
     internal static List<Type> ReachedContracts(Type contract)

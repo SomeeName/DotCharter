@@ -26,8 +26,8 @@ public sealed class SongInspectorToneMarksUiPerfSmokeTests
             var vm = new SongOverviewViewModel(state, new HistoryService(logger), logger, FakeLocalization.English(),
             DotCharter.Tests.Presentation.Dialogs.RecordingProxy.Create<DotCharter.Services.Editing.IChartEditorSurface>().Proxy);
             var tab = new SongInspectorView { DataContext = vm };
-            // #601: the tones are a section of the Song tab's rail; open it, as its entry's click does.
-            tab.Rail.Choose("SongTonesBody");
+            // the tones are a card of the Song tab (design D); bring it on screen, as its page button does.
+            tab.ShowCard("SongTonesCard");
             var window = new Window
             {
                 Width = 360, Height = 900, Content = InspectorScope(tab),

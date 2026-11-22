@@ -8,6 +8,7 @@ using DotCharter.Tone.UI.ViewModels.Shell;
 using DotCharter.UI.ViewModels.Editor.Inspector;
 using DotCharter.UI.ViewModels.Panels;
 using DotCharter.Presentation.Contracts.Editor;
+using DotCharter.Presentation.Screens.Editor;
 
 namespace DotCharter.UI.ViewModels.Editor;
 
@@ -92,8 +93,8 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
     // string picker. NotePreviewChord is a one-note synthetic Chord the
     // MiniFretboardControl renders (rebuilt as a fresh reference on every sync
     // so the control repaints); NoteStringCount / NoteTuningNames drive its
-    // grid. Every click routes through SetNoteTargetCommand → ApplyNoteMutation
-    // so it is a single undoable gesture like every other note edit.
+    // grid. The staged Placement page (Inspector/StagedPlacementViewModel) owns the
+    // board's clicks; they stage and the footer's Apply writes them.
     [ObservableProperty] private Chord? _notePreviewChord;
     [ObservableProperty] private int _noteStringCount = 6;
     [ObservableProperty] private IReadOnlyList<string>? _noteTuningNames;
@@ -115,11 +116,10 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
     // headers, two footers and three fretboards.
     public bool IsSoundTabSelected => SelectedTabIndex == 0;
     public bool IsMixerTabSelected => SelectedTabIndex == 1;
-    public bool IsSongTabSelected => SelectedTabIndex == 2;
-    public bool IsLyricsTabSelected => SelectedTabIndex == 3;
+    public bool IsSongTabSelected => SelectedTabIndex == SongTabIndex;
+    public bool IsLyricsTabSelected => SelectedTabIndex == LyricsTabIndex;
     public bool IsIssuesTabSelected => SelectedTabIndex == 4;
     public bool IsNotesTabSelected => SelectedTabIndex == 5;
-    public bool IsPhrasesTabSelected => SelectedTabIndex == 6;
 
     /// <summary>
     ///     The Riff Library, an inspector TAB rather than a dock
@@ -157,7 +157,6 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
 
     partial void OnSelectedTabIndexChanged(int value)
     {
-        _ = value;
         if (!_autoSwitchingTab) _userPinnedTab = true;
         OnPropertyChanged(nameof(IsSoundTabSelected));
         OnPropertyChanged(nameof(IsMixerTabSelected));
@@ -165,37 +164,29 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsLyricsTabSelected));
         OnPropertyChanged(nameof(IsIssuesTabSelected));
         OnPropertyChanged(nameof(IsNotesTabSelected));
-        OnPropertyChanged(nameof(IsPhrasesTabSelected));
         OnPropertyChanged(nameof(IsRiffLibraryTabSelected));
         OnPropertyChanged(nameof(IsChordShapesTabSelected));
-        // The FEHLER groups are rebuilt on activation when an edit left them
-        // stale while the tab was hidden (see RebuildIssueGroups).
-        if (value == IssuesTabIndex) Issues.EnsureIssueGroupsCurrent();
-        // Same rule for the work queue, which only this tab binds.
-        if (value == SoundTabIndex) Queue.EnsureCurrent();
-        // The phrase browser rebuilds on activation only (never per tick), and only
-        // when its phrases moved: an unchanged list keeps its laid-out cards.
-        if (value == PhrasesTabIndex) Phrases.EnsureCurrent();
-        // Same rule for the riff library, and it is load-bearing: the catalog
-        // reads every stored riff off disk, which is why its own constructor
-        // defers the first load to a Background post. Loading it when the tab is
-        // actually opened keeps that cost off the boot path.
-        if (value == RiffLibraryTabIndex) RiffLibrary?.EnsureLoaded();
+        _tabActivation.Activated(value);
     }
 
-    /// <summary>Index of the Phrases tab. Named because it is read in two
-    /// places and the 8→7 collapse moved it once already.</summary>
-    internal const int PhrasesTabIndex = 6;
+    /// <summary>What leaving and opening a tab does (commit a draft, catch a hidden tab up).</summary>
+    private readonly InspectorTabActivation _tabActivation;
+
+    /// <summary>Index of the Lyrics tab, whose draft is committed when the strip leaves it.</summary>
+    internal const int LyricsTabIndex = 3;
+
+    /// <summary>Index of the Song tab, which hosts the Phrases section beside Sections and Tones.</summary>
+    internal const int SongTabIndex = 2;
 
     /// <summary>Index of the Mixer tab. Named for the same reason as the two
     /// below: the shell selects it when "show the stem mixer" is asked for.</summary>
     internal const int MixerTabIndex = 1;
 
     /// <summary>Index of the Riff Library tab (0.42.4, was a dock pane).</summary>
-    internal const int RiffLibraryTabIndex = 7;
+    internal const int RiffLibraryTabIndex = 6;
 
     /// <summary>Index of the Chord shapes tab: every chord template, its uses and duplicates.</summary>
-    internal const int ChordShapesTabIndex = 8;
+    internal const int ChordShapesTabIndex = 7;
 
     /// <summary>Index of the merged Sound tab — where a sound selection lands.</summary>
     internal const int SoundTabIndex = 0;
@@ -224,6 +215,8 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
         HandShapeEditorViewModel handShapeEditor,
         StringMaskViewModel stringMask,
         ILocalizationService localization,
+        IConfigurationService configuration,
+        Shell.StemSeparationViewModel stemSeparation,
         DotCharter.Services.Editing.Phrases.IPhraseIterationPropagationService? phrasePropagation = null,
         DotCharter.Services.Editing.Linting.IAudioChartLintService? audioLint = null,
         IAudioPlaybackService? audioPlayback = null,
@@ -240,6 +233,8 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
         _projectState = projectState;
         _localization = localization;
         ChordTemplateEditor = chordTemplateEditor;
+        StagedEdits = new InspectorStagedEdits(chartEditor, historyService, highwayEditingService, localization, projectState,
+            () => transport.GridDivisor, ChordEditTargets);
         Sections.PropertyChanged += OnSectionsChanged;
         // the keyboard's technique verbs reach what a click here would.
         highwayEditingService.TechniqueReach = new ChordTechniqueKeyboardReach(LadderTargets,
@@ -250,13 +245,17 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
         ProjectState = projectState;
         Lyrics = lyricsInspector;
         StemMixer = stemMixer;
+        StemSeparation = stemSeparation;
         Annotations = annotations;
         ExportReadiness = exportReadiness;
+        IssuesSections = new IssuesSectionsViewModel(exportReadiness);
+        MixerSections = new MixerSectionsViewModel(stemMixer);
         // the Issues tab, driven from here (the debounce below, the tab
         // switch) and tied back through IInspectorIssuesHost — never a field.
         Issues = issues;
         Issues.AttachHost(this);
         HandShapeEditor = handShapeEditor;
+        GripInspector = new GripInspectorViewModel(chartEditor, projectState, historyService, localization, Sections, chordTemplateEditor);
         StringMask = stringMask;
         // the song's chart-synth playing style, under Mixer ▸ MIDI synth.
         SynthPlayStyle = new ChartSynthPlayStyleViewModel(projectState, historyService, localization);
@@ -269,6 +268,8 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
             phrasePropagation,
             localization,
             historyService);
+        // The Song tab's Phrases section reads this view model and its Refresh re-reads it.
+        songOverview.PhrasesPanel = Phrases;
         // v0.29 audio-verified lint (explicit-run block on the FEHLER tab):
         // same standalone composition pattern.
         // v0.36 work queue: the same standalone composition pattern — the host
@@ -284,8 +285,16 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
             () => Issues.Items,
             _chartEditor.Selection,
             _chartEditor.ExecuteSeek,
-            localization);
+            localization,
+            arr =>
+            {
+                var config = configuration.LoadAppConfig();
+                return (ChordNamingOptions.For(config.ChordNamingStyle, arr, _chartEditor.ActiveProject?.Chart),
+                    new DoubleStopNameOptions(config.SuppressDoubleStopChordNames, config.KeepPowerChordNames));
+            });
         NextTask = new SoundNextTaskViewModel(Queue, localization);
+        _tabActivation = new InspectorTabActivation(Lyrics, Issues, ExportReadiness, Queue, Phrases, RiffLibrary);
+        Lyrics.Syllables.IsShown = SelectedTabIndex == LyricsTabIndex;
         AudioLint = new AudioLintViewModel(
             () => _chartEditor.ActiveArrangement,
             () => _chartEditor.Beats,
@@ -301,7 +310,7 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
         _issueRefreshTimer.Tick += (_, _) =>
         {
             _issueRefreshTimer.Stop();
-            Issues.RecomputeIssues();
+            DotCharter.Services.Diagnostics.UiWorkTiming.Measure("Inspector validation snapshot", Issues.RecomputeIssues);
         };
 
         _chartEditor.Selection.PropertyChanged += OnSelectionChanged;
@@ -314,6 +323,17 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
         _historyService.HistoryChanged += OnHistoryChanged;
         _projectState.PropertyChanged += OnProjectStateChanged;
         Transport.PropertyChanged += OnTransportChanged;
+        Clock = new InspectorPlayheadClock(_projectState, Transport);
+        Staged = new InspectorStagedPages(StagedEdits, chartEditor, historyService, projectState, localization, Sections, Queue,
+            () => transport.GridDivisor, chordTemplateEditor);
+        Library = new ChordLibraryViewModel(chartEditor, chordTemplateEditor, Sections, Queue, historyService, localization,
+            () => projectState.CurrentTimeMs);
+        Findings = new SelectionFindingsViewModel(() => SelectionFieldIssues, SelectionIssues, chartEditor, historyService,
+            localization, issue =>
+            {
+                Issues.JumpToIssue(issue);
+                ShowIssuesSection(IssuesSection.Findings);
+            }, Sections, Staged.Footer.AskToConfirm);
 
         SelectedNote = _chartEditor.Selection.SelectedNote;
         SelectedChord = _chartEditor.Selection.SelectedChord;
@@ -322,6 +342,15 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
         SyncNoteProperties();
         SyncChordProperties();
         SyncChordTemplate();
+        Issues.RecomputeIssues();
+    }
+
+    /// <summary>Runs a refresh queued on the 150 ms debounce now, so a test can wait for its pass
+    /// (<c>Issues.Pending</c>) instead of for the timer.</summary>
+    internal void FlushIssueRefresh()
+    {
+        if (!_issueRefreshTimer.IsEnabled) return;
+        _issueRefreshTimer.Stop();
         Issues.RecomputeIssues();
     }
 
@@ -365,20 +394,47 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
     public LyricsInspectorViewModel Lyrics { get; }
     public StemMixerViewModel StemMixer { get; }
 
+    /// <summary>The Stems card's "Separate stems": the shell's run, bound here so a floated pane reaches it too.</summary>
+    public Shell.StemSeparationViewModel StemSeparation { get; }
+
     /// <summary>The Notes tab's charting annotations — standalone sub-VM.</summary>
     public AnnotationsInspectorViewModel Annotations { get; }
 
     /// <summary>The FEHLER tab's export-readiness block — standalone sub-VM.</summary>
     public ExportReadinessViewModel ExportReadiness { get; }
 
-    /// <summary>The Sound tab's Span card and the Shape card's rebind warning — standalone sub-VM.</summary>
+    /// <summary>The Issues tab's rail: which section is open and what each entry says.</summary>
+    public IssuesSectionsViewModel IssuesSections { get; }
+
+    /// <summary>The Mixer tab's section strip: Stems (while the song has them), EQ, MIDI.</summary>
+    public MixerSectionsViewModel MixerSections { get; }
+
+    /// <summary>The Shape page's fit-to-sounds and enclosed count — standalone sub-VM.</summary>
     public HandShapeEditorViewModel HandShapeEditor { get; }
+
+    /// <summary>The Shape page's grip editor — standalone sub-VM.</summary>
+    public GripInspectorViewModel GripInspector { get; }
 
     /// <summary>The string-edit mask's verbs and the keyboard readouts — standalone sub-VM.</summary>
     public StringMaskViewModel StringMask { get; }
 
     /// <summary>Which section of the Sound tab's rail is on screen — standalone sub-VM.</summary>
     public SoundSectionsViewModel Sections { get; } = new();
+
+    /// <summary>The Note pages' staged edits and their one-node Apply — standalone collaborator.</summary>
+    public InspectorStagedEdits StagedEdits { get; }
+
+    /// <summary>The staged Note pages and their pinned footer — standalone collaborator.</summary>
+    public InspectorStagedPages Staged { get; }
+
+    /// <summary>The Library page's template search, grip and uses — standalone collaborator.</summary>
+    public ChordLibraryViewModel Library { get; }
+
+    /// <summary>The Findings page's list, detail and review — standalone collaborator.</summary>
+    public SelectionFindingsViewModel Findings { get; }
+
+    /// <summary>The Note footer's playhead time — standalone sub-VM.</summary>
+    public InspectorPlayheadClock Clock { get; }
 
     public void Dispose()
     {
@@ -388,9 +444,15 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
         _projectState.PropertyChanged -= OnProjectStateChanged;
         Transport.PropertyChanged -= OnTransportChanged;
         HandShapeEditor.Synced -= OnHandShapeEditorSynced;
+        GripInspector.Dispose();
         Sections.PropertyChanged -= OnSectionsChanged;
         Issues.DetachHost(this);
         SynthPlayStyle.Dispose();
+        Staged.Dispose();
+        Library.Dispose();
+        Findings.Dispose();
+        StagedEdits.Dispose();
+        Clock.Dispose();
     }
 
     /// <summary>The hand-shape selection, or the shape itself, moved: re-read what
@@ -420,6 +482,9 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
         SyncNoteProperties();
         SyncChordProperties();
         SyncChordTemplate();
+        // An undo or redo moves a selected hand shape's span and grip without touching the
+        // selection, so the Span card's typed end, the enclosed count and the grip re-read it.
+        if (SelectedHandShapes.Count > 0) HandShapeEditor.SyncHandShapeProperties();
         NoteBendEditor?.ReloadFromDomain();
         ChordBendEditor?.ReloadFromDomain();
         ScheduleIssueRefresh();
@@ -444,17 +509,14 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
         // as the export findings above: a switch invalidates the old result
         // rather than leaving it standing. Reset also cancels a decode in
         // flight, which is tens of seconds of work for a chart nobody is on.
-        // The audio lint is per-ARRANGEMENT as well as per-project, and its
-        // findings are times into the song that was analysed — against any other
-        // chart they seek the new song to the old one's positions. Same contract
-        // as the export findings above: a switch invalidates the old result
-        // rather than leaving it standing. Reset also cancels a decode in
-        // flight, which is tens of seconds of work for a chart nobody is on.
         if (e.PropertyName is nameof(ProjectState.ActiveProject) or nameof(ProjectState.ActiveArrangement))
         {
             AudioLint.Reset();
-            // The mask readout names strings by the arrangement's tuning.
-            StringMask.NotifyMaskChanged();
+            // The mask readout and the string chips name strings by the arrangement's tuning.
+            NotifyMaskScopeChanged();
+            // The Song tab's phrase rows belong to one arrangement: an open tab follows the switch
+            // (a hidden one catches up when it is opened). The fingerprint keeps it cheap.
+            if (IsSongTabSelected) Phrases.EnsureCurrent();
         }
 
         // The string-edit mask is keyboard-driven (Ctrl+1..9) as well as
@@ -515,7 +577,8 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
     /// </summary>
     private void OnUserOrProgrammaticSelection(int kind)
     {
-        if (_programmaticSelection)
+        // A tick or a press on the Chord shapes tab's Uses page is a selection made FROM that tab: it stays.
+        if (_programmaticSelection || ChordShapes is ShapesPanelViewModel { IsDrivingSelection: true })
         {
             // An inspector-driven selection (issue jump) — record the kind so
             // the user's NEXT direct pick is judged against it, but never

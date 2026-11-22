@@ -11,6 +11,28 @@ public sealed class ChartAudioLintAnalyzerTests
 {
     private const int Sr = 44100;
 
+    [Fact]
+    public void CancellationDuringSoundEnumerationStopsVerification()
+    {
+        using var cancelled = new CancellationTokenSource();
+        var sounds = new CancellingSounds(cancelled);
+
+        Assert.Throws<OperationCanceledException>(() => ChartAudioLintAnalyzer.Analyze(
+            new float[1024], Sr, sounds, cancellationToken: cancelled.Token));
+    }
+
+    private sealed class CancellingSounds(CancellationTokenSource cancellation) : IReadOnlyList<LintExpectedSound>
+    {
+        public int Count => 1;
+        public LintExpectedSound this[int index] => new(0, [45], false);
+        public IEnumerator<LintExpectedSound> GetEnumerator()
+        {
+            cancellation.Cancel();
+            yield return this[0];
+        }
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     /// <summary>0.5 s silence + 1.5 s of a plucked-ish tone + 0.5 s silence.
     /// The silence matters: the offline noise floor is a low percentile of
     /// the WHOLE clip, so an all-signal clip would estimate "noise" at
@@ -41,7 +63,7 @@ public sealed class ChartAudioLintAnalyzerTests
     [Fact]
     public void ACorrectlyChartedNote_Verifies_WithNoFindings()
     {
-        var result = ChartAudioLintAnalyzer.Analyze(RenderTone(57), Sr, [Note(750, 57)]);
+        var result = ChartAudioLintAnalyzer.Analyze(RenderTone(57), Sr, [Note(750, 57)], cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.SoundsChecked);
         Assert.Equal(1, result.SoundsVerified);
@@ -52,7 +74,7 @@ public sealed class ChartAudioLintAnalyzerTests
     public void AWrongChartedPitch_Fails_AndNamesWhatTheAudioSays()
     {
         // Audio plays A3 (57); the chart claims B3 (59).
-        var result = ChartAudioLintAnalyzer.Analyze(RenderTone(57), Sr, [Note(750, 59)]);
+        var result = ChartAudioLintAnalyzer.Analyze(RenderTone(57), Sr, [Note(750, 59)], cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(0, result.SoundsVerified);
         var finding = Assert.Single(result.Findings);
@@ -64,7 +86,7 @@ public sealed class ChartAudioLintAnalyzerTests
     [Fact]
     public void ANoteChartedIntoSilence_Fails_WithNothingObserved()
     {
-        var result = ChartAudioLintAnalyzer.Analyze(new float[Sr * 2], Sr, [Note(1000, 57)]);
+        var result = ChartAudioLintAnalyzer.Analyze(new float[Sr * 2], Sr, [Note(1000, 57)], cancellationToken: TestContext.Current.CancellationToken);
 
         var finding = Assert.Single(result.Findings);
         Assert.Null(finding.ObservedMidi);
@@ -74,7 +96,7 @@ public sealed class ChartAudioLintAnalyzerTests
     public void UnpitchedSounds_AreSkippedEntirely()
     {
         var result = ChartAudioLintAnalyzer.Analyze(RenderTone(57), Sr,
-            [new LintExpectedSound(750, [57], IsChord: false, IsPitched: false)]);
+            [new LintExpectedSound(750, [57], IsChord: false, IsPitched: false)], cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(0, result.SoundsChecked);
         Assert.Empty(result.Findings);
@@ -96,7 +118,7 @@ public sealed class ChartAudioLintAnalyzerTests
         // container preserves 64, 59, 55; a sorted or hash-ordered one does not.
         var chord = new LintExpectedSound(1000, [64, 59, 64, 55], IsChord: true);
 
-        var result = ChartAudioLintAnalyzer.Analyze(new float[Sr * 2], Sr, [chord]);
+        var result = ChartAudioLintAnalyzer.Analyze(new float[Sr * 2], Sr, [chord], cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal([64, 59, 55], result.Findings.Select(f => f.ChartedMidi));
         Assert.Equal(1, result.SoundsChecked);
@@ -122,7 +144,7 @@ public sealed class ChartAudioLintAnalyzerTests
     {
         var midi = beyondEdge < 0 ? Floor + beyondEdge : Ceiling + beyondEdge - 1;
 
-        var result = ChartAudioLintAnalyzer.Analyze(RenderTone(57), Sr, [Note(750, midi)]);
+        var result = ChartAudioLintAnalyzer.Analyze(RenderTone(57), Sr, [Note(750, midi)], cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(0, result.SoundsChecked);
         Assert.Equal(0, result.SoundsVerified);
@@ -138,7 +160,7 @@ public sealed class ChartAudioLintAnalyzerTests
     {
         var midi = bottom ? Floor : Ceiling - 1;
 
-        var result = ChartAudioLintAnalyzer.Analyze(new float[Sr * 2], Sr, [Note(1000, midi)]);
+        var result = ChartAudioLintAnalyzer.Analyze(new float[Sr * 2], Sr, [Note(1000, midi)], cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.SoundsChecked);
         Assert.Single(result.Findings);
@@ -151,7 +173,7 @@ public sealed class ChartAudioLintAnalyzerTests
     [InlineData(26)]
     public void ALowBassNote_IsChecked(int midi)
     {
-        var result = ChartAudioLintAnalyzer.Analyze(new float[Sr * 2], Sr, [Note(1000, midi)]);
+        var result = ChartAudioLintAnalyzer.Analyze(new float[Sr * 2], Sr, [Note(1000, midi)], cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.SoundsChecked);
     }
@@ -163,7 +185,7 @@ public sealed class ChartAudioLintAnalyzerTests
     {
         var chord = new LintExpectedSound(1000, [Floor - 2, 40, 47], IsChord: true);
 
-        var result = ChartAudioLintAnalyzer.Analyze(new float[Sr * 2], Sr, [chord]);
+        var result = ChartAudioLintAnalyzer.Analyze(new float[Sr * 2], Sr, [chord], cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.SoundsChecked);
         Assert.Equal([40, 47], result.Findings.Select(f => f.ChartedMidi));
@@ -179,8 +201,8 @@ public sealed class ChartAudioLintAnalyzerTests
         var pcm = RenderTone(57);
         var sounds = new[] { Note(750, 57), Note(750, 62) };
 
-        var a = ChartAudioLintAnalyzer.Analyze(pcm, Sr, sounds);
-        var b = ChartAudioLintAnalyzer.Analyze(pcm, Sr, sounds);
+        var a = ChartAudioLintAnalyzer.Analyze(pcm, Sr, sounds, cancellationToken: TestContext.Current.CancellationToken);
+        var b = ChartAudioLintAnalyzer.Analyze(pcm, Sr, sounds, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(a.SoundsVerified, b.SoundsVerified);
         Assert.Equal(a.Findings, b.Findings);

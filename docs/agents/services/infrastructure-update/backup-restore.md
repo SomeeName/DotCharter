@@ -1,5 +1,22 @@
 # `Infrastructure/` + `Update/` — config, backup, crash reports, library doctor, auto-update (deep reference) — a restore is atomic per file and per set
 
+## Export preserves the last complete archive
+
+`ConfigBackupService.Export` writes through `AtomicFile.Write`: a random sibling
+`.tmp` archive is closed and flushed before atomic promotion. A source read or
+archive write failure removes staging and preserves any existing destination.
+`ConfigBackupServiceTests.Export_AReadFailure_PreservesTheExistingBackupAndRemovesStaging`
+pins the failure path; an archive saved inside an included data tree excludes
+both the destination and its stage.
+
+## The manifest is bounded before parsing
+
+Import reads at most 64 KiB plus one overflow byte from the manifest inflater
+before decoding or parsing. The limit applies to actual bytes, independently of
+ZIP length declarations and decoded character counts. Oversized manifests are
+refused as unreadable before staging or touching live config files. The tests
+cover the exact boundary, compressed overflow and multibyte content.
+
 ## A restore is atomic per FILE and per SET
 
 `ConfigBackupService.PromoteStagedFiles` swapped each staged file in with
@@ -63,6 +80,9 @@ back does the most damage.
   key=value pairs, long hex runs, and the Rocksmith keys `PsarcToc` / `SngPc` /
   `SngMac` of `appconfig.json` by NAME to the end of the value, spaces included —
   #774, `RocksmithKeyRedactionTests`); the service is the thin impure edge.
+  Provider keys include hyphens and underscores through the end of the token
+  (`sk-proj-` / `sk-ant-`); user-name matching is culture-invariant, including
+  under Turkish casing (#577, `SensitiveTextRedactorTests`).
   **That redactor is the ONE in the app** — it was `CrashReportRedactor` until
   2026-09-04, when the diagnostics bundle's separate, drifted second copy was
   folded into it (`SharedRedactorLintTests` fails the gate on a third). **`client_id` and `anon_key` are on the key list (0.45)** — they
@@ -166,14 +186,32 @@ back does the most damage.
   The wait loop is built from `goto`s with **no parenthesised block**: cmd expands
   `%VAR%` when it PARSES a block, so a loop written with parentheses compares the
   counter's entry value forever.
+  Paths in diagnostics and execution stay double-quoted, literal percent signs
+  are doubled, and `setlocal EnableExtensions DisableDelayedExpansion` protects
+  exclamation marks (#577). Quotes, line breaks and nulls in supplied paths are
+  refused. The backup subroutine slices `DCABS` directly, without `call set`:
+  a second expansion could interpret percent signs in a filename as commands.
   **A staged payload is never abandoned silently.** `ApplyDownloadedUpdate`
   writes `UpdateApplyState` to `<install>\dotcharter-update-pending.json` BEFORE
   launching, and the script deletes it on its success path only, so all three
   ways an apply can stall (the launch threw, the wait timed out, robocopy failed)
-  leave a resumable record. It carries the DELETIONS because
+  leave a resumable record. The script is UTF-8 (no BOM) behind `chcp 65001` and escapes `%` as `%%` (#381); before the copy it saves every install file the payload will overwrite into `<install>\update-backup` (plain `copy`, no locale-dependent prompts) and on robocopy >= 8 puts them back and deletes files the update added (#382); a failed restore exits `ExitRestoreFailed` and keeps backup and state. It carries the DELETIONS because
   `PayloadDeletions.TakeFrom` removes `payload-deletions.txt` from the payload —
   a resume with only the staging tree could not reconstruct them and every
   dropped file would survive the no-purge copy forever.
+  **Copy and restore include same, tweaked and modified files (`/IS /IT /IM`, #539).**
+  Equal size and last-write time do not prove equal content: differing NTFS change
+  times classify a pair as modified, which `/IS /IT` alone can still skip. Neither
+  the payload nor the backup may be skipped on that basis. Both calls still treat
+  exit codes 0..7 as success and 8+ as failure. A target still locked during
+  restore therefore reports `ExitRestoreFailed` and keeps the backup.
+  `UpdaterScriptBuilderTests` pins both calls and uses fixed equal timestamps
+  with different bytes for the generated-script apply and rollback cases. Each runs
+  with explicitly matched NTFS change times and with the installed file touched
+  again after a short fixture-only gap, then its last-write time reset. The
+  rollback test releases its target lock at a test-only failure-label rendezvous
+  before restore, checks that the changed file's timestamp matches its backup,
+  and prepares the backup/installed change-time pair for each class independently.
   **The record is DATA, not an authority (#109).** It sits in a user-writable
   folder, and Resume copies from its paths while Discard deletes them. So
   `UpdateInstaller.GetPendingUpdateApply` believes a record only when its

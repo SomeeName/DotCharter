@@ -123,7 +123,7 @@ public sealed partial class AudioSilenceSplicer(
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            logger?.Warning(AppLogCategory.Audio, $"Add silence failed: {ex.Message}");
+            logger?.Warning(AppLogCategory.Audio, "Add silence failed", ex);
             return Cleanup(written, SilenceSpliceFailure.AudioFailed);
         }
 
@@ -214,7 +214,7 @@ public sealed partial class AudioSilenceSplicer(
                 : StemCacheIdentity.ForAudioFile(result.AudioPath);
             // Keyed like every other save (StemCacheSource): the padded audio has no
             // .wem beside it, so this is its own bytes.
-            var source = StemCacheSource.TryResolve(identity, result.AudioPath);
+            var source = StemCacheSource.ResolveForStore(stemCache, identity, result.AudioPath);
             if (source is null) return;
             var tracks = result.Stems.Select(s => new StemTrack { Name = s.Name, Path = s.Path }).ToList();
             await stemCache.SaveAsync(source.Key, identity, source.Signature, tracks, modelId: string.Empty,
@@ -223,7 +223,7 @@ public sealed partial class AudioSilenceSplicer(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // The padded stems are in the project either way; only a later re-open from the cache misses.
-            logger?.Warning(AppLogCategory.Audio, $"Add silence: the padded stems were not cached ({ex.Message}).");
+            logger?.Warning(AppLogCategory.Audio, "Add silence: the padded stems were not cached.", ex);
         }
     }
 

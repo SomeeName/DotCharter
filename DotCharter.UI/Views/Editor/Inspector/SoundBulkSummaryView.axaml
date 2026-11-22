@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundBulkSummaryView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Selection page's SUMMARY card (#751 P4, design D's "Selected sounds"): what the selection is (a shape
+         summary, never an ambiguous diagram over several shapes), its bends, and the two "first sound's values to
+         all" verbs, which write at once. -->
+    <StackPanel Spacing="{StaticResource SpaceXs}">
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                   Text="{localization:Loc Inspector_Staged_SummaryTitle}" />
+        <TextBlock Text="{Binding AppliesToLabel}" TextWrapping="Wrap"
+                   FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextMuted}" />
+        <TextBlock Text="{Binding SelectionShapeSummary}" TextWrapping="Wrap"
+                   FontFamily="{StaticResource FireFontMono}" FontSize="{StaticResource FireSizeXs}"
+                   Foreground="{DynamicResource FireTextPrimary}" />
+        <TextBlock Text="{Binding BendSummary}" IsVisible="{Binding ShowBendSummary}" TextWrapping="Wrap"
+                   FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextMuted}" />
+        <WrapPanel x:Name="SoundBulkVerbs" ItemSpacing="{StaticResource SpaceXs}" LineSpacing="3">
+            <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" Content="{localization:Loc Inspector_ApplyToAll}"
+                    Command="{Binding ApplyNoteValuesToAllCommand}"
+                    AutomationProperties.Name="{localization:Loc Inspector_ApplyToAll}"
+                    ToolTip.Tip="{localization:Loc Inspector_ApplyToAllTip}" />
+            <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" Content="{localization:Loc Inspector_Chord_ApplyToAll}"
+                    Command="{Binding ApplyChordValuesToAllCommand}"
+                    AutomationProperties.Name="{localization:Loc Inspector_Chord_ApplyToAll}"
+                    ToolTip.Tip="{localization:Loc Inspector_Chord_ApplyToAllTip}" />
+        </WrapPanel>
+    </StackPanel>
+</UserControl>

@@ -241,7 +241,7 @@ public sealed class CompanionOwnershipTests : IDisposable
         Directory.CreateDirectory(DlcBuilderBundle.DirectoryFor(projectPath));
 
         var project = CreateProject();
-        var path = Path.Combine(_dir, Rs2DlcProjectBuilder.FileNameFor(project));
+        var path = Path.Combine(_dir, "export", "MySong.rs2dlc");
         File.WriteAllText(path, "{ \"Tones\": [ \"from an older DotCharter, then edited\" ] }");
 
         Assert.Null(service.WriteDlcBuilderProject(projectPath, project, 60_000));

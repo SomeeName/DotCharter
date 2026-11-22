@@ -13,6 +13,17 @@ namespace DotCharter.Tone.Audio.Dsp.Presets;
 /// </summary>
 public interface IDspTonePresetService
 {
+    /// <summary>Successful explicit applies, including already-matching rigs on an attached seat.
+    /// Carries the seat and originating profile generation; session restores are filtered by the subscriber.</summary>
+    event Action<int, long>? PresetApplied { add { } remove { } }
+
+    /// <summary>Monotonic identity of the active rig profile; zero in hosts without profiles.</summary>
+    long ProfileGeneration => 0;
+
+    /// <summary>Applies queued work only in its originating profile; null means obsolete.</summary>
+    DcRigApplyResult? ApplyToPlayerForProfile(int player, DspTonePreset preset, long generation)
+        => generation == ProfileGeneration ? ApplyToPlayer(player, preset) : null;
+
     /// <summary>The immutable built-in factory presets.</summary>
     IReadOnlyList<DspTonePreset> Presets { get; }
 
@@ -79,6 +90,29 @@ public interface IDspTonePresetService
     /// id is created. Returns the stored (or refused-existing) preset.</summary>
     DspTonePreset SaveUser(
         string name, DspToneCategory category, string description, DcRigPreset rig, string? overwriteId = null);
+
+    /// <summary><see cref="SaveUser(string, DspToneCategory, string, DcRigPreset, string?)" />,
+    /// also answering whether the preset reached the disk: false when the write failed, so
+    /// the preset lives only until the app closes and the player must be told. A store
+    /// with no file has nothing to fail, which is what this default answers.</summary>
+    DspTonePreset SaveUser(
+        string name, DspToneCategory category, string description, DcRigPreset rig, string? overwriteId, out bool written)
+    {
+        written = true;
+        return SaveUser(name, category, description, rig, overwriteId);
+    }
+
+    /// <summary><see cref="SaveUser(string, DspToneCategory, string, DcRigPreset, string?, out bool)" />
+    /// in two halves: the preset is saved in memory before this returns, and
+    /// <paramref name="write" /> puts it on disk and answers whether the disk took it, so a
+    /// caller on the UI thread runs the write on a worker. This default writes at once.</summary>
+    DspTonePreset StageUser(
+        string name, DspToneCategory category, string description, DcRigPreset rig, string? overwriteId, out Func<bool> write)
+    {
+        var saved = SaveUser(name, category, description, rig, overwriteId, out var written);
+        write = () => written;
+        return saved;
+    }
 
     /// <summary>Deletes a user preset by id. False for an unknown id or a built-in
     /// id (factory presets are immutable).</summary>

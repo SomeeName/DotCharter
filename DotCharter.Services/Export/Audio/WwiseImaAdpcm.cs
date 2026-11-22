@@ -61,10 +61,6 @@ internal static class WwiseImaAdpcm
     public static int BlockCount(int frameCount) =>
         (frameCount + SamplesPerBlock - 1) / SamplesPerBlock;
 
-    /// <summary>Total encoded byte length for the given frame count and channel count.</summary>
-    public static int EncodedLength(int frameCount, int channels) =>
-        BlockCount(frameCount) * BlockBytes * channels;
-
     /// <summary>
     ///     Encodes interleaved 16-bit PCM into Wwise IMA-ADPCM. The tail of the
     ///     final block is padded with the last sample (not silence — a jump to

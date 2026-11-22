@@ -1,8 +1,11 @@
+using System.Collections.Concurrent;
 using System.IO.Compression;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using DotCharter.Core.Domain.Vocals;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.Services.Editing.Tracks;
+using DotCharter.Services.Export.Audio;
 using DotCharter.Services.Infrastructure.Documents;
 using DotCharter.Services.Session;
 using DotCharter.Tone.Diagnostics;
@@ -11,7 +14,7 @@ using DotCharter.UI.ViewModels.Editor;
 
 namespace DotCharter.Tests.Services.Session;
 
-public sealed class ProjectAutoBackupTests : IDisposable
+public sealed partial class ProjectAutoBackupTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("dotcharter-autobackup-").FullName;
     private readonly FakeAppLogger _logger = new();
@@ -80,6 +83,156 @@ public sealed class ProjectAutoBackupTests : IDisposable
     }
 
     [Fact]
+    public void AFailedTick_RetriesUnchangedDirtyContent_OnTheNextDueTick()
+    {
+        _dirty.MarkDirty();
+        _documents.FailNext = new IOException("disk full");
+
+        RunDueTick();
+
+        Assert.True(_logger.HasEntryContaining("ERROR", "Auto backup failed"));
+        Assert.Empty(Directory.GetFiles(Path.Combine(_root, "backups")));
+
+        RunDueTick();
+
+        var path = Assert.Single(Directory.GetFiles(Path.Combine(_root, "backups"), "*.dcproj.zip"));
+        using var archive = ZipFile.OpenRead(path);
+        Assert.Single(archive.Entries);
+    }
+
+    [Fact]
+    public void ASuccessfulTick_DoesNotBackUpUnchangedDirtyContentAgain()
+    {
+        _dirty.MarkDirty();
+        RunDueTick();
+        var path = Assert.Single(Directory.GetFiles(Path.Combine(_root, "backups")));
+
+        RunDueTick();
+
+        Assert.Equal(path, Assert.Single(Directory.GetFiles(Path.Combine(_root, "backups"))));
+    }
+
+    [Fact]
+    public void AnEditDuringTheWrite_IsStillOwedABackup()
+    {
+        _dirty.MarkDirty();
+        RunDueTick(_dirty.MarkDirty);
+
+        RunDueTick();
+
+        Assert.Equal(2, Directory.GetFiles(Path.Combine(_root, "backups"), "*.dcproj.zip").Length);
+    }
+
+    [Fact]
+    public void AProjectSwitchDuringTheWrite_DoesNotReuseThePreviousProjectsStamp()
+    {
+        _dirty.MarkDirty();
+        RunDueTick(() =>
+        {
+            _state.ActiveProject = new ChartProject();
+            _backup.ResetSchedule();
+        });
+
+        RunDueTick();
+
+        Assert.Equal(2, Directory.GetFiles(Path.Combine(_root, "backups"), "*.dcproj.zip").Length);
+    }
+
+    // Hold the worker until Tick has returned, then run its posted continuation
+    // to completion. This drives the real gate without sleeping or racing a timer.
+    private void RunDueTick(Action? afterSnapshot = null)
+    {
+        using var release = new ManualResetEventSlim();
+        using var context = new TickContext();
+        _documents.WriteRelease = release;
+        var previous = SynchronizationContext.Current;
+        var pending = false;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(context);
+            typeof(ProjectAutoBackup).GetField("_lastBackupUtc", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(_backup, DateTimeOffset.MinValue);
+            _backup.Tick();
+            pending = (bool)typeof(ProjectAutoBackup).GetField("_inProgress", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(_backup)!;
+            afterSnapshot?.Invoke();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+            release.Set();
+        }
+
+        if (pending)
+        {
+            context.CompleteWrite(() => !(bool)typeof(ProjectAutoBackup)
+                .GetField("_inProgress", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_backup)!);
+        }
+        _documents.WriteRelease = null;
+    }
+
+    private sealed class TickContext : SynchronizationContext, IDisposable
+    {
+        private readonly BlockingCollection<(SendOrPostCallback Callback, object? State)> _posted = [];
+
+        public override void Post(SendOrPostCallback d, object? state) => _posted.Add((d, state));
+
+        public void CompleteWrite(Func<bool> completed)
+        {
+            var deadlock = System.Diagnostics.Stopwatch.StartNew();
+            var previous = Current;
+            try
+            {
+                SetSynchronizationContext(this);
+                while (!completed())
+                {
+                    var remaining = BoundedWait.DeadlockCap - deadlock.Elapsed;
+                    Assert.True(remaining > TimeSpan.Zero, "The auto-backup dispatcher never finished (deadlock or a starved box).");
+                    Assert.True(_posted.TryTake(out var work, remaining), "The auto-backup dispatcher never posted its next continuation.");
+                    work.Callback(work.State);
+                }
+            }
+            finally
+            {
+                SetSynchronizationContext(previous);
+            }
+        }
+
+        public void Dispose() => _posted.Dispose();
+    }
+
+    [Fact]
+    public async Task AZipThatFailsMidWrite_LeavesNoFinalNamedArchive_AndKeepsTheGoodBackup()
+    {
+        var backups = Path.Combine(_root, "backups");
+        Directory.CreateDirectory(backups);
+        var good = Path.Combine(backups, "My Song_20200101_000000.dcproj.zip");
+        using (var seed = ZipFile.Open(good, ZipArchiveMode.Create)) seed.CreateEntry("x.dcproj");
+        var goodBytes = File.ReadAllBytes(good);
+
+        _documents.VanishAfterWrite = true;
+        await _backup.CreateBackupAsync();
+
+        Assert.True(_logger.HasEntryContaining("ERROR", "Auto backup failed"));
+        Assert.Equal(good, Assert.Single(Directory.GetFiles(backups)));
+        Assert.Equal(goodBytes, File.ReadAllBytes(good));
+    }
+
+    [Fact]
+    public void PruneBackups_IgnoresAndSweepsStagedZips_SoTheLastGoodOneSurvivesKeepOne()
+    {
+        File.WriteAllText(Path.Combine(_root, "song_20200101_000000.dcproj.zip"), "good");
+        var staged = Path.Combine(_root, "song_20300101_000000.dcproj.zip.tmp");
+        File.WriteAllText(staged, "truncated");
+
+        var deleted = ProjectAutoBackup.PruneBackups(_root, "song", 1);
+
+        Assert.Equal(0, deleted);
+        Assert.True(File.Exists(Path.Combine(_root, "song_20200101_000000.dcproj.zip")));
+        Assert.False(File.Exists(staged));
+    }
+
+    [Fact]
     public async Task AProjectNeverSaved_IsNotBackedUp()
     {
         _state.CurrentProjectPath = "";
@@ -140,13 +293,20 @@ public sealed class ProjectAutoBackupTests : IDisposable
     private sealed class RecordingDocumentService : IProjectDocumentService
     {
         public List<(string Path, ChartProject Project)> Saved { get; } = [];
+        public List<ProjectVolumeFields> WrittenVolumeFields { get; } = [];
         public Exception? FailNext { get; set; }
+        public ManualResetEventSlim? WriteRelease { get; set; }
+
+        /// <summary>Makes the zip step fail AFTER the archive file exists: the .dcproj it zips vanishes.</summary>
+        public bool VanishAfterWrite { get; set; }
 
         public ChartProject LoadChart(string filePath) => new();
 
         public void SaveChart(string filePath, ChartProject project, double? audioLengthMs = null)
         {
+            if (WriteRelease is { } release) BoundedWait.For(release, "the auto-backup writer release");
             Saved.Add((filePath, project));
+            WrittenVolumeFields.Add(ProjectVolumeFields.From(project.Chart));
             if (FailNext is { } failure)
             {
                 FailNext = null;
@@ -154,6 +314,7 @@ public sealed class ProjectAutoBackupTests : IDisposable
             }
 
             File.WriteAllText(filePath, "chart");
+            if (VanishAfterWrite) File.Delete(filePath);
         }
 
         public void RefreshArrangementFileManifest(ChartProject project)

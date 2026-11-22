@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using DotCharter.UI.Controls;
 using DotCharter.UI.ViewModels.Editor;
 
 namespace DotCharter.UI.Views.Editor;
@@ -20,7 +21,14 @@ public partial class PhraseCatalogView : UserControl
 {
     private PhraseCatalogViewModel? _subscribed;
 
-    public PhraseCatalogView() => InitializeComponent();
+    public PhraseCatalogView()
+    {
+        InitializeComponent();
+        Cards = this.FindControl<ColumnFlowPanel>("RiffCards")!;
+    }
+
+    /// <summary>The card body — the test hook.</summary>
+    internal ColumnFlowPanel Cards { get; }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {

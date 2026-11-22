@@ -107,7 +107,7 @@ public partial class ToneDesignCoreViewModel : ObservableObject
     /// started a fresh conversation. An import answers THAT request — the chat saw
     /// it, whatever the box says now. Null until a prompt is copied; dropped by a
     /// successful import, a provider design and Discard.</summary>
-    private (ToneDesignRequest Request, bool Fresh)? _manualPending;
+    private (ToneDesignRequest Request, bool Fresh, Func<bool> IsCurrent)? _manualPending;
 
     /// <summary>The conversation so far, in order, exactly as the contract's
     /// <see cref="ToneDesignRequest.History" /> wants it. A tweak sends it so
@@ -435,6 +435,8 @@ public partial class ToneDesignCoreViewModel : ObservableObject
 
     private async Task RunAsync(string text, bool fresh)
     {
+        var isCurrent = ResultValidity(fresh);
+        if (!isCurrent()) return;
         var service = _service();
         if (service is null || !service.IsConfigured)
         {
@@ -468,10 +470,14 @@ public partial class ToneDesignCoreViewModel : ObservableObject
             // said so, and in a test it is after the assertion: the status guard
             // failed on a loaded box for exactly that reason. This one applies the
             // line the moment Report returns.
-            var progress = new InlineProgress(line => PostToUi(() => Status = line));
+            var progress = new InlineProgress(line => PostToUi(() =>
+            {
+                if (isCurrent()) Status = line;
+            }));
             var result = await service.DesignAsync(request, progress, cts.Token).ConfigureAwait(true);
 
-            Result = new ToneDesignResultViewModel(result, ChainSummary(result.Tone.Rig), _loc);
+            if (!isCurrent()) return;
+            Result = new ToneDesignResultViewModel(result, ChainSummary(result.Tone.Rig), _loc, isCurrent);
             AddTurn(ToneDesignRole.Assistant, result.Tone.Name);
             TweakText = string.Empty;
             // "12.4 s · ~$0.04" — what the design just cost, in the line that was
@@ -481,10 +487,12 @@ public partial class ToneDesignCoreViewModel : ObservableObject
         }
         catch (ToneDesignException ex)
         {
+            if (!isCurrent()) return;
             Fail(ex.Fault);
         }
         catch (OperationCanceledException)
         {
+            if (!isCurrent()) return;
             Status = _loc["ToneDesign_Cancelled"];
         }
         finally
@@ -660,30 +668,40 @@ public partial class ToneDesignCoreViewModel : ObservableObject
         if (service is null || clipboard is null) return;
 
         var fresh = !HasResult;
+        var isCurrent = ResultValidity(fresh);
+        if (!isCurrent()) return;
         var text = ActiveText;
         var request = BuildRequest(text, fresh,
             (fresh ? [] : _history).Append(new ToneDesignTurn(ToneDesignRole.User, text)));
 
         ManualErrorText = string.Empty;
         IsCopying = true;
+        var previousPending = _manualPending;
         try
         {
             var manual = await Task.Run(() => service.BuildManualPromptAsync(request, CancellationToken.None))
                 .ConfigureAwait(true);
+            if (!isCurrent()) return;
+            // Retain ownership before an OS write that may finish after this owner expires.
+            _manualPending = (request, fresh, isCurrent);
             await clipboard.SetTextAsync(manual.Text).ConfigureAwait(true);
-            _manualPending = (request, fresh);
+            if (!isCurrent()) return;
             Status = _loc.Format("ToneDesign_Manual_Copied",
                 manual.EstimatedTokens.ToString("N0", CultureInfo.CurrentCulture));
         }
         catch (ToneDesignException ex)
         {
-            _logger?.Warning(AppLogCategory.Application, $"Copying the tone prompt failed: {ex.Message} {ex.Detail}");
+            if (!isCurrent()) return;
+            if (ReferenceEquals(_manualPending?.Request, request)) _manualPending = previousPending;
+            _logger?.Warning(AppLogCategory.Application, $"Copying the tone prompt failed: {ex.Detail}", ex);
             ManualErrorText = _loc[FaultKey(ex.Fault)];
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            if (!isCurrent()) return;
+            if (ReferenceEquals(_manualPending?.Request, request)) _manualPending = previousPending;
             // The clipboard is the OS's: another app can hold it open.
-            _logger?.Warning(AppLogCategory.Application, $"Copying the tone prompt failed: {ex.GetType().Name}: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Application, "Copying the tone prompt failed", ex);
             ManualErrorText = _loc["ToneDesign_Manual_CopyFailed"];
         }
         finally
@@ -714,7 +732,8 @@ public partial class ToneDesignCoreViewModel : ObservableObject
         if (service is null) return;
 
         var reply = ReplyText;
-        var (request, fresh) = _manualPending ?? PendingFromTheBox();
+        var (request, fresh, isCurrent) = _manualPending ?? PendingFromTheBox();
+        if (!isCurrent()) return;
 
         ManualErrorText = string.Empty;
         Status = _loc["ToneDesign_Working"];
@@ -722,13 +741,17 @@ public partial class ToneDesignCoreViewModel : ObservableObject
         IsRunning = true;
         try
         {
-            var progress = new InlineProgress(line => PostToUi(() => Status = line));
+            var progress = new InlineProgress(line => PostToUi(() =>
+            {
+                if (isCurrent()) Status = line;
+            }));
             var result = await Task.Run(() => service.ImportReplyAsync(request, reply, progress, cts.Token))
                 .ConfigureAwait(true);
 
+            if (!isCurrent()) return;
             if (fresh) ClearConversation();
             AddTurn(ToneDesignRole.User, request.Description);
-            Result = new ToneDesignResultViewModel(result, ChainSummary(result.Tone.Rig), _loc);
+            Result = new ToneDesignResultViewModel(result, ChainSummary(result.Tone.Rig), _loc, isCurrent);
             AddTurn(ToneDesignRole.Assistant, result.Tone.Name);
             _manualPending = null;
             ReplyText = string.Empty;
@@ -739,6 +762,7 @@ public partial class ToneDesignCoreViewModel : ObservableObject
         }
         catch (ToneDesignException ex)
         {
+            if (!isCurrent()) return;
             _logger?.Info(AppLogCategory.Application, $"A pasted tone answer was not usable: {ex.Message} {ex.Detail}");
             ManualErrorText = ex.Fault == ToneDesignFault.InvalidOutput
                 ? _loc["ToneDesign_Manual_InvalidReply"]
@@ -747,6 +771,7 @@ public partial class ToneDesignCoreViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
+            if (!isCurrent()) return;
             Status = _loc["ToneDesign_Cancelled"];
         }
         finally
@@ -760,12 +785,12 @@ public partial class ToneDesignCoreViewModel : ObservableObject
     /// <summary>The request an import answers when no prompt was copied from here
     /// (the player asked the chat on their own): the box's text, or the route's
     /// name when the box is empty, so the conversation still has a "You" turn.</summary>
-    private (ToneDesignRequest Request, bool Fresh) PendingFromTheBox()
+    private (ToneDesignRequest Request, bool Fresh, Func<bool> IsCurrent) PendingFromTheBox()
     {
         var fresh = !HasResult;
         var text = ActiveText.Length > 0 ? ActiveText : _loc["ToneDesign_Manual_Title"];
         return (BuildRequest(text, fresh,
-            (fresh ? [] : _history).Append(new ToneDesignTurn(ToneDesignRole.User, text))), fresh);
+            (fresh ? [] : _history).Append(new ToneDesignTurn(ToneDesignRole.User, text))), fresh, ResultValidity(fresh));
     }
 
     /// <summary>"Rat → Power Amp → Cab → Mic Position" — the ordered chain in the
@@ -775,6 +800,12 @@ public partial class ToneDesignCoreViewModel : ObservableObject
 
     // ---- the four result actions ---------------------------------------------
 
+    /// <summary>Lets a host refuse a result whose publishing owner has expired.</summary>
+    protected virtual bool CanUseResult() => Result is { } result && result.ValidityCheck();
+
+    protected Func<bool> ResultValidity(bool fresh) =>
+        !fresh && Result is { } result ? result.ValidityCheck : static () => true;
+
     /// <summary>Applies the designed tone through the drawer's own apply path,
     /// remembering what was playing first so <see cref="DiscardCommand" /> can put
     /// it back. The snapshot is taken ONCE: hearing two designs in a row must
@@ -782,6 +813,7 @@ public partial class ToneDesignCoreViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(HasResult))]
     private void HearIt()
     {
+        if (!CanUseResult()) return;
         if (Result is not { } result) return;
         _restorePoint ??= _snapshotLive();
         _apply(result.Tone);
@@ -794,6 +826,7 @@ public partial class ToneDesignCoreViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(HasResult))]
     private void SaveTone()
     {
+        if (!CanUseResult()) return;
         if (Result is not { } result) return;
         var saved = _saveUser(result.ToneName, result.Tone.Category, result.Rationale, result.Tone.Rig);
         Status = _loc.Format("ToneDesign_Saved", saved.Name);
@@ -841,8 +874,10 @@ public partial class ToneDesignCoreViewModel : ObservableObject
 /// would do it on the UI thread.</summary>
 public sealed partial class ToneDesignResultViewModel : ObservableObject
 {
-    public ToneDesignResultViewModel(ToneDesignResult result, string chainSummary, ILocalizationService loc)
+    public ToneDesignResultViewModel(ToneDesignResult result, string chainSummary, ILocalizationService loc,
+        Func<bool>? isCurrent = null)
     {
+        ValidityCheck = isCurrent ?? (static () => true);
         Tone = result.Tone;
         ToneName = result.Tone.Name;
         ChainSummary = chainSummary;
@@ -884,6 +919,9 @@ public sealed partial class ToneDesignResultViewModel : ObservableObject
             (result.DownloadedCaptures ?? []).Select(c =>
                 loc.Format("ToneDesign_DownloadedCapture", c.Title, c.Author, c.License)));
     }
+
+    /// <summary>The host's ownership check, retained by every refinement of this result.</summary>
+    public Func<bool> ValidityCheck { get; }
 
     public DspTonePreset Tone { get; }
     public string ToneName { get; }

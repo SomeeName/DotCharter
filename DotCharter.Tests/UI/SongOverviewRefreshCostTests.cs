@@ -27,6 +27,15 @@ namespace DotCharter.Tests.UI;
 /// </summary>
 public sealed class SongOverviewRefreshCostTests
 {
+    [Fact]
+    public void ProjectMetadataDoesNotSubscribeToArrangementChanges()
+    {
+        var source = SourceText.StripComments(UiSourceTree.ReadAllText(UiSourceTree.Resolve(
+            Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "ViewModels", "Editor", "SongOverviewViewModel.cs"))));
+
+        Assert.DoesNotContain("nameof(ProjectState.ActiveArrangement)", source);
+    }
+
     /// <summary>
     ///     An edit that changes nothing the pane shows raises nothing on any of
     ///     its three bound collections.

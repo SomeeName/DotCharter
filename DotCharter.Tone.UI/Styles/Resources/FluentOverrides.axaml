@@ -193,6 +193,34 @@
         <SolidColorBrush x:Key="CheckBoxForegroundChecked" Color="{DynamicResource TextSecondaryColor}" />
         <SolidColorBrush x:Key="CheckBoxForegroundCheckedPointerOver" Color="{DynamicResource TextPrimaryColor}" />
         <SolidColorBrush x:Key="CheckBoxForegroundCheckedPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="CheckBoxForegroundUncheckedDisabled" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="CheckBoxForegroundCheckedDisabled" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="CheckBoxForegroundIndeterminateDisabled" Color="{DynamicResource TextDimColor}" />
+
+        <!-- RadioButton: Fluent's ring and label colours are template keys
+             of its own light/dark pair, so an unstyled radio drew a near-black label and a
+             black disc with no outline on the dark panels. Label = the check box's label,
+             unchecked ring = the check box's BorderDefault outline, checked ring = accent. -->
+        <SolidColorBrush x:Key="RadioButtonForeground" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="RadioButtonForegroundPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="RadioButtonForegroundPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="RadioButtonForegroundDisabled" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseFill" Color="Transparent" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseFillPointerOver" Color="Transparent" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseFillPressed" Color="Transparent" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseFillDisabled" Color="Transparent" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseStroke" Color="{DynamicResource BorderDefaultColor}" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseStrokePointerOver" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseStrokePressed" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseStrokeDisabled" Color="{DynamicResource BorderDefaultColor}" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedFill" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedFillPointerOver" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedFillPressed" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedFillDisabled" Color="{DynamicResource BorderDefaultColor}" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedStroke" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedStrokePointerOver" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedStrokePressed" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedStrokeDisabled" Color="{DynamicResource BorderDefaultColor}" />
 
         <!-- Expander — Fluent's template binds these resource keys via
              TemplateBinding, so reskinning Background on the outer Style

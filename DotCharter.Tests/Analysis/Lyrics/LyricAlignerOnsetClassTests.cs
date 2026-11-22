@@ -68,6 +68,23 @@ public sealed class LyricAlignerOnsetClassTests
     }
 
     [Theory]
+    [InlineData("b 水 a")]
+    [InlineData("b 水 火 a")]
+    [InlineData("水 b a")]
+    [InlineData("b a 水")]
+    public void InterpolationKeepsStartsMonotonicEvenWhenVowelBiasOverlapsSpans(string sheet)
+    {
+        var placed = Align(sheet, "ba", -5.0);
+
+        Assert.Contains(placed, s => s.IsInterpolated);
+        for (var i = 0; i < placed.Count; i++)
+        {
+            Assert.True(placed[i].EndSeconds >= placed[i].StartSeconds);
+            if (i > 0) Assert.True(placed[i].StartSeconds >= placed[i - 1].StartSeconds);
+        }
+    }
+
+    [Theory]
     [InlineData("tsu", SyllableOnsetClass.Unvoiced)]
     [InlineData("chi", SyllableOnsetClass.Unvoiced)]
     [InlineData("shi", SyllableOnsetClass.Unvoiced)]

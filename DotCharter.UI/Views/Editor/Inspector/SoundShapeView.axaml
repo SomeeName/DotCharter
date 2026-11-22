@@ -2,100 +2,401 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
              xmlns:inspector="using:DotCharter.UI.ViewModels.Editor.Inspector"
-             xmlns:panels="clr-namespace:DotCharter.UI.Views.Panels;assembly=DotCharter"
+             xmlns:ctl="using:DotCharter.UI.Controls"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              x:Class="DotCharter.UI.Views.Editor.Inspector.SoundShapeView"
              x:DataType="viewModels:InspectorViewModel"
              Name="SoundShapeRoot">
-    <!-- The Sound tab's SHAPE section (#601) for a chord or a hand shape: the chord box, the
-         fingering and the name (ChordTemplateEditorView, fingering first) and, for a hand shape,
-         its span. The "Apply to" ladder is NOT in here: the tab pins it above the section. -->
-    <StackPanel Spacing="{StaticResource SpaceMd}">
-        <!-- Reshaping a hand shape also rebinds the untemplated chords inside it
-             (ChordApplyScope.EnclosedUnbound): stated BEFORE the edit. -->
-        <Border Classes="FieldIssue Warn"
-                IsVisible="{Binding HandShapeEditor.HandShapeRebindsChords}">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}">
-                <PathIcon Grid.Column="0" Data="{DynamicResource IconAlert}" />
-                <TextBlock Grid.Column="1" Text="{Binding HandShapeEditor.HandShapeRebindWarning}" TextWrapping="Wrap" />
-            </Grid>
-        </Border>
+    <!-- The Note tab's SHAPE page (#751, inspector design D) for a chord or a hand shape.
+         LEFT: one 28 px row per string — string and pitch, the chord's fret (Note), the hand shape's
+         fret (Grip), its ghost toggle, its finger (T 1 2 3 4) and its edit-mask dot. RIGHT: the
+         fretboard, its lanes aligned with those rows (ctl:ColumnFlowFretboard), or one of the pages
+         Name / Scope / Flags / Double-stop. "Full board" keeps the board beside the rows and opens the
+         page below. Every edit is a DRAFT until Save (GripInspectorViewModel); a grip edit never adds a
+         note. Below: the rebind line; Undo save / Save / Save and next / Save & next missing are pinned in the
+         tab's footer (#751 P5). The
+         span is resized on the timeline; "Fit this shape" is on the Scope page. ONE grid, ONE board,
+         ONE template list, ONE Pin, ONE Save set: the old chord-shape editor's tools live on these
+         pages (suggested names and the shapes that contain this one on Name, Generate all fingerings
+         on Scope, the Nop flag as Double-stop on Flags), never a second grid that could add notes. -->
+    <UserControl.Styles>
+        <!-- An 18 px header with 4 px button padding (German fits one row at 530 px) and 2 px gaps keep all six rows on screen at the primary 530 x 370 size
+             (SoundShapeViewUiPerfSmokeTests.AtThePrimarySize_AllSixRows_AreOnScreen_WithNothingScrolled). The
+             Subtle Compact and Seg themes' class rules out-rank this style's Padding (6,3 / 8,2 cut the text of the
+             18 px fret window and Full board), so those buttons set Padding (and Full board MinHeight) locally. -->
+        <Style Selector="ctl|SplitRowPanel#SoundShapeHeader Button, ctl|SplitRowPanel#SoundShapeHeader ToggleButton">
+            <Setter Property="MinHeight" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Padding" Value="4,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </UserControl.Styles>
+    <StackPanel x:Name="SoundShapeBody" DataContext="{Binding GripInspector}" x:DataType="inspector:GripInspectorViewModel"
+                Spacing="{StaticResource SpaceXxs}" KeyDown="OnBodyKeyDown">
 
-        <panels:ChordTemplateEditorView
-            DataContext="{Binding ChordTemplateEditor}"
-            ShowsApplyScope="False" FingeringFirst="True"
-            Mask="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).ProjectState.StringEditMask}"
-            ToggleMaskCommand="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).StringMask.ToggleStringMaskCommand}"
-            IssueStrings="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).SelectionIssuePips}" />
+        <TextBlock x:Name="SoundShapeUnavailable" IsVisible="{Binding !IsAvailable}" TextWrapping="Wrap"
+                   Text="{localization:Loc Inspector_Grip_Unavailable}"
+                   Foreground="{DynamicResource FireTextMuted}" FontSize="{StaticResource FireSizeXs}" />
 
-        <!-- SPAN: a hand shape's editable start and EXCLUSIVE end. Commits on LostFocus; an end at
-             or before the start is refused rather than clamped. -->
-        <StackPanel x:Name="SoundSpanBlock" Spacing="{StaticResource SpaceSm}" IsVisible="{Binding ShowSpanCard}">
-            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceSm}">
-                <PathIcon Data="{DynamicResource IconTechLinkNext}" Classes="SectionIcon" Margin="0" />
-                <TextBlock Classes="InspectorCardTitle" Text="{localization:Loc Inspector_Span}" />
+        <!-- header: title (or the board's fret window), the page strip, Full board. One 18 px row while both fit;
+             where they do not (German, Japanese, a narrow pane) the page strip moves under the pager and wraps,
+             so no control is ever hidden or painted under another (SplitRowPanel,
+             SoundShapeViewUiPerfSmokeTests.TheHeader_KeepsThePagerAndEveryToggle_VisibleApartAndClickable). -->
+        <ctl:SplitRowPanel x:Name="SoundShapeHeader" Spacing="{StaticResource SpaceXs}" RowSpacing="{StaticResource SpaceXxs}"
+                           IsVisible="{Binding IsAvailable}">
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXxs}" VerticalAlignment="Center">
+                <TextBlock Classes="InspectorCardTitle" Text="{localization:Loc Inspector_Grip_Title}"
+                           IsVisible="{Binding !ShowsBoard}" TextTrimming="CharacterEllipsis" />
+                <Button x:Name="SoundShapeLowerFrets" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Padding="4,0"
+                        IsVisible="{Binding ShowsBoard}" Click="OnLowerFrets"
+                        ToolTip.Tip="{localization:Loc Inspector_Grip_LowerFrets}"
+                        AutomationProperties.Name="{localization:Loc Inspector_Grip_LowerFrets}">
+                    <PathIcon Data="{DynamicResource IconChevronLeft}" Width="9" Height="9" />
+                </Button>
+                <Button x:Name="SoundShapeWindow" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Padding="4,0"
+                        IsVisible="{Binding ShowsBoard}" Click="OnShowShape"
+                        ToolTip.Tip="{localization:Loc Inspector_Grip_ShowShape}"
+                        AutomationProperties.Name="{localization:Loc Inspector_Grip_ShowShape}">
+                    <TextBlock FontWeight="SemiBold">
+                        <Run Text="{localization:Loc Inspector_Grip_Frets}" />
+                        <Run Text="{Binding #SoundShapeBoard.WindowLabel}" />
+                    </TextBlock>
+                </Button>
+                <Button x:Name="SoundShapeHigherFrets" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Padding="4,0"
+                        IsVisible="{Binding ShowsBoard}" Click="OnHigherFrets"
+                        ToolTip.Tip="{localization:Loc Inspector_Grip_HigherFrets}"
+                        AutomationProperties.Name="{localization:Loc Inspector_Grip_HigherFrets}">
+                    <PathIcon Data="{DynamicResource IconChevronRight}" Width="9" Height="9" />
+                </Button>
             </StackPanel>
-            <Grid Classes="FieldRow" ColumnDefinitions="Auto,*,Auto,*">
-                <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_Span_Start}"
-                           Theme="{StaticResource LabelText}" Classes="Label FieldLabel" />
-                <TextBox Grid.Column="1"
-                         AutomationProperties.Name="{localization:Loc Inspector_Span_Start}"
-                         Text="{Binding HandShapeEditor.HandShapeStartText, UpdateSourceTrigger=LostFocus}"
-                         FontFamily="{StaticResource FireFontMono}"
-                         Margin="{StaticResource GapRightMd}"
-                         ToolTip.Tip="{localization:Loc Inspector_Span_StartTip}" />
-                <TextBlock Grid.Column="2" Text="{localization:Loc Inspector_Span_End}"
-                           Theme="{StaticResource LabelText}" Classes="Label" VerticalAlignment="Center"
-                           Margin="{StaticResource GapRightMd}" />
-                <TextBox Grid.Column="3"
-                         AutomationProperties.Name="{localization:Loc Inspector_Span_End}"
-                         Text="{Binding HandShapeEditor.HandShapeEndText, UpdateSourceTrigger=LostFocus}"
-                         FontFamily="{StaticResource FireFontMono}"
-                         ToolTip.Tip="{localization:Loc Inspector_Span_EndTip}" />
-            </Grid>
-            <TextBlock Text="{Binding HandShapeEditor.HandShapeSpanLabel}"
-                       FontFamily="{StaticResource FireFontMono}"
-                       FontSize="{StaticResource FontSizeXs}"
-                       Foreground="{DynamicResource TextDim}" TextWrapping="Wrap" />
-            <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0"
-                           Text="{Binding HandShapeEditor.HandShapeEnclosedLabel}"
-                           Foreground="{DynamicResource TextMuted}"
-                           VerticalAlignment="Center"
-                           FontSize="{StaticResource FontSizeXs}" />
-                <Button Grid.Column="1" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                        Content="{localization:Loc Inspector_Span_Fit}"
-                        Command="{Binding HandShapeEditor.FitHandShapeToSoundsCommand}"
-                        ToolTip.Tip="{localization:Loc Inspector_Span_FitTip}" />
-            </Grid>
-        </StackPanel>
+            <WrapPanel x:Name="SoundShapePages" LineSpacing="{StaticResource SpaceXxs}">
+                <ToggleButton x:Name="SoundShapePageBoard" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              IsChecked="{Binding IsBoardPage, Mode=OneWay}" Command="{Binding ShowPageCommand}" CommandParameter="0"
+                              Content="{localization:Loc Inspector_Grip_Page_Board}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Grip_Page_Board}" />
+                <ToggleButton x:Name="SoundShapePageName" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              IsChecked="{Binding IsNamePage, Mode=OneWay}" Command="{Binding ShowPageCommand}" CommandParameter="1"
+                              Content="{localization:Loc Inspector_Grip_Page_Name}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Grip_Page_Name}" />
+                <ToggleButton x:Name="SoundShapePageScope" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              IsChecked="{Binding IsScopePage, Mode=OneWay}" Command="{Binding ShowPageCommand}" CommandParameter="2"
+                              Content="{localization:Loc Inspector_Grip_Page_Scope}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Grip_Page_Scope}" />
+                <ToggleButton x:Name="SoundShapePageFlags" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              IsChecked="{Binding IsFlagsPage, Mode=OneWay}" Command="{Binding ShowPageCommand}" CommandParameter="3"
+                              Content="{localization:Loc Inspector_Grip_Page_Flags}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Grip_Page_Flags}" />
+                <ToggleButton x:Name="SoundShapePageDoubleStop" Theme="{StaticResource ColumnFlowNavToggle}" Classes="ColumnFlowNav"
+                              IsChecked="{Binding IsDoubleStopPage, Mode=OneWay}" Command="{Binding ShowPageCommand}" CommandParameter="4"
+                              Content="{localization:Loc Inspector_Grip_Page_DoubleStop}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Grip_Page_DoubleStop}" />
+                <ToggleButton x:Name="SoundShapeFullBoard" Theme="{StaticResource SegToggle}" Classes="Seg"
+                              IsChecked="{Binding IsFullBoard}" Margin="{StaticResource GapLeftXs}" MinHeight="18" Padding="4,0"
+                              Content="{localization:Loc Inspector_Grip_FullBoard}"
+                              ToolTip.Tip="{localization:Loc Inspector_Grip_FullBoardTip}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Grip_FullBoard}" />
+            </WrapPanel>
+        </ctl:SplitRowPanel>
 
-        <!-- GHOST GEMS (#785): the strings the grip HOLDS without playing (a tapped harmonic's
-             fretting finger, the full chord a partial strum sits in), and the grip's pin. A grip
-             with ghost gems is always pinned, so the box is disabled then. -->
-        <StackPanel x:Name="SoundGhostBlock" Spacing="{StaticResource SpaceSm}"
-                    IsVisible="{Binding HandShapeEditor.HasGhostRows}">
-            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceSm}">
-                <PathIcon Data="{DynamicResource IconGuitar}" Classes="SectionIcon" Margin="0" />
-                <TextBlock Classes="InspectorCardTitle" Text="{localization:Loc Inspector_GhostGems}" />
+        <!-- the row-aligned grid: rows (left) + board or page (right) -->
+        <Grid x:Name="SoundShapeGrid" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto"
+              ColumnSpacing="{StaticResource SpaceSm}" RowSpacing="{StaticResource SpaceXs}"
+              IsVisible="{Binding IsAvailable}">
+            <StackPanel x:Name="SoundShapeRows" Grid.Column="0" Focusable="True"
+                        AutomationProperties.Name="{localization:Loc Inspector_Grip_Title}">
+                <Grid Height="18" ColumnDefinitions="64,32,32,34,140,20">
+                    <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_Grip_Col_String}" FontSize="{StaticResource FireSizeNano}" Foreground="{DynamicResource FireTextMuted}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Grip_Col_Note}" FontSize="{StaticResource FireSizeNano}" Foreground="{DynamicResource FireTextMuted}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{localization:Loc Inspector_Grip_NoteTip}" />
+                    <TextBlock Grid.Column="2" Text="{localization:Loc Inspector_Grip_Col_Grip}" FontSize="{StaticResource FireSizeNano}" Foreground="{DynamicResource FireTextMuted}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{localization:Loc Inspector_Grip_GripTip}" />
+                    <TextBlock Grid.Column="3" Text="{localization:Loc Inspector_Grip_Col_Ghost}" FontSize="{StaticResource FireSizeNano}" Foreground="{DynamicResource FireTextMuted}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{localization:Loc Inspector_Grip_GhostTip}" />
+                    <TextBlock Grid.Column="4" Text="{localization:Loc Inspector_Grip_Col_Finger}" FontSize="{StaticResource FireSizeNano}" Foreground="{DynamicResource FireTextMuted}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                </Grid>
+                <ItemsControl x:Name="SoundShapeRowList" ItemsSource="{Binding Rows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="inspector:GripRow">
+                            <Grid Height="28" ColumnDefinitions="64,32,32,34,140,20">
+                                <Border Grid.ColumnSpan="6" IsVisible="{Binding IsKeyRow}" Background="{DynamicResource FireSurfaceHover}"
+                                        CornerRadius="{StaticResource FireRadiusMicro}" />
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="{StaticResource SpaceXs}" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Label}" FontFamily="{StaticResource FireFontMono}"
+                                               FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextMuted}" />
+                                    <TextBlock Text="{Binding Pitch}" FontFamily="{StaticResource FireFontMono}"
+                                               FontSize="{StaticResource FireSizeXs}" FontWeight="SemiBold" Foreground="{DynamicResource FireTextPrimary}" />
+                                </StackPanel>
+                                <TextBox Grid.Column="1" Padding="2,0" MinWidth="0" MinHeight="24" Height="24" Margin="1,0" FontFamily="{StaticResource FireFontMono}" FontSize="{StaticResource FireSizeXs}" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Text="{Binding ChordFretText, UpdateSourceTrigger=LostFocus}"
+                                         Watermark="{Binding ChordPlaceholder}" IsEnabled="{Binding HasChord}"
+                                         ToolTip.Tip="{localization:Loc Inspector_Grip_NoteTip}"
+                                         AutomationProperties.Name="{localization:Loc Inspector_Grip_Col_Note}" />
+                                <TextBox Grid.Column="2" Padding="2,0" MinWidth="0" MinHeight="24" Height="24" Margin="1,0" FontFamily="{StaticResource FireFontMono}" FontSize="{StaticResource FireSizeXs}" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Text="{Binding GripFretText, UpdateSourceTrigger=LostFocus}"
+                                         Watermark="{Binding GripPlaceholder}" IsEnabled="{Binding CanEditGrip}"
+                                         ToolTip.Tip="{localization:Loc Inspector_Grip_GripTip}"
+                                         AutomationProperties.Name="{localization:Loc Inspector_Grip_Col_Grip}" />
+                                <CheckBox Grid.Column="3" HorizontalAlignment="Center" IsChecked="{Binding IsGhost}"
+                                          IsEnabled="{Binding CanEditGhost}" MinWidth="0" Padding="0"
+                                          ToolTip.Tip="{localization:Loc Inspector_Grip_GhostTip}"
+                                          AutomationProperties.Name="{localization:Loc Inspector_Grip_Col_Ghost}" />
+                                <ItemsControl Grid.Column="4" ItemsSource="{Binding FretboardFingerChoices}" VerticalAlignment="Center">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="inspector:GripFingerChoice">
+                                            <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Width="26" MinWidth="26" Height="24" Padding="0" Margin="1,0"
+                                                          IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                          Command="{Binding ToggleCommand}"
+                                                          IsEnabled="{Binding $parent[ItemsControl].((inspector:GripRow)DataContext).CanEditFinger}"
+                                                          Content="{Binding Display}"
+                                                          ToolTip.Tip="{Binding FretboardMixedHint}"
+                                                          AutomationProperties.Name="{Binding Display}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Grid.Column="5" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Padding="0"
+                                        Command="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).GripInspector.ToggleMaskCommand}"
+                                        CommandParameter="{Binding StringIndex}"
+                                        ToolTip.Tip="{localization:Loc Inspector_Grip_MaskTip}"
+                                        AutomationProperties.Name="{localization:Loc Inspector_Grip_MaskTip}">
+                                    <Panel>
+                                        <Ellipse Width="6" Height="6" Fill="{DynamicResource FireTextMuted}" IsVisible="{Binding !IsMaskExplicit}" />
+                                        <Ellipse Width="8" Height="8" Fill="{DynamicResource FireAccent}" IsVisible="{Binding IsMaskExplicit}" />
+                                    </Panel>
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
-            <TextBlock Text="{localization:Loc Inspector_GhostGems_Hint}" TextWrapping="Wrap"
-                       Foreground="{DynamicResource TextMuted}" FontSize="{StaticResource FontSizeXs}" />
-            <ItemsControl x:Name="SoundGhostRows" ItemsSource="{Binding HandShapeEditor.GhostRows}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="inspector:HandShapeGhostRow">
-                        <CheckBox Content="{Binding Label}" IsChecked="{Binding IsGhost, Mode=TwoWay}"
-                                  AutomationProperties.Name="{Binding Label}"
-                                  ToolTip.Tip="{localization:Loc Inspector_GhostGem_Tip}" />
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <CheckBox x:Name="SoundGripPinned"
-                      Content="{localization:Loc Inspector_GripPinned}"
-                      AutomationProperties.Name="{localization:Loc Inspector_GripPinned}"
-                      IsChecked="{Binding HandShapeEditor.IsGripPinned, Mode=TwoWay}"
-                      IsEnabled="{Binding HandShapeEditor.CanUnpinGrip}"
-                      ToolTip.Tip="{localization:Loc Inspector_GripPinned_Tip}" />
-        </StackPanel>
+
+            <ctl:ColumnFlowFretboard Grid.Column="1" x:Name="SoundShapeBoard" IsVisible="{Binding ShowsBoard}" Focusable="True"
+                                         MinWidth="120" VerticalAlignment="Top"
+                                         Role="Shape"
+                                         Chord="{Binding BoardNotes}"
+                                         Template="{Binding FretboardTemplate}"
+                                         StringCount="{Binding StringCount}"
+                                         Capo="{Binding Capo}"
+                                         FlipStrings="{Binding InvertStrings}"
+                                         Mask="{Binding Mask}"
+                                         MutedStrings="{Binding MutedStrings}"
+                                         ToggleNoteCommand="{Binding ToggleBoardFretCommand}"
+                                         SetFretCommand="{Binding SetBoardFretCommand}"
+                                         SetFingerCommand="{Binding SetBoardFingerCommand}"
+                                         ClearStringCommand="{Binding ClearBoardStringCommand}"
+                                         ToggleMaskCommand="{Binding ToggleMaskCommand}"
+                                         IssueStrings="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).SelectionIssuePips}"
+                                         AutomationProperties.Name="{localization:Loc Inspector_Grip_Page_Board}" />
+
+            <!-- the pages: beside the rows, or on Full board below rows and board (one tree, placed by row/column) -->
+            <Border x:Name="SoundShapePageFrame" IsVisible="{Binding !IsBoardPage}"
+                    Grid.Row="{Binding PageRow}" Grid.Column="{Binding PageColumn}" Grid.ColumnSpan="{Binding PageColumnSpan}"
+                    Background="{DynamicResource FireSurfaceSunken}" BorderBrush="{DynamicResource FireBorder}" BorderThickness="1"
+                    CornerRadius="{StaticResource FireRadiusMicro}" Padding="{StaticResource FireGapHSm}">
+            <Panel>
+                <!-- NAME: template search (name and frets), the name, New template -->
+                <StackPanel x:Name="SoundShapeNamePage" IsVisible="{Binding IsNamePage}" Spacing="{StaticResource SpaceXs}">
+                    <TextBlock Text="{Binding GripSummary}" FontFamily="{StaticResource FireFontMono}" FontSize="{StaticResource FireSizeXs}"
+                               Foreground="{DynamicResource FireTextMuted}" TextTrimming="CharacterEllipsis" />
+                    <TextBox Text="{Binding Query}" Watermark="{localization:Loc Inspector_Grip_Search}"
+                             AutomationProperties.Name="{localization:Loc Inspector_Grip_Search}" />
+                    <!-- virtualized: an arrangement can hold hundreds of templates; the "Part of shape" group
+                         holds the shapes that contain this grip (the old editor's containing-shape pills) -->
+                    <ItemsControl x:Name="SoundShapeTemplates" ItemsSource="{Binding TemplateOptions}" MaxHeight="84">
+                            <ItemsControl.Template>
+                                <ControlTemplate>
+                                    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsPresenter ItemsPanel="{TemplateBinding ItemsPanel}" />
+                                    </ScrollViewer>
+                                </ControlTemplate>
+                            </ItemsControl.Template>
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel CacheLength="0" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="inspector:GripTemplateOption">
+                                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Left" IsEnabled="{Binding IsChoice}"
+                                            Command="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).GripInspector.UseTemplateCommand}"
+                                            CommandParameter="{Binding}"
+                                            AutomationProperties.Name="{Binding Display}">
+                                        <TextBlock Text="{Binding Display}" FontFamily="{StaticResource FireFontMono}"
+                                                   FontSize="{StaticResource FireSizeXs}" TextTrimming="CharacterEllipsis" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <AutoCompleteBox Text="{Binding ChordNameText}" ItemsSource="{Binding KnownNames}"
+                                     Watermark="{Binding NamePlaceholder}" IsEnabled="{Binding CanName}"
+                                     FilterMode="ContainsOrdinal"
+                                     AutomationProperties.Name="{localization:Loc Inspector_Grip_Page_Name}" />
+                    <WrapPanel x:Name="SoundShapeNameVerbs" ItemSpacing="{StaticResource SpaceXs}" LineSpacing="{StaticResource SpaceXs}">
+                        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                Command="{Binding NewTemplateCommand}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Grip_NewTemplate}">
+                            <TextBlock Text="{localization:Loc Inspector_Grip_NewTemplate}" TextWrapping="Wrap" />
+                        </Button>
+                        <!-- the names the frets suggest ("Use Abm"), drafted like a typed name -->
+                        <ItemsControl x:Name="SoundShapeSuggestedNames" ItemsSource="{Binding SuggestedNames}"
+                                      IsVisible="{Binding HasSuggestedNames}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel ItemSpacing="{StaticResource SpaceXs}" LineSpacing="{StaticResource SpaceXs}" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="inspector:GripNameSuggestion">
+                                    <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                            Command="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).GripInspector.UseNameCommand}"
+                                            CommandParameter="{Binding}"
+                                            IsEnabled="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).GripInspector.CanName}"
+                                            ToolTip.Tip="{localization:Loc ChordTemplate_ApplySuggestedTip}"
+                                            AutomationProperties.Name="{Binding Caption}">
+                                        <TextBlock Text="{Binding Caption}" TextWrapping="Wrap" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </WrapPanel>
+                </StackPanel>
+
+                <!-- SCOPE: the Apply-to rung (shared with the footer ladder), targets, run navigation, span fit -->
+                <StackPanel x:Name="SoundShapeScopePage" IsVisible="{Binding IsScopePage}" Spacing="{StaticResource SpaceXs}">
+                    <TextBlock Classes="InspectorCardTitle" Text="{localization:Loc Inspector_Grip_Scope_Title}" TextWrapping="Wrap" />
+                    <ComboBox ItemsSource="{Binding Scopes}" SelectedIndex="{Binding ScopeIndex}" HorizontalAlignment="Stretch"
+                              AutomationProperties.Name="{localization:Loc Inspector_Grip_Scope_Title}" />
+                    <Grid ColumnDefinitions="*,Auto,Auto">
+                        <TextBlock Grid.Column="0" Text="{Binding TargetCount}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                   FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextMuted}" />
+                        <Button Grid.Column="1" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                Command="{Binding PreviousShapeCommand}"
+                                ToolTip.Tip="{localization:Loc Inspector_Grip_PreviousShape}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Grip_PreviousShape}">
+                            <PathIcon Data="{DynamicResource IconChevronLeft}" Width="9" Height="9" />
+                        </Button>
+                        <Button Grid.Column="2" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                Command="{Binding NextShapeCommand}"
+                                ToolTip.Tip="{localization:Loc Inspector_Grip_NextShape}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Grip_NextShape}">
+                            <PathIcon Data="{DynamicResource IconChevronRight}" Width="9" Height="9" />
+                        </Button>
+                    </Grid>
+                    <TextBlock FontSize="{StaticResource FireSizeNano}" Foreground="{DynamicResource FireTextMuted}" TextWrapping="Wrap">
+                        <Run Text="{Binding RunPosition}" />
+                        <Run Text="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).HandShapeEditor.HandShapeEnclosedLabel}" />
+                    </TextBlock>
+                    <WrapPanel x:Name="SoundShapeScopeVerbs">
+                        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" Margin="{StaticResource GapRightXs}"
+                                IsVisible="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).ShowSpanCard}"
+                                Command="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).HandShapeEditor.FitHandShapeToSoundsCommand}"
+                                ToolTip.Tip="{localization:Loc Inspector_Span_FitTip}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Span_Fit}">
+                            <TextBlock Text="{localization:Loc Inspector_Span_Fit}" TextWrapping="Wrap" />
+                        </Button>
+                        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" Margin="{StaticResource GapRightXs}"
+                                Command="{Binding AutoFillCommand}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Grip_AutoFill}">
+                            <TextBlock Text="{localization:Loc Inspector_Grip_AutoFill}" TextWrapping="Wrap" />
+                        </Button>
+                        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" Margin="{StaticResource GapRightXs}"
+                                Command="{Binding NextMissingCommand}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Grip_NextMissing}">
+                            <TextBlock Text="{localization:Loc Inspector_Grip_NextMissing}" TextWrapping="Wrap" />
+                        </Button>
+                        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" Margin="{StaticResource GapRightXs}"
+                                Command="{Binding ClearMaskCommand}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Grip_ClearMask}">
+                            <TextBlock Text="{localization:Loc Inspector_Grip_ClearMask}" TextWrapping="Wrap" />
+                        </Button>
+                        <!-- the whole arrangement's missing fingerings (the old editor's Generate all), one undo step -->
+                        <Button x:Name="SoundShapeGenerateAll" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                Command="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).ChordTemplateEditor.GenerateAllFingeringsCommand}"
+                                ToolTip.Tip="{localization:Loc ChordTemplate_GenerateAllFingeringsTip}"
+                                AutomationProperties.Name="{localization:Loc ChordTemplate_GenerateAllFingerings}">
+                            <TextBlock Text="{localization:Loc ChordTemplate_GenerateAllFingerings}" TextWrapping="Wrap" />
+                        </Button>
+                    </WrapPanel>
+                </StackPanel>
+
+                <!-- FLAGS: tri-state (mixed across targets) -->
+                <StackPanel x:Name="SoundShapeFlagsPage" IsVisible="{Binding IsFlagsPage}" Spacing="{StaticResource SpaceXs}">
+                    <TextBlock Classes="InspectorCardTitle" Text="{localization:Loc Inspector_Grip_Flags_Title}" TextWrapping="Wrap" />
+                    <WrapPanel>
+                        <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" IsThreeState="False"
+                                      IsChecked="{Binding Arpeggio}" IsEnabled="{Binding CanEditGrip}"
+                                      Content="{localization:Loc Inspector_Grip_Arpeggio}"
+                                      AutomationProperties.Name="{localization:Loc Inspector_Grip_Arpeggio}" />
+                        <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" IsThreeState="False"
+                                      IsChecked="{Binding NoName}" IsEnabled="{Binding CanEditGrip}"
+                                      Content="{localization:Loc Inspector_Grip_NoName}"
+                                      AutomationProperties.Name="{localization:Loc Inspector_Grip_NoName}" />
+                        <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" IsThreeState="False"
+                                      IsChecked="{Binding Fingerless}" IsEnabled="{Binding CanEditGrip}"
+                                      Content="{localization:Loc Inspector_Grip_Fingerless}"
+                                      AutomationProperties.Name="{localization:Loc Inspector_Grip_Fingerless}" />
+                        <ToggleButton x:Name="SoundShapePin" Theme="{StaticResource ChipToggle}" Classes="Chip Mini" IsThreeState="False"
+                                      IsChecked="{Binding IsPinned}" IsEnabled="{Binding CanEditPin}"
+                                      Content="{localization:Loc Inspector_Grip_Pin}"
+                                      ToolTip.Tip="{localization:Loc Inspector_Grip_PinTip}"
+                                      AutomationProperties.Name="{localization:Loc Inspector_Grip_Pin}" />
+                        <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" IsThreeState="False"
+                                      IsChecked="{Binding DoubleStop}" IsEnabled="{Binding CanEditGrip}"
+                                      Content="{localization:Loc Inspector_Grip_Page_DoubleStop}"
+                                      AutomationProperties.Name="{localization:Loc Inspector_Grip_Page_DoubleStop}" />
+                    </WrapPanel>
+                </StackPanel>
+
+                <!-- DOUBLE-STOP: keep two strings of the grip and mark it a double-stop -->
+                <StackPanel x:Name="SoundShapeDoubleStopPage" IsVisible="{Binding IsDoubleStopPage}" Spacing="{StaticResource SpaceXs}">
+                    <TextBlock Classes="InspectorCardTitle" Text="{localization:Loc Inspector_Grip_DoubleStop_Title}" TextWrapping="Wrap" />
+                    <!-- each label above its box: beside the rows the page is too narrow for label and string side by side -->
+                    <TextBlock Text="{localization:Loc Inspector_Grip_First}" FontSize="{StaticResource FireSizeXs}"
+                               TextWrapping="Wrap" Foreground="{DynamicResource FireTextMuted}" />
+                    <ComboBox ItemsSource="{Binding PairOptions}" SelectedIndex="{Binding PairFirst}"
+                              HorizontalAlignment="Stretch" AutomationProperties.Name="{localization:Loc Inspector_Grip_First}" />
+                    <TextBlock Text="{localization:Loc Inspector_Grip_Second}" FontSize="{StaticResource FireSizeXs}"
+                               TextWrapping="Wrap" Foreground="{DynamicResource FireTextMuted}" />
+                    <ComboBox ItemsSource="{Binding PairOptions}" SelectedIndex="{Binding PairSecond}"
+                              HorizontalAlignment="Stretch" AutomationProperties.Name="{localization:Loc Inspector_Grip_Second}" />
+                    <WrapPanel>
+                        <Button Theme="{StaticResource PrimaryButton}" Classes="Primary Compact" Margin="{StaticResource GapRightXs}" Command="{Binding UseDoubleStopPairCommand}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Grip_UsePair}">
+                            <TextBlock Text="{localization:Loc Inspector_Grip_UsePair}" TextWrapping="Wrap" />
+                        </Button>
+                        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" Margin="{StaticResource GapRightXs}" Command="{Binding DoubleStopOffCommand}"
+                                AutomationProperties.Name="{localization:Loc Inspector_Grip_Off}">
+                            <TextBlock Text="{localization:Loc Inspector_Grip_Off}" TextWrapping="Wrap" />
+                        </Button>
+                        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" Command="{Binding ShowPageCommand}"
+                                CommandParameter="0"
+                                AutomationProperties.Name="{localization:Loc Inspector_Grip_Back}">
+                            <TextBlock Text="{localization:Loc Inspector_Grip_Back}" TextWrapping="Wrap" />
+                        </Button>
+                    </WrapPanel>
+                </StackPanel>
+            </Panel>
+            </Border>
+        </Grid>
+
+        <!-- rebind line, and after a grip save the offer to give the grip to the other hand shapes over the same sounds,
+             applied only on its click. Save is pinned in the tab's footer, #751 P5. -->
+        <Grid x:Name="SoundShapeRebind" IsVisible="{Binding IsAvailable}" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource SpaceXs}">
+            <PathIcon Grid.Column="0" Data="{DynamicResource IconAlert}" Width="10" Height="10" Foreground="{DynamicResource FireWarning}"
+                      IsVisible="{Binding HasRebindWarning}" />
+            <TextBlock Grid.Column="1" Text="{Binding RebindWarning}" TextWrapping="Wrap" FontSize="{StaticResource FireSizeXs}"
+                       Foreground="{DynamicResource FireTextMuted}" />
+            <Button x:Name="SoundShapeApplyIdentical" Grid.Column="2" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                    VerticalAlignment="Center" MaxWidth="240" IsVisible="{Binding HasIdenticalShapes}"
+                    Command="{Binding ApplyToIdenticalShapesCommand}"
+                    AutomationProperties.Name="{Binding ApplyToIdenticalText}"
+                    ToolTip.Tip="{localization:Loc GripInspector_ApplyIdenticalTip}">
+                <TextBlock x:Name="SoundShapeApplyIdenticalText" Text="{Binding ApplyToIdenticalText}" TextWrapping="Wrap" />
+            </Button>
+        </Grid>
     </StackPanel>
+
 </UserControl>

@@ -65,7 +65,7 @@ public sealed partial class PlayModeViewModel
         {
             // A corrupt practice store must not take the front door down — it is
             // the app's BOOT surface with AppConfig.StartInPlayMode.
-            _logger.Warning(AppLogCategory.Application, $"Front-door last-session read failed: {ex.Message}");
+            _logger.Warning(AppLogCategory.Application, "Front-door last-session read failed", ex);
         }
 
         var ownCharts = SongSelect.AllSongs.Count(s => s.IsOwnChart);

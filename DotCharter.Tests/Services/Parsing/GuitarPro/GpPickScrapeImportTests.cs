@@ -11,7 +11,7 @@ namespace DotCharter.Tests.Services.Parsing.GuitarPro;
 
 /// <summary>
 ///     Guitar Pro's PICK SCRAPE imports the way the owner charts it (issues #583,
-///     #599): <b>tap + tremolo + fret-hand mute + an unpitched slide in the
+///     #599): <b>tap + tremolo + an unpitched slide in the
 ///     scrape's direction + ignore</b>; a scrape on several strings is ONE chord
 ///     split into notes (<see cref="Chord.SplitIntoNotes" />, ignored as a whole so
 ///     Live Play never expects it) that every export writes as one
@@ -28,6 +28,26 @@ namespace DotCharter.Tests.Services.Parsing.GuitarPro;
 /// </summary>
 public sealed class GpPickScrapeImportTests
 {
+    [Theory]
+    [InlineData("gpif", "Whole", ScrapeUp, -2, 24)]
+    [InlineData("gpif", "Half", ScrapeUp, -1, 24)]
+    [InlineData("gpif", "Half", ScrapeDown, -1, 5)]
+    [InlineData("gp5", "Whole", ScrapeUp, -2, 24)]
+    [InlineData("gp5", "Half", ScrapeUp, -1, 24)]
+    [InlineData("gp5", "Half", ScrapeDown, -1, 5)]
+    public void DeadOpenPickSlidesImportWithoutMute(string format, string value, int flags, int duration, int landing)
+    {
+        var arrangement = format == "gpif"
+            ? PickScrapeScenes.Import(PickScrapeScenes.Gpif([[new(value, [new(0, 0, flags), new(1, 0, flags)])]]))
+            : ImportLegacy(LegacyGpFixtureBuilder.WriteFile("5.10",
+                [new FxMeasure().AddVoice(FxBeat.Chord(duration,
+                    new FxNote(0, 0, Slide: flags, Dead: true), new FxNote(1, 0, Slide: flags, Dead: true)))]));
+        var level = Assert.Single(arrangement.Levels);
+        Assert.Empty(level.Anchors);
+        AssertScrapeChord(arrangement, Assert.Single(level.Chords), [0, 1], 12, landing);
+        Assert.All(level.Chords[0].ChordNotes, n => Assert.Equal(MuteType.None, n.Mute));
+    }
+
     private const int ScrapeDown = GpPickScrape.DownFlag;
     private const int ScrapeUp = GpPickScrape.UpFlag;
 
@@ -91,7 +111,7 @@ public sealed class GpPickScrapeImportTests
     [InlineData(ScrapeDown, MuteType.None, true)]
     [InlineData(ScrapeUp, MuteType.Palm, false)]
     [InlineData(ScrapeDown | ScrapeUp, MuteType.Full, true)]
-    public void Apply_MarksTapTremoloIgnore_FretHandMuted(int flags, MuteType tabMute, bool towardNut)
+    public void Apply_MarksTapTremoloIgnoreWithoutMute(int flags, MuteType tabMute, bool towardNut)
     {
         var note = new GuitarNote { Fret = 12, Mute = tabMute, LinkNext = true };
         var chordNote = new ChordNote { Fret = 12, Mute = tabMute, LinkNext = true };
@@ -101,7 +121,7 @@ public sealed class GpPickScrapeImportTests
 
         foreach (var s in new IGuitarSound[] { note, chordNote })
         {
-            Assert.Equal((HopoType.Tap, true, true, MuteType.Full, false),
+            Assert.Equal((HopoType.Tap, true, true, MuteType.None, false),
                 (s.Hopo, s.Tremolo, s.UnpitchedSlide, s.Mute, s.LinkNext));
             Assert.Equal(towardNut, s.SlideTo < s.Fret);
             Assert.True(GpPickScrape.IsScrape(s));
@@ -129,7 +149,7 @@ public sealed class GpPickScrapeImportTests
     ///     A scrape is a sound of its own: a multi-string scrape is ONE chord split
     ///     into notes and ignored as a whole; a one-string scrape is a note; strings
     ///     of the same strum that do not scrape stay a chord, or a note when one is
-    ///     left. Every scrape string ends fret-hand muted, whatever the tab said.
+    ///     left. Every scrape string ends unmuted, whatever the tab said.
     /// </summary>
     [Fact]
     public void IsolateScrapes_GivesEveryScrapeASoundOfItsOwn()
@@ -155,7 +175,7 @@ public sealed class GpPickScrapeImportTests
         {
             Assert.True(c.Ignore);
             Assert.True(GpPickScrape.IsScrapeChord(c));
-            Assert.All(c.ChordNotes, cn => Assert.Equal(MuteType.Full, cn.Mute));
+            Assert.All(c.ChordNotes, cn => Assert.Equal(MuteType.None, cn.Mute));
         });
         Assert.Equal(new[] { 1, 2 }, level.Chords[1].ChordNotes.Select(n => n.StringIndex).ToArray());
         Assert.Equal(new[] { 0, 1 }, level.Chords[2].ChordNotes.Select(n => n.StringIndex).ToArray());
@@ -166,7 +186,7 @@ public sealed class GpPickScrapeImportTests
         Assert.Equal(new[] { (2, 0, true), (3, 0, true), (3, 1, false), (4, 2, false), (5, 0, false) },
             level.Notes.OrderBy(n => n.Position).ThenBy(n => n.StringIndex)
                 .Select(n => (n.Position.BeatId, n.StringIndex, n.Ignore)).ToArray());
-        Assert.All(level.Notes.Where(GpPickScrape.IsScrape), n => Assert.Equal(MuteType.Full, n.Mute));
+        Assert.All(level.Notes.Where(GpPickScrape.IsScrape), n => Assert.Equal(MuteType.None, n.Mute));
 
         static Chord ChordAt(int beat, params ChordNote[] notes)
         {
@@ -333,7 +353,7 @@ public sealed class GpPickScrapeImportTests
             ChordNote chordNote => chordNote.Ignore,
             _ => false
         };
-        Assert.Equal((HopoType.Tap, true, true, true, MuteType.Full, false),
+        Assert.Equal((HopoType.Tap, true, true, true, MuteType.None, false),
             (n.Hopo, n.Tremolo, n.UnpitchedSlide, ignored, n.Mute, n.LinkNext));
         Assert.True(n.Sustain.CompareTo(FractionalPosition.Zero) > 0, "the scrape sustains over its duration");
     }
@@ -347,7 +367,7 @@ public sealed class GpPickScrapeImportTests
     ///     The owner's hand-charted <i>Shinbatsu wo Tadaori</i> m197–198 as the RS XML
     ///     export writes it (issue #599, the project's <c>1_Lead_Main_RS2.xml</c>):
     ///     three A+D eighth-note scrapes and one E+A scrape off FHP 21, each string
-    ///     its own <c>&lt;note&gt;</c>. Copied verbatim; only these eight lines.
+    ///     its own <c>&lt;note&gt;</c>. Copied verbatim; output expectations omit the chart mute.
     /// </summary>
     private static readonly string[] ReferenceNotes =
     [
@@ -362,9 +382,9 @@ public sealed class GpPickScrapeImportTests
     ];
 
     /// <summary>
-    ///     The GP import of the reference-shaped score exports EXACTLY the owner's
-    ///     <c>&lt;note&gt;</c> lines — the same attributes and values, nothing else —
-    ///     with no <c>&lt;chord&gt;</c> and no hand shape. One documented difference:
+    ///     The reference-shaped score exports reference note fields with mute omitted
+    ///     for the unmuted convention, no chord and no hand shape.
+    ///     The other documented difference is
     ///     the E+A scrape's sustain. The tab says a half note, 0.480 s at the song's
     ///     250 BPM; the owner trimmed it by hand to 449 ms in EOF (the <c>.eof</c>
     ///     stores that length), which no note value a tab can write produces.
@@ -378,7 +398,7 @@ public sealed class GpPickScrapeImportTests
         Assert.Empty(doc.Descendants("handShape"));
         var written = doc.Descendants("note").Where(n => n.Attribute("ignore")?.Value == "1")
             .Select(Fields).ToArray();
-        var expected = ReferenceNotes.Select(XElement.Parse).Select(Fields)
+        var expected = ReferenceNotes.Select(line => XElement.Parse(line.Replace(" mute=\"1\"", "", StringComparison.Ordinal))).Select(Fields)
             .Select(f => f["time"] == "199.164" ? new SortedDictionary<string, string>(f) { ["sustain"] = "0.480" } : f)
             .ToArray();
 
@@ -540,7 +560,7 @@ internal static class PickScrapeScenes
     /// </summary>
     public static string GpifWithFrets(int? fretCount, params ScrapeBeat[][] bars)
     {
-        var rhythms = new[] { "Eighth", "Quarter", "Half" };
+        var rhythms = new[] { "Eighth", "Quarter", "Half", "Whole" };
         var masterBars = new StringBuilder();
         var barNodes = new StringBuilder();
         var voices = new StringBuilder();

@@ -10,38 +10,6 @@ namespace DotCharter.Services.Parsing.Xml.Vocals;
 /// </summary>
 internal sealed class RsXmlVocalsWriter
 {
-    public XDocument Write(ChartProject project)
-    {
-        var beats = project.Beats;
-        var allLyrics = new List<(int TimeMs, int LengthMs, string Lyric, int Note)>();
-
-        foreach (var track in project.VocalTracks)
-        {
-            foreach (var phrase in track.Phrases)
-            {
-                for (var i = 0; i < phrase.Lyrics.Count; i++)
-                {
-                    var lev = phrase.Lyrics[i];
-                    var timeMs = TimelineMath.ToWholeMs(TimelineMath.CalculateTimeMs(lev.Position, beats));
-                    var endMs = TimelineMath.ToWholeMs(TimelineMath.CalculateTimeMs(lev.EndPosition, beats));
-                    var lengthMs = Math.Max(0, endMs - timeMs);
-                    allLyrics.Add((timeMs, lengthMs, EncodeLyric(lev, isLastInPhrase: i == phrase.Lyrics.Count - 1), lev.Note));
-                }
-            }
-        }
-
-        allLyrics.Sort((a, b) => a.TimeMs.CompareTo(b.TimeMs));
-
-        var vocalEls = allLyrics.Select(l => new XElement("vocal",
-            new XAttribute("time", Fmt.Time(l.TimeMs)),
-            new XAttribute("length", Fmt.Time(l.LengthMs)),
-            new XAttribute("lyric", l.Lyric),
-            new XAttribute("note", l.Note)));
-
-        var root = Fmt.CountedList("vocals", vocalEls);
-        return new XDocument(new XDeclaration("1.0", "UTF-8", "yes"), root);
-    }
-
     /// <summary>
     ///     RS2014 encodes vocal structure INSIDE the lyric string: a trailing
     ///     <c>-</c> means "this syllable joins the next one into a word", and a
@@ -56,13 +24,51 @@ internal sealed class RsXmlVocalsWriter
     ///         writer persists the two flags, so only this writer lost them.
     ///     </para>
     ///     <para>
-    ///         A syllable that is both a word part and the phrase end keeps the word
-    ///         join — a phrase cannot end mid-word, and RS reads only one marker.
+    ///         The rule for a syllable that is both a word part and the phrase end (a
+    ///         project file may carry both): it is written as the phrase end, so the
+    ///         file reads back with the same lines. A syllable ends its line by its flag or
+    ///         by being the last WRITTEN syllable of its phrase
+    ///         (<see cref="RsVocalLyricEncoding.EncodeLine" />, the rule the vocals SNG and the export
+    ///         check read too).
     ///     </para>
     /// </summary>
-    private static string EncodeLyric(LyricEvent lyric, bool isLastInPhrase)
-        => RsVocalLyricEncoding.Encode(
-            lyric.Text, lyric.IsWordPart, lyric.IsPhraseEnd || isLastInPhrase);
+    public XDocument Write(ChartProject project)
+    {
+        var beats = project.Beats;
+        var lines = new List<List<(int TimeMs, int LengthMs, string Lyric, int Note)>>();
+
+        foreach (var track in project.VocalTracks)
+        {
+            foreach (var phrase in track.Phrases)
+            {
+                var line = new List<(int TimeMs, int LengthMs, string Lyric, int Note)>();
+                foreach (var token in RsVocalLyricEncoding.EncodeLine(phrase))
+                {
+                    var lev = token.Syllable;
+                    var timeMs = TimelineMath.ToWholeMs(TimelineMath.CalculateTimeMs(lev.Position, beats));
+                    var endMs = TimelineMath.ToWholeMs(TimelineMath.CalculateTimeMs(lev.EndPosition, beats));
+                    var lengthMs = Math.Max(0, endMs - timeMs);
+                    line.Add((timeMs, lengthMs, token.Lyric, lev.Note));
+                }
+
+                if (line.Count > 0) lines.Add(line);
+            }
+        }
+
+        // Line membership wins over time order: the lines go out ordered by their first
+        // syllable and each keeps its own order, so a line whose syllables are not in time
+        // order still reads back as one line (the export check reports it as an error).
+        var allLyrics = lines.OrderBy(l => l[0].TimeMs).SelectMany(l => l).ToList();
+
+        var vocalEls = allLyrics.Select(l => new XElement("vocal",
+            new XAttribute("time", Fmt.Time(l.TimeMs)),
+            new XAttribute("length", Fmt.Time(l.LengthMs)),
+            new XAttribute("lyric", l.Lyric),
+            new XAttribute("note", l.Note)));
+
+        var root = Fmt.CountedList("vocals", vocalEls);
+        return new XDocument(new XDeclaration("1.0", "UTF-8", "yes"), root);
+    }
 
     public void WriteTo(ChartProject project, string filePath)
     {

@@ -45,7 +45,7 @@ public sealed class MixerScrollHostUiPerfSmokeTests
     private const double MixerWidth = 340;
 
     /// <summary>
-    ///     Since #601 the Mixer shows ONE section at a time behind its rail, and the EQ section
+    ///     Design D shows ONE Mixer section at a time (its strip), its cards paged on a narrow pane, each card
     ///     alone fits a tall pane. The harness opens it at the height a 1280x720 window gives the
     ///     inspector's section body (~160 px under the tab strip and the pinned row), where the EQ
     ///     scrolls — the shape the owner's laptop has, and the one these cases are about.
@@ -65,46 +65,9 @@ public sealed class MixerScrollHostUiPerfSmokeTests
             var mixer = Open();
             try
             {
-                var (window, host, eq) = (mixer.Window, mixer.Host, mixer.Eq);
-                var before = Snapshot(eq);
-                var max = host.Extent.Height - host.Viewport.Height;
-                Assert.True(max > 100, $"the Mixer tab must scroll for this to mean anything (max offset {max}).");
-
-                var crossedQ = false;
-                var crossedPlot = false;
-                var x = mixer.QSlider.TranslatePoint(new Point(mixer.QSlider.Bounds.Width / 2, 0), window)!.Value.X;
-                var viewportTop = host.TranslatePoint(default, window)!.Value.Y;
-
-                for (var y = viewportTop + 20; y < viewportTop + host.Viewport.Height - 10; y += 40)
-                {
-                    host.Offset = default;
-                    Settle(window);
-                    var point = new Point(x, y);
-
-                    foreach (var direction in new[] { -1, 1 })
-                    {
-                        for (var notch = 0; notch < 60; notch++)
-                        {
-                            var hit = window.InputHitTest(point) as Visual;
-                            crossedQ |= hit != null && (hit == mixer.QSlider || mixer.QSlider.IsVisualAncestorOf(hit));
-                            crossedPlot |= hit == mixer.Plot;
-
-                            Wheel(window, point, direction);
-                            Assert.True(Snapshot(eq).SequenceEqual(before),
-                                $"a wheel notch at {point}, scroll offset {host.Offset.Y:0}, over " +
-                                $"{hit?.GetType().Name ?? "nothing"} edited the EQ (Q now {eq.SelectedQText}) — " +
-                                "a bare notch over the Mixer tab must scroll it, never edit a value.");
-                        }
-
-                        var end = direction < 0 ? max : 0;
-                        Assert.True(Math.Abs(host.Offset.Y - end) < 0.5,
-                            $"with the pointer at {point} the Mixer tab stopped at {host.Offset.Y:0} instead of " +
-                            $"{end:0} — something under the pointer is taking the notches.");
-                    }
-                }
-
-                Assert.True(crossedQ, "the sweep never put the pointer over the EQ's Q slider — it proves nothing about it.");
-                Assert.True(crossedPlot, "the sweep never put the pointer over the EQ plot — it proves nothing about it.");
+                // Design D: the Q slider (Band card) and the plot (Response card) each scroll inside their own card.
+                foreach (var target in new Control[] { mixer.QSlider, mixer.Plot })
+                    SweepOver(mixer, target);
             }
             finally
             {
@@ -130,9 +93,10 @@ public sealed class MixerScrollHostUiPerfSmokeTests
             var mixer = Open();
             try
             {
-                var (window, host, eq) = (mixer.Window, mixer.Host, mixer.Eq);
+                var (window, eq) = (mixer.Window, mixer.Eq);
                 Control control = target == "plot" ? mixer.Plot : mixer.QSlider;
-                var point = ParkUnderViewportY(mixer, control, atViewportY);
+                var host = HostOf(mixer, control);
+                var point = ParkUnderViewportY(mixer, host, control, atViewportY);
                 var q = eq.Section.Bands[eq.SelectedIndex].Q;
 
                 foreach (var direction in new[] { -1, 1 })
@@ -164,14 +128,15 @@ public sealed class MixerScrollHostUiPerfSmokeTests
             var mixer = Open();
             try
             {
-                var point = ParkUnderViewportY(mixer, mixer.Plot, 60);
-                var offset = mixer.Host.Offset.Y;
+                var host = HostOf(mixer, mixer.Plot);
+                var point = ParkUnderViewportY(mixer, host, mixer.Plot, 20);
+                var offset = host.Offset.Y;
                 var q = mixer.Eq.Section.Bands[mixer.Eq.SelectedIndex].Q;
 
                 Wheel(mixer.Window, point, -1, RawInputModifiers.Control);
 
                 Assert.NotEqual(q, mixer.Eq.Section.Bands[mixer.Eq.SelectedIndex].Q);
-                Assert.Equal(offset, mixer.Host.Offset.Y);
+                Assert.Equal(offset, host.Offset.Y);
             }
             finally
             {
@@ -200,13 +165,15 @@ public sealed class MixerScrollHostUiPerfSmokeTests
             var mixer = Open(above: 400, section: "MixerMidiBody");
             try
             {
-                var (window, host) = (mixer.Window, mixer.Host);
-                // The MIDI synth section's last dropdown (its playing style): far
-                // enough down the section to park at every viewport row. (The EQ
-                // preset picker this was written on sits at the top of its own
-                // section since #601, so it can never be scrolled.)
+                var window = mixer.Window;
+                // The MIDI section's last dropdown (its playing style, on its own card): far enough
+                // down its card to park at every viewport row. Without the synth (the headless session has none) design D
+                // keeps the card disabled with its reason; a disabled dropdown cannot be clicked, so the card is let live.
+                mixer.View.GetVisualDescendants().OfType<Panel>().Single(p => p.Name == "MidiPlayStyleRows").IsEnabled = true;
+                Settle(window);
                 var combo = mixer.View.GetVisualDescendants().OfType<ComboBox>().Last(c => c.IsEffectivelyVisible && c.Bounds.Height > 0);
-                ParkUnderViewportY(mixer, combo, atViewportY);
+                var host = HostOf(mixer, combo);
+                ParkUnderViewportY(mixer, host, combo, atViewportY);
 
                 var offset = host.Offset.Y;
                 Assert.True(offset > 10, $"the Mixer must be scrolled for this to mean anything (offset {offset}).");
@@ -245,13 +212,14 @@ public sealed class MixerScrollHostUiPerfSmokeTests
             var mixer = Open(above: 400);
             try
             {
-                var (window, host) = (mixer.Window, mixer.Host);
+                var window = mixer.Window;
+                // The LAST control a Tab can land on in the Band card: below the fold at offset 0
+                // by construction, whatever the card's content is this week.
+                var card = mixer.QSlider.GetVisualAncestors().OfType<ColumnFlowCard>().First();
+                var host = HostOf(mixer, mixer.QSlider);
                 host.Offset = default;
                 Settle(window);
-
-                // The LAST control a Tab can land on: below the fold at offset 0
-                // by construction, whatever the tab's content is this week.
-                var target = mixer.View.GetVisualDescendants().OfType<Control>()
+                var target = card.GetVisualDescendants().OfType<Control>()
                     .Last(c => c.Focusable && c.IsEffectivelyEnabled && c.IsEffectivelyVisible && c.Bounds.Height > 0);
                 Assert.False(IsInViewport(host, target), $"{target.GetType().Name} must start below the fold.");
 
@@ -269,8 +237,66 @@ public sealed class MixerScrollHostUiPerfSmokeTests
 
     // ── harness ────────────────────────────────────────────────────────────
 
+    /// <summary>Wheels <paramref name="target" />'s card down and back up with the pointer parked at each of a
+    /// column of points across it: the EQ must never change and the card must never stop short.</summary>
+    private static void SweepOver(Mixer mixer, Control target)
+    {
+        var (window, eq) = (mixer.Window, mixer.Eq);
+        var host = HostOf(mixer, target);
+        var before = Snapshot(eq);
+        var max = host.Extent.Height - host.Viewport.Height;
+        Assert.True(max > 20, $"the {target.GetType().Name}'s card must scroll for this to mean anything (max offset {max}).");
+
+        var crossed = false;
+        var x = target.TranslatePoint(new Point(target.Bounds.Width / 2, 0), window)!.Value.X;
+        var viewportTop = host.TranslatePoint(default, window)!.Value.Y;
+
+        for (var y = viewportTop + 10; y < viewportTop + host.Viewport.Height - 5; y += 9)
+        {
+            host.Offset = default;
+            Settle(window);
+            var point = new Point(x, y);
+
+            foreach (var direction in new[] { -1, 1 })
+            {
+                for (var notch = 0; notch < 40; notch++)
+                {
+                    var hit = window.InputHitTest(point) as Visual;
+                    crossed |= hit != null && (hit == target || target.IsVisualAncestorOf(hit));
+
+                    Wheel(window, point, direction);
+                    Assert.True(Snapshot(eq).SequenceEqual(before),
+                        $"a wheel notch at {point}, scroll offset {host.Offset.Y:0}, over " +
+                        $"{hit?.GetType().Name ?? "nothing"} edited the EQ (Q now {eq.SelectedQText}): " +
+                        "a bare notch over the Mixer tab must scroll it, never edit a value.");
+                }
+
+                // the card's viewport can settle a few px after the first pass: read the range now
+                var end = direction < 0 ? host.Extent.Height - host.Viewport.Height : 0;
+                Assert.True(Math.Abs(host.Offset.Y - end) < 0.5,
+                    $"with the pointer at {point} the card stopped at {host.Offset.Y:0} instead of " +
+                    $"{end:0}: something under the pointer is taking the notches " +
+                    $"({string.Join("/", (window.InputHitTest(point) as Visual)?.GetSelfAndVisualAncestors().Take(8).Select(v => v.GetType().Name + ":" + (v as Control)?.Name) ?? [])}; scrollers " +
+                    $"{string.Join(" | ", (window.InputHitTest(point) as Visual)?.GetVisualAncestors().OfType<ScrollViewer>().Select(v => $"{v.Name}:{v.Offset.Y:0}/{v.Extent.Height:0}-{v.Viewport.Height:0}{(v == host ? "*" : "")}") ?? [])}).");
+            }
+        }
+
+        Assert.True(crossed, $"the sweep never put the pointer over the {target.GetType().Name}; it proves nothing about it.");
+    }
+
+    /// <summary>Shows the card that holds <paramref name="control" /> (a narrow pane pages them) and returns
+    /// its scroller, the host a bare wheel notch over the control must move.</summary>
+    private static ScrollViewer HostOf(Mixer mixer, Control control)
+    {
+        var card = control.GetVisualAncestors().OfType<ColumnFlowCard>().First();
+        var panel = card.GetVisualAncestors().OfType<ColumnFlowPanel>().First();
+        panel.ShowPage(card);
+        Settle(mixer.Window);
+        return card.GetVisualDescendants().OfType<ScrollViewer>().First();
+    }
+
     private sealed record Mixer(
-        Window Window, MixerInspectorView View, ScrollViewer Host, EqModuleViewModel Eq, Slider QSlider, EqPlotControl Plot);
+        Window Window, MixerInspectorView View, EqModuleViewModel Eq, Slider QSlider, ColumnFlowEqPlot Plot);
 
     private static Mixer Open(double above = 0, string section = "MixerEqBody")
     {
@@ -279,9 +305,9 @@ public sealed class MixerScrollHostUiPerfSmokeTests
         var inspector = services.GetRequiredService<InspectorViewModel>();
 
         var view = new MixerInspectorView { DataContext = inspector };
-        // #601: the EQ is a section of the Mixer's rail; open it (or the one a case asks
+        // Design D: the EQ is a section of the Mixer's strip; open it (or the one a case asks
         // for), as a click on its entry does. The live EQ below is put in its place either way.
-        view.Rail.Choose("MixerEqBody");
+        inspector.MixerSections.ChooseCommand.Execute(MixerSection.Eq);
         var root = new Grid { RowDefinitions = new RowDefinitions($"{above},{MixerHeight}") };
         Grid.SetRow(view, 1);
         root.Children.Add(view);
@@ -304,25 +330,29 @@ public sealed class MixerScrollHostUiPerfSmokeTests
         eq.SelectedQNormalized = 0.4375;
         Settle(window);
         var qSlider = eqView.GetVisualDescendants().OfType<Slider>().Single(s => Math.Abs(s.Value - eq.SelectedQNormalized) < 1e-9);
-        var plot = eqView.GetVisualDescendants().OfType<EqPlotControl>().Single();
+        var plot = eqView.GetVisualDescendants().OfType<ColumnFlowEqPlot>().Single();
 
-        var host = view.GetVisualDescendants().OfType<ScrollViewer>()
-            .First(s => !s.GetVisualAncestors().OfType<ScrollViewer>().Any());
         if (section != "MixerEqBody")
         {
-            view.Rail.Choose(section);
+            inspector.MixerSections.ChooseCommand.Execute(section switch
+            {
+                "MixerStemsBody" => MixerSection.Stems,
+                "MixerMidiBody" => MixerSection.Midi,
+                _ => throw new ArgumentOutOfRangeException(nameof(section), section, "no such Mixer section")
+            });
             Settle(window);
         }
 
-        return new Mixer(window, view, host, eq, qSlider, plot);
+        return new Mixer(window, view, eq, qSlider, plot);
     }
 
     /// <summary>Scrolls the host so <paramref name="control" />'s centre sits
     /// <paramref name="atViewportY" /> px below the viewport's top (clamped to
     /// the scroll range), and returns that centre in window coordinates.</summary>
-    private static Point ParkUnderViewportY(Mixer mixer, Control control, double atViewportY)
+    private static Point ParkUnderViewportY(Mixer mixer, ScrollViewer host, Control control, double atViewportY)
     {
-        var host = mixer.Host;
+        // a card's viewport is shorter than the old tab's: park inside it, whatever row a case names
+        atViewportY = Math.Clamp(atViewportY, control.Bounds.Height / 2 + 2, Math.Max(control.Bounds.Height / 2 + 2, host.Viewport.Height - control.Bounds.Height / 2 - 2));
         var centreInContent = control.TranslatePoint(new Point(0, control.Bounds.Height / 2), host)!.Value.Y + host.Offset.Y;
         var max = host.Extent.Height - host.Viewport.Height;
         host.Offset = new Vector(0, Math.Clamp(centreInContent - atViewportY, 0, max));

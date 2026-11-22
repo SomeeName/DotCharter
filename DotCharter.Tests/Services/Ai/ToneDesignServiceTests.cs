@@ -353,38 +353,46 @@ public sealed class ToneDesignServiceTests
     [Fact]
     public async Task TheResult_CarriesTheElapsedTimeOfTheWholeCall()
     {
-        var model = new SlowModel(ToneJson, TimeSpan.FromMilliseconds(40));
+        var clock = new ManualTimeProvider();
+        var model = new SlowModel(ToneJson, clock, TimeSpan.FromMilliseconds(40));
 
-        var result = await Service(model).DesignAsync(
+        var result = await Service(model, clock).DesignAsync(
             new ToneDesignRequest("a warm clean", [], null), null, CancellationToken.None);
 
-        Assert.True(result.Elapsed >= TimeSpan.FromMilliseconds(30),
-            $"elapsed was {result.Elapsed.TotalMilliseconds:0.0} ms; the model slept 40 ms.");
-        Assert.True(result.Elapsed < TimeSpan.FromSeconds(30));
+        Assert.Equal(TimeSpan.FromMilliseconds(40), result.Elapsed);
     }
 
-    /// <summary>A provider that takes measurable time, so the elapsed assertion is
-    /// not comparing a stopwatch against its own resolution.</summary>
-    private sealed class SlowModel(string json, TimeSpan delay) : IToneDesignModel
+    /// <summary>A provider that "takes" exactly <c>delay</c> on the injected clock.</summary>
+    private sealed class SlowModel(string json, ManualTimeProvider clock, TimeSpan delay) : IToneDesignModel
     {
         public AiProviderKind Kind => AiProviderKind.Claude;
 
-        public async Task<ToneDesignModelReply> CompleteAsync(ToneDesignPrompt prompt, CancellationToken ct)
+        public Task<ToneDesignModelReply> CompleteAsync(ToneDesignPrompt prompt, CancellationToken ct)
         {
-            await Task.Delay(delay, ct);
-            return new ToneDesignModelReply(json, new AiUsage("claude-opus-5", 10, 20));
+            clock.Advance(delay);
+            return Task.FromResult(new ToneDesignModelReply(json, new AiUsage("claude-opus-5", 10, 20)));
         }
 
         public Task<AiProbeResult> ProbeAsync(CancellationToken ct)
             => Task.FromResult(new AiProbeResult(true, "ok", "claude-opus-5"));
     }
 
-    private static ToneDesignService Service(IToneDesignModel model)
+    private sealed class ManualTimeProvider : TimeProvider
     {
-        var config = new AppConfig { Ai = new AiProviderSettings(AiProviderKind.Claude, "claude-opus-5", null) };
-        return new ToneDesignService(() => config, new FakeFactory(model), localization: FakeLocalization.English());
+        private long _ticks;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp() => Interlocked.Read(ref _ticks);
+
+        public void Advance(TimeSpan by) => Interlocked.Add(ref _ticks, by.Ticks);
     }
 
+    private static ToneDesignService Service(IToneDesignModel model, TimeProvider? time = null)
+    {
+        var config = new AppConfig { Ai = new AiProviderSettings(AiProviderKind.Claude, "claude-opus-5", null) };
+        return new ToneDesignService(() => config, new FakeFactory(model), localization: FakeLocalization.English(), time: time);
+    }
     private sealed class FakeFactory(IToneDesignModel model) : IToneDesignModelFactory
     {
         public IToneDesignModel Create(AiProviderSettings settings) => model;

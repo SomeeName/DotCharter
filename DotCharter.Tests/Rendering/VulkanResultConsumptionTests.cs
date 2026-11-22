@@ -29,7 +29,7 @@ public sealed class VulkanResultConsumptionTests
     /// <summary>Silk entry points on the Vulkan API object whose
     /// <c>Result</c> reports a failure the caller cannot survive.</summary>
     private static readonly Regex Call = new(
-        @"(?<!\w)(?<recv>_context\.Api|_vk|(?<![\w.])Api)\.(?<name>Create\w+|Allocate\w+|MapMemory|BindBufferMemory|BindImageMemory)\(",
+        @"(?<!\w)(?<recv>_context\.Api|_vk|(?<![\w.])[Aa]pi)\.(?<name>Create\w+|Allocate\w+|MapMemory|BindBufferMemory|BindImageMemory)\(",
         RegexOptions.Compiled);
 
     /// <summary>Consumption shapes that are as good as the wrapper: an
@@ -37,15 +37,20 @@ public sealed class VulkanResultConsumptionTests
     /// tests.</summary>
     private static readonly string[] AcceptedPrefixes = ["VulkanCheck.Ok(", "if (", "="];
 
+    /// <summary>Both device paths: the 3D highway (<c>Vulkan/</c>) and the 2D
+    /// timeline (<c>Vulkan2D/</c>), whose vertex buffers, atlas upload and
+    /// headless readback map memory exactly like the 3D side does.</summary>
+    private static readonly string[] SourceFolders = ["Vulkan", "Vulkan2D"];
+
+    private static IEnumerable<string> SourceFiles() =>
+        SourceFolders.SelectMany(folder => Directory.EnumerateFiles(
+            Path.Combine(TestPaths.RepoRoot(), "DotCharter.Rendering", folder), "*.cs",
+            SearchOption.AllDirectories));
+
     public static TheoryData<string> RendererSources()
     {
         var data = new TheoryData<string>();
-        foreach (var file in Directory.EnumerateFiles(
-                     Path.Combine(TestPaths.RepoRoot(), "DotCharter.Rendering", "Vulkan"), "*.cs",
-                     SearchOption.AllDirectories))
-        {
-            data.Add(Path.GetRelativePath(TestPaths.RepoRoot(), file));
-        }
+        foreach (var file in SourceFiles()) data.Add(Path.GetRelativePath(TestPaths.RepoRoot(), file));
 
         return data;
     }
@@ -75,14 +80,16 @@ public sealed class VulkanResultConsumptionTests
     {
         var found = 0;
         var wrapped = 0;
-        foreach (var file in Directory.EnumerateFiles(
-                     Path.Combine(TestPaths.RepoRoot(), "DotCharter.Rendering", "Vulkan"), "*.cs",
-                     SearchOption.AllDirectories))
+        var vulkan2DCalls = 0;
+        foreach (var file in SourceFiles())
         {
+            var inVulkan2D = file.Contains($"{Path.DirectorySeparatorChar}Vulkan2D{Path.DirectorySeparatorChar}",
+                StringComparison.Ordinal);
             var source = StripCommentsAndStrings(File.ReadAllText(file));
             foreach (Match m in Call.Matches(source))
             {
                 found++;
+                if (inVulkan2D) vulkan2DCalls++;
                 if (source[..m.Index].TrimEnd().EndsWith("VulkanCheck.Ok(", StringComparison.Ordinal))
                     wrapped++;
             }
@@ -91,6 +98,9 @@ public sealed class VulkanResultConsumptionTests
         Assert.True(found >= 40,
             $"only {found} creation/allocation calls matched — the receiver pattern has drifted " +
             "and the Theory above is passing vacuously.");
+        Assert.True(vulkan2DCalls >= 15,
+            $"only {vulkan2DCalls} calls matched under Vulkan2D/ — its local `api` receiver is no longer " +
+            "seen, so the 2D path's map and create results are unguarded again.");
         Assert.True(wrapped >= 35,
             $"only {wrapped} of {found} go through VulkanCheck.Ok; the rest would have to be " +
             "if-tested, which is unlikely to be true and is worth re-reading.");

@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace DotCharter.UI.ViewModels.Editor;
 
@@ -27,7 +28,7 @@ public partial class StemTrackViewModel : ObservableObject
         _localization = localization;
         _stem = stem;
         Name = string.IsNullOrWhiteSpace(stem.Name) ? "stem" : stem.Name;
-        _volumeLinear = Math.Clamp(stem.Volume <= 0 ? 1.0 : stem.Volume, 0.0, 4.0);
+        _volumeLinear = Math.Clamp(stem.Volume < 0 ? 1.0 : stem.Volume, 0.0, 4.0);
         _isMuted = stem.Muted;
         _isSolo = stem.Solo;
         IsMasterMix = false;
@@ -77,7 +78,11 @@ public partial class StemTrackViewModel : ObservableObject
         _syncing = true;
         try { IsMuted = value; }
         finally { _syncing = false; }
-        _stem?.Muted = value;
+        if (_stem != null && _stem.Muted != value)
+        {
+            _stem.Muted = value;
+            _owner?.NotifyStemChanged(_stem);
+        }
         if (IsMasterMix)
         {
             // Cross-track exclusion arrives here, and it is a real state change the
@@ -167,6 +172,10 @@ public partial class StemTrackViewModel : ObservableObject
     /// volume, and the fader and the seed may not disagree.</summary>
     public double DefaultVolumeLinear => 1.0;
 
+    /// <summary>The strip's reset (design D): the fader back to <see cref="DefaultVolumeLinear" />; mute and solo stay.</summary>
+    [RelayCommand]
+    public void ResetLevel() => VolumeLinear = DefaultVolumeLinear;
+
     public string VolumeDbLabel
     {
         get
@@ -207,11 +216,13 @@ public partial class StemTrackViewModel : ObservableObject
     {
         if (_stem == null || IsSolo == _stem.Solo) return;
         SetSoloSilently(_stem.Solo);
+        _owner?.OnTrackSoloChanged(this, IsSolo);
     }
 
     partial void OnIsMutedChanged(bool value)
     {
         if (_syncing) return;
+        var persistedChange = _stem != null && !_runScopedMute && _stem.Muted != value;
         if (_stem != null && !_runScopedMute) _stem.Muted = value;
         if (IsMasterMix)
         {
@@ -231,7 +242,12 @@ public partial class StemTrackViewModel : ObservableObject
             if (!IsMasterMix) _audio.SetStemSolo(Name, false);
             // Same reason as the mute above: a run-scoped mute must not persist a
             // cleared solo into the project. RestoreSoloFromProject puts the UI back.
-            if (_stem != null && !_runScopedMute) _stem.Solo = false;
+            if (_stem != null && !_runScopedMute)
+            {
+                persistedChange |= _stem.Solo;
+                _stem.Solo = false;
+            }
+            _owner?.OnTrackSoloChanged(this, false);
         }
 
         // Cross-track exclusion: the master mix and the stem group should not
@@ -248,6 +264,7 @@ public partial class StemTrackViewModel : ObservableObject
         // anyway: a run-scoped restore puts the strip back exactly where it was
         // BEFORE the run, a state the exclusion had already had its say about.
         if (!_runScopedMute) _owner?.OnTrackMuteChanged(this, value);
+        if (persistedChange) _owner?.NotifyStemChanged(_stem!);
         // Audibility DID change either way — the drawn waveform follows what is
         // audible, run-scoped or not.
         _owner?.OnTrackAudibilityChanged();
@@ -257,6 +274,7 @@ public partial class StemTrackViewModel : ObservableObject
     {
         if (_syncing) return;
         if (IsMasterMix) return;
+        var persistedChange = _stem != null && _stem.Solo != value;
         if (_stem != null) _stem.Solo = value;
         _audio.SetStemSolo(Name, value);
 
@@ -268,10 +286,15 @@ public partial class StemTrackViewModel : ObservableObject
             try { IsMuted = false; }
             finally { _syncing = false; }
             _audio.SetStemMute(Name, false);
-            if (_stem != null) _stem.Muted = false;
+            if (_stem != null)
+            {
+                persistedChange |= _stem.Muted;
+                _stem.Muted = false;
+            }
         }
 
         _owner?.OnTrackSoloChanged(this, value);
+        if (persistedChange) _owner?.NotifyStemChanged(_stem!);
     }
 
     partial void OnVolumeLinearChanged(double value)
@@ -279,7 +302,11 @@ public partial class StemTrackViewModel : ObservableObject
         OnPropertyChanged(nameof(VolumeDbLabel));
         if (_syncing) return;
         var clamped = Math.Clamp(value, 0.0, 4.0);
-        if (_stem != null) _stem.Volume = clamped;
+        if (_stem != null && _stem.Volume != clamped)
+        {
+            _stem.Volume = clamped;
+            _owner?.NotifyStemChanged(_stem);
+        }
         if (IsMasterMix) _audio.SongVolume = clamped;
         else _audio.SetStemVolume(Name, clamped);
         _owner?.OnTrackAudibilityChanged();

@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.VisualTree;
 using DotCharter.Tone.Ai;
 using DotCharter.Services.Ai.Match;
@@ -139,6 +140,10 @@ public sealed class ToneSectionsUiPerfSmokeTests
                         $"'{name}' laid out as {control.Bounds} — its styles failed silently");
                 }
 
+                CaptureSections(panel);
+                Assert.Same(vm.Sections.AddSectionCommand, ((Button)Find(panel, "ToneSectionsAdd")).Command);
+                Assert.Same(vm.Sections.ProposeCommand, ((Button)Find(panel, "ToneSectionsPropose")).Command);
+
                 // One section, one realized row — a list that measured non-zero
                 // while realizing nothing would pass every assertion above. The
                 // row's own candidate ListBox is the marker: exactly one per
@@ -220,6 +225,16 @@ public sealed class ToneSectionsUiPerfSmokeTests
         Assert.True(control != null,
             $"'{name}' is not in the visual tree — the surface never realized (a XAML fault or a rename).");
         return control!;
+    }
+
+    private static void CaptureSections(Control panel)
+    {
+        var dir = Environment.GetEnvironmentVariable("DOTCHARTER_RIG_CAPTURE_DIR");
+        if (!UiSweepRunner.CaptureEnabled || string.IsNullOrWhiteSpace(dir) || TopLevel.GetTopLevel(panel) is not Window window) return;
+        Directory.CreateDirectory(dir);
+        using var frame = window.CaptureRenderedFrame();
+        Assert.NotNull(frame);
+        frame.Save(Path.Combine(dir, "tone-sections.png"), new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
     }
 
     private static void AttachAndLayout(Control view, Action assert)

@@ -1,38 +1,36 @@
+using DotCharter.Services.Export.Rocksmith;
+
 namespace DotCharter.Services.Export;
 
 /// <summary>
 ///     Where an export's files default to, resolved against the project folder: the output
-///     folder, the playback audio when it already is (or sits beside) a .wem/.wav, and the
+///     folder, the project snapshot's export audio, and the
 ///     chart's embedded cover. Every lookup goes through <see cref="IExportTargetWriter" />.
 /// </summary>
 public static class ExportPathDefaults
 {
-    /// <summary>The last export folder while it exists, else the project's folder, else Documents.</summary>
+    /// <summary>A saved project's export folder; otherwise the last export folder or Documents.</summary>
     public static string ExportDirectory(AppConfig config, string projectPath, IExportTargetWriter files)
     {
+        if (!string.IsNullOrWhiteSpace(projectPath)) return ProjectFolderLayout.ExportDirectory(projectPath);
         if (!string.IsNullOrWhiteSpace(config.LastExportDir) && files.DirectoryExists(config.LastExportDir))
             return config.LastExportDir;
         return ProjectDirectory(projectPath) is { Length: > 0 } dir ? dir : files.DocumentsFolder;
     }
 
-    /// <summary>The playback audio when it is .wem/.wav, else a sibling .wem/.wav of it; null when none exists.</summary>
-    public static string? ProjectAudio(string audioFileName, string projectPath, IExportTargetWriter files)
-    {
-        // A UNC, device or network-drive reference is never probed (see ProjectRelativePath).
-        if (!ProjectRelativePath.IsReadableMediaReference(audioFileName)) return null;
-        var full = Path.IsPathRooted(audioFileName) ? audioFileName : Path.Combine(ProjectDirectory(projectPath) ?? "", audioFileName);
-        foreach (var candidate in new[] { full, Path.ChangeExtension(full, "wem"), Path.ChangeExtension(full, "wav") })
-        {
-            if (!files.FileExists(candidate)) continue;
-            if (candidate.EndsWith(".wem", StringComparison.OrdinalIgnoreCase) ||
-                candidate.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
-            {
-                return candidate;
-            }
-        }
+    /// <summary>The shared artist/title/version release name used by the save companion and export dialog.</summary>
+    public static string PackageFileName(ChartProject project) =>
+        RocksmithPackageName.For(project, project.Chart.Version);
 
-        return null;
-    }
+    /// <summary>The snapshot's export audio; an unrelated sibling never supplies a missing source.</summary>
+    public static string? ProjectAudio(ChartProject snapshot, string audioFileName, string projectPath, IExportTargetWriter files) =>
+        ProjectAudio(ProjectExportAudio.ForSnapshot(snapshot, audioFileName), projectPath, files);
+
+    /// <summary>The exact working audio reference, or null when missing or unsafe.</summary>
+    public static string? ProjectAudio(string audioFileName, string projectPath, IExportTargetWriter files) =>
+        ProjectRelativePath.IsReadableMediaReference(audioFileName)
+            ? ProjectAudioLocator.TryResolve(projectPath, audioFileName, files.FileExists)
+            : null;
 
     /// <summary>The chart's cover on disk, or "" when unset or missing (the builder then uses a placeholder).</summary>
     public static string CoverArt(ChartProject project, string projectPath, IExportTargetWriter files)
@@ -44,12 +42,14 @@ public static class ExportPathDefaults
         return full != null && files.FileExists(full) ? full : "";
     }
 
-    /// <summary>Rewrites the file name's platform suffix (_p / _m), keeping its folder and base name.</summary>
+    /// <summary>Rewrites the platform suffix and keeps the extended-range tag only on PC.</summary>
     public static string WithPlatformSuffix(string outputPath, bool mac)
     {
         if (string.IsNullOrWhiteSpace(outputPath)) return outputPath;
         var dir = Path.GetDirectoryName(outputPath) ?? "";
-        var rebuilt = StripPsarcSuffix(Path.GetFileName(outputPath)) + (mac ? "_m.psarc" : "_p.psarc");
+        var pc = StripPsarcSuffix(Path.GetFileName(outputPath)) + "_p.psarc";
+        pc = Rocksmith.ExtendedRangePackageName.Apply(pc, !mac && pc.EndsWith("_rsxr_p.psarc", StringComparison.OrdinalIgnoreCase));
+        var rebuilt = mac ? pc[..^"_p.psarc".Length] + "_m.psarc" : pc;
         return string.IsNullOrEmpty(dir) ? rebuilt : Path.Combine(dir, rebuilt);
     }
 

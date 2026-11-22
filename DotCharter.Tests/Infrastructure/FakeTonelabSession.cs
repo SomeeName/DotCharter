@@ -11,7 +11,7 @@ internal sealed class FakeTonelabSession : ITonelabSession
     /// <summary>The Tone designer's preview targets over a clone on an empty fake chain and this fake session (disconnected unless told).</summary>
     public static TonePreviewTargets Targets(TonePreviewSession clone, ITonelabSession? session = null) =>
         For(clone, session ?? new FakeTonelabSession(), new FakeConfigurationService(), new ManualTonelabScheduler(),
-            Path.Combine(Path.GetTempPath(), "dotcharter-tonelab-tests"));
+            Path.Combine(Path.GetTempPath(), "dotcharter-tonelab-tests-" + Guid.NewGuid().ToString("N")));
 
     /// <summary>The same with every collaborator named: the debounce clock and where tone files go.</summary>
     public static TonePreviewTargets For(TonePreviewSession clone, ITonelabSession session, IConfigurationService config,
@@ -38,6 +38,8 @@ internal sealed class FakeTonelabSession : ITonelabSession
     /// <summary>Runs after each accepted <c>apply-file</c>: a test's hook for "a preview claims the route mid-render".</summary>
     public Action? Applied { get; set; }
 
+    public Func<Task<TonelabResult>>? ApplyReply { get; set; }
+
     public TonelabStatus? LastStatus { get; set; }
 
     public int Reconnects { get; private set; }
@@ -52,9 +54,13 @@ internal sealed class FakeTonelabSession : ITonelabSession
 
     public GameToneLaunchFailure LastLaunchFailure { get; set; }
 
+    /// <summary>Set once <see cref="LaunchAsync"/> has been entered (and counted), so a test can wait for a launch started on the pool.</summary>
+    public ManualResetEventSlim LaunchEntered { get; } = new(false);
+
     public Task<TonelabSessionState> LaunchAsync(CancellationToken ct = default)
     {
         Launches++;
+        LaunchEntered.Set();
         return ProbeAsync(ct);
     }
 
@@ -88,7 +94,7 @@ internal sealed class FakeTonelabSession : ITonelabSession
     {
         AppliedFiles.Add(path);
         Applied?.Invoke();
-        return Ok("tl");
+        return ApplyReply?.Invoke() ?? Ok("tl");
     }
 
     public Task<TonelabResult> SetKnobAsync(string gearSlot, string knobKey, float value, CancellationToken ct = default) => Ok();

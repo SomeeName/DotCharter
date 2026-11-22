@@ -391,7 +391,7 @@ its own copy of this guide for the reader's half.
   ▸ Export ▸ EOF's lossy status-rail message opens it with Show, and the save
   companion logs `EofLossSummary.LogLine()`. **That section is LAZY (#685):**
   the in-memory export costs ~105–145 ms on a chart with a 20-level ladder, so
-  `EofRoundTripSectionViewModel` runs it only while the section is open, on a
+  `EofRoundTripSectionViewModel` runs it only while the Issues tab's Editor on Fire section is open, on a
   `ChartProjectCloner` snapshot, off the UI thread, and drops a result that
   lands after a recheck. It opens closed unless the project is
   `ChartDocumentState.EofRoundTripProject` (an EOF export, or the user opened it;
@@ -409,6 +409,11 @@ its own copy of this guide for the reader's half.
   persists it and `EofExporter` re-emits it — so the first tempo edit after an
   import dragged pinned beats and a round trip back to `.eof` lost every flag.
   `EofBeatAnchorImportTests` pins the mapping and lints the dialog's call site.
+  **EOF's first explicit key signature is project metadata:** the signed beat
+  key byte under `BeatFlagKeySig` becomes `EofImportMetadata.KeyAccidentals`
+  and `EofProjectCreator` copies it to `ChartData.KeyAccidentals`. Only values
+  from -7 to 7 are accepted; absent a valid flag the key stays C major. The
+  project has one key signature, so later key changes are not represented.
   **PART VOCALS imports as the project's lyrics** (`EofVocalTrackParser`, #232): the
   track is listed by `GetAvailableTracks` once it holds a lyric (`EofTrackInfo.IsVocals`,
   `NoteCount` = lyrics) and lands in `EofImportResult.VocalTracks`. EOF text is Rock
@@ -425,16 +430,74 @@ its own copy of this guide for the reader's half.
   instances WITH flag `EOF_RS_ARP_HANDSHAPE=2` (flag 0 = true arpeggio,
   keyed off `ChordTemplate.Arpeggio` both ways); `GraceFret` hints
   materialize as EOF grace pairs (short LINKNEXT slide-in + displaced
-  target; the importer folds the exact shape back — **since 0.33.2 for
-  CHORDS too: one grace note carrying every graced string, folded back to
-  per-string `ChordNote.GraceFret`. EOF stores ONE slide end fret per note
-  (the lowest fretted string's) and projects that single distance onto every
-  string, so a chord grace is only representable when every graced string
-  travels the SAME non-zero fretted interval — anything else is REPORTED as
-  dropped, never written as a wrong shape. Writer and folder must stay
-  symmetric or a save/reload duplicates or drops notes**); multi-point bend
+  target). Single-note ornaments carry `[DotCharter grace]` in EOF's existing
+  serialized pro-guitar note-name field. This marker is visible as a note name
+  in EOF's editor. The marker alone is NOT proof of an ornament.
+  `EofGraceTiming.TargetIndex` owns the raw pair contract: one unghosted
+  fretted string, no assigned finger/legacy/extended ornament technique, only
+  LINKNEXT + RS_NOTATION + the correct slide direction, distinct positive frets,
+  and the exact bounded (1..200 ms) duration. The same string/difficulty must
+  have a target at that exact end and fret. Single targets remain unnamed;
+  chord targets retain authored names (including their Nop suffix/flag).
+  `EofGraceTiming.IsReservedName` rejects the exact identity, also after the
+  reader's trim and single `-nop` fold, at both name boundaries and in pairing;
+  these generated identities never become chord names. Ordinary names are data;
+  target ghosts and authored target techniques are retained. `EofGracePairing`
+  resolves all identities before folding moves attacks. Complete marked pairs
+  may interleave on one string; an unrelated played neighbour still vetoes
+  folding, and ambiguous targets are rejected. Export sets all candidate markers
+  before validating them, so an earlier pair cannot erase a later identity.
+  Duration is chosen from the SERIALIZED onset's canonical imported position,
+  so writer and reader agree exactly even across a rounded tempo boundary.
+  The target's length is one pair too (#643): the writer's
+  `EofGraceTiming.DisplacedLength` and the fold's `FoldedLength` (also used by
+  `EofGraceTargetTech.Owners`). Wire length 0 means "no sustain" and folds back
+  to 0, never to the ornament's length; a sustained target behind a
+  single-string ornament keeps at least 1 ms, and wire length 1 folds back to
+  exactly the ornament: a sustain EQUAL to the ornament (the grid value) is the
+  identity, and a sustain from 1 ms to ornament + 1 ms comes back as the ornament
+  (the one inexact range; ornament + 1 is the price of the grid value). A multi-string
+  ornament never folds, and its strum keeps the plain clip to 0.
+  The identity is never chart data: import clears every remaining reserved note
+  name immediately after the fold decision, before building played or ghost-grip
+  templates. Export assigns all names at the final-note boundary after ghosts:
+  chart templates bearing the reserved name (including old saved projects) are
+  unnamed, even with Nop set; only internally synthesized single ornaments can
+  receive the identity after validation. An ornament
+  promoted to a multi-gem ghost carrier loses its marker and stays unfolded;
+  its ghost grip and both played sounds survive without a synthetic chord name.
+  **Chord-ornament limit:** EOF exports manual chord names as Rocksmith
+  `chordName`/`displayName` (`note.c:3114-3118`, `rs.c:2471,2542`). Multi-string
+  ornaments stay UNNAMED and import as independent played ornaments and targets.
+  A single graced chord tone emits a single-string marked ornament and restores
+  that tone's `GraceFret` without adding any chord name. EOF stores ONE slide end fret per note,
+  so every graced string must travel the SAME non-zero fretted interval;
+  anything else is REPORTED as dropped rather than written as a wrong shape.
+  **Generated attachments:** bend tech, tremolo, shapes, anchors, tones,
+  ghost grips, target fingering and text retain their export-capability policy,
+  including existing rounding and zero-sustain limits. Mixed-slide overrides
+  require generation proof: `EofGraceTargetTech` reconstructs candidate owners
+  with the actual reader and calls **the same `EofNoteBuilder.Build` as export**.
+  Only a record emitted by that function, serialized by the real note codec,
+  can pass an otherwise vetoing override. No second slide-emission recipe,
+  guessed duration or retry is used. Owner headers are captured before folding
+  moves any target: interleaved grace chords' generated overrides cannot veto
+  their neighbours. Wrong-onset, wrong-fret, wrong-length or extra-flag edits
+  stay independent played ornaments. Plain tech and trill have no writer path.
+  Applicability still uses `EofAttachmentApplicability`: tech ONSETS in the
+  ornament's time/string/difficulty span (through the target attack), sections
+  at either attack. Tech length never extends applicability; the sorted lower
+  bound remains shared with the reader. Multi-string ornaments remain unnamed
+  under the established no-synthetic-chord-name rule. Assigned ornament fingers,
+  ghost-promoted ornaments and noncanonical markers remain unfolded.
+  Other unmarked or nonconforming pairs (including older marker records whose
+  duration differs from the canonical policy) stay independent played sounds.
+  Fingering is keyed by raw note identity,
+  not list index, because folding removes raw notes. Multi-point bend
   curves ride the tech-note custom block 7 (1 ms BEND|RS_NOTATION points,
-  quarter-step MSB) and the importer rebuilds `BendValues` from them.
+  quarter-step MSB) and the importer rebuilds `BendValues` from them. Chord
+  strings share one curve; differing bend positions OR steps are reported as
+  `ChordMixedBend` before the writer selects a curve, even at equal point counts.
   **Split and Fingerless both ways (#609):** the note flag
   `EOF_PRO_GUITAR_NOTE_FLAG_SPLIT` (`0x20000000`, `song.h:64`) is
   `Chord.SplitIntoNotes`; the EXTENDED flag `EOF_PRO_GUITAR_NOTE_EFLAG_FINGERLESS`
@@ -497,11 +560,38 @@ its own copy of this guide for the reader's half.
   (`vocals.xml`) and the package reader's SNG vocals both go through
   `Xml/Vocals/RsVocalPhraseBuilder`, which strips the trailing `-`/`+` with
   `RsVocalLyricEncoding.Decode` (the inverse of `Encode`), sets `IsWordPart` /
-  `IsPhraseEnd`, and starts a new phrase after each `+` or a 5 s silence. Stored
+  `IsPhraseEnd`, and starts a new phrase after each `+`; a 5 s silence starts one
+  only in a file with no `+` anywhere (`RsVocalLineBreaks.MarkersElseGaps`, file
+  order kept). The EOF reader's no-lines fallback keeps both rules and time order
+  (`MarkersAndGaps`, `EofVocalImportTests`). The XML writer emits a syllable that is
+  both a word part and a phrase end as `+`, writes `+` on every line end whatever its
+  text ends in (`hel-` goes out as `hel-+`), and writes whole lines in the order of
+  their first syllable; a line out of time order, or two lines of one track that
+  overlap in time (the package sorts its one track by time), is the blocking export
+  finding `LyricsOutOfOrder` (`RsXmlVocalsLineRoundTripTests`, #638). Both writers, the
+  XML and the package's vocals SNG (`SngFromDomainMapper.BuildVocals`), take their tokens
+  from ONE rule, `RsVocalLyricEncoding.EncodeLine`: blank syllables (trailing spaces
+  trimmed) are not written (a blank one's line end passes to the last written syllable
+  before it in that line, or is dropped when there is none), the line end is the flag or
+  the last WRITTEN syllable, a word
+  part gets its `-` unless its text ends in one; the only difference, the package's time
+  order, is `RsVocalLyricEncoding.InPackageOrder` (`VocalsWriterTokenParityTests`). The
+  format has no other escape: text ending in `+` or `-` off a line end reads back as
+  different lines or loses its hyphen (a word part "a-" reads back as "a"), so it is the
+  blocking finding `LyricMarkerText`; the check asks the encoder
+  (`RsVocalLyricEncoding.LosesText`, over that same line rule). Editing paths set
+  the two flags through `Core/Domain/Vocals/LyricLineRule` (a line end is never a word
+  part). Lyric STYLE (capitals, stray punctuation, unsplit syllables) is the Issues
+  tab's Warning `D13`, `LyricStyleRule` (see `core/guitar-and-tuning.md`). Stored
   text carries no marker and no trailing space (the word gap comes from
   `IsWordPart`). The XML reader used to keep the markers and build one phrase
   for the whole song (#324); `RsXmlVocalsRoundtripTests` pins the XML path (the
   plugin's tests compare it with the SNG path on the same syllables).
+  Standalone vocals XML gets a neutral 60 BPM marker at zero so absolute source
+  timestamps survive loading and saving without an external tempo map. Imports
+  and legacy `RscpMigrations` recovery pass the destination project's beats to
+  map those same timestamps onto the real grid (`RsXmlVocalsRoundtripTests`,
+  `RscpMigrationTests`).
 - **A `.eof` is untrusted input too, and its two size fields are file-supplied
   (0.41).** `EofPackReader.ReadBytes`/`Skip` bounded with
   `Position + count > _data.Length`, which OVERFLOWS `int` and goes NEGATIVE for
@@ -515,6 +605,9 @@ its own copy of this guide for the reader's half.
   consumes its input monotonically so the output was never infinite, but the
   format's worst case is ~8.5× and `ToArray()` doubles the peak, so a 200 MB
   crafted file cost ~3.4 GB. Both are pinned by hostile-input tests.
+  The same decoded-byte ceiling applies to plain and NOPACK payloads before
+  returning or copying them. `EofDecodedFileCache` checks the open file's raw
+  length against that ceiling plus four magic bytes before allocating a buffer.
 - **One gesture decodes an `.eof` ONCE.** `EofImporter` read and LZSS-decoded
   the whole file twice for a single import — once for the dialog's track preview
   (`GetAvailableTracks`) and again for the import itself
@@ -705,6 +798,15 @@ its own copy of this guide for the reader's half.
   be read).
 
 ## `Parsing/Rscp/` — the project format (moved here from `DotCharter.Services/AGENTS.md`)
+
+- Targetless `UnpitchedSlide` is independent of `SlideTo`: both single notes
+  and chord strings save the flag even without a slide target.
+- RS-XML song imports into an existing grid map source positions through
+  milliseconds onto the live host beats during `RsXmlImporter.Apply`. Sustains
+  are re-measured from their endpoints; bends and all arrangement markers use
+  `ChartProjectPositions.Remap`. An empty host adopts the source grid. The
+  reader treats `measure="-1"` (and other negative indices) as ordinary beats;
+  measure zero is a valid bar line.
 
 - **The header is read through ONE indexed pass, not thirty tree walks (0.49).**
   `RscpHeaderParser` asked `doc.Descendants(name).FirstOrDefault()` thirty times.
@@ -906,7 +1008,12 @@ its own copy of this guide for the reader's half.
     phrases; the writer then always emits the node, and the parser REGROUPS the
     lyrics by the `n` counts when every entry has one and they add up to the
     lyrics that parsed (#283), keeping the old one-entry-per-derived-phrase
-    mapping for a truncated or foreign file. `ChartProjectRestorer` carried both
+    mapping for a truncated or foreign file. After regrouping, containers win:
+    only each nonempty phrase's last syllable has `IsPhraseEnd` set (#624).
+    Mid-line flags in older projects are cleared, missing final flags are set,
+    and phrase spans and lyric objects are retained. The shared RS vocal builder
+    also sets the end flag on gap-derived and final unmarked lines.
+    `ChartProjectRestorer` carried both
     all along, so UNDO preserved what a save destroyed.
   - `RscpDeepValueRoundTripTests` was blind to the second one: its fixture sets
     `phrase.Position` to the first lyric's position and `EndPosition` to the
@@ -932,6 +1039,11 @@ its own copy of this guide for the reader's half.
     plays there). The fill slices by POSITION; on the base game it agrees with
     the SNG's own iteration ids on every level the plugin's owner-only fidelity
     test reads.
+    The level-by-phrase bucket product is bounded to 1,000,000 cells before allocation.
+    Expansion shares a 1,000,000-entity clone budget across every level and
+    entity kind, including nested chord notes and bends. The budget is charged
+    before cloning; excess expansion throws `InvalidDataException` rather than
+    returning a partially inherited chart (`RsLevelLadderTests`).
   - **Opt-out (#399):** Settings ▸ Files ▸ "Hardest difficulty level only"
     (`AppConfig.PsarcOpenHardestLevelOnly`, off by default) makes the song
     browser's load squash every arrangement to one level
@@ -944,7 +1056,8 @@ its own copy of this guide for the reader's half.
     `LibraryLevelImportTests` and `SongBrowserAudioTests.LoadSongItem_KeepsOnlyTheHardestLevel_WhenTheSettingIsOn`.
   - **Export, both writers:** `RsXmlSongWriter.Write` and
     `SngFromDomainMapper.BuildInstrumental` read levels ONLY through
-    `RsLevelLadder.ForExport`, which leaves out every span above its phrase's
+    `RsLevelLadder.ForExport` (as `RsPhraseExportData.Ladder`, cut along the
+    export's resolved iteration table, #639), which leaves out every span above its phrase's
     SHIPPED max. The shipped max is the authored one raised to the highest level
     whose content in the phrase is non-empty and differs from the level below
     (`ChartActionStateComparer` equality) — so an unedited import re-exports

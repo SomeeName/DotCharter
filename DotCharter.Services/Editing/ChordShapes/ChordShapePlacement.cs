@@ -77,7 +77,7 @@ public sealed record ChordShapePlacementPlan(
 public static class ChordShapePlacement
 {
     public const string PlaceLabelKey = "History_ChordShapes_Place";
-    public const int MaxFret = 24;
+    public const int MaxFret = FretLimits.MaxFret;
 
     /// <summary>
     ///     Places <paramref name="template" /> at every one of <paramref name="positions" /> as one

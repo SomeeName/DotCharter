@@ -1,5 +1,4 @@
-﻿using System.Globalization;
-using System.Text;
+﻿using System.Text;
 
 namespace DotCharter.Services.Online.MusicBrainz;
 
@@ -84,9 +83,4 @@ public static class ScriptDetection
     internal static bool LooksLikeEnglishLocale(string? locale) =>
         !string.IsNullOrWhiteSpace(locale) &&
         locale.StartsWith("en", StringComparison.OrdinalIgnoreCase);
-
-    internal static string TitleCaseIfShouting(string value) =>
-        value.Length > 3 && value == value.ToUpperInvariant()
-            ? CultureInfo.InvariantCulture.TextInfo.ToTitleCase(value.ToLowerInvariant())
-            : value;
 }

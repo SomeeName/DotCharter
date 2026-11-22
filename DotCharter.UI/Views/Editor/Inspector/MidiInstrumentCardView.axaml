@@ -1,0 +1,82 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor.Inspector"
+             xmlns:inspector="using:DotCharter.UI.Views.Editor.Inspector"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.MidiInstrumentCardView"
+             x:DataType="viewModels:ChartSynthInstrumentViewModel">
+    <!-- The Mixer ▸ MIDI Instrument card in design D's card grammar, over the transport's one
+         ChartSynthInstrumentViewModel (Play Mode's Amp/FX panel keeps ChartSynthInstrumentView, its own grammar):
+         the guitar and bass models and, under each, its pickups (a placeholder says so while the synth has nothing to offer), the coil
+         split, what each choice sounds like, a playing tone's own instrument, and "Reset instrument", which asks. -->
+    <StackPanel x:Name="MidiInstrumentRoot" Spacing="{StaticResource FireSpaceXs}">
+        <StackPanel Spacing="{StaticResource FireSpaceXs}" IsEnabled="{Binding IsAvailable}">
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}" RowSpacing="{StaticResource FireSpaceXxs}">
+                <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" MinWidth="44" VerticalAlignment="Center"
+                           Text="{localization:Loc Mixer_ChartSynth_Guitar}" />
+                <ComboBox x:Name="MidiGuitarModelPicker" Grid.Column="1" HorizontalAlignment="Stretch" Classes="ColumnFlowField" MinWidth="0"
+                          PlaceholderText="{localization:Loc Mixer_Midi_NotAvailable}"
+                          ItemsSource="{Binding GuitarModels}"
+                          SelectedItem="{Binding SelectedGuitarModel}"
+                          ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Model_Tip}"
+                          AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_Guitar}" />
+                <ComboBox x:Name="MidiGuitarPickupPicker" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" Classes="ColumnFlowField" MinWidth="0"
+                          PlaceholderText="{localization:Loc Mixer_Midi_NotAvailable}"
+                          ItemsSource="{Binding GuitarPickups}"
+                          SelectedItem="{Binding SelectedGuitarPickup}"
+                          ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Pickup_Tip}"
+                          AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_GuitarPickup}" />
+            </Grid>
+            <ToggleButton x:Name="MidiCoilSplitToggle" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                          HorizontalAlignment="Left"
+                          IsVisible="{Binding GuitarHasCoilSplit}"
+                          IsChecked="{Binding GuitarCoilSplit}"
+                          Content="{localization:Loc Mixer_ChartSynth_CoilSplit}"
+                          ToolTip.Tip="{localization:Loc Mixer_ChartSynth_CoilSplit_Tip}"
+                          AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_CoilSplit}" />
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}" RowSpacing="{StaticResource FireSpaceXxs}">
+                <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" MinWidth="44" VerticalAlignment="Center"
+                           Text="{localization:Loc Mixer_ChartSynth_Bass}" />
+                <ComboBox x:Name="MidiBassModelPicker" Grid.Column="1" HorizontalAlignment="Stretch" Classes="ColumnFlowField" MinWidth="0"
+                          PlaceholderText="{localization:Loc Mixer_Midi_NotAvailable}"
+                          ItemsSource="{Binding BassModels}"
+                          SelectedItem="{Binding SelectedBassModel}"
+                          ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Model_Tip}"
+                          AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_Bass}" />
+                <ComboBox x:Name="MidiBassPickupPicker" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" Classes="ColumnFlowField" MinWidth="0"
+                          PlaceholderText="{localization:Loc Mixer_Midi_NotAvailable}"
+                          ItemsSource="{Binding BassPickups}"
+                          SelectedItem="{Binding SelectedBassPickup}"
+                          ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Pickup_Tip}"
+                          AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_BassPickup}" />
+            </Grid>
+            <TextBlock x:Name="MidiGuitarSoundText" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                       Text="{Binding GuitarSound}" />
+            <TextBlock x:Name="MidiBassSoundText" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                       Text="{Binding BassSound}" />
+            <Button x:Name="MidiOverrideToneButton" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                    HorizontalAlignment="Left"
+                    IsVisible="{Binding CanOverrideTone}"
+                    Command="{Binding OverrideToneCommand}"
+                    Content="{localization:Loc ChartSynth_Override_ThisTone}"
+                    ToolTip.Tip="{localization:Loc ChartSynth_Override_ThisTone_Tip}"
+                    AutomationProperties.Name="{localization:Loc ChartSynth_Override_ThisTone}" />
+            <Grid x:Name="MidiToneOverrideRow" ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}"
+                  IsVisible="{Binding HasToneOverride}">
+                <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                           Text="{Binding ToneOverrideText}" />
+                <Button x:Name="MidiUseMyInstrumentButton" Grid.Column="1" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                        Command="{Binding UseMyInstrumentCommand}"
+                        Content="{localization:Loc ChartSynth_Override_UseMine}"
+                        ToolTip.Tip="{localization:Loc ChartSynth_Override_UseMine_Tip}"
+                        AutomationProperties.Name="{localization:Loc ChartSynth_Override_UseMine}" />
+            </Grid>
+            <Button x:Name="MidiResetInstrument" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc Mixer_Midi_ResetInstrument}"
+                    AutomationProperties.Name="{localization:Loc Mixer_Midi_ResetInstrument}"
+                    ToolTip.Tip="{localization:Loc Mixer_Midi_ResetInstrumentTip}"
+                    Command="{Binding ResetInstrumentCommand}" />
+        </StackPanel>
+        <inspector:InspectorConfirmRow x:Name="MidiResetInstrumentConfirm" DataContext="{Binding ResetConfirm}" />
+    </StackPanel>
+</UserControl>

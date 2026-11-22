@@ -47,11 +47,11 @@ public sealed class OpenNoteBendRule : IArrangementRule
             {
                 if (note.Fret > capo || !HasBend(note.BendValues)) continue;
 
-                issues.Add(new ArrangementIssue(
-                    ArrangementIssueType.OpenNoteWithBend,
-                    Message(note.StringIndex, capo),
+                var (key, args) = Message(note.StringIndex, capo);
+                issues.Add(ArrangementIssues.Make(
+                    ArrangementIssueType.OpenNoteWithBend, key,
                     note.Position.GetPositionMs(beats),
-                    Note: note, StringIndex: note.StringIndex));
+                    note: note, stringIndex: note.StringIndex, args: args));
             }
 
             foreach (var chord in level.Chords)
@@ -60,11 +60,11 @@ public sealed class OpenNoteBendRule : IArrangementRule
                 {
                     if (chordNote.Fret > capo || !HasBend(chordNote.BendValues)) continue;
 
-                    issues.Add(new ArrangementIssue(
-                        ArrangementIssueType.OpenNoteWithBend,
-                        Message(chordNote.StringIndex, capo),
+                    var (key, args) = Message(chordNote.StringIndex, capo);
+                    issues.Add(ArrangementIssues.Make(
+                        ArrangementIssueType.OpenNoteWithBend, key,
                         chord.Position.GetPositionMs(beats),
-                        Chord: chord, StringIndex: chordNote.StringIndex));
+                        chord: chord, stringIndex: chordNote.StringIndex, args: args));
 
                     // One finding per SOUND — a strum whose open strings all
                     // carry a stray bend is one mistake, not six.
@@ -81,10 +81,8 @@ public sealed class OpenNoteBendRule : IArrangementRule
     /// </summary>
     private static bool HasBend(IEnumerable<BendValue> bends) => bends.Any(b => Math.Abs(b.Step) > 0.0001);
 
-    private static string Message(int stringIndex, int capo) =>
+    private static (string Key, object[] Args) Message(int stringIndex, int capo) =>
         capo > 0
-            ? $"String {stringIndex + 1} is played open (stopped by the capo at fret {capo}) but carries a " +
-              "bend. A capoed string cannot be bent, and Rocksmith has no way to render or score it."
-            : $"String {stringIndex + 1} is played open but carries a bend. A Rocksmith bend is an offset " +
-              "from a fretted note, so an open string has nothing to bend from.";
+            ? ("Validation_OpenNoteWithBend_Capo", [stringIndex + 1, capo])
+            : ("Validation_OpenNoteWithBend", [stringIndex + 1]);
 }

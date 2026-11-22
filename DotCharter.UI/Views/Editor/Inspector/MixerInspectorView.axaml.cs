@@ -1,28 +1,29 @@
 using Avalonia.Controls;
+using Avalonia.Interactivity;
+using DotCharter.UI.ViewModels.Shell;
 
 namespace DotCharter.UI.Views.Editor.Inspector;
 
 /// <summary>
-///     The Mixer tab: Levels, Stems, Playback FX, EQ &amp; filters and the MIDI synth, one section
-/// at a time behind the icon-only rail (<see cref="InspectorSectionRail" />).
+///     The Mixer tab in inspector design D: the Stems / EQ / MIDI section strip over one section's cards at a time,
+///     all bound to <c>InspectorViewModel</c> (the section is <c>MixerSections</c>). The levels, track pan, speed
+///     and pitch live in the toolbar's Mix and Tempo popovers.
 ///     <para>
-///         Double-click-to-reset is not a code-behind <c>DoubleTapped</c>
-///         handler that forwards the slider's NAME to
-///         <c>TransportViewModel.ResetMixerParameter</c>. It is
-///         <c>Controls/ResetOnDoubleClick</c> — the same command, the same
-///         name as its parameter, declared on each slider — because the EQ
-///         module's four sliders needed the identical gesture and a second
-///         code-behind copy of it is how one of the two silently stops working.
+///         Double-click-to-reset is not a code-behind <c>DoubleTapped</c> handler: it is
+///         <c>Controls/ResetOnDoubleClick</c>, declared on each fader with the value the row's reset writes, so the
+///         stem strips and the EQ's sliders share one gesture.
 ///     </para>
 /// </summary>
 public partial class MixerInspectorView : UserControl
 {
-    public MixerInspectorView()
-    {
-        InitializeComponent();
-        Rail = new InspectorSectionRail(this, this.FindControl<StackPanel>("MixerRailEntries")!);
-    }
+    public MixerInspectorView() => InitializeComponent();
 
-    /// <summary>The section rail — the test hook.</summary>
-    internal InspectorSectionRail Rail { get; }
+    /// <summary>The three section bodies, so the inspector's tab rewarmer realizes the hidden ones too.</summary>
+    internal IReadOnlyList<Control> Bodies => [MixerStemsBody, MixerEqBody, MixerMidiBody];
+
+    /// <summary>The VST instrument picker is the Practice tools popover's: this link opens it.</summary>
+    private void OpenVstInstrumentPicker(object? sender, RoutedEventArgs e)
+    {
+        if (TopLevel.GetTopLevel(this)?.DataContext is MainWindowViewModel shell) shell.RequestPopover(TransportPopover.Tools);
+    }
 }

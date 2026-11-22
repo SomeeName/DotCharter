@@ -55,11 +55,9 @@ public sealed class TimelineGutterLayoutTests
                             TopMargin = layout.TopMargin,
                             LaneHeight = layout.LaneHeight,
                             StringCount = layout.StringCount,
-                            // The context stores the two flags separately and XORs them;
-                            // the layout stores the XOR. Feeding the combined value in as
-                            // LeftyFlip with InvertStrings false is the same predicate.
-                            LeftyFlip = flip,
-                            InvertStrings = false
+                            // Handedness is independent of the timeline's lane order.
+                            LeftyFlip = true,
+                            InvertStrings = flip
                         };
 
                         for (var s = 0; s < count; s++)
@@ -214,22 +212,26 @@ public sealed class TimelineGutterLayoutTests
     }
 
     /// <summary>
-    ///     The two flags really do CANCEL. A left-handed player with the tab
-    ///     string layout gets the default order back, and a gutter that took
-    ///     either flag alone would print the strings upside down for exactly
-    ///     that user.
+    ///     The gutter and rendered lanes use only InvertStrings, including for
+    ///     left-handed profiles. The chord diagram's XOR does not belong here.
     /// </summary>
     [Theory]
     [InlineData(false, false, false)]
-    [InlineData(true, false, true)]
+    [InlineData(true, false, false)]
     [InlineData(false, true, true)]
-    [InlineData(true, true, false)]
-    public void TheTwoVerticalFlips_Xor(bool lefty, bool inverted, bool expectFlipped)
+    [InlineData(true, true, true)]
+    public void OnlyInvertStringsChangesTheLanes(bool lefty, bool inverted, bool expectFlipped)
     {
         var layout = TimelineGutterLayout.For(
-            600, RibbonLayout.Default, 6, lefty ^ inverted, BottomMargin);
+            600, RibbonLayout.Default, 6, inverted, BottomMargin);
+        var context = new ChartRenderContext
+        {
+            TopMargin = layout.TopMargin, LaneHeight = layout.LaneHeight, StringCount = 6,
+            LeftyFlip = lefty, InvertStrings = inverted
+        };
 
         Assert.Equal(expectFlipped, layout.FlipStrings);
+        Assert.Equal(layout.LaneTopFor(0), context.LaneTopFor(0));
         // String 0 is the LOW string and sits at the top unflipped.
         var lowIsAtTop = layout.LaneTopFor(0) < layout.LaneTopFor(5);
         Assert.Equal(!expectFlipped, lowIsAtTop);
@@ -313,13 +315,9 @@ public sealed class TimelineGutterLayoutTests
     ///     constant.</b>
     ///     <para>
     ///         The owner's reference screenshot is a chart in Eb-with-drop-Db,
-    ///         where the gutter reads Eb Bb F# C# G# Eb — not one of those is the
-    ///         standard name for that string. A gutter that printed "E A D G B e"
-    ///         would look completely convincing and be wrong on every drop-tuned
-    ///         chart in the library. The names come from
-    ///         <c>TuningCheckTargets</c>, the same table the tuner and Get Ready
-    ///         judge against, so the gutter cannot claim a note the tuner
-    ///         disagrees with.
+    ///         whose lowered strings read Db Ab Db Gb Bb Eb, low string first.
+    ///         Printing "E A D G B E" would show the wrong pitch on every lane.
+    ///         The gutter uses the same display spelling as the tuner.
     ///     </para>
     /// </summary>
     [Fact]
@@ -330,9 +328,7 @@ public sealed class TimelineGutterLayoutTests
             new[] { "E", "A", "D", "G", "B", "E" },
             TimelineGutterControl.StringNamesFor(standard, 6));
 
-        // The reference's tuning: every string down a semitone, low string down
-        // a further tone (Eb standard with drop Db → Db Ab Eb Ab C F on paper;
-        // what matters here is that NOT ONE name matches the standard set).
+        // Every string is down a semitone, with the lowest down a further tone.
         var dropped = new Arrangement { ArrangementType = ArrangementType.Lead };
         foreach (var step in new[] { -3, -1, -1, -1, -1, -1 })
             dropped.TuningPitches.Add(new TuningOffset(step));

@@ -9,7 +9,7 @@ namespace DotCharter.Services.Editing.Validation.Rules;
 /// </summary>
 public sealed class CapoAnchorRangeRule : IArrangementRule
 {
-    private const int MaxFret = 24;
+    private const int MaxFret = FretLimits.MaxFret;
     private const int DefaultAnchorWidth = 4;
 
     public void Validate(ArrangementValidationContext context, ICollection<ArrangementIssue> issues)
@@ -24,16 +24,15 @@ public sealed class CapoAnchorRangeRule : IArrangementRule
                 var aMs = anchor.Position.GetPositionMs(beats);
                 if (anchor.Fret <= capo)
                 {
-                    issues.Add(new ArrangementIssue(ArrangementIssueType.AnchorOnOrBelowCapo,
-                        $"Anchor starts on fret {anchor.Fret}, which is on or below the capo (fret {capo}).",
-                        aMs, Anchor: anchor));
+                    issues.Add(ArrangementIssues.Make(ArrangementIssueType.AnchorOnOrBelowCapo,
+                        "Validation_AnchorOnOrBelowCapo", aMs, anchor: anchor, args: [anchor.Fret, capo]));
                 }
 
                 if (TopFret(anchor.Fret, anchor.Width) > MaxFret)
                 {
-                    issues.Add(new ArrangementIssue(ArrangementIssueType.AnchorTopFretTooHigh,
-                        $"Anchor reaches fret {TopFret(anchor.Fret, anchor.Width)} — past the last fret ({MaxFret}).",
-                        aMs, Anchor: anchor));
+                    issues.Add(ArrangementIssues.Make(ArrangementIssueType.AnchorTopFretTooHigh,
+                        "Validation_AnchorTopFretTooHigh", aMs, anchor: anchor,
+                        args: [TopFret(anchor.Fret, anchor.Width), MaxFret]));
                 }
             }
 
@@ -43,7 +42,7 @@ public sealed class CapoAnchorRangeRule : IArrangementRule
                 if (note.Fret > 0 && note.Fret < capo)
                 {
                     issues.Add(ArrangementIssues.Note(ArrangementIssueType.NoteFretBelowCapo, note, timeMs,
-                        $"Note fret {note.Fret} is below the capo (fret {capo}) — open strings should use the capo fret."));
+                        "Validation_NoteFretBelowCapo_Note", args: [note.Fret, capo]));
                 }
 
                 // A slide TARGET is a fret too: ArrangementAutoFixService
@@ -52,7 +51,7 @@ public sealed class CapoAnchorRangeRule : IArrangementRule
                 if (note.SlideTo is { } noteTarget && noteTarget > 0 && noteTarget < capo)
                 {
                     issues.Add(ArrangementIssues.Note(ArrangementIssueType.NoteFretBelowCapo, note, timeMs,
-                        $"Slide target fret {noteTarget} is below the capo (fret {capo})."));
+                        "Validation_NoteFretBelowCapo_SlideTarget", args: [noteTarget, capo]));
                 }
 
                 CheckAnchorCoverage(context, level, note.Position, note.Fret, note.Hopo == HopoType.Tap,
@@ -67,15 +66,15 @@ public sealed class CapoAnchorRangeRule : IArrangementRule
                     if (cn.Fret > 0 && cn.Fret < capo)
                     {
                         issues.Add(ArrangementIssues.Chord(ArrangementIssueType.NoteFretBelowCapo, chord, timeMs,
-                            $"Chord note fret {cn.Fret} (string {cn.StringIndex + 1}) is below the capo (fret {capo}).",
-                            cn.StringIndex));
+                            "Validation_NoteFretBelowCapo_ChordNote", cn.StringIndex,
+                            [cn.Fret, cn.StringIndex + 1, capo]));
                     }
 
                     if (cn.SlideTo is { } chordTarget && chordTarget > 0 && chordTarget < capo)
                     {
                         issues.Add(ArrangementIssues.Chord(ArrangementIssueType.NoteFretBelowCapo, chord, timeMs,
-                            $"Slide target fret {chordTarget} (string {cn.StringIndex + 1}) is below the capo (fret {capo}).",
-                            cn.StringIndex));
+                            "Validation_NoteFretBelowCapo_ChordSlideTarget", cn.StringIndex,
+                            [chordTarget, cn.StringIndex + 1, capo]));
                     }
 
                     CheckAnchorCoverage(context, level, chord.Position, cn.Fret, isTap: false,
@@ -97,18 +96,19 @@ public sealed class CapoAnchorRangeRule : IArrangementRule
         var anchor = context.ActiveAnchor(level, position);
         if (anchor == null)
         {
-            issues.Add(new ArrangementIssue(ArrangementIssueType.NoteWithoutAnchor,
-                "No anchor (fret hand position) is defined at or before this note.",
-                timeMs, Note: note, Chord: chord, StringIndex: stringIndex ?? note?.StringIndex));
+            issues.Add(ArrangementIssues.Make(ArrangementIssueType.NoteWithoutAnchor,
+                "Validation_NoteWithoutAnchor",
+                timeMs, note: note, chord: chord, stringIndex: stringIndex ?? note?.StringIndex));
             return;
         }
 
         if (fret < anchor.Fret || fret > TopFret(anchor.Fret, anchor.Width))
         {
-            issues.Add(new ArrangementIssue(ArrangementIssueType.NoteOutsideAnchorRange,
-                $"Fret {fret} lies outside the active anchor's range (frets {anchor.Fret}–{TopFret(anchor.Fret, anchor.Width)}).",
-                timeMs, Note: note, Chord: chord, Anchor: anchor,
-                StringIndex: stringIndex ?? note?.StringIndex));
+            issues.Add(ArrangementIssues.Make(ArrangementIssueType.NoteOutsideAnchorRange,
+                "Validation_NoteOutsideAnchorRange",
+                timeMs, note: note, chord: chord, anchor: anchor,
+                stringIndex: stringIndex ?? note?.StringIndex,
+                args: [fret, anchor.Fret, TopFret(anchor.Fret, anchor.Width)]));
         }
     }
 

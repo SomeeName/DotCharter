@@ -20,6 +20,7 @@ public sealed class LinkFollowUpAction : IChartAction, ILinkPolicyAction
     private readonly List<LinkCopyStep> _copies;
     private readonly List<LinkPropagationReport> _reports;
     private List<LinkGroup> _after;
+    private long _copyBytes;
 
     internal LinkFollowUpAction(ChartProject project, List<LinkGroup> before, List<LinkGroup> after,
         List<LinkCopyStep> copies, int propagated, int unlinked, IEnumerable<LinkPropagationReport> reports)
@@ -28,9 +29,11 @@ public sealed class LinkFollowUpAction : IChartAction, ILinkPolicyAction
         _before = before;
         _after = after;
         _copies = [.. copies];
+        _copyBytes = CopyBytes(_copies);
         _reports = [.. reports];
         Propagated = propagated;
         Unlinked = unlinked;
+        EstimatedBytes = SnapshotBytes();
     }
 
     /// <summary>Per group: where the edit was made and which placements it was copied to.</summary>
@@ -38,6 +41,8 @@ public sealed class LinkFollowUpAction : IChartAction, ILinkPolicyAction
 
     /// <summary>Placements the step's edit was copied to.</summary>
     public int Propagated { get; private set; }
+
+    public long EstimatedBytes { get; private set; }
 
     /// <summary>Placements the step unlinked (diverged, invalid, or whose arrangement went away).</summary>
     public int Unlinked { get; private set; }
@@ -62,7 +67,11 @@ public sealed class LinkFollowUpAction : IChartAction, ILinkPolicyAction
     /// <summary>Folds a later tick's follow-up of the same gesture into this one.</summary>
     internal void Absorb(LinkFollowUpAction next)
     {
+        // Every tick's copies stay: each one's clean-up collateral was recorded against the
+        // state the previous tick left, so only replaying them in order restores exactly.
+        // They are counted, so the history's byte budget sees what a long gesture retains.
         _copies.AddRange(next._copies);
+        _copyBytes += next._copyBytes;
         foreach (var report in next._reports)
         {
             var known = _reports.FindIndex(r => r.GroupId == report.GroupId);
@@ -71,19 +80,25 @@ public sealed class LinkFollowUpAction : IChartAction, ILinkPolicyAction
         }
 
         _after = next._after;
+        EstimatedBytes = SnapshotBytes();
         Propagated += next.Propagated;
         Unlinked += next.Unlinked;
     }
 
-    /// <summary>A detached copy of the project's link groups.</summary>
-    internal static List<LinkGroup> Capture(ChartProject project) => [.. project.LinkGroups.Select(g => g.Clone())];
+    private long SnapshotBytes() =>
+        ChartProjectFootprint.EstimateHistoryBytes(_before) + ChartProjectFootprint.EstimateHistoryBytes(_after) +
+        _copyBytes;
 
-    /// <summary>Puts <paramref name="state" />'s groups back (as fresh clones, so the record is never aliased).</summary>
-    internal static void Restore(ChartProject project, List<LinkGroup> state)
-    {
-        project.LinkGroups.Clear();
-        foreach (var group in state) project.LinkGroups.Add(group.Clone());
-    }
+    private static long CopyBytes(List<LinkCopyStep> copies) =>
+        copies.Sum(c => ChartProjectFootprint.EstimateCopyBytes(c.Copy));
+
+    /// <summary>An independent value snapshot which retains group/placement identities for history.</summary>
+    internal static List<LinkGroup> Capture(ChartProject project) =>
+        ChartProjectCloner.CloneLinkGroups(project.LinkGroups, retainIdentities: true);
+
+    /// <summary>Reattaches the original live groups and placements without aliasing snapshot values.</summary>
+    internal static void Restore(ChartProject project, List<LinkGroup> state) =>
+        ChartProjectRestorer.RestoreLinkGroups(project.LinkGroups, state);
 
     /// <summary>
     ///     "Only here" for <paramref name="report" />: keeps the edit at its source, puts the
@@ -111,6 +126,10 @@ public sealed class LinkFollowUpAction : IChartAction, ILinkPolicyAction
     private sealed class OnlyHereAction(ChartProject project, List<LinkCopyStep> steps, List<LinkGroup> before,
         List<LinkGroup> after) : IChartAction, ILinkPolicyAction
     {
+        public long EstimatedBytes { get; } =
+            ChartProjectFootprint.EstimateHistoryBytes(before) + ChartProjectFootprint.EstimateHistoryBytes(after) +
+            CopyBytes(steps);
+
         /// <summary>It sets the groups itself; the copies it restores were equal before the edit.</summary>
         public LinkPolicy LinkPolicy => LinkPolicy.Retain;
 

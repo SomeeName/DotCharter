@@ -5,6 +5,21 @@ public sealed class LevelGenerationServiceTests
     private const int LevelCount = 4;
 
     [Fact]
+    public void TryGenerate_UsesTheFirstHardestLevelWhenDifficultiesTie()
+    {
+        var arrangement = BuildDenseArrangement();
+        arrangement.Levels[0].DifficultyIndex = 10;
+        var sourceNoteCount = arrangement.Levels[0].Notes.Count;
+        arrangement.Levels.Add(new ChartLevel { DifficultyIndex = 10 });
+        arrangement.Levels.Add(new ChartLevel { DifficultyIndex = 0 });
+
+        Assert.True(new LevelGenerationService().TryGenerate(arrangement, LevelCount, BuildBeats()));
+
+        Assert.True(sourceNoteCount > 0);
+        Assert.Equal(sourceNoteCount, arrangement.Levels[LevelCount - 1].Notes.Count);
+    }
+
+    [Fact]
     public void TryGenerate_ProducesRequestedLevelCount_WithSequentialDifficultyIndices()
     {
         var arrangement = BuildDenseArrangement();

@@ -1,17 +1,18 @@
 namespace DotCharter.Services.Export.Audio;
 
 /// <summary>
-///     DLC Builder's "calculate volume" (<c>Rocksmith2014.Audio/Volume</c>): the file's BS.1770
-///     integrated loudness against a reference of -16, as dB, rounded to one decimal
-///     (half away from zero); a file with no measurable loudness reads 0. The measurement is
-///     a port of the meter DLC Builder ports from R128Normalization (<see cref="Bs1770Meter" />),
-///     fed the way DLC Builder feeds it: the file's own sample rate and channels, 50,000
-///     samples a read.
+///     Gain from BS.1770 integrated loudness to the export target, rounded to one decimal
+///     and limited by sample peak when boosting. A file with no measurable loudness reads 0.
+///     The meter (<see cref="Bs1770Meter" />) follows DLC Builder and receives the packaged
+///     48 kHz stereo 16-bit PCM, 50,000 samples a read.
 /// </summary>
 public static class RocksmithAutoVolume
 {
-    /// <summary>DLC Builder's reference loudness (LUFS).</summary>
-    public const double ReferenceLoudness = -16.0;
+    public const int DefaultTargetLufs = -14;
+    public const int MinTargetLufs = -20;
+    public const int MaxTargetLufs = -10;
+
+    public static int ClampTarget(int targetLufs) => Math.Clamp(targetLufs, MinTargetLufs, MaxTargetLufs);
 
     private const int ReadSamples = 50_000;
 
@@ -20,13 +21,12 @@ public static class RocksmithAutoVolume
     ///     measures the <c>.wav</c> or <c>.ogg</c> beside it, and so does this
     ///     (<see cref="SourceFor" />); with none, <see cref="NotSupportedException" />.
     /// </summary>
-    public static double Calculate(string path)
-    {
-        var source = SourceFor(path);
-        var warnings = new List<string>();
-        var (samples, channels, rate) = Decode(source, warnings);
-        return FromSamples(samples, channels, rate);
-    }
+    public static double Calculate(string path, int targetLufs = DefaultTargetLufs) =>
+        FromPcm(PcmAudioLoader.Load(SourceFor(path), []), targetLufs);
+
+    /// <summary>Explicit decoder choices for the same measurement pipeline.</summary>
+    internal static double Calculate(string path, Func<string, JuceSharp.AudioIo.AudioBuffer?> decodeNative, string? ffmpeg)
+        => FromPcm(PcmAudioLoader.Load(SourceFor(path), [], decodeNative, ffmpeg));
 
     /// <summary>The file to measure for <paramref name="path" />: itself, or for a <c>.wem</c> the <c>.wav</c> / <c>.ogg</c> beside it.</summary>
     public static string SourceFor(string path)
@@ -43,12 +43,18 @@ public static class RocksmithAutoVolume
     }
 
     /// <summary>The volume of interleaved <paramref name="samples" />.</summary>
-    public static double FromSamples(float[] samples, int channels, int sampleRate)
+    public static double FromSamples(float[] samples, int channels, int sampleRate, int targetLufs = DefaultTargetLufs)
     {
         var loudness = MeasureLoudness(samples, channels, sampleRate);
-        return double.IsInfinity(loudness) || double.IsNaN(loudness)
-            ? 0.0
-            : Math.Round(ReferenceLoudness - loudness, 1, MidpointRounding.AwayFromZero);
+        if (!double.IsFinite(loudness)) return 0.0;
+
+        var gain = Math.Round(ClampTarget(targetLufs) - loudness, 1, MidpointRounding.AwayFromZero);
+        if (gain <= 0) return gain;
+
+        var peak = 0f;
+        foreach (var sample in samples) peak = Math.Max(peak, Math.Abs(sample));
+        var headroom = -20 * Math.Log10(peak);
+        return Math.Min(gain, Math.Floor(headroom * 10) / 10);
     }
 
     /// <summary>The integrated loudness (LUFS) of interleaved <paramref name="samples" />, fed 50,000 samples at a time.</summary>
@@ -73,24 +79,12 @@ public static class RocksmithAutoVolume
         return meter.GetIntegratedLoudness();
     }
 
-    /// <summary>The engine's own decode (native rate and channels, 32-bit float), else the export's decoder.</summary>
-    private static (float[] Samples, int Channels, int SampleRate) Decode(string path, IList<string> warnings)
+    /// <summary>Measures the exact PCM representation passed to the package encoder.</summary>
+    internal static double FromPcm(PcmAudio pcm, int targetLufs = DefaultTargetLufs)
     {
-        try
-        {
-            var buf = JuceSharp.AudioIo.JuceAudioDecoder.Decode(path);
-            if (buf.Channels > 0 && buf.SampleRate > 0 && buf.FrameCount > 0)
-                return (buf.Interleaved, buf.Channels, buf.SampleRate);
-        }
-        catch (Exception)
-        {
-            // Not a format the engine reads: the export's decoders take it.
-        }
-
-        var pcm = PcmAudioLoader.Load(path, warnings);
         var floats = new float[pcm.Samples.Length];
         for (var i = 0; i < floats.Length; i++) floats[i] = pcm.Samples[i] / 32768f;
-        return (floats, pcm.Channels, pcm.SampleRate);
+        return FromSamples(floats, pcm.Channels, pcm.SampleRate, targetLufs);
     }
 }
 

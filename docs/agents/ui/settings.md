@@ -40,8 +40,17 @@ the bullets describe the 0.49 card grammar, which Graphite replaced.
   `Views/Shell/ScreenSlot`, which unwraps the hosted view's own `ScrollViewer`
   so the page scrolls as one
   (`SettingsShellUiPerfSmokeTests.TheAiPage_HostsTheStemAndLyricSections`).
-- **Save block:** Cancel reverts and leaves, so with nothing to revert its
+- **Save block:** `ISettingsTab.HasSaveError` keeps Settings open and selects the
+  failed tab. Pending API-key input counts as `ai.ApiKeyEntry` (never its value),
+  survives rebaselining and is cleared only after the secret store accepts it.
+  Failed Save/Clear and connection probes preserve the input and show the failure
+  (`AiSettingsViewModelTests`, `SettingsShellViewModelTests`, `RigLabAiSettingsTests`).
+  Cancel reverts and leaves, so with nothing to revert its
   caption is Close (`SettingsShellUiPerfSmokeTests.ARebind_MovesTheFooterCounter_AndResetSectionClearsIt`).
+  Returning to the editor invalidates the Note queue's counts in
+  `MainWindowViewModel.OnSettingsSessionChanged`: naming and double-stop preferences
+  affect which chords need names. The Sound tab refreshes immediately; another
+  Inspector tab keeps the work deferred until Sound is shown.
 - **Appearance's colour list** is grouped by `ThemeTokenInfo.Category` under
   headings (`IAppearanceSettingsScreen.ColorGroups`), and each row shows a mono
   hex readout beside its swatch. Token names and group headings are
@@ -188,10 +197,22 @@ the bullets describe the 0.49 card grammar, which Graphite replaced.
       `Presentation/Settings/GraphicsSettingsViewModelTests` and
       `Presentation/Settings/AppearanceSettingsViewModelTests
       .PickingAPalette_PreviewsIt_AndKeepsTheCustomColours`.
-    - **Appearance's colour edits are previewed and reverted, but NOT counted**
-      — exactly as on the old page, whose tracker never saw its colour list. The
-      footer reads zero after a colour edit while Cancel still puts the persisted
-      theme back; counting them is a separate decision.
+    - **Appearance's colour edits are previewed AND counted (#579)**: the
+      tracker holds one entry (`AppearanceSettingsViewModel.ColorsKey`) over a
+      sorted `token=HEX` signature of the overrides, so a colour edit or Reset
+      Colours counts once and editing it back reads zero; a session reload
+      rebaselines only that entry. Guards: `AppearanceSettingsViewModelTests
+      .EditingAColour_PreviewsIt_AndCountsIt` and `.ResetColors_OverSavedColours_CountsAsAnEdit_AndSaveWritesNoOverrides`.
+    - **Audio's device pickers count as ONE entry (#579)**
+      (`AudioSettingsTracking.DeviceSelectionKey`, the tab's change tracker, over the six picked device
+      NAMES, not indices, which a lint keeps out of `TrackedSettings`). The
+      background probe that repopulates the lists rebaselines only that entry,
+      so it counts nothing; a user's pick counts once.
+      `AudioSettingsTabTests.PickingOnlyAnotherDevice_CountsOnce_AndTheProbeCountsNothing`.
+    - **A late device or jack probe is dropped**: each probe carries a
+      generation (`InputJackPicker`, `LiveInputChannelViewModel`, like
+      `OutputPairPicker`), so a read of the device the user already left cannot
+      overwrite the current device's jacks (`HeldPostsDispatcher` stages it).
   - **A tracked setting must also have a ROW, and nothing checked that until
     2026-09-04.** `UI/SettingsTabReachabilityTests` walks from every tracked
     property to the markup under `Views/Settings` (plus the TONE3000 panel). It
@@ -372,7 +393,7 @@ the bullets describe the 0.49 card grammar, which Graphite replaced.
 
     | tab | groups | two-column? |
     |---|---|---|
-    | General | 3 | yes — the Advanced (logging) body is the second column's |
+    | General | 4 | yes — the Advanced body contains Logging and Rocksmith export |
     | Editor | 4 | yes |
     | Play | 1 | **no** — one group, so a plain `StackPanel` like TONE3000 |
     | Import & export | 5 | yes |
@@ -508,6 +529,12 @@ the bullets describe the 0.49 card grammar, which Graphite replaced.
   it per step — its `InlineDispatcher` otherwise runs the marshalled
   continuation on the POOL thread, mutating the device collections while Save
   indexes them).
+- **The device probe ends with the shared view model.** `AudioDeviceProbe` runs the enumeration on the pool
+  holding the device seam, the config and a landing, never the view model; `AudioSettingsViewModel.Dispose`
+  (its container, or the Settings scope that resolved it) cancels a queued read and cuts the landing, so a
+  read still inside a slow enumeration neither keeps the app reachable nor posts its rows. Guard:
+  `UI/ViewModels/Settings/AudioSettingsProbeReleaseTests` (parks the read in the fake's
+  `WasapiProbePass`), behind `Perf/IsolatedAppReleaseUiPerfSmokeTests`.
 - **…and `AudioSettingsViewModel.Save` must APPLY what it wrote (2026-09-04).**
   It calls `IAudioPlaybackService.ApplyAudioConfiguration` only when its own
   `HasRoutingChanged` (now `Presentation/Screens/Settings/AudioSettingsRules`)
@@ -589,9 +616,11 @@ the bullets describe the 0.49 card grammar, which Graphite replaced.
   - **General** (`general`, Workspace) — Language & region (language, startup
     screen, run setup again) · Diagnostics (crash report) · and, behind a
     collapsed Advanced disclosure, Logging (13 rows: the two old checkbox rows
-    became four switches, console and file each with their dependent rows).
+    became four switches, console and file each with their dependent rows) ·
+    Rocksmith export (Auto volume loudness target, −20 to −10 LUFS, default −14,
+    and Default test export folder, blank to use the song's export folder).
   - **Editor** (`editor`, Workspace) — Chart editing (10) · Copy & paste (one
-    full-width row of six checkboxes) · New project (4); the Timeline view group
+    replacement switch plus a full-width row of six include checkboxes) · New project (4); the Timeline view group
     leads with String order and the 2D timeline's polish and lane tint (moved
     from Graphics). Guitar Pro import (9) moved to Import & export.
     The millisecond row and the denominator row enable by the spacing mode

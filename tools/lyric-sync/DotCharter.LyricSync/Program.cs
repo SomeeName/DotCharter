@@ -22,7 +22,7 @@ public static class Program
         };
 
         var command = new LyricSyncCommand(
-            Console.Out, Console.Error, BuildCore, EnsureModelsAsync);
+            Console.Out, Console.Error, BuildCore, EnsureModelsAsync, LyricSyncBeatGrid.Detect);
 
         try
         {

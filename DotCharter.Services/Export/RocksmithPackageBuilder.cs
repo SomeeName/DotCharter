@@ -22,9 +22,13 @@ public sealed class RocksmithBuildOptions
     /// pair: both packages take its folder and base name with their own suffix.</summary>
     public required string OutputPath { get; init; }
 
+    /// <summary>The project folder that owns generated audio caches, independently of the package destination.
+    /// When omitted, raw builder callers derive the folder from the original main audio.</summary>
+    public string? ProjectDirectory { get; init; }
+
     /// <summary>
     /// The platform(s) to write. The Mac package is always encrypted, never for a
-    ///     7-/8-string guitar (the rs7string mod is Windows-only) and needs the Mac SNG key:
+    ///     extended arrangement (the RS Extended Range mod is Windows-only) and needs the Mac SNG key:
     ///     a Mac-only build that cannot have it fails, PC + Mac writes the PC package alone
     ///     and says why (<see cref="RocksmithPlatformTargets" />).
     /// </summary>
@@ -44,9 +48,9 @@ public sealed class RocksmithBuildOptions
     /// main audio automatically (see <see cref="PreviewStartMs"/>).</summary>
     public string PreviewAudioPath { get; init; } = "";
 
-    /// <summary>Where the auto-cut preview starts in the main audio. Null picks
-    /// 25% into the song (clamped so the clip fits). Setting a value bypasses
-    /// the preview cache and re-cuts.</summary>
+    /// <summary>Where the auto-cut preview starts in the main audio. Null uses the
+    /// project's <c>ChartData.PreviewStartMs</c>, else 25% into the song; always
+    /// clamped so a whole clip fits. The clip is re-cut on every build.</summary>
     public double? PreviewStartMs { get; init; }
 
     /// <summary>
@@ -76,6 +80,7 @@ public sealed class RocksmithBuildOptions
     /// </summary>
     public bool? PlainPackage { get; init; }
 
+
     /// <summary>
     /// The package path whose stale <c>chords-ext.json</c> sidecars (the 7-string
     /// chord format before the RS7X block) are removed after the build.
@@ -84,15 +89,8 @@ public sealed class RocksmithBuildOptions
     /// </summary>
     public string? ChordSidecarPackagePath { get; init; }
 
-    /// <summary>
-    /// How a chord on the 7th string of a 7-string guitar ships.
-    ///     <see cref="Rs7ChordMode.Projection" /> (the default) keeps it one chord: six-string
-    ///     columns in the SNG chord template, the 7th string in the SNG's RS7X block;
-    ///     <see cref="Rs7ChordMode.Split" /> writes the extra strings as simultaneous single
-    ///     notes instead, for an <c>rs7string</c> build that predates the block. Six-string
-    ///     arrangements ignore it.
-    /// </summary>
-    public Rs7ChordMode Rs7ChordMode { get; init; } = Rs7ChordMode.Projection;
+    /// <summary>Whether to remove legacy chord sidecars after publication. Test exports preserve them.</summary>
+    public bool CleanUpChordSidecars { get; init; } = true;
 
     /// <summary>
     /// DLC Builder's build steps (its fixes, then dynamic difficulty for a single-level
@@ -101,6 +99,9 @@ public sealed class RocksmithBuildOptions
     ///     does not ask builds the chart as it is.
     /// </summary>
     public DlcBuilderSteps? DlcBuilderSteps { get; init; }
+
+    /// <summary>The double-stop naming policy for both the build steps and SNG.</summary>
+    public DoubleStopNameOptions ChordNameOptions { get; init; } = DoubleStopNameOptions.Default;
 
     /// <summary>
     /// Test seam: pins every id and time stamp the build would otherwise
@@ -197,6 +198,9 @@ public sealed record RocksmithBuildResult(
 {
     /// <summary>Every package written, PC first; <see cref="PsarcPath" /> is the first.</summary>
     public IReadOnlyList<string> PackagePaths { get; init; } = [PsarcPath];
+
+    /// <summary>The archive carries the PSXR magic and extended arrangements.</summary>
+    public bool IsPsxr { get; init; }
 }
 
 /// <summary>
@@ -210,26 +214,28 @@ public sealed class RocksmithPackageBuilder
 
     public RocksmithPackageBuilder(IAppLogger logger) => _logger = logger;
 
-    /// <summary>Whether this arrangement exports through the rs7string layout (a 7-/8-string
-    /// guitar), i.e. whether <see cref="RocksmithBuildOptions.Rs7ChordMode" /> applies to it.</summary>
-    public static bool IsExtendedStringGuitar(Arrangement arrangement) => Rs7StringLayout.IsExtendedGuitar(arrangement);
+    /// <summary>Whether this is a seven-/eight-string guitar or five-/six-string bass,
+    /// written as an RS Extended Range package on Windows.</summary>
+    public static bool IsExtendedStringArrangement(Arrangement arrangement) => Rs7StringLayout.IsExtended(arrangement);
 
     public Task<RocksmithBuildResult> BuildPsarcAsync(
         ChartProject project,
         RocksmithBuildOptions options,
         IProgress<RocksmithBuildProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<string, CancellationToken, Task>? beforePublish = null)
     {
         // Play-only content is never exported; refused before any work starts.
         PlayOnlyExportGuard.ThrowIfPlayOnly(project, "Rocksmith package");
-        return Task.Run(() => Build(project, options, progress, cancellationToken), cancellationToken);
+        return Task.Run(() => BuildAsync(project, options, progress, cancellationToken, beforePublish), cancellationToken);
     }
 
-    private RocksmithBuildResult Build(
+    private async Task<RocksmithBuildResult> BuildAsync(
         ChartProject project,
         RocksmithBuildOptions options,
         IProgress<RocksmithBuildProgress>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<string, CancellationToken, Task>? beforePublish)
     {
         var warnings = new List<string>();
         var step = 0;
@@ -249,8 +255,9 @@ public sealed class RocksmithPackageBuilder
         Report(RocksmithBuildStage.ResolvingAudio);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var mainWem = ResolveWem(options.AudioPath, options, warnings);
-        var previewWem = ResolvePreviewWem(mainWem, options, warnings);
+        var exportAudio = ProjectExportAudio.ForSnapshot(project, options.AudioPath);
+        var mainWem = ResolveWem(exportAudio, options, warnings);
+        var previewWem = ResolvePreviewWem(mainWem, options, exportAudio, project.Chart.PreviewStartMs, warnings);
 
         Report(RocksmithBuildStage.ConvertingArrangements);
         cancellationToken.ThrowIfCancellationRequested();
@@ -274,7 +281,7 @@ public sealed class RocksmithPackageBuilder
 
         // Everything but the SNGs, the graph and the entry folders is the same bytes on
         // both platforms, so it is built once.
-        var showlights = CreateShowlights(project, warnings);
+        var showlights = CreateShowlights(project, songLengthMs, warnings);
         var header = Encoding.UTF8.GetBytes(RsManifestGenerator.CreateHeader(meta, arrangements));
         var manifests = arrangements
             .Select(a => Encoding.UTF8.GetBytes(RsManifestGenerator.CreateArrangementManifest(meta, a)))
@@ -300,21 +307,31 @@ public sealed class RocksmithPackageBuilder
         cancellationToken.ThrowIfCancellationRequested();
 
         var shared = new SharedEntries(key, showlights, header, manifests, albumArt, xblock, banks,
-            Encoding.UTF8.GetBytes(
-                $"Toolkit version: DotCharter\nPackage Author: {meta.Charter}\nPackage Version: {ToolkitVersion(options.Version)}\nPackage Comment: Remastered"),
+            Encoding.UTF8.GetBytes(ToolkitVersionText(meta.Charter, options)),
             Encoding.ASCII.GetBytes(options.AppId));
         var paths = new List<string>(platforms.Count);
+        var psxr = arrangements.Any(a => a.Sng.Extension != null);
+        using var publication = new PackagePublication(logger: _logger);
         foreach (var platform in platforms)
         {
             var path = RocksmithPlatformTargets.OutputPathFor(options, platform);
-            WritePackage(path, platform, plain && !platform.IsMac, meta, arrangements, shared, options);
+            if (!platform.IsMac) path = ExtendedRangePackageName.Apply(path, psxr);
+            cancellationToken.ThrowIfCancellationRequested();
+            WritePackage(publication.Stage(path), platform, plain && !platform.IsMac, meta, arrangements, shared, options, psxr);
             paths.Add(path);
         }
+        if (beforePublish != null)
+        {
+            foreach (var path in paths)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await beforePublish(path, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        publication.Commit(cancellationToken);
 
-        // The RS7X block in the SNG replaced the chord sidecar: drop one an
-        // older build of this package left, so nothing reads stale chord columns.
-        Rs7ChordSidecar.RemoveStale(options.ChordSidecarPackagePath ?? paths[0],
-            arrangements.Select(a => a.PartitionName));
+        if (options.CleanUpChordSidecars)
+            CleanUpChordSidecars(options.ChordSidecarPackagePath ?? options.OutputPath, arrangements, psxr);
 
         _logger.Info(AppLogCategory.Project,
             $"Rocksmith package built. Path='{string.Join("', '", paths)}', key='{dlcKey}', " +
@@ -327,8 +344,15 @@ public sealed class RocksmithPackageBuilder
             arrangements.Select(a => a.ArrangementName).ToList(),
             warnings)
         {
-            PackagePaths = paths
+            PackagePaths = paths, IsPsxr = psxr
         };
+    }
+
+    private static void CleanUpChordSidecars(string path, IReadOnlyList<RsPackageArrangement> arrangements, bool extended)
+    {
+        var partitions = arrangements.Select(a => a.PartitionName);
+        Rs7ChordSidecar.RemoveStale(path, partitions);
+        Rs7ChordSidecar.RemoveStale(ExtendedRangePackageName.Apply(path, extended), partitions);
     }
 
     /// <summary>Whether the PC package is written PLAIN: only when asked for, and
@@ -337,6 +361,11 @@ public sealed class RocksmithPackageBuilder
         List<string> warnings)
     {
         var plain = options.PlainPackage ?? false;
+        if (arrangements.Any(a => a.Sng.Extension != null))
+        {
+            warnings.Add("Written as a PLAIN package (unencrypted) for the RS Extended Range format.");
+            return true;
+        }
         // No user key file: an encrypted package cannot be written, so the
         // package is plain — the export dialog says so before the export starts.
         if (!plain && !RocksmithKeys.CanWriteEncrypted)
@@ -382,7 +411,7 @@ public sealed class RocksmithPackageBuilder
     ///     </para>
     /// </summary>
     private static void WritePackage(string path, RsPlatformLayout platform, bool plain, RsPackageMetadata meta,
-        IReadOnlyList<RsPackageArrangement> arrangements, SharedEntries shared, RocksmithBuildOptions options)
+        IReadOnlyList<RsPackageArrangement> arrangements, SharedEntries shared, RocksmithBuildOptions options, bool psxr)
     {
         var key = shared.LowerKey;
         var entries = new List<PsarcWriteEntry>();
@@ -393,6 +422,8 @@ public sealed class RocksmithPackageBuilder
                 var sngData = new MemoryStream();
                 if (platform.IsMac)
                     RocksmithSngWriter.WritePackedMac(arrangement.Sng, sngData, options.Identity?.SngIv);
+                else if (arrangement.Sng.Extension != null)
+                    RsxrSngWriter.WritePlain(arrangement.Sng, sngData);
                 else if (plain)
                     RocksmithSngWriter.WritePlainPc(arrangement.Sng, sngData);
                 else
@@ -437,7 +468,8 @@ public sealed class RocksmithPackageBuilder
             if (!string.IsNullOrEmpty(outputDirectory)) Directory.CreateDirectory(outputDirectory);
 
             EnsureEntryNamesFromKey(entries.Select(e => e.Name), key);
-            PsarcWriter.WriteFile(path, entries, encryptToc: !plain);
+            PsarcWriter.WriteFile(path, entries, encryptToc: !plain,
+                extendedRange: psxr);
         }
         finally
         {
@@ -514,13 +546,18 @@ public sealed class RocksmithPackageBuilder
 
             try
             {
+                if (RsxrStringLayout.ExportRefusal(arrangement) is { } refusal)
+                    throw new InvalidDataException(refusal);
                 // Charts with no authored phrase/section structure would otherwise
                 // export the SNG mapper's degenerate one-riff stub; generate a
                 // proper COUNT/p0…pN/END structure first (in place — this
                 // arrangement belongs to an already-cloned snapshot).
                 PhraseSectionGenerator.GenerateIfAbsent(arrangement, project.Beats, songLengthMs);
                 if (options.DlcBuilderSteps is { } steps)
-                    arrangement = DlcBuilderBuildSteps.ApplyOrKeep(project, arrangement, songLengthMs > 0 ? songLengthMs : null, steps, _logger, warnings);
+                {
+                    arrangement = DlcBuilderBuildSteps.ApplyOrKeep(project, arrangement, songLengthMs > 0 ? songLengthMs : null,
+                        steps with { ChordNameOptions = options.ChordNameOptions }, _logger, warnings);
+                }
 
                 // Resolve the slot table BEFORE the SNG: a tone-change event in
                 // the SNG is an INDEX into the very list the manifest declares as
@@ -534,12 +571,17 @@ public sealed class RocksmithPackageBuilder
                     : RsToneSlots.Resolve(arrangement);
 
                 var build = SngFromDomainMapper.BuildInstrumental(
-                    arrangement, project.Beats, songLengthMs, options.Identity?.ConversionTime, toneSlots: slots,
-                    rs7ChordMode: options.Rs7ChordMode);
+                    arrangement, project.Beats, songLengthMs, options.Identity?.ConversionTime,
+                    chordNameOptions: options.ChordNameOptions, toneSlots: slots);
                 // The game needs a non-empty Tone_Base to resolve the arrangement's
                 // tone at song load, even when no tone definitions are shipped (it
                 // then falls back to its default tone BY NAME). DLC Builder always
                 // emits one ("lead_base"); an empty string is a load crash.
+                // Nothing declared a tone (New project and every importer without
+                // tone names leave all of them empty), so the invented name is not a
+                // declaration: a body the project happens to define under it is still
+                // shipped, but its absence is not reported.
+                var declaresTone = !string.IsNullOrWhiteSpace(toneBase) || slots.Any(s => !string.IsNullOrWhiteSpace(s));
                 if (string.IsNullOrWhiteSpace(toneBase)) toneBase = $"{partitionName}_base";
 
                 var ids = ArrangementIds(options, result.Count);
@@ -556,14 +598,14 @@ public sealed class RocksmithPackageBuilder
                     ToneBase = toneBase,
                     ToneSlots = slots,
                     ToneDefinitions = ResolveToneDefinitions(
-                        toneDefinitions, toneBase, slots, arrangement.Name, warnings, toneRepair)
+                        toneDefinitions, toneBase, slots, arrangement.Name, declaresTone ? warnings : [], toneRepair)
                 });
             }
             catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException)
             {
                 warnings.Add($"Arrangement '{arrangement.Name}' was skipped: {ex.Message}");
                 _logger.Warning(AppLogCategory.Project,
-                    $"Export skipped arrangement. Name='{arrangement.Name}', message='{ex.Message}'.");
+                    $"Export skipped arrangement. Name='{arrangement.Name}'.", ex);
             }
         }
 
@@ -585,6 +627,14 @@ public sealed class RocksmithPackageBuilder
 
         return result;
     }
+
+    /// <summary>The whole <c>toolkit.version</c> entry: the tool and its version, the author, the song's version and the comment.</summary>
+    internal static string ToolkitVersionText(string author, RocksmithBuildOptions options) =>
+        $"Toolkit version: {ToolkitName(options)}\nPackage Author: {author}\nPackage Version: {ToolkitVersion(options.Version)}\nPackage Comment: Remastered";
+
+    /// <summary>The tool line of <c>toolkit.version</c>, <c>DotCharter v1.3.0</c>: DLC Builder writes its own name and version there.</summary>
+    internal static string ToolkitName(RocksmithBuildOptions options) =>
+        $"DotCharter v{options.Identity?.ToolVersion ?? DotCharter.Services.Infrastructure.AppVersionInfo.Current}";
 
     /// <summary>The version as <c>toolkit.version</c> carries it: one line, "1" when blank.</summary>
     private static string ToolkitVersion(string version) =>
@@ -677,15 +727,14 @@ public sealed class RocksmithPackageBuilder
 
     // ---- assets ---------------------------------------------------------------
 
-    private byte[] CreateShowlights(ChartProject project, List<string> warnings)
+    internal static byte[] CreateShowlights(ChartProject project, double songLengthMs, List<string> warnings)
     {
         if (project.Showlights.Count == 0)
         {
-            // Minimal generated show lights: fog + beam + lasers so the game
-            // has something to render.
-            warnings.Add("The project has no show lights; a minimal default set was generated.");
-            var start = project.Beats.Count > 0 ? project.Beats[0].Time : 0.0;
-            project = CloneWithDefaultShowlights(project, start);
+            // Generated from the sections and notes (a minimal fog + beam + lasers set when there is
+            // nothing to read), so the game has something to render. The project is not touched.
+            warnings.Add("The project has no show lights; a set was generated from the sections and notes.");
+            project = CloneWithDefaultShowlights(project, songLengthMs);
         }
 
         var writer = new RsXmlShowlightsWriter();
@@ -693,29 +742,12 @@ public sealed class RocksmithPackageBuilder
         return Encoding.UTF8.GetBytes(document.Declaration + Environment.NewLine + document);
     }
 
-    private static ChartProject CloneWithDefaultShowlights(ChartProject project, double startMs)
+    private static ChartProject CloneWithDefaultShowlights(ChartProject project, double songLengthMs)
     {
         // Only Beats + Showlights are read by the showlights writer.
         var stub = new ChartProject();
         foreach (var beat in project.Beats) stub.Beats.Add(beat);
-        stub.Showlights.Add(new Showlight
-        {
-            Position = TimelineMath.PositionFromMs(startMs, project.Beats),
-            Type = "FOG_BLUE",
-            Note = 28
-        });
-        stub.Showlights.Add(new Showlight
-        {
-            Position = TimelineMath.PositionFromMs(startMs, project.Beats),
-            Type = "BEAMS_BLUE",
-            Note = 52
-        });
-        stub.Showlights.Add(new Showlight
-        {
-            Position = TimelineMath.PositionFromMs(startMs, project.Beats),
-            Type = "LASERS_ON",
-            Note = 66
-        });
+        foreach (var light in RsDefaultShowlights.For(project, songLengthMs)) stub.Showlights.Add(light);
         return stub;
     }
 
@@ -795,7 +827,7 @@ public sealed class RocksmithPackageBuilder
     ///     as-is (its codec is read from the file). Otherwise we encode
     ///     <see cref="RocksmithBuildOptions.AudioCodec"/> ourselves.
     ///     <para>
-    ///         The encoded wem is cached next to the source and reused while it stays
+    ///         The encoded wem is cached in the project metadata folder and reused while it stays
     ///         newer than the source, so building the same song again — e.g. on every
     ///         save — does not re-encode the audio. A cache hit still has its codec
     ///         DETECTED (<see cref="TryReuseCachedWem" />): no path may declare a
@@ -826,9 +858,11 @@ public sealed class RocksmithPackageBuilder
         }
 
         var codec = ManagedCodec(options.AudioCodec);
+        var sourceSignature = ProjectVolumes.Signature(audioPath);
 
-        var cache = ManagedWemCachePath(audioPath, codec);
-        if (TryReuseCachedWem(cache, audioPath) is { } reusable && reusable.Codec == codec)
+        var cache = ManagedWemCachePath(audioPath, codec, CacheRoot(options));
+        if (ManagedAudioCache.IsCurrent(cache, audioPath) && CompanionOwnership.IsUnmodified(cache) &&
+            TryReuseCachedWem(cache, audioPath) is { } reusable && reusable.Codec == codec)
         {
             _logger.Info(AppLogCategory.Project, $"Reusing cached wem '{cache}'.");
             return reusable;
@@ -838,7 +872,23 @@ public sealed class RocksmithPackageBuilder
             $"Encoding wem ({codec}). Source='{audioPath}'.");
 
         var pcm = PcmAudioLoader.Load(audioPath, warnings);
-        WemWriter.WriteFile(cache, codec, pcm.Samples, pcm.Channels, pcm.SampleRate);
+        if (!CompanionOwnership.WriteIfUnmodified(cache, target =>
+            {
+                var staging = target + ".writing";
+                try
+                {
+                    WemWriter.WriteFile(staging, codec, pcm.Samples, pcm.Channels, pcm.SampleRate);
+                    AtomicFile.Publish(staging, target);
+                }
+                finally
+                {
+                    if (File.Exists(staging)) RecycleBin.Remove(staging);
+                }
+            }, out var reason))
+        {
+            throw new IOException($"Managed audio cache was left alone: {reason}.");
+        }
+        ManagedAudioCache.Record(cache, sourceSignature);
 
         if (codec == WemCodec.Pcm)
         {
@@ -853,32 +903,43 @@ public sealed class RocksmithPackageBuilder
     /// <summary>
     ///     The preview wem. An explicit <see cref="RocksmithBuildOptions.PreviewAudioPath"/>
     ///     wins; otherwise a 28 s faded clip is cut from the main audio (cached as
-    ///     <c>&lt;stem&gt;.preview.wav</c> next to it) and encoded like any source.
+    ///     <c>.dotcharter/cache/</c>) and encoded like any source.
     ///     A <c>.wem</c> main input cannot be decoded for clipping, and any clip
     ///     failure degrades to the old ship-the-full-song behavior.
     /// </summary>
     private ResolvedWem ResolvePreviewWem(
-        ResolvedWem mainWem, RocksmithBuildOptions options, List<string> warnings)
+        ResolvedWem mainWem, RocksmithBuildOptions options, string audioPath, double? projectPreviewStartMs, List<string> warnings)
     {
         if (!string.IsNullOrWhiteSpace(options.PreviewAudioPath))
             return ResolveWem(options.PreviewAudioPath, options, warnings);
 
-        var audioPath = options.AudioPath;
         if (audioPath.EndsWith(".wem", StringComparison.OrdinalIgnoreCase))
             return mainWem;
 
         try
         {
-            var directory = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(audioPath)) ?? ".";
-            var stem = System.IO.Path.GetFileNameWithoutExtension(audioPath);
-            var previewWav = System.IO.Path.Combine(directory, $"{stem}.preview.wav");
+            var previewWav = ManagedAudioCache.PreviewPath(audioPath, CacheRoot(options));
 
-            if (options.PreviewStartMs.HasValue || !IsFresh(previewWav, audioPath))
+            // Cut on every build: a cached clip may have been cut at another start (or at the automatic one).
+            var pcm = PcmAudioLoader.Load(audioPath, warnings);
+            var totalMs = pcm.Duration.TotalMilliseconds;
+            var startMs = PreviewClip.ClampStartMs(
+                options.PreviewStartMs ?? projectPreviewStartMs ?? PreviewClip.DefaultStartMs(totalMs), totalMs);
+            if (!CompanionOwnership.WriteIfUnmodified(previewWav, target =>
+                {
+                    var staging = target + ".writing";
+                    try
+                    {
+                        PcmAudioLoader.WriteWav(staging, PreviewClip.Create(pcm, startMs));
+                        AtomicFile.Publish(staging, target);
+                    }
+                    finally
+                    {
+                        if (File.Exists(staging)) RecycleBin.Remove(staging);
+                    }
+                }, out var reason))
             {
-                var pcm = PcmAudioLoader.Load(audioPath, warnings);
-                var totalMs = pcm.Duration.TotalMilliseconds;
-                var startMs = options.PreviewStartMs ?? PreviewClip.DefaultStartMs(totalMs);
-                PcmAudioLoader.WriteWav(previewWav, PreviewClip.Create(pcm, startMs));
+                throw new IOException($"Preview cache was left alone: {reason}.");
             }
 
             return ResolveWem(previewWav, options, warnings);
@@ -895,16 +956,14 @@ public sealed class RocksmithPackageBuilder
     internal static WemCodec ManagedCodec(WemCodec requested) =>
         requested == WemCodec.Pcm ? WemCodec.Pcm : WemCodec.Vorbis;
 
-    /// <summary>Where a managed-encoded wem is cached. Codec is in the name so
-    /// switching codec regenerates instead of silently reusing the other one, and
-    /// the built-in Vorbis never takes the Wwise output's <c>&lt;stem&gt;.wem</c>.</summary>
-    private static string ManagedWemCachePath(string audioPath, WemCodec codec)
-    {
-        var directory = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(audioPath)) ?? ".";
-        var stem = System.IO.Path.GetFileNameWithoutExtension(audioPath);
-        var suffix = codec == WemCodec.Vorbis ? "vorbis" : "pcm";
-        return System.IO.Path.Combine(directory, $"{stem}.{suffix}.wem");
-    }
+    /// <summary>Where a managed-encoded wem is cached. The complete source filename
+    /// and codec plus decode policy keep recordings, encodings and decode levels in separate cache slots.</summary>
+    private static string ManagedWemCachePath(string audioPath, WemCodec codec, string? projectDirectory = null) =>
+        ManagedAudioCache.WemPath(audioPath, projectDirectory);
+
+    private static string CacheRoot(RocksmithBuildOptions options) =>
+        string.IsNullOrWhiteSpace(options.ProjectDirectory)
+            ? ProjectFolderLayout.RootForArtifact(options.AudioPath) : Path.GetFullPath(options.ProjectDirectory);
 
     private static bool IsFresh(string candidate, string source) =>
         File.Exists(candidate) &&

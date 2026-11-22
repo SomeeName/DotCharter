@@ -4,7 +4,7 @@ namespace DotCharter.Tests.Services.Gameplay;
 
 /// <summary>
 /// Pure schedule for the pre-gameplay metronome count-in (0.14.4 C): normalises
-/// the off/4/8 setting, spaces clicks at the start tempo scaled by practice
+/// the off/2/4/8 setting, spaces clicks at the start tempo scaled by practice
 /// speed, and accents measure downbeats. Injected-time / no-audio, mirroring the
 /// pure CountBeatsCrossed style so the driver just awaits the plan.
 /// </summary>
@@ -13,12 +13,13 @@ public class CountInPlanTests
     [Theory]
     [InlineData(0, 0)]
     [InlineData(1, 0)]
-    [InlineData(3, 0)]
+    [InlineData(2, 2)]
+    [InlineData(3, 2)]
     [InlineData(4, 4)]
     [InlineData(7, 4)]
     [InlineData(8, 8)]
     [InlineData(16, 8)]
-    public void Sanitize_NormalisesToOffFourOrEight(int input, int expected)
+    public void Sanitize_NormalisesToOffTwoFourOrEight(int input, int expected)
         => Assert.Equal(expected, CountInPlan.Sanitize(input));
 
     [Fact]
@@ -59,6 +60,15 @@ public class CountInPlanTests
     [Fact]
     public void Build_Off_ReturnsEmpty()
         => Assert.Empty(CountInPlan.Build(0, 4, 120, 1.0));
+
+    [Fact]
+    public void Build_TwoBeats_PreservesTheOfferedShortCountIn()
+    {
+        var plan = CountInPlan.Build(2, 4, 120, 1.0);
+        Assert.Equal(2, plan.Length);
+        Assert.Equal(0, plan[0].DelayBeforeMs);
+        Assert.Equal(500, plan[1].DelayBeforeMs);
+    }
 
     [Fact]
     public void Build_FourBeats_FirstClickHasNoDelay_RestSpacedOneBeat()

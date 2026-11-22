@@ -1,7 +1,7 @@
 ﻿# DotCharter.Analysis Agent Guide
 
-Offline **audio → chart** analysis ("Pillar A"): turns raw mono audio into a
-draft guitar chart and an auto-detected beat map. Deterministic, streaming, and
+Offline **audio → chart** analysis ("Pillar A"): turns raw mono audio into an
+auto-detected beat map, lyric timings and a chart-vs-audio lint. Deterministic, streaming, and
 advisory — results are review candidates, never auto-committed.
 
 References `DotCharter.Core` + `JuceSharp.Dsp` only; no external NuGet packages.
@@ -17,37 +17,11 @@ update it in the same change.
 
 ## Layout
 
-- `AudioToChart/` — onsets/pitches → draft notes.
-  - `IGuitarEventDetector` — the onset+pitch contract (`Push(span) → events`,
-    `Reset()`, `SampleRate`). Shared with the realtime path so offline detection
-    matches live play. **Hard contract: chunk-boundary independent** — the same
-    total sample sequence must yield the same events regardless of slicing.
-    Records: `GuitarPitchCandidate` (Salience, strongest = 1),
-    `GuitarAudioEvent` (TimeSeconds, IsLegato, Strength 0..1, Pitches).
-  - `JuceGuitarEventDetector` — the only concrete detector; thin adapter over
-    `JuceSharp.Dsp.JuceGuitarAnalyzer` (realtime pipeline reused unchanged).
-  - `AudioToChartAnalyzer` — the driver. Feeds `ChunkSize=8192` slices, flushes
-    ~0.25 s trailing silence, snaps events to a supplied beat grid, greedily
-    assigns strings/frets near a hand position, shapes confidence
-    (`Strength*Salience` − grid-error penalty, ×0.75 legato), drops below
-    `MinConfidence`, tags HOPO. Config in `AudioToChartOptions`
-    (`GridDenominator=12`, `MaxNotesPerOnset=3`, standard guitar/bass MIDI).
-    Outputs `AudioToChartDraft` of `DraftNote`.
-    **`OpenStringMidi` and `MinFret` are the CALLER's arrangement, not a
-    default.** The wizard's map used to come from the arrangement TYPE alone
-    while `Apply` stamped the template's real tuning/capo/string count onto the
-    draft, so a Drop-C chart got every note spelled at its standard-tuning fret
-    (off by the per-string offset), a capo'd one got frets BELOW the capo — the
-    shape rule L01 flags — and a 7-string's extra string was unreachable. The
-    derivation is `Services/Import/Audio/ChartFromAudioOptions` (a pure static
-    over `LivePitchAcceptance.SoundingMidi`), pinned by `UI/ChartFromAudioOptionsTests`.
-    `MinFret` is the capo: a fret is ABSOLUTE, the string sounds at
-    `max(fret, capo)`, and `MinFret = 0` is a strict no-op.
 - `BeatMap/` — audio → tempo/beats (`BeatMapAnalyzer`, "v2"). Spectral-flux
   envelope (`JuceFft`, 1024/256, Hann) → whiten → comb-autocorrelation tempo
   windows (drift-tracking, octave-error suppression) → forward beat tracking →
   downbeat phase. Outputs `DetectedBeat` + average BPM (`BeatMapAnalysisResult`,
-  `BeatMapAnalyzerOptions` 60–200 BPM).
+  `BeatMapAnalyzerOptions` 60–220 BPM).
   `BeatMap/RecordingAligner` (#784, #792) is the other half: it warps an EXISTING
   chart's beat grid onto a recording of it. `RecordingAlignmentFeatures`
   (log-flux onsets on ~2.7 ms frames, normalised to the local peak; 4096-point
@@ -60,7 +34,9 @@ update it in the same change.
   measured against) → a Viterbi pass over the beats (±160 ms around the coarse
   estimate; each interval scores the onsets under its notes at their own fractions
   minus a squared log-tempo-ratio penalty; FIXED beats have one candidate).
-  Confidence per section = recall, precision and chroma agreement. Whole clip in
+  Confidence per section = recall, precision and chroma agreement; extra uncharted
+  attacks lower precision even when every charted note is heard. Peak spacing widens
+  before subtracting the `int.MinValue` sentinel (`RecordingAlignerTests`). Whole clip in
   memory, like the lint. `FluxPeakLeadMs` (4.5 ms) is measured on the synthetic pluck.
   **The coarse warp is STIFF on purpose (#792)**: a skew step costs 2 (it was 0.4), because
   a loose warp wandered off the diagonal by part of a beat wherever a full mix was
@@ -99,7 +75,18 @@ update it in the same change.
   `RomanizedLyricTokenizer` + `LyricVocabulary` → `CtcForcedAligner` (the Viterbi
   trellis) → `LyricAligner`. Two acoustic models since 0.41, routed by
   `Lyrics/LyricScriptDetector` and ENSEMBLED by `CtcEmissionBlender`.
+  `VocalOnsetFeatures` + `LyricOnsetSnap` then move each onset to the stem's own onset (#868).
   → **[docs/agents/analysis/lyric-alignment.md](../docs/agents/analysis/lyric-alignment.md)**
+- `Tuning/` — **the song's A440 reference offset** (#821). `ReferencePitchEstimator.Estimate` pairs Hann
+  frames a quarter frame apart and takes each steady peak's frequency from the phase advance (exact for a
+  steady partial, so low notes are as precise as high ones); peaks that change level by more than 20 % between
+  the two frames (attacks, drums) do not vote. Votes fold to cents around the nearest semitone into a circular
+  1-cent histogram; the smoothed peak, refined by a circular mean within ±15 cents, is the offset, and
+  confidence is the share of the vote near it above an even spread. Measured: synthetic sines and
+  8-harmonic notes at 0/+15/−30/+45 within ±3 cents, white noise 0.03; 12 corpus mixes (all authored 0)
+  read +0.5..+5.8 cents at confidence 0.36–0.76, hence `DefaultMinConfidence` 0.3
+  (`ReferencePitchEstimatorTests`, `ReferencePitchCorpusTests`). `ReferencePitchComparison` keeps the
+  authored whole semitones and offers only a residual move over 10 cents.
 - `Tone/` — **one span of audio → the measurements a tone is built from.**
   `ToneAudioAnalyzer.Analyze(ReadOnlySpan<float> mono, int sampleRate)` →
   `ToneAudioProfile`. The owner's rule for the feature: the tone PLACEMENT is not
@@ -112,27 +99,6 @@ update it in the same change.
 
 ## Rules / gotchas
 
-- **There IS a corpus score, and it is the only thing here that measures
-  ACCURACY** — the published number, the method and the re-run recipe are in
-  [docs/agents/testing/autochart-eval.md](../docs/agents/testing/autochart-eval.md)
-  (2026-10-07, 89 arrangements, ±50 ms: onset F1 44.7 %, pitch accuracy at
-  found onsets 10.9 %, note F1 4.3 % — pitch on a full mix is the limit).
-  `Analysis/AutoChartCorpusProbeTests` drafts every `TestData/EOF` arrangement
-  with the dialog's own options (`ChartFromAudioAnalyzer.OptionsFor` at
-  `DefaultSensitivity`) and scores it against the hardest level: onset P/R/F1,
-  pitch accuracy and string/fret agreement on matched onsets, per arrangement
-  and overall. Env-gated (`DOTCHARTER_AUTOCHART_CORPUS=1`; the detector runs at
-  about real time in a Debug build) and it **never asserts a quality number** —
-  the corpus is git-ignored, so a threshold would be vacuous in every tree but
-  the owner's. The arithmetic is pinned in the default gate by
-  `Analysis/AutoChartScorerTests`. Everything else in this project is judged on
-  synthetic fixtures, which is repeatability, not accuracy.
-- **`Analyze` is `DraftFromEvents(DetectEvents(…))`, and the corpus score depends
-  on it.** Both halves are `internal`: detection depends only on the audio, so
-  the harness detects a song once and drafts each arrangement from the same
-  events. Change one half without the other and the published number stops
-  describing the dialog. Pinned by
-  `AudioToChartAnalyzerTests.DetectThenDraft_IsTheSameDraftAsAnalyze`.
 - **Determinism is a hard contract** across the project — same samples + options
   (+ beat grid) ⇒ identical output. **It is guarded by RE-RUNNING, and the
   catalogue is DERIVED** (`Analysis/AnalysisDeterminismTests`): it reflects over
@@ -143,7 +109,7 @@ update it in the same change.
   subject again), which is the one thing each analyzer's own
   `Analyze_IsDeterministic` cannot do: those call ONE analyzer twice in a row and
   are therefore blind to state shared BETWEEN analyzers. Proved by breaking it —
-  a static that `AudioToChartAnalyzer` writes and `BeatMapAnalyzer` reads leaves
+  a static that `ChartAudioLintAnalyzer` writes and `BeatMapAnalyzer` reads leaves
   `BeatMapAnalyzerTests.Analyze_IsDeterministic` green in isolation while the
   history test fails. **What it does NOT prove:** the fixtures are synthetic, so
   it is a repeatability guard and says nothing about accuracy on real
@@ -159,22 +125,6 @@ update it in the same change.
   yields one char yields one id), so it is order-independent by construction
   rather than by luck; if you ever make two symbols share an id, that stops
   being true.
-- **A non-finite number must be rejected where it ENTERS, because every gate
-  downstream lets it past.** `NaN` loses every comparison, so
-  `confidence < MinConfidence` — the one thing that drops a weak candidate — is
-  FALSE for it and the note survives; `+inf` is worse, because the
-  `Math.Clamp(confidence, 0, 1)` that shapes the score turns it into 1.0, the
-  HIGHEST confidence in the draft. Both then outrank every honestly-scored note,
-  which is the identical failure the clamped grid fraction produced.
-  `AudioToChartAnalyzer.BuildDraft` drops an event whose `TimeSeconds`/`Strength`
-  is not finite and a pitch candidate whose `Salience`/`FrequencyHz` is not, and
-  the gate itself is spelled `!(confidence >= MinConfidence)` on purpose — the
-  naive `<` admits exactly the value it exists to reject. Pinned by
-  `AudioToChartAnalyzerTests.ANonFinite*`.
-  A test that reaches this needs a detector that emits on the FIRST push
-  (`ImmediateDetector`): the release condition in `FakeDetector`
-  (`TimeSeconds * SampleRate <= pushed`) is itself false for `NaN`, so a test
-  built on it never emits the event and passes having asserted nothing.
 - **A pitch the CQT cannot ADDRESS is unknowable, not wrong, and is skipped
   like a mute.** `JuceConstantQ` covers `LiveCqtConfig.MinMidi` (28, E1) up
   `BinCount` quarter-tone bins, i.e. MIDI **28..99**; outside that
@@ -209,30 +159,34 @@ update it in the same change.
   observable; what it buys is that the property is now stated and pinned
   (`AChordsFindings_ComeOutInTheChartedOrder_WithDuplicatesRemoved` fails against
   a `SortedSet`, the plausible "cleanup").
-- **`BeatMapAnalyzer` is reached by NO PRODUCT CODE — only by tests** (checked
-  2026-09-04: the only non-test references to `BeatMapAnalyzer`,
-  `BeatMapAnalysisResult` or `DetectedBeat` are inside this project). There is
-  no menu item, no service wrapper and no dialog for beat-map auto-detect; the
-  app's beat grids come from `TempoService` and the importers. Treat everything
-  below about its behaviour as a description of a component that does not ship
-  yet, and see the roadmap before giving it a surface.
-- **`BeatMapAnalyzer` OCTAVE-ERRORS above ~140 BPM, and it is measured, not
-  suspected.** Constant click track, 25–40 s, default options, `AverageBpm`:
-  60→60.0, 90→90.0, 120→120.1, 140→139.9, **160→80.0, 180→90.0, 200→66.7,
-  210→70.0** — i.e. half tempo from ~150 and a THIRD from ~195. Identical with
-  and without bar accents, and identical on a synthesised-pluck track, so it is
-  not a metrical-salience effect. **The cause is integer lag quantisation
-  against a 1–2 hop flux peak**: at 172.27 fps a 160 BPM period is 64.6 hops, so
-  lag 65 is misaligned by 0.4 hops on EVERY period while lag 129 (the double)
-  misses 129.2 by only 0.2 — the raw autocorrelation is genuinely higher at the
-  wrong lag (`ac[129]=79662` vs `ac[65]=77359`, dumped from a debug build), and
-  the comb's `+0.5·ac[2L]+0.33·ac[3L]` cannot recover it. 120 and 140 survive
-  only because 86.13 and 73.8 happen to sit near integers, which is also why the
-  two pre-existing tests (120 BPM, a 100→140 ramp) never saw this.
-  **A 3/5/7-tap smoothing of the correlation envelope was tried and REJECTED**:
-  it fixes the click track at 160/175 but not the pluck track at 160, and turns
-  190/200 into an EMPTY result. Anything better needs the `TestData/EOF` corpus
-  the roadmap asks for — do not tune this on click tracks.
+- **`BeatMapAnalyzer` has ONE product caller: Tempo map ▸ Estimate BPM (#488).**
+  `Services/Editing/Tempo/Estimate/TempoEstimateService.EstimateSamples` decodes the
+  mix, cuts the whole song or the marked part, runs the analyzer and takes the
+  MEDIAN beat tempo (one mistracked beat cannot move it); the dialog offers it with
+  its half and double. Beat-map auto-detect as a chart builder is still not a
+  surface: the app's beat grids come from `TempoService` and the importers.
+- **The comb scores FRACTIONAL periods, which is what fixed the octave errors.**
+  The tempo used to be the best INTEGER lag of the flux autocorrelation, and at
+  172.27 fps a 160 BPM period (64.6 hops) is misaligned by 0.4 hop on every period
+  while its double (129.2) is off by only 0.2, so the raw correlation preferred the
+  wrong octave (160→80, 180→90, 200→66.7). Now `EstimateWindowPeriods` box-sums three
+  neighbouring lags (a pulse pair lands on one of two integer lags depending on the
+  fractional part; the sum keeps every pair), interpolates that at `P·m`, and scores
+  a grid of periods in 1/8-hop steps over `CombHarmonics` = 4 multiples (weights
+  1, .5, .33, .25). Measured constant click tracks (30 s, default options,
+  `AverageBpm`): 60→60.09, 75→74.90, 90→89.88, 100→99.98, 120→120.19, 140→139.67,
+  150→149.80, 160→160.25, 170→169.44, 180→179.76, 185→184.57, 190→189.98,
+  195→195.02, 200→199.73, 205→204.67, 210→209.87; pluck tracks at 80/120/160/200
+  within 1.5 (`BeatMapAnalyzerTests`). The default range is 60–220 BPM so 210 is
+  inside it. The first beat is now searched over at least 1.5 s, not 1.5 periods:
+  above ~180 BPM the old window ended before a first hit at 0.5 s and the whole map
+  came back empty (hidden until the octave fix made such tempos reachable). Wholly
+  silent search windows are skipped until there is onset evidence, so a silent
+  intro longer than 1.5 s cannot discard an otherwise detectable track
+  (`BeatMapAnalyzerTests.Analyze_AfterASilentIntro_FindsTheFirstClickAndTracksTheRest`).
+  Still a click/pluck-track measurement, not a corpus one: the `TestData/EOF`
+  corpus the roadmap asks for remains the real check, and a song whose true tempo
+  is a power of two away from the read one is why the dialog shows half and double.
 - **`BeatMapAnalyzer` drops a frame containing a non-finite SAMPLE rather than
   letting the FFT see it.** One bad sample (decoder glitch, denormal blow-up) is
   smeared across every bin, and its NaN log-magnitude then becomes the PREVIOUS
@@ -256,48 +210,6 @@ update it in the same change.
   only interpolates between two, so every beat's `Bpm` is then in range by
   construction. Nothing downstream re-checks. Pinned by
   `BeatMapAnalyzerTests.EveryDetectedTempo_StaysInsideTheRequestedBpmRange`.
-- **The used-string mask belongs to the GRID SLOT, not to the event.** Snapping
-  is many-to-one: at 120 BPM with `GridDenominator = 12` a slot is ~41.7 ms wide,
-  so two onsets 20 ms apart land on the SAME `FractionalPosition`.
-  `BuildDraft`'s `usedStrings` was declared per event, so each of them took the
-  same string and the draft carried two `DraftNote`s at one position AND one
-  string — the shape the GP path calls physically impossible and scrubs with
-  `GpPostProcessor.RemoveDuplicateSounds`. The owner table is keyed by position
-  (`slotOwners`, `-1` = free) and holds the index into `notes` of the sound
-  occupying each string there, so a later candidate whose only usable string is
-  taken can take the slot over on strictly HIGHER confidence — and the score is
-  computed before the assignment, because it does not depend on the string.
-  **Keep that table an ORDERED structure and never enumerate it into an output**:
-  it is a `SortedDictionary` so a future reader cannot make the draft depend on
-  hash order, which `AnalysisDeterminismTests` would then catch only by luck.
-  Pinned by `AudioToChartAnalyzerTests.TwoOnsetsInOneGridSlot_*` and
-  `.WhenTheOnlyStringIsTaken_*`.
-- **An EMPTY beat grid is rejected at the entry point too, and it was not a
-  harmless "no grid ⇒ no draft".** `TimelineMath.TryBeatOffsetFromMs` fails for
-  every event, `SnapToGrid`'s failure arm answers
-  `(FractionalPosition.Zero, 0.0)`, and a grid error of 0 is the HIGHEST
-  confidence the shaping can award — so the whole song piled onto beat 0, one
-  note per string, each outranking every honestly-placed note. The same collapse
-  the clamped beat fraction produced, through the other door. A SINGLE beat is
-  still a legal grid (`TryBeatOffsetFromMs` extrapolates off it) and still
-  drafts; both are pinned in `AudioToChartAnalyzerTests`.
-- **`AudioToChartOptions.GridDenominator` is validated at the entry point.** 0
-  reached `Fraction`'s ctor as a `DivideByZeroException` thrown out of a
-  primitive with no zero anywhere in it, and a NEGATIVE denominator is worse:
-  `Fraction` normalizes the sign, so every note landed silently at its own
-  MIRROR position with no error at all.
-- **ms → position is `TimelineMath`'s, never a local one.**
-  `AudioToChartAnalyzer.SnapToGrid` hand-rolled it and clamped the beat fraction
-  into `[0, 1]`, so every event past the last beat collapsed onto ONE position —
-  and a clamped fraction sits exactly on a grid slot, so all of them scored a
-  grid error of 0, i.e. the HIGHEST confidence, and survived `MinConfidence`
-  ahead of every honestly-placed note. The trigger is ordinary: recomputing beat
-  times for a new tempo never ADDS beats, so a grid generated at 100 BPM covers
-  62% of the song once the charter sets 160, and Tools → Chart from audio then
-  stacked the whole tail on one beat. It snaps through
-  `TimelineMath.TryBeatOffsetFromMs` (the un-rounded half of `PositionFromMs`,
-  which extrapolates on both sides), and the grid error is priced off the
-  UN-clamped offset. Pinned by two cases in `AudioToChartAnalyzerTests`.
 - **`ToneAudioProfile.Drive` is calibrated for a PERFORMANCE, and a steady tone
   falls off the end of that calibration.** Its crest term maps 18 dB → 0 and
   6 dB → 1, but a continuous full-level sine has a crest of 3.01 dB by
@@ -333,11 +245,6 @@ update it in the same change.
   to "what note is this". Do not expose the fundamental without re-checking that.
 - **Bounded memory:** input is never buffered whole; work streams in ≤8192-sample
   chunks (only the flux envelope / detector ring is retained).
-- **Type seam:** `BeatMapAnalyzer` emits `DetectedBeat` (this project) but
-  `AudioToChartAnalyzer` consumes `IList<BeatMarker>` (Core). Converting one to
-  the other happens *outside* this project (Core/app layer).
-- Reusing the realtime analyzer offline is deliberate — don't fork detection
-  logic here; fix it in `JuceSharp.Dsp` so live + offline stay identical.
 - Ownership: keep disjoint from Play Mode / scoring (that is the app + Services).
 
 ### Lyric rules — one line each, full text one file away
@@ -370,4 +277,3 @@ All under
 ## Validation
 
 `dotnet test --project DotCharter.Tests\DotCharter.Tests.csproj --filter-namespace "*.Analysis*"`.
-Tests inject a fake `IGuitarEventDetector` via the analyzer's internal factory ctor.

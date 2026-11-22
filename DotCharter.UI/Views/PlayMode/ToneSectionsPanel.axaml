@@ -45,10 +45,10 @@
                    LineSpacing="{StaticResource FireSpaceXs}">
             <Button x:Name="ToneSectionsAdd" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
                     Content="{localization:Loc ToneSections_Add}"
-                    Command="{Binding ProposeCommand}" />
+                    Command="{Binding AddSectionCommand}" />
             <Button x:Name="ToneSectionsPropose" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
                     Content="{localization:Loc ToneSections_Propose}"
-                    Command="{Binding AddSectionCommand}"
+                    Command="{Binding ProposeCommand}"
                     IsVisible="{Binding CanPropose}" />
             <Button x:Name="ToneSectionsMatchAll" Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary Body"
                     Content="{localization:Loc ToneSections_MatchAll}"

@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Core.Domain.Project;
 using DotCharter.Services.Editing.Tones;
+using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Tone.Audio.Dsp.Tones;
 
 namespace DotCharter.Presentation.Screens.Dialogs;
@@ -15,6 +16,39 @@ public sealed partial class ToneDesignerArrangementItem : ObservableObject, ITon
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsToneBUndefined))] private string _toneB = "";
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsToneCUndefined))] private string _toneC = "";
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsToneDUndefined))] private string _toneD = "";
+
+    /// <summary>True while the row still shows what its arrangement RESOLVES to: never edited, so writing it back would only add an undo step.</summary>
+    internal bool ShowsResolvedSlots()
+    {
+        var (resolvedBase, slots) = RsToneSlots.Resolve(Arrangement);
+        return ToneBase.Trim() == resolvedBase.Trim() && ToneA.Trim() == (slots.ElementAtOrDefault(0) ?? "").Trim() && ToneB.Trim() == (slots.ElementAtOrDefault(1) ?? "").Trim() &&
+               ToneC.Trim() == (slots.ElementAtOrDefault(2) ?? "").Trim() && ToneD.Trim() == (slots.ElementAtOrDefault(3) ?? "").Trim();
+    }
+
+    private bool _quiet;
+
+    /// <summary>The user edited a slot (not a rename following along): the designer records it as an undo step.</summary>
+    internal event Action? SlotEdited;
+
+    protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (!_quiet && e.PropertyName is nameof(ToneBase) or nameof(ToneA) or nameof(ToneB) or nameof(ToneC) or nameof(ToneD)) SlotEdited?.Invoke();
+    }
+
+    /// <summary>A slot that named <paramref name="from" /> now names <paramref name="to" /> ("" clears it); a slot edited to something else is left alone.</summary>
+    internal void Retarget(string from, string to)
+    {
+        string Swap(string value) => ToneKeyEdits.Same(value, from) && value.Trim().Length > 0 ? to : value;
+
+        _quiet = true;
+        ToneBase = Swap(ToneBase);
+        ToneA = Swap(ToneA);
+        ToneB = Swap(ToneB);
+        ToneC = Swap(ToneC);
+        ToneD = Swap(ToneD);
+        _quiet = false;
+    }
 
     public required string Name { get; init; }
 
@@ -77,9 +111,11 @@ public sealed partial class ProjectToneItem(string key, string name, string json
 }
 
 /// <summary>A gear picker entry; a null <see cref="Gear" /> is the "(empty)" sentinel.</summary>
-public sealed record ToneGearOption(RsGearData? Gear, string DisplayName) : ISearchableChoice
+public sealed record ToneGearOption(RsGearData? Gear, string DisplayName) : ISearchableChoice, IGroupedChoice
 {
     public string SearchKey => Gear?.Key ?? "";
+
+    public string GroupName => Gear?.Category.Replace('_', ' ') ?? "";
 
     public override string ToString() => DisplayName;
 }

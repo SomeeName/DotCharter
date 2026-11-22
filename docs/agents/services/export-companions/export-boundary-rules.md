@@ -94,9 +94,12 @@
   psarc import, a cross-arrangement paste, or a chart authored before the setting
   existed. `RsXmlSongWriter.ChordNameOptions` and `SngFromDomainMapper`'s
   `chordNameOptions` both default to `DoubleStopNameOptions.Default` — the same
-  value `AppConfig.SuppressDoubleStopChordNames` ships as — so a caller that does
-  not thread the setting still writes the shipped behaviour rather than a third
-  one, and the SNG the GAME reads cannot disagree with the XML DLC Builder reads.
+  value `AppConfig.SuppressDoubleStopChordNames` ships as. App entry points pass
+  both that switch and `KeepPowerChordNames`: `NewChordNames.OptionsFor` supplies
+  saved XML, DTRS bundles, manual and companion packages, and DLC Builder's XML
+  preprocessing. `AppStatics` wires live preferences into automatic naming too.
+  A caller without configuration keeps the default. The SNG the GAME reads and
+  the XML DLC Builder reads therefore use the same policy.
   Two ordering traps, both pinned: the strip runs BEFORE `displayName`'s `-arp`
   suffix is derived (else an arpeggio double stop ships as the bare marker
   `-arp`), and the Nop bit (SNG mask 0x2, the `-nop` displayName) comes from the
@@ -174,14 +177,33 @@
   anything.** `Export/Rocksmith/RsPhraseName` is the ONE sanitizer, called by
   `RsXmlSongWriter` (the `<phrase name>` attribute) and
   `SngFromDomainMapper.BuildPhrasesAndIterations` (whose names the psarc
-  manifest copies). A legal name is returned unchanged, so an imported RS chart
+  manifest copies). A legal name within the target length limit is returned unchanged, so an imported RS chart
   round-trips byte-identically; otherwise accents are transliterated
   (`Übergang` → `Ubergang`), dashes/brackets/separators become one space
   (`Solo (fast)` → `Solo fast`), the rest is dropped, and an empty result is
   `phrase{n}`. `SanitizeAll` keeps rewritten names UNIQUE (`Riff!`, `Riff?` next
   to `Riff` → `Riff 2`, `Riff 3`), judged on the 31 characters the SNG holds.
+  Truncated legal names also enter that allocation: two names sharing their first
+  31 characters get distinct bounded spellings. Unchanged legal names reserve
+  their spellings first, including names that already end in a numeric suffix.
 - **`PhraseInfos` (solo, max difficulty) is keyed by the AUTHORED name**, so both
   writers look it up with the authored name and only write the sanitized one.
+  `Export/Rocksmith/RsPhraseExportData` resolves ONE iteration table per export
+  (`Resolved`: phrase, the XML's start in whole ms, the SNG's start = that clipped
+  into the song, end, highest level of owned content) and both writers read it: the
+  XML writes `IterationStartMs` unclipped (END on the last beat stays `2.500` past a
+  `2.499` song length, on the grid, and re-imports there), the SNG the clipped rows,
+  and the level ladder (`RsPhraseExportData.Ladder`) is cut along the same rows,
+  never along the unrounded marker positions (#639). Ownership is the XML's, in
+  both files: a sound belongs to the last iteration WRITTEN at or before its whole
+  millisecond (`SngFromDomainMapper.FindOwningIterationId`), so an END clipped onto
+  a note does not take it; only a start before zero is clipped for ownership (ties
+  keep source order); content before the first iteration belongs to iteration zero. A phrase's ceiling
+  is the authored one, raised by the ladder's shipped max and never below the
+  content its iterations own, so a note in the last millisecond before END, or one
+  an audio-clipped iteration lands on, is always at or below its phrase's maximum
+  in both files. Repeated iterations share the highest ceiling; an empty COUNT or
+  END stays at zero; solo flags survive. Pinned by `ExportPhraseBoundaryTests`.
 - **Do not move it back into `ChartSpacingEnforcer`.** It used to run there, on
   the live project on every save and load (#322): it erased `サビ` to `""`,
   merged distinct phrases and orphaned every `PhraseInfos` entry, so the solo
@@ -343,142 +365,52 @@
   test that it really scans the six writers it names — a lint that matches
   nothing is worth nothing.
 
-## A 7-string GUITAR ships in the rs7string layout with the RS7X block (#736, #777)
+## Extended arrangements use RS Extended Range
 
-- **The owner's `rs7string` game mod plays a guitar arrangement in 7-string mode
-  when its SNG tuning has 7 entries.** The package keeps strings 0..5 as the
-  six-string E A D G B e and puts the extra strings AFTER them (6 = 7th string,
-  B1; 7 = 8th, F#1), while a chart numbers strings LOWEST first.
-  `Export/Rocksmith/Rs7StringLayout` (`ToSng` / `ToDomain`) is the one mapping;
-  reader and writer both use it.
-- **The RS XML of a 7-/8-string guitar uses the SAME order (#904, the mod's
-  "RS XML extension for 7/8-string guitar" v1)**: `RsXmlSongWriter` writes a
-  `Rs7Projection` copy of the arrangement (renumbering only at this boundary, plus
-  the package's chord rules: a template keeps a stock column, names are printable
-  ASCII of at most 30), so `strings="N"`, `string0..N-1`, `fret6/7`, `finger6/7`,
-  note and chordNote `string` are package-order and indices 0..5 are the
-  six-string projection; `standardTuning` is 0 for more than six strings.
-  `RsXmlSongReader` applies the inverse once after reading
-  (`RsXmlSongStringOrder`). **A lowest-first 7-string XML from before #904 is NOT
-  read specially** (re-export it from the `.rscp`). Six-string guitars and basses
-  stay byte-identical. Six-wide tools: EOF aborts the import on a note with
-  `string` > 5; Rocksmith2014.NET reads it but its XML-to-SNG converter indexes
-  six-wide arrays. Pinned by `RsXmlRs7StringOrderTests`.
-- **The six-string projection for those tools (#911)**: `Rs7Projection.TryCreate(arr,
-  sixStringOnly: true)` runs the split-mode breakup, then drops every note on a package
-  string above 5, strips the extra template columns (also on the hand-mute templates),
-  and trims the copy to six strings and six tuning entries, so `RsXmlSongWriter` writes no
-  `strings` attribute and no `string6+`; `standardTuning` derives from the six-string
-  copy. `Rs7Projection.Loss` (`SixStringLoss`: notes dropped, chords that sounded only
-  there, chords that lost some strings) feeds `RsXmlSongWriter.LastLoss` and one log
-  WARNING per arrangement. Who uses it: the DTRS XML bundle, the
-  `.rs2dlc` tuning (six slots on, every string in package order off) and Save As `.xml` only with
-  `AppConfig.RsXmlSixStringProjection` ("RS XML for 6-string tools", Settings > Files; default
-  off, the spec XML above). The rs7string
-  package (SNG) and the `.rscp` keep every string. Charter (Lordszynencja) reads more than
-  six strings but numbers them lowest first, so the spec order is wrong there too
-  (finding on #911). Pinned by `RsXmlSixStringProjectionTests`.
-- **An 8-string guitar is not exported** (`Rs7StringLayout.ExportRefusal`): a
-  validator ERROR (`KeyEightStringMod`), and `SngFromDomainMapper.BuildInstrumental`
-  throws the same reason, which the builder reports as the skipped arrangement. The
-  format model stays general (`RsExtensionBlock.ForStrings(8)` spells the 8-string
-  block). **A bass never gets a block** (RS7X v1 reserves the bass instrument): a
-  5-/6-string bass keeps the stock six-slot spelling, which official Rocksmith bass
-  charts use.
-- **Chord columns past the sixth string go into the RS7X block** (the mod's
-  spec "RS7X: the SNG extension block", v1, in the rs7string repo; `Export/Sng/Model/RsExtensionBlock`, written by `Export/Sng/RsExtensionBlockWriter`, read by the package reader): appended INSIDE the
-  zlib body right after MetaData (the stock loader stops reading there), sections
-  `STRS`, `CHDT`, `CHNT` in that order even when empty, written for EVERY
-  arrangement with more than six strings and for nothing else (a 6-string guitar or
-  4-string bass SNG stays byte-for-byte stock). `Rs7BlockBuilder` collects it while
-  the mapper writes the stock sections: one `CHDT` row per emitted template, one
-  `CHNT` row per ChordNotes record ADDED, so the counts match by construction.
-  Writer rules it keeps: the six stock columns stay a projection (no extended pitch
-  in a free stock MIDI slot); templates are never merged on their stock columns
-  alone; a template keeps a stock column (`Rs7Projection` turns a chord on extra
-  strings ONLY into single notes and leaves such a template out with its hand
-  shapes); a ChordNotes record is created when ANY string has technique data and
-  is deduplicated on stock + extended data — an OPEN 7th string makes one too, as
-  an open stock string does, because the game draws the open gem from that bit
-  (rs7string #18 stage 2; the spec text of 2026-10-13 11:32 still says otherwise,
-  `rs7chart` and its packages were changed at 12:22); `name[31]` stays 0 and a 7-string chord name is cut to 30
-  printable ASCII characters; section `StringMask` bit 6 counts chord notes too.
-- **`SngFromDomainMapper` never sees the chart order**: `Rs7Projection` copies the
-  arrangement into package order first and runs `LinkLandingBreakup` itself; the
-  mapper writes strings 0..5 and hands 6+ to `Rs7BlockBuilder`.
-- **The block is the DEFAULT; "split" is an option** (#743,
-  `RocksmithBuildOptions.Rs7ChordMode`, the export dialog's "Split 7th-string
-  chords" box, shown only for a 7-string guitar, for an rs7string build from before
-  the block). Split writes a chord on an extra string as rs7chart's split mode does:
-  native columns stay a chord (a single note when only one is left), every extra
-  string becomes a simultaneous single note, no template keeps an extra column
-  (the block's `CHDT` is all -1), and a template only such chords played is left
-  out of the SNG (the export copy only). The save companion always builds the
-  default.
-- **No `chords-ext.json` sidecar is written any more** (#777): the block replaced
-  it. An export deletes the ones an older build of the same package left
-  (`Rs7ChordSidecar.RemoveStale`, exact names only); the IMPORT still reads them
-  for older packages (below).
-- **The reference packages are rebuilt BYTE FOR BYTE** (#743, #777, by the
-  plugin's reference-rebuild tests, skipped without `DOTCHARTER_RS7_DIR`): the
-  control package as a whole file; the 7-string and rs7chart's split, pairs,
-  triads, full-chord and 6-string control packages per entry (other writers made
-  their containers; the test pins why), and for rs7chart's three chord packages the
-  stock sections and the RS7X block each byte-identical on their own. The random
-  ids and the time stamp are pinned through `RocksmithBuildOptions.Identity`
-  (`RocksmithBuildIdentity`, internal, test-only). Named divergences, each matched
-  exactly once: rs7chart's `barreChords` / `doubleStops` / `SongDiff*` (it ports
-  the old barre rule and judges adjacency by package index — `KnownDivergences`);
-  the pairs package's chord NAMES (two-string shapes ship unnamed under
-  `DoubleStopNameOptions.Default`; `SngRules`); and `rs7test_7str`, which predates
-  the block (the rebuild must end in exactly the empty 7-string block).
-- **The manifest adds `Rs7String6` / `Rs7String7` after `string5` — never
-  `string6`**, which overflows the game's six-int song-list reader.
-- **Every package is ENCRYPTED by default, 7-/8-string included (#804)**
-  (`RocksmithBuildOptions.PlainPackage` null/false: TOC flag 4, SNG flags 3; the
-  RS7X block sits inside the zlib body, which the game decrypts first). PLAIN
-  (TOC unencrypted, SNG flags 1; loads only with the RS7String 7-string
-  mod) is the export dialog's explicit Package option (`ExportTargetViewModel`). Without the
-  user's keys in appconfig.json EVERY package is plain with a warning, the
-  picker is disabled on Plain and the dialog says so (#756, `RocksmithKeysTests`;
-  the key rules are in [../parsing-psarc.md](../parsing-psarc.md)). A Mac package
-  is encrypted only. Pinned by `Rs7PackageExportTests`, `ExportPackageChoiceTests`.
-  A stale sidecar is looked for beside the
-  FINAL path (`ChordSidecarPackagePath`; the save companion builds to a staging
-  name). Pinned by `Rs7PackageExportTests`, `Rs7BlockExportTests`,
-  `Rs7ExtensionBlockFormatTests`, `Rs7PlainFixtureTests` (the read-back halves are the plugin's).
-- **The Mac package (`_m.psarc`, #782) differs from the PC one in four things and
-  nothing else** (`Export/Package/RsPlatformLayout`): SNGs in `songs/bin/macos/`
-  encrypted with the Mac SNG key (`RocksmithSngWriter.WritePackedMac`; same body,
-  same little-endian layout); banks and wems in `audio/mac/` (the same bytes); the
-  aggregate graph's bank tag `macos` for `dx9`, plus a `macos` tag on each SNG item.
-  Manifests, xblock, album art, flat models, showlights, toolkit.version and appid
-  are identical. Sources: Rocksmith2014.NET `Platform.fs` `getPathPart`,
-  `GraphItem.fs` `sng`/`bnk`, `PlatformConverter.fs` `pcToMac`; checked against
-  official PC/Mac pairs (the plugin's layout-parity test, skips without the install).
-  **A Mac package is always encrypted** (TOC + Mac SNG key, `RocksmithKeys.CanWriteMac`)
-  and **never for a 7-/8-string guitar** (rs7string is Windows-only):
-  `RocksmithPlatformTargets.Resolve` refuses a Mac-only build and drops Mac with a
-  warning from PC + Mac; the dialog says why first (`RocksmithMacBlock`). PC + Mac
-  builds every shared entry once and writes `<name>_p.psarc` + `<name>_m.psarc`
-  (`RocksmithBuildResult.PackagePaths`). **The PC package is pinned byte for byte to
-  the pre-#782 builder** (`RocksmithPlatformPackageTests`, every id and the SNG IV
-  pinned through `RocksmithBuildIdentity`, synthetic keys) — a change that moves a
-  PC byte must update that pin on purpose.
-- **`ChartExportValidator` makes a 7-string guitar a WARNING naming the mod**
-  (`KeyExtendedRangeGuitar`), an 8-string guitar an ERROR (above), and a string past the arrangement's own count stays an Error
-  (`SngStringLimits.MaxNoteStringIndex`).
-- **The song file's fixed widths are `Export/Sng/SngFormatLimits`**: 36 difficulty
-  levels (the per-section string-mask table), 32,767 notes plus chords per level (note
-  ids and links are 16-bit), chord-template frets and fingers in signed bytes, and the
-  string counts a package spells (guitar 8, bass 6, `Rs7StringLayout.MaxStringsFor`).
-  The validator reports each as an Error (`KeyTooManyLevels`, `KeyTooManyNotes`,
-  `KeyFingerOutOfRange`, `KeyStringCountUnsupported`, `KeyStringBeyondTuning`); the mapper
-  throws `InvalidDataException` on levels, notes and string count, and clamps a template
-  fret or finger. A Guitar Pro export asks the narrower `ValidateGuitarPro` (a sound on a
-  string the tuning lacks) before the picker opens. Fixed-width and length-prefixed names
-  (`RocksmithSngWriter.WriteFixedString`, `EofPackWriter.WriteString`) cut through
-  `Infrastructure/Utf8Truncation`, on a code-point boundary. Pinned by `ExportBoundsTests`.
+Seven-/eight-string guitar and five-/six-string bass are written as RS Extended
+Range packages. The package is plain, Windows only, starts with `PSXR`, and uses
+`<name>_rsxr_p.psarc`. A Mac-only export is refused; PC + Mac writes PC with its
+reason. Six-string guitar and four-string bass keep stock bytes and names.
+
+`Rs7Projection` and `SngFromDomainMapper` retain the internal slot-order model.
+The six stock chord columns, extra template columns and per-string techniques
+are collected by `Rs7BlockBuilder`; `RsxrSngWriter` combines them into N-column
+positional records. The stock writer rejects a model with an extension. Template
+deduplication, chord-note techniques, open strings, ghost gems, double stops and
+section masks count every string. A chord on two or more extra strings stays a
+chord; a one-note shape becomes one note. Bass low B and high C stay chord columns.
+
+Arrangement XML carries `extendedRange="1"` and thickest-first numbering.
+Unmarked RS7X slot-order XML stays readable through `RsXmlSongReader` and
+`RsXmlSongStringOrder`; an unknown marker is rejected. The frozen fixtures in
+`RsxrXmlCompatibilityTests` exercise both forms for every extended instrument.
+`RsXmlRs7StringOrderTests` and `Rs7BassXmlOrderTests` protect the positional writer
+and the domain round trip.
+
+The six-string guitar copy drops extra notes and template columns, keeps the six
+stock tuning offsets, omits the native marker, and reports `LastLoss`. The setting
+applies to saved XML, the bundle and `.rs2dlc` tuning; it does not trim a bass.
+`RsXmlSixStringProjectionTests` protects the six-string result. Native tuning
+vectors match the positional XML. The dynamic-difficulty round trip keeps this
+same domain order without a second permutation.
+
+`RsxrStringLayout` refuses more than eight guitar strings, more than six bass
+strings, and extended offsets outside -24..24. The package leaves refused
+arrangements out and reports their sentences. XML validation happens before a
+file is opened; bundle and project entries are omitted together and saves log
+the warning. `ChartExportValidator` names RS Extended Range and blocks an
+unrepresentable tuning. Other fixed limits stay at 36 levels and 32,767 sounds
+per level, with signed-byte template frets/fingers (`SngFormatLimits`).
+
+The export dialog fixes the package picker to Plain for accepted extended
+content and shows its unencrypted/Windows/mod reason. The stock plain warning
+is hidden there. The picker offers only Encrypted and Plain for stock content,
+and Plain alone without keys. Names follow the accepted selection. Package,
+manifest, chart and XML bytes are frozen by `RsxrOutputPinTests`; stock package,
+SNG, XML/export and dynamic-difficulty pins retain their expected values.
+
+Details, internal mappings and test ownership:
+[extended-range-export.md](extended-range-export.md).
 
 ## Capo at the export boundary
 
@@ -538,15 +470,29 @@
   direction — a chart LONGER than its audio must end with the audio or it never
   reaches an end in-game. RSCP ignores the argument (no song-length field).
 
-- **The psarc path takes it as `RocksmithBuildOptions.SongLengthMs`, and the
-  COMPANION path did not pass it at all until 0.61.** `ISaveCompanionService
-  .BuildPsarcAsync` had no parameter for it, so the SNG mapper's
-  `ResolveSongLengthMs` fell back to the chart's own extent — measured on the test
-  fixture, a 9 s song shipped as 15.5 s, and it disagreed with the DTRS XML bundle
-  the SAME save writes beside it. `ProjectSessionService` already held
-  `work.AudioLengthMs` and could have passed it. Pinned by
-  `Services/Export/SaveCompanionServiceTests
-  .The_companion_psarc_takes_its_song_length_from_the_audio`.
+- **The psarc path takes the audio duration as `RocksmithBuildOptions.SongLengthMs`.**
+  XML and SNG both call `Export/Rocksmith/RsSongLength.ResolveMs`: positive audio
+  duration clamps the chart extent, zero/null falls back to that extent, and the
+  one millisecond subtraction happens once. Passing the audio straight through
+  used to make a short chart's SNG claim the entire audio duration while its XML
+  ended at the chart. `SngFromDomainMapperTests` covers both clamp directions,
+  missing audio and sustains past the final beat.
+
+## SNG note semantics follow the XML representation
+
+- Phrase ceilings include the final explicit iteration through the resolved end;
+  authored metadata keys retain exact case. SNG iteration and section boundaries
+  are clipped to the resolved song interval (`ExportRound2RegressionTests`).
+- A chord note's `Ignore` flag enters its own technique mask, including when it
+  is the only bit that requires a chord-notes record. It does not mark the whole
+  chord ignored or change the chord's scoring count (`SngFromDomainMapperTests`).
+- A linked child must start within two milliseconds on either side of its
+  parent's sustain end. A note earlier in the sustain is not a child
+  (`SngFromDomainMapperTests`).
+- A compact repeat or `ForceNoNotes` chord still plays its template's strings.
+  Section masks use the emitted template when there are no emitted chord notes,
+  including extended strings and synthesized templates. No chord panel or
+  sustain is added (`CompactRepeatChordTests`, `CompactRepeatSustainTests`).
 
 ## An SNG tone EVENT is an index into the manifest's slot table
 
@@ -605,8 +551,32 @@
   key is given — that is intended, the key should name the real artist.
   Pinned by `Services/Export/RsPackageArrangementMetadataTests`.
 
+## Bend strengths use semitones in both Rocksmith writers
+
+`Export/Rocksmith/RsBendStrength` normalizes XML and SNG strengths to 0..6
+semitones (three whole steps); `SlideTechniqueRule` uses the same ceiling.
+The XML `bend` maximum remains fractional, like its `bendValue` steps.
+Rocksmith2014.NET's XML `BendValue.Step` and `Note.MaxBend` are floats;
+its XML reader/writer and DLC Builder's XML-to-SNG conversion pass those
+values without a three-semitone clamp. Six is the app's compatibility policy,
+not an XML schema restriction. `BendExportRangeTests` pins 3.5, 6 and the
+shared clamp above 6 on loose notes and chord strings. The live chart is unchanged.
+
 ## GP export makes authored notation WIN
 
+- Open-string pitches use `SoundingPitch.OpenSoundingMidi`: authored offsets or
+  letter tuning, the Bass path octave, and the whole reference octave (A220)
+  all reach GP's high-to-low tuning. Capo is written separately and does not
+  shift these open pitches. Fractional reference cents do not change the MIDI
+  note (`GpExporterTuningTests`).
+
+- **Bends are sliced over every written tied beat**, including bar-line
+  continuations. `GpBendCurve` interpolates the curve at each chunk boundary
+  and expresses interior points against that chunk's duration; putting the whole
+  curve on the first chunk moves its peak on import. Interior peaks use an explicit
+  alphaTab bend/release type: `Score.Finish` otherwise infers a simple release from
+  a continuation's nonzero start and drops the peak. `GpExporterBarLineTests`
+  covers same-bar ties, single- and multiple-bar crossings, and boundary interpolation.
 - **`Export/GuitarPro/GpExporter`** (GP7 via alphaTab). GP export
   (0.25) makes authored notation WIN: a note/chord's `NotationDuration` sets the
   beat's duration/dots/tuplet (`GpRhythmFraction.TryUnfold`, else a tied chain on
@@ -622,7 +592,7 @@
   notes, so an authored length goes through `QuarterTicks(nd, denominator)`;
   counting the quarter as a beat wrote every rhythm of an x/8 bar at half length.
   **A sound longer than the rest of its bar CONTINUES into the next bar(s) as
-  tied beats** (`BarCarry`), as Guitar Pro writes it — cut at the bar line, the
+  tied beats** (`BarCarry`), including the final sound with no later onset. Cut at the bar line, the
   re-import read the gap as a staccato rest and accented the note. **A
   hammer-on/pull-off marks its ORIGIN, the previous sound on the destination's
   string** (`Legato.Of`), wherever it is — not just the next event of the same
@@ -645,14 +615,14 @@
   sustain whose rest up to the next onset is writable too (a one-tick rest is
   held instead). Pinned by `GpTickChainTests`.
 
-## The DLC key is ASCII, and every package name comes from it
+## The DLC key is ASCII; archive entries use it and filenames use shared release/test names
 
 - **The DLC key is `[A-Za-z0-9]` only (#747) — `char.IsLetterOrDigit` is true
   for kana and kanji and must never pick a key character.** The game does not
   list a package whose key (and so its sng/manifest/xblock/bnk/graph/showlights/
   art names) holds any other letter. `Export/RocksmithDlcKey.Create` (behind
   `RocksmithDlcKey.Create`, which the export dialog, the save
-  companion's `<key>_p.psarc` and `DcSongWriter` all call) folds Latin
+  companion's package metadata and `DcSongWriter` all call) folds Latin
   diacritics ("Beyoncé" → `Beyonce`), drops the rest, and appends an 8-hex
   SHA-256 of the ORIGINAL artist + title when a letter was dropped or the key is
   under 6 — stable and unique; an all-ASCII artist + title keep their old key

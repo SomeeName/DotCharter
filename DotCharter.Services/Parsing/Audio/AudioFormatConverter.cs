@@ -99,7 +99,7 @@ internal sealed class AudioFormatConverter
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.Warning(AppLogCategory.Import,
-                $"Native WEM decode failed; trying vgmstream and ffmpeg. Source='{wemPath}', type={ex.GetType().Name}, message='{ex.Message}'.");
+                $"Native WEM decode failed; trying vgmstream and ffmpeg. Source='{wemPath}'.", ex);
         }
 
         return false;
@@ -155,7 +155,7 @@ internal sealed class AudioFormatConverter
         try
         {
             if (!write(staging) || !IsUsableAudioFile(staging)) return false;
-            File.Move(staging, finalPath, overwrite: true);
+            AtomicFile.Publish(staging, finalPath);
             return true;
         }
         finally

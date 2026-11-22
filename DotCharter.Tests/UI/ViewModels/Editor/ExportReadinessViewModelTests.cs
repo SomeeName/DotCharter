@@ -19,7 +19,9 @@ public sealed class ExportReadinessViewModelTests
     private static ExportReadinessViewModel Create(ChartEditHarness harness, ILocalizationService localization) =>
         new(harness.State, new CheckpointsViewModelTests.FakeDocumentService(), harness.Transport, harness.Editor,
             localization, RecordingProxy.Create<DotCharter.Services.Editing.Maintenance.IChartMaintenanceService>().Proxy,
-            new DotCharter.Presentation.Dialogs.DialogsSlot(), new FakeAppLogger());
+            new DotCharter.Presentation.Dialogs.DialogsSlot(), new FakeAppLogger(),
+            new DotCharter.Services.Editing.Quality.ChartQualityReporter(new DotCharter.Services.Editing.Validation.ArrangementValidationService(new FakeAppLogger())),
+            new DotCharter.Tests.Infrastructure.TestUiDispatcher());
 
     [Fact]
     public void BeforeTheCheck_TheVerdictSaysNotChecked_AndTheRefreshDoesNothing()
@@ -53,6 +55,21 @@ public sealed class ExportReadinessViewModelTests
                 ? localization.Format("Dialog_Export_ValidationSummary", errors, expected.Count - errors)
                 : localization["Dialog_Export_ValidationOk"],
             vm.ExportReadinessSummary);
+    }
+
+    /// <summary>The check reads the chart, so a lyric draft still in its text box goes in first:
+    /// a typed "go+" inside a line is checked (and reported), not the old text.</summary>
+    [Fact]
+    public void TheCheck_AppliesALyricDraftStillInItsTextBox()
+    {
+        var harness = new ChartEditHarness();
+        var rig = new LyricDraftRig(harness, "go+");
+        var vm = Create(harness, FakeLocalization.KeysOnly());
+
+        vm.CheckExportReadinessCommand.Execute(null);
+
+        Assert.Equal("go+", rig.Syllable.Text);
+        Assert.Contains(vm.ExportFindings, f => f.Message.Contains("go+", StringComparison.Ordinal));
     }
 
     [Fact]

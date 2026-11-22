@@ -35,8 +35,8 @@ public static class CommandCatalog
             Func<KeyChord>? shortcut = null) =>
             new(id, l[titleKey], l[catKey],
                 () => { if (command.CanExecute(null)) command.Execute(null); },
-                shortcut, () => command.CanExecute(null),
-                DotCharter.UI.Diagnostics.CommandIdResolver.Resolve(command, null, null));
+                shortcut, () => command.CanExecute(null) && vm.EditingAvailability.ReasonFor(command) == null,
+                DotCharter.UI.Diagnostics.CommandIdResolver.Resolve(command, null, null), () => vm.EditingAvailability.ReasonFor(command));
 
         AppCommand FromAction(string id, string titleKey, string catKey, Action run,
             Func<KeyChord>? shortcut = null) =>
@@ -93,7 +93,6 @@ public static class CommandCatalog
         list.Add(FromCommand("file.exportSheetPdf", "Menu_ExportSheetPdf", fo, vm.Export.ExportSheetPdfCommand));
         list.Add(FromCommand("file.attachAudio", "Menu_AttachAudio", fo, vm.Project.AttachAudioCommand));
         list.Add(FromCommand("file.attachYoutubeAudio", "Menu_AttachYoutubeAudio", fo, vm.Imports.AttachYoutubeAudioCommand));
-        list.Add(FromCommand("file.chartFromAudio", "Menu_ChartFromAudio", fo, vm.ShellDialogs.OpenChartFromAudioCommand));
         list.Add(FromCommand("file.songBrowser", "Menu_SongBrowser", fo, vm.OpenSongBrowserCommand));
         list.Add(FromCommand("file.revealProject", "Menu_RevealProjectInExplorer", fo,
             vm.Project.RevealProjectInExplorerCommand));
@@ -115,8 +114,9 @@ public static class CommandCatalog
             () => k.PasteSpecial));
         list.Add(FromCommand("edit.selectAll", "Keybind_SelectAll", ed, vm.SelectAllCommand, () => k.SelectAll));
         list.Add(FromAction("edit.linkIdentical", "LinkIdentical_Title", ed, () => vm.ChartEditor.LinkedMeasures?.LinkIdentical()));
-        list.Add(FromCommand("edit.selectLike", "Keybind_SelectLike", ed, vm.SelectLikePatternCommand,
+        list.Add(FromCommand("edit.selectLike", "Menu_SelectLikePattern", ed, vm.SelectLikePatternCommand,
             () => k.SelectLike));
+        AddSavedPatterns(list, vm, l, ed);
         list.Add(FromCommand("edit.patternBuilder", "Keybind_PatternBuilder", ed,
             vm.ShellDialogs.OpenPatternBuilderCommand, () => k.PatternBuilder));
         list.Add(FromCommand("edit.delete", "Keybind_DeleteSelected", ed, vm.DeleteSelectionCommand, () => k.Delete));
@@ -178,6 +178,7 @@ public static class CommandCatalog
 
         // === Tempo map ===
         const string tm = "Menu_TempoMap";
+        list.Add(FromCommand("tempo.startEnd", "Menu_StartEnd", tm, vm.ShellDialogs.OpenStartEndDialogCommand));
         list.Add(FromCommand("tempo.setDefaultStartSilence", "Menu_SetDefaultStartSilence", tm,
             vm.ShellDialogs.OpenSetDefaultStartSilenceDialogCommand));
         list.Add(FromCommand("tempo.addSilenceAtStart", "Menu_AddSilenceAtStart", tm,
@@ -190,15 +191,15 @@ public static class CommandCatalog
             vm.CopyStructureToOtherArrangementsCommand));
         list.Add(FromCommand("arrangement.sync", "Menu_ArrangementSync", tm,
             vm.ShellDialogs.OpenArrangementSyncDialogCommand));
-        list.Add(FromCommand("tempo.insertBeat", "Keybind_InsertBeatAtPlayhead", tm, vm.InsertBeatAtPlayheadCommand,
-            () => k.InsertBeatAtPlayhead));
-        list.Add(FromCommand("tempo.removeBeat", "Keybind_RemoveBeatAtPlayhead", tm, vm.RemoveBeatAtPlayheadCommand,
-            () => k.RemoveBeatAtPlayhead));
+        list.Add(FromCommand("tempo.insertBeat", "Keybind_InsertBeatAtPlayhead", tm, vm.InsertBeatAtPlayheadCommand, () => k.InsertBeatAtPlayhead));
+        list.Add(FromCommand("tempo.removeBeat", "Keybind_RemoveBeatAtPlayhead", tm, vm.RemoveBeatAtPlayheadCommand, () => k.RemoveBeatAtPlayhead));
+        list.Add(FromCommand("tempo.insertMeasures", "Menu_InsertMeasuresAtPlayhead", tm, vm.ShellDialogs.OpenInsertMeasuresAtPlayheadDialogCommand, () => k.InsertMeasuresAtPlayhead));
         list.Add(FromCommand("tempo.addSilenceAtEnd", "Menu_AddSilenceAtEnd", tm, vm.ShellDialogs.OpenAddSilenceAtEndDialogCommand));
         list.Add(FromCommand("tempo.setAllBpm", "Menu_SetAllBpm", tm, vm.ShellDialogs.OpenSetBpmDialogCommand));
         list.Add(FromCommand("tempo.alignBeatGrid", "Menu_AlignBeatGrid", tm, vm.ShellDialogs.OpenAlignBeatGridDialogCommand));
         list.Add(FromCommand("tempo.alignToRecording", "Menu_AlignToRecording", tm,
             vm.ShellDialogs.OpenAlignToRecordingDialogCommand));
+        list.Add(EstimateBpmCommand(vm, l, tm));
         list.Add(FromCommand("tempo.lockBeatMap", "Menu_LockBeatMap", tm, vm.ToggleBeatMapLockCommand));
 
         // === Arrangements ===
@@ -218,13 +219,17 @@ public static class CommandCatalog
 
         // === Tools ===
         const string to = "Menu_Tools";
-        list.Add(FromCommand("tools.generateFhp", "Menu_GenerateFhp", to, vm.GenerateFhpCommand));
+        list.Add(FromCommand("tools.generateFhp", "Menu_GenerateFhp", to, vm.FhpGeneration.GenerateFhpCommand));
         list.Add(FromCommand("tools.linkedMeasures", "Menu_LinkedMeasures", to, vm.ShellDialogs.OpenLinkGroupsCommand));
         list.Add(FromCommand("tools.generateFhpForSelection", "Menu_GenerateFhpForSelection", to,
-            vm.GenerateFhpForSelectionCommand));
-        list.Add(FromAction("tools.editFhp", "Keybind_EditFhp", to, () => vm.ShellDialogs.OpenFhp(), () => k.EditFhp));
+            vm.FhpGeneration.GenerateFhpForSelectionCommand, () => k.GenerateFhp));
+        list.Add(FromAction("tools.editFhp", "Keybind_EditFhp", to, () => vm.ShellDialogs.EditFhpAtPlayheadInPlace(), () => k.EditFhp));
+        list.Add(FromCommand("tools.saveAndNextFingering", "Keybind_SaveAndNextFingering", to,
+            vm.Inspector.GripInspector.SaveAndNextFingeringCommand, () => k.SaveAndNextFingering));
         list.Add(FromCommand("tools.generateHandShape", "Keybind_GenerateHandShape", to, vm.GenerateHandShapeCommand,
             () => k.GenerateHandShape));
+        list.Add(FromCommand("tools.handShapesFromLetRing", "Menu_HandShapesFromLetRing", to,
+            vm.HandShapesFromLetRingCommand));
         list.Add(FromCommand("tools.generateArpeggio", "Keybind_GenerateArpeggio", to, vm.GenerateArpeggioCommand,
             () => k.GenerateArpeggio));
         list.Add(FromCommand("tools.generateHandShapesArrangement", "Menu_GenerateHandShapesArrangement", to,
@@ -254,9 +259,9 @@ public static class CommandCatalog
         list.Add(FromCommand("tools.phraseCatalogPasteByName", "Keybind_PhraseCatalogPasteByName", to,
             vm.FocusPhraseCatalogSearchCommand, () => k.PhraseCatalogPasteByName));
         list.Add(FromCommand("tools.mergeNotesIntoChord", "Menu_MergeNotesIntoChord", to,
-            vm.MergeNotesIntoChordCommand));
+            vm.MergeNotesIntoChordCommand, () => k.MergeNotesIntoChord));
         list.Add(FromCommand("tools.splitChordsIntoNotes", "Menu_SplitChordsIntoNotes", to,
-            vm.SplitChordsIntoNotesCommand));
+            vm.SplitChordsIntoNotesCommand, () => k.SplitChordsIntoNotes));
         list.Add(FromCommand("tools.toggleOctaveFingering", "Menu_ToggleOctaveFingering", to,
             vm.ToggleOctaveFingeringCommand));
         list.Add(FromCommand("tools.togglePowerChordFingering", "Menu_TogglePowerChordFingering", to,
@@ -280,23 +285,23 @@ public static class CommandCatalog
         list.Add(FromCommand("tools.pedalboard", "Menu_Pedalboard", to, vm.ToneRig.OpenPedalboardCommand));
         list.Add(FromCommand("tools.generateRocksmithTones", "Menu_GenerateRocksmithTones", to,
             vm.ToneRig.GenerateRocksmithTonesCommand));
-        // Tools ▸ Fix & clean up: the AI chart pass, on the selection or the whole arrangement.
+        list.Add(FromCommand("tools.aiChat", "Menu_PanelAiChat", to, vm.ShowAiChatCommand));
         if (vm.ShellDialogs.AiChart is { } ai)
         {
-            list.Add(FromCommand("tools.aiFixFhpFingering", "Menu_AiFixFhpFingering", to, ai.FixFhpAndFingeringCommand));
-            list.Add(FromCommand("tools.aiFixFhpOnly", "Menu_AiFixFhpOnly", to, ai.FixFhpOnlyCommand));
-            list.Add(FromCommand("tools.aiFixFingeringOnly", "Menu_AiFixFingeringOnly", to, ai.FixFingeringOnlyCommand));
-            list.Add(FromCommand("tools.aiFixChordNames", "Menu_AiFixChordNames", to, ai.FixChordNamesCommand));
-            list.Add(FromCommand("tools.aiFixChordNamesMusical", "Menu_AiFixChordNamesMusical", to,
-                ai.FixChordNamesMusicalCommand));
+            list.Add(FromAction("tools.aiFixFhpFingering", "Menu_AiFixFhpFingering", to, () => _ = ai.FixFhpAndFingeringAsync()));
+            list.Add(FromAction("tools.aiFixFhpOnly", "Menu_AiFixFhpOnly", to, () => _ = ai.FixFhpOnlyAsync()));
+            list.Add(FromAction("tools.aiFixFingeringOnly", "Menu_AiFixFingeringOnly", to, () => _ = ai.FixFingeringOnlyAsync()));
+            list.Add(FromAction("tools.aiFixChordNames", "Menu_AiFixChordNames", to, () => _ = ai.FixChordNamesAsync()));
+            list.Add(FromAction("tools.aiFixChordNamesMusical", "Menu_AiFixChordNamesMusical", to, () => _ = ai.FixChordNamesMusicalAsync()));
             list.Add(FromCommand("tools.aiSettings", "Menu_AiSettings", to, ai.OpenAiSettingsCommand));
         }
         list.Add(FromCommand("tools.showlights", "Menu_ShowlightsEditor", to, vm.ShellDialogs.OpenShowlightsCommand));
         list.Add(FromCommand("tools.applyDlcBuilderFixes", "Timeline_Ctx_ApplyDlcBuilderFixes", to, vm.ApplyDlcBuilderFixesCommand));
-        list.Add(FromCommand("tools.improveChart", "Menu_ImproveChart", to, vm.ImproveChartCommand));
+        list.Add(FromCommand("tools.fixChart", "Menu_FixChart", to, vm.ShellDialogs.FixChartCommand, () => k.FixChart));
+        list.Add(FromCommand("tools.improveChart", "Menu_ImproveChart", to, vm.ShellDialogs.ImproveChartCommand));
         list.Add(FromCommand("tools.removeDoubleStopNames", "Menu_RemoveDoubleStopNames", to,
             vm.RemoveDoubleStopChordNamesCommand));
-        list.Add(FromCommand("tools.autoFixChart", "Menu_AutoFixChart", to, vm.AutoFixChartCommand));
+        list.Add(FromCommand("tools.autoFixChart", "Menu_AutoFixChart", to, vm.ShellDialogs.AutoFixChartCommand));
         list.Add(FromCommand("tools.squashLevels", "Menu_SquashLevels", to, vm.SquashLevelsCommand));
         list.Add(FromCommand("tools.generateLevels", "Menu_GenerateLevels", to,
             vm.ShellDialogs.OpenLevelGenerationCommand));
@@ -327,47 +332,7 @@ public static class CommandCatalog
         // Per-string ("independent") toggles and their "group" variants, which
         // set every targeted sound to the FIRST one's next value. They are two
         // different verbs (see SelectedNoteMutationCommands), so both are listed.
-        list.Add(FromAction("note.toggleHopo", "Keybind_ToggleHopo", nm,
-            highway.ToggleSelectedHopo, () => k.ToggleHopo));
-        list.Add(FromAction("note.toggleHopoGroup", "Keybind_ToggleHopoGroup", nm,
-            highway.ToggleSelectedHopoGroup, () => k.ToggleHopoGroup));
-        list.Add(FromAction("note.toggleHarmonic", "Keybind_ToggleHarmonic", nm,
-            highway.ToggleSelectedHarmonic, () => k.ToggleHarmonic));
-        list.Add(FromAction("note.toggleHarmonicGroup", "Keybind_ToggleHarmonicGroup", nm,
-            highway.ToggleSelectedHarmonicGroup, () => k.ToggleHarmonicGroup));
-        list.Add(FromAction("note.toggleMute", "Keybind_ToggleMute", nm,
-            highway.ToggleSelectedMute, () => k.ToggleMute));
-        list.Add(FromAction("note.toggleMuteGroup", "Keybind_ToggleMuteGroup", nm,
-            highway.ToggleSelectedMuteGroup, () => k.ToggleMuteGroup));
-        list.Add(FromAction("note.toggleLinkNext", "Keybind_ToggleLinkNext", nm,
-            highway.ToggleSelectedLinkNext, () => k.ToggleLinkNext));
-        list.Add(FromAction("note.toggleLinkNextGroup", "Keybind_ToggleLinkNextGroup", nm,
-            highway.ToggleSelectedLinkNextGroup, () => k.ToggleLinkNextGroup));
-        list.Add(FromAction("note.toggleVibrato", "Keybind_ToggleVibrato", nm,
-            highway.ToggleSelectedVibrato, () => k.ToggleVibrato));
-        list.Add(FromAction("note.toggleVibratoGroup", "Keybind_ToggleVibratoGroup", nm,
-            highway.ToggleSelectedVibratoGroup, () => k.ToggleVibratoGroup));
-        list.Add(FromAction("note.toggleTremolo", "Keybind_ToggleTremolo", nm,
-            highway.ToggleSelectedTremolo, () => k.ToggleTremolo));
-        list.Add(FromAction("note.toggleTremoloGroup", "Keybind_ToggleTremoloGroup", nm,
-            highway.ToggleSelectedTremoloGroup, () => k.ToggleTremoloGroup));
-        list.Add(FromAction("note.togglePicking", "Keybind_ToggleBassPicking", nm,
-            highway.ToggleSelectedPicking, () => k.TogglePicking));
-        list.Add(FromAction("note.togglePickingGroup", "Keybind_TogglePickingGroup", nm,
-            highway.ToggleSelectedPickingGroup, () => k.TogglePickingGroup));
-        list.Add(FromAction("note.toggleAccent", "Keybind_ToggleAccent", nm,
-            highway.ToggleSelectedAccent, () => k.ToggleAccent));
-        list.Add(FromAction("note.toggleAccentGroup", "Keybind_ToggleAccentGroup", nm,
-            highway.ToggleSelectedAccentGroup, () => k.ToggleAccentGroup));
-        list.Add(FromAction("note.toggleIgnore", "Keybind_ToggleIgnore", nm,
-            highway.ToggleSelectedIgnore, () => k.ToggleIgnore));
-        list.Add(FromAction("note.toggleIgnoreGroup", "Keybind_ToggleIgnoreGroup", nm,
-            highway.ToggleSelectedIgnoreGroup, () => k.ToggleIgnoreGroup));
-        list.Add(FromAction("note.togglePassOtherNotes", "Keybind_TogglePassOtherNotes", nm,
-            highway.ToggleSelectedPassOtherNotes, () => k.TogglePassOtherNotes));
-        list.Add(FromAction("note.togglePassOtherNotesGroup", "Keybind_TogglePassOtherNotesGroup", nm,
-            highway.ToggleSelectedPassOtherNotesGroup, () => k.TogglePassOtherNotesGroup));
-
+        AddTechniqueToggles(list, vm, l, nm, k);
         // Fret and string. The octave shift is ONE command (a twelve-iteration
         // loop in the registrar would spend twelve history nodes).
         list.Add(FromAction("note.fretUp", "Keybind_MoveFretUp", nm,
@@ -378,6 +343,7 @@ public static class CommandCatalog
             () => highway.MoveSelectedFretByOctave(1), () => k.FretUpOctave));
         list.Add(FromAction("note.fretDownOctave", "Keybind_FretDownOctave", nm,
             () => highway.MoveSelectedFretByOctave(-1), () => k.FretDownOctave));
+        AddTimeNudges(list, vm, l, nm, k);
         list.Add(FromAction("note.stringUp", "Keybind_MoveStringUp", nm,
             // The ceiling is the ACTIVE ARRANGEMENT's lane count — the same answer
             // AppKeybindRegistrar gives the StringUp KEY, and it has to be, or the
@@ -403,18 +369,7 @@ public static class CommandCatalog
             () => k.StringDownSamePitch));
 
         // Chord-template fingering. Six verbs, all keyboard-only before this.
-        list.Add(FromAction("note.fingerNone", "Keybind_SetFingerNone", nm,
-            () => vm.Inspector.SetFingerOnSelectedStringsCommand.Execute(-1), () => k.SetFingerNone));
-        list.Add(FromAction("note.fingerThumb", "Keybind_SetFingerThumb", nm,
-            () => vm.Inspector.SetFingerOnSelectedStringsCommand.Execute(0), () => k.SetFingerThumb));
-        list.Add(FromAction("note.finger1", "Keybind_SetFinger1", nm,
-            () => vm.Inspector.SetFingerOnSelectedStringsCommand.Execute(1), () => k.SetFinger1));
-        list.Add(FromAction("note.finger2", "Keybind_SetFinger2", nm,
-            () => vm.Inspector.SetFingerOnSelectedStringsCommand.Execute(2), () => k.SetFinger2));
-        list.Add(FromAction("note.finger3", "Keybind_SetFinger3", nm,
-            () => vm.Inspector.SetFingerOnSelectedStringsCommand.Execute(3), () => k.SetFinger3));
-        list.Add(FromAction("note.finger4", "Keybind_SetFinger4", nm,
-            () => vm.Inspector.SetFingerOnSelectedStringsCommand.Execute(4), () => k.SetFinger4));
+        AddFingeringCommands(list, vm, l, nm, k);
 
         // The string-edit mask. Only CLEAR is listed: the nine per-string toggles
         // are a digit FAMILY (`StringMaskBase` + 1..9) whose verb needs an
@@ -439,11 +394,9 @@ public static class CommandCatalog
         list.Add(FromAction("edit.deleteRelated", "Keybind_DeleteRelated", ed,
             () => global.DeleteSelectedRelated(vm.ChartEditor.FocusArea), () => k.DeleteRelated));
         list.Add(FromCommand("edit.checkpoints", "Checkpoints_Menu", ed, vm.ShellDialogs.OpenCheckpointsCommand));
-        // Edit ▸ Bookmarks: ten menu rows with typed Int32 parameters, mirrored
-        // here the way the Open Recent rows are. The keybind digit family
-        // (BookmarkBase) is excluded from palette COVERAGE with a fair excuse
-        // for the KEYS — but the menu proves the verb works without an
-        // argument picker, and the palette carried no bookmark verb at all.
+        list.Add(FromCommand("edit.bookmarks", "Menu_Bookmarks", ed, vm.ShellDialogs.OpenBookmarksCommand));
+        // The ten digit toggles (typed Int32 parameters, as the Open Recent rows are): the BookmarkBase keys are
+        // excluded from palette COVERAGE, but the palette still carries the verb; the menu door is the dialog above.
         for (var slot = 0; slot <= 9; slot++)
         {
             var captured = slot;
@@ -456,14 +409,14 @@ public static class CommandCatalog
                 }));
         }
 
-        list.Add(FromAction("tools.doubleTime", "Keybind_DoubleTime", to,
-            global.ApplyDoubleTimeToSelection, () => k.DoubleTime));
-        list.Add(FromAction("tools.halfTime", "Keybind_HalfTime", to,
-            global.ApplyHalfTimeToSelection, () => k.HalfTime));
+        list.Add(FromCommand("tools.doubleTime", "Keybind_DoubleTime", to,
+            vm.SelectionEdits.DoubleTimeCommand, () => k.DoubleTime));
+        list.Add(FromCommand("tools.halfTime", "Keybind_HalfTime", to,
+            vm.SelectionEdits.HalfTimeCommand, () => k.HalfTime));
         list.Add(FromCommand("tools.stampSection", "Keybind_StampSection", to,
             vm.StampSectionCommand, () => k.StampSection));
 
-        // FHP anchor nudges (0.40). The dialog (`tools.editFhp`) was already here;
+        // FHP anchor nudges (0.40). The in-place editor is `tools.editFhp`;
         // the four keys that replaced 16 modal round trips in one session were not.
         list.Add(FromAction("tools.anchorFretUp", "Keybind_AnchorFretUp", to,
             () => NudgeAnchor(vm, 1, AnchorNudgeTarget.Fret), () => k.AnchorFretUp));
@@ -497,12 +450,104 @@ public static class CommandCatalog
         return ContestedFeatures.FilterPalette(list, c => c.Id, ContestedFeatures.Enabled, vm.Project.PackageFeatures);
     }
 
+    private static void AddFingeringCommands(List<AppCommand> list, MainWindowViewModel vm, ILocalizationService l,
+        string category, KeybindConfig k)
+    {
+        AppCommand FromAction(string id, string titleKey, Action run, Func<KeyChord> shortcut) =>
+            new(id, l[titleKey], l[category], run, shortcut);
+
+        list.Add(FromAction("note.fingerNone", "Keybind_SetFingerNone",
+            () => vm.Inspector.SetFingerOnSelectedStringsCommand.Execute(-1), () => k.SetFingerNone));
+        list.Add(FromAction("note.fingerThumb", "Keybind_SetFingerThumb",
+            () => vm.Inspector.SetFingerOnSelectedStringsCommand.Execute(0), () => k.SetFingerThumb));
+        list.Add(FromAction("note.finger1", "Keybind_SetFinger1",
+            () => vm.Inspector.SetFingerOnSelectedStringsCommand.Execute(1), () => k.SetFinger1));
+        list.Add(FromAction("note.finger2", "Keybind_SetFinger2",
+            () => vm.Inspector.SetFingerOnSelectedStringsCommand.Execute(2), () => k.SetFinger2));
+        list.Add(FromAction("note.finger3", "Keybind_SetFinger3",
+            () => vm.Inspector.SetFingerOnSelectedStringsCommand.Execute(3), () => k.SetFinger3));
+        list.Add(FromAction("note.finger4", "Keybind_SetFinger4",
+            () => vm.Inspector.SetFingerOnSelectedStringsCommand.Execute(4), () => k.SetFinger4));
+    }
+
+    /// <summary>
+    ///     Every technique toggle and its group form, through the shell's selection verbs: the same
+    ///     commands the keys and the Edit &gt; Technique menu run, so all three say what they did on
+    ///     the status rail.
+    /// </summary>
+    private static void AddTechniqueToggles(List<AppCommand> list, MainWindowViewModel vm, ILocalizationService l,
+        string category, KeybindConfig k)
+    {
+        AppCommand FromCommand(string id, string titleKey, ICommand command, Func<KeyChord> shortcut) =>
+            new(id, l[titleKey], l[category],
+                () => { if (command.CanExecute(null)) command.Execute(null); },
+                shortcut, () => command.CanExecute(null),
+                DotCharter.UI.Diagnostics.CommandIdResolver.Resolve(command, null, null));
+
+        list.Add(FromCommand("note.toggleHopo", "Keybind_ToggleHopo", vm.SelectionEdits.ToggleHopoCommand, () => k.ToggleHopo));
+        list.Add(FromCommand("note.toggleHopoGroup", "Keybind_ToggleHopoGroup", vm.SelectionEdits.ToggleHopoGroupCommand, () => k.ToggleHopoGroup));
+        list.Add(FromCommand("note.toggleHarmonic", "Keybind_ToggleHarmonic", vm.SelectionEdits.ToggleHarmonicCommand, () => k.ToggleHarmonic));
+        list.Add(FromCommand("note.toggleHarmonicGroup", "Keybind_ToggleHarmonicGroup", vm.SelectionEdits.ToggleHarmonicGroupCommand, () => k.ToggleHarmonicGroup));
+        list.Add(FromCommand("note.toggleMute", "Keybind_ToggleMute", vm.SelectionEdits.ToggleMuteTechniqueCommand, () => k.ToggleMute));
+        list.Add(FromCommand("note.toggleMuteGroup", "Keybind_ToggleMuteGroup", vm.SelectionEdits.ToggleMuteGroupCommand, () => k.ToggleMuteGroup));
+        list.Add(FromCommand("note.toggleLinkNext", "Keybind_ToggleLinkNext", vm.SelectionEdits.ToggleLinkNextCommand, () => k.ToggleLinkNext));
+        list.Add(FromCommand("note.toggleLinkNextGroup", "Keybind_ToggleLinkNextGroup", vm.SelectionEdits.ToggleLinkNextGroupCommand, () => k.ToggleLinkNextGroup));
+        list.Add(FromCommand("note.toggleVibrato", "Keybind_ToggleVibrato", vm.SelectionEdits.ToggleVibratoCommand, () => k.ToggleVibrato));
+        list.Add(FromCommand("note.toggleVibratoGroup", "Keybind_ToggleVibratoGroup", vm.SelectionEdits.ToggleVibratoGroupCommand, () => k.ToggleVibratoGroup));
+        list.Add(FromCommand("note.toggleTremolo", "Keybind_ToggleTremolo", vm.SelectionEdits.ToggleTremoloCommand, () => k.ToggleTremolo));
+        list.Add(FromCommand("note.pickSlide", "Keybind_PickSlide", vm.SelectionEdits.PickSlideCommand, () => k.PickSlide));
+        list.Add(FromCommand("note.toggleTremoloGroup", "Keybind_ToggleTremoloGroup", vm.SelectionEdits.ToggleTremoloGroupCommand, () => k.ToggleTremoloGroup));
+        list.Add(FromCommand("note.togglePicking", "Keybind_ToggleBassPicking", vm.SelectionEdits.TogglePickingCommand, () => k.TogglePicking));
+        list.Add(FromCommand("note.togglePickingGroup", "Keybind_TogglePickingGroup", vm.SelectionEdits.TogglePickingGroupCommand, () => k.TogglePickingGroup));
+        list.Add(FromCommand("note.toggleAccent", "Keybind_ToggleAccent", vm.SelectionEdits.ToggleAccentCommand, () => k.ToggleAccent));
+        list.Add(FromCommand("note.toggleAccentGroup", "Keybind_ToggleAccentGroup", vm.SelectionEdits.ToggleAccentGroupCommand, () => k.ToggleAccentGroup));
+        list.Add(FromCommand("note.toggleIgnore", "Keybind_ToggleIgnore", vm.SelectionEdits.ToggleIgnoreCommand, () => k.ToggleIgnore));
+        list.Add(FromCommand("note.toggleIgnoreGroup", "Keybind_ToggleIgnoreGroup", vm.SelectionEdits.ToggleIgnoreGroupCommand, () => k.ToggleIgnoreGroup));
+        list.Add(FromCommand("note.togglePassOtherNotes", "Keybind_TogglePassOtherNotes", vm.SelectionEdits.TogglePassOtherNotesCommand, () => k.TogglePassOtherNotes));
+        list.Add(FromCommand("note.togglePassOtherNotesGroup", "Keybind_TogglePassOtherNotesGroup", vm.SelectionEdits.TogglePassOtherNotesGroupCommand, () => k.TogglePassOtherNotesGroup));
+    }
+
+    /// <summary>Edit &gt; Select &gt; Saved patterns, one palette row per pattern (read fresh, like the menu).</summary>
+    private static void AddSavedPatterns(List<AppCommand> list, MainWindowViewModel vm, ILocalizationService l,
+        string category)
+    {
+        vm.SelectionEdits.RefreshSavedPatterns();
+        for (var slot = 0; slot < vm.SelectionEdits.SavedPatterns.Count; slot++)
+        {
+            var captured = vm.SelectionEdits.SavedPatterns[slot];
+            list.Add(new AppCommand($"edit.selectPattern.{slot}",
+                l.Format("Palette_SelectPatternFmt", captured.Name), l[category],
+                () => captured.RunCommand.Execute(null)));
+        }
+    }
+
+    private static AppCommand EstimateBpmCommand(MainWindowViewModel vm, ILocalizationService l, string category) =>
+        new("tempo.estimateBpm", l["Menu_EstimateBpm"], l[category],
+            () => vm.ShellDialogs.OpenEstimateBpmDialogCommand.Execute(null),
+            canExecute: () => vm.ShellDialogs.EstimateBpmDisabledReason() == null,
+            disabledReason: vm.ShellDialogs.EstimateBpmDisabledReason);
+
     /// <summary>
     ///     View ▸ Timeline Rows — the ActiveRibbon flags, twins of the menu rows.
     ///     Titles are "Timeline Rows · X" from the keys the menu rows wear, so the
     ///     two surfaces cannot drift. The ribbon is read at CLICK time — it follows
     ///     the focused track and is null with no chart (then a no-op, like the menu).
     /// </summary>
+    private static void AddTimeNudges(List<AppCommand> list, MainWindowViewModel vm, ILocalizationService l,
+        string category, KeybindConfig k)
+    {
+        AppCommand Add(string id, string titleKey, int direction, int ms, Func<KeyChord> chord) =>
+            new(id, l[titleKey], l[category], () => vm.TimeNudge.Nudge(direction, ms), chord,
+                () => vm.TimeNudge.HasSelection, disabledReason: () => vm.TimeNudge.DisabledReason);
+
+        list.Add(Add("note.nudgeEarlier", "Keybind_NudgeEarlier", -1, 0, () => k.NudgeEarlier));
+        list.Add(Add("note.nudgeLater", "Keybind_NudgeLater", 1, 0, () => k.NudgeLater));
+        list.Add(Add("note.nudgeEarlier10Ms", "Keybind_NudgeEarlier10Ms", -1, 10, () => k.NudgeEarlier10Ms));
+        list.Add(Add("note.nudgeLater10Ms", "Keybind_NudgeLater10Ms", 1, 10, () => k.NudgeLater10Ms));
+        list.Add(Add("note.nudgeEarlier1Ms", "Keybind_NudgeEarlier1Ms", -1, 1, () => k.NudgeEarlier1Ms));
+        list.Add(Add("note.nudgeLater1Ms", "Keybind_NudgeLater1Ms", 1, 1, () => k.NudgeLater1Ms));
+    }
+
     private static void AddTimelineRowToggles(List<AppCommand> list, MainWindowViewModel vm, ILocalizationService l, string vw)
     {
         string RowTitle(string key) => $"{l["Timeline_Rows"]} · {l[key]}";

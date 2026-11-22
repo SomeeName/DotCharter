@@ -18,7 +18,7 @@ public sealed class CopyGrammarLintTests
     {
         "DotCharter", "Rocksmith", "YouTube", "Demucs", "Guitar", "Pro", "Editor", "Fire", "File", "Explorer",
         // The toolbar's panels, named as the toolbar names them.
-        "Mix", "Tools", "Tracks"
+        "Mix", "Tools", "Tracks", "Arrangements", "Practice"
     };
 
     [Fact]

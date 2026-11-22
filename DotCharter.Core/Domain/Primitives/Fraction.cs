@@ -48,9 +48,9 @@ public readonly struct Fraction : IComparable<Fraction>, IEquatable<Fraction>
     ///     </para>
     ///     <para>
     ///         Widening cannot itself overflow: numerators and denominators are
-    ///         ints, so every product fits a long with room to spare, and the one
-    ///         SUM (<c>operator+</c>) of two such products is bounded by
-    ///         <c>2 * (2^31-1)^2 &lt; long.MaxValue</c>.
+    ///         ints, so every product fits a long with room to spare, and the
+    ///         sum or difference of two cross products is bounded in magnitude by
+    ///         <c>2 * 2^31 * (2^31-1) &lt; long.MaxValue</c>.
     ///     </para>
     /// </summary>
     public Fraction(long numerator, long denominator)
@@ -99,26 +99,30 @@ public readonly struct Fraction : IComparable<Fraction>, IEquatable<Fraction>
     /// offending value.</summary>
     private static bool TryReduce(long numerator, long denominator, out long n, out long d)
     {
-        // long throughout: negating or Math.Abs-ing int.MinValue overflows.
-        // That threw OverflowException for a MinValue numerator and — worse —
-        // silently left a NEGATIVE denominator for a MinValue denominator,
-        // breaking the always-positive invariant every comparison depends on.
+        // The public constructor accepts longs, including long.MinValue.
+        // Normalize and reduce in a wider type before testing the int range.
         n = numerator;
         d = denominator;
-        if (d < 0)
+        var wideNumerator = (Int128)numerator;
+        var wideDenominator = (Int128)denominator;
+        if (wideDenominator < 0)
         {
-            n = -n;
-            d = -d;
+            wideNumerator = -wideNumerator;
+            wideDenominator = -wideDenominator;
         }
 
-        var gcd = GetGcd(Math.Abs(n), d);
-        n /= gcd;
-        d /= gcd;
+        var gcd = GetGcd(wideNumerator < 0 ? -wideNumerator : wideNumerator, wideDenominator);
+        wideNumerator /= gcd;
+        wideDenominator /= gcd;
+        if (wideNumerator < int.MinValue || wideNumerator > int.MaxValue || wideDenominator > int.MaxValue)
+            return false;
 
-        return n is >= int.MinValue and <= int.MaxValue && d <= int.MaxValue;
+        n = (long)wideNumerator;
+        d = (long)wideDenominator;
+        return true;
     }
 
-    private static long GetGcd(long a, long b)
+    private static Int128 GetGcd(Int128 a, Int128 b)
     {
         while (b != 0)
         {
@@ -164,7 +168,7 @@ public readonly struct Fraction : IComparable<Fraction>, IEquatable<Fraction>
     public int IntValue => Numerator / Denominator;
     public bool IsNegative => Numerator < 0;
 
-    public Fraction Negate() => new(-Numerator, Denominator);
+    public Fraction Negate() => new(-(long)Numerator, Denominator);
 
     public Fraction Absolute() => IsNegative ? Negate() : this;
 
@@ -182,7 +186,9 @@ public readonly struct Fraction : IComparable<Fraction>, IEquatable<Fraction>
 
     public static Fraction operator -(Fraction a, Fraction b)
     {
-        return a + b.Negate();
+        return new Fraction(
+            (long)a.Numerator * b.Denominator - (long)b.Numerator * a.Denominator,
+            (long)a.Denominator * b.Denominator);
     }
 
     public static Fraction operator *(Fraction a, Fraction b)

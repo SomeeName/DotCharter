@@ -131,7 +131,7 @@ public sealed class FrontDoorLastSessionReadTests : IDisposable
             IReadOnlyList<PhraseMasteryOutcome>? phraseOutcomes = null,
             IReadOnlyList<SectionResult>? sections = null,
             IReadOnlyList<TechniqueResult>? techniques = null,
-            double? chartDifficulty = null, bool failed = false)
+            double? chartDifficulty = null, bool failed = false, PracticeRunIdentity? run = null)
             => new();
 
         public void InvalidateCache() { }

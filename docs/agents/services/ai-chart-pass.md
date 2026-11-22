@@ -41,13 +41,13 @@ in the reason strings: re-measure (with #603's reasoning level) before changing 
 Tests: `Presentation/Editor/AiChatViewModelTests.TheFingeringTask_DefaultsTo…`,
 `AnExplicitPick_Wins_…`, `ANonFingeringTask_IsKept_…`.
 
-Verbs: Tools ▸ Fix & clean up ▸ *Fix FHP & fingering with AI* ▸ *Fingering only (FHP
-stays)* / *FHP and fingering together* / *FHP only (fingering follows)* (one submenu,
-because `MainMenuLocalizationTests` caps the Tools menu at 10 entries), *Fix chord
-names with AI (EOF style)* / *(musical)*, *AI settings…*. Palette: `tools.aiFixFhpFingering`,
-`tools.aiFixFhpOnly`, `tools.aiFixFingeringOnly`, `tools.aiFixChordNames`,
-`tools.aiFixChordNamesMusical`, `tools.aiSettings`. The submenu rows' short headers carry
-the whole verb as `AutomationProperties.Name`.
+Verbs (#497): Tools has ONE row, *AI chat* (opens the panel); the five fix verbs are tasks
+of the AI chat's Task picker (`AiChatJobText`), run through `AiChartPassRun.RunInstructionAsync`
+(`ChordNames` takes its `Style` there). *Generate tones with AI…* moved to Tools ▸ Tones. The
+palette ids of the removed rows stay and call `AiChatViewModel.StartJobAsync` through the
+one-line verbs of `AiChartViewModel`: `tools.aiFixFhpFingering`, `tools.aiFixFhpOnly`,
+`tools.aiFixFingeringOnly`, `tools.aiFixChordNames`, `tools.aiFixChordNamesMusical`; `tools.aiSettings`
+opens Settings from the panel's own button, `tools.aiChat` opens the panel.
 
 ## The pieces
 
@@ -92,7 +92,8 @@ the per-job rule pin in `AiChartRuleGateCoverageTests`), the five schemas in `Se
   is on the card (`AiChartReviewView.HandleKey`, a TUNNEL handler so a focused row
   does not take Enter as its own click and the editor's keybinds never see the
   keys): ↑ / ↓ move `AiChartReviewViewModel.CurrentRow` and go to it, A / R decide
-  it, Enter on a row applies. Pinned by `Perf/AiChartReviewSizesUiPerfSmokeTests`
+  it, P auditions a tone row's proposal (`AuditionCurrent`; Audition is no Tab stop,
+  like the toggles), Enter on a row applies. Pinned by `Perf/AiChartReviewSizesUiPerfSmokeTests`
   (rows, scrollbar, one-row footer — in the release's de-DE / ja-JP layout filter)
   and `Perf/AiChartReviewConstructionUiPerfSmokeTests` (click, keys).
 - **Nothing is written by the run.** `AiChartPassRun.RunAsync` ends by HOLDING the
@@ -115,8 +116,9 @@ the per-job rule pin in `AiChartRuleGateCoverageTests`), the five schemas in `Se
   history step. Pinned against the write by
   `AiChartReviewTests.The_marks_are_exactly_what_the_apply_changes`.
 - **The chart stays editable while a review is open.** A plan carries the chords
-  it changes, its `Guards` and its `SeenAnchors` (the hand positions the model was
-  shown in its span); one that no longer matches the live level is stale, dropped
+  it changes, its `Guards`, its `SeenAnchors` (the hand positions the model was
+  shown in its span) and, for the FHP jobs, its `SeenNotes` (the single notes in
+  the span, #598); one that no longer matches the live level is stale, dropped
   from the marks and the write alike.
 - **One retry, with the reason.** A chunk the reader, the validator or the rule
   gate rejects is asked ONCE more, in chunk order against the same scratch:

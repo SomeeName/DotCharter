@@ -122,6 +122,22 @@ public sealed class DcSongProjectOpenerTests : IDisposable
         Assert.Equal("the load's own error", _state.MainDisplayMessage);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AProjectOpenedDuringThePickerOrTheUnpack_KeepsTheWindow(bool duringUnpack)
+    {
+        var newer = Path.Combine(_dir, "Newer", "project.dcproj");
+        if (duringUnpack) _statusBar.OnBegin = _ => _state.CurrentProjectPath = newer;
+        else _storage.DuringFolderPicker = () => _state.CurrentProjectPath = newer;
+
+        await Opener(new FakeDecoder(available: true)).OpenAsync(BuildProjectPackage(_dir, lossless: false));
+
+        Assert.Equal(newer, _state.CurrentProjectPath);
+        Assert.Empty(_loaded);
+        Assert.Equal(1, _replacePrompts);
+    }
+
     private DcSongProjectOpener Opener(FakeDecoder decoder, bool adoptLoadedPath = true) =>
         new(new DcSongProjectUnpacker(new FakeAppLogger(), () => decoder), _storage, _config, _state,
             FakeLocalization.English(), new FakeAppLogger(), _statusBar,

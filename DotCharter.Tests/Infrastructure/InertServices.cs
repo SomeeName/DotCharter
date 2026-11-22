@@ -34,7 +34,8 @@ internal sealed class InertProjectSession : IProjectSessionService
     public Task<bool> AttachAudioAsync(string sourcePath) => Task.FromResult(false);
     public Task LoadSilentTransportAsync(double projectLengthMs) => Task.CompletedTask;
     public Task OpenProject() => Task.CompletedTask;
-    public Task<bool> SaveProjectAsync() => Task.FromResult(false);
+    public bool HasUnsavedWork() => IsProjectDirty;
+    public Task<bool> SaveProjectAsync(SaveInitiator initiator) => Task.FromResult(false);
     public Task<bool> SaveProjectAsAsync() => Task.FromResult(false);
     public IReadOnlyList<RecentProjectEntry> GetRecentProjects() => [];
     public void Dispose() { }
@@ -61,9 +62,10 @@ internal sealed class InertPsarcLibrary : ILibraryService
 internal sealed class InertLiveTakeStore : ILiveTakeStore
 {
     public bool IsEnabled => false;
-    public string TakesDirectory => Path.Combine(Path.GetTempPath(), "dotcharter-inert-takes");
+    public string TakesDirectory { get; } = Path.Combine(Path.GetTempPath(), "dotcharter-inert-takes-" + Guid.NewGuid().ToString("N"));
     public LiveTakeRecorder? TryStartTake(int sampleRate) => null;
     public Task<string?> FinalizeTakeAsync(LiveTakeRecorder recorder) => Task.FromResult<string?>(null);
+    public void CompleteTake(LiveTakeRecorder recorder) { }
     public Task CleanupAsync() => Task.CompletedTask;
 }
 
@@ -104,7 +106,7 @@ internal sealed class InertTone3000Auth : ITone3000AuthService
 /// <summary>An empty capture library that cannot download or import.</summary>
 internal sealed class InertNamCaptureLibrary : INamCaptureLibrary
 {
-    public string RootDirectory => Path.Combine(Path.GetTempPath(), "dotcharter-inert-nam");
+    public string RootDirectory { get; } = Path.Combine(Path.GetTempPath(), "dotcharter-inert-nam-" + Guid.NewGuid().ToString("N"));
 
     public event EventHandler? Changed { add { } remove { } }
 

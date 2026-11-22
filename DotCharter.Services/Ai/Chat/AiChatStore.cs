@@ -1,8 +1,9 @@
+
 namespace DotCharter.Services.Ai.Chat;
 
 /// <summary>
 ///     The synchronous file half of <see cref="AiChatHistory" />, for ONE chart:
-///     <c>&lt;project folder&gt;/ai-chats/&lt;chart id&gt;/&lt;conversation id&gt;.json</c>.
+///     <c>&lt;project folder&gt;/.dotcharter/ai-chats/&lt;chart id&gt;/&lt;conversation id&gt;.json</c>.
 ///     <para>
 ///         Every read checks the file's own <c>chartId</c> against the chart it
 ///         was asked for, so a conversation copied, moved or edited into another
@@ -40,7 +41,7 @@ internal sealed class AiChatStore
         if (chart is null) return AiChatStatus.NoChart;
         if (!ProjectIdentity.IsWellFormed(chart.ChartId)) return AiChatStatus.InvalidId;
         if (string.IsNullOrWhiteSpace(chart.ProjectFolder)) return AiChatStatus.ChartNotSaved;
-        store = new AiChatStore(chart.ChartId, Path.Combine(chart.ProjectFolder, FolderName, chart.ChartId));
+        store = new AiChatStore(chart.ChartId, Path.Combine(chart.ProjectFolder, ProjectFolderLayout.MetadataFolderName, FolderName, chart.ChartId));
         return AiChatStatus.Ok;
     }
 
@@ -145,6 +146,7 @@ internal sealed class AiChatStore
 
         try
         {
+            ProjectFolderLayout.MetadataDirectory(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(FolderPath)))!);
             Directory.CreateDirectory(FolderPath);
             AtomicFile.WriteAllBytes(path, bytes);
             return AiChatWriteResult.Ok;
@@ -155,16 +157,18 @@ internal sealed class AiChatStore
         }
     }
 
-    internal AiChatWriteResult Delete(string id)
+    internal AiChatWriteResult Delete(string id, Action<string>? recycle = null)
     {
         var status = Read(id, out _, out var detail);
         if (status != AiChatStatus.Ok) return new AiChatWriteResult(status, detail);
         try
         {
-            File.Delete(PathOf(id));
+            var path = PathOf(id);
+            (recycle ?? RecycleBin.Remove)(path);
+            if (File.Exists(path)) return new AiChatWriteResult(AiChatStatus.WriteFailed);
             return AiChatWriteResult.Ok;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
         {
             return new AiChatWriteResult(AiChatStatus.WriteFailed, ex.Message);
         }
@@ -203,7 +207,7 @@ internal sealed class AiChatStore
             $"{Path.GetFileNameWithoutExtension(path)}.corrupt-{DateTime.UtcNow:yyyyMMdd-HHmmssfff}{Extension}");
         try
         {
-            File.Move(path, aside, true);
+            AtomicFile.MoveAside(path, aside);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

@@ -43,5 +43,5 @@ if ($offending.Count -eq 0) { exit 0 }
     "  powershell -NoProfile -File tools/agent/Invoke-Gate.ps1                 # build + gate`n" +
     "  powershell -NoProfile -File tools/agent/Invoke-Gate.ps1 -Headless       # build + headless suite, own process`n" +
     "  powershell -NoProfile -File tools/agent/Invoke-Gate.ps1 -FilterClass '*SomeTests,*OtherTests'`n" +
-    "It prints pass/fail/skip counts and, on failure, the test name plus the first line of the message. Full logs land in `$env:TEMP\dotcharter-gate\.")
+    "It prints pass/fail/skip counts and, on failure, the test name plus the first line of the message. Full logs land in a per-run folder under `$env:TEMP\dotcharter-gate-<checkout>-<hash>\ (the run prints it).")
 exit 2

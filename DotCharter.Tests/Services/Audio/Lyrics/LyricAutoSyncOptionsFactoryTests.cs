@@ -46,7 +46,7 @@ public sealed class LyricAutoSyncOptionsFactoryTests
     public void TheInspectorsAutoSyncCallSite_BuildsItsOptionsFromTheAppConfig()
     {
         var source = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(
-            TestPaths.RepoRoot(), "DotCharter.UI", "ViewModels", "Editor", "LyricsInspectorViewModel.cs")));
+            TestPaths.RepoRoot(), "DotCharter.Services", "Editing", "Lyrics", "LyricAutoSyncRunner.cs")));
 
         Assert.Contains("LyricAutoSyncOptions.FromConfig(", source, StringComparison.Ordinal);
     }

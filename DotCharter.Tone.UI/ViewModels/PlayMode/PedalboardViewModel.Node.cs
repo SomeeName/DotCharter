@@ -71,7 +71,7 @@ public sealed partial class PedalNodeViewModel : ObservableObject
             pars.Select(p =>
             {
                 var value = node.Values.TryGetValue(p.Id, out var v) ? v : p.Default;
-                return new PedalParamViewModel(_dsp, NodeId, p, value);
+                return new PedalParamViewModel(_dsp, NodeId, p, value, _loc);
             }));
         if (ModuleTypeId == "delay" && Params.FirstOrDefault(p => p.Id == "sync") is { } sync &&
             Params.FirstOrDefault(p => p.Id == "timeMs") is { } manualTime)
@@ -167,9 +167,9 @@ public sealed partial class PedalNodeViewModel : ObservableObject
         var byRole = pars.Where(p => p.HasValueLabels)
             .ToLookup(p => RigParamRoles.RoleOf(ModuleTypeId, p.Id));
         TransportParams = byRole[RigParamRole.Transport]
-            .Select(p => new PedalTransportParamViewModel(_dsp, NodeId, p)).ToList();
+            .Select(p => new PedalTransportParamViewModel(_dsp, NodeId, p, _loc)).ToList();
         MomentaryParams = byRole[RigParamRole.Momentary]
-            .Select(p => new PedalMomentaryParamViewModel(_dsp, NodeId, p)).ToList();
+            .Select(p => new PedalMomentaryParamViewModel(_dsp, NodeId, p, _loc)).ToList();
         var choiceIds = byRole[RigParamRole.Choice].Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
 
         var labelled = Params.Where(p => p.HasValueLabels && choiceIds.Contains(p.Id)).ToList();
@@ -436,6 +436,13 @@ public sealed partial class PedalNodeViewModel : ObservableObject
         {
             Branch = node.Branch;
             OnPropertyChanged(nameof(Branch));
+        }
+
+        if (_sidechain != node.Sidechain)
+        {
+            _sidechain = node.Sidechain;
+            OnPropertyChanged(nameof(SidechainSource));
+            OnPropertyChanged(nameof(SelectedSidechainOption));
         }
 
         foreach (var p in Params)
@@ -916,7 +923,7 @@ public sealed partial class PedalNodeViewModel : ObservableObject
             var i = ids.IndexOf(p.Id);
             if (i < 0) continue;
             var used = i < names.Count;
-            p.DisplayName = used ? names[i] : "Knob " + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            p.Rename(used ? names[i] : "Knob " + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
             p.IsControlActive = used;
             p.InactiveHint = available ? null : needsInstallHint;
         }
@@ -931,8 +938,8 @@ public sealed partial class PedalNodeViewModel : ObservableObject
 ///         managed copy of it — its numbers are ABI and are persisted, so a
 ///         second vocabulary here would be a drift the engine reports as a
 ///         rejected key. The LABEL is localized, because "Song mix" is a
-///         sentence for a player and not an engine proper noun (unlike a value
-///         label, which comes off the ABI and is never duplicated into resx).
+///         sentence for a player and not an engine proper noun (like a parameter
+///         caption, translated at presentation while native identities stay intact).
 ///     </para>
 /// </summary>
 public sealed class RigSidechainOption

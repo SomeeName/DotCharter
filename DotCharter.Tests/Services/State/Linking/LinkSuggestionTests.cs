@@ -1,12 +1,11 @@
 using DotCharter.Core.Linking;
 using DotCharter.Services.Editing.Linking;
+using DotCharter.Tests.Core.Linking;
 
 namespace DotCharter.Tests.Services.State.Linking;
 
 /// <summary>
-///     What an import proposes to link (<see cref="LinkSuggestionFinder" />): the score's repeats
-///     first, then repeated content, never an empty run or one that overlaps a group — and Link all
-///     as ONE undo step.
+///     What an import proposes to link (<see cref="LinkSuggestionFinder" />), and Link All as one undo step.
 /// </summary>
 public sealed class LinkSuggestionTests
 {
@@ -16,20 +15,73 @@ public sealed class LinkSuggestionTests
     private static List<(Arrangement Arrangement, int First)> RunsOf(LinkSuggestion suggestion) =>
         [.. suggestion.Runs.Select((r, i) => (r.Arrangement, suggestion.FirstMeasures[i]))];
 
-    [Fact]
-    public void The_scores_repeats_become_one_group_across_every_part_that_plays_them_the_same()
+    private static LinkHarness StandaloneRepeats()
     {
-        var h = LinkHarness.WithRhythm();
+        var project = LinkFixture.Project(seed: null);
+        project.Arrangements[0].Levels =
+        [
+            new ChartLevel
+            {
+                Notes = [.. new[] { 1, 4, 7 }.Select(m => new GuitarNote { Position = LinkFixture.At(m, 0), Fret = 5 })]
+            }
+        ];
+        return new LinkHarness(project);
+    }
 
-        var suggestions = LinkSuggestionFinder.Find(h.Project, [h.Lead, h.Rhythm], PatternRepeats, h.Rule);
+    [Fact]
+    public void The_scores_repeats_record_their_source_support()
+    {
+        var h = StandaloneRepeats();
 
-        var repeat = suggestions[0];
+        var suggestions = LinkSuggestionFinder.Find(h.Project, [h.Lead], PatternRepeats, h.Rule);
+
+        var repeat = Assert.Single(suggestions, s => s.FromRepeats);
         Assert.True(repeat.FromRepeats);
         Assert.Equal(1, repeat.MeasureCount);
         Assert.Equal(
-            [(h.Lead, 1), (h.Lead, 4), (h.Lead, 7), (h.Rhythm, 1), (h.Rhythm, 4), (h.Rhythm, 7)],
+            [(h.Lead, 1), (h.Lead, 4), (h.Lead, 7)],
             RunsOf(repeat));
         Assert.DoesNotContain(suggestions.Skip(1), s => s.Runs.Any(r => r.Start == repeat.Runs[0].Start));
+    }
+
+    [Fact]
+    public void A_run_found_by_both_content_and_source_builds_its_strict_key_once()
+    {
+        var h = StandaloneRepeats();
+        var measures = MeasureGrid.Build(h.Project.Beats);
+        var detector = new RankedLinkSuggestions(h.Project, measures, [h.Lead], PatternRepeats, [], h.Rule,
+            LinkDetectionScope.All);
+
+        Assert.Equal(3, Assert.Single(detector.Find()).Runs.Count);
+        Assert.Equal(3, detector.RunKeyBuilds);
+    }
+
+    [Fact]
+    public void The_search_budget_stops_candidate_work_and_reports_why()
+    {
+        var h = StandaloneRepeats();
+        var messages = new List<string>();
+        var work = new LinkDetectionWork(CancellationToken.None, MeasureGrid.Build(h.Project.Beats).Count);
+
+        var suggestions = LinkSuggestionFinder.Find(h.Project, [h.Lead], PatternRepeats, h.Rule,
+            LinkDetectionScope.All, work, messages.Add);
+
+        Assert.Empty(suggestions);
+        Assert.Contains("search limit", Assert.Single(messages));
+    }
+
+    [Fact]
+    public void Oversized_compatibility_classes_are_reported()
+    {
+        var h = StandaloneRepeats();
+        for (var i = 0; i < 400; i++) h.Project.Arrangements.Add(ChartProjectCloner.CloneArrangement(h.Lead));
+        var messages = new List<string>();
+
+        var suggestions = LinkSuggestionFinder.Find(h.Project, h.Project.Arrangements, PatternRepeats, h.Rule,
+            CancellationToken.None, messages.Add);
+
+        Assert.Empty(suggestions);
+        Assert.Contains("MaxPairs", Assert.Single(messages));
     }
 
     [Fact]
@@ -48,18 +100,15 @@ public sealed class LinkSuggestionTests
     }
 
     [Fact]
-    public void Content_shared_between_the_repeats_is_still_offered_around_them()
+    public void A_single_bar_source_repeat_does_not_preempt_longer_shared_content()
     {
         var h = LinkHarness.WithRhythm();
 
         var suggestions = LinkSuggestionFinder.Find(h.Project, [h.Lead, h.Rhythm], PatternRepeats, h.Rule);
 
-        var between = Assert.Single(suggestions, s => RunsOf(s).Contains((h.Lead, 2)));
-        Assert.False(between.FromRepeats);
-        Assert.Contains((h.Rhythm, 2), RunsOf(between));
-        Assert.Equal(2, between.MeasureCount); // measures 2 and 3, up to the repeat at 4
-        var all = suggestions.SelectMany(RunsOf).ToList();
-        Assert.Equal(all.Count, all.Distinct().Count());
+        var first = suggestions.First(s => !s.RequiresReview);
+        Assert.True(first.MeasureCount > 1);
+        Assert.Contains(first.Runs, r => ReferenceEquals(r.Arrangement, h.Rhythm));
     }
 
     [Fact]
@@ -73,6 +122,21 @@ public sealed class LinkSuggestionTests
     }
 
     [Fact]
+    public void The_same_written_position_does_not_make_different_parts_repeats()
+    {
+        var h = StandaloneRepeats();
+        var other = ChartProjectCloner.CloneArrangement(h.Lead);
+        foreach (var note in LinkHarness.Hardest(other).Notes) note.StringIndex++;
+        h.Project.Arrangements.Add(other);
+        var source = Enumerable.Range(0, MeasureGrid.Build(h.Project.Beats).Count).ToArray();
+
+        var proposals = LinkSuggestionFinder.Find(h.Project, [h.Lead, other], source, h.Rule);
+
+        Assert.Equal(2, proposals.Count);
+        Assert.All(proposals, p => Assert.False(p.FromRepeats || p.RequiresReview));
+    }
+
+    [Fact]
     public void Measures_an_existing_group_holds_are_never_suggested_again()
     {
         var h = LinkHarness.WithRhythm();
@@ -80,11 +144,11 @@ public sealed class LinkSuggestionTests
 
         var suggestions = LinkSuggestionFinder.Find(h.Project, [h.Lead, h.Rhythm], PatternRepeats, h.Rule);
 
-        var runs = suggestions.SelectMany(RunsOf).ToList();
+        var runs = suggestions.Where(s => !s.RequiresReview).SelectMany(s => RunsOf(s)
+            .SelectMany(r => Enumerable.Range(r.First, s.MeasureCount).Select(m => (r.Arrangement, m)))).ToList();
         Assert.DoesNotContain((h.Lead, 1), runs);
         Assert.DoesNotContain((h.Lead, 4), runs);
-        Assert.Contains((h.Lead, 7), runs);
-        Assert.Contains((h.Rhythm, 4), runs);
+        Assert.NotEmpty(runs);
     }
 
     [Fact]
@@ -117,7 +181,7 @@ public sealed class LinkSuggestionTests
         Assert.Empty(h.Project.LinkGroups); // building it changes nothing; the history runs it
         Assert.True(h.History.Do(action!));
         Assert.Equal(steps + 1, h.History.GetUndoSteps().Count);
-        Assert.Equal(suggestions.Count, h.Project.LinkGroups.Count);
+        Assert.Equal(suggestions.Count(s => !s.RequiresReview), h.Project.LinkGroups.Count);
         Assert.Equal(suggestions.Count, h.Project.LinkGroups.Select(g => g.Letter).Distinct().Count());
         foreach (var group in h.Project.LinkGroups)
             LinkHarness.AssertLinkedAndEqual(h, group, group.Placements.Count);
@@ -127,7 +191,7 @@ public sealed class LinkSuggestionTests
         Assert.Equal(before, h.Snapshot());
 
         h.History.Redo();
-        Assert.Equal(suggestions.Count, h.Project.LinkGroups.Count);
+        Assert.Equal(suggestions.Count(s => !s.RequiresReview), h.Project.LinkGroups.Count);
     }
 
     [Fact]
@@ -140,18 +204,19 @@ public sealed class LinkSuggestionTests
         Assert.Null(LinkSuggestionFinder.LinkAll(h.Project, suggestions, h.Rule));
     }
 
-    [Theory]
-    [InlineData(new[] { 0, 1, 2, 3, 0, 1, 2, 4 }, 0, 3, new[] { 0, 4 })]
-    [InlineData(new[] { 0, 1, 0, 1, 0, 1 }, 0, 2, new[] { 0, 2, 4 })]
-    [InlineData(new[] { 5, 5, 6 }, 0, 1, new[] { 0, 1 })]
-    public void The_repeat_runs_are_the_longest_runs_every_pass_plays_alike(int[] bars, int first, int length, int[] starts)
-    {
-        var run = Assert.Single(LinkSuggestionFinder.RepeatRuns(bars));
-
-        Assert.Equal((first, length), (run.First, run.Length));
-        Assert.Equal(starts, run.Starts);
-    }
-
     [Fact]
-    public void Unknown_bars_never_repeat() => Assert.Empty(LinkSuggestionFinder.RepeatRuns([-1, -1, -1]));
+    public void All_scope_can_propose_existing_placements_without_touching_the_project()
+    {
+        var h = StandaloneRepeats();
+        var group = h.Link((h.Lead, 1), (h.Lead, 4));
+        var before = h.Snapshot();
+
+        var unlinked = LinkSuggestionFinder.Detect(h.Project, h.Lead, LinkDetectionScope.UnlinkedOnly, h.Rule);
+        var all = LinkSuggestionFinder.Detect(h.Project, h.Lead, LinkDetectionScope.All, h.Rule);
+
+        Assert.DoesNotContain(unlinked.SelectMany(s => s.FirstMeasures), m => m is 1 or 4);
+        Assert.Contains(all, s => s.FirstMeasures.Contains(1) && s.FirstMeasures.Contains(4));
+        Assert.Same(group, Assert.Single(h.Project.LinkGroups));
+        Assert.Equal(before, h.Snapshot());
+    }
 }

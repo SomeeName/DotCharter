@@ -10,7 +10,10 @@ internal sealed class RsPackageMetadata
     public required string DlcKey { get; init; }
 
     public required string Title { get; init; }
-    public string TitleSort => SortValue(Title);
+    /// <summary>The song's own title sort name (<c>ChartData.TitleSort</c>); empty derives it.</summary>
+    public string TitleSortOverride { get; init; } = "";
+
+    public string TitleSort => string.IsNullOrWhiteSpace(TitleSortOverride) ? SortValue(Title) : TitleSortOverride.Trim();
     public required string Artist { get; init; }
 
     /// <summary>The AUTHORED sort name, when the chart has one
@@ -23,7 +26,10 @@ internal sealed class RsPackageMetadata
         ? SortValue(Artist)
         : ArtistSortOverride.Trim();
     public string Album { get; init; } = "";
-    public string AlbumSort => SortValue(Album);
+    /// <summary>The album's own sort name (<c>ChartData.AlbumSort</c>); empty derives it.</summary>
+    public string AlbumSortOverride { get; init; } = "";
+
+    public string AlbumSort => string.IsNullOrWhiteSpace(AlbumSortOverride) ? SortValue(Album) : AlbumSortOverride.Trim();
 
     /// <summary>Title / artist in their original script. Emitted as the
     /// manifest's <c>JapaneseSongName</c> / <c>JapaneseArtistName</c> only when
@@ -73,6 +79,7 @@ internal sealed class RsPackageArrangement
     public int MasterId { get; init; }
 
     public required RocksmithSng Sng { get; init; }
+
 
     /// <summary>Null for vocals arrangements.</summary>
     public SngNoteCounts? NoteCounts { get; init; }

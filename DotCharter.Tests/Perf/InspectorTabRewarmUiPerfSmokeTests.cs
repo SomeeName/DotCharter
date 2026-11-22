@@ -52,7 +52,7 @@ public sealed class InspectorTabRewarmUiPerfSmokeTests
                 foreach (var tab in new Control[]
                          {
                              panels.OfType<MixerInspectorView>().Single(),
-                             panels.OfType<PhrasesInspectorView>().Single(),
+                             panels.OfType<SongInspectorView>().Single(),
                          })
                 {
                     // What a project switch does behind the hidden tab: content changes.

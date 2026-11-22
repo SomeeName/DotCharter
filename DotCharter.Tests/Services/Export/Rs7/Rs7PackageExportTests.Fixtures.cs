@@ -5,11 +5,9 @@ using DotCharter.Tone.Infrastructure.Storage;
 namespace DotCharter.Tests.Services.Export.Rs7;
 
 /// <summary>
-///     #736, #777: a 7-string guitar exports in the format the owner's <c>rs7string</c>
-///     mod plays — the bytes it relies on are checked one by one (the RS7X block
-///     included), the package comes back through the importer with every sound, tuning
-///     and extra-string technique intact, and the plain and encrypted containers both
-///     import. An 8-string guitar is refused until the mod plays one.
+///     Synthetic guitar charts for RS Extended Range package tests, with single
+///     notes, mixed chords and techniques on every string. The helper builds real
+///     packages while keeping the test audio and temporary output isolated.
 /// </summary>
 public sealed partial class Rs7PackageExportTests : IDisposable
 {

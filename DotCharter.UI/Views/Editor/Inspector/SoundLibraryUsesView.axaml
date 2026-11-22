@@ -1,0 +1,27 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspector="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
+             xmlns:panels="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundLibraryUsesView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Library page's USES card (#751 P5, design D): the picked template's frets, how many chords use it, and the
+         two ways to them: Select uses (every chord on this level on it) and Next use (the next one after the playhead). -->
+    <StackPanel x:Name="SoundLibraryUses" Spacing="{StaticResource SpaceXs}">
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowValue" Text="{Binding Library.SelectedFrets}" />
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody" Text="{Binding Library.UsesText}" IsVisible="{Binding Library.HasSelected}" />
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{localization:Loc Inspector_Library_PickOne}" IsVisible="{Binding !Library.HasSelected}"
+                   TextWrapping="Wrap" />
+        <WrapPanel ItemSpacing="{StaticResource SpaceXs}" LineSpacing="{StaticResource SpaceXs}">
+            <Button Grid.Column="0" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc Inspector_Library_SelectUses}" AutomationProperties.Name="{localization:Loc Inspector_Library_SelectUses}"
+                    Command="{Binding Library.SelectUsesCommand}" IsEnabled="{Binding Library.HasUses}" />
+            <Button Grid.Column="1" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc Inspector_Library_NextUse}" AutomationProperties.Name="{localization:Loc Inspector_Library_NextUse}"
+                    Command="{Binding Library.NextUseCommand}" IsEnabled="{Binding Library.HasUses}" />
+        </WrapPanel>
+    </StackPanel>
+</UserControl>

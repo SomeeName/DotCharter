@@ -44,11 +44,14 @@ public sealed class EditorToolLifetimeTests
 
         public event Action<Arrangement?>? FocusRequested { add { } remove { } }
         public event Action? ActionFailed { add { } remove { } }
+        public event Action<bool>? StepEnded { add { } remove { } }
         public event Action<IReadOnlyList<LinkPropagationReport>>? LinksPropagated { add { } remove { } }
         public bool OnlyHere(LinkPropagationReport report) => false;
+        public bool IsApplyingStep => false;
         public bool CanUndo => false;
         public bool CanRedo => false;
         public int CurrentNodeId => 0;
+        public int CurrentContentId => 0;
         public void Clear() { }
         public bool Do(IChartAction action) => false;
         public bool PushAction(IChartAction action) => false;
@@ -119,7 +122,7 @@ public sealed class EditorToolLifetimeTests
         using var provider = services.BuildServiceProvider();
         // Only _services is exercised here; the rest of the factory's graph is
         // not reachable from CreateToolScope.
-        var factory = new TimelineInteractionFactory(provider, null!, null!, history, null!, null!);
+        var factory = new TimelineInteractionFactory(provider, null!, null!, history, null!, null!, new DotCharter.UI.Controls.Layers.PinnedLabelHitRegistry());
 
         var scoped = ResolveThroughDisposedScopes(factory, 100);
         var rooted = ResolveFromRoot(provider);
@@ -162,6 +165,7 @@ public sealed class EditorToolLifetimeTests
     private sealed class ProbeTool : IEditorTool, IDisposable
     {
         public void Dispose() { }
+        public void Cancel(ToolContext context) { }
         public void OnPointerPressed(PointerPressedEventArgs e, ToolContext context) { }
         public void OnPointerMoved(PointerEventArgs e, ToolContext context) { }
         public void OnPointerReleased(PointerReleasedEventArgs e, ToolContext context) { }

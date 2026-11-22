@@ -82,6 +82,22 @@ public class StageLightsTests
     }
 
     [Fact]
+    public void Laser_only_showlights_are_visible_and_obey_the_beams_toggle()
+    {
+        var lights = new[] { Sl(500, ShowlightPalette.LasersOn), Sl(1000, ShowlightPalette.LasersOff) };
+        Assert.False(At(499, lights).Visible);
+        var on = At(500, lights);
+        Assert.True(on.Visible);
+        Assert.Equal(1f, on.Lasers);
+        Assert.Equal(StageLights.DefaultLaser, on.Laser);
+        Assert.Equal(0f, on.HazeLevel);
+        Assert.Equal(0f, on.BeamLevel);
+        Assert.False(At(500, lights, beams: false).Visible);
+        Assert.Equal(0.5f, At(1000 + StageLights.TransitionMs / 2, lights).Lasers);
+        Assert.Equal(0f, At(1000 + StageLights.TransitionMs, lights).Lasers);
+    }
+
+    [Fact]
     public void The_toggles_keep_working()
     {
         var lights = new[] { Sl(0, 24), Sl(0, 49), Sl(0, ShowlightPalette.LasersOn) };
@@ -123,7 +139,9 @@ public class StageLightsTests
     {
         var lights = new[] { Sl(0, 24), Sl(0, 49), Sl(0, ShowlightPalette.LasersOn), Sl(2000, 35) };
         var a = At(2050, lights);
-        Thread.Sleep(30);
+        // Evaluate other song times in between: the answer for 2050 must not depend on call order or history.
+        _ = At(0, lights);
+        _ = At(9000, lights);
         var b = At(2050, lights);
         Assert.Equal(a, b);
     }

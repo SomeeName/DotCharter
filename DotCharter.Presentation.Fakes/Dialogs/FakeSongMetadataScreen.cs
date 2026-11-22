@@ -18,6 +18,13 @@ public sealed partial class FakeSongMetadataScreen : FakeDialog<bool>, ISongMeta
     [ObservableProperty] private string _releaseDate;
     [ObservableProperty] private string _charter;
     [ObservableProperty] private string _genre;
+    [ObservableProperty] private bool _showJapaneseFields;
+    [ObservableProperty] private bool _showSortFields;
+    [ObservableProperty] private string _artistSort = "";
+    [ObservableProperty] private string _titleSort = "";
+    [ObservableProperty] private string _albumSort = "";
+    [ObservableProperty] private string _dlcKey = "";
+    [ObservableProperty] private string _version = "1";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(KeyAccidentalsLabel), nameof(KeySignatureLabel))]
@@ -27,15 +34,31 @@ public sealed partial class FakeSongMetadataScreen : FakeDialog<bool>, ISongMeta
     [NotifyPropertyChangedFor(nameof(KeyIsMajor), nameof(KeySignatureLabel))]
     private bool _keyIsMinor;
 
-    private FakeSongMetadataScreen(string[] fields, IReadOnlyList<string> genres, int accidentals, bool minor)
+    [ObservableProperty] private bool _keyLocked;
+
+    private FakeSongMetadataScreen(string[] fields, IReadOnlyList<string> genres, int accidentals, bool minor, bool sortFields = false)
     {
         (_artist, _songName, _japaneseArtist, _japaneseTitle, _albumName) =
             (fields[0], fields[1], fields[2], fields[3], fields[4]);
         (_albumYear, _releaseDate, _charter, _genre) = (fields[5], fields[6], fields[7], fields[8]);
         _keyAccidentals = accidentals;
         _keyIsMinor = minor;
+        _showJapaneseFields = _japaneseArtist.Length > 0 || _japaneseTitle.Length > 0;
+        _showSortFields = sortFields;
+        if (_artist.Length > 0)
+        {
+            (_artistSort, _titleSort, _albumSort, _dlcKey) = (_artist, _songName, _albumName, "DC" + _artist.Replace(" ", "") + "x1");
+        }
+
+        HasOriginalScriptOffer = _artist.Length > 0 && _japaneseArtist.Length > 0 && _artist == _japaneseArtist;
+        MoveToOriginalScriptCommand = new RelayCommand(() => { });
         GenreSuggestions = genres;
         PickGenreCommand = new RelayCommand<string>(g => Genre = g ?? Genre);
+        HasKeyEstimate = fields[0].Length > 0;
+        KeyEstimateLabel = HasKeyEstimate
+            ? $"Estimated from the notes: {SongMetadataViewModel.KeyName(accidentals, minor)} {(minor ? "minor" : "major")} (63%)"
+            : "Key unknown";
+        UseKeyEstimateCommand = new RelayCommand(() => KeyLocked = true);
         SaveCommand = Answer(true);
         CancelCommand = Answer(false);
     }
@@ -66,11 +89,17 @@ public sealed partial class FakeSongMetadataScreen : FakeDialog<bool>, ISongMeta
     /// <summary>Every field set, five genre picks, the widest key.</summary>
     public static FakeSongMetadataScreen Full() => new(
         ["Dream Theater", "Metropolis Pt. 1", "", "", "Images and Words", "1992", "1992-07-07", "alex", "Progressive metal"],
-        ["Progressive metal", "Rock", "Metal", "Djent", "Post-rock"], 7, false);
+        ["Progressive metal", "Rock", "Metal", "Djent", "Post-rock"], 7, false, sortFields: true);
 
     public IReadOnlyList<string> GenreSuggestions { get; }
 
     public bool HasGenreSuggestions => GenreSuggestions.Count > 0;
+
+    public string ToolVersion => "DotCharter v1.3.0";
+
+    public bool HasOriginalScriptOffer { get; }
+
+    public ICommand MoveToOriginalScriptCommand { get; }
 
     public ICommand PickGenreCommand { get; }
 
@@ -85,6 +114,12 @@ public sealed partial class FakeSongMetadataScreen : FakeDialog<bool>, ISongMeta
 
     public string KeySignatureLabel =>
         $"{SongMetadataViewModel.KeyName(KeyAccidentals, KeyIsMinor)} {(KeyIsMinor ? "minor" : "major")}";
+
+    public string KeyEstimateLabel { get; }
+
+    public bool HasKeyEstimate { get; }
+
+    public ICommand UseKeyEstimateCommand { get; }
 
     public ICommand SaveCommand { get; }
 

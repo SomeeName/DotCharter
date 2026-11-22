@@ -126,6 +126,19 @@ public sealed class RigMicSideView : FireDrawnControl
         if (_dragging) DragTo(e.GetPosition(this).X);
     }
 
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        _dragging = false;
+        Repaint();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _dragging = false;
+        base.OnDetachedFromVisualTree(e);
+    }
+
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);

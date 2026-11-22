@@ -15,6 +15,34 @@ public sealed class ClaudeCliRunnerTests
 {
     private static string Shell => Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
 
+    [Theory]
+    [InlineData(".cmd")]
+    [InlineData(".bat")]
+    public async Task NpmBatchShim_RunsThroughTheRealRunner(string extension)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows batch shim");
+        var directory = Directory.CreateTempSubdirectory("cli shim ");
+        try
+        {
+            var shim = Path.Combine(directory.FullName, "fake cli" + extension);
+            await File.WriteAllTextAsync(shim, "@echo off\r\necho shim:%~1\r\nmore\r\nexit /b 7\r\n", TestContext.Current.CancellationToken);
+            ClaudeCliOutcome? outcome = null;
+            var error = await Record.ExceptionAsync(async () => outcome = await new ClaudeCliRunner().RunAsync(
+                new ClaudeCliRequest(shim, ["two words"], "stdin payload", directory.FullName, TimeSpan.FromMinutes(2)),
+                TestContext.Current.CancellationToken));
+            Assert.Null(error);
+            Assert.NotNull(outcome);
+            Assert.Equal(7, outcome.ExitCode);
+            Assert.Contains("shim:two words", outcome.StandardOutput, StringComparison.Ordinal);
+            Assert.Contains("stdin payload", outcome.StandardOutput, StringComparison.Ordinal);
+            Assert.False(outcome.TimedOut);
+        }
+        finally
+        {
+            directory.Delete(true);
+        }
+    }
+
     [Fact]
     public async Task ItCapturesStdout_StdinAndTheExitCode()
     {
@@ -88,7 +116,7 @@ public sealed class ClaudeCliRunnerTests
         // A timeout comes BACK as an outcome the provider maps to a Network fault;
         // only the caller's own token throws. Conflating the two would make every
         // slow model look like a user pressing Cancel.
-        Assert.True(outcome.TimedOut);
+        Assert.True(outcome.TimedOut, outcome.ToRedactedLogLine());
         Assert.Equal(-1, outcome.ExitCode);
     }
 

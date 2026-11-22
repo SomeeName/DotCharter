@@ -32,6 +32,26 @@ public static class MatchPatternCatalog
     public const string SameHandJobId = "builtin.anchor.job";
     public const string SameHandPositionId = "builtin.anchor.fretwidth";
 
+    private const string BuiltInIdPrefix = "builtin.";
+
+    /// <summary>The resx key of a built-in pattern's display name, or null for a user pattern id.</summary>
+    public static string? NameKey(string id) =>
+        id.StartsWith(BuiltInIdPrefix, StringComparison.Ordinal)
+            ? "Pattern_Builtin_" + id[BuiltInIdPrefix.Length..].Replace('.', '_')
+            : null;
+
+    /// <summary>
+    ///     The name to SHOW: a built-in whose stored name is still the shipped English one
+    ///     reads from the resx (so it follows the UI language); a renamed one keeps the user's text.
+    /// </summary>
+    public static string DisplayName(MatchPattern pattern, DotCharter.Localization.ILocalizationService loc)
+    {
+        var key = NameKey(pattern.Id);
+        if (key is null) return pattern.Name;
+        var shipped = BuiltIns().FirstOrDefault(b => b.Id == pattern.Id);
+        return shipped is not null && shipped.Name == pattern.Name ? loc[key] : pattern.Name;
+    }
+
     public static IReadOnlyList<MatchPattern> BuiltIns() =>
     [
         // The shipped select-like answer for shapes, written out as data: the

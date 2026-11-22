@@ -74,12 +74,13 @@ public static class ShapeBulkEdits
         var group = Normalize(arrangement, templates);
         if (group.Count == 0) return ChordShapeEditPlan.Refused(ChordShapeEditRefusal.NotInArrangement);
 
+        var selected = new HashSet<ChordTemplate>(group, ReferenceEqualityComparer.Instance);
         var used = LevelTemplateOrphans.UsedTemplates(arrangement);
         var pairs = new List<(ChordTemplate Source, ChordTemplate Target)>();
         foreach (var source in group.Where(used.Contains))
         {
             var target = arrangement.ChordTemplates
-                .Where(t => !group.Contains(t) && ChordShapeCatalog.IsDuplicateOf(t, source))
+                .Where(t => !selected.Contains(t) && ChordShapeCatalog.IsDuplicateOf(t, source))
                 .OrderByDescending(t => UseCount(arrangement, t)).FirstOrDefault();
             if (target is null) return ChordShapeEditPlan.Refused(ChordShapeEditRefusal.NoMergeTarget);
             pairs.Add((source, target));

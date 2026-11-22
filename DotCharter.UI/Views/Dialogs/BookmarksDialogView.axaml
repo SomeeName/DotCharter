@@ -1,0 +1,68 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.BookmarksDialogView"
+             x:DataType="contracts:IBookmarksScreen"
+             x:CompileBindings="True">
+
+    <!-- Edit ▸ Bookmarks…: the ten slots and the time each holds. Grammar: Views/Dialogs/DialogStyles.axaml.
+         The footer's one Primary is Close, which takes focus on open. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconBookmark}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Bookmarks_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{Binding ShortcutHint}" />
+                    </StackPanel>
+                </Grid>
+
+                <Border Theme="{DynamicResource DlgListFrameBorder}" Grid.Row="1" Classes="DlgListFrame">
+                    <ItemsControl x:Name="SlotsList" ItemsSource="{Binding Slots}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="contracts:IBookmarkRow">
+                                <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                    <Grid ColumnDefinitions="32,*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+                                        <TextBlock Grid.Column="0" Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                   VerticalAlignment="Center" Text="{Binding Slot}" />
+                                        <TextBlock Grid.Column="1" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                   Text="{Binding TimeText}" />
+                                        <TextBlock Grid.Column="2" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                   VerticalAlignment="Center" MinWidth="72" Text="{Binding Chord}" />
+                                        <Button Grid.Column="3" Theme="{DynamicResource SecondaryButton}" Classes="Secondary" MinWidth="84"
+                                                HorizontalContentAlignment="Center" VerticalAlignment="Center"
+                                                Content="{localization:Loc Bookmarks_GoTo}"
+                                                Command="{Binding GoToCommand}" />
+                                        <Button Grid.Column="4" Theme="{DynamicResource SecondaryButton}" Classes="Secondary" MinWidth="84"
+                                                HorizontalContentAlignment="Center" VerticalAlignment="Center"
+                                                Content="{localization:Loc Bookmarks_SetHere}"
+                                                Command="{Binding SetCommand}" />
+                                        <Button Grid.Column="5" Theme="{DynamicResource SubtleButton}" Classes="Subtle Danger" MinWidth="72"
+                                                HorizontalContentAlignment="Center" VerticalAlignment="Center"
+                                                Content="{localization:Loc Bookmarks_Clear}"
+                                                Command="{Binding ClearCommand}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Close}"
+                                dlgv:FocusOnOpen.IsTarget="True"
+                                Command="{Binding CloseCommand}" IsCancel="True" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

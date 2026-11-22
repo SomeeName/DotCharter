@@ -325,14 +325,19 @@ public sealed class EvalRenderMathTests
 // and DCA_ENABLE_NULL_DEVICE is process-wide, so it must serialize with every other
 // class that does — the same rule RigDatasetRenderTests records.
 [Collection("NativeEngine")]
-public sealed class EvalRenderSmokeTests
+public sealed class EvalRenderSmokeTests : IDisposable
 {
     private const int Rate = 48_000;
     private const double Seconds = 1.0;
 
+    /// <summary>The null device for every engine a case opens, and the previous value
+    /// back when the case ends, skipped or failed included (#606).</summary>
+    private readonly NullDeviceEnvScope _nullDevice = NullDeviceEnvScope.Enable();
+
+    public void Dispose() => _nullDevice.Dispose();
+
     private static void SkipWithoutEngine()
     {
-        Environment.SetEnvironmentVariable("DCA_ENABLE_NULL_DEVICE", "1");
         try
         {
             using var probe = RenderCommand.OpenDevicelessEngine(Rate, requireNull: true);
@@ -474,7 +479,6 @@ public sealed class EvalRenderSmokeTests
             // match — the render arrives at LevelMatch's target, a clip off disk does
             // not until the command puts it there.
             Directory.CreateDirectory(Path.Combine(root, "clips"));
-            Environment.SetEnvironmentVariable("DCA_ENABLE_NULL_DEVICE", "1");
             using (var host = new NullDeviceRigHost())
             {
                 var renderer = new RigRenderer(host);

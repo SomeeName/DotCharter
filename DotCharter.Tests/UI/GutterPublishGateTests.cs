@@ -166,14 +166,14 @@ public sealed class GutterPublishGateTests
     }
 
     /// <summary>
-    ///     …and the names the gutter would print for the real artifact. Sharps,
-    ///     octave stripped, low string first.
+    ///     The real artifact lowers every string, so the gutter uses flats.
+    ///     It lists note letters without octaves, low string first.
     /// </summary>
     [Fact]
     public void TheRealCdlcTuning_NamesEveryLane()
     {
         Assert.Equal(
-            ["C#", "G#", "C#", "F#", "A#", "D#"],
+            ["Db", "Ab", "Db", "Gb", "Bb", "Eb"],
             TimelineGutterControl.StringNamesFor(Guitar(DropCSharp), 6));
     }
 

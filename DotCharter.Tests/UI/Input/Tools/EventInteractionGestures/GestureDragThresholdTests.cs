@@ -109,6 +109,7 @@ public sealed class GestureDragThresholdTests
     [InlineData("EventPointDragGesture.cs")]
     [InlineData("LyricDragGesture.cs")]
     [InlineData("BeatDragGesture.cs")]
+    [InlineData("ToneChangeDragGesture.cs")]
     public void EveryEventGesture_GatesItsMoveOnTheThreshold(string file)
     {
         var source = Read($"DotCharter.UI/Input/Tools/EventInteractionGestures/{file}")
@@ -127,13 +128,35 @@ public sealed class GestureDragThresholdTests
     public void TheEventTool_HandsEveryGestureThePressPosition()
     {
         var source = Read("DotCharter.UI/Input/Tools/EventInteractionTool.cs");
-        foreach (var gesture in new[] { "_beatDrag.Start(", "_eventPointDrag.Start(", "_lyricDrag.Start(" })
+        foreach (var gesture in new[] { "_beatDrag.Start(", "_eventPointDrag.Start(", "_lyricDrag.Start(", "_toneDrag.Start(" })
         {
             var start = source.IndexOf(gesture, StringComparison.Ordinal);
             Assert.True(start >= 0, $"{gesture} has moved — repoint this lint.");
             var call = source[start..source.IndexOf(';', start)];
             Assert.Contains("context.Position", call);
         }
+    }
+
+    /// <summary>Esc while a tool holds the pointer cancels the gesture (its live edit rolls back)
+    /// and leaves nothing armed: the handler is hooked at the press and unhooked when the gesture ends.</summary>
+    [Fact]
+    public void EscapeDuringAToolGesture_CancelsIt()
+    {
+        var source = Read("DotCharter.UI/Input/TimelineInteractionManager.cs").Replace("\r\n", "\n");
+        var key = Block(source, "private void OnToolKeyDown(");
+        Assert.Contains("Key.Escape", key);
+        Assert.Contains("EndToolGesture(cancel: true);", key);
+        Assert.Contains("e.Handled = true;", key);
+        Assert.Contains("AttachToolEscape();", Block(source, "private void OnPointerPressed("));
+        Assert.Contains("DetachToolEscape();", Block(source, "private void EndToolGesture("));
+    }
+
+    private static string Block(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"'{signature}' has moved or been renamed — repoint this lint.");
+        var end = source.IndexOf("\n    }\n", start, StringComparison.Ordinal);
+        return source[start..end];
     }
 
     private static string MethodBody(string source, string signature)

@@ -29,8 +29,8 @@ the point.
 | `Domain/Events/` | timeline markers: `BeatMarker`, `EventPoint` (phrases/sections + `Status`), `ToneChange`, `Showlight`, `Bookmark`, `ChartAnnotation`, `FretAnchor`, `FretHandMute` | `domain-model.md` |
 | `Domain/Vocals/` | `VocalTrack` → `LyricPhrase` → `LyricEvent` | `domain-model.md` |
 | `Domain/Validation/` | result types ONLY: `ArrangementIssue`, `ArrangementIssueType` (~60 codes), `ArrangementIssueSeverity`. The validation *service* is in `DotCharter.Services` | `guitar-and-tuning.md` § validation codes |
-| `Utilities/` — timing + graph | `TimelineMath`, `ITimedElement`, `ChartProjectCloner` + `ChartProjectRestorer`, `ChartProjectPositions`, `BulkObservableCollection<T>`, `ChartPositionLabel`, `BarCount` | `timeline-and-project.md` |
-| `Utilities/` — guitar + tuning | `FretboardMath`, `TuningUtilities`, `StandardOpenStrings` (the ONE open-string table, extra strings extend DOWN, up to 9 strings; a package spells 8 so a 9-string is refused on export), `StringColorSlots` (string → colour slot by identity: low E red on any guitar, extra low strings grey), `TuningNameResolver` + `ExtendedRangeTunings` (standard/drop names for 5/6-string bass and 7/8/9-string guitar, which rscharter's six-string `TuningType` table cannot name; written to a .rscp as CUSTOM + offsets and re-derived on load), `ArrangementInstrument` (bass PART vs path, the A220 octave), `TuningOffsetResolution`, `ChordNameSuggester` + `ChordNamingOptions` + `ChordKeyEstimator` (naming style and key), `ChordTemplateFingerSetter` (+ `LearnedChordFingerings`), `ShowlightCatalog`, `ChartDifficultyEstimator`, `ArrangementPropertiesDeriver`, `PhraseMarkers`, `RsSectionCatalog`, `RsEventCatalog` | `guitar-and-tuning.md` |
+| `Utilities/` — timing + graph | `TimelineMath`, `ITimedElement`, `ChartProjectCloner` + `ChartProjectRestorer`, `ChartProjectPositions`, `BulkObservableCollection<T>`, `ChartPositionLabel`, `ElapsedTimeLabel` (elapsed clocks with total hours and selectable precision), `BarCount` | `timeline-and-project.md` |
+| `Utilities/` — guitar + tuning | `FretboardMath`, `TuningUtilities`, `StandardOpenStrings` (the ONE open-string table, extra strings extend DOWN, up to 9 strings; a package spells 8 so a 9-string is refused on export), `StringColorSlots` (string → colour slot by identity: low E red on any guitar, extra low strings grey), `TuningNameResolver` + `ExtendedRangeTunings` (standard/drop names for 5/6-string bass and 7/8/9-string guitar, which rscharter's six-string `TuningType` table cannot name; written to a .rscp as CUSTOM + offsets and re-derived on load), `ArrangementInstrument` (bass PART vs path, the A220 octave), `TuningOffsetResolution`, `ChordNameSuggester` + `ChordNamingOptions` + `ChordKeyEstimator` (naming style and key), `SongKeyEstimator` (the song key shown, runner-up, confidence), `ChordTemplateFingerSetter` (+ `LearnedChordFingerings`), `ShowlightCatalog`, `ChartDifficultyEstimator`, `ArrangementPropertiesDeriver`, `PhraseMarkers`, `SectionMarkers` (the one "section at this position" lookup), `RsSectionCatalog`, `RsEventCatalog` | `guitar-and-tuning.md` |
 | `Linking/` | `MeasureContentIndex` (THE measure-content comparison, detection + integrity keys), `MeasureContentKey`, `MeasureContentOptions`, `SpacingGap` (the enforcer's gap, one implementation), `MeasureGrid`, `LinkCandidateDetector` + `LinkCompatibility` (repeated-run detection), `LinkRuns` (placements on the grid, keys, splits), `LinkedRunCopier` (one copy onto another placement), `LinkGroupVerifier` (the load check); the model is `Domain/Project/LinkGroup` | `domain-model.md` § `Linking/` |
 | `Diff/` | `ChartDiffEngine.Diff(old, new)` + `ChartDiffResult` — the pure beat-aligned structural diff, plus `DiffStructure` for everything that is NOT a sound | `domain-model.md` § `Diff/` |
 
@@ -58,7 +58,7 @@ is near one, open the file it points at (all under `docs/agents/core/`).
   `(BeatId, Fraction)`, safe as dictionary keys.
   → `timeline-and-project.md`
 - **`Fraction`'s constructor takes `long`s and EVERY operator widens before it
-  multiplies — do not "simplify" a cast away.** An unchecked `int` product wrapped
+  multiplies or negates — do not "simplify" a cast away.** An unchecked `int` product wrapped
   to 0 and threw `DivideByZeroException` out of a fraction with no zero in it,
   from one `.rscp` attribute that arrives off disk AND over the unauthenticated
   LAN transfer.
@@ -149,8 +149,9 @@ is near one, open the file it points at (all under `docs/agents/core/`).
   → `guitar-and-tuning.md`
 - **A tuning NAME the table does not know is an UNKNOWN, not E standard** — ask
   `TuningUtilities.TryGetOffsetsForTuningType`; `GetOffsetsForTuningType` still
-  answers "standard" and is now only for the two callers that deliberately want
-  a default. The table spells tunings Rocksmith's way (**Drop C# is
+  answers "standard" for callers that deliberately want a default. Arrangement
+  consumers use `TuningOffsetResolution` and `SoundingPitch`. The table spells
+  tunings Rocksmith's way (**Drop C# is
   `E_FLAT_DROP_D_FLAT`**), and `"CUSTOM"` is not in it at all.
   → `guitar-and-tuning.md`
 - **`ChordTemplate.Id`/`TemplateId` default to `-1` = untemplated/custom**, and

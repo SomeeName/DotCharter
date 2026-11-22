@@ -142,12 +142,21 @@ internal class FakeAudioPlaybackService : IAudioPlaybackService
     public double VstInstrumentVolume { get; set; } = 1.0;
     public double MidiOffsetMs { get; set; }
     public DeviceManager DeviceManager { get; } = new();
-    public bool IsDeviceLost => false;
+    public bool IsDeviceLost { get; set; }
+    public long DropoutCount { get; set; }
     public AudioDiagnostics Diagnostics { get; } = new();
 
     public event EventHandler<double>? PositionChanged;
+    public void PublishPosition(double timeMs)
+    {
+        CurrentTimeMs = timeMs;
+        RawPlayheadMs = timeMs;
+        PositionChanged?.Invoke(this, timeMs);
+    }
+
 #pragma warning disable CS0067 // Events exist purely to satisfy the interface contract for tests.
     public event EventHandler<int>? DeviceBufferFramesChanged;
+    public void RaiseBufferChanged(int frames) => DeviceBufferFramesChanged?.Invoke(this, frames);
     public event EventHandler? DeviceLost;
     public event EventHandler<AudioDeviceReconnectedEventArgs>? DeviceReconnected;
     public event EventHandler<bool>? InstrumentVstLoadChanged;
@@ -207,9 +216,10 @@ internal class FakeAudioPlaybackService : IAudioPlaybackService
     {
     }
 
-    public void EnsureWasapiDevicesProbed(RigConfig config)
-    {
-    }
+    /// <summary>Runs inside the WASAPI enumeration, on the caller's thread: a test parks the device probe here.</summary>
+    public Action? WasapiProbePass { get; set; }
+
+    public void EnsureWasapiDevicesProbed(RigConfig config) => WasapiProbePass?.Invoke();
 
     /// <summary>The WASAPI playback devices the fake machine lists.</summary>
     public List<string> WasapiOutputDevices { get; set; } = [];
@@ -253,11 +263,21 @@ internal class FakeAudioPlaybackService : IAudioPlaybackService
         InputChannelCountProbes
     { get; } = new();
 
+    /// <summary>Runs inside <see cref="GetInputDeviceChannelCount" />, on the caller's thread: a test parks the jack-count read here.</summary>
+    public Action? InputProbePass { get; set; }
+
+    /// <summary>Runs inside <see cref="GetOutputDeviceChannelCount" />, on the caller's thread: a test parks the output-count read here.</summary>
+    public Action? OutputProbePass { get; set; }
+
     public int GetInputDeviceChannelCount(string driver, string deviceName)
     {
         InputChannelCountProbes.Enqueue((driver, deviceName));
-        return InputDeviceChannelCount;
+        InputProbePass?.Invoke();
+        return InputDeviceChannelCountByDriver.TryGetValue(driver, out var count) ? count : InputDeviceChannelCount;
     }
+
+    /// <summary>A driver's own jack count, over <see cref="InputDeviceChannelCount" />; filled before any probe runs.</summary>
+    public Dictionary<string, int> InputDeviceChannelCountByDriver { get; } = [];
 
     /// <summary>The output count <see cref="GetOutputDeviceChannelCount" /> reports; 0 = unknown.</summary>
     public int OutputDeviceChannelCount { get; set; }
@@ -269,6 +289,7 @@ internal class FakeAudioPlaybackService : IAudioPlaybackService
     public int GetOutputDeviceChannelCount(string driver, string deviceName)
     {
         OutputChannelCountProbes.Enqueue((driver, deviceName));
+        OutputProbePass?.Invoke();
         return OutputDeviceChannelCount;
     }
 
@@ -295,12 +316,22 @@ internal class FakeAudioPlaybackService : IAudioPlaybackService
     /// load — the silent-transport fallback, for one, never touches the project's
     /// audio identity, so the file name is the only evidence it ran.</summary>
     public List<string> LoadedPaths { get; } = [];
+    public string? CompletedLoadPath { get; private set; }
+    public Func<Task>? MemoryLoadPass { get; set; }
 
-    public Task LoadAudioAsync(string filePath)
+    /// <summary>When set, the master load stays in flight until the test releases it.</summary>
+    public TaskCompletionSource? AudioLoadGate { get; set; }
+
+    public Func<string, Task>? FileLoadPass { get; set; }
+    public Func<string, WaveformSamples>? WaveformForPath { get; set; }
+
+    public async Task LoadAudioAsync(string filePath)
     {
-        if (LoadAudioFailure != null) return Task.FromException(LoadAudioFailure);
+        if (LoadAudioFailure != null) throw LoadAudioFailure;
         LoadedPaths.Add(filePath);
-        return Task.CompletedTask;
+        if (AudioLoadGate != null) await AudioLoadGate.Task;
+        if (FileLoadPass != null) await FileLoadPass(filePath);
+        CompletedLoadPath = filePath;
     }
 
     /// <summary>Every blob handed to <see cref="LoadAudioFromMemoryAsync" />, in
@@ -326,7 +357,14 @@ internal class FakeAudioPlaybackService : IAudioPlaybackService
         MemoryLoads.Add((bytes, bytes.ToArray(), formatHint));
         MemoryLoadDisplayPaths.Add(displayPath);
         DuringMemoryLoad?.Invoke();
-        return MemoryLoadFailure != null ? Task.FromException(MemoryLoadFailure) : Task.CompletedTask;
+        if (MemoryLoadFailure != null) return Task.FromException(MemoryLoadFailure);
+        return CompleteLoadAsync();
+
+        async Task CompleteLoadAsync()
+        {
+            if (MemoryLoadPass != null) await MemoryLoadPass();
+            CompletedLoadPath = displayPath;
+        }
     }
 
     /// <summary>What the "engine" reports for the loaded file. 0 is an engine
@@ -352,6 +390,7 @@ internal class FakeAudioPlaybackService : IAudioPlaybackService
     public Task<WaveformSamples> GenerateWaveformAsync(string filePath)
     {
         WaveformRequests.Add(filePath);
+        if (WaveformForPath != null) return Task.FromResult(WaveformForPath(filePath));
         return WaveformPass == null ? Task.FromResult(WaveformResult) : AfterPass(WaveformPass);
 
         async Task<WaveformSamples> AfterPass(Func<Task> pass)
@@ -361,8 +400,12 @@ internal class FakeAudioPlaybackService : IAudioPlaybackService
         }
     }
 
+    public void FreeMasterAudio() => CompletedLoadPath = null;
+
     public void FreeAudio()
     {
+        FreeMasterAudio();
+        ClearStems();
     }
 
     /// <summary>Models a stale/unreadable VST3 folder: the real scan throws
@@ -478,13 +521,24 @@ internal class FakeAudioPlaybackService : IAudioPlaybackService
     /// tracks <see cref="CurrentTimeMs"/> unless a test sets it explicitly.</summary>
     public double RawPlayheadMs { get; set; }
 
+    /// <summary>Runs inside <see cref="TryScheduleClick"/> after the click is recorded.</summary>
+    public Action? DuringScheduleClick { get; set; }
+
+    /// <summary>Runs inside <see cref="ClearScheduledClicks"/>.</summary>
+    public Action? DuringClearScheduledClicks { get; set; }
+
     public bool TryScheduleClick(int clickType, double transportMs)
     {
         ScheduledClicks.Add((clickType, transportMs));
+        DuringScheduleClick?.Invoke();
         return true;
     }
 
-    public void ClearScheduledClicks() => ClearScheduledClicksCount++;
+    public void ClearScheduledClicks()
+    {
+        ClearScheduledClicksCount++;
+        DuringClearScheduledClicks?.Invoke();
+    }
 
     /// <summary>When non-zero, <see cref="TryScheduleCalibrationClap"/> succeeds and
     /// returns this host tick; when zero it fails (as if no engine).</summary>

@@ -1,4 +1,4 @@
-﻿using DotCharter.Services.Editing;
+using DotCharter.Services.Editing;
 using DotCharter.Services.Editing.Collisions;
 using DotCharter.Services.Editing.Highway;
 using DotCharter.Services.Editing.Selection;
@@ -19,6 +19,143 @@ namespace DotCharter.Tests.Services.Editing.Highway;
 /// </summary>
 public sealed class ChordTemplateIntegrityTests
 {
+    [Fact]
+    public void Paste_KeepsTheSecondSameFretTemplatesAuthoredIdentity()
+    {
+        var h = new Harness();
+        h.AddTemplate(0, (0, 3), (1, 5));
+        var authored = h.AddTemplate(1, (0, 3), (1, 5));
+        authored.Name = "authored";
+        authored.Fingers[0] = 2;
+        authored.Fingers[1] = 4;
+        authored.NopInRs = true;
+        authored.Unnamed = true;
+        authored.Pinned = true;
+        var chord = h.AddChord(2, 1, (0, 3), (1, 5));
+        var track = h.Track(h.Arrangement);
+        h.Selection.SelectedChords.Add(chord);
+        h.Clipboard.Copy(track, EditorFocusArea.NoteHighway);
+        h.Selection.ClearAll();
+
+        var before = ChartProjectCloner.CloneArrangement(h.Arrangement);
+        h.Clipboard.Paste(track, 4000, 4);
+
+        Assert.Equal(1, h.Level.Chords.Single(c => c.Position == new FractionalPosition(8)).TemplateId);
+        Assert.Equal(2, h.Arrangement.ChordTemplates.Count);
+        Assert.Empty(DeepCompare.Diff("Templates", before.ChordTemplates, h.Arrangement.ChordTemplates, new HashSet<string>()));
+        AssertUndoRedo(h, h.Arrangement, before);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Paste_ResolvesPendingArpeggioTemplatesBeforeNormalizing(bool forceArpeggio)
+    {
+        var h = new Harness();
+        var authored = h.AddTemplate(7, (0, 3), (1, 5));
+        authored.Arpeggio = !forceArpeggio;
+        authored.ForceArpeggioInRs = forceArpeggio;
+        authored.Fingers[0] = 2;
+        authored.Fingers[1] = 4;
+        var chord = h.AddChord(2, 7, (0, 3), (1, 5));
+        h.Selection.SelectedChords.Add(chord);
+        h.Clipboard.Copy(h.Track(h.Arrangement), EditorFocusArea.NoteHighway);
+        h.Selection.ClearAll();
+        var target = h.AddArrangement("Rhythm");
+        h.State.ActiveArrangement = target;
+        h.State.ActiveLevel = target.Levels[0];
+
+        var before = ChartProjectCloner.CloneArrangement(target);
+        var sourceBefore = ChartProjectCloner.CloneArrangement(h.Arrangement);
+        h.Clipboard.Paste(h.Track(target), 4000, 4);
+
+        var pasted = Assert.Single(target.Levels[0].Chords);
+        var template = target.ChordTemplates.Single(t => t.Id == pasted.TemplateId);
+        Assert.Equal(authored.Arpeggio, template.Arpeggio);
+        Assert.Equal(authored.ForceArpeggioInRs, template.ForceArpeggioInRs);
+        Assert.Equal(authored.Fingers, template.Fingers);
+        AssertUndoRedo(h, target, before);
+        Assert.Empty(DeepCompare.Diff("Source", sourceBefore, h.Arrangement, new HashSet<string>()));
+    }
+
+    [Fact]
+    public void Paste_ChecksOnlyContentIncludedByPreferences()
+    {
+        var h = new Harness();
+        h.Config.AppConfig.PasteIncludeNotes = false;
+        h.Config.AppConfig.PasteIncludeHandShapes = false;
+        h.Config.AppConfig.PasteIncludeFretAnchors = false;
+        var template = h.AddTemplate(0, (0, 3), (1, 5));
+        var chord = h.AddChord(2, template.Id, (0, 3), (1, 5));
+        var note = new GuitarNote { Position = new FractionalPosition(3), StringIndex = 8, Fret = 30 };
+        h.Level.Notes.Add(note);
+        h.Selection.SelectedChords.Add(chord);
+        h.Selection.SelectedNotes.Add(note);
+        h.Clipboard.Copy(h.Track(h.Arrangement), EditorFocusArea.NoteHighway);
+        h.Selection.ClearAll();
+
+        var before = ChartProjectCloner.CloneArrangement(h.Arrangement);
+        var outcome = h.Clipboard.Paste(h.Track(h.Arrangement), 4000, 4);
+
+        Assert.Equal(DotCharter.Services.Editing.Catalog.PhrasePasteResult.Pasted, outcome!.Result);
+        Assert.Equal(2, h.Level.Chords.Count);
+        Assert.Single(h.Level.Notes);
+        AssertUndoRedo(h, h.Arrangement, before);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Paste_ChecksTheGripOfAnIncludedHandShape(bool includeHandShapes)
+    {
+        var h = new Harness();
+        h.Arrangement.StringCount = 7;
+        h.Config.AppConfig.PasteIncludeNotes = false;
+        h.Config.AppConfig.PasteIncludeChords = false;
+        h.Config.AppConfig.PasteIncludeHandShapes = includeHandShapes;
+        h.Config.AppConfig.PasteIncludeFretAnchors = false;
+        var template = h.AddTemplate(0, (0, 3), (6, 5));
+        var chord = h.AddChord(2, template.Id, (0, 3), (6, 5));
+        var shape = new HandShape
+        {
+            Position = new FractionalPosition(2), EndPosition = new FractionalPosition(3), TemplateId = template.Id
+        };
+        h.Level.HandShapes.Add(shape);
+        h.Selection.SelectedChords.Add(chord);
+        h.Selection.SelectedHandShapes.Add(shape);
+        h.Clipboard.Copy(h.Track(h.Arrangement), EditorFocusArea.NoteHighway);
+        h.Selection.ClearAll();
+        var target = h.AddArrangement("Rhythm");
+        target.StringCount = 6;
+        h.State.ActiveArrangement = target;
+        h.State.ActiveLevel = target.Levels[0];
+        var before = ChartProjectCloner.CloneArrangement(target);
+        var node = h.History.CurrentNodeId;
+
+        var outcome = h.Clipboard.Paste(h.Track(target), 4000, 4);
+
+        Assert.NotNull(outcome);
+        Assert.Equal(includeHandShapes
+            ? DotCharter.Services.Editing.Catalog.PhrasePasteResult.Blocked
+            : DotCharter.Services.Editing.Catalog.PhrasePasteResult.Pasted, outcome.Result);
+        if (includeHandShapes)
+        {
+            Assert.Contains(outcome.Check!.Issues, i => i.LocalizationKey ==
+                DotCharter.Services.Editing.Catalog.PhrasePasteCompatibility.KeyStringOutOfRange);
+        }
+        Assert.Empty(DeepCompare.Diff("Target", before, target, new HashSet<string>()));
+        Assert.Equal(node, h.History.CurrentNodeId);
+    }
+
+    private static void AssertUndoRedo(Harness harness, Arrangement arrangement, Arrangement before)
+    {
+        var after = ChartProjectCloner.CloneArrangement(arrangement);
+        harness.History.Undo();
+        Assert.Empty(DeepCompare.Diff("Arrangement", before, arrangement, new HashSet<string>()));
+        harness.History.Redo();
+        Assert.Empty(DeepCompare.Diff("Arrangement", after, arrangement, new HashSet<string>()));
+    }
+
     [Fact]
     public void RightClickAddChordString_RepointsTheChordInsteadOfDivergingFromItsSharedTemplate()
     {
@@ -158,7 +295,7 @@ public sealed class ChordTemplateIntegrityTests
         {
             var logger = new FakeAppLogger();
             History = new HistoryService(logger);
-            var config = new FakeConfigurationService();
+            var config = Config;
             var scope = new EditingScope(State);
             Service = new HighwayEditingService(State, Selection, History, new StrictCollisionService(),
                 config, scope, new EditTargetService(Selection, scope, config), logger);
@@ -178,6 +315,7 @@ public sealed class ChordTemplateIntegrityTests
         public ProjectState State { get; } = new();
         public SelectionService Selection { get; } = new();
         public HistoryService History { get; }
+        public FakeConfigurationService Config { get; } = new();
         public HighwayEditingService Service { get; }
         public EditingClipboardCoordinator Clipboard { get; }
         public Arrangement Arrangement { get; }

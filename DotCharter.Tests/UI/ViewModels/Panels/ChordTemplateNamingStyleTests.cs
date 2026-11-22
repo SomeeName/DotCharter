@@ -7,12 +7,8 @@ using DotCharter.UI.ViewModels.Panels;
 
 namespace DotCharter.Tests.UI.ViewModels.Panels;
 
-/// <summary>
-///     #493: the chord panel's Suggest pills and "Auto-fill fingerings &amp; names"
-///     name in the style Settings ▸ Editor chose, spelled in the project's key.
-///     A setting the panel does not read is a dead feature, so both entry points
-///     are driven here through the real view model.
-/// </summary>
+/// <summary>Chord offers and auto-fill share the selected naming style and key;
+/// tuning spelling is the fallback without a resolved naming key.</summary>
 public sealed class ChordTemplateNamingStyleTests
 {
     // x,1,3,1,2,x — Bbm7 at sounding pitch in standard tuning.
@@ -42,6 +38,63 @@ public sealed class ChordTemplateNamingStyleTests
         vm.GenerateAllFingeringsCommand.Execute(null);
 
         Assert.Equal(expected, template.Name);
+    }
+
+    [Theory]
+    [InlineData(ChordNamingStyle.Eof, 0)]
+    [InlineData(ChordNamingStyle.Musical, -5)]
+    [InlineData(ChordNamingStyle.Musical, 4)]
+    public void PillAndAutoFill_Agree_WithoutEnharmonicDuplicates(ChordNamingStyle style, int keyAccidentals)
+    {
+        var h = new Harness(style, keyAccidentals);
+        var (vm, template) = h.LoadedShape(Bbm7, name: "");
+        var pill = vm.Names.SuggestedChordNames[0];
+        var identities = vm.Names.SuggestedChordNames.Select(name => TuningDisplayNames.ChordSuggestion(name, h.Editor.ActiveArrangement!));
+        Assert.Equal(vm.Names.SuggestedChordNames.Count, identities.Distinct(StringComparer.Ordinal).Count());
+        vm.GenerateAllFingeringsCommand.Execute(null);
+        Assert.Equal(template.Name, pill);
+    }
+
+    [Fact]
+    public void SharpProjectKey_WinsOverFlatTuning_AndMatchesAutoFill()
+    {
+        var h = new Harness(ChordNamingStyle.Musical, keyAccidentals: 4);
+        var arrangement = h.Editor.ActiveArrangement!;
+        arrangement.Tuning = TuningUtilities.GetTuningNames(6, [-1, -1, -1, -1, -1, -1]);
+        for (var i = 0; i < 6; i++) arrangement.TuningPitches.Add(new TuningOffset(-1));
+        var (vm, template) = h.LoadedShape([(0, 5), (1, 7), (2, 7), (3, 6), (4, 5), (5, 5)], name: "");
+        Assert.Equal("G#", vm.Names.SuggestedChordNames[0]);
+        Assert.DoesNotContain("Ab", vm.Names.SuggestedChordNames);
+        vm.GenerateAllFingeringsCommand.Execute(null);
+        Assert.Equal(template.Name, vm.Names.SuggestedChordNames[0]);
+    }
+
+    [Fact]
+    public void NoKey_FallsBackToTuning_AndMatchesAutoFill()
+    {
+        var h = new Harness(ChordNamingStyle.Eof, keyAccidentals: 0);
+        var arrangement = h.Editor.ActiveArrangement!;
+        arrangement.Tuning = TuningUtilities.GetTuningNames(6, [-1, -1, -1, -1, -1, -1]);
+        for (var i = 0; i < 6; i++) arrangement.TuningPitches.Add(new TuningOffset(-1));
+        var (vm, template) = h.LoadedShape([(0, 5), (1, 7), (2, 7), (3, 6), (4, 5), (5, 5)], name: "");
+        Assert.Equal(new[] { "Ab" }, vm.Names.SuggestedChordNames);
+        vm.GenerateAllFingeringsCommand.Execute(null);
+        Assert.Equal("Ab", template.Name);
+    }
+
+    [Fact]
+    public void ClearingNoName_RestoresTheSameNameThePillOffers()
+    {
+        var h = new Harness(ChordNamingStyle.Musical, keyAccidentals: -5);
+        var (vm, template) = h.LoadedShape(Bbm7, name: "");
+        template.Unnamed = true;
+        vm.LoadTemplate(template, 6);
+        var suggested = vm.Names.SuggestedChordNames[0];
+
+        vm.IsUnnamed = false;
+
+        Assert.False(template.Unnamed);
+        Assert.Equal(suggested, template.Name);
     }
 
     private sealed class Harness

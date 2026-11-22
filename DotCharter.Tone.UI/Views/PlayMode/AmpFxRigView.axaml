@@ -1245,7 +1245,7 @@
                      footer does, instead of running under the gear panel. -->
                 <Border Grid.Row="2" Grid.Column="0" x:Name="RigFooter"
                         Theme="{StaticResource FireFooterBorder}" Classes="FireFooter" MinHeight="52"
-                        Padding="{StaticResource FirePadBar}">
+                        Padding="12,4">
                     <!-- EVERY DYNAMIC READOUT IN HERE SITS IN A FIXED COLUMN.
                          Owner, 2026-09-12: "the footer jumps around while the
                          tuner reads". Three faults, all of them width:
@@ -1285,7 +1285,7 @@
                              cell is six chips wide whichever it shows, and the
                              meter is centred on the strip, not top-aligned. -->
                         <Grid x:Name="RigTunerStrip" VerticalAlignment="Center"
-                              ColumnDefinitions="180,101,Auto,86,Auto"
+                              ColumnDefinitions="176,101,Auto,72,Auto"
                               ColumnSpacing="{StaticResource FireSpaceSm}"
                               Margin="{StaticResource FireGapLeftMd}">
                             <!-- the tuning to tune TO: chromatic, or a tuning whose
@@ -1341,7 +1341,7 @@
                                 </ItemsControl>
                             </Panel>
                             <fire:FireTunerMeter Grid.Column="2" x:Name="RigTunerMeter" VerticalAlignment="Center"
-                                                 Width="130"
+                                                 Width="80"
                                                  AutomationProperties.Name="{localization:Loc Rig_TunerReading}"
                                                  Cents="{Binding Rig.RigTuner.CentsOff}"
                                                  HasReading="{Binding Rig.RigTuner.HasReading}" />
@@ -1387,7 +1387,7 @@
                                            ToolTip.Tip="{localization:Loc Rig_Editor_ReferencePitch}"
                                            Text="{localization:Loc Rig_TunerReferenceShort}" />
                                 <NumericUpDown x:Name="RigTunerReference"
-                                               Width="60" ShowButtonSpinner="False"
+                                               Width="54" ShowButtonSpinner="False"
                                                Minimum="415" Maximum="466" Increment="1" FormatString="0"
                                                Value="{Binding Rig.RigTuner.ReferenceHz, Mode=TwoWay}"
                                                ToolTip.Tip="{localization:Loc Rig_TunerReferenceTip}"
@@ -1407,7 +1407,7 @@
                              its widest face (66 px in de-DE) permanently pushed
                              the OUTPUT cluster onto a second line at 1920. -->
                         <Grid x:Name="RigTempoStrip" VerticalAlignment="Center"
-                              ColumnDefinitions="Auto,84,Auto,Auto"
+                              ColumnDefinitions="Auto,72,Auto,Auto"
                               ColumnSpacing="{StaticResource FireSpaceXs}"
                               Margin="{StaticResource FireGapLeftMd}"
                               ToolTip.Tip="{localization:Loc Rig_TempoHint}">
@@ -1440,7 +1440,7 @@
                              off, or WASAPI, which has no input mask). -->
                         <Grid x:Name="RigInputChannelPicker"
                               VerticalAlignment="Center"
-                              ColumnDefinitions="Auto,110,Auto,Auto,44"
+                              ColumnDefinitions="Auto,90,Auto,Auto,44"
                               ColumnSpacing="{StaticResource FireSpaceXs}"
                               Margin="{StaticResource FireGapLeftMd}"
                               ToolTip.Tip="{Binding InputChannel.Hint}">
@@ -1516,7 +1516,7 @@
                                     ToolTip.Tip="{localization:Loc Rig_OutputLevelHint}">
                             <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
                                        Text="{localization:Loc Rig_Output}" />
-                            <fire:FireLevelMeter x:Name="RigOutputMeter" Width="72" SegmentCount="12" VerticalAlignment="Center"
+                            <fire:FireLevelMeter x:Name="RigOutputMeter" Width="60" SegmentCount="10" VerticalAlignment="Center"
                                                  AutomationProperties.Name="{localization:Loc Rig_OutputLevel}"
                                                  LevelDb="{Binding Rig.OutputMeters.OutputDb}" />
                         </StackPanel>

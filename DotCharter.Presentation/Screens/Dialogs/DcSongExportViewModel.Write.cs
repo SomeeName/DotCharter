@@ -45,7 +45,7 @@ public sealed partial class DcSongExportViewModel
             CoverPath = string.IsNullOrWhiteSpace(CoverPath) ? null : CoverPath.Trim(),
             BannerPath = string.IsNullOrWhiteSpace(BannerPath) ? null : BannerPath.Trim(),
             ProjectDirectory = _projectDirectory.Length == 0 ? null : _projectDirectory,
-            Stems = IncludeStems ? _probe.Stems.Select(s => new DcSongStemSource(s.Name, s.SourcePath)).ToList() : [],
+            Stems = IncludeStems ? _probe.Stems.Select(s => new DcSongStemSource(s.Name, s.SourcePath, s.Original)).ToList() : [],
             ArrangementIndexes = Arrangements.Where(a => a.IsSelected).Select(a => a.Index).ToList()
         };
     }
@@ -87,7 +87,7 @@ public sealed partial class DcSongExportViewModel
         }
         catch (DcSongWriteException ex)
         {
-            _edit.Logger.Warning(AppLogCategory.Project, $".dcsong export refused ({ex.Reason}): {ex.Message}");
+            _edit.Logger.Warning(AppLogCategory.Project, $".dcsong export refused ({ex.Reason})", ex);
             ErrorMessage = loc[ex.ResourceKey];
         }
         catch (PlayOnlyContentException ex)
@@ -144,8 +144,12 @@ public sealed partial class DcSongExportViewModel
             ? DefaultFileName(_project?.Chart.Artist ?? "", _project?.Chart.SongName ?? "")
             : Path.GetFileName(OutputPath);
         var path = await _io.Storage.SaveFilePickerAsync(_edit.Localization["Picker_DcSong_Save"], suggested,
-            [new FilePickerFilter("DotCharter song", ["*" + DcSongFormat.Extension])], OutputPath);
+            [new FilePickerFilter("DotCharter song", ["*" + DcSongFormat.Extension])],
+            string.IsNullOrWhiteSpace(OutputPath)
+                ? _edit.Config.StartDirectory(c => c.LastDcSongDir)
+                : OutputPath);
         if (string.IsNullOrEmpty(path)) return;
+        _edit.Config.RememberDirectory(path, (c, d) => c.LastDcSongDir = d);
         OutputPath = path;
     }
 

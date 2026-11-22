@@ -27,6 +27,8 @@ public class AppKeybindRegistrar
     private readonly MainWindowViewModel _shell;
     private readonly InspectorViewModel _inspector;
 
+    private Arrangement? EditArrangement => _chartEditor.FocusedTrack?.Arrangement ?? _projectState.ActiveArrangement;
+
     public AppKeybindRegistrar(
         IKeybindRegistry registry,
         ProjectState projectState,
@@ -60,9 +62,29 @@ public class AppKeybindRegistrar
         _shell = shell;
         _inspector = inspector;
 
+        // A verb that cannot run says why on the status rail instead of doing nothing.
+        _registry.Gate = label => _shell?.EditingAvailability.Blocks(label) == true;
+
         // Restore the persisted overlay toggle so each session opens with the
         // user's last choice instead of the renderer default.
         FingeringRenderer.Enabled = _configService.LoadAppConfig().Show3DFingering;
+    }
+
+    /// <summary>The Tools verbs: hand shape template, fret hand positions, chord merge / split, fingering, Fix chart.</summary>
+    private void RegisterToolsVerbs()
+    {
+        _registry.Register(() => _projectState.Keybinds.ApplyHandShapeTemplateToChords,
+            () => _shell.ApplyHandShapeTemplateToChordsCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.GenerateFhp,
+            () => _shell.FhpGeneration.GenerateFhpForScopeCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.MergeNotesIntoChord,
+            () => _shell.MergeNotesIntoChordCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.SplitChordsIntoNotes,
+            () => _shell.SplitChordsIntoNotesCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.FixChart,
+            () => _shell.ShellDialogs.FixChartCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.SaveAndNextFingering,
+            () => _inspector.GripInspector.SaveAndNextFingeringCommand.Execute(null));
     }
 
     public void RegisterAll()
@@ -234,7 +256,7 @@ public class AppKeybindRegistrar
             else
                 _globalEditing.SelectAllNotes();
         });
-        _registry.Register(() => _projectState.Keybinds.SelectLike, () => _globalEditing.SelectLikePattern());
+        _registry.Register(() => _projectState.Keybinds.SelectLike, () => _shell.SelectLikePatternCommand.Execute(null));
         _registry.Register(() => _projectState.Keybinds.PatternBuilder, () => _shell.ShellDialogs.OpenPatternBuilderCommand.Execute(null));
 
         // Drop the last section again at the playhead without the dialog. 44
@@ -284,31 +306,32 @@ public class AppKeybindRegistrar
         // twelve ±1 steps.
         _registry.Register(() => _projectState.Keybinds.FretUpOctave, () => _highwayEditing.MoveSelectedFretByOctave(1));
         _registry.Register(() => _projectState.Keybinds.FretDownOctave, () => _highwayEditing.MoveSelectedFretByOctave(-1));
+        RegisterTimeNudges();
+        _registry.Register(() => _projectState.Keybinds.ToggleHopo, () => _shell.SelectionEdits.ToggleHopoCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleHarmonic, () => _shell.SelectionEdits.ToggleHarmonicCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleMute, () => _shell.SelectionEdits.ToggleMuteTechniqueCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleLinkNext, () => _shell.SelectionEdits.ToggleLinkNextCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleVibrato, () => _shell.SelectionEdits.ToggleVibratoCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleTremolo, () => _shell.SelectionEdits.ToggleTremoloCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.PickSlide, () => _shell.SelectionEdits.PickSlideCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.TogglePicking, () => _shell.SelectionEdits.TogglePickingCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleAccent, () => _shell.SelectionEdits.ToggleAccentCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleIgnore, () => _shell.SelectionEdits.ToggleIgnoreCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.TogglePassOtherNotes, () => _shell.SelectionEdits.TogglePassOtherNotesCommand.Execute(null));
 
-        _registry.Register(() => _projectState.Keybinds.ToggleHopo, () => _highwayEditing.ToggleSelectedHopo());
-        _registry.Register(() => _projectState.Keybinds.ToggleHarmonic, () => _highwayEditing.ToggleSelectedHarmonic());
-        _registry.Register(() => _projectState.Keybinds.ToggleMute, () => _highwayEditing.ToggleSelectedMute());
-        _registry.Register(() => _projectState.Keybinds.ToggleLinkNext, () => _highwayEditing.ToggleSelectedLinkNext());
-        _registry.Register(() => _projectState.Keybinds.ToggleVibrato, () => _highwayEditing.ToggleSelectedVibrato());
-        _registry.Register(() => _projectState.Keybinds.ToggleTremolo, () => _highwayEditing.ToggleSelectedTremolo());
-        _registry.Register(() => _projectState.Keybinds.TogglePicking, () => _highwayEditing.ToggleSelectedPicking());
-        _registry.Register(() => _projectState.Keybinds.ToggleAccent, () => _highwayEditing.ToggleSelectedAccent());
-        _registry.Register(() => _projectState.Keybinds.ToggleIgnore, () => _highwayEditing.ToggleSelectedIgnore());
-        _registry.Register(() => _projectState.Keybinds.TogglePassOtherNotes, () => _highwayEditing.ToggleSelectedPassOtherNotes());
-
-        _registry.Register(() => _projectState.Keybinds.ToggleHopoGroup, () => _highwayEditing.ToggleSelectedHopoGroup());
-        _registry.Register(() => _projectState.Keybinds.ToggleHarmonicGroup, () => _highwayEditing.ToggleSelectedHarmonicGroup());
-        _registry.Register(() => _projectState.Keybinds.ToggleMuteGroup, () => _highwayEditing.ToggleSelectedMuteGroup());
-        _registry.Register(() => _projectState.Keybinds.ToggleLinkNextGroup, () => _highwayEditing.ToggleSelectedLinkNextGroup());
-        _registry.Register(() => _projectState.Keybinds.ToggleVibratoGroup, () => _highwayEditing.ToggleSelectedVibratoGroup());
-        _registry.Register(() => _projectState.Keybinds.ToggleTremoloGroup, () => _highwayEditing.ToggleSelectedTremoloGroup());
-        _registry.Register(() => _projectState.Keybinds.TogglePickingGroup, () => _highwayEditing.ToggleSelectedPickingGroup());
-        _registry.Register(() => _projectState.Keybinds.ToggleAccentGroup, () => _highwayEditing.ToggleSelectedAccentGroup());
-        _registry.Register(() => _projectState.Keybinds.ToggleIgnoreGroup, () => _highwayEditing.ToggleSelectedIgnoreGroup());
-        _registry.Register(() => _projectState.Keybinds.TogglePassOtherNotesGroup, () => _highwayEditing.ToggleSelectedPassOtherNotesGroup());
+        _registry.Register(() => _projectState.Keybinds.ToggleHopoGroup, () => _shell.SelectionEdits.ToggleHopoGroupCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleHarmonicGroup, () => _shell.SelectionEdits.ToggleHarmonicGroupCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleMuteGroup, () => _shell.SelectionEdits.ToggleMuteGroupCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleLinkNextGroup, () => _shell.SelectionEdits.ToggleLinkNextGroupCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleVibratoGroup, () => _shell.SelectionEdits.ToggleVibratoGroupCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleTremoloGroup, () => _shell.SelectionEdits.ToggleTremoloGroupCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.TogglePickingGroup, () => _shell.SelectionEdits.TogglePickingGroupCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleAccentGroup, () => _shell.SelectionEdits.ToggleAccentGroupCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.ToggleIgnoreGroup, () => _shell.SelectionEdits.ToggleIgnoreGroupCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.TogglePassOtherNotesGroup, () => _shell.SelectionEdits.TogglePassOtherNotesGroupCommand.Execute(null));
 
         // === Tools ===
-        _registry.Register(() => _projectState.Keybinds.EditFhp, () => _shell.ShellDialogs.OpenFhp());
+        _registry.Register(() => _projectState.Keybinds.EditFhp, () => _shell.ShellDialogs.EditFhpAtPlayheadInPlace());
         _registry.Register(() => _projectState.Keybinds.AnchorFretUp, () => NudgeAnchor(1, AnchorNudgeTarget.Fret));
         _registry.Register(() => _projectState.Keybinds.AnchorFretDown, () => NudgeAnchor(-1, AnchorNudgeTarget.Fret));
         _registry.Register(() => _projectState.Keybinds.AnchorWidthUp, () => NudgeAnchor(1, AnchorNudgeTarget.Width));
@@ -325,8 +348,8 @@ public class AppKeybindRegistrar
         // The chord-shape palette's keyboard half: one verb, owned by the Chord shapes pane.
         _registry.Register(() => _projectState.Keybinds.RepeatPreviousChord,
             () => _inspector.ChordShapes?.RepeatPreviousChordCommand.Execute(null));
-        _registry.Register(() => _projectState.Keybinds.DoubleTime, () => _globalEditing.ApplyDoubleTimeToSelection());
-        _registry.Register(() => _projectState.Keybinds.HalfTime, () => _globalEditing.ApplyHalfTimeToSelection());
+        _registry.Register(() => _projectState.Keybinds.DoubleTime, () => _shell.SelectionEdits.DoubleTimeCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.HalfTime, () => _shell.SelectionEdits.HalfTimeCommand.Execute(null));
 
         // === Zoom & Length ===
         // Viewport-center anchored while Follow is off (0.16 6.6);
@@ -343,7 +366,7 @@ public class AppKeybindRegistrar
             () => _shell.DecreaseLengthCommand.Execute(null));
 
         // === File Ops ===
-        _registry.Register(() => _projectState.Keybinds.SaveProject, () => { _ = _projectSession.SaveProjectAsync(); });
+        _registry.Register(() => _projectState.Keybinds.SaveProject, () => { _ = _projectSession.SaveProjectAsync(SaveInitiator.User); });
         _registry.Register(() => _projectState.Keybinds.SaveProjectAs, () => { _ = _projectSession.SaveProjectAsAsync(); });
         _registry.Register(() => _projectState.Keybinds.OpenProject, () => { _ = _projectSession.OpenProject(); });
         _registry.Register(() => _projectState.Keybinds.NewProject, () => _shell.Imports.OpenNewProjectCommand.Execute(null));
@@ -353,7 +376,7 @@ public class AppKeybindRegistrar
         {
             var idx = i;
             _registry.Register(
-                () => new KeyChord((Key)((int)Key.D0 + idx), _projectState.Keybinds.BookmarkBase.Modifiers),
+                () => _projectState.Keybinds.BookmarkBase.WithDigit(idx),
                 () => _chartEditor.ToggleBookmarkAtPlayhead(idx),
                 nameof(KeybindConfig.BookmarkBase));
         }
@@ -370,7 +393,7 @@ public class AppKeybindRegistrar
         {
             var fret = i;
             _registry.Register(
-                () => new KeyChord((Key)((int)Key.D0 + fret), _projectState.Keybinds.SetFretBase.Modifiers),
+                () => _projectState.Keybinds.SetFretBase.WithDigit(fret),
                 () => _pen.TypeFretDigit(fret, _transport.GridDivisor),
                 nameof(KeybindConfig.SetFretBase));
         }
@@ -390,10 +413,10 @@ public class AppKeybindRegistrar
         {
             var stringIndex = i;
             _registry.Register(
-                () => new KeyChord((Key)((int)Key.D1 + stringIndex), _projectState.Keybinds.StringMaskBase.Modifiers),
+                () => _projectState.Keybinds.StringMaskBase.WithDigit(stringIndex + 1),
                 () =>
                 {
-                    if (!StringDigitTargeting.IsAddressable(stringIndex, _projectState.ActiveArrangement)) return;
+                    if (!StringDigitTargeting.IsAddressable(stringIndex, EditArrangement)) return;
                     _projectState.ToggleStringEditMask(stringIndex);
                 },
                 nameof(KeybindConfig.StringMaskBase));
@@ -416,10 +439,10 @@ public class AppKeybindRegistrar
         {
             var stringIndex = i;
             _registry.Register(
-                () => new KeyChord((Key)((int)Key.D1 + stringIndex), _projectState.Keybinds.PenToggleStringBase.Modifiers),
+                () => _projectState.Keybinds.PenToggleStringBase.WithDigit(stringIndex + 1),
                 () =>
                 {
-                    if (!StringDigitTargeting.IsAddressable(stringIndex, _projectState.ActiveArrangement)) return;
+                    if (!StringDigitTargeting.IsAddressable(stringIndex, EditArrangement)) return;
                     _pen.ToggleString(stringIndex, _transport.GridDivisor);
                 },
                 nameof(KeybindConfig.PenToggleStringBase));
@@ -429,12 +452,10 @@ public class AppKeybindRegistrar
         _registry.Register(() => _projectState.Keybinds.TapLyric, () => _lyrics.TapNext());
         _registry.Register(() => _projectState.Keybinds.ToggleLyricWordPart, () => _lyrics.ToggleSelectedWordPart());
         _registry.Register(() => _projectState.Keybinds.ToggleLyricPhraseEnd, () => _lyrics.ToggleSelectedPhraseEnd());
-        _registry.Register(() => _projectState.Keybinds.ApplyHandShapeTemplateToChords,
-            () => _shell.ApplyHandShapeTemplateToChordsCommand.Execute(null));
-        _registry.Register(() => _projectState.Keybinds.InsertBeatAtPlayhead,
-            () => _shell.InsertBeatAtPlayheadCommand.Execute(null));
-        _registry.Register(() => _projectState.Keybinds.RemoveBeatAtPlayhead,
-            () => _shell.RemoveBeatAtPlayheadCommand.Execute(null));
+        RegisterToolsVerbs();
+        _registry.Register(() => _projectState.Keybinds.InsertBeatAtPlayhead, () => _shell.InsertBeatAtPlayheadCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.RemoveBeatAtPlayhead, () => _shell.RemoveBeatAtPlayheadCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.InsertMeasuresAtPlayhead, () => _shell.ShellDialogs.OpenInsertMeasuresAtPlayheadDialogCommand.Execute(null));
         _registry.Register(() => _projectState.Keybinds.InsertVocalAtPlayhead,
             () => _shell.InsertVocalAtPlayheadCommand.Execute(null));
         _registry.Register(() => _projectState.Keybinds.ToggleChordSplit,
@@ -478,6 +499,17 @@ public class AppKeybindRegistrar
             () => _shell.PhraseCatalog.PasteSelectedCommand.Execute(null));
         _registry.Register(() => _projectState.Keybinds.PhraseCatalogPasteByName,
             () => _shell.FocusPhraseCatalogSearchCommand.Execute(null));
+    }
+
+    /// <summary>Time nudges: ONE history node each; the shell's <c>TimeNudge</c> says the outcome on the status rail.</summary>
+    private void RegisterTimeNudges()
+    {
+        _registry.Register(() => _projectState.Keybinds.NudgeEarlier, () => _shell.TimeNudge.EarlierCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.NudgeLater, () => _shell.TimeNudge.LaterCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.NudgeEarlier10Ms, () => _shell.TimeNudge.Earlier10MsCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.NudgeLater10Ms, () => _shell.TimeNudge.Later10MsCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.NudgeEarlier1Ms, () => _shell.TimeNudge.Earlier1MsCommand.Execute(null));
+        _registry.Register(() => _projectState.Keybinds.NudgeLater1Ms, () => _shell.TimeNudge.Later1MsCommand.Execute(null));
     }
 
     /// <summary>
@@ -530,7 +562,7 @@ public class AppKeybindRegistrar
 
         if (verb == PatternVerb.Select)
         {
-            _globalEditing.SelectByPattern(pattern);
+            _shell.SelectionEdits.SelectPattern(pattern);
             return;
         }
 
@@ -554,9 +586,9 @@ public class AppKeybindRegistrar
     /// </summary>
     private void MoveStringOnScreen(bool towardTop, bool samePitch = false)
     {
-        var flip = _projectState.LeftyFlip ^ _projectState.InvertStrings;
+        var flip = _projectState.InvertStrings;
         var step = StringLaneDirection.IndexStep(flip, towardTop);
-        var strings = StringDigitTargeting.StringCountOf(_projectState.ActiveArrangement);
+        var strings = StringDigitTargeting.StringCountOf(EditArrangement);
 
         if (samePitch)
         {

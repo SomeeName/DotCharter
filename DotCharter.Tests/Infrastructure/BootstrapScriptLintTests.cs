@@ -35,23 +35,16 @@ public sealed class BootstrapScriptLintTests
 
         var command = "$e=$null;$t=$null;[void][System.Management.Automation.Language.Parser]::ParseFile("
                       + "$env:BOOTSTRAP_SCRIPT,[ref]$t,[ref]$e);if($e.Count){$e|ForEach-Object{$_.Message};exit 1}";
-        var info = new ProcessStartInfo(pwsh!)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var info = new ProcessStartInfo(pwsh!);
         info.ArgumentList.Add("-NoProfile");
         info.ArgumentList.Add("-NonInteractive");
         info.ArgumentList.Add("-Command");
         info.ArgumentList.Add(command);
         info.Environment["BOOTSTRAP_SCRIPT"] = ScriptPath();
 
-        using var process = Process.Start(info)!;
-        var output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
-        Assert.True(process.WaitForExit(60_000), "The PowerShell parser did not finish.");
-        Assert.True(process.ExitCode == 0, "Bootstrap.ps1 has parse errors:\n" + output);
+        // #608: both pipes drain concurrently under one cap (a deadlock detector, never a budget).
+        var result = BoundedProcess.Run(info, TimeSpan.FromMinutes(2), "pwsh (Bootstrap.ps1 parser)");
+        Assert.True(result.ExitCode == 0, "Bootstrap.ps1 has parse errors:\n" + result.StandardOutput + result.StandardError);
     }
 
     [Fact]

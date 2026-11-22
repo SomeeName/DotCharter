@@ -65,10 +65,9 @@ public interface IAiChatScreen : INotifyPropertyChanged
 
     IAiChatOption? SelectedScope { get; set; }
 
-    /// <summary>The open chart's arrangements, by name.</summary>
-    IReadOnlyList<IAiChatOption> Arrangements { get; }
-
-    IAiChatOption? SelectedArrangement { get; set; }
+    /// <summary>The open chart's arrangements, by name (a row each), the active one the default. The arrangement picker's rows: "All arrangements" first, then one checkable row per
+    /// arrangement. One request runs for every checked arrangement, one after the other.</summary>
+    IAiChatArrangementPicker ArrangementPicker { get; }
 
     /// <summary>What the chosen scope covers right now ("Bars 17–32 · 48 notes · 6 chords"), or why it is empty.</summary>
     string ScopeSummary { get; }
@@ -122,6 +121,24 @@ public interface IAiChatOption : INotifyPropertyChanged
 
     /// <summary>A second line where one helps ("claude-sonnet-5-5", "Bars 17–32"); may be empty.</summary>
     string Detail { get; }
+}
+
+/// <summary>The arrangement picker: its rows and the button's text.</summary>
+public interface IAiChatArrangementPicker : INotifyPropertyChanged
+{
+    /// <summary>"All arrangements" first, then one checkable row per arrangement.</summary>
+    IReadOnlyList<IAiChatArrangementChoice> Choices { get; }
+
+    /// <summary>The picker button's text: the arrangement's name, "2 arrangements" or "All arrangements".</summary>
+    string PickerText { get; }
+}
+
+/// <summary>One row of the arrangement picker: an arrangement, or "All arrangements".</summary>
+public interface IAiChatArrangementChoice : IAiChatOption
+{
+    /// <summary>Whether the next message covers it. Checking "All" checks every arrangement; the last
+    /// checked arrangement cannot be unchecked.</summary>
+    bool IsChecked { get; set; }
 }
 
 /// <summary>One message in the conversation.</summary>

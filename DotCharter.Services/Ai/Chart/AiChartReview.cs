@@ -230,7 +230,7 @@ public sealed class AiChartReview
         var items = new List<AiStructureReviewItem>();
         foreach (var change in (result.Structure ?? []).OrderBy(c => c.At))
         {
-            AiStructureApplier.Preview(arrangement, [change], out var applied);
+            AiStructureApplier.Preview(arrangement, [change], out var applied, new AiStructureWorld(project.Arrangements, beats));
             if (applied == 0) continue;
             items.Add(new AiStructureReviewItem(change, change.At.GetPositionMs(beats), change.From?.GetPositionMs(beats)));
         }
@@ -331,7 +331,7 @@ public sealed class AiChartReview
     /// <summary>What an apply of every structure change still on the table would change on the
     /// live ribbon: the review's section and phrase marks. None once the arrangement is gone.</summary>
     public AiStructureApplyTargets StructureMarks() => Items.Count > 0 && Project.Arrangements.Contains(Arrangement)
-        ? AiStructureApplier.Preview(Arrangement, ProposedChanges, out _)
+        ? AiStructureApplier.Preview(Arrangement, ProposedChanges, out _, new AiStructureWorld(Project.Arrangements, Project.Beats))
         : AiStructureApplyTargets.None;
 
     /// <summary>The plans the next apply writes, in song order.</summary>

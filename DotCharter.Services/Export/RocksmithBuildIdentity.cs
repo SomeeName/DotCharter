@@ -30,6 +30,10 @@ internal sealed record RocksmithBuildIdentity
     /// <summary>The counter IV of every encrypted SNG; null draws a fresh one per SNG,
     /// as a shipped build always does.</summary>
     public byte[]? SngIv { get; init; }
+
+    /// <summary>The tool version <c>toolkit.version</c> names ("1.3.0"); null reads the running
+    /// application's, as a shipped build does. A byte pin sets one so a version bump re-pins nothing.</summary>
+    public string? ToolVersion { get; init; }
 }
 
 internal readonly record struct RsArrangementIdentity(Guid PersistentId, int MasterId);

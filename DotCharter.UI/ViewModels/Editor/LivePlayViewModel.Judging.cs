@@ -1,21 +1,10 @@
 // LivePlayViewModel: judging a sound - the verdict handler, the detection-event to transport-time mapping, the detection log's formatting, and the stats publish.
 
-using System.Diagnostics;
 using DotCharter.Services.Audio.LivePlay;
 
 namespace DotCharter.UI.ViewModels.Editor;
 
-/// <summary>
-///     Judging a sound and reporting it: the verdict handler, the mapping from a
-///     detection event's capture-stream position to transport milliseconds (the
-///     one place capture time becomes chart time), the detection monitor's
-///     formatting, and the stats publish.
-///     <para>
-///         Part of <see cref="LivePlayViewModel" />. The type's fields, its
-///         whole bound surface and its constructor stay in the ROOT file, so
-///         "where does this come from" is one look rather than a search.
-///     </para>
-/// </summary>
+/// <summary>Maps capture evidence into chart time and publishes judgments and timing cues.</summary>
 public partial class LivePlayViewModel
 {
     /// <summary>Worker-side judgment funnel: the lock-free consumers (timing
@@ -140,22 +129,14 @@ public partial class LivePlayViewModel
         };
     }
 
-    /// <summary>Maps a detection event's capture-stream position to transport
-    /// time using the engine's {captured samples ↔ host ticks} sync pair —
-    /// both on the Stopwatch (QPC) timebase — falling back to the current
-    /// playhead when no sync is available yet. The calibrated round-trip
-    /// offset (hear → play → captured) is subtracted so the judged time is
-    /// the chart time the player was actually reacting to.</summary>
+    /// <summary>Maps an attack through capture sync or the frozen EOF anchor, including input latency.</summary>
     private double MapEventToTransportMs(in LiveDetectionEvent ev, double playheadMs)
     {
+        if (_completion.IsPending) return _completion.Map(ev.StreamSamplePosition);
         if (TryGetEventHostTicks(ev, out var eventTicks))
         {
-            var ageMs = (Stopwatch.GetTimestamp() - eventTicks) * 1000.0 / Stopwatch.Frequency;
-            // The playhead we just read is "now" on the same wall clock; the
-            // attack happened ageMs earlier. Sanity-cap: a stale sync (device
-            // stopped) must not fling events far into the past.
-            // ageMs and the latency offset are WALL-CLOCK; the playhead is TRANSPORT.
-            // They only tick together at full speed — see LiveTimeMapping.
+            var ageMs = (_completion.Clock.GetTimestamp() - eventTicks) * 1000.0 / _completion.Clock.TimestampFrequency;
+            // Capture age and input offset are wall time; LiveTimeMapping scales both.
             if (ageMs is >= 0 and <= LiveTimeMapping.MaxEventAgeMs)
                 return LiveTimeMapping.ToTransportMs(playheadMs, ageMs, _latencyOffsetMs, _audio.PlaybackSpeed);
         }
@@ -169,6 +150,12 @@ public partial class LivePlayViewModel
     /// before the first block or when the sync is stale.</summary>
     private bool TryMapStreamPosToTransportMs(ulong streamPos, double playheadMs, out double ms)
     {
+        if (_completion.IsPending && !_completion.NeedsCaptureAnchor)
+        {
+            ms = _completion.Map(streamPos);
+            return true;
+        }
+        if (_completion.IsPending) playheadMs = _completion.PendingPlayheadMs;
         ms = LiveTimeMapping.ToTransportMs(playheadMs, _latencyOffsetMs, _audio.PlaybackSpeed);
         if (_analyzer is not { } analyzer ||
             !_audio.TryGetInputCaptureSync(out var capturedSamples, out var syncTicks) ||
@@ -178,8 +165,8 @@ public partial class LivePlayViewModel
         }
 
         var eventTicks = syncTicks - (long)((capturedSamples - streamPos) / (double)analyzer.SampleRate
-                                             * Stopwatch.Frequency);
-        var ageMs = (Stopwatch.GetTimestamp() - eventTicks) * 1000.0 / Stopwatch.Frequency;
+                                             * _completion.Clock.TimestampFrequency);
+        var ageMs = (_completion.Clock.GetTimestamp() - eventTicks) * 1000.0 / _completion.Clock.TimestampFrequency;
         if (ageMs is >= 0 and <= LiveTimeMapping.MaxEventAgeMs)
         {
             ms = LiveTimeMapping.ToTransportMs(playheadMs, ageMs, _latencyOffsetMs, _audio.PlaybackSpeed);
@@ -201,7 +188,7 @@ public partial class LivePlayViewModel
         }
 
         var deltaTicks = (capturedSamples - ev.StreamSamplePosition) / (double)analyzer.SampleRate
-                         * Stopwatch.Frequency;
+                         * _completion.Clock.TimestampFrequency;
         eventTicks = syncTicks - (long)deltaTicks;
         return true;
     }

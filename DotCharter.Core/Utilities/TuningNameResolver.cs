@@ -34,7 +34,12 @@ public static class TuningNameResolver
 
     /// <summary>(count, "pc,pc,…") → canonical name. Built once from the offset
     /// definitions so the note spelling can never drift from the pitch it names.</summary>
+    private static readonly Dictionary<string, int[]> OffsetsByName = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, string> Table = Build();
+
+    internal static int[]? KnownOffsetsFor(IReadOnlyList<string> notes) =>
+        Resolve(notes) is { } name && OffsetsByName.TryGetValue($"{notes.Count}:{name}", out var offsets)
+            ? [.. offsets] : null;
 
     private static Dictionary<string, string> Build()
     {
@@ -120,6 +125,7 @@ public static class TuningNameResolver
         {
             var reference = TuningUtilities.GetStandardMidiPitches(tuning.StringCount);
             table.TryAdd(Key(reference.Select((pitch, i) => Mod12(pitch + tuning.Offsets[i])).ToArray()), tuning.Name);
+            OffsetsByName.TryAdd($"{tuning.StringCount}:{tuning.Name}", tuning.Offsets);
         }
 
         return table;
@@ -130,6 +136,7 @@ public static class TuningNameResolver
         var pcs = new int[std.Length];
         for (var i = 0; i < std.Length; i++) pcs[i] = Mod12(std[i] + offsets[i]);
         table[Key(pcs)] = name;
+        OffsetsByName[$"{std.Length}:{name}"] = offsets;
     }
 
     /// <summary>For a tuning that is not a transposition of a standard open
@@ -242,8 +249,10 @@ public static class TuningNameResolver
     /// <summary>Parses one note letter (any case; sharps or flats;
     /// double-accidentals not needed) to a pitch class 0–11, or -1 if it isn't a
     /// note. Matches the spelling <see cref="TuningUtilities.GetTuningNames" />
-    /// emits (C#, Eb, F#, G#, Bb) plus the common enharmonic aliases.</summary>
-    private static int NoteToPitchClass(string? note)
+    /// emits (C#, Eb, F#, G#, Bb) plus the common enharmonic aliases. The one
+    /// note-letter parser: <see cref="TuningOffsetResolution" /> derives offsets
+    /// through it, so a derived vector always names the same as its letters.</summary>
+    public static int NoteToPitchClass(string? note)
     {
         if (string.IsNullOrWhiteSpace(note)) return -1;
         var t = note.Trim();

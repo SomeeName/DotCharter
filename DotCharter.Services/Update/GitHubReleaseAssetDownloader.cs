@@ -203,7 +203,7 @@ public sealed class GitHubReleaseAssetDownloader : IGitHubReleaseAssetDownloader
                     $"'{asset.AssetName}' from {asset.Tag} does not match its pinned SHA-256; it was discarded.");
             }
 
-            File.Move(partial, destinationPath, overwrite: true);
+            AtomicFile.Publish(partial, destinationPath);
             _logger?.Info(AppLogCategory.Application,
                 $"Release asset '{asset.AssetName}' ({asset.Tag}) downloaded and verified ({exactBytes:N0} bytes).");
             return destinationPath;

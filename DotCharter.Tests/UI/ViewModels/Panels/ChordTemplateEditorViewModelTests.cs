@@ -1,4 +1,4 @@
-﻿using DotCharter.Services.Editing.Fingering;
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.Tone.Diagnostics;
 using DotCharter.UI.ViewModels.Editor;
@@ -17,6 +17,151 @@ namespace DotCharter.Tests.UI.ViewModels.Panels;
 /// </summary>
 public sealed class ChordTemplateEditorViewModelTests
 {
+    [Fact]
+    public void SaveFingeringPreservesEveryFretAndTheAuthoredGhostMask()
+    {
+        var h = new Harness();
+        var arr = h.Editor.ActiveArrangement!;
+        var grip = new ChordTemplate
+        {
+            Id = 0, GhostMask = 1 << 2, Frets = new() { [2] = 7, [3] = 5, [4] = 5 },
+            Fingers = new() { [2] = 3, [3] = 1, [4] = 1 }
+        };
+        arr.ChordTemplates.Add(grip);
+        var level = arr.Levels[0];
+        var shape = new HandShape { TemplateId = 0, EndPosition = new(2) };
+        level.HandShapes.Add(shape);
+        var chord = new Chord { ChordNotes = { new ChordNote { StringIndex = 3, Fret = 5 } } };
+        level.Chords.Add(chord);
+        level.Notes.Add(new GuitarNote { Position = new(1), StringIndex = 4, Fret = 5 });
+        var vm = h.CreateChordEditor();
+        h.Selection.SelectedHandShapes.Add(shape);
+
+        vm.StringInputs[2].FingerText = "4";
+        vm.SaveFingerEditsCommand.Execute(null);
+
+        var saved = arr.FindChordTemplate(shape.TemplateId)!;
+        Assert.Equal(grip.Frets, saved.Frets);
+        Assert.Equal(1 << 2, shape.GhostMask ?? saved.GhostMask);
+        Assert.Equal([4, 1, 1], new[] { 2, 3, 4 }.Select(saved.GetFinger));
+        Assert.Equal(3, Assert.Single(chord.ChordNotes).StringIndex);
+    }
+
+    [Fact]
+    public void EditingAHandShapesGripReusesAnEqualTemplateAndLeavesOtherUsesAlone()
+    {
+        var h = new Harness();
+        var arr = h.Editor.ActiveArrangement!;
+        var original = new ChordTemplate { Id = 0, Name = "Grip", Frets = new() { [3] = 5 } };
+        var equal = new ChordTemplate { Id = 1, Name = "Grip", Frets = new() { [3] = 7 } };
+        arr.ChordTemplates.Add(original);
+        arr.ChordTemplates.Add(equal);
+        var shape = new HandShape { TemplateId = 0, EndPosition = new(1) };
+        var other = new HandShape { TemplateId = 0, Position = new(2), EndPosition = new(3) };
+        arr.Levels[0].HandShapes.Add(shape);
+        arr.Levels[0].HandShapes.Add(other);
+        var vm = h.CreateChordEditor();
+        h.Selection.SelectedHandShapes.Add(shape);
+        vm.ChooseApplyRungCommand.Execute(ChordApplyRung.EveryUse);
+
+        vm.StringInputs[3].FretText = "7";
+
+        Assert.Equal(equal.Id, shape.TemplateId);
+        Assert.Equal(original.Id, other.TemplateId);
+        Assert.Equal(5, original.GetFret(3));
+        Assert.Equal(2, arr.ChordTemplates.Count);
+    }
+
+    [Fact]
+    public void NoName_RemembersTheNameOfEachTemplateIndependently()
+    {
+        var h = new Harness();
+        var arr = h.Editor.ActiveArrangement!;
+        var first = new ChordTemplate { Id = 0, Name = "first authored", Frets = new() { [0] = 3, [1] = 5 } };
+        var second = new ChordTemplate { Id = 1, Name = "second authored", Frets = new() { [0] = 5, [1] = 7 } };
+        arr.ChordTemplates.Add(first);
+        arr.ChordTemplates.Add(second);
+        var vm = h.CreateChordEditor();
+        vm.ChooseApplyRungCommand.Execute(ChordApplyRung.EveryUse);
+        vm.LoadTemplate(first, 6);
+        AssertUnnamedUndoRedo(h, vm, true);
+        vm.LoadTemplate(second, 6);
+        AssertUnnamedUndoRedo(h, vm, true);
+        vm.LoadTemplate(first, 6);
+
+        AssertUnnamedUndoRedo(h, vm, false);
+
+        Assert.Equal("first authored", first.Name);
+        Assert.True(second.Unnamed);
+        vm.LoadTemplate(second, 6);
+        AssertUnnamedUndoRedo(h, vm, false);
+        Assert.Equal("second authored", second.Name);
+    }
+
+    private static void AssertUnnamedUndoRedo(Harness harness, ChordTemplateEditorViewModel vm, bool unnamed)
+    {
+        var arrangement = harness.Editor.ActiveArrangement!;
+        var before = ChartProjectCloner.CloneArrangement(arrangement);
+        vm.IsUnnamed = unnamed;
+        var after = ChartProjectCloner.CloneArrangement(arrangement);
+        harness.History.Undo();
+        Assert.Empty(DeepCompare.Diff("Arrangement", before, arrangement, new HashSet<string>()));
+        harness.History.Redo();
+        Assert.Empty(DeepCompare.Diff("Arrangement", after, arrangement, new HashSet<string>()));
+    }
+
+    [Fact]
+    public void ReloadingAnEmptyArrangement_ClearsTheTargetAndPinAction()
+    {
+        var h = new Harness();
+        var old = new ChordTemplate { Id = 0, Name = "old", Frets = new() { [0] = 3, [1] = 5 } };
+        h.Editor.ActiveArrangement!.ChordTemplates.Add(old);
+        var vm = h.CreateChordEditor();
+        Assert.True(vm.CanTogglePin);
+        var empty = new Arrangement { StringCount = 7, Tuning = new string[7] };
+        empty.Levels.Add(new ChartLevel());
+        h.State.ActiveArrangement = empty;
+        h.State.ActiveLevel = empty.Levels[0];
+
+        vm.ReloadForSelectedChord();
+
+        Assert.Null(vm.Template);
+        Assert.Null(vm.DraftTemplate);
+        Assert.Null(vm.SelectedDropdownTemplate);
+        Assert.False(vm.CanTogglePin);
+        Assert.False(vm.CanSaveFingering);
+        Assert.Empty(vm.ChordName);
+        Assert.All(vm.StringInputs, input => Assert.Equal(string.Empty, input.FretText));
+        vm.IsPinned = true;
+        Assert.False(old.Pinned);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LeftyProfile_PreservesPerStringRowOrder_WhileInvertReversesIt(bool invert)
+    {
+        var h = new Harness();
+        h.State.InvertStrings = invert;
+        var chord = UntemplatedChord((0, 3), (1, 5));
+        h.Editor.ActiveArrangement!.Levels[0].Chords.Add(chord);
+        h.Selection.SelectedChords.Add(chord);
+        var vm = h.CreateChordEditor();
+        var righty = vm.DisplayStringInputs.ToArray();
+        Assert.Equal(6, righty.Length);
+
+        h.State.LeftyFlip = true;
+
+        Assert.Equal(righty, vm.DisplayStringInputs);
+        Assert.Equal(invert, h.Editor.FlipStrings);
+        Assert.Equal(invert, vm.FlipStrings);
+
+        h.State.InvertStrings = !invert;
+
+        Assert.Equal(righty.Reverse(), vm.DisplayStringInputs);
+        Assert.Equal(!invert, vm.FlipStrings);
+    }
+
     [Fact]
     public void SelectingUntemplatedChord_ShowsItsOwnNotes_NotTheFirstTemplate()
     {
@@ -422,6 +567,87 @@ public sealed class ChordTemplateEditorViewModelTests
         h.History.Undo();
         Assert.Equal("A5", arr.ChordTemplates[0].Name);
         Assert.False(h.History.CanUndo);
+    }
+
+    [Fact]
+    public void DisplayRows_UseFlatLabelsAndPitches_WithoutChangingStoredTuning()
+    {
+        var h = new Harness();
+        var arr = h.Editor.ActiveArrangement!;
+        arr.Tuning = ["Eb", "G#", "C#", "F#", "Bb", "Eb"];
+        for (var i = 0; i < 6; i++) arr.TuningPitches.Add(new TuningOffset(-1));
+        var vm = h.CreateChordEditor();
+        vm.LoadTemplate(new ChordTemplate { Frets = { [3] = 2 } }, 6);
+        Assert.Equal(new[] { "Eb", "Ab", "Db", "Gb", "Bb", "Eb" }, vm.StringInputs.Select(s => s.StringName));
+        Assert.Equal(vm.TuningNames, vm.StringInputs.Select(s => s.StringName));
+        Assert.Equal("Ab3", vm.StringInputs[3].PitchName);
+        Assert.Equal(new[] { "Eb", "G#", "C#", "F#", "Bb", "Eb" }, arr.Tuning);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AdjacentFretRow_FollowsTheVisualOrderAndLiveFlip(bool invert)
+    {
+        var h = new Harness();
+        h.State.InvertStrings = invert;
+        var vm = h.CreateChordEditor();
+        vm.LoadTemplate(new ChordTemplate(), 6);
+        foreach (var order in new[] { invert, !invert })
+        {
+            h.State.InvertStrings = order;
+            var indices = order ? Enumerable.Range(0, 6).Reverse().ToArray() : Enumerable.Range(0, 6).ToArray();
+            for (var i = 0; i < indices.Length; i++)
+            {
+                Assert.Equal(i < 5 ? indices[i + 1] : null, vm.AdjacentStringInput(indices[i], 1)?.StringIndex);
+                Assert.Equal(i > 0 ? indices[i - 1] : null, vm.AdjacentStringInput(indices[i], -1)?.StringIndex);
+            }
+        }
+    }
+
+    [Fact]
+    public void ReloadingTheSameGripAfterATuningEdit_NotifiesTheSoundingPitchBinding()
+    {
+        var h = new Harness();
+        var arr = h.Editor.ActiveArrangement!;
+        for (var i = 0; i < 6; i++) arr.TuningPitches.Add(new TuningOffset(-1));
+        var vm = h.CreateChordEditor();
+        var grip = new ChordTemplate { Frets = { [3] = 2 } };
+        vm.LoadTemplate(grip, 6);
+        var row = vm.StringInputs[3];
+        Assert.Equal("Ab3", row.PitchName);
+        var changed = new List<string?>();
+        row.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        arr.TuningPitches[0].Step = 1;
+        vm.LoadTemplate(grip, 6);
+        Assert.Equal("G#3", row.PitchName);
+        Assert.Contains(nameof(StringFingeringInput.PitchName), changed);
+    }
+
+    [Theory]
+    [InlineData(-1, "Ab")]
+    [InlineData(0, "A")]
+    [InlineData(1, "A#")]
+    public void SuggestedNames_FollowTuningSpellingWithoutEnharmonicDuplicates_AndKeepAuthoredNames(int shift, string expected)
+    {
+        var h = new Harness();
+        var arrangement = h.Editor.ActiveArrangement!;
+        var offsets = Enumerable.Repeat(shift, 6).ToArray();
+        arrangement.Tuning = TuningUtilities.GetTuningNames(6, offsets);
+        foreach (var step in offsets) arrangement.TuningPitches.Add(new TuningOffset(step));
+        var template = new ChordTemplate
+        {
+            Id = 0, Name = "G# authored/Eb",
+            Frets = { [0] = 5, [1] = 7, [2] = 7, [3] = 6, [4] = 5, [5] = 5 }
+        };
+        arrangement.ChordTemplates.Add(template);
+        var vm = h.CreateChordEditor();
+        vm.LoadTemplate(template, 6);
+        Assert.Equal("G# authored/Eb", template.Name);
+        Assert.Equal(template.Name, vm.ChordName);
+        Assert.Contains(template.Name, vm.Names.KnownChordNames);
+        Assert.False(h.History.CanUndo);
+        Assert.Equal(new[] { expected }, vm.Names.SuggestedChordNames);
     }
 
     private sealed class Harness

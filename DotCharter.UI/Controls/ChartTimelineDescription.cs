@@ -90,7 +90,7 @@ public static class ChartTimelineDescription
     private static string DescribeChord(Chord chord, Arrangement? arrangement, IList<BeatMarker> beats,
         ILocalizationService loc)
     {
-        var name = FindTemplate(arrangement, chord.TemplateId)?.GetDisplayName();
+        var name = arrangement?.FindChordTemplate(chord.TemplateId)?.GetDisplayName();
         var kind = string.IsNullOrWhiteSpace(name)
             ? loc["ChartDiff_Chord"]
             : loc.Format("Timeline_A11y_KindNameFmt", loc["ChartDiff_Chord"], name);
@@ -168,19 +168,6 @@ public static class ChartTimelineDescription
     {
         var time = TimeSpan.FromMilliseconds(Math.Max(0, timeMs));
         return time.ToString(time.TotalHours >= 1 ? @"h\:mm\:ss\.f" : @"m\:ss\.f", CultureInfo.CurrentCulture);
-    }
-
-    private static ChordTemplate? FindTemplate(Arrangement? arrangement, int templateId)
-    {
-        if (arrangement is null || templateId < 0) return null;
-        var templates = arrangement.ChordTemplates;
-        for (var i = 0; i < templates.Count; i++)
-        {
-            if (templates[i].Id == templateId)
-                return templates[i];
-        }
-
-        return null;
     }
 
     private static string Join(ILocalizationService loc, params string[] parts) =>

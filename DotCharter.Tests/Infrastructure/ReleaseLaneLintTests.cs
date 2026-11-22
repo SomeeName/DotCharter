@@ -137,17 +137,19 @@ public sealed class ReleaseLaneLintTests : IDisposable
 
         // The gate leaves the list out and the lane runs exactly it: both read the ONE list.
         Assert.Contains("@($GateExclusion) + @((Read-ReleaseLane $ReleaseLanePath).Classes.Keys)", gate, StringComparison.Ordinal);
-        Assert.Contains("New-ReleaseLaneShardPlan $weights.Classes $Shards", gate, StringComparison.Ordinal);
-        Assert.Contains("if ($ReleaseLane) { $exit = Invoke-ReleaseLaneRun 'release'; if ($exit -ne 0) { exit $exit } }", gate, StringComparison.Ordinal);
+        Assert.Contains("New-ReleaseLaneShardPlan $weights.Classes $Count", gate, StringComparison.Ordinal);
+        Assert.Contains("if ($lanes -contains 'release') { $started['release'] = Start-GateShardedRun 'release' 'release' $counts['release'] }", gate, StringComparison.Ordinal);
+        Assert.Contains("if ($lanes -contains 'release') { $exit = Invoke-ReleaseLaneRun 'release'; if ($exit -ne 0) { exit $exit }; $acceptedKinds += 'releaseLane' }", gate, StringComparison.Ordinal);
 
-        // The train: after the green gate, on every train that is not docs-only, before the merge, and on record.
-        Assert.Contains("if (-not $docsOnly -and $gateOk -and $headlessOk) {", train, StringComparison.Ordinal);
-        var lane = train.IndexOf("-File $gate @cpuSwitch -ReleaseLane -NoBuild -Shards $Shards", StringComparison.Ordinal);
+        // The train (#325): every train that is not docs-only runs the lane in its ONE gate call, beside
+        // the gate and headless, before the merge, and on record.
+        Assert.Contains("$laneArgs = @('-Gate', '-ReleaseLane') + @(if ($wantHeadless) { '-Headless' })", train, StringComparison.Ordinal);
+        var lane = train.IndexOf("-File $gate @cpuSwitch -Configuration Release @laneArgs -Shards $Shards", StringComparison.Ordinal);
         var record = train.IndexOf("$recordPath = Save-GateRecord @recordArgs", StringComparison.Ordinal);
-        var merge = train.IndexOf("gh pr merge", StringComparison.Ordinal);
+        var merge = train.IndexOf("Invoke-MergeTrainMerges -Prs $info", StringComparison.Ordinal);
         Assert.True(lane > 0 && record > lane && merge > record, "the train must run the release lane before it records the tree and merges.");
         Assert.Contains("elseif (-not $releaseOk) { 'release lane RED' }", train, StringComparison.Ordinal);
-        Assert.Contains("ReleaseLane = $ranRelease", train, StringComparison.Ordinal);
+        Assert.Contains("ReleaseLane = ($executedGreenLanes -contains 'release')", train, StringComparison.Ordinal);
 
         // The release preflight: not skippable, reuses only a green record of the same tree, runs before the publishes.
         Assert.DoesNotContain("SkipReleaseLane", release, StringComparison.Ordinal);

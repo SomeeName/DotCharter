@@ -32,7 +32,9 @@ public sealed class ChordApplyPreviewParityTests
     private readonly ChordTemplate _a5;
     private readonly Chord _first;
     private readonly Chord _second;
+    private readonly Chord _otherBarChord;
     private readonly HandShape _sharedBar;
+    private readonly HandShape _otherBar;
 
     public ChordApplyPreviewParityTests()
     {
@@ -61,6 +63,12 @@ public sealed class ChordApplyPreviewParityTests
         AddChord(0, _a5.Id, 5, 2);
         AddChord(0, -1, 5, 3);                       // an unbound strum under the shared bar
         _sharedBar = AddHandShape(0, _a5.Id, 0, 4);
+        // A second bar of the same grip. A fingering edit reaches every strum under
+        // the bars it is applied to (the whole hand shape), so the selection rung
+        // needs a chord under a bar the loaded chord is NOT in to preview more than
+        // "this chord" does.
+        _otherBarChord = AddChord(0, _a5.Id, 5, 14);
+        _otherBar = AddHandShape(0, _a5.Id, 14, 15);
         AddChord(0, sameFrets.Id, 5, 8);
         AddChord(0, movedUp.Id, 7, 10);
         AddHandShape(0, movedUp.Id, 10, 11);
@@ -70,11 +78,14 @@ public sealed class ChordApplyPreviewParityTests
         AddChord(1, sameFrets.Id, 5, 4);
     }
 
+    /// <summary>"This chord" is the four strums under the shared bar plus the bar (5):
+    /// a fingering edit reaches the whole hand shape. "Selected" adds the second bar
+    /// and its strum (7), and each wider rung adds the uses beyond.</summary>
     [Theory]
-    [InlineData(ChordApplyRung.ThisChord, 2)]
-    [InlineData(ChordApplyRung.Selected, 3)]
-    [InlineData(ChordApplyRung.EveryUse, 7)]
-    [InlineData(ChordApplyRung.SameGrip, 11)]
+    [InlineData(ChordApplyRung.ThisChord, 5)]
+    [InlineData(ChordApplyRung.Selected, 7)]
+    [InlineData(ChordApplyRung.EveryUse, 9)]
+    [InlineData(ChordApplyRung.SameGrip, 13)]
     public void ThePreview_IsExactlyWhatTheEditChanges(ChordApplyRung rung, int expected)
     {
         var scope = Scope();
@@ -122,13 +133,13 @@ public sealed class ChordApplyPreviewParityTests
         var highlight = ChordUseHighlight.From(sounds.Chords, sounds.HandShapes, _arr);
 
         Assert.Equal(sounds.Count, highlight.Count);
-        Assert.Equal(8, highlight.On(_arr.Levels[0].Chords).Count);
+        Assert.Equal(10, highlight.On(_arr.Levels[0].Chords).Count);
         Assert.Equal(3, highlight.ElsewhereThan(_arr.Levels[0].Chords));
     }
 
     private ChordApplyScope Scope() =>
         _planner.ResolveReach(_a5, new ChordApplySounds([_first], [_sharedBar]),
-            new ChordApplySounds([_first, _second], [_sharedBar]))!;
+            new ChordApplySounds([_first, _second, _otherBarChord], [_sharedBar, _otherBar]))!;
 
     private ChordTemplate Refingered()
     {

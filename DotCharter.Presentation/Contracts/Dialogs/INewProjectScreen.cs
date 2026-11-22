@@ -10,7 +10,7 @@ namespace DotCharter.Presentation.Contracts.Dialogs;
 ///     <see cref="IDialogScreen{TResult}.Result" /> is the details to create from, or
 ///     null when cancelled; the folder is picked after the dialog closes.
 /// </summary>
-public interface INewProjectScreen : IDialogScreen<NewProjectDetails?>
+public interface INewProjectScreen : IDialogScreen<NewProjectDetails?>, ISongNamesFields
 {
     bool IsChooserStage { get; }
 
@@ -25,11 +25,6 @@ public interface INewProjectScreen : IDialogScreen<NewProjectDetails?>
     string Artist { get; set; }
 
     string Title { get; set; }
-
-    /// <summary>The tags' own script when they are not Latin; carried into the project beside the Latin names.</summary>
-    string JapaneseArtist { get; set; }
-
-    string JapaneseTitle { get; set; }
 
     string Album { get; set; }
 

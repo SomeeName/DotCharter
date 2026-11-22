@@ -21,14 +21,20 @@ public sealed record SongMetadataFields(
     string Genre,
     int KeyAccidentals,
     bool KeyIsMinor,
-    string Version = "1")
+    string Version = "1",
+    string TitleSort = "",
+    string AlbumSort = "",
+    string DlcKey = "",
+    double? PreviewStartMs = null,
+    bool KeyLocked = false)
 {
     public static SongMetadataFields From(ChartData chart)
     {
         return new SongMetadataFields(chart.Artist, chart.ArtistSort, chart.SongName,
             chart.JapaneseArtist, chart.JapaneseTitle, chart.AlbumName,
             chart.AlbumYear, chart.ReleaseDate, chart.Charter, chart.Genre,
-            chart.KeyAccidentals, chart.KeyIsMinor, chart.Version);
+            chart.KeyAccidentals, chart.KeyIsMinor, chart.Version,
+            chart.TitleSort, chart.AlbumSort, chart.DlcKey, chart.PreviewStartMs, chart.KeyLocked);
     }
 
     public void ApplyTo(ChartData chart)
@@ -46,6 +52,11 @@ public sealed record SongMetadataFields(
         chart.KeyAccidentals = KeyAccidentals;
         chart.KeyIsMinor = KeyIsMinor;
         chart.Version = Version;
+        chart.TitleSort = TitleSort;
+        chart.AlbumSort = AlbumSort;
+        chart.DlcKey = DlcKey;
+        chart.PreviewStartMs = PreviewStartMs;
+        chart.KeyLocked = KeyLocked;
     }
 }
 

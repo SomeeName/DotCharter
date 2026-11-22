@@ -41,7 +41,8 @@ public sealed class PlayOnlyExportGuardCoverageTests
         ("File ▸ Export: Rocksmith package, DotCharter song", "DotCharter.UI/ViewModels/Shell/ShellDialogsViewModel.cs", Guard),
         ("Lyrics: LRC, UltraStar", "DotCharter.UI/ViewModels/Editor/LyricsInspectorViewModel.cs", Guard),
         ("Phrase catalog capture", "DotCharter.UI/ViewModels/Editor/PhraseCatalogViewModel.cs", Guard),
-        ("Rocksmith export dialog", "DotCharter.Presentation/Screens/Dialogs/RocksmithExportViewModel.Build.cs", Guard),
+        ("Rocksmith export dialog", "DotCharter.Presentation/Screens/Dialogs/RocksmithExportViewModel.Build.cs", "_pickers.ShowFailureAsync("),
+        ("Rocksmith export refusal messages", "DotCharter.Presentation/Screens/Dialogs/RocksmithExportPickers.cs", Guard),
         ("DotCharter song dialog", "DotCharter.Presentation/Screens/Dialogs/DcSongExportViewModel.Write.cs", Guard)
     ];
 

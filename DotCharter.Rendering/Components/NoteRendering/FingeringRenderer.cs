@@ -97,7 +97,7 @@ public static class FingeringRenderer
         {
             var hs = snapshot.HandShapes[i];
             if (hs.EndTime < timeMs || hs.Time - LeadMs > timeMs) continue;
-            if (hs.Time >= startMs) continue;
+            if (hs.TemplateId < 0 || hs.Time >= startMs) continue;
             templateId = hs.TemplateId;
             startMs = hs.Time;
         }
@@ -131,7 +131,8 @@ public static class FingeringRenderer
         for (var i = 0; i < snapshot.HandShapeCount; i++)
         {
             var hs = snapshot.HandShapes[i];
-            if (time >= hs.Time && time <= hs.EndTime) return true;
+            // A shape without a template has no grip to show, so it owns no chord.
+            if (hs.TemplateId >= 0 && time >= hs.Time && time <= hs.EndTime) return true;
         }
 
         return false;
@@ -148,13 +149,8 @@ public static class FingeringRenderer
 
     private static RenderChordTemplate? FindTemplate(FrameSnapshot snapshot, int templateId)
     {
-        for (var t = 0; t < snapshot.TemplateCount; t++)
-        {
-            if (snapshot.Templates[t].Id == templateId)
-                return snapshot.Templates[t];
-        }
-
-        return null;
+        var index = snapshot.FindTemplateIndex(templateId);
+        return index >= 0 ? snapshot.Templates[index] : null;
     }
 
     private static void DrawTemplateFingering(RenderContext context, RenderChordTemplate template, float alpha)

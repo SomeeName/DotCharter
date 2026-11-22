@@ -74,7 +74,8 @@ public sealed class SurfaceShowRewarmUiPerfSmokeTests(ITestOutputHelper output)
                     $"rewarm ({string.Join(", ", stale.Select(s => s.GetType().Name).Distinct())}) — the click pays for them");
 
                 var vm = (SongOverviewViewModel)tab.DataContext!;
-                foreach (var list in tab.GetVisualDescendants().OfType<ListBox>())
+                // The Phrases list has no source in this fixture (the standalone pane has no inspector to host it).
+                foreach (var list in tab.GetVisualDescendants().OfType<ListBox>().Where(l => l.Name != "PhraseGroups"))
                 {
                     Assert.True(list.GetVisualDescendants().OfType<ListBoxItem>().Any(),
                         $"the '{list.Name ?? list.GetType().Name}' list realized no rows while hidden " +

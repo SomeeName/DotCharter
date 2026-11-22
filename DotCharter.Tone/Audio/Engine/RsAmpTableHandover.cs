@@ -65,7 +65,7 @@ internal sealed class RsAmpTableHandover : IDisposable
             }
             catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
             {
-                _logger?.Warning(AppLogCategory.Audio, $"Rocksmith amp chains not handed to the engine ({reason}): {ex.Message}");
+                _logger?.Warning(AppLogCategory.Audio, $"Rocksmith amp chains not handed to the engine ({reason})", ex);
             }
         }
     }

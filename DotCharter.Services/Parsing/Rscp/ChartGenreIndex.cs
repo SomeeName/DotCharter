@@ -33,7 +33,7 @@ public sealed class RscpChartGenreSource : IChartGenreSource
 
 /// <summary>
 ///     A scan-time cache of the genre authored in each of the player's OWN
-///     charts, so the practice planner's genre preference has real data behind
+///     charts, so Song Select's genre filter has real data behind
 ///     it without ever touching a disk from the UI thread.
 /// </summary>
 /// <remarks>
@@ -42,10 +42,8 @@ public sealed class RscpChartGenreSource : IChartGenreSource
 ///         <b><see cref="Warm" /> does the I/O, <see cref="GenreFor" /> does
 ///         not.</b> Warm is called ONCE per library scan, on a pool thread, next
 ///         to the PSARC scan that already runs there. GenreFor is a dictionary
-///         lookup and is safe on the UI thread — which matters because the
-///         planner's preview regenerates on every knob turn and
-///         <c>BuildPlanRequest</c> is assembled on the UI thread before the
-///         generation hops to the pool.
+///         lookup and is safe on the UI thread — which matters because
+///         Song Select reads it on the UI thread while the library is browsed.
 ///     </para>
 ///     <para>
 ///         <b>Unknown is a real answer.</b> A file that is missing, unreadable,
@@ -195,7 +193,7 @@ public sealed class ChartGenreIndex : IChartGenreIndex
     }
 
     private void LogSoft(string path, Exception ex) => _logger?.Warning(AppLogCategory.Project,
-        $"Could not read the genre of '{path}': {ex.Message}. Treating it as unknown.");
+        $"Could not read the genre of '{path}'. Treating it as unknown.", ex);
 
     private readonly record struct Entry(string Stamp, string? Genre);
 }

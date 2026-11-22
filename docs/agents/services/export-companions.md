@@ -6,6 +6,7 @@ One file per subject under `export-companions/`. Read the one you need:
 - [save-companions.md](export-companions/save-companions.md) — save companions (SaveCompanionService)
 - [export-cost-and-open-items.md](export-companions/export-cost-and-open-items.md) — export cost measured, the four non-reproducible things, still open
 - [export-boundary-rules.md](export-companions/export-boundary-rules.md) — the export-boundary rules: linked chords, chord names, repeated chords, phrase names, moveR phrases, chordId, error invention, arrangement properties, tuning, capo, songLength, tone events, average tempo, tuning stated twice, metadata, GP export
+- [extended-range-export.md](export-companions/extended-range-export.md) — automatic RS Extended Range packages and XML for 7-/8-string guitar and 5-/6-string bass, stock identity, limits and legacy XML reading
 - [dlc-builder-parity.md](export-companions/dlc-builder-parity.md) — the export dialog's DLC Builder surfaces: Version, test export, release file name, Auto volume
 
 **Play-only content is never exported (#822).** A chart a source marked play-only
@@ -50,6 +51,7 @@ selectable). A step that throws ships the arrangement as charted, with a warning
   modes, the fixes, and fixes-then-DD; `DdLevelCountModelTests` holds the tree
   evaluator to 2,000 ML.NET scores bit for bit. Chord IDs are compared by template
   content: the F# runs phrases in parallel and numbers new templates by thread timing.
+  The contract test and its expected F# output are compared unchanged.
 - **Skipped on purpose:** `removeExtraBeats` and the `removebeats` event's beat
   removal (the event itself is consumed). Both move or delete BEATS, which belong to
   the project and every arrangement in the package; the `songLength` rule in
@@ -59,13 +61,38 @@ selectable). A step that throws ships the arrangement as charted, with a warning
   crowd events it adds are the ones `SngFromDomainMapper.AddCrowdEvents` adds when
   absent.
 - **Strings past the sixth:** the generator works lowest-string-first with templates
-  as wide as the guitar ("the highest strings" are the top three); the RS7X block is
-  built from the generated copy, so it matches by construction
+  as wide as the guitar ("the highest strings" are the top three); positional XML
+  and RS Extended Range records are written from that generated copy
   (`DynamicDifficultyExportTests`).
+- **Conversion fidelity:** reduced chord notes and templates keep strings from the same
+  end. Two steps are deliberately NOT the F#'s (#636). The muted-string cleanup
+  (`DdMutedChordCleanup`) never edits an authored template: a chord with muted and
+  played strings is rebound to a deduplicated reduced copy, and its own strummed
+  hand shape follows only when no chord or sounding note under it needs the full
+  grip (arpeggios, foreign-template shapes and shared ranges keep their template).
+  Level generation then reduces a hand shape and the chords under it as ONE decision
+  (`DdTemplateRequestApplier.ApplyLevel`): the F# request is applied unchanged
+  unless its grip would lack a string that a chord on a reduced grip
+  (`DdChordTemplate.ReducedFrom`) sounds under the shape at that level, in which
+  case the shape takes its full grip cut to exactly the strings sounded under it.
+  Charts without mixed-muted chords generate exactly as before
+  (`DdGoldenParityTests`); DLC Builder's own narrowing can still leave a shape
+  without a string a note under it sounds, and that stays for parity. Pinned by
+  `DdMutedGripInvariantTests` and `DdMutedHandShapeTests`.
+  A third: the F# ends the last phrase at `songLength` and starts the first at its
+  marker, so a sound past either (END written on its beat after the song length, a
+  note after END, one before the first marker) fell out of every generated level.
+  `DdPhraseData.For` stretches the first and last phrases over every sound of the
+  level (`DdContentPastSongEndTests`, chart + XML + SNG).
+  Chord-to-note conversion retains Ignore, and each level retains its authored
+  `fretHandMutes` XML (copied to every generated level, including empty phrases).
+  Chord-name normalization only changes musical minor qualities and trailing
+  `CONV` / `-arp` / `-nop` tokens; embedded text in authored names is preserved.
+  These corrections deliberately differ from the F# port and are covered by
+  `DdConversionRegressionTests`.
 - **Known limits:** the domain has no linked difficulties, so `newLinkedDiffs` from the
   phrase search do not reach the SNG; the SNG mapper derives hero levels as
-  `max/4`, `max/2` where DLC Builder rounds half to even; position-only fret-hand-mute
-  markers are not kept on the generated levels (DLC Builder's levels have none either).
+  `max/4`, `max/2` where DLC Builder rounds half to even.
 
 **What the package writer shares with everything else lives in `Export/Rocksmith/`,
 never on `RocksmithPackageBuilder`** (#884, ahead of the PSARC reader leaving this

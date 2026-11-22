@@ -51,7 +51,7 @@ namespace DotCharter.UI.Platform;
 ///     </para>
 ///     <para>
 ///         The SLIDER is not the only control that turns a notch into an edit.
-///         The EQ module's plot (<c>EqPlotControl</c>) mapped the wheel to the
+///         The EQ module's plot (<c>ColumnFlowEqPlot</c>) mapped the wheel to the
 ///         selected band's Q, and the plot is 100 px tall in the middle of the
 ///         Mixer tab: scroll the tab and, a few notches in, the plot slides under
 ///         the pointer, takes every notch from then on (the panel stops dead) and

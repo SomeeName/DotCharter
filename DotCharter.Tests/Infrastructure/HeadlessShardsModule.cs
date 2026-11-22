@@ -30,34 +30,20 @@ internal static class HeadlessShardsModule
         var file = Path.Combine(scratchDirectory, "case-" + Guid.NewGuid().ToString("N") + ".ps1");
         File.WriteAllText(file, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
-        var info = new ProcessStartInfo(host)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var info = new ProcessStartInfo(host);
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", file })
             info.ArgumentList.Add(argument);
 
-        Process? process;
-        try
-        {
-            process = Process.Start(info);
-        }
-        catch (System.ComponentModel.Win32Exception)
+        // #608: both pipes drain concurrently under one cap (a deadlock detector for a hung child, never a budget).
+        var result = BoundedProcess.TryRun(info, TimeSpan.FromMinutes(2), "powershell (HeadlessShards)");
+        if (result is null)
         {
             Assert.Skip("Windows PowerShell is not available, so the shard module cannot be executed here.");
             return "";
         }
 
-        Assert.NotNull(process);
-        var stdoutTask = process!.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
-        var stderr = process.StandardError.ReadToEnd();
-        // A deadlock detector for a hung child, never a budget.
-        Assert.True(process.WaitForExit(120_000), "powershell did not finish within 120 s.");
-        var stdout = stdoutTask.GetAwaiter().GetResult();
-        Assert.True(process.ExitCode == 0, $"powershell exited {process.ExitCode}.{Environment.NewLine}{stderr}{Environment.NewLine}{stdout}");
+        var stdout = result.StandardOutput;
+        Assert.True(result.ExitCode == 0, $"powershell exited {result.ExitCode}.{Environment.NewLine}{result.StandardError}{Environment.NewLine}{stdout}");
         return stdout.Trim();
     }
 }

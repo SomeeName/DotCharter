@@ -2,11 +2,57 @@
 
 ## `Editing/Validation/` + `Editing/Fixing/` — the inspector and auto-fix
 
+An `ArrangementIssue` keeps its original domain-field equality and hash identity.
+`MessageKey` and `MessageArgs` render the English sentence in another language and
+do not split the same finding into different identities on repeated validation passes.
+
 The inspector (`ArrangementValidationService` over the `Rules/` set) and
 `ArrangementAutoFixService` are two halves of one contract: the rule says what is
 wrong, the fixer repairs exactly that and nothing else. Both re-run constantly —
 validation on the inspector's 150 ms debounce after every history step, auto-fix
 on demand and inside `BatchChartLintService`.
+
+**I30 (`ToneChangeOnNote`, `NoteRule` / `ChordRule`) has a one-click fix** (#759):
+`Editing/Tones/ToneChangeNudge` moves the tone change ONE 16th note earlier, measured on
+the beat grid (`NoteDenominator/16` of a beat; reaching back over a beat line, the rest is
+measured on the previous beat's meter; before the first beat, on the lead-in the timeline
+extrapolates from the first interval), as one undo step (`MoveToneChangeAction`). It moves
+exactly a 16th or not at all: it is offered DISABLED with the reason
+(`ToneChangeNudgeBlock`) when more than one tone change sits on the note, the move would reach
+before 0 ms, reach another tone change (never two on one time), cross a phrase or section start
+lying strictly inside the 16th, or land on another note's onset on any level. A change sitting
+ON a phrase start may move before it. "Same time" is I30's own comparison,
+`Editing/Validation/ValidationTimeMatch` (whole ms, 1 ms slop), for both matching the finding's
+change and the landing-spot guards. The press recomputes the nudge on the live arrangement, so
+an undo between the offer and the re-validation cannot stack two changes. The Issues tab offers
+it through `IssueFixViewModel` (no Fix all: the fix menu has none).
+Tests: `ToneChangeNudgeTests`, `IssueFixViewModelTests`, `InspectorIssuesViewModelTests`.
+
+Phrase boundary times, mover times, sustain-crossing queries and noguitar phrase
+intervals all use the context's shared `PhraseMarkers.All` result. An imported
+silence ends at the next phrase from either store; section-based silence
+intervals remain independent (`ArrangementValidationPhraseTimingTests`).
+
+`LinkNextRule` projects cloned landing-chord bend values for its initial-step
+comparison (`ArrangementValidationServiceTests`). Linked-note joins require all
+continuation technique, provenance and notation fields to match: only the span,
+bend points and final link/slide state are absorbed. A reflection guard in
+`ArrangementAutoFixServiceTests` checks each other writable note field and the
+fixer's fixed point.
+
+The Note queue's chord work is `Editing/ChordWorkEligibility`. Its split/link-landing
+set comes from the export's `LinkLandingBreakup` projection, and
+`TemplateAndOverlapRule` shares its `UsesFingering` and capo-aware `IsMissingFinger`
+rules. A hand shape or an ordinary chord using the same template still supplies a
+fingering-check use. The export and the queue also share `SynthesizeTemplate` for
+grips with chord notes but no stored template.
+
+For Issues validation, a link landing from either a note or chord note supplies no
+use for L06/L07/L08. If an ordinary chord or hand shape shares the template, its
+first eligible use still owns all three findings. Structural overlap checks still
+run on landings. Fingerless, fully muted, explicit-split and capo-open handling is
+unchanged. `TemplateAndOverlapRuleTests` pins these cases, including both link
+sources and the finding's chord/hand-shape backreference.
 
 - **`Fix` must be a FIXED POINT: running auto-fix on its own output has to change
   nothing.** A pipeline that is not idempotent is a pipeline that eats charts —
@@ -95,7 +141,7 @@ on demand and inside `BatchChartLintService`.
 - **TWO RULES THAT JUDGE THE SAME ELEMENT MUST LOOK IT UP THE SAME WAY.**
   `HandShapeRule` (I46) read a shape's template through the raw id index with no
   negative guard; `HandShapeContentRule` (E05) read it through
-  `ChordTemplateResolver.FindById`, which is null for any negative id. Both
+  `Arrangement.FindChordTemplate`, which is null for any negative id. Both
   `HandShape.TemplateId` and `ChordTemplate.Id` default to `-1`, so on an
   untemplated shape E05 went silent while I46 judged it against whichever
   UNNUMBERED template sat first in the collection — a false negative and a false
@@ -162,8 +208,12 @@ on demand and inside `BatchChartLintService`.
   rest of the suite, and sharp enough that a single boxed enumerator failed it.
 
 - **The rules and the export gate keep NO state between calls, and the quality
-  report depends on it (#690).** `ChartQualityReportViewModel` runs
-  `ChartQualityReporter.Build` OFF the UI thread on a `QualityReportSnapshot`
+  report depends on it (#690).** (The report DIALOG was removed in #497: its
+  verdict, counts, per-arrangement counts and difficulties and the Editor on Fire round trip moved to the Issues
+  tab, `ExportReadinessViewModel.ChartReport`, which runs the reporter over a snapshot off the UI thread; the
+  reporter, the snapshot and the copies below stay for it, the AI chat and their own tests. The dialog-bound names in this
+  entry, `QualityReportChecks` and `ChartQualityReport*Tests`, no longer exist.)
+  The dialog ran `ChartQualityReporter.Build` OFF the UI thread on a `QualityReportSnapshot`
   copy while the Inspector validates the live chart on the UI thread with the
   same singleton `IArrangementRule`s. Every rule's only fields are `const`s,
   `ArrangementValidationService` holds a logger and a rule array,
@@ -172,7 +222,7 @@ on demand and inside `BatchChartLintService`.
   report. Its findings name the COPY's elements: `QualityReportSnapshot.Rebind`
   maps them to the live chart by position (an element that moved is dropped, a
   chart whose arrangements or levels changed gets no report), pinned by
-  `QualityReportSnapshotTests` and `ChartQualityReportOffThreadTests`.
+  `QualityReportSnapshotTests`.
 
 - **The quality report's COPY waits for the busy row, and reuses the last one
   (#711).** Recheck only raises `IsChecking`; the assemble + copy runs in
@@ -188,7 +238,9 @@ on demand and inside `BatchChartLintService`.
   still 13–31 ms on the corpus's biggest 20-level ladders (measured
   2026-10-11 on a contended box, `EofRoundTripCostProbeTests`), paid on the UI
   thread after the busy row has painted; the clone of the first check in a
-  session is 36–73 ms. Pinned by `ChartQualityReportCopyTests` and
+  session is 36–73 ms. Pinned by
   `QualityReportCopiesTests`; the report over a restored spare equals the
   report over a clone on all 40 corpus charts
   (`EveryCorpusChart_ReportsTheSameOverARestoredSpare`, env-gated).
+
+A finding's sentence is a `Validation_*` resx key plus arguments (`ArrangementIssue.MessageKey`/`MessageArgs`, built by `ArrangementIssues.Make`); `Message` stays the English text read from the same resource. Surfaces that show it call `ArrangementIssueText.Of(issue, localization)`; logs, reports and AI prompts keep `Message`.

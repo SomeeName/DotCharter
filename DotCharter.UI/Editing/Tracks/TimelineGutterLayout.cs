@@ -44,11 +44,9 @@ public readonly struct TimelineGutterLayout
     public int StringCount { get; }
 
     /// <summary>
-    ///     The COMBINED vertical string flip: lefty XOR inverted-strings. Both
-    ///     flags flip the lane order, so together they cancel — the renderer's
-    ///     <c>ChartRenderContext.LaneTopFor</c> and every hit-tester take the
-    ///     same combined value, and so must the gutter or its labels run
-    ///     upside down for a left-handed player.
+    ///     The timeline's vertical string flip: InvertStrings alone, independent
+    ///     of handedness. The renderer's <c>ChartRenderContext.LaneTopFor</c> and
+    ///     every hit-tester use the same value so gutter labels name the lane drawn.
     /// </summary>
     public bool FlipStrings { get; }
 

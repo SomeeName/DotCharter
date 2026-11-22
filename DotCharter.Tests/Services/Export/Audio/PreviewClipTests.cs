@@ -29,10 +29,9 @@ public sealed class PreviewClipTests
 
         Assert.Equal(48_000 * 4, clip.FrameCount);
         Assert.Equal(0, clip.Samples[0]);
-        // Halved fade-in is 1.25 s — just after it the signal is at full level
-        // (and still before the halved 1.5 s fade-out starting at 2.5 s).
-        var afterFadeIn = (int)(48_000 * 1.3) * 2;
-        Assert.Equal(1000, clip.Samples[afterFadeIn]);
+        // DLC Builder halves the fades of a song under 5.5 s to half its length: 2 s each, meeting at 2 s.
+        Assert.Equal(1000, clip.Samples[48_000 * 2 * 2]);
+        Assert.InRange(clip.Samples[48_000 * 2], 490, 510);
     }
 
     [Fact]

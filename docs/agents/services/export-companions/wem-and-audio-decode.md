@@ -78,6 +78,14 @@ Wwise's IMA variant, not textbook IMA:
 
 ## Audio decode (`PcmAudioLoader`)
 
+`Export/Audio/ExportAudioFormats.cs` supplies the export picker patterns and display
+hints from one catalog: `Import/Audio/AudioFileTypes.Extensions`, plus pre-encoded
+WEM, WAV/AIFF container aliases (BWF, AIF, AIFF, AIFC), OGA, WMA and Opus.
+The catalog guides selection; it never restricts decoding. Native JUCE readers
+and the installed ffmpeg build decide which codecs can actually be read, and
+ffmpeg can accept additional inputs, so the picker retains **All files**.
+`ExportAudioFormatsTests` covers the advertised suffixes and import-format inclusion.
+
 Source audio → 48 kHz stereo 16-bit PCM. **The decoder is the EDITOR'S**: the
 native engine's (`JuceAudioDecoder`, JUCE's basic format set — what the editor
 plays), so a chart exports against exactly the audio it was charted against.
@@ -88,15 +96,32 @@ reader keeps it, so every MP3 project's wem ran **1,729 samples (36 ms at 48 kHz
 sample-identical. `PcmAudioLoaderEditorParityTests` pins it for MP3 at both rates
 and for FLAC. ffmpeg (bundled; `MediaToolResolver`) still RESAMPLES a non-48 kHz
 decode — from the engine's own float PCM, timing-neutral — and still DECODES what
-the engine cannot read (.m4a/.aac/.wma, which the editor cannot play either).
+the native reader rejects (including fallback-dependent M4A/AAC/WMA and Opus inputs).
 Without ffmpeg the resample is **linear** and recorded as a build warning,
 because it is audibly worse. The same loader feeds the audio lint, lyric
 auto-sync and tone generation, so all of them follow the editor too. The Vorbis
 encoder adds no delay (JuceSharp `WemEncoderTests.TheDecodedAudio_IsTheInput_AlignedAndClose`:
 best correlation at lag 0).
 
-The encoded wem is cached next to the source audio (`<stem>.vorbis.wem` /
-`<stem>.pcm.wem` — codec in the name, so switching codec regenerates instead of
-silently reusing the other one). Without this cache, psarc-on-save would re-encode
-the entire song on every Ctrl+S.
+Mono sources are copied to both stereo channels at full level, on every decoder
+path (#660). Native mono is expanded before resampling; ffmpeg-only formats are
+decoded with their source channel count, then mono is expanded in-process. This
+avoids ffmpeg's default -3 dB mono upmix without requiring the optional pan filter.
+Surround sources retain ffmpeg's downmix matrix. Tests inject native decoding and
+the resolved ffmpeg path (null disables the tool); optional tool integration uses
+`DOTCHARTER_TEST_FFMPEG` or this checkout's redist, never parent checkouts or PATH. The redist build decodes AAC but has no AAC
+encoder: a case that encodes its fixture asks `PcmDecoderFixture.Ffmpeg(encoder)`
+and is skipped, naming the encoder, when the tool's `-encoders` list lacks it.
 
+The managed WEM and preview WAV caches live in the project's `.dotcharter/cache/` (#725).
+`RocksmithBuildOptions.ProjectDirectory` comes from the saved project for normal,
+test and automatic exports. Package destinations never choose cache or ownership
+locations. Raw builder callers without a project directory fall back to the original
+working-audio root, never the output path.
+`ManagedAudioCache` gives each source path one stable slot, regardless of codec;
+the content/decode-policy receipt and detected WEM codec govern reuse. A codec
+or source-content change rewrites the slot rather than accumulating another
+filename. User-supplied WEMs bypass encoding and are never rewritten. Legacy
+top-level encoder names are handled by `ProjectFolderTidy` on open, through the
+Recycle Bin. `WwiseFreeExportTests` covers source identity/reuse;
+`SaveCompanionServiceTests` covers codec replacement and the folder listing.

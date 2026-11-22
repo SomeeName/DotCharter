@@ -53,6 +53,29 @@ public sealed class LibraryDeviceRateAudioNativeTests : IDisposable
 
     private LibraryDeviceRateAudio NewAudio() => new(new LibraryAudioCacheStore(rootOverride: Path.Combine(_sandbox, "cache")));
 
+    [Fact]
+    public async Task A_master_reset_preserves_native_stems_while_full_reset_clears_them()
+    {
+        Assert.SkipUnless(NativeLoadable(), "juce_sharp.dll is not loadable here");
+        var wav = Path.Combine(SongFolder(), "master.wav");
+        await File.WriteAllBytesAsync(wav, SongWav(DeviceRate, 1, false), TestContext.Current.CancellationToken);
+        using var service = new DotCharter.Tone.Audio.JuceAudioPlaybackService(FakeLocalization.KeysOnly());
+        typeof(DotCharter.Tone.Audio.JuceAudioPlaybackService)
+            .GetField("_engine", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(service, NullEngine(DeviceRate));
+        await service.LoadAudioAsync(wav);
+        await service.LoadStemsAsync([new("bass", wav)]);
+        Assert.Equal(["bass"], service.LoadedStemNames);
+        // Fall back to the old reset only to run this regression against the pre-fix API.
+        var reset = service.GetType().GetMethod("FreeMasterAudio") ?? service.GetType().GetMethod("FreeAudio")!;
+        reset.Invoke(service, null);
+        Assert.Equal("", service.CurrentAudioPath);
+        Assert.Equal(0, service.GetTotalAudioLengthMs());
+        Assert.Equal(["bass"], service.LoadedStemNames);
+        service.FreeAudio();
+        Assert.Empty(service.LoadedStemNames);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

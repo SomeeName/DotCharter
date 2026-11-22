@@ -58,16 +58,16 @@ public sealed class UserSettingsState
     public bool EnableStringShimmer { get; set; } = true;
     public bool EnableHitSparks { get; set; } = true;
 
-    /// <summary>Left-handed mode (v0.34): mirrors the 3D highway fret axis and
-    /// the 2D lanes. PROFILE-level — mirrored here from the active
+    /// <summary>Left-handed mode: mirrors only the 3D highway's fret axis.
+    /// All 2D string rows follow InvertStrings alone. PROFILE-level — mirrored here from the active
     /// <c>PlayerProfile.LeftyFlip</c> (startup + ActiveProfileChanged +
     /// toggle), never persisted in AppConfig.</summary>
     public bool LeftyFlip { get; set; }
 
     /// <summary>The editor's String order: <c>true</c> is Tab (low string at the bottom). It
     /// flips the VERTICAL string order of the 2D timeline and the editor's 3D preview.
-    /// Independent of <see cref="LeftyFlip"/> (a HORIZONTAL fret-axis mirror in 3D); in the 2D
-    /// lanes the two compose (XOR). AppConfig display setting, mirrored here — default OFF.</summary>
+    /// Independent of <see cref="LeftyFlip"/>: it alone sets the 2D lane order.
+    /// AppConfig display setting, mirrored here — default OFF.</summary>
     public bool InvertStrings { get; set; }
 
     /// <summary>Play Mode's String order, for the highway while a run is presenting.</summary>
@@ -76,6 +76,10 @@ public sealed class UserSettingsState
     /// <summary>A Play Mode run is presenting on the editor's 3D surface (the shell's
     /// gameplay presentation): the highway takes <see cref="PlayModeInvertStrings" />.</summary>
     public bool GameplayPresentation { get; set; }
+
+    /// <summary>The note inspector holds its edits as a draft until Apply (<c>AppConfig.InspectorApplyStep</c>,
+    /// mirrored here so a Settings save takes effect at once) — default OFF: each edit is written at once.</summary>
+    public bool InspectorApplyStep { get; set; }
 
     /// <summary>The 3D highway's string order this frame: Play Mode's during a run, the editor's otherwise.</summary>
     public bool HighwayInvertStrings => GameplayPresentation ? PlayModeInvertStrings : InvertStrings;

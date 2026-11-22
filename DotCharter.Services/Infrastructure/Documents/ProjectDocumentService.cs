@@ -1,8 +1,10 @@
 ﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
+using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Services.Export;
 using DotCharter.Services.Export.DlcBuilder;
 using DotCharter.Services.Export.DynamicDifficulty;
+using DotCharter.Services.Editing.ChordShapes;
 using DotCharter.Services.Parsing;
 using DotCharter.Services.Parsing.Rscp;
 using DotCharter.Services.Parsing.Xml;
@@ -18,9 +20,14 @@ public class ProjectDocumentService : IProjectDocumentService
     private const string ShowlightsFileName = DlcBuilderBundle.ShowlightsFileName;
     private readonly IAppLogger _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly Action<string> _recycle;
 
     public ProjectDocumentService(IServiceProvider serviceProvider, IAppLogger logger)
+        : this(serviceProvider, logger, RecycleBin.Remove) { }
+
+    internal ProjectDocumentService(IServiceProvider serviceProvider, IAppLogger logger, Action<string> recycle)
     {
+        _recycle = recycle;
         _serviceProvider = serviceProvider;
         _logger = logger;
     }
@@ -78,12 +85,12 @@ public class ProjectDocumentService : IProjectDocumentService
 
     /// <inheritdoc />
     public void SaveChart(string filePath, ChartProject project, double? audioLengthMs = null)
+        => PrepareSave(filePath, project, audioLengthMs)(filePath);
+
+    /// <inheritdoc />
+    public Action<string> PrepareSave(string destinationPath, ChartProject project, double? audioLengthMs = null)
     {
-        var format = ResolveFormat(filePath);
-
-        _logger.Info(AppLogCategory.Project,
-            $"Saving chart '{filePath}' (format={format}, arrangements={project.Arrangements.Count}, beats={project.Beats.Count}).");
-
+        var format = ResolveFormat(destinationPath);
         var serializer = _serviceProvider.GetRequiredKeyedService<IChartSerializer>(format);
         // "RS XML for 6-string tools": the file the user saves as .xml is often headed
         // for EOF, which aborts on a 7th string. Off by default: the spec XML keeps all of them.
@@ -91,12 +98,24 @@ public class ProjectDocumentService : IProjectDocumentService
         {
             var config = TryLoadAppConfig();
             xml.SixStringProjection = config?.RsXmlSixStringProjection ?? false;
+            xml.Warning = message => _logger.Warning(AppLogCategory.Project, message);
             xml.MoverPhrases = config?.RsXmlMoverPhrases ?? false;
+            xml.ChordNameOptions = config == null ? DoubleStopNameOptions.Default : NewChordNames.OptionsFor(config);
         }
+        var kind = XmlChartSerializer.GetDocumentKind(destinationPath, project);
+        return filePath => WriteChart(filePath, project, audioLengthMs, serializer, kind);
+    }
+
+    private void WriteChart(string filePath, ChartProject project, double? audioLengthMs,
+        IChartSerializer serializer, XmlChartSerializer.DocumentKind kind)
+    {
+        _logger.Info(AppLogCategory.Project,
+            $"Saving chart '{filePath}' (arrangements={project.Arrangements.Count}, beats={project.Beats.Count}).");
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            serializer.Save(filePath, project, audioLengthMs);
+            if (serializer is XmlChartSerializer xml) xml.Save(filePath, project, kind, audioLengthMs, failOnRefusal: true);
+            else serializer.Save(filePath, project, audioLengthMs);
             stopwatch.Stop();
             var fileSize = SafeGetFileSize(filePath);
             _logger.Info(AppLogCategory.Project,
@@ -121,9 +140,12 @@ public class ProjectDocumentService : IProjectDocumentService
     }
 
     /// <inheritdoc />
-    public void SaveDlcBuilderXmlBundle(string projectPath, ChartProject project, double? audioLengthMs = null)
+    public void SaveDlcBuilderXmlBundle(string projectPath, ChartProject project, double? audioLengthMs = null) =>
+        SaveDlcBuilderXmlBundleToDirectory(GetDlcBuilderXmlDirectory(projectPath), project, audioLengthMs);
+
+    public void SaveDlcBuilderXmlBundleToDirectory(string exportDirectory, ChartProject project, double? audioLengthMs = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(exportDirectory);
         ArgumentNullException.ThrowIfNull(project);
 
         // The bundle is Rocksmith XML: play-only content is never exported.
@@ -136,20 +158,27 @@ public class ProjectDocumentService : IProjectDocumentService
         // it in only after every file succeeded. The old delete-then-write
         // sequence left the DTRS XML folder half-populated (stale or
         // missing arrangements) if anything failed mid-bundle.
-        var exportDirectory = GetDlcBuilderXmlDirectory(projectPath);
         var stagingDirectory = exportDirectory + ".saving";
-        if (Directory.Exists(stagingDirectory)) Directory.Delete(stagingDirectory, true);
+        OwnedDlcBuilderBundle.RequireOwned(exportDirectory);
+        OwnedDlcBuilderBundle.Recycle(stagingDirectory, _recycle);
         Directory.CreateDirectory(stagingDirectory);
 
         // The bundle follows the same "RS XML for 6-string tools" option as the saved .xml: off
         // writes every string the chart has (for rs7string tooling), on writes the six-string
         // projection a stock DLC Builder indexes. Six-string guitars and basses are identical either way.
         var config = TryLoadAppConfig() ?? new AppConfig();
-        var arrangementWriter = new RsXmlSongWriter { SixStringProjection = config.RsXmlSixStringProjection, MoverPhrases = config.RsXmlMoverPhrases };
+        var arrangementWriter = new RsXmlSongWriter
+        {
+            SixStringProjection = config.RsXmlSixStringProjection, MoverPhrases = config.RsXmlMoverPhrases,
+            Warning = message => _logger.Warning(AppLogCategory.Project, message),
+            ChordNameOptions = NewChordNames.OptionsFor(config)
+        };
         var vocalsWriter = new RsXmlVocalsWriter();
         var showlightsWriter = new RsXmlShowlightsWriter();
 
         var arrangementCount = 0;
+        long cloneTicks = 0, stepsTicks = 0, writeTicks = 0;
+        var timer = Stopwatch.StartNew();
         // The bundle is what DLC Builder builds from, and the .rs2dlc names it: each
         // arrangement goes in with the fixes and levels the package export gives it.
         var steps = DlcBuilderSteps.FromConfig(config);
@@ -165,17 +194,28 @@ public class ProjectDocumentService : IProjectDocumentService
                 // re-imports as a structureless arrangement. Generate on a
                 // CLONE: the structure is derived output, never project
                 // content, and callers may pass a live (non-snapshot) project.
-                var arrangement = ChartProjectCloner.CloneArrangement(project.Arrangements[i]);
+                var stage = timer.ElapsedTicks;
+                var arrangement = ChartProjectCloner.CloneArrangement(project.Arrangements[i], retainIdentities: true);
+                if (RsxrStringLayout.XmlExportRefusal(arrangement, config.RsXmlSixStringProjection) is { } refusal)
+                {
+                    _logger.Warning(AppLogCategory.Project, refusal);
+                    continue;
+                }
                 PhraseSectionGenerator.GenerateIfAbsent(arrangement, project.Beats, songLengthMs);
+                cloneTicks += timer.ElapsedTicks - stage;
+                stage = timer.ElapsedTicks;
                 arrangement = DlcBuilderBuildSteps.ApplyOrKeep(project, arrangement, audioLengthMs, steps, _logger);
+                stepsTicks += timer.ElapsedTicks - stage;
+                stage = timer.ElapsedTicks;
                 // songLength is EOF's min(chart, audio) - 1 ms: when the audio
                 // is SHORTER than the chart it must win, or the exported
                 // arrangement never reaches an end in-game. A null here is the
                 // no-audio-loaded branch and keeps the chart's own length.
-                arrangementWriter.WriteTo(
-                    CreateArrangementExportProject(project, arrangement),
-                    Path.Combine(stagingDirectory, project.ArrangementFiles[i]),
-                    audioLengthMs);
+                var written = false;
+                WriteOwnedBundleFile(Path.Combine(stagingDirectory, project.ArrangementFiles[i]),
+                    target => written = arrangementWriter.WriteTo(CreateArrangementExportProject(project, arrangement), target, audioLengthMs));
+                if (!written) continue;
+                writeTicks += timer.ElapsedTicks - stage;
                 if (arrangementWriter.LastLoss is { IsEmpty: false } loss)
                     _logger.Warning(AppLogCategory.Project, loss.Describe(project.Arrangements[i]));
                 arrangementCount++;
@@ -192,31 +232,47 @@ public class ProjectDocumentService : IProjectDocumentService
                 var track = project.VocalTracks[i];
                 if (!VocalsExportPolicy.ShouldWrite(track, includeVocals)) continue;
 
-                vocalsWriter.WriteTo(
-                    CreateVocalExportProject(project, track),
-                    Path.Combine(stagingDirectory, BuildVocalTrackFileName(i + 1, track)));
+                WriteOwnedBundleFile(Path.Combine(stagingDirectory, BuildVocalTrackFileName(i + 1, track)),
+                    target => vocalsWriter.WriteTo(CreateVocalExportProject(project, track), target));
                 vocalCount++;
             }
 
             var showlightsWritten = false;
             if (project.Showlights.Count > 0)
             {
-                showlightsWriter.WriteTo(
-                    CreateShowlightsExportProject(project),
-                    Path.Combine(stagingDirectory, ShowlightsFileName));
+                WriteOwnedBundleFile(Path.Combine(stagingDirectory, ShowlightsFileName),
+                    target => showlightsWriter.WriteTo(CreateShowlightsExportProject(project), target));
                 showlightsWritten = true;
             }
 
-            SwapInBundle(stagingDirectory, exportDirectory);
+            OwnedDlcBuilderBundle.Record(stagingDirectory);
+            SwapInBundle(stagingDirectory, exportDirectory, _recycle);
+            OwnedDlcBuilderBundle.Record(exportDirectory);
 
             _logger.Info(AppLogCategory.Project,
-                $"Saved DLC Builder XML bundle to '{exportDirectory}'. Arrangements={arrangementCount}, vocals={vocalCount}, showlights={showlightsWritten}.");
+                $"Saved DLC Builder XML bundle to '{exportDirectory}'. Arrangements={arrangementCount}, vocals={vocalCount}, showlights={showlightsWritten}, " +
+                $"totalMs={timer.ElapsedMilliseconds}, cloneMs={Ms(cloneTicks)}, buildStepsMs={Ms(stepsTicks)}, writeXmlMs={Ms(writeTicks)}.");
         }
         catch
         {
             // best-effort cleanup; the real error propagates
-            BestEffortDelete.Directory(stagingDirectory);
+            try { OwnedDlcBuilderBundle.Recycle(stagingDirectory, _recycle); }
+            catch (IOException) { /* A locked or unrecorded stage is left for the next open. */ }
             throw;
+        }
+    }
+
+    private static long Ms(long stopwatchTicks) => stopwatchTicks * 1000 / Stopwatch.Frequency;
+
+    private static void WriteOwnedBundleFile(string path, Action<string> write)
+    {
+        if (File.Exists(path)) throw new IOException("The staged XML destination already exists.");
+        try { write(path); }
+        finally
+        {
+            // This attempt created the destination, including a partial serialization.
+            // Stamp it even when the writer throws so cleanup never adopts unknown files.
+            if (File.Exists(path)) CompanionOwnership.AdoptMovedFile(path);
         }
     }
 
@@ -232,15 +288,16 @@ public class ProjectDocumentService : IProjectDocumentService
     ///     <c>.old</c> folder (cleaned up on the next save) with the previous bundle
     ///     still intact.
     /// </remarks>
-    private static void SwapInBundle(string stagingDirectory, string exportDirectory)
+    private static void SwapInBundle(string stagingDirectory, string exportDirectory, Action<string> recycle)
     {
         var previousDirectory = exportDirectory + ".old";
-        if (Directory.Exists(previousDirectory)) Directory.Delete(previousDirectory, true);
+        OwnedDlcBuilderBundle.Recycle(previousDirectory, recycle);
 
         var movedAside = false;
         if (Directory.Exists(exportDirectory))
         {
             Directory.Move(exportDirectory, previousDirectory);
+            OwnedDlcBuilderBundle.Record(previousDirectory);
             movedAside = true;
         }
 
@@ -261,7 +318,8 @@ public class ProjectDocumentService : IProjectDocumentService
 
         if (!movedAside) return;
         // the new bundle is in place; a stale '.old' is harmless
-        BestEffortDelete.Directory(previousDirectory);
+        try { OwnedDlcBuilderBundle.Recycle(previousDirectory, recycle); }
+        catch (IOException) { /* The new bundle is intact; a locked old copy stays. */ }
     }
 
     public ChartProject AssembleProject(ChartProject? baseProject, double bpm, string audioFileName,
@@ -377,7 +435,7 @@ public class ProjectDocumentService : IProjectDocumentService
         catch (Exception ex)
         {
             _logger.Warning(AppLogCategory.Project,
-                $"Could not read the app configuration for the XML bundle; using defaults. {ex.Message}");
+                "Could not read the app configuration for the XML bundle; using defaults.", ex);
             return null;
         }
     }

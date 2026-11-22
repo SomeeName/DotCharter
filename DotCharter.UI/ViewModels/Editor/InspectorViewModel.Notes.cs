@@ -1,8 +1,6 @@
 ﻿// InspectorViewModel: the NOTE side - SyncNoteProperties and its tri-state fold, every per-note field handler, the placement fretboard target, the editable length, and the read-only provenance badges.
 
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using DotCharter.UI.Controls;
 using DotCharter.UI.ViewModels.Editor.Inspector;
 
@@ -70,7 +68,7 @@ public partial class InspectorViewModel
         // The strings BEFORE the string index: the String picker's items are
         // built from them and its SelectedIndex is the index.
         NoteStringCount = _chartEditor.ActiveArrangement?.Tuning.Length ?? 6;
-        NoteTuningNames = _chartEditor.ActiveArrangement?.Tuning;
+        NoteTuningNames = TuningDisplayNames.For(_chartEditor.ActiveArrangement);
         NoteStringIndex = SelectedNote.StringIndex;
         NoteFret = SelectedNote.Fret;
         NoteSustainLabel = FormatSustain(SelectedNote.Sustain.DoubleValue);
@@ -415,25 +413,6 @@ public partial class InspectorViewModel
         ApplyNoteMutation(n => n.SlideTo = value);
     }
 
-    /// <summary>
-    /// Move the selected note(s) to the clicked string/fret. Wired to the
-    /// placement fretboard's <c>ToggleNoteCommand</c> (payload = the hit cell)
-    /// so a click sets string + fret in ONE undoable gesture, the same
-    /// <see cref="ApplyNoteMutation" /> path every other note edit uses.
-    /// </summary>
-    [RelayCommand]
-    private void SetNoteTarget((int stringIdx, int fret) pos)
-    {
-        var maxString = Math.Max(0, NoteStringCount - 1);
-        var stringIdx = Math.Clamp(pos.stringIdx, 0, maxString);
-        var fret = Math.Clamp(pos.fret, 0, 24);
-        ApplyNoteMutation(n =>
-        {
-            n.StringIndex = stringIdx;
-            n.Fret = fret;
-        });
-    }
-
     // A one-note synthetic chord the placement fretboard renders as a single
     // dot at the note's string/fret. Rebuilt (fresh reference) on every sync so
     // the control — which only repaints on a Chord reference change — follows
@@ -514,30 +493,6 @@ public partial class InspectorViewModel
         // RE-READ. ChartSpacingEnforcer has already run inside the action's
         // post-pass and only ever SHORTENS, so the user is told when it did.
         SustainWasShortened = SelectedNote.Sustain.DoubleValue < requested - 0.0001;
-        SyncSustainReadout();
-    }
-
-    /// <summary>▴ / ▾ — exactly one grid-divisor step, which is exactly what
-    /// <c>]</c>/<c>[</c> and wheel rule 1 do, so the three agree.</summary>
-    /// <remarks>
-    ///     The parameter is a STRING because it comes from a XAML
-    ///     <c>CommandParameter="1"</c> literal, which is a string. Declaring it
-    ///     <c>int</c> makes CommunityToolkit generate a <c>RelayCommand&lt;int&gt;</c>
-    ///     whose <c>CanExecute</c> THROWS <see cref="ArgumentException" /> the moment
-    ///     the Button attaches to the logical tree — an unhandled crash during
-    ///     layout, not a binding warning. `SheetMusicPaneViewModel.ApplyDurationValue`
-    ///     already takes a string for exactly this reason; keep them consistent.
-    /// </remarks>
-    [RelayCommand]
-    private void StepSustain(string? deltaText)
-    {
-        if (!int.TryParse(deltaText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var deltaGridSteps)) return;
-        if (SelectedNote == null && SelectedChord == null) return;
-        var before = SelectedNote?.Sustain.DoubleValue ?? 0;
-        _highwayEditingService.AdjustSelectedNotesSustain(deltaGridSteps,
-            _projectState.TotalAudioLengthMs, Transport.GridDivisor, _projectState.Beats);
-        SustainWasShortened = deltaGridSteps > 0 && SelectedNote != null &&
-                              SelectedNote.Sustain.DoubleValue <= before + 0.0001;
         SyncSustainReadout();
     }
 

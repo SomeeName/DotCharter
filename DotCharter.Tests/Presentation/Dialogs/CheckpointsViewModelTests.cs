@@ -16,7 +16,7 @@ namespace DotCharter.Tests.Presentation.Dialogs;
 ///     history" are different questions). A "no" leaves the list where it was.
 ///     Delete takes two clicks: a checkpoint is the only copy of its snapshot.
 /// </summary>
-public sealed class CheckpointsViewModelTests
+public sealed partial class CheckpointsViewModelTests
 {
     private sealed class Harness
     {
@@ -142,6 +142,30 @@ public sealed class CheckpointsViewModelTests
         Assert.Equal(1, h.Session.MarkedDirty);
     }
 
+    [Fact]
+    public async Task A_restore_reloads_session_media_before_reporting_success()
+    {
+        var h = new Harness(new ChartProject { AudioFileName = "A.wav" });
+        h.Edit.State.CurrentAudioFileName = "B.wav";
+        var loading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        h.Session.ReloadMedia = () =>
+        {
+            Assert.Equal("A.wav", h.Edit.State.CurrentAudioFileName);
+            Assert.Same(h.Service.RestoredProject, h.Edit.State.ActiveProject);
+            return loading.Task;
+        };
+
+        var restore = h.RestoreAsync();
+        await Task.WhenAny(restore, h.Session.MediaReloaded.Task);
+        Assert.True(h.Session.MediaReloaded.Task.IsCompleted, "Restore must enter the session media loader.");
+        Assert.False(h.Vm.Result.IsCompleted);
+        loading.SetResult();
+        await restore;
+
+        Assert.True(ChartEditHarness.Answer(h.Vm.Result));
+        Assert.Equal(1, h.Session.MarkedDirty);
+    }
+
     // ---- delete: two clicks --------------------------------------------------
 
     [Fact]
@@ -257,8 +281,10 @@ public sealed class CheckpointsViewModelTests
         ];
 
         public ChartProject RestoredProject { get; set; } = new();
+        public Func<ChartProject>? RestorePass { get; set; }
 
         public List<string> Restored { get; } = [];
+        public List<string?> RestoredIdentities { get; } = [];
 
         public List<string> Deleted { get; } = [];
 
@@ -280,7 +306,8 @@ public sealed class CheckpointsViewModelTests
         public ChartProject Restore(string? projectIdentity, CheckpointEntry entry)
         {
             Restored.Add(entry.Id ?? "");
-            return RestoredProject;
+            RestoredIdentities.Add(projectIdentity);
+            return RestorePass?.Invoke() ?? RestoredProject;
         }
 
         public int CopyTo(string? fromIdentity, string toIdentity) => 0;
@@ -311,7 +338,18 @@ public sealed class CheckpointsViewModelTests
     /// <summary>The production replace-guard rule, verbatim: a clean project never asks.</summary>
     internal sealed class FakeSession : IProjectSessionService
     {
+        public Func<Task>? ReloadMedia { get; set; }
+        public TaskCompletionSource MediaReloaded { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task ReloadProjectAudioAsync()
+        {
+            var loading = ReloadMedia?.Invoke() ?? Task.CompletedTask;
+            MediaReloaded.TrySetResult();
+            return loading;
+        }
+
         public bool Allow { get; set; } = true;
+        public Func<Task<bool>>? ReplaceGuard { get; set; }
 
         public int ReplaceGuardCalls { get; private set; }
 
@@ -330,7 +368,7 @@ public sealed class CheckpointsViewModelTests
         public Task<bool> MayReplaceOpenProjectAsync()
         {
             ReplaceGuardCalls++;
-            return Task.FromResult(!IsProjectDirty || Allow);
+            return ReplaceGuard?.Invoke() ?? Task.FromResult(!IsProjectDirty || Allow);
         }
 
         public void MarkProjectDirty() => MarkedDirty++;
@@ -345,7 +383,9 @@ public sealed class CheckpointsViewModelTests
 
         public void FreeAudio() { }
 
-        public Task LoadFile(string filePath) => Task.CompletedTask;
+        public Func<string, Task> LoadFileHandler { get; set; } = _ => Task.CompletedTask;
+
+        public Task LoadFile(string filePath) => LoadFileHandler(filePath);
 
         public Task LoadAudioFile(string filePath, bool generateBeats = true, bool preferMemoryPlayback = false) =>
             Task.CompletedTask;
@@ -356,7 +396,25 @@ public sealed class CheckpointsViewModelTests
 
         public Task OpenProject() => Task.CompletedTask;
 
-        public Task<bool> SaveProjectAsync() => Task.FromResult(true);
+        /// <summary>A draft an editor still holds: unsaved work the dirty flag does not show yet.</summary>
+        public bool PendingDraft { get; set; }
+
+        public int UnsavedWorkAsked { get; private set; }
+
+        public bool HasUnsavedWork()
+        {
+            UnsavedWorkAsked++;
+            return IsProjectDirty || PendingDraft;
+        }
+
+        /// <summary>Who asked for each save, in order.</summary>
+        public List<SaveInitiator> SaveInitiators { get; } = [];
+
+        public Task<bool> SaveProjectAsync(SaveInitiator initiator)
+        {
+            SaveInitiators.Add(initiator);
+            return Task.FromResult(true);
+        }
 
         public Task<bool> SaveProjectAsAsync() => Task.FromResult(true);
 

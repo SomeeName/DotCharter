@@ -32,13 +32,14 @@ public sealed class SheetOverlayCaptureUiPerfSmokeTests
     private const double Scale = 2;
 
     [Theory]
-    [InlineData(false, 1000, 220)]
-    [InlineData(true, 1000, 600)]
-    public async Task TheSheet_WithCursorSelectionAndHover_RendersAndIsCaptured(bool pageMode, double width, double height)
+    [InlineData(false, 1000, 220, 8)]
+    [InlineData(true, 1000, 600, 8)]
+    [InlineData(true, 1000, 900, 12)]
+    public async Task TheSheet_WithCursorSelectionAndHover_RendersAndIsCaptured(bool pageMode, double width, double height, int bars)
     {
         await HeadlessSessionFixture.Dispatch(async () =>
         {
-            var (state, level) = Fixture();
+            var (state, level) = Fixture(bars);
             var selection = new SelectionService();
             selection.SelectedNotes.Add(level.Notes[6]);
             selection.SelectedNotes.Add(level.Notes[13]);
@@ -64,7 +65,7 @@ public sealed class SheetOverlayCaptureUiPerfSmokeTests
 
                 var hovered = HoverANote(window, view, canvas);
                 NarrowWidthLayout.Settle(window);
-                Save(view, $"sheet-{(pageMode ? "page" : "strip")}", hovered);
+                Save(view, $"sheet-{(pageMode ? "page" : "strip")}" + (bars == 8 ? "" : $"-{bars}bars"), hovered);
             }
             finally
             {
@@ -73,16 +74,16 @@ public sealed class SheetOverlayCaptureUiPerfSmokeTests
         }, CancellationToken.None);
     }
 
-    /// <summary>Eight bars of 4/4 at 120 BPM, a note on every beat walking the strings and
+    /// <summary>Eight bars (or <c>bars</c>; AlphaTab 1.9 marks scores over 10 bars) of 4/4 at 120 BPM, a note on every beat walking the strings and
     /// frets, so the cursor, the selection bands and the hover box each have glyphs under them.</summary>
-    private static (ProjectState State, ChartLevel Level) Fixture()
+    private static (ProjectState State, ChartLevel Level) Fixture(int bars)
     {
         var project = new ChartProject();
         var arrangement = new Arrangement { Name = "Lead", StringCount = 6 };
         var level = new ChartLevel();
         arrangement.Levels.Add(level);
         project.Arrangements.Add(arrangement);
-        for (var i = 0; i < 32; i++)
+        for (var i = 0; i < bars * 4; i++)
         {
             project.Beats.Add(new BeatMarker { Time = i * 500, Bpm = 120, BeatsInMeasure = 4, NoteDenominator = 4, IsMeasure = i % 4 == 0 });
             level.Notes.Add(new GuitarNote { Position = new FractionalPosition(i), StringIndex = i % 6, Fret = 3 + (i % 5) });

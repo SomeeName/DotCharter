@@ -1,4 +1,5 @@
 using DotCharter.Localization;
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 
 namespace DotCharter.Services.Audio.Lyrics;
@@ -49,21 +50,29 @@ public sealed class LyricModelInstaller(
 
     private const int MaxEntries = 64;
 
+    private static readonly ConcurrentDictionary<string, object> PublicationLocks = new(StringComparer.OrdinalIgnoreCase);
+
     private IReadOnlyList<string> Roots => modelRoots ?? LyricModelCatalog.ModelRoots;
 
     /// <summary>Where a model would be written if it had to be fetched.</summary>
     public string TargetDirectory(string id) => Path.Combine(Roots[0], id);
 
-    /// <summary>True when the model is usable from any root.</summary>
-    /// <summary>Deletes the copy this installer writes (the first root), so a repair downloads it afresh.</summary>
+    /// <summary>Deletes all copies in the search roots, including damaged or incomplete fallback copies.</summary>
     public void Remove(string id)
     {
-        var target = TargetDirectory(id);
-        if (!Directory.Exists(target)) return;
-        Directory.Delete(target, recursive: true);
-        logger?.Info(AppLogCategory.Audio, $"Lyric model '{id}' removed from '{target}' for a repair.");
+        foreach (var root in Roots)
+        {
+            var target = Path.GetFullPath(Path.Combine(root, id));
+            lock (PublicationLocks.GetOrAdd(target, static _ => new object()))
+            {
+                if (!Directory.Exists(target)) continue;
+                Directory.Delete(target, recursive: true);
+                logger?.Info(AppLogCategory.Audio, $"Lyric model '{id}' removed from '{target}' for a repair.");
+            }
+        }
     }
 
+    /// <summary>True when the model is usable from any root.</summary>
     public bool IsInstalled(string id) =>
         Roots.Any(root => Required.All(f => File.Exists(Path.Combine(root, id, f))));
 
@@ -99,7 +108,7 @@ public sealed class LyricModelInstaller(
         }
 
         var target = TargetDirectory(model.Id);
-        var staging = target + ".incoming";
+        var staging = target + $".incoming-{Guid.NewGuid():N}";
 
         try
         {
@@ -108,7 +117,6 @@ public sealed class LyricModelInstaller(
                 $"Fetching lyric model '{model.Id}' from asset '{model.AssetName}'.");
 
             Directory.CreateDirectory(Path.GetDirectoryName(staging)!);
-            if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true);
 
             var archive = Path.Combine(Path.GetTempPath(), $"dc-lyric-model-{Guid.NewGuid():N}.zip");
             try
@@ -152,8 +160,20 @@ public sealed class LyricModelInstaller(
 
             // Publish atomically. Another process may have installed it while this
             // one downloaded, and that copy wins -- never overwrite.
-            if (IsInstalled(model.Id)) return true;
-            Directory.Move(payload, target);
+            ct.ThrowIfCancellationRequested();
+            lock (PublicationLocks.GetOrAdd(Path.GetFullPath(target), static _ => new object()))
+            {
+                if (IsInstalled(model.Id)) return true;
+                try
+                {
+                    Directory.Move(payload, target);
+                }
+                catch (IOException) when (IsInstalled(model.Id))
+                {
+                    // A different process published a complete model first.
+                    return true;
+                }
+            }
 
             logger?.Info(AppLogCategory.Audio, $"Lyric model '{model.Id}' installed at '{target}'.");
             return true;

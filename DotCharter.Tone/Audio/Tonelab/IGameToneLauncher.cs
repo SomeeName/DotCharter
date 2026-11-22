@@ -33,7 +33,10 @@ public enum GameToneLaunchFailure
     StartFailed,
 
     /// <summary>The helper could not inject tonelab into the game.</summary>
-    InjectFailed
+    InjectFailed,
+
+    /// <summary>The game ran but tonelab never reported ready within the bounded wait.</summary>
+    StartTimedOut
 }
 
 /// <summary>One launch: the game's pid, who started it, and how it ends.</summary>
@@ -46,6 +49,9 @@ public interface IGameToneLaunch
 
     /// <summary>True when DotCharter started the game, so DotCharter ends it; false for a game the user started, which is only ever detached.</summary>
     bool StartedByApp { get; }
+
+    /// <summary>tonelab's <c>tonelab.log</c> for a game DotCharter started: the session waits for its ready line before touching the pipe. Null for a game DotCharter did not start.</summary>
+    string? BootLogPath => null;
 
     /// <summary>
     ///     Ends a game DotCharter started: <paramref name="sendQuit" /> (the pipe's <c>quit</c>), a few

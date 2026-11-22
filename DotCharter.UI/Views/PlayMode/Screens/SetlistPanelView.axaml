@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:shell="clr-namespace:DotCharter.UI.Views.Shell;assembly=DotCharter"
              xmlns:contracts="using:DotCharter.Presentation.Contracts.PlayMode"
              x:Class="DotCharter.UI.Views.PlayMode.Screens.SetlistPanelView"
              x:DataType="contracts:ISetlistPanel"
@@ -65,7 +66,7 @@
                             <PathIcon Grid.Column="0" Data="{DynamicResource IconPencil}" Width="11" Height="11"
                                       Margin="12,0,4,0" VerticalAlignment="Center"
                                       Foreground="{DynamicResource FireTextMuted}" />
-                            <TextBox Grid.Column="1" x:Name="SetlistNameBox" Classes="FireFieldInput"
+                            <TextBox Grid.Column="1" x:Name="SetlistNameBox" Classes="FireFieldInput" shell:CommitOnEnter.IsEnabled="True"
                                      MaxLength="48"
                                      AutomationProperties.Name="{localization:Loc PlayMode_Setlist_Name}"
                                      ToolTip.Tip="{localization:Loc PlayMode_Setlist_Name}"

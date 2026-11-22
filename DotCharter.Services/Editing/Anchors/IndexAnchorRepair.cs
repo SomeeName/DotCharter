@@ -77,7 +77,7 @@ public sealed class IndexAnchorRepair
         ArgumentNullException.ThrowIfNull(anchor);
 
         var templateId = chord?.TemplateId ?? handShape?.TemplateId ?? -1;
-        var template = ChordTemplateResolver.FindById(arrangement, templateId);
+        var template = arrangement.FindChordTemplate(templateId);
         if (template == null) return null;
 
         var index = IndexFingerPosition.Find(template, arrangement.Capo);

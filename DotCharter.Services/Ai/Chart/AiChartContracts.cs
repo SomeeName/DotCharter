@@ -156,6 +156,10 @@ public sealed record AiChordChange(
 /// stale.</summary>
 public sealed record AiChordGuard(int ChordIndex, FractionalPosition Position, string FretSignature, int TemplateId);
 
+/// <summary>A single note a hand-position plan was made over: the anchors the model chose fit
+/// these frets, so a note re-fretted while the proposal waited makes the plan stale.</summary>
+public sealed record AiNoteGuard(FractionalPosition Position, int StringIndex, int Fret);
+
 /// <summary>
 ///     What an ACCEPTED chunk changes. <paramref name="Anchors" /> is the complete
 ///     replacement set for <c>[Start, End)</c>, or null when the anchors stay as they are
@@ -166,7 +170,9 @@ public sealed record AiChordGuard(int ChordIndex, FractionalPosition Position, s
 ///     <c>[Start, End)</c> (every job but the name job): the live write re-checks them like
 ///     <paramref name="Guards" />, so a hand position the charter moved while the proposal
 /// waited for review makes the plan stale instead of being written over. Null = no
-///     check.
+///     check. <paramref name="SeenNotes" /> are the single notes in <c>[Start, End)</c> a
+///     hand-position job was shown, re-checked the same way. Null = no check; required, so
+///     every caller states it.
 /// </summary>
 public sealed record AiChartChunkPlan(
     int ChunkIndex,
@@ -174,6 +180,7 @@ public sealed record AiChartChunkPlan(
     FractionalPosition? End,
     IReadOnlyList<AiAnchorPlacement>? Anchors,
     IReadOnlyList<AiChordChange> Chords,
+    IReadOnlyList<AiNoteGuard>? SeenNotes,
     bool FingersFollowAnchors = false,
     IReadOnlyList<AiChordGuard>? Guards = null,
     IReadOnlyList<AiAnchorPlacement>? SeenAnchors = null);

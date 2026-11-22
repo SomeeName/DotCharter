@@ -20,6 +20,9 @@ public interface IReplayStore
     /// <see cref="ReplaysDirectory" />) or null on failure. Never throws.</summary>
     string? Save(RunReplay replay);
 
+    /// <summary>Persists to the profile that owned the run, captured before background work.</summary>
+    string? Save(RunReplay replay, Guid profileId) => Save(replay);
+
     /// <summary>Loads a replay by stored name; null when missing, unreadable
     /// or not a replay. Never throws.</summary>
     RunReplay? TryLoad(string fileName);
@@ -59,21 +62,25 @@ public sealed class ReplayStore : IReplayStore
         }
     }
 
-    public string? Save(RunReplay replay)
+    public string? Save(RunReplay replay) => Save(replay, _playerProfiles?.ActiveProfile.Id ?? Guid.Empty);
+
+    public string? Save(RunReplay replay, Guid profileId)
     {
         try
         {
+            if (_playerProfiles != null && !_playerProfiles.Profiles.Any(p => p.Id == profileId)) return null;
+            var directory = _fixedDirectory ?? Path.Combine(_playerProfiles!.GetDataDirectory(profileId), ReplaysDirectoryName);
             var name = $"replay-{replay.RecordedUtc:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}"[..40] + ".json";
-            Directory.CreateDirectory(ReplaysDirectory);
+            Directory.CreateDirectory(directory);
             // Atomic-enough for a new unique name; tolerant readers treat a
             // torn file as "no replay".
-            File.WriteAllText(Path.Combine(ReplaysDirectory, name),
+            File.WriteAllText(Path.Combine(directory, name),
                 JsonSerializer.Serialize(replay, JsonOptions));
             return name;
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Replay not writable: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Replay not writable", ex);
             return null;
         }
     }

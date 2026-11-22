@@ -109,6 +109,7 @@ public sealed class NullAudioPlaybackService : IAudioPlaybackService
     public void Pause() { }
     public void Stop() { }
     public void SeekTo(double timeMs) { }
+    public bool RunIfOwned(string path, long generation, Action act) => false;
     public void PlayMetronomeTick(bool isMeasure) { }
     public void PlayClap() { }
     public double RawPlayheadMs => 0.0;

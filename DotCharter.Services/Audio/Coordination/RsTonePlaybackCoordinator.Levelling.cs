@@ -225,7 +225,12 @@ public sealed partial class RsTonePlaybackCoordinator
             var g = i == steps ? end : start + (end - start) * i / steps;
             var step = RsToneLevelling.WithTrailingGain(target, g);
             if (ampMove != 0f && i < steps) step = RsToneLevelling.WithAmpLevel(step, ampFrom!.Value + ampMove * i / steps);
-            lock (_applyGate) _applier.Apply(i == steps ? target : step);
+            lock (_applyGate)
+            {
+                var applied = i == steps ? target : step;
+                var result = _applier.Apply(applied);
+                if (!token.IsCancellationRequested) RememberAppliedPreset(applied, result);
+            }
             _appliedGainDb = g;
             if (ampMove != 0f) _appliedAmpLevelDb = ampFrom!.Value + ampMove * i / steps;
             if (i < steps) await Task.Delay(pause, token).ConfigureAwait(false);

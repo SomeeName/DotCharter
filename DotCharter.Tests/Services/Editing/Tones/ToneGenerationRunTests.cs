@@ -41,6 +41,24 @@ public sealed class ToneGenerationRunTests : IDisposable
     }
 
     [Fact]
+    public void Analyse_finds_the_song_at_the_parent_song_root()
+    {
+        var (project, arrangement, _) = ProjectWithChanges("clean");
+        var projectPath = Path.Combine(_dir, "lead", "project.dcproj");
+        var loaded = new List<string>();
+        var service = new ToneGenerationService(new FakeAppLogger(), load: (path, _) =>
+        {
+            loaded.Add(path);
+            return Guitarish(30);
+        });
+        var run = new ToneGenerationRun(new HistoryService(new FakeAppLogger()), new ExportTargetWriter(), new FakeAppLogger());
+
+        run.Analyse(ToneGenerationRun.Capture(project, arrangement, projectPath), service);
+
+        Assert.Equal([Path.Combine(_dir, "song.wav")], loaded);
+    }
+
+    [Fact]
     public void Capture_touches_no_file_and_Analyse_does_not_write_the_project()
     {
         var (project, arrangement, path) = ProjectWithChanges("clean", "lead");
@@ -52,7 +70,7 @@ public sealed class ToneGenerationRunTests : IDisposable
 
         Assert.Empty(project.ToneDefinitions);
         Assert.Equal("", arrangement.ToneA);
-        Assert.Equal(Path.Combine(_dir, "song.wav"), input.SongCandidate);
+        Assert.Equal("song.wav", input.SongCandidate);
     }
 
     [Fact]
@@ -70,6 +88,34 @@ public sealed class ToneGenerationRunTests : IDisposable
         while (history.CanUndo) history.Undo();
         Assert.Empty(project.ToneDefinitions);
         Assert.True(string.IsNullOrEmpty(arrangement.ToneA));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Analyse_resolves_declared_stems_beside_legacy_or_parent_audio(bool parentAudio)
+    {
+        var (project, arrangement, _) = ProjectWithChanges("clean");
+        var chartDir = Directory.CreateDirectory(Path.Combine(_dir, "chart")).FullName;
+        var audioDir = parentAudio ? _dir : Directory.CreateDirectory(Path.Combine(_dir, "audio")).FullName;
+        var audio = Path.Combine(audioDir, "song.wav");
+        File.WriteAllBytes(audio, [0]);
+        project.AudioFileName = parentAudio ? "song.wav" : audio;
+        var stemDir = Directory.CreateDirectory(Path.Combine(audioDir, "stems")).FullName;
+        var guitar = Path.Combine(stemDir, "guitar.wav");
+        File.WriteAllBytes(guitar, [1]);
+        project.Stems.Add(new Stem { Name = "guitar", Path = Path.Combine("stems", "guitar.wav") });
+        var loaded = new List<string>();
+        var service = new ToneGenerationService(new FakeAppLogger(), load: (path, _) =>
+        {
+            loaded.Add(path);
+            return Guitarish(30);
+        });
+        var run = new ToneGenerationRun(new HistoryService(new FakeAppLogger()), new ExportTargetWriter(), new FakeAppLogger());
+
+        run.Analyse(ToneGenerationRun.Capture(project, arrangement, Path.Combine(chartDir, "project.dcproj")), service);
+
+        Assert.Equal([guitar], loaded);
     }
 
     [Fact]

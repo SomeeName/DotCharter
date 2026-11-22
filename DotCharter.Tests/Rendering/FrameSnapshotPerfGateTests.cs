@@ -26,6 +26,8 @@ public sealed class FrameSnapshotPerfGateTests(ITestOutputHelper output)
         var ctx = new SnapshotUpdateContext
         {
             ActiveBeats = chart.Beats,
+            // The stress chart is immutable; match the versioned app builders.
+            BeatsVersion = 0,
             ActiveNotes = chart.Notes,
             ActiveChords = chart.Chords,
             ActiveAnchors = chart.Anchors,

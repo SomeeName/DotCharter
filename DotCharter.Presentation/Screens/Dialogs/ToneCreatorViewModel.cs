@@ -328,12 +328,12 @@ public sealed partial class ToneCreatorViewModel : DialogViewModel<string?>, ITo
         }
         catch (RsToneCatalogException ex)
         {
-            _edit.Logger.Warning(AppLogCategory.Project, $"AI tone creator: the reply was refused — {ex.Message}");
+            _edit.Logger.Warning(AppLogCategory.Project, "AI tone creator: the reply was refused", ex);
             Status = _edit.Localization.Format("Dialog_ToneCreator_Refused", ex.Message);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            _edit.Logger.Warning(AppLogCategory.Project, $"AI tone creator: the call failed — {ex.Message}");
+            _edit.Logger.Warning(AppLogCategory.Project, "AI tone creator: the call failed", ex);
             Status = _edit.Localization.Format("Dialog_ToneCreator_Failed", ex.Message);
         }
         finally

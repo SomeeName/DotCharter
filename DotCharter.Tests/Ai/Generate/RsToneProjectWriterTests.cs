@@ -156,4 +156,52 @@ public sealed class RsToneProjectWriterTests
         Assert.Equal("verse", parsed.Key);
         Assert.Null(RsToneCatalogValidation.FirstFault(parsed, RsGearCatalog.Shared));
     }
+
+    [Fact]
+    public void Regenerating_a_set_where_one_window_fails_keeps_the_failed_changes_tone_declared()
+    {
+        var (project, arrangement, _) = Fixture(4000, 12_000);
+        arrangement.ToneChanges[0].ToneName = "A";
+        arrangement.ToneChanges[1].ToneName = "B";
+        arrangement.ToneNames.Add("A");
+        arrangement.ToneNames.Add("B");
+        var windows = ToneWindowPlanner.Plan(arrangement.ToneChanges, project.Beats, 32_000);
+
+        RsToneProjectWriter.Write(project, arrangement,
+            [Tone(windows[0], "A"), new GeneratedTone(windows[1], null, null, "no guitar stem")]);
+
+        Assert.Equal("B", arrangement.ToneChanges[1].ToneName);
+        Assert.Equal(["A", "B"], arrangement.ToneNames);
+        Assert.Equal("A", arrangement.ToneBase);
+        Assert.Equal("B", arrangement.ToneA);
+    }
+
+    [Fact]
+    public void A_change_inserted_while_generating_is_not_renamed_and_each_tone_lands_on_its_own_change()
+    {
+        var (project, arrangement, windows) = Fixture(4000, 12_000);
+        var inserted = GenerateFakes.At(1000, [.. project.Beats], "manual");
+        arrangement.ToneChanges.Add(inserted);
+
+        var result = RsToneProjectWriter.Write(project, arrangement, [Tone(windows[0], "verse"), Tone(windows[1], "chorus")]);
+
+        Assert.Equal("manual", inserted.ToneName);
+        Assert.Equal("verse", arrangement.ToneChanges[0].ToneName);
+        Assert.Equal("chorus", arrangement.ToneChanges[1].ToneName);
+        Assert.Equal(2, result.ToneChangesPointed);
+        Assert.Equal(["manual", "verse", "chorus"], arrangement.ToneNames);
+    }
+
+    [Fact]
+    public void A_change_renamed_while_generating_keeps_its_name_and_stays_declared()
+    {
+        var (project, arrangement, windows) = Fixture(4000, 12_000);
+        arrangement.ToneChanges[1].ToneName = "mine";
+
+        var result = RsToneProjectWriter.Write(project, arrangement, [Tone(windows[0], "verse"), Tone(windows[1], "chorus")]);
+
+        Assert.Equal("mine", arrangement.ToneChanges[1].ToneName);
+        Assert.Equal(1, result.ToneChangesPointed);
+        Assert.Contains("mine", arrangement.ToneNames);
+    }
 }

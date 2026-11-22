@@ -17,7 +17,7 @@ public sealed class AppearanceTheme(IThemeService theme) : IAppearanceTheme
         [.. ThemePresets.CustomizableTokens.Select(t => new ThemeTokenEntry(t.Key, t.DisplayName, t.Category))];
 
     public IReadOnlyList<StringPaletteEntry> StringPalettes { get; } =
-        [.. StringColorPresets.All.Select(p => new StringPaletteEntry(p.Id, p.DisplayName))];
+        [.. StringColorPresets.All.Select(p => new StringPaletteEntry(p.Id, p.NameKey))];
 
     public string DefaultStringPaletteId => StringColorPresets.DefaultId;
 

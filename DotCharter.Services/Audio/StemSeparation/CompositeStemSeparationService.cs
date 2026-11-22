@@ -67,6 +67,7 @@ public sealed class CompositeStemSeparationService : IStemSeparationService
         CancellationToken ct)
     {
         var skipped = new List<string>();
+        var modelMissing = false;
         foreach (var b in _backends)
         {
             // Cancel means ABORT, not "try the next one". The loop never checked
@@ -112,12 +113,16 @@ public sealed class CompositeStemSeparationService : IStemSeparationService
             // and continue down the chain.
             _logger?.Info(AppLogCategory.Audio, $"Stem separation: backend {name} did not produce stems — {result.ErrorMessage}. Trying next backend.");
             skipped.Add($"{name}: {result.ErrorMessage}");
+            if (result.FailureKind == StemFailureKind.ModelMissing) modelMissing = true;
         }
+        var tried = string.Join(" | ", skipped);
         return new StemSeparationResult
         {
             Success = false,
-            ErrorMessage = "No stem-separation backend produced output. Tried: " +
-                string.Join(" | ", skipped),
+            ErrorMessage = "No stem-separation backend produced output. Tried: " + tried,
+            // A missing model is the actionable cause behind most chain failures.
+            FailureKind = modelMissing ? StemFailureKind.ModelMissing : StemFailureKind.NoBackend,
+            FailureArgs = [tried],
             Stems = Array.Empty<StemTrack>(),
         };
     }

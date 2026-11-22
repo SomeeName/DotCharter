@@ -52,26 +52,27 @@ public sealed class UndefinedToneKeyFixTests
         Assert.Empty(DeepCompare.Diff("project", before, h.Project, new HashSet<string>()));
     }
 
-    /// <summary>Two undefined keys: which defined tone either one meant is a guess, so the finding
-    /// stays a report and its Fix is the Tone designer, as before.</summary>
+    /// <summary>Two undefined keys: which defined tone either one meant is a guess, so there is no rename;
+    /// the Fix creates default definitions for both names instead, as ONE undo step.</summary>
     [Fact]
-    public async Task AnAmbiguousFinding_KeepsOpeningTheToneDesigner_AndEditsNothing()
+    public async Task AnAmbiguousFinding_CreatesDefinitionsForEveryUndefinedName_AsOneUndoStep()
     {
         var project = SongTabBroken();
         project.Arrangements[0].ToneB = "solo";
         project.Arrangements[0].ToneChanges.Add(new ToneChange { Position = Pos(6000, project), ToneName = "solo" });
         var h = new Harness(project);
-        var before = ChartProjectCloner.Clone(project);
         var finding = h.Findings().First(f => f.MessageKey == ChartExportValidator.KeyToneNotDefined);
 
         Assert.True(h.Fixes.CanFix(finding));
-        Assert.Equal(FakeLocalization.English().Format("Export_FixTip_Tones", "Lead"), h.Fixes.Describe(finding));
+        Assert.Equal(FakeLocalization.English().Format("Export_FixTip_DefineTones", "Lead"), h.Fixes.Describe(finding));
 
         await h.Fixes.FixAsync(finding);
 
-        Assert.Contains(h.Dialogs.Calls, c => c.StartsWith(nameof(IDialogs.ShowAsync), StringComparison.Ordinal));
+        Assert.Empty(h.Dialogs.Calls);
+        Assert.DoesNotContain(h.Findings(), f => f.MessageKey == ChartExportValidator.KeyToneNotDefined);
+        h.History.Undo();
+        Assert.Equal(Old, Assert.Single(h.Project.ToneDefinitions).Key);
         Assert.False(h.History.CanUndo);
-        Assert.Empty(DeepCompare.Diff("project", before, h.Project, new HashSet<string>()));
     }
 
     [Fact]

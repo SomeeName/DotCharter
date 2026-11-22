@@ -48,9 +48,7 @@ internal sealed class MidiStringPitches
             // An A220 reference (a 5/6-string bass on a guitar path) is an
             // octave of the NOTE: a MIDI note has no cents to carry it in.
             // -1 = a string the rule does not price (past the sixth of a <=6-string chart).
-            _open[i] = SoundingPitch.OpenStringMidi(arrangement, i) is { } open
-                ? open + ArrangementInstrument.ReferenceOctaveSemitones(arrangement.CentOffset)
-                : -1;
+            _open[i] = SoundingPitch.OpenSoundingMidi(arrangement, i) ?? -1;
         }
     }
 

@@ -219,7 +219,7 @@ public static class ChartEditorConstants
         public const float CursorThickness = 1.5f;
 
         // HandShapeLayer
-        public const double AnchorTailMaxMs = 5000.0;
+        public const double AnchorTailMaxMs = DotCharter.Core.Graphics.AnchorSpan.TailMaxMs;
         public const float AnchorTailHeight = 18.0f;
         public const float AnchorLineThickness = 2.0f;
         public const float HandShapeActiveBarHeight = 12.0f;

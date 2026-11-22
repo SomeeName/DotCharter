@@ -1,3 +1,4 @@
+using DotCharter.Localization;
 using DotCharter.Presentation.Screens.Dialogs;
 using DotCharter.Services.Editing;
 using DotCharter.Services.Editing.Selection;
@@ -13,7 +14,8 @@ namespace DotCharter.Tests.Presentation.Dialogs;
 /// </summary>
 internal sealed class ChartEditHarness
 {
-    public ChartEditHarness()
+    /// <param name="localization">The dialogs' language; English when omitted.</param>
+    public ChartEditHarness(ILocalizationService? localization = null)
     {
         var logger = new FakeAppLogger();
         // Scoped like the app's, so a committed edit bumps the arrangement it reached (#720).
@@ -48,7 +50,7 @@ internal sealed class ChartEditHarness
             ActiveArrangement = arrangement
         };
 
-        Services = new ChartEditDialogServices(Editor, History, State, config, FakeLocalization.English(), logger);
+        Services = new ChartEditDialogServices(Editor, History, State, config, localization ?? FakeLocalization.English(), logger);
     }
 
     public ChartProject Project { get; }

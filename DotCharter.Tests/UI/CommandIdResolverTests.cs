@@ -1,3 +1,7 @@
+using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Templates;
+using Avalonia.VisualTree;
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.UI.Diagnostics;
 
@@ -13,6 +17,13 @@ public sealed class CommandIdResolverTests
     private void GenerateFretHandPositions() { }
 
     private Task RunLongThingAsync() => Task.CompletedTask;
+
+    private bool CanGenerateFretHandPositions() => true;
+
+    private void XamlIlPopulateTrampoline() { }
+
+    /// <summary>Stands in for a bound Button's own handler of the command's event.</summary>
+    private void CanExecuteChanged(object? sender, EventArgs e) { }
 
     /// <summary>
     ///     A <c>[RelayCommand]</c> wraps the method it was generated from, so the
@@ -80,5 +91,69 @@ public sealed class CommandIdResolverTests
 
         Assert.NotNull(id);
         Assert.True(id!.Length <= 96, $"id was {id.Length} chars");
+    }
+
+    /// <summary>
+    ///     530 clicks were counted as "CanExecuteChanged": the command's event
+    ///     backing field holds the subscribed Button's handler, which is a named
+    ///     method, and the field scan took it for the verb.
+    /// </summary>
+    [Fact]
+    public void ASubscribedCanExecuteChangedHandlerIsNotTheCommandId()
+    {
+        var command = new RelayCommand(() => { });
+        command.CanExecuteChanged += CanExecuteChanged;
+
+        Assert.Equal("ExportButton", CommandIdResolver.Resolve(command, "ExportButton", null));
+        Assert.Null(CommandIdResolver.Resolve(command, null, null));
+    }
+
+    [Fact]
+    public void TheVerbWinsOverTheCanExecutePredicateAndTheSubscriber()
+    {
+        var command = new RelayCommand(GenerateFretHandPositions, CanGenerateFretHandPositions);
+        command.CanExecuteChanged += CanExecuteChanged;
+
+        Assert.Equal("GenerateFretHandPositions", CommandIdResolver.Resolve(command, null, null));
+    }
+
+    /// <summary>Dock builds some commands from compiled-XAML glue, whose method name says nothing.</summary>
+    [Fact]
+    public void AFrameworkTrampolineIsNotACommandId()
+    {
+        var command = new RelayCommand(XamlIlPopulateTrampoline);
+
+        Assert.Equal("DockCloseButton", CommandIdResolver.Resolve(command, "DockCloseButton", null));
+        Assert.Null(CommandIdResolver.Resolve(command, null, null));
+    }
+
+    /// <summary>
+    ///     PART_IncreaseButton / PART_DecreaseButton are the same two names in every
+    ///     spinner; the click is attributed to the spinner that owns them or skipped.
+    /// </summary>
+    [Fact]
+    public void ASpinnerArrowIsCountedUnderItsOwnerOrNotAtAll()
+    {
+        Assert.Null(CommandIdResolver.Resolve(null, "PART_IncreaseButton", null));
+        Assert.Null(CommandIdResolver.Resolve(null, "PART_DecreaseButton", new object()));
+
+        Assert.Equal("CapoSpinner", UsageInstrumentation.OwnerName(TemplatedArrow("CapoSpinner")));
+
+        var orphan = new Button { Name = "PART_DecreaseButton" };
+        Assert.Null(CommandIdResolver.Resolve(null, UsageInstrumentation.OwnerName(orphan), null));
+
+        Assert.Null(CommandIdResolver.Resolve(null, UsageInstrumentation.OwnerName(TemplatedArrow(null)), null));
+    }
+
+    /// <summary>A spinner arrow as a real template builds it: a PART_ button whose TemplatedParent is the owner.</summary>
+    private static Button TemplatedArrow(string? ownerName)
+    {
+        var owner = new TemplatedControl
+        {
+            Name = ownerName,
+            Template = new FuncControlTemplate<TemplatedControl>((_, _) => new Button { Name = "PART_IncreaseButton" })
+        };
+        owner.ApplyTemplate();
+        return (Button)owner.GetVisualChildren().Single();
     }
 }

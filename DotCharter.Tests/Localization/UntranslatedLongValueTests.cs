@@ -61,13 +61,6 @@ public sealed class UntranslatedLongValueTests
             "Placeholders and units — 'fps' and 'ms' are the German units too."),
         ("Resources.de-DE.resx", "Inspector_EqBandTitle",
             "'Band' is the German EQ term; the rest is placeholders."),
-        ("Resources.de-DE.resx", "Panel_Bend_BendRelease",
-            "The Panel_Bend_* family keeps the English bend technique names, as the "
-            + "shorter siblings Panel_Bend_Bend / _Release / _Prebend already do."),
-        ("Resources.de-DE.resx", "Panel_Bend_PrebendBend",
-            "Same family rule as Panel_Bend_BendRelease."),
-        ("Resources.de-DE.resx", "Panel_Bend_PrebendRelease",
-            "Same family rule as Panel_Bend_BendRelease."),
 
         ("Resources.ja-JP.resx", "About_RenderingBody",
             "Product names only — Silk.NET / SkiaSharp / AlphaTab / AlphaSkia."),

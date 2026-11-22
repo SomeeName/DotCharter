@@ -25,15 +25,26 @@ powershell -NoProfile -File .claude/skills/dotcharter-worktree/scripts/New-Agent
 ```
 
 It prints the worktree path, the branch and whether `juce_sharp.dll` is
-present, and fails loudly if the tree would not build. **The copy is checked
-against the base commit's JuceSharp gitlink:** when the main checkout's
-submodule sits at another commit (it lags after every gitlink bump the owner
-has not pulled), the script fetches the gitlink's commit into the main
-checkout's submodule repo (objects only, the owner's files are untouched) and
-puts exactly that tree in place, keeping the prebuilt DLL. It then reads the
-DLL's own `dca_abi_version()` and **warns when it does not match the headers'
-`DCA_ABI_VERSION`**: rebuild native in the worktree, or copy a DLL built at that
-JuceSharp commit, before running native tests or the app. The default base is
+present, and fails loudly if the tree would not build. **The copy is replaced
+by the base commit's JuceSharp gitlink tree:** the main checkout's submodule can
+sit at another commit (it lags after every gitlink bump the owner has not
+pulled) or hold uncommitted edits, so the script fetches the gitlink's commit
+into the main checkout's submodule repo (objects only, the owner's files are
+untouched) and puts exactly that tracked tree in place, keeping the untracked
+native pair (`juce_sharp.dll` + `juce_vst_host.exe`) together. Each run extracts
+into a temp folder of its own, so two worktrees created at once cannot clobber
+each other; the decisions live in `scripts/AgentWorktree.psm1`
+(`Infrastructure/AgentWorktreeModuleTests`). It takes a complete local native
+pair built for the gitlink when available. Otherwise it invokes the new tree's
+`tools/setup/Get-NativeRuntime.ps1 -Force`, which honours
+`DOTCHARTER_NATIVE_ASSET_DIR` and verifies SHA-256 and ABI, then checks both
+installed hashes against that tree's `tools/setup/native-runtime.json` entry.
+A missing pin or failed install leaves the copied pair in place and prints a
+warning with the reason: build native in the worktree before native tests.
+The final `native-pair: <JSON>` line reports `Gitlink`, `Action` (`keep` or
+`warn`) and `Reason`. It also reads the DLL's own `dca_abi_version()` and warns
+when it differs from the headers' `DCA_ABI_VERSION`. The merge train requires
+the pinned hashes on every run and stops when installation cannot resolve them. The default base is
 `main` on purpose: a worktree cut from a stale session HEAD looks clean but is
 several merges behind, and merging it later can silently undo newer work.
 

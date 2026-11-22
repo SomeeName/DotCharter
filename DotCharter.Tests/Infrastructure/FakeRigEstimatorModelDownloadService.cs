@@ -39,6 +39,20 @@ public sealed class FakeRigEstimatorModelDownloadService : IRigEstimatorModelDow
     /// <summary>Progress steps to report before answering.</summary>
     public IReadOnlyList<string> Steps { get; init; } = ["Downloading…", "Unpacking…"];
 
+    /// <summary>Reports the steps from a thread-pool thread, as the real installer does after its awaits.</summary>
+    public bool ReportOnPoolThread { get; init; }
+
+    private async Task ReportStepsAsync(IProgress<string>? progress)
+    {
+        if (ReportOnPoolThread) await Task.Run(() => Report(progress)).ConfigureAwait(false);
+        else Report(progress);
+    }
+
+    private void Report(IProgress<string>? progress)
+    {
+        foreach (var step in Steps) progress?.Report(step);
+    }
+
     /// <summary>How many times the download was asked for.</summary>
     public int Calls { get; private set; }
 
@@ -51,7 +65,7 @@ public sealed class FakeRigEstimatorModelDownloadService : IRigEstimatorModelDow
         IProgress<string>? progress = null, CancellationToken ct = default)
     {
         Calls++;
-        foreach (var step in Steps) progress?.Report(step);
+        await ReportStepsAsync(progress).ConfigureAwait(false);
 
         if (Gate is not null) await Gate.Task.ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
@@ -85,7 +99,7 @@ public sealed class FakeRigEstimatorModelDownloadService : IRigEstimatorModelDow
         IProgress<string>? progress = null, CancellationToken ct = default)
     {
         LibraryCalls++;
-        foreach (var step in Steps) progress?.Report(step);
+        await ReportStepsAsync(progress).ConfigureAwait(false);
 
         if (Gate is not null) await Gate.Task.ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();

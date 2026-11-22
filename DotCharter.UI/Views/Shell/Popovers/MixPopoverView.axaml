@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
@@ -40,13 +40,31 @@
                  (52, mono). The value column is FIXED because a proportional
                  read-out re-flows the whole row on every drag frame. -->
             <StackPanel Theme="{StaticResource FirePopoverBodyPanel}" Classes="FirePopoverBody">
+                <!-- MASTER: the bus everything feeds, last in the engine's chain.
+                     It lived only in the Mixer tab until that tab's Levels section went:
+                     one home per control. Its mute is in MUTE AND SOLO below. -->
+                <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="92,*,52"
+                      ColumnSpacing="{StaticResource FirePopoverGapSlider}"
+                      ToolTip.Tip="{localization:Loc Toolbar_Master}">
+                    <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
+                               Text="{localization:Loc Toolbar_Master}" />
+                    <Slider VerticalAlignment="Center" Grid.Column="1" Classes="FirePopoverSlider Song"
+                            Minimum="0.0" Maximum="1.0"
+                            AutomationProperties.Name="{localization:Loc Toolbar_Master}"
+                            Value="{Binding Transport.Volume}"
+                            appControls:ResetOnDoubleClick.Command="{Binding Transport.ResetMixerParameterCommand}"
+                            appControls:ResetOnDoubleClick.CommandParameter="MasterSlider"
+                            TickFrequency="0.05" IsSnapToTickEnabled="False" />
+                    <TextBlock VerticalAlignment="Center" Grid.Column="2" Theme="{StaticResource FirePopoverValueText}" Classes="FirePopoverValue"
+                               Text="{Binding Transport.Volume, StringFormat=\{0:P0\}}" />
+                </Grid>
                 <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="92,*,52"
                       ColumnSpacing="{StaticResource FirePopoverGapSlider}"
                       ToolTip.Tip="{localization:Loc Toolbar_SongVolume}">
                     <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
                                Text="{localization:Loc Toolbar_Mix_Song}" />
                     <Slider VerticalAlignment="Center" Grid.Column="1" Classes="FirePopoverSlider Song"
-                            Minimum="0.0" Maximum="1.0"
+                            Minimum="0.0" Maximum="2.0"
                             AutomationProperties.Name="{localization:Loc Toolbar_Mix_Song}"
                             Value="{Binding Transport.SongVolume}"
                             appControls:ResetOnDoubleClick.Command="{Binding Transport.ResetMixerParameterCommand}"
@@ -76,7 +94,7 @@
                     <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
                                Text="{localization:Loc Toolbar_Mix_MidiInst}" />
                     <Slider VerticalAlignment="Center" Grid.Column="1" Classes="FirePopoverSlider Midi"
-                            Minimum="0.0" Maximum="1.5"
+                            Minimum="0.0" Maximum="2.0"
                             AutomationProperties.Name="{localization:Loc Toolbar_Mix_MidiInst}"
                             Value="{Binding Transport.MidiVolume}"
                             appControls:ResetOnDoubleClick.Command="{Binding Transport.ResetMixerParameterCommand}"
@@ -85,9 +103,26 @@
                     <TextBlock VerticalAlignment="Center" Grid.Column="2" Theme="{StaticResource FirePopoverValueText}" Classes="FirePopoverValue"
                                Text="{Binding Transport.MidiVolume, StringFormat=\{0:P0\}}" />
                 </Grid>
+                <!-- TRACK PAN: the stereo position of the backing track; the amber
+                     fill is the mockup's "this one changes the sound, not the level". -->
+                <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="92,*,52"
+                      ColumnSpacing="{StaticResource FirePopoverGapSlider}"
+                      ToolTip.Tip="{localization:Loc Inspector_TrackPan}">
+                    <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
+                               Text="{localization:Loc Inspector_TrackPan}" />
+                    <Slider VerticalAlignment="Center" Grid.Column="1" Classes="FirePopoverSlider Pitch"
+                            Minimum="-1.0" Maximum="1.0"
+                            AutomationProperties.Name="{localization:Loc Inspector_TrackPan}"
+                            Value="{Binding Transport.Pan}"
+                            appControls:ResetOnDoubleClick.Command="{Binding Transport.ResetMixerParameterCommand}"
+                            appControls:ResetOnDoubleClick.CommandParameter="TrackPanSlider"
+                            TickFrequency="0.5" IsSnapToTickEnabled="True" />
+                    <TextBlock VerticalAlignment="Center" Grid.Column="2" Theme="{StaticResource FirePopoverValueText}" Classes="FirePopoverValue"
+                               Text="{Binding Transport.Pan, StringFormat=\{0:0.00\}}" />
+                </Grid>
             </StackPanel>
 
-            <!-- INPUT LEVEL. The meter is REAL: `TransportViewModel.PollInputMeter`
+            <!-- INPUT LEVEL. The meter is REAL: `TransportInputMeter.Poll`
                  reads the engine's windowed capture tap (the multi-consumer one,
                  so it cannot starve live note detection) and this view's own
                  clock drives it — started on attach, stopped on detach, so a
@@ -112,9 +147,9 @@
                                              SegmentCount="12" BarWidth="3" BarGap="2"
                                              MinBarHeight="4" MaxBarHeight="8" HeightCycle="3"
                                              VerticalAlignment="Center"
-                                             LevelDb="{Binding Transport.InputLevelDb}" />
+                                             LevelDb="{Binding Transport.InputMeter.LevelDb}" />
                         <TextBlock VerticalAlignment="Center" Grid.Column="1" Theme="{StaticResource FirePopoverPeakText}" Classes="FirePopoverPeak"
-                                   Text="{Binding Transport.InputPeakLabel}" />
+                                   Text="{Binding Transport.InputMeter.PeakLabel}" />
                         <StackPanel VerticalAlignment="Center" Grid.Column="2" Orientation="Horizontal"
                                     HorizontalAlignment="Right"
                                     Spacing="{StaticResource FirePopoverGapTight}">
@@ -128,6 +163,65 @@
                                           ToolTip.Tip="{localization:Loc Toolbar_Mix_SoloInput}"
                                           AutomationProperties.Name="{localization:Loc Toolbar_Mix_SoloInput}"
                                           IsChecked="{Binding Transport.IsInputSoloed}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- MUTE AND SOLO: the verbs the Mixer tab's Levels section carried
+                 (master mute; song and MIDI mute / solo). The guitar input's own pair
+                 sits in INPUT LEVEL above, beside its meter. -->
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                               Text="{localization:Loc Toolbar_Mix_MuteSolo}" />
+                    <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="*,Auto">
+                        <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
+                                   Text="{localization:Loc Toolbar_Master}" />
+                        <StackPanel VerticalAlignment="Center" Grid.Column="1" Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    Spacing="{StaticResource FirePopoverGapTight}">
+                            <ToggleButton Theme="{StaticResource FirePopoverChipToggle}" Classes="FirePopoverChip" MinWidth="30"
+                                          Content="{localization:Loc Toolbar_Mix_MuteShort}"
+                                          ToolTip.Tip="{localization:Loc Inspector_MuteMaster}"
+                                          AutomationProperties.Name="{localization:Loc Inspector_MuteMaster}"
+                                          IsChecked="{Binding Transport.IsMasterMuted}" />
+                        </StackPanel>
+                    </Grid>
+                    <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="*,Auto">
+                        <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
+                                   Text="{localization:Loc Toolbar_Mix_Song}" />
+                        <StackPanel VerticalAlignment="Center" Grid.Column="1" Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    Spacing="{StaticResource FirePopoverGapTight}">
+                            <ToggleButton Theme="{StaticResource FirePopoverChipToggle}" Classes="FirePopoverChip" MinWidth="30"
+                                          Content="{localization:Loc Toolbar_Mix_MuteShort}"
+                                          ToolTip.Tip="{localization:Loc Inspector_MuteSong}"
+                                          AutomationProperties.Name="{localization:Loc Inspector_MuteSong}"
+                                          IsChecked="{Binding Transport.IsSongMuted}" />
+                            <ToggleButton Theme="{StaticResource FirePopoverChipToggle}" Classes="FirePopoverChip" MinWidth="30"
+                                          Content="{localization:Loc Toolbar_Mix_SoloShort}"
+                                          ToolTip.Tip="{localization:Loc Inspector_SoloSong}"
+                                          AutomationProperties.Name="{localization:Loc Inspector_SoloSong}"
+                                          IsChecked="{Binding Transport.IsSongSoloed}" />
+                        </StackPanel>
+                    </Grid>
+                    <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="*,Auto">
+                        <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
+                                   Text="{localization:Loc Toolbar_Mix_MidiInst}" />
+                        <StackPanel VerticalAlignment="Center" Grid.Column="1" Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    Spacing="{StaticResource FirePopoverGapTight}">
+                            <ToggleButton Theme="{StaticResource FirePopoverChipToggle}" Classes="FirePopoverChip" MinWidth="30"
+                                          Content="{localization:Loc Toolbar_Mix_MuteShort}"
+                                          ToolTip.Tip="{localization:Loc Inspector_MuteMidi}"
+                                          AutomationProperties.Name="{localization:Loc Inspector_MuteMidi}"
+                                          IsChecked="{Binding Transport.IsMidiMuted}" />
+                            <ToggleButton Theme="{StaticResource FirePopoverChipToggle}" Classes="FirePopoverChip" MinWidth="30"
+                                          Content="{localization:Loc Toolbar_Mix_SoloShort}"
+                                          ToolTip.Tip="{localization:Loc Inspector_SoloMidi}"
+                                          AutomationProperties.Name="{localization:Loc Inspector_SoloMidi}"
+                                          IsChecked="{Binding Transport.IsMidiSoloed}" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>

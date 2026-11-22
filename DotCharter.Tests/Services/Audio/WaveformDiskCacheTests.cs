@@ -67,6 +67,23 @@ public sealed class WaveformDiskCacheTests : IDisposable
     }
 
     [Fact]
+    public void Save_ReplacesAnEntryWhileAShareDeleteReaderHoldsIt()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows rename semantics.");
+        var cache = CreateCache();
+        var audio = WriteAudio("held.wav");
+        var identity = StemCacheIdentity.ForAudioFile(audio);
+        cache.Save(identity, audio, MakeSamples(500));
+        var entry = Directory.GetFiles(Path.Combine(_root, "cache")).Single();
+        using var held = new FileStream(entry, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+        cache.Save(identity, audio, MakeSamples(800));
+
+        var loaded = cache.TryLoad(identity, audio);
+        Assert.NotNull(loaded);
+        Assert.Equal(800, loaded!.Mipmaps[0].Length);
+    }
+    [Fact]
     public void ChangedAudioBytes_IsAMiss()
     {
         var cache = CreateCache();
@@ -77,6 +94,29 @@ public sealed class WaveformDiskCacheTests : IDisposable
         // Same path + identity, different content — the signature changes,
         // so the old entry must not be served.
         WriteAudio("song.wav", seed: 2);
+        Assert.Null(cache.TryLoad(identity, audio));
+    }
+
+    /// <summary>#571 row 7: the key's signature samples three windows, so a
+    /// same-length edit between them kept the key and served the old peaks.</summary>
+    [Fact]
+    public void ASameLengthEditBetweenTheSampleWindows_IsAMiss()
+    {
+        var cache = CreateCache();
+        var audio = WriteAudio("long.wav", seed: 3, bytes: 2 * 1024 * 1024);
+        var identity = StemCacheIdentity.ForAudioFile(audio);
+        cache.Save(identity, audio, MakeSamples(500));
+        Assert.NotNull(cache.TryLoad(identity, audio));
+        var written = File.GetLastWriteTimeUtc(audio);
+        var sampledBefore = StemAudioSignature.ComputeFile(audio);
+
+        // Past the 256 KB head window, well before the middle one.
+        var bytes = File.ReadAllBytes(audio);
+        bytes[400_000] ^= 0xFF;
+        File.WriteAllBytes(audio, bytes);
+        File.SetLastWriteTimeUtc(audio, written.AddSeconds(2));
+        Assert.Equal(sampledBefore, StemAudioSignature.ComputeFile(audio));   // the key cannot tell
+
         Assert.Null(cache.TryLoad(identity, audio));
     }
 

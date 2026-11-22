@@ -28,7 +28,7 @@ public enum NewProjectStage
 ///     here; Create answers <see cref="NewProjectDetails" /> and
 ///     <see cref="NewProjectCreator" /> builds the project after the dialog closes.
 /// </summary>
-public sealed class NewProjectViewModel : DialogViewModel<NewProjectDetails?>, INewProjectScreen
+public sealed partial class NewProjectViewModel : DialogViewModel<NewProjectDetails?>, INewProjectScreen
 {
     private readonly IFileStorageService _storage;
     private readonly IConfigurationService _config;
@@ -73,6 +73,7 @@ public sealed class NewProjectViewModel : DialogViewModel<NewProjectDetails?>, I
             _logger.Info(AppLogCategory.Project, "New project dialog canceled.");
             Close(null);
         });
+        _charter = config.LoadAppConfig().DefaultCharterName;
         logger.Info(AppLogCategory.Project, "New project dialog opened.");
     }
 
@@ -95,11 +96,22 @@ public sealed class NewProjectViewModel : DialogViewModel<NewProjectDetails?>, I
     public string AcceptedAudioFormats { get; } = string.Join(" · ",
         AudioFileTypes.Extensions.Select(extension => extension.TrimStart('.').ToUpperInvariant()));
 
-    public string Artist { get => _artist; set => SetProperty(ref _artist, value); }
-    public string Title { get => _title; set => SetProperty(ref _title, value); }
-    public string JapaneseArtist { get => _japaneseArtist; set => SetProperty(ref _japaneseArtist, value); }
-    public string JapaneseTitle { get => _japaneseTitle; set => SetProperty(ref _japaneseTitle, value); }
-    public string Album { get => _album; set => SetProperty(ref _album, value); }
+    public string Artist { get => _artist; set { if (SetProperty(ref _artist, value)) NamesChanged(); } }
+    public string Title { get => _title; set { if (SetProperty(ref _title, value)) NamesChanged(); } }
+
+    public string JapaneseArtist
+    {
+        get => _japaneseArtist;
+        set { if (SetProperty(ref _japaneseArtist, value) && value.Length > 0) ShowJapaneseFields = true; }
+    }
+
+    public string JapaneseTitle
+    {
+        get => _japaneseTitle;
+        set { if (SetProperty(ref _japaneseTitle, value) && value.Length > 0) ShowJapaneseFields = true; }
+    }
+
+    public string Album { get => _album; set { if (SetProperty(ref _album, value)) NamesChanged(); } }
     public string AlbumYear { get => _albumYear; set => SetProperty(ref _albumYear, value); }
     public string Genre { get => _genre; set => SetProperty(ref _genre, value); }
 
@@ -157,7 +169,7 @@ public sealed class NewProjectViewModel : DialogViewModel<NewProjectDetails?>, I
         catch (Exception ex)
         {
             _logger.Warning(AppLogCategory.Project,
-                $"Audio metadata extraction failed for '{path}'. Falling back to filename heuristics. {ex.Message}");
+                $"Audio metadata extraction failed for '{path}'. Falling back to filename heuristics.", ex);
             tags = AudioMetadataResult.Empty;
         }
 
@@ -172,8 +184,8 @@ public sealed class NewProjectViewModel : DialogViewModel<NewProjectDetails?>, I
     ///     names and suggestion, which would otherwise ship in this project's manifest.</summary>
     private void StartWithoutAudio()
     {
-        Artist = Title = Album = AlbumYear = Genre = _releaseDate = "";
-        JapaneseArtist = JapaneseTitle = "";
+        ResetNames();
+        AlbumYear = Genre = _releaseDate = "";
         SuggestedArtist = SuggestedTitle = SuggestedAlbum = "";
         _audioFilePath = null;
         CoverArtPng = null;
@@ -190,8 +202,7 @@ public sealed class NewProjectViewModel : DialogViewModel<NewProjectDetails?>, I
             return;
         }
 
-        Close(new NewProjectDetails(Artist, Title, Album, AlbumYear, _releaseDate, Genre, JapaneseArtist, JapaneseTitle,
-            CoverArtPng, _audioFilePath));
+        Close(Details());
     }
 
     /// <summary>Takes the suggestion, moving the original names into the Japanese fields rather than
@@ -292,7 +303,7 @@ public sealed class NewProjectViewModel : DialogViewModel<NewProjectDetails?>, I
             }
             catch (Exception ex)
             {
-                _logger.Warning(AppLogCategory.Project, $"Online name lookup failed: {ex.GetType().Name}: {ex.Message}");
+                _logger.Warning(AppLogCategory.Project, "Online name lookup failed", ex);
             }
         });
     }
@@ -305,6 +316,8 @@ public sealed class NewProjectViewModel : DialogViewModel<NewProjectDetails?>, I
 
     private void SetSuggestion(ref string field, string? value)
     {
-        if (SetProperty(ref field, value?.Trim() ?? "")) OnPropertyChanged(nameof(HasNameSuggestion));
+        if (!SetProperty(ref field, value?.Trim() ?? "")) return;
+        OnPropertyChanged(nameof(HasNameSuggestion));
+        OnPropertyChanged(nameof(HasOriginalScriptOffer));
     }
 }

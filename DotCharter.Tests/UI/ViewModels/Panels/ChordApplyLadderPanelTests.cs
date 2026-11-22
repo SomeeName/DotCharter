@@ -81,6 +81,39 @@ public sealed class ChordApplyLadderPanelTests
         }
     }
 
+    /// <summary>
+    ///     #751 (design D): the Note footer keeps the ladder on ONE row, so it prints only the first part of the lit
+    ///     rung's reach ("1 chord"); the whole one ("1 chord · all levels") stays in the tooltip. The short reach
+    ///     follows the rung like the whole one.
+    /// </summary>
+    [Fact]
+    public void TheFooter_PrintsTheShortReach_AndFollowsTheRung()
+    {
+        Assert.Equal("4 chords", ChordApplyLadder.ShortOf("4 chords · 2 hand shapes · all levels"));
+        Assert.Equal("4 chords", ChordApplyLadder.ShortOf("4 chords"));
+        Assert.Equal(string.Empty, ChordApplyLadder.ShortOf(string.Empty));
+
+        var h = new Harness();
+        var a5 = h.AddTemplate(0, "A5", 5);
+        var chords = h.AddChords(a5, 3);
+        h.Arrangement.Levels[0].HandShapes.Add(new HandShape
+        {
+            TemplateId = a5.Id, Position = new FractionalPosition(100), EndPosition = new FractionalPosition(104)
+        });
+        var vm = h.CreateChordEditor();
+        h.Selection.SelectedChords.Add(chords[0]);
+        var raised = new List<string?>();
+        vm.Ladder.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        vm.ChooseApplyRungCommand.Execute(ChordApplyRung.EveryUse);
+        var loc = FakeLocalization.English();
+        Assert.Equal(loc.Plural("ChordTemplate_Reach_ChordsOne", "ChordTemplate_Reach_Chords", 3), vm.Ladder.EffectiveShortDetail);
+        Assert.NotEqual(vm.Ladder.EffectiveDetail, vm.Ladder.EffectiveShortDetail);
+        Assert.Contains(nameof(ChordApplyLadder.EffectiveShortDetail), raised);
+        Assert.Equal(loc["ChordTemplate_ApplyShort_EveryUse"], vm.Ladder.EveryUse.ShortLabel);
+        Assert.Equal(vm.Ladder.Selected.Label, vm.Ladder.Selected.ShortLabel);
+    }
+
     [Fact]
     public void SameGrip_ReachesSameFretAndTransposedTemplates_InOneUndoNode()
     {

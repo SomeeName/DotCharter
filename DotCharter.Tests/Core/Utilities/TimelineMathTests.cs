@@ -2,6 +2,17 @@ namespace DotCharter.Tests.Core.Utilities;
 
 public class TimelineMathTests
 {
+    [Theory]
+    [InlineData(int.MaxValue)]
+    [InlineData(int.MinValue)]
+    public void CalculateTimeMs_ExtremeBeatId_ExtrapolatesWithoutIndexOverflow(int beatId)
+    {
+        var beats = BuildBeats(120, 3);
+        var position = new FractionalPosition(beatId, new Fraction(1, 2));
+
+        Assert.Equal((beatId + 0.5) * 500, TimelineMath.CalculateTimeMs(position, beats));
+    }
+
     private static List<BeatMarker> BuildBeats(double bpm, int count)
     {
         var beats = new List<BeatMarker>();

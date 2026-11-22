@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspector="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
+             xmlns:panels="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundFindingsDetailView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Findings page's DETAIL card (#751 P5, design D): the picked finding (the first while none is picked),
+         whether it stops the export, what it is; Open this issue shows it on the Issues tab (its element selected,
+         its fix offered), Jump to sound moves the playhead there and keeps the selection, Open grip editor (a chord's
+         fingering finding) goes to the Shape page. -->
+    <StackPanel x:Name="SoundFindingsDetail" Spacing="{StaticResource SpaceXs}">
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" Text="{Binding Findings.PickedTitle}" TextWrapping="Wrap" />
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody" Text="{Binding Findings.PickedSeverity}" Foreground="{DynamicResource FireWarning}"
+                   IsVisible="{Binding Findings.HasPicked}" />
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{Binding Findings.PickedDetail}" TextWrapping="Wrap" />
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{localization:Loc Inspector_Findings_None}" IsVisible="{Binding Findings.HasNone}"
+                   TextWrapping="Wrap" />
+        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc Inspector_Findings_OpenThis}" AutomationProperties.Name="{localization:Loc Inspector_Findings_OpenThis}"
+                    Command="{Binding Findings.OpenPickedCommand}" IsEnabled="{Binding Findings.HasPicked}" />
+        <Button Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc Inspector_Findings_JumpToSound}" AutomationProperties.Name="{localization:Loc Inspector_Findings_JumpToSound}"
+                    Command="{Binding Findings.JumpToPickedCommand}" IsEnabled="{Binding Findings.CanJump}" />
+        <Button x:Name="SoundFindingsOpenGrip" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" HorizontalAlignment="Stretch"
+                    Content="{localization:Loc Inspector_Findings_OpenGrip}" AutomationProperties.Name="{localization:Loc Inspector_Findings_OpenGrip}"
+                    Command="{Binding Findings.OpenGripCommand}" IsVisible="{Binding Findings.CanOpenGrip}" />
+    </StackPanel>
+</UserControl>

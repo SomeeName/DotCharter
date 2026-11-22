@@ -150,18 +150,12 @@ public sealed class PluginReleaseToolTests : IDisposable
     {
         var info = new ProcessStartInfo("cmd.exe")
         {
-            Arguments = arguments,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
+            Arguments = arguments
         };
         Assert.SkipUnless(OperatingSystem.IsWindows(), "the launcher is a Windows batch file.");
-        using var process = Process.Start(info) ?? throw new InvalidOperationException("cmd did not start.");
-        var stdout = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
-        var stderr = process.StandardError.ReadToEnd();
-        Assert.True(process.WaitForExit(30_000), "cmd did not finish within 30 s.");
-        return stdout.GetAwaiter().GetResult() + stderr;
+        // #608: both pipes drain concurrently under one cap (a deadlock detector for a hung child, never a budget).
+        var result = BoundedProcess.Run(info, TimeSpan.FromMinutes(2), "cmd");
+        return result.StandardOutput + result.StandardError;
     }
 
     private string Payload(string name, bool exe, bool launcher)

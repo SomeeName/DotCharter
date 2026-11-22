@@ -27,6 +27,12 @@ public sealed class RecoverySnapshotMetadata
     public string SongName { get; set; } = string.Empty;
     public DateTimeOffset TimestampUtc { get; set; }
     public string AppVersion { get; set; } = string.Empty;
+
+    /// <summary>Digest of the snapshot bytes this metadata describes. Empty in legacy sidecars.</summary>
+    public string SnapshotSha256 { get; set; } = string.Empty;
+
+    /// <summary>The committed predecessor, retained until the next snapshot swap succeeds.</summary>
+    public RecoverySnapshotMetadata? PreviousGeneration { get; set; }
 }
 
 /// <summary>One on-disk crash snapshot (rscp + sidecar) found by the store.</summary>
@@ -46,11 +52,10 @@ public interface IRecoverySnapshotStore
     string GetSnapshotPath(string? originalProjectPath);
 
     /// <summary>
-    ///     Serialize <paramref name="snapshot"/> to <c>&lt;key&gt;.rscp.tmp</c>,
-    ///     write the SIDECAR, and only then atomically rename the snapshot into
-    ///     place as <c>&lt;key&gt;.rscp</c>. A crash mid-write leaves only a
-    ///     <c>.tmp</c>, which is never considered recoverable — and a snapshot
-    ///     that IS visible always has its metadata beside it.
+    ///     Serialize <paramref name="snapshot"/> to <c>&lt;key&gt;.rscp.&lt;random&gt;.tmp</c>,
+    ///     write a sidecar describing both the staged and committed generations,
+    ///     then atomically rename the snapshot into place as <c>&lt;key&gt;.rscp</c>.
+    ///     Recovery selects only the metadata whose digest matches the visible snapshot.
     /// </summary>
     void WriteSnapshot(ChartProject snapshot, RecoverySnapshotMetadata metadata);
 
@@ -64,6 +69,9 @@ public interface IRecoverySnapshotStore
     ///     already contains everything the snapshot does).
     /// </summary>
     bool IsRecoverable(RecoverableSession session);
+
+    /// <summary>Deletes only a readable, unchanged listed generation whose original is provably newer.</summary>
+    bool DeleteIfSuperseded(RecoverableSession session) => false;
 
     /// <summary>Best-effort delete of the snapshot + sidecar (+ stray tmp) for a project path.</summary>
     void DeleteSnapshot(string? originalProjectPath);
@@ -92,6 +100,7 @@ public sealed class RecoverySnapshotStore : IRecoverySnapshotStore
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private readonly IChartSerializer _serializer;
+    private readonly Lock _sync = new();
 
     public RecoverySnapshotStore(string? rootDirectory = null, IChartSerializer? serializer = null)
     {
@@ -128,53 +137,63 @@ public sealed class RecoverySnapshotStore : IRecoverySnapshotStore
 
     public void WriteSnapshot(ChartProject snapshot, RecoverySnapshotMetadata metadata)
     {
+        lock (_sync) WriteSnapshotLocked(snapshot, metadata);
+    }
+
+    private void WriteSnapshotLocked(ChartProject snapshot, RecoverySnapshotMetadata metadata)
+    {
         Directory.CreateDirectory(RootDirectory);
 
         var snapshotPath = GetSnapshotPath(metadata.OriginalProjectPath);
-        var tempPath = snapshotPath + TempSuffix;
-        _serializer.Save(tempPath, snapshot);
-        // The serializer owns its own stream, so this is exactly the case
-        // AtomicFile.FlushFile exists for: without it the stage-then-swap is only
-        // half done — the rename is atomic, but a power cut can persist the
-        // RENAME while the snapshot's bytes are still in the page cache, leaving
-        // an atomically-swapped-in EMPTY .rscp where the crash evidence should
-        // be. That is precisely the file whose whole job is to survive a crash.
-        AtomicFile.FlushFile(tempPath);
-
-        // THE SIDECAR GOES FIRST, and the snapshot becomes visible only after it
-        // lands. The file name is a one-way HASH of the project path
-        // (ComputeKey), so the sidecar is the ONLY record of which project a
-        // snapshot belongs to — and of the original, usually relative, audio
-        // reference, since the snapshot's own AudioFileName was rewritten
-        // absolute on the way in. Writing it second meant a crash between the two
-        // renames (the exact moment snapshots exist for) left a `.rscp` with no
-        // sidecar, which ListSessions correctly surfaces as an UNTITLED session:
-        // the player's titled project comes back with Save pointing at nothing
-        // and the audio path baked absolute, and IsRecoverable can never gate it,
-        // so it re-offers itself on every launch until it is discarded by hand.
-        //
-        // AtomicFile.WriteAllText stages a randomly named sibling ".tmp", forces
-        // it to the platter and renames with the bounded retry — the same three
-        // steps the snapshot does by hand — and removes its own stage when the
-        // swap fails. DeleteSnapshot/DeleteSession still sweep the fixed
-        // "<path>.tmp" name an older build left behind; the catch below sweeps
-        // OUR temp, so a failed sidecar leaves the previous (still described)
-        // snapshot standing rather than a staged orphan beside it.
-        var sidecarPath = SidecarPathFor(snapshotPath);
+        var tempPath = snapshotPath + "." + Guid.NewGuid().ToString("N") + TempSuffix;
         try
         {
-            AtomicFile.WriteAllText(sidecarPath, JsonSerializer.Serialize(metadata, JsonOptions));
+            _serializer.Save(tempPath, snapshot);
+            // The serializer owns its stream: force the staged bytes to disk
+            // before publishing the generation that names them.
+            AtomicFile.FlushFile(tempPath);
+
+            var sidecarPath = SidecarPathFor(snapshotPath);
+            var previous = File.Exists(snapshotPath)
+                ? MatchingMetadata(snapshotPath, TryReadSidecar(sidecarPath)) ?? new RecoverySnapshotMetadata
+                {
+                    TimestampUtc = SafeLastWriteUtc(snapshotPath) ?? DateTimeOffset.UtcNow
+                }
+                : null;
+            if (previous != null)
+            {
+                previous.SnapshotSha256 = SnapshotHash(snapshotPath);
+                previous.PreviousGeneration = null;
+            }
+
+            var generation = new RecoverySnapshotMetadata
+            {
+                OriginalProjectPath = metadata.OriginalProjectPath,
+                OriginalAudioFileName = metadata.OriginalAudioFileName,
+                SongName = metadata.SongName,
+                TimestampUtc = metadata.TimestampUtc,
+                AppVersion = metadata.AppVersion,
+                SnapshotSha256 = SnapshotHash(tempPath),
+                PreviousGeneration = previous
+            };
+            // The sidecar keeps both candidates across the swap. A crash at either
+            // rename therefore leaves a matching chart/metadata pair on disk.
+            AtomicFile.WriteAllText(sidecarPath, JsonSerializer.Serialize(generation, JsonOptions));
+            AtomicFile.ReplaceWithRetry(tempPath, snapshotPath);
         }
         catch
         {
             BestEffortDelete.File(tempPath);
             throw;
         }
-
-        AtomicFile.ReplaceWithRetry(tempPath, snapshotPath);
     }
 
     public IReadOnlyList<RecoverableSession> ListSessions()
+    {
+        lock (_sync) return ListSessionsLocked();
+    }
+
+    private IReadOnlyList<RecoverableSession> ListSessionsLocked()
     {
         if (!Directory.Exists(RootDirectory)) return Array.Empty<RecoverableSession>();
 
@@ -187,14 +206,16 @@ public sealed class RecoverySnapshotStore : IRecoverySnapshotStore
                 continue;
 
             var sidecarPath = SidecarPathFor(file);
-            var metadata = TryReadSidecar(sidecarPath)
-                           // A missing/corrupt sidecar loses the original-path link but
-                           // not the work: surface the snapshot as an untitled session
-                           // instead of silently ignoring it.
-                           ?? new RecoverySnapshotMetadata
-                           {
-                               TimestampUtc = SafeLastWriteUtc(file) ?? DateTimeOffset.UtcNow
-                           };
+            var sidecar = TryReadSidecar(sidecarPath);
+            var metadata = MatchingMetadata(file, sidecar);
+            // A hashed sidecar cannot describe any other bytes, even when its
+            // original path and audio reference happen to look plausible.
+            if (sidecar is { SnapshotSha256.Length: > 0 } && metadata == null) continue;
+            // Preserve legacy snapshots without a readable sidecar as untitled work.
+            metadata ??= new RecoverySnapshotMetadata
+            {
+                TimestampUtc = SafeLastWriteUtc(file) ?? DateTimeOffset.UtcNow
+            };
 
             // The sidecar is not trusted to say where Save writes: a path that is not
             // a plain local .rscp leaves the session untitled (Save As), work intact.
@@ -218,6 +239,11 @@ public sealed class RecoverySnapshotStore : IRecoverySnapshotStore
     public bool IsRecoverable(RecoverableSession session)
     {
         if (!File.Exists(session.SnapshotPath)) return false;
+        if (!string.IsNullOrEmpty(session.Metadata.SnapshotSha256) &&
+            !ReferenceEquals(MatchingMetadata(session.SnapshotPath, session.Metadata), session.Metadata))
+        {
+            return false;
+        }
         if (session.IsUntitled) return true;
 
         var originalPath = session.Metadata.OriginalProjectPath;
@@ -227,6 +253,49 @@ public sealed class RecoverySnapshotStore : IRecoverySnapshotStore
         var originalWrite = SafeLastWriteUtc(originalPath);
         if (snapshotWrite == null || originalWrite == null) return true;
         return snapshotWrite > originalWrite;
+    }
+
+    public bool DeleteIfSuperseded(RecoverableSession session)
+    {
+        lock (_sync)
+        {
+            if (!IsSuperseded(session)) return false;
+            DeleteSession(session);
+            return true;
+        }
+    }
+
+    private bool IsSuperseded(RecoverableSession session)
+    {
+        if (session.IsUntitled || string.IsNullOrEmpty(session.Metadata.SnapshotSha256) ||
+            !RecoveredProjectPath.IsAdoptable(session.Metadata.OriginalProjectPath))
+        {
+            return false;
+        }
+        try
+        {
+            using var snapshot = new FileStream(session.SnapshotPath, FileMode.Open, FileAccess.Read,
+                FileShare.Read | FileShare.Delete);
+            using var original = new FileStream(session.Metadata.OriginalProjectPath, FileMode.Open,
+                FileAccess.Read, FileShare.Read | FileShare.Delete);
+            if (!string.Equals(Convert.ToHexString(SHA256.HashData(snapshot)), session.Metadata.SnapshotSha256,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var saved = _serializer.Load(session.Metadata.OriginalProjectPath);
+            var captured = _serializer.Load(session.SnapshotPath);
+            if (saved.ProjectId != captured.ProjectId) return false;
+            var snapshotWrite = SafeLastWriteUtc(session.SnapshotPath);
+            var originalWrite = SafeLastWriteUtc(session.Metadata.OriginalProjectPath);
+            return snapshotWrite != null && originalWrite != null && originalWrite >= snapshotWrite;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException or
+                                   InvalidOperationException or ArgumentException or FormatException)
+        {
+            return false;
+        }
     }
 
     public void DeleteSnapshot(string? originalProjectPath)
@@ -248,20 +317,51 @@ public sealed class RecoverySnapshotStore : IRecoverySnapshotStore
 
     public ChartProject LoadSnapshot(string snapshotPath) => _serializer.Load(snapshotPath);
 
+    private static RecoverySnapshotMetadata? MatchingMetadata(string snapshotPath, RecoverySnapshotMetadata? metadata)
+    {
+        if (metadata == null || string.IsNullOrEmpty(metadata.SnapshotSha256)) return metadata;
+        string hash;
+        try
+        {
+            hash = SnapshotHash(snapshotPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+        if (string.Equals(hash, metadata.SnapshotSha256, StringComparison.Ordinal)) return metadata;
+        var previous = metadata.PreviousGeneration;
+        return previous != null && string.Equals(hash, previous.SnapshotSha256, StringComparison.Ordinal)
+            ? previous
+            : null;
+    }
+
+    private static string SnapshotHash(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
     private static string SidecarPathFor(string snapshotPath) => Path.ChangeExtension(snapshotPath, null) + SidecarSuffix;
 
-    private static RecoverySnapshotMetadata? TryReadSidecar(string sidecarPath)
+    /// <summary>Test seam: runs while a sidecar read holds its handle open, so a
+    /// test can publish a snapshot from another store at exactly that moment.</summary>
+    internal Action? SidecarOpenForTesting { get; set; }
+
+    private RecoverySnapshotMetadata? TryReadSidecar(string sidecarPath)
     {
         try
         {
             if (!File.Exists(sidecarPath)) return null;
-            // AtomicFile.ReadAllText, not File.ReadAllText: this file is written
+            // AtomicFile.OpenRead, not File.OpenRead: this file is written
             // by AtomicFile, and a plain read denies DELETE — so an autosave
             // landing while the startup dialog enumerates sessions has its rename
             // refused and burns the bounded retry, and past the budget the write
             // is dropped. Sharing read/write/delete lets the rename proceed while
             // this handle keeps reading the whole OLD sidecar.
-            return JsonSerializer.Deserialize<RecoverySnapshotMetadata>(AtomicFile.ReadAllText(sidecarPath));
+            using var stream = AtomicFile.OpenRead(sidecarPath);
+            SidecarOpenForTesting?.Invoke();
+            return JsonSerializer.Deserialize<RecoverySnapshotMetadata>(stream);
         }
         catch
         {

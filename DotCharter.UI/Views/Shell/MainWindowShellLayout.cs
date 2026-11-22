@@ -171,6 +171,25 @@ internal sealed class MainWindowShellLayout(MainWindow window)
     private GridLength _savedDockCol1Width;
     private double _savedBottomDockMinWidth;
 
+    /// <summary>Reset all pre-run memories together so visibility, dock placement and geometry agree at run end.</summary>
+    internal void ResetGameplayLayoutMemory(MainWindowViewModel vm, GameplayDockSnapshot docks)
+    {
+        if (!_gameplayLayoutApplied) return;
+        vm.ResetGameplayPanelMemory();
+        docks.Reset();
+        var main = _window.FindControl<Grid>("MainSplitGrid");
+        var floors = EditorRowFloors.For(main?.Bounds.Height ?? 0,
+            TimelineAreaMinHeight.For(vm.IsSheetMusicVisible, vm.IsMinimapVisible, false), true);
+        _savedMainRow0Height = EditorSplitDefaults.TimelineRow;
+        _savedMainRow0MinHeight = floors.TopAreaMinPx;
+        _savedMainSplitterHeight = new GridLength(EditorRowFloors.SplitterPx);
+        _savedTimelineRowHeight = new GridLength(1, GridUnitType.Star);
+        _savedTimelineRowMinHeight = floors.TimelineRowMinPx;
+        _savedDockCol0Width = new GridLength(1, GridUnitType.Star);
+        _savedDockCol1Width = new GridLength(6);
+        _savedBottomDockMinWidth = Layout.MainWindowLayoutController.MinInspectorWidthPx;
+    }
+
     [DllImport("user32.dll")]
     private static extern nint SetFocus(nint hWnd);
 
@@ -196,6 +215,9 @@ internal sealed class MainWindowShellLayout(MainWindow window)
 
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    private static extern bool IsChild(nint parent, nint hwnd);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct GuiThreadInfo
@@ -244,10 +266,8 @@ internal sealed class MainWindowShellLayout(MainWindow window)
         if (!GetGUIThreadInfo(0, ref info)) return;
         if (info.hwndFocus == hwnd || info.hwndFocus == 0) return;
 
-        // Only steal focus back from OUR OWN child windows — never from
-        // another application the user switched to.
         GetWindowThreadProcessId(info.hwndFocus, out var focusPid);
-        if (focusPid != (uint)Environment.ProcessId) return;
+        if (!IsReclaimable(hwnd, info.hwndFocus, focusPid == (uint)Environment.ProcessId, IsChild(hwnd, info.hwndFocus))) return;
 
         var focusThread = GetWindowThreadProcessId(info.hwndFocus, out _);
         var myThread = GetCurrentThreadId();
@@ -261,6 +281,15 @@ internal sealed class MainWindowShellLayout(MainWindow window)
         try { SetFocus(hwnd); }
         finally { AttachThreadInput(myThread, focusThread, false); }
     }
+
+    /// <summary>
+    ///     Whether the watchdog takes focus back: only from a CHILD window of the
+    ///     shell (the renderer's swapchain HWND it exists for), never from another
+    ///     application or from this app's own floating pane windows, which are
+    ///     top-levels the user may legitimately be typing in.
+    /// </summary>
+    internal static bool IsReclaimable(nint shell, nint focused, bool sameProcess, bool focusedIsShellChild) =>
+        focused != 0 && focused != shell && sameProcess && focusedIsShellChild;
 
     private void UpdateGameplayFocusWatchdog(MainWindowViewModel vm)
     {
@@ -343,6 +372,7 @@ internal sealed class MainWindowShellLayout(MainWindow window)
 
         if (vm.IsGameplayPresentation && !_gameplayLayoutApplied)
         {
+            _window.CancelSideColumnDrags();
             _gameplayLayoutApplied = true;
 
             // The run is PRESENTED in the 3D preview panel — this branch
@@ -395,6 +425,8 @@ internal sealed class MainWindowShellLayout(MainWindow window)
 
             dockGrid.ColumnDefinitions[0].Width = _savedDockCol0Width;
             dockGrid.ColumnDefinitions[1].Width = _savedDockCol1Width;
+            // That width was sized for the window the run started in, which may have changed since.
+            _window.RefitSideColumns();
             if (bottomDock != null)
             {
                 bottomDock.MinWidth = _savedBottomDockMinWidth;

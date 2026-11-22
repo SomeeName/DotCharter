@@ -1,0 +1,310 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctl="using:DotCharter.UI.Controls"
+        xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI">
+
+    <!-- Inspector design D's card vocabulary, app-wide: merged by Theme.axaml like
+         KeybindControlTheme.axaml, so a tab view that also stands alone (the Shapes panel, the
+         Riff library, the Song, Lyrics and Annotations tabs in their smoke tests) finds every key
+         without the inspector grammar around it.
+         * `ctl:ColumnFlowCard`'s default theme: the framed card whose content scrolls inside its
+           slot, with the "More below" cue pinned to its bottom edge (the control shows the cue and
+           stops the scroller above it). A card whose content pins its own head and foot around a
+           list sets `ScrollViewer.VerticalScrollBarVisibility="Disabled"`: its content then gets
+           the slot's height and scrolls nothing itself.
+         * `ColumnFlowNavToggle` + `ColumnFlowNav`: one quiet navigation entry, worn by the main tab
+           strip, the Note section strip and a card pager's page buttons. Caption only; the lit entry
+           is accent text with a 2 px accent underline. 28 px tall, the design's touch target.
+         * `ColumnFlowButton` (theme and class of one name): the quiet framed 28 px button; with
+           `ColumnFlowPrimary` it is the accent-filled verb of a card or footer.
+         * `ColumnFlowToggle`: a framed 28 px on/off button; On is accent-filled, heavier framed and
+           carries a check mark, so the state reads without colour.
+         * `ColumnFlowRow`: one list line, a framed button stretched over the card; `selected`
+           frames the row on screen.
+         * `ColumnFlowText` (+ `ColumnFlowHeading` / `ColumnFlowMuted` / `ColumnFlowBody` /
+           `ColumnFlowValue` / `ColumnFlowStamp`): a card's title, a muted label, body text, a mono
+           value and a list line's time; `ColumnFlowFrame` (theme and class): a hand-built card frame.
+         Every family is a ControlTheme whose rules are gated on its class: wear both. -->
+    <Styles.Resources>
+        <ControlTheme x:Key="{x:Type ctl:ColumnFlowCard}" TargetType="ctl:ColumnFlowCard">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceCard}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+            <Setter Property="Padding" Value="{StaticResource FirePadMenuPanel}" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            ClipToBounds="True">
+                        <Panel>
+                            <ScrollViewer x:Name="PART_Scroll"
+                                          VerticalScrollBarVisibility="{TemplateBinding (ScrollViewer.VerticalScrollBarVisibility)}"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <ContentPresenter Content="{TemplateBinding Content}"
+                                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                  Padding="{TemplateBinding Padding}" />
+                            </ScrollViewer>
+                            <!-- "More below": shown by the card while content hides under the fold. -->
+                            <Border x:Name="PART_Cue" Height="20" IsVisible="False" IsHitTestVisible="False"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                    Padding="{StaticResource FireGapHSm}" CornerRadius="{StaticResource FireRadiusMicro}"
+                                    Background="{DynamicResource FireSurfaceFooter}"
+                                    AutomationProperties.Name="{localization:Loc Inspector_ColumnFlow_MoreBelow}">
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}" VerticalAlignment="Center">
+                                    <PathIcon Data="{DynamicResource IconChevronDown}" Width="8" Height="8"
+                                              Foreground="{DynamicResource FireAccentBright}" />
+                                    <TextBlock Text="{localization:Loc Inspector_ColumnFlow_MoreBelow}" VerticalAlignment="Center"
+                                               FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireAccentBright}" />
+                                </StackPanel>
+                            </Border>
+                        </Panel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+
+        <ControlTheme x:Key="ColumnFlowNavToggle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="Padding" Value="{StaticResource FireGapHSm}" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:Name="PART_Chrome"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="Transparent" BorderThickness="{StaticResource FireGapNavRow}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^.ColumnFlowNav:pointerover /template/ Border#PART_Chrome">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            </Style>
+            <Style Selector="^.ColumnFlowNav:checked">
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+            <Style Selector="^.ColumnFlowNav:checked /template/ Border#PART_Chrome">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+            </Style>
+            <Style Selector="^.ColumnFlowNav:focus-visible /template/ Border#PART_Chrome">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            </Style>
+            <Style Selector="^.ColumnFlowNav:disabled">
+                <Setter Property="Opacity" Value="0.4" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="ColumnFlowButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Padding" Value="{StaticResource FireGapHSm}" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:Name="PART_Chrome"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource FireRadiusMicro}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^.ColumnFlowButton:pointerover /template/ Border#PART_Chrome">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            </Style>
+            <Style Selector="^.ColumnFlowButton:focus-visible /template/ Border#PART_Chrome">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+            </Style>
+            <Style Selector="^.ColumnFlowButton:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+            <Style Selector="^.ColumnFlowButton.ColumnFlowPrimary">
+                <Setter Property="Background" Value="{DynamicResource FireAccentBright}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBright}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextOnAccent}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+            <Style Selector="^.ColumnFlowButton.ColumnFlowPrimary:pointerover /template/ Border#PART_Chrome">
+                <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="ColumnFlowToggle" TargetType="ToggleButton">
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="Padding" Value="{StaticResource FireGapHSm}" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:Name="PART_Chrome"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource FireRadiusMicro}"
+                            Padding="{TemplateBinding Padding}">
+                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}"
+                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+                            <TextBlock x:Name="PART_Check" Text="✓" IsVisible="False" VerticalAlignment="Center" />
+                            <ContentPresenter Content="{TemplateBinding Content}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^.ColumnFlowToggle:pointerover /template/ Border#PART_Chrome">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            </Style>
+            <Style Selector="^.ColumnFlowToggle:checked">
+                <Setter Property="Background" Value="{DynamicResource FireAccentFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBright}" />
+                <Setter Property="BorderThickness" Value="2" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextOnAccent}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+            <Style Selector="^.ColumnFlowToggle:checked /template/ Border#PART_Chrome">
+                <Setter Property="Background" Value="{DynamicResource FireAccentFill}" />
+            </Style>
+            <Style Selector="^.ColumnFlowToggle:checked /template/ TextBlock#PART_Check">
+                <Setter Property="IsVisible" Value="True" />
+            </Style>
+            <Style Selector="^.ColumnFlowToggle:focus-visible /template/ Border#PART_Chrome">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+            </Style>
+            <Style Selector="^.ColumnFlowToggle:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="ColumnFlowRow" TargetType="Button">
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="Padding" Value="{StaticResource FireGapHSm}" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:Name="PART_Chrome"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource FireRadiusMicro}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^.ColumnFlowRow:pointerover /template/ Border#PART_Chrome">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            </Style>
+            <Style Selector="^.ColumnFlowRow.selected">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+            </Style>
+            <Style Selector="^.ColumnFlowRow:focus-visible /template/ Border#PART_Chrome">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+            </Style>
+        </ControlTheme>
+    
+        <!-- The card text family: a title, a muted label, a mono value, a list line's time or frets
+             (mono, muted; accent with `selected`, worn by the row on screen). -->
+        <ControlTheme x:Key="ColumnFlowText" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Style Selector="^.ColumnFlowHeading">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="Margin" Value="0,0,0,4" />
+            </Style>
+            <Style Selector="^.ColumnFlowLabel">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+            <Style Selector="^.ColumnFlowMuted">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+            </Style>
+            <Style Selector="^.ColumnFlowBody">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+            <Style Selector="^.ColumnFlowValue">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            </Style>
+            <Style Selector="^.ColumnFlowStamp">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+            </Style>
+            <Style Selector="^.ColumnFlowStamp.selected">
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- The frame of a card that is not a ColumnFlowCard (a list card pins its own head and foot). -->
+        <ControlTheme x:Key="ColumnFlowFrame" TargetType="Border">
+            <Style Selector="^.ColumnFlowFrame">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceCard}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadMenuPanel}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <!-- A text field of a card: 28 px, the card's type size. -->
+    <Style Selector="TextBox.ColumnFlowField">
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        <Setter Property="Padding" Value="5,1" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ComboBox.ColumnFlowField">
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+</Styles>

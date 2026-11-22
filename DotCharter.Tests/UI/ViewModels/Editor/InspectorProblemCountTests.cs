@@ -53,7 +53,8 @@ public sealed class InspectorProblemCountTests
         ];
 
         var queue = new SoundQueueViewModel(() => arrangement, () => level, () => [], () => issues,
-            new SelectionService(), _ => { }, FakeLocalization.English());
+            new SelectionService(), _ => { }, FakeLocalization.English(),
+            _ => (ChordNamingOptions.Default, DoubleStopNameOptions.Default));
 
         Assert.Equal(2, queue.BlocksExportCount);
         Assert.Equal(3, queue.BlocksExportFindingCount);
@@ -72,7 +73,7 @@ public sealed class InspectorProblemCountTests
         var english = FakeLocalization.English();
         Assert.StartsWith("sounds", english["Inspector_Empty_Tile_Blockers"], StringComparison.Ordinal);
         Assert.Contains("Issues tab", ProblemCountText.BlockingSoundsTip(english, 190, 230), StringComparison.Ordinal);
-        Assert.Contains("lint", ProblemCountText.IssueBadgeTip(english, 267), StringComparison.Ordinal);
+        Assert.Contains("findings in the Issues list", ProblemCountText.IssueBadgeTip(english, 267), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -112,7 +113,7 @@ public sealed class InspectorProblemCountTests
             .Select(Path.GetFileName)
             .ToList();
 
-        Assert.Equal(["IssuesInspectorView.axaml"], binders);
+        Assert.Equal(["IssuesProjectView.axaml"], binders); // the Issues tab's Whole project card
         Assert.Contains("Command=\"{Binding ShowExportReadinessCommand}\"", SoundTabMarkup(), StringComparison.Ordinal);
     }
 

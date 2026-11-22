@@ -33,9 +33,16 @@ public interface ILiveTakeStore
     /// take was empty or persisting failed. Never throws.</summary>
     Task<string?> FinalizeTakeAsync(LiveTakeRecorder recorder);
 
+    /// <summary>Releases this take's output reservations AFTER attachment (or
+    /// abandonment). Call in a finally even when finalization fails.</summary>
+    void CompleteTake(LiveTakeRecorder recorder);
+
     /// <summary>Deletes takes no session record references anymore and
     /// enforces the total-size cap (oldest first). Never throws.</summary>
     Task CleanupAsync();
+
+    /// <summary>Sweeps only the profile that owned the recording.</summary>
+    Task CleanupAsync(Guid profileId) => CleanupAsync();
 }
 
 public sealed class LiveTakeStore : ILiveTakeStore
@@ -48,6 +55,8 @@ public sealed class LiveTakeStore : ILiveTakeStore
     private readonly IAppLogger? _logger;
     private readonly IPlayerProfileService? _playerProfiles;
     private readonly IPracticeProfileService? _practiceProfiles;
+    private readonly object _pendingGate = new();
+    private readonly HashSet<string> _pendingPaths = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Profile-scoped store (production wiring).</summary>
     public LiveTakeStore(IPlayerProfileService playerProfiles, IPracticeProfileService practiceProfiles,
@@ -106,11 +115,22 @@ public sealed class LiveTakeStore : ILiveTakeStore
             var maxMinutes = Math.Clamp(config.LivePlayTakeMaxMinutes, 1, 60);
             var name = $"take-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}"[..38] + ".wav";
             var path = Path.Combine(TakesDirectory, name);
-            return new LiveTakeRecorder(path, sampleRate, TimeSpan.FromMinutes(maxMinutes));
+            lock (_pendingGate)
+            {
+                _pendingPaths.Add(path);
+                _pendingPaths.Add(Path.ChangeExtension(path, ".opus"));
+                try { return new LiveTakeRecorder(path, sampleRate, TimeSpan.FromMinutes(maxMinutes)); }
+                catch
+                {
+                    _pendingPaths.Remove(path);
+                    _pendingPaths.Remove(Path.ChangeExtension(path, ".opus"));
+                    throw;
+                }
+            }
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Take recorder could not start: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Take recorder could not start", ex);
             return null;
         }
     }
@@ -161,7 +181,7 @@ public sealed class LiveTakeStore : ILiveTakeStore
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Take could not be finalized: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Take could not be finalized", ex);
             return null;
         }
         finally
@@ -170,11 +190,29 @@ public sealed class LiveTakeStore : ILiveTakeStore
         }
     }
 
-    public Task CleanupAsync() => Task.Run(() =>
+    public Task CleanupAsync() => CleanupAsync(_playerProfiles?.ActiveProfile.Id ?? _practiceProfiles?.ActiveProfileId ?? Guid.Empty);
+
+    public void CompleteTake(LiveTakeRecorder recorder)
+    {
+        lock (_pendingGate)
+        {
+            _pendingPaths.Remove(recorder.FilePath);
+            _pendingPaths.Remove(Path.ChangeExtension(recorder.FilePath, ".opus"));
+        }
+    }
+
+    public Task CleanupAsync(Guid profileId) => Task.Run(() =>
+    {
+        // Reference collection and deletion share the reservation gate.
+        lock (_pendingGate) CleanupUnreserved(profileId);
+    });
+
+    private void CleanupUnreserved(Guid profileId)
     {
         try
         {
-            var dir = TakesDirectory;
+            if (_playerProfiles != null && !_playerProfiles.Profiles.Any(p => p.Id == profileId)) return;
+            var dir = _fixedDirectory ?? Path.Combine(_playerProfiles!.GetDataDirectory(profileId), TakesDirectoryName);
             if (!Directory.Exists(dir)) return;
 
             // The sweep deletes on the strength of what the practice store does
@@ -185,7 +223,8 @@ public sealed class LiveTakeStore : ILiveTakeStore
             // star being consulted only by the cap-eviction pass below. This runs
             // after every run and on every take delete, so one locked file would
             // have wiped the whole listen-back library.
-            if (_practiceProfiles is { IsStoreAuthoritative: false })
+            var profiles = _practiceProfiles?.GetArchiveProfiles(profileId);
+            if (_practiceProfiles != null && profiles == null)
             {
                 _logger?.Warning(AppLogCategory.Audio,
                     "Take cleanup skipped: the practice profile store could not be read, so every take " +
@@ -193,10 +232,11 @@ public sealed class LiveTakeStore : ILiveTakeStore
                 return;
             }
 
-            var (referenced, pinned) = CollectReferencedTakeFiles();
+            var (referenced, pinned) = CollectReferencedTakeFiles(profiles);
             var files = new List<TakeFileInfo>();
             foreach (var path in Directory.EnumerateFiles(dir))
             {
+                if (_pendingPaths.Contains(path)) continue;
                 var info = new FileInfo(path);
                 files.Add(new TakeFileInfo(info.Name, info.Length, info.LastWriteTimeUtc));
             }
@@ -216,9 +256,9 @@ public sealed class LiveTakeStore : ILiveTakeStore
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Take cleanup failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Take cleanup failed", ex);
         }
-    });
+    }
 
     /// <summary>One take file on disk, as fed to <see cref="SelectDeletions"/>.</summary>
     public readonly record struct TakeFileInfo(string Name, long SizeBytes, DateTime LastWriteUtc);
@@ -278,19 +318,22 @@ public sealed class LiveTakeStore : ILiveTakeStore
 
     /// <summary>Referenced = every session's take + attached re-amp renders;
     /// pinned = the same for STARRED sessions (cap-eviction exempt).</summary>
-    private (IReadOnlySet<string> Referenced, IReadOnlySet<string> Pinned) CollectReferencedTakeFiles()
+    private static (IReadOnlySet<string> Referenced, IReadOnlySet<string> Pinned) CollectReferencedTakeFiles(
+        IReadOnlyDictionary<string, PracticeArrangementProfile>? profiles)
     {
         var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var pinned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (_practiceProfiles == null) return (referenced, pinned);
-        foreach (var profile in _practiceProfiles.GetAll().Values)
+        if (profiles == null) return (referenced, pinned);
+        foreach (var profile in profiles.Values)
         {
             foreach (var session in profile.Sessions)
             {
-                if (string.IsNullOrEmpty(session.TakeFile)) continue;
                 var starred = session.TakeStarred == true;
-                referenced.Add(session.TakeFile);
-                if (starred) pinned.Add(session.TakeFile);
+                if (!string.IsNullOrEmpty(session.TakeFile))
+                {
+                    referenced.Add(session.TakeFile);
+                    if (starred) pinned.Add(session.TakeFile);
+                }
                 if (session.ReampFiles is not { Count: > 0 } reamps) continue;
                 foreach (var reamp in reamps)
                 {

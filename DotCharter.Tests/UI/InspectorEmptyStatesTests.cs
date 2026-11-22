@@ -19,7 +19,7 @@ public sealed class InspectorEmptyStatesTests
         var summary = Regex.Match(vm, @"public string IssueSummary => IssueCount == 0\s*\?\s*_localization\[""(?<key>\w+)""\]");
         Assert.True(summary.Success, "IssueSummary's zero branch is no longer one resource key; re-read this test");
 
-        var view = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor", "Inspector", "IssuesInspectorView.axaml")));
+        var view = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor", "Inspector", "IssuesListView.axaml")));
         var empty = Regex.Match(view, @"Classes=""InspectorEmpty""[\s\S]*?Loc (?<key>\w+)\}");
         Assert.True(empty.Success, "the Issues tab has no empty state any more");
         Assert.NotEqual(empty.Groups["key"].Value, summary.Groups["key"].Value);
@@ -28,7 +28,7 @@ public sealed class InspectorEmptyStatesTests
     [Fact]
     public void AutoFix_ShowsOnlyWithSomethingToFix()
     {
-        var view = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor", "Inspector", "IssuesInspectorView.axaml")));
+        var view = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor", "Inspector", "IssuesListView.axaml")));
         var button = Regex.Match(view, @"<Button[^>]*Command=""\{Binding Issues\.AutoFixIssuesCommand\}""[^>]*>");
         Assert.True(button.Success, "the Issues header has no Auto-Fix button");
         Assert.Contains(@"IsVisible=""{Binding Issues.IssueCount}""", button.Value, StringComparison.Ordinal);

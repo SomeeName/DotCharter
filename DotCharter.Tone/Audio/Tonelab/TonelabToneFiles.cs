@@ -9,11 +9,14 @@ namespace DotCharter.Tone.Audio.Tonelab;
 ///     so a <c>DOTCHARTER_DATA_ROOT</c> launch keeps them in its own root); each write
 ///     deletes the file before it once the game has answered, <see cref="Dispose" />
 ///     deletes the last, and opening the folder sweeps what a crashed run left behind.
+///     Each instance names and releases only its own files.
 /// </summary>
 public sealed class TonelabToneFiles : IDisposable
 {
     private readonly object _sync = new();
     private readonly List<string> _live = [];
+    private static int _instances;
+    private readonly int _instance = Interlocked.Increment(ref _instances);
     private int _counter;
 
     public TonelabToneFiles()
@@ -25,6 +28,13 @@ public sealed class TonelabToneFiles : IDisposable
 
     public string Directory { get; }
 
+    /// <summary>
+    ///     What every file this instance writes starts with: the process AND the instance, so two
+    ///     owners in one process (the designer's preview, the editor's, the offline check) never
+    ///     write or release each other's pending file.
+    /// </summary>
+    internal string FilePrefix => $"tone-{Environment.ProcessId}-{_instance}-";
+
     /// <summary>Writes <paramref name="toneJson" /> (UTF-8, no BOM) to a fresh file and returns its full path.</summary>
     public string Write(string toneJson)
     {
@@ -32,7 +42,7 @@ public sealed class TonelabToneFiles : IDisposable
         {
             if (_counter == 0) SweepStale();
             System.IO.Directory.CreateDirectory(Directory);
-            var path = Path.Combine(Directory, $"tone-{Environment.ProcessId}-{++_counter}.json");
+            var path = Path.Combine(Directory, $"{FilePrefix}{++_counter}.json");
             File.WriteAllText(path, toneJson, new UTF8Encoding(false));
             _live.Add(path);
             return path;

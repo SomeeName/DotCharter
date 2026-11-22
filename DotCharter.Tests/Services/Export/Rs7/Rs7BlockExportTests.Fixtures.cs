@@ -5,15 +5,9 @@ using DotCharter.Services.Export.Sng.Model;
 namespace DotCharter.Tests.Services.Export.Rs7;
 
 /// <summary>
-///     #777: the writer rules of the RS7X block (the rs7string mod's
-///     <c>docs/sng-extension.md</c> §4, §5) on small synthetic charts, through the real
-///     mapper, writer and reader: the block is written for a 7-string guitar and for
-///     nothing else, its sections come in order even when empty, templates are never
-///     merged on their stock columns alone, every template keeps a stock column, the
-///     name's last byte stays 0, ChordNotes records follow the extended strings'
-///     techniques, section string masks carry string 6, and the import reads it all
-///     back (and the older name[31] column too). The byte-for-byte comparison with
-///     <c>rs7chart</c>'s packages is <c>Rs7ReferenceRebuildTests</c>.
+///     Synthetic charts for the shared extended model: template deduplication,
+///     extra-string techniques, ghost gems, double stops and section masks.
+///     Helpers expose the model and its stock columns for field-level assertions.
 /// </summary>
 public sealed partial class Rs7BlockExportTests
 {
@@ -21,17 +15,6 @@ public sealed partial class Rs7BlockExportTests
     private static readonly int LowB = Rs7StringLayout.ToDomain(6, Strings);
     private static readonly int LowE = Rs7StringLayout.ToDomain(0, Strings);
     private static readonly int A = Rs7StringLayout.ToDomain(1, Strings);
-
-    /// <summary>What <c>rs7chart</c> writes for a 7-string chart without chords
-    /// (<c>rs7c_runs_7str</c>, <c>rs7c_tech_a</c>): 65 bytes, all three sections.</summary>
-    private const string EmptySevenStringBlock =
-        "52533758010010004100000003000000" + "535452530100010005000000" + "0007010006" +
-        "434844540100010004000000" + "00000000" + "43484e54010000000400000000000000";
-
-    private const string PinnedEmptyBlockBody = "15ffa680956cac941291ed3feb9626662efd514b263670a9bd5f5f18bc5b66e3";
-    private const string PinnedGhostGemBody = "3e279ca256442ccec9735f277782362763b00c8e68d08a676b116b388d2480d5";
-    private const string PinnedSeventhStringChordBody = "1ec0ae8802c535402d08e294273ab94f7ebc031139ea998c459e2a0126389ce2";
-    private const string PinnedNameByte31Body = "7a21d28ece0dbccbed961f7a54864e65b8b29ba4e44aa542fb248bfb2e7ce6d8";
 
     // ---- helpers ---------------------------------------------------------------
 
@@ -94,21 +77,14 @@ public sealed partial class Rs7BlockExportTests
     {
         var sng = SngFromDomainMapper.BuildInstrumental(arrangement, beats, 20_000,
             new DateTime(2026, 10, 13, 12, 0, 0, DateTimeKind.Unspecified)).Sng;
-        return (sng, RocksmithSngWriter.WriteUnpacked(sng));
+        return (sng, BodyWithoutBlock(sng));
     }
 
     private static byte[] BodyWithoutBlock(RocksmithSng sng)
     {
-        var block = sng.Extension;
-        sng.Extension = null;
-        try
-        {
-            return RocksmithSngWriter.WriteUnpacked(sng);
-        }
-        finally
-        {
-            sng.Extension = block;
-        }
+        using var output = new MemoryStream();
+        using (var writer = new BinaryWriter(output)) RocksmithSngWriter.WriteBody(writer, sng);
+        return output.ToArray();
     }
 
     private static ChartProject Project(Arrangement arrangement, List<BeatMarker> beats)

@@ -19,9 +19,16 @@ public static class SafeFileName
     ///     — callers pick their own fallback stem.
     /// </summary>
     public static string Make(string? fileName)
-    {
-        if (string.IsNullOrWhiteSpace(fileName)) return string.Empty;
+        => string.IsNullOrWhiteSpace(fileName) ? string.Empty : ReplaceInvalid(fileName).Trim();
 
+    /// <summary>
+    ///     The invalid-character policy alone: every character illegal in a file name
+    ///     becomes '_', nothing is trimmed and there is no fallback. For a caller whose
+    ///     names already exist on disk in exactly that spelling.
+    /// </summary>
+    public static string ReplaceInvalid(string fileName)
+    {
+        ArgumentNullException.ThrowIfNull(fileName);
         var buffer = fileName.Length <= 256 ? stackalloc char[fileName.Length] : new char[fileName.Length];
         for (var i = 0; i < fileName.Length; i++)
         {
@@ -29,6 +36,6 @@ public static class SafeFileName
             buffer[i] = Array.IndexOf(Invalid, c) >= 0 ? '_' : c;
         }
 
-        return new string(buffer).Trim();
+        return new string(buffer);
     }
 }

@@ -80,6 +80,29 @@ public class AlphaTexExporterTests
         Assert.Equal("Am", ParseFirstChordName(tex));
     }
 
+    [Theory]
+    [InlineData(-1, null, "Ab")]
+    [InlineData(0, "", "Ab")]
+    [InlineData(0, "G#", "G#")]
+    public void Export_SpellsGeneratedNamesForTheTuning_AndKeepsAuthoredNames(int templateId, string? name, string expected)
+    {
+        var (project, arr, level, beats) = Fixture();
+        arr.Tuning = ["Eb", "Ab", "Db", "Gb", "Bb", "Eb"];
+        var chord = ChordAt(0, templateId, (0, 5), (1, 7), (2, 7), (3, 6), (4, 5), (5, 5));
+        if (name != null)
+        {
+            arr.ChordTemplates.Add(new ChordTemplate
+            {
+                Id = templateId, Name = name, Frets = chord.ChordNotes.ToDictionary(n => n.StringIndex, n => n.Fret)
+            });
+        }
+        level.Chords.Add(chord);
+
+        var tex = AlphaTexExporter.Export(project, arr, level, beats).AlphaTex;
+
+        Assert.Equal(expected, ParseFirstChordName(tex));
+    }
+
     [Fact]
     public void Export_EscapesChordNameWithSpecialChars()
     {

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -35,6 +36,9 @@ public partial class PhraseCatalogViewModel : ViewModelBase
     [ObservableProperty] private PhraseCatalogEntry? _selectedEntry;
     [ObservableProperty] private string _searchText = "";
     [ObservableProperty] private string _newPhraseName = "";
+
+    /// <summary>The details card's name box: the selected riff's name, typed over and written by Rename.</summary>
+    [ObservableProperty] private string _renameText = "";
     [ObservableProperty] private string _statusMessage = "";
     [ObservableProperty] private bool _statusIsProblem;
 
@@ -69,8 +73,15 @@ public partial class PhraseCatalogViewModel : ViewModelBase
         // Synchronous by default (tests construct this VM directly); the
         // composition root passes the UI dispatcher's background post.
         _searchPass = new Tone.UI.ViewModels.Shell.CoalescedFilterPass(RefreshEntries, searchPost ?? (action => action()));
+        // The live "Pastes at" / "Selection" readouts need the editor; a library-only host (tests) has none.
+        Readouts = chartEditor is not null && transport is not null
+            ? new RiffPasteReadouts(state, chartEditor, transport, localization, searchPost ?? (action => action()))
+            : null;
 
         _catalog.CatalogChanged += RefreshEntries;
+        // The verdict is against the arrangement a paste would land in: another one (or a
+        // re-announced one, after its tuning changed) re-reads it.
+        _state.PropertyChanged += OnProjectStateChanged;
 
         // NOT here: reading the library deserializes EVERY stored riff (one full
         // .rscp project parse per file, and the folder grows with use). This view
@@ -95,6 +106,12 @@ public partial class PhraseCatalogViewModel : ViewModelBase
     public event Action? FocusSearchRequested;
 
     public ObservableCollection<PhraseCatalogEntry> Entries { get; } = [];
+
+    /// <summary>Where a paste lands and how many sounds a capture stores, live; null without an editor.</summary>
+    public RiffPasteReadouts? Readouts { get; }
+
+    /// <summary>The UI language the riff rows' length stamps are worded in (<c>RiffLengthConverter</c>).</summary>
+    public ILocalizationService Localization => _localization;
 
     public string StorageDirectory => _catalog.StorageDirectory;
 
@@ -232,16 +249,17 @@ public partial class PhraseCatalogViewModel : ViewModelBase
     private void RenameSelected()
     {
         var entry = SelectedEntry;
-        if (entry == null || string.IsNullOrWhiteSpace(NewPhraseName)) return;
-        var name = NewPhraseName.Trim();
+        if (entry == null || string.IsNullOrWhiteSpace(RenameText)) return;
+        var name = RenameText.Trim();
+        if (string.Equals(name, entry.Name, StringComparison.Ordinal)) return;
         if (!_catalog.Rename(entry, name))
         {
             SetStatus(_localization["PhraseCatalog_RenameFailed"], true);
             return;
         }
 
-        NewPhraseName = "";
         Reveal(entry);
+        RenameText = SelectedEntry?.Name ?? name;
         SetStatus(_localization.Format("PhraseCatalog_Renamed", name), false);
     }
 
@@ -421,13 +439,24 @@ public partial class PhraseCatalogViewModel : ViewModelBase
 
     partial void OnSelectedEntryChanged(PhraseCatalogEntry? value)
     {
-        _ = value;
         // Moving the selection disarms — the armed button belongs to the riff
         // that was picked when it was armed, not to whatever is picked now.
         IsConfirmingDelete = false;
+        RenameText = value?.Name ?? "";
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(SelectedSummary));
         OnPropertyChanged(nameof(SelectedSourceSummary));
+        NotifyCompatibility();
+    }
+
+    private void OnProjectStateChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ProjectState.ActiveArrangement) or nameof(ProjectState.ActiveProject))
+            NotifyCompatibility();
+    }
+
+    private void NotifyCompatibility()
+    {
         OnPropertyChanged(nameof(CompatibilityMessage));
         OnPropertyChanged(nameof(CompatibilityIsProblem));
     }

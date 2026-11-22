@@ -156,6 +156,6 @@ public sealed class RigSyncTimingUiPerfSmokeTests
 
         foreach (var line in lines) _output.WriteLine(line);
         File.WriteAllLines(
-            Path.Combine(Path.GetTempPath(), "DotCharterTests", "rig-sync-timing.txt"), lines);
+            Path.Combine(TestArtifactRun.Directory(Path.Combine(Path.GetTempPath(), "DotCharterTests")), "rig-sync-timing.txt"), lines);
     }
 }

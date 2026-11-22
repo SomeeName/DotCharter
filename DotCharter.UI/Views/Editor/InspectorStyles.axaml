@@ -6,18 +6,17 @@
          The FOURTH converted grammar file, after `Views/Dialogs/DialogStyles`,
          `Views/Settings/SettingsStyles` and `Views/Shell/ShellChromeStyles`.
          Same mechanism, and the reason it is the right one: this file is
-         included by exactly four views — `InspectorView` (which hosts all
+         included by exactly three views — `InspectorView` (which hosts all
          eight tabs, so the classes cascade to every one of them regardless of
-         its own DataContext), `MixerInspectorView`, `PhraseCatalogView` and
-         `StemMixerView` — so re-pointing it moves ~76 KB of tab markup at once.
+         its own DataContext), `MixerInspectorView` and `PhraseCatalogView`
+         (the unhosted `StemMixerView` duplicate is gone) — so re-pointing it moves ~76 KB of tab markup at once.
          Editing eight views by hand would have converted eight things that
          then drift apart.
 
-         WHAT CHANGED AND WHAT DID NOT: every class NAME survives, and several
-         are load-bearing (`InspectorCard` is asserted by name in
-         `Perf/InspectorConstructionUiPerfSmokeTests`, `Disclosure` +
-         `DisclosureLabel` by `UI/InspectorDisclosureWiringTests`). Every SHAPE
-         moved: radius 4/6/10 became the Fire 4/6/10 ladder, the opaque
+         WHAT CHANGED AND WHAT DID NOT: the class names of 0.50 survived that
+         conversion (the D inspector, #751, later retired the header, footer,
+         card, disclosure, scope-bar and EQ classes its card pages replaced).
+         Every SHAPE moved: radius 4/6/10 became the Fire 4/6/10 ladder, the opaque
          `#181A1E`/`#131519` surfaces became washes of white over the pane, the
          app's `#24272B` border became the layer's ONE hairline, and the
          section labels became the layer's signature mark — a MONO EYEBROW
@@ -32,9 +31,8 @@
          (plus the companion proving the file really SPEAKS the layer, so "no
          app tokens because no tokens at all" cannot pass).
 
-         TWO app keys survive on purpose and are NOT ladder steps:
-         `FieldLabelRail` (84) and `RowHeightField` (32) are this pane's own
-         geometry. The Fire ladder's nearest row height is `FireFieldHeight`
+         ONE app key survives on purpose and is NOT a ladder step:
+         `RowHeightField` (32) is this pane's own geometry. The Fire ladder's nearest row height is `FireFieldHeight`
          = 36, which is a full-width settings row — the inspector is a ~380 px
          dock pane where density IS the design, and four extra pixels per row
          costs a whole field over a card.
@@ -100,6 +98,5 @@
     <StyleInclude Source="avares://DotCharter/Views/Editor/InspectorStyles/TabStripAndMixerRow.axaml" />
     <StyleInclude Source="avares://DotCharter/Views/Editor/InspectorStyles/PaneChromeAndTechniqueChip.axaml" />
     <StyleInclude Source="avares://DotCharter/Views/Editor/InspectorStyles/ScopeAndIssueChrome.axaml" />
-    <StyleInclude Source="avares://DotCharter/Views/Editor/InspectorStyles/EqModule.axaml" />
 
 </Styles>

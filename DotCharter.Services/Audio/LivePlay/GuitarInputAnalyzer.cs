@@ -88,6 +88,7 @@ public sealed class GuitarInputAnalyzer : ILiveInputDetector
     public GuitarInputAnalyzer(int sampleRate) => _inner = new JuceGuitarAnalyzer(sampleRate);
 
     public int SampleRate => _inner.SampleRate;
+    public int LatencySamples => _inner.LatencySamples;
 
     /// <summary>Absolute capture-stream position consumed so far.</summary>
     public ulong StreamPosition => _inner.StreamPosition;

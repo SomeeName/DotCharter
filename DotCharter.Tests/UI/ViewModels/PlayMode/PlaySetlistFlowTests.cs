@@ -227,6 +227,114 @@ public sealed class PlaySetlistFlowTests : IDisposable
     }
 
     [Fact]
+    public async Task ADelayedLoad_CannotReplaceANewerReadOfTheSameProfile()
+    {
+        Directory.CreateDirectory(_dir);
+        var profiles = new PlayerProfileService(FakeLocalization.English(), null, Path.Combine(_dir, "profiles.json"), "Tester");
+        using var store = new DelayedSetlistStore { Name = _ => "Old", BlockNext = true };
+        var lists = new PlaySetlistViewModel(FakeLocalization.English(), store, profiles);
+        var old = lists.LoadAsync();
+        await store.Entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            store.Name = _ => "New";
+            await lists.LoadAsync();
+        }
+        finally { store.Release.Set(); }
+        await old;
+        Assert.Equal("New", Assert.Single(lists.Lists).Name);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ADelayedRead_AfterAProfileSwitchCannotPublishOrSaveTheOldLists(bool refresh)
+    {
+        // The view model lives on the UI thread: every load resumes there, so the generation
+        // check and the publish after it are one step no other load can split (#823). Driven
+        // from a test thread without a context, the switch's own load and the test's load
+        // resumed on two pool threads, both passed the check and filled Lists side by side.
+        using var ui = new SingleThreadPump();
+        await ui.RunAsync(() => DelayedReadAfterAProfileSwitch(refresh));
+    }
+
+    private async Task DelayedReadAfterAProfileSwitch(bool refresh)
+    {
+        Directory.CreateDirectory(_dir);
+        var profiles = new PlayerProfileService(FakeLocalization.English(), null, Path.Combine(_dir, "profiles.json"), "Tester");
+        var first = profiles.ActiveProfile.Id;
+        var second = profiles.Create("Second").Id;
+        using var store = new DelayedSetlistStore { Name = id => id == first ? "First" : "Second" };
+        var lists = new PlaySetlistViewModel(FakeLocalization.English(), store, profiles);
+        var uiThread = Environment.CurrentManagedThreadId;
+        var offUiChanges = 0;
+        lists.Lists.CollectionChanged += (_, _) =>
+        {
+            if (Environment.CurrentManagedThreadId != uiThread) Interlocked.Increment(ref offUiChanges);
+        };
+        var (host, _) = Create(profiles, lists);
+        if (refresh) await lists.LoadAsync();
+        store.BlockNext = true;
+        Task old;
+        if (refresh)
+        {
+            host.CurrentScreen = PlayModeScreen.Start;
+            host.CurrentScreen = PlayModeScreen.SongSelect;
+            old = lists.WhenRefreshed;
+        }
+        else
+        {
+            old = lists.LoadAsync();
+        }
+        await store.Entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            profiles.SwitchTo(second);
+            await lists.LoadAsync();
+        }
+        finally { store.Release.Set(); }
+        await old;
+
+        Assert.Equal(0, offUiChanges);
+        Assert.Equal("Second", Assert.Single(lists.Lists).Name);
+        lists.SelectedListName = "Renamed second";
+        await lists.WhenSaved;
+        Assert.Equal(second, store.SavedProfile);
+        Assert.Equal("Renamed second", store.SavedName);
+    }
+
+    private sealed class DelayedSetlistStore : IPlaySetlistStore, IDisposable
+    {
+        private int _blockNext;
+        public Func<Guid, string> Name { get; set; } = _ => "List";
+        public bool BlockNext { set => _blockNext = value ? 1 : 0; }
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public ManualResetEventSlim Release { get; } = new();
+        public Guid SavedProfile { get; private set; }
+        public string? SavedName { get; private set; }
+
+        public PlaySetlistRead Load(Guid profileId)
+        {
+            var name = Name(profileId);
+            if (Interlocked.Exchange(ref _blockNext, 0) == 1)
+            {
+                Entered.SetResult();
+                Release.Wait(TestContext.Current.CancellationToken);
+            }
+            return new PlaySetlistRead(PlaySetlistReadOutcome.Loaded, [new PlaySetlist { Name = name }]);
+        }
+
+        public bool Save(Guid profileId, IReadOnlyList<PlaySetlist> setlists)
+        {
+            SavedProfile = profileId;
+            SavedName = Assert.Single(setlists).Name;
+            return true;
+        }
+
+        public void Dispose() => Release.Dispose();
+    }
+
+    [Fact]
     public void ARename_IsTrimmedAndReannouncedToThePicker_AndABlankNameIsPutBack()
     {
         var (vm, _) = Create();

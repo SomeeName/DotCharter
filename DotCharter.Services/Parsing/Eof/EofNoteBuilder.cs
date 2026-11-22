@@ -9,6 +9,8 @@ namespace DotCharter.Services.Parsing.Eof;
 internal sealed class EofExportNote
 {
     public required EofRawProGuitarNote Raw { get; init; }
+    public bool IsSynthesizedSingleGrace { get; init; }
+    public ChordTemplate? Template { get; init; }
     public Dictionary<int, int> Fingers { get; } = [];
 
     /// <summary>Bend-curve points destined for the track's tech-note custom
@@ -86,7 +88,32 @@ internal static class EofNoteBuilder
         }
 
         // EOF keeps notes sorted by position (then difficulty).
-        return notes.OrderBy(n => n.SortMs).ThenBy(n => n.Diff).Select(n => n.Note).ToList();
+        var sorted = notes.OrderBy(n => n.SortMs).ThenBy(n => n.Diff).Select(n => n.Note).ToList();
+        FinalizeGraceIdentities(sorted, beats);
+        return sorted;
+    }
+
+    /// <summary>The only identity writer: project names and synthesize single-grace identities after ghosts.</summary>
+    private static void FinalizeGraceIdentities(List<EofExportNote> notes, IList<BeatMarker> beats)
+    {
+        var raw = notes.Select(n => n.Raw).ToList();
+        for (var i = 0; i < notes.Count; i++)
+        {
+            // Chart names are data except for the reserved wire identity. Check
+            // before encoding suffixes so even an old named Nop chord stays unnamed.
+            raw[i].Name = notes[i].Template is { } template && !EofGraceTiming.IsReservedName(template.Name)
+                ? EofChordName(template) : "";
+        }
+        for (var i = 0; i < notes.Count; i++)
+        {
+            if (!notes[i].IsSynthesizedSingleGrace) continue;
+            raw[i].Name = EofGraceTiming.SynthesizedNoteName;
+        }
+        var pairs = EofGracePairing.Targets(raw, beats, i => notes[i].Fingers.Count != 0);
+        for (var i = 0; i < notes.Count; i++)
+        {
+            if (notes[i].IsSynthesizedSingleGrace && !pairs.ContainsKey(i)) raw[i].Name = "";
+        }
     }
 
     private static EofExportNote? BuildSingleNote(GuitarNote note, byte diff, int capo, IList<BeatMarker> beats,
@@ -130,8 +157,8 @@ internal static class EofNoteBuilder
     ///     own GP import writes graces: a short grace note ON the beat
     ///     (LINKNEXT + a pitched RS_NOTATION slide into the target fret) with
     ///     the main note displaced after it. The hint model stores no duration,
-    ///     so the grace length is synthesized as a 32nd at the local tempo —
-    ///     the same magnitude EOF emits (34–68 ms). The importer's
+    ///     so the grace length is synthesized as a 32nd at the local tempo,
+    ///     capped by <see cref="EofGraceTiming"/>. The importer's
     ///     <c>FoldGraceNotePairs</c> is the exact inverse.
     /// </summary>
     private static EofExportNote? TryBuildGraceNote(GuitarNote note, EofExportNote main, int graceFret,
@@ -145,9 +172,7 @@ internal static class EofNoteBuilder
             return null;
         }
 
-        var mainMs = ToMs(note.Position, beats);
-        var thirtySecondMs = mainMs - ToMs(note.Position - new FractionalPosition(0, new Fraction(1, 8)), beats);
-        var graceLen = (uint)Math.Clamp(Math.Round(thirtySecondMs), 1, 200);
+        var graceLen = EofGraceTiming.LengthAt(note.Position, beats);
 
         var raw = new EofRawProGuitarNote
         {
@@ -162,9 +187,9 @@ internal static class EofNoteBuilder
         raw.SlideEndFret = EncodeFret(note.Fret, capo, raw.PositionMs, subject, report);
 
         main.Raw.PositionMs += graceLen;
-        main.Raw.LengthMs = main.Raw.LengthMs > graceLen ? main.Raw.LengthMs - graceLen : 0;
+        main.Raw.LengthMs = EofGraceTiming.DisplacedLength(main.Raw.LengthMs, graceLen);
 
-        return new EofExportNote { Raw = raw };
+        return new EofExportNote { Raw = raw, IsSynthesizedSingleGrace = true };
     }
 
     /// <summary>
@@ -172,8 +197,9 @@ internal static class EofNoteBuilder
     ///     same way <see cref="TryBuildGraceNote"/> does for a single note: one
     ///     short EOF note ON the beat carrying every graced string, LINKNEXT and
     ///     a pitched RS_NOTATION slide into the strum, with the strum displaced
-    ///     after it. <see cref="EofProGuitarTrackParser"/>'s <c>FoldGraceNotePairs</c>
-    ///     is the exact inverse.
+    ///     after it. Multi-string ornaments stay unnamed because EOF exports
+    ///     manual chord names to Rocksmith; a single-string ornament can carry
+    ///     the same identity as a single note and restore its chord-tone hint.
     ///     <para>EOF stores ONE slide end fret per note — the end fret of the
     ///     chord's LOWEST fretted string — and the importer projects that one
     ///     distance onto every string. A chord grace is therefore only
@@ -201,9 +227,7 @@ internal static class EofNoteBuilder
             return null;
         }
 
-        var chordMs = ToMs(chord.Position, beats);
-        var thirtySecondMs = chordMs - ToMs(chord.Position - new FractionalPosition(0, new Fraction(1, 8)), beats);
-        var graceLen = (uint)Math.Clamp(Math.Round(thirtySecondMs), 1, 200);
+        var graceLen = EofGraceTiming.LengthAt(chord.Position, beats);
 
         var raw = new EofRawProGuitarNote
         {
@@ -224,10 +248,15 @@ internal static class EofNoteBuilder
                     (distance > 0 ? EofConstants.PgFlagSlideUp : EofConstants.PgFlagSlideDown);
         raw.SlideEndFret = EncodeFret(lowestGraceFret + distance, capo, raw.PositionMs, subject, report);
 
+        // Only a single-string ornament can fold back; a multi-string one stays a played
+        // pair, and its strum has nothing left to sustain once the ornament outlasts it.
+        var foldable = BitOperations.IsPow2((uint)raw.NoteBitmask);
         main.Raw.PositionMs += graceLen;
-        main.Raw.LengthMs = main.Raw.LengthMs > graceLen ? main.Raw.LengthMs - graceLen : 0;
+        main.Raw.LengthMs = foldable
+            ? EofGraceTiming.DisplacedLength(main.Raw.LengthMs, graceLen)
+            : main.Raw.LengthMs > graceLen ? main.Raw.LengthMs - graceLen : 0;
 
-        return new EofExportNote { Raw = raw };
+        return new EofExportNote { Raw = raw, IsSynthesizedSingleGrace = foldable };
     }
 
     /// <summary>The name EOF stores on a chord note: the template's name with
@@ -254,9 +283,6 @@ internal static class EofNoteBuilder
         templates.TryGetValue(chord.TemplateId, out var template);
         var raw = new EofRawProGuitarNote
         {
-            // EOF has no Nop field: it keeps the flag as the "-nop" name text its
-            // own RS export reads, and our import folds it back.
-            Name = template == null ? "" : EofChordName(template),
             Difficulty = diff
         };
         SetTimes(raw, chord.Position, chord.Position + chord.GetMaxSustain(), beats);
@@ -324,7 +350,7 @@ internal static class EofNoteBuilder
         }
 
         ReportCommonLoss(first.Vibrato, first.VibratoStrength, raw.PositionMs, subject, report);
-        var note = new EofExportNote { Raw = raw };
+        var note = new EofExportNote { Raw = raw, Template = template };
         if (bendTech != null) note.BendTechNotes.AddRange(bendTech);
         note.BendTechNotes.AddRange(slideTech);
         if (template != null)
@@ -416,7 +442,8 @@ internal static class EofNoteBuilder
 
         // Bends: EOF applies one bend to every chord string, so every string
         // must carry the same curve (or none at all).
-        Check(chordNotes.Select(cn => cn.BendValues.Count).Distinct().Count() == 1, EofLoss.ChordMixedBend, "bend curves");
+        Check(chordNotes.All(cn => cn.BendValues.Select(b => (b.Position, b.Step))
+            .SequenceEqual(first.BendValues.Select(b => (b.Position, b.Step)))), EofLoss.ChordMixedBend, "bend curves");
     }
 
     private static void ReportCommonLoss(bool vibrato, int vibratoStrength, uint posMs,
@@ -436,7 +463,8 @@ internal static class EofNoteBuilder
     ///     (<c>song.h:200</c>, bit n = string n) on the note that carries the shape — the one
     ///     EOF's RS export reads the handshape's chord from (<c>rs.c:2302-2316</c>: the FIRST note in
     ///     the phrase with two or more gems, ghosts counted) and the importer reads back from the
-    ///     full bitmask (<c>EofProGuitarTrackParser.ApplyArpeggioHandShapes</c>). See
+    ///     full bitmask (<c>EofProGuitarTrackParser.ApplyArpeggioHandShapes</c>). Only the
+    ///     carrier receives ghost bits, so later picks on those strings still play. See
     /// <see cref="GhostCarrier" /> for which note that is.
     ///     <para>
     ///         A ghost on a string the carrier itself plays has NO EOF spelling: one EOF note holds
@@ -454,14 +482,16 @@ internal static class EofNoteBuilder
     {
         foreach (var shape in level.HandShapes)
         {
-            if (!templates.TryGetValue(shape.TemplateId, out var grip) || grip.GhostMask == 0) continue;
+            if (!templates.TryGetValue(shape.TemplateId, out var grip)) continue;
+            var ghostBits = (byte)(shape.GetGhostMask(grip) & 0xFF);
+            if (ghostBits == 0) continue;
             var startMs = EofExportSession.ToMsU32(ToMs(shape.Position, beats));
             var endMs = EofExportSession.ToMsU32(ToMs(shape.EndPosition, beats));
-            var carrier = GhostCarrier(notes, diff, startMs, endMs, grip, capo);
+            var carrier = GhostCarrier(notes, diff, startMs, endMs, grip, ghostBits, capo);
             var lost = new List<int>();
             for (var s = 0; s <= 7; s++)
             {
-                if (!grip.IsGhost(s)) continue;
+                if (!shape.IsGhost(grip, s)) continue;
                 var bit = (byte)(1 << s);
                 var raw = carrier?.Raw;
                 if (raw == null || ((raw.NoteBitmask & ~raw.GhostBitmask) & bit) != 0)
@@ -497,7 +527,7 @@ internal static class EofNoteBuilder
     ///     what it can; <see langword="null" /> when the bar covers no sound.
     /// </summary>
     private static EofExportNote? GhostCarrier(List<(double SortMs, int Diff, EofExportNote Note)> notes, byte diff,
-        uint startMs, uint endMs, ChordTemplate grip, int capo)
+        uint startMs, uint endMs, ChordTemplate grip, byte ghostBits, int capo)
     {
         var inside = notes
             .Where(n => n.Diff == diff && n.Note.Raw.PositionMs >= startMs &&
@@ -507,7 +537,6 @@ internal static class EofNoteBuilder
             .ToList();
         if (inside.Count == 0) return null;
 
-        var ghostBits = (byte)(grip.GhostMask & 0xFF);
         foreach (var note in inside)
         {
             var raw = note.Raw;
@@ -524,7 +553,7 @@ internal static class EofNoteBuilder
         for (var s = 0; s <= 7; s++)
         {
             if ((live & (1 << s)) == 0) continue;
-            if (!grip.Frets.TryGetValue(s, out var fret) || grip.IsGhost(s)) return false;
+            if (!grip.Frets.TryGetValue(s, out var fret)) return false;
             if ((raw.Frets[s] & EofConstants.FretValueMask) != EncodeFret(fret, capo)) return false;
         }
 

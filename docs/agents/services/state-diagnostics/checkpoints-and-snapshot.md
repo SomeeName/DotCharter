@@ -14,13 +14,23 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
     path after a successful write (`CopyTo`, #287; the source keeps its own,
     the untitled bucket is never claimed). Pinned by
     `ProjectSessionSaveOutcomeTests.SaveAs_CarriesTheProjectsCheckpointsToTheNewPath`.
+    Cross-folder carries rebase each checkpoint's audio and stems against its source
+    project, and copy its cover using a content-addressed name. A retry reconciles an
+    unindexed destination snapshot only when its bytes match the relocated snapshot.
+    A conflicting file is neither overwritten nor claimed. This repairs
+    copies whose snapshots landed before their manifest write failed
+    (`CheckpointServiceTests.CopyTo_retries_after_the_manifest_swap_fails`).
     Writes are temp-file-then-atomic-rename like the recovery store; snapshots
     are the SAME `ChartProjectCloner` graph as save/recovery (caller clones
     before `Create`). All manifest interpretation lives in the pure,
     schema-tolerant `CheckpointManifestOps` (drops invalid/duplicate entries,
     never throws) — unit-tested in `CheckpointManifestOpsTests` +
     `CheckpointServiceTests`. UI: `CheckpointsViewModel` (Edit →
-    Checkpoints…); restore swaps the project graph and clears undo history.
+    Checkpoints…); restore swaps the project graph, clears undo history and reloads
+    the restored audio through the session media path before reporting success.
+    Every restore await revalidates the captured project/path/audio context:
+    a late prompt/read cannot replace a newer session, and obsolete media reload
+    completion cannot report success over it (`CheckpointsViewModelTests`).
 - `Diagnostics/` — `DiagnosticsBundleExporter` (`IDiagnosticsBundleExporter`):
   assembles the redacted "Export diagnostics bundle" zip (system-info +
   appconfig.json + recent log tails + manifest). `WriteBundle(Stream, request)`
@@ -89,6 +99,10 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   `DotCharter.Core/AGENTS.md`. The quality report's recycled copy
   (`Services/Editing/Quality/QualityReportCopies`, #711) is that same restore
   into a spare copy instead of an empty one — not a third path.
+- A failed `RunAsSingleUndoStep` restores the pre-mutation chart, then
+  `MutationViewState` restores the caller's arrangement, level, vocal focus,
+  selection, hover and previews (`SingleUndoStepTests`). Successful snapshot
+  history replay still clears transient selection that may refer to removed objects.
 - **Coverage is DERIVED, not listed** —
   `DotCharter.Tests/Services/State/SnapshotFieldCoverageTests`. `ModelGraphWalker`
   fills every writable property and every collection on the domain graph by

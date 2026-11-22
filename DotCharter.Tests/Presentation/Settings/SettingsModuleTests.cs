@@ -33,6 +33,7 @@ public sealed class SettingsModuleTests
         services.AddSingleton<ILocalizationService>(LocalizationService.Instance);
         services.AddSingleton<IUiDispatcher>(new TestUiDispatcher());
         services.AddSingleton<IAppLogger>(new FakeAppLogger());
+        services.AddSingleton<IHistoryService, HistoryService>();
         services.AddSingleton<DotCharter.Presentation.Dialogs.IDialogs>(new DotCharter.Presentation.Dialogs.DialogsSlot());
         services.AddSingleton<IKeybindDispatch>(new NullDispatch());
         services.AddSingleton<IMidiTriggerInput>(new FakeMidiTriggerInput());

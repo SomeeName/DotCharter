@@ -64,7 +64,7 @@ ask.
   `EditTarget.IsImplied` — is never widened) and only for the selection the
   ladder was resolved on.
 - Pinned by `UI/ViewModels/Panels/ChordTechniqueKeyboardApplyToTests` and the
-  headless `SoundTabRailUiPerfSmokeTests.TheMuteKey_FollowsTheLadderOnScreen_AndOnlyTheLadderOnScreen`.
+  headless `NoteSectionStripUiPerfSmokeTests.TheMuteKey_FollowsTheLadderOnScreen_AndOnlyTheLadderOnScreen`.
 
 ## Chord-template panel: ONE "Apply to" ladder decides every edit's reach (#484)
 
@@ -81,11 +81,11 @@ words cannot drift from the write. The ladder resolves once per refresh (and
 the Save count once per draft change), never per property read. Every edit uses it: fret, finger, name, arpeggio, and the template
 dropdown / containing-shape pills / New (`ChordTemplateEditKind.Switch`).
 
-**The result is stated before the edit (#266).** `ChordApplyLadder.ResultText`
-(`ApplyToResult` in `ChordApplyScopeBar`) says what the next shape edit does, read off the same
-`Resolve`: "“Am” itself changes, so every use plays the new grip" (the in-place path) or "A new shape
-is made for these 4 chords; the other 10 keep “Am”" (the rebind). The old *Selected* rung meant either,
-silently; it is still the same write, now stated. An in-place fret or fingering edit that gives the
+**The reach is stated before the edit (#266).** The footer's picker (`SoundApplyBarView`) shows the rung and
+its reach (`SoundApplyReach`, each rung's `Detail`), read off the same `Resolve`; the scope-first **Edit shape…**
+dialog states the result in a sentence (`ShapeEditViewModel.ResultText`: "“Am” itself changes…" or "A new
+shape is made for these 4 chords; the other 10 keep “Am”"). The ladder's own unbound copy of that sentence
+went in #751 P5. The old *Selected* rung meant either, silently; it is still the same write, now stated. An in-place fret or fingering edit that gives the
 shape exactly the frets and fingers of ANOTHER shape JOINS it (`ChordTemplateEditPlanner.JoinExisting`):
 every chord and hand shape of the shape moves there, the target keeps its own name, and the emptied shape
 goes in the same undo node. **Edit shape…** (`ChordShapeEditOpener`, `EditShapeButton`) opens the scope-first
@@ -144,6 +144,15 @@ on a shape with no origin chord (`ShapeEditRequest`).
   ("Techniques on the ladder"). **So do a chord's bend curve and the technique
   KEYS (#604)** — see "Technique keys follow the ladder" above.
 
+The fingering panel also offers **Save and next** (`SaveAndNextFingering`, default
+Shift+F8, rebindable in Settings and listed in the palette). It commits through
+the current Apply-to rung and advances to the next missing fingering only after
+the commit succeeds. A refused commit keeps the shape and draft. An isolated save
+may mint a new template id; the walk starts from the shape that was edited.
+Save, Save & next missing, and Auto-fill remain available. `ChordSaveAndNextTests`
+checks the rungs, refused/no-op saves and undo; `SoundLibraryTemplateConstructionUiPerfSmokeTests`
+checks that all four controls attach and measure.
+
 ### The bulk-edit preview (#485)
 
 While the lit rung reaches MORE than the panel's selection (companion bars
@@ -167,19 +176,19 @@ corner brackets on the 2D timeline and a mark per sound on the song map, with a
   (`ChordUseHighlight.ForLevel`, with the anchors it replaces and adds);
   `UseHighlight` is the review's set while it is non-empty, else the panel's. It
   hands the marks back on apply or discard (`AiChartReviewViewModelTests`).
-- **Only while a panel is on screen:** each `ChordTemplateEditorView` reports its
+- **Only while a panel is on screen:** each `SoundApplyBarView` (the Note footer's "Apply to" picker) reports its
   `EffectiveVisibilityWatcher` state (`ChordApplyPreview.SetHostShown`). The rung
   is sticky for the session, and marks for a hidden panel would be noise.
 - Pinned by `ChordApplyPreviewTests`, `EditTargetRenderDataTests`,
   `EditTargetLayerTests`, `UI/Controls/SongMapMarksTests`,
   `Perf/MinimapUseMarksUiPerfSmokeTests` and the preview case of
-  `Perf/ChordTemplateEditorConstructionUiPerfSmokeTests`.
+  `Perf/SoundLibraryTemplateConstructionUiPerfSmokeTests`.
 
 Pinned by `UI/ViewModels/Panels/ChordApplyScopeTests` (the resolver per rung),
 `ChordApplyLadderTests` (the words), `ChordApplyLadderPanelTests` (through the
 panel: "this chord" never touches another template; "+ same grip" is one undo
 node; the carry-overs; #515), `SameGripFingeringTests`, and
-`Perf/ChordTemplateEditorConstructionUiPerfSmokeTests`.
+`Perf/SoundLibraryTemplateConstructionUiPerfSmokeTests`.
 
 ### Shape edits need a selection
 
@@ -199,7 +208,7 @@ The refusal records no history node, and it is NOT silent (#483): the rows go
 back to the frets the shape really holds and the panel shows
 `ChordTemplate_SelectToReshape` (`ChordApplyLadder.ShowsReshapeHint`).
 A refused hover-typed digit also drops the fret-typing run's anchor
-(`_fretRunNodeId = -1`) — it pushed nothing, so anchoring on the current node
+(`ChordBoxEditHandler._fretRunNodeId = -1`) — it pushed nothing, so anchoring on the current node
 let the next digit UNDO somebody else's work.
 
 ### The name box (#515)
@@ -212,7 +221,7 @@ wrote that null back, so selecting a chord showed an empty box.
 holds the suggested names and containing shapes) now syncs the list in place, always offers the shown
 template's name, and runs before the name is set; a null written into
 `ChordName` is never a rename. Only a bound view shows the fault:
-`Perf/ChordTemplateEditorConstructionUiPerfSmokeTests.SelectingAChord_ShowsItsTemplatesNameInTheNameBox`.
+`Perf/SoundLibraryTemplateConstructionUiPerfSmokeTests.SelectingAChord_ShowsItsTemplatesNameInTheNameBox`.
 
 ### …and every edit is NARROWED to the shape the panel is showing
 
@@ -255,7 +264,7 @@ rungs are unavailable and the edit takes "every use", which is what browse mode
 means.
 
 
-## Two-fret octave and power chord fingering (Tools ▸ Chords, #498, #511)
+## Two-fret octave and power chord fingering (Edit ▸ Chord, #498, #511)
 
 `ToggleOctaveFingering` → `ChartMaintenanceService.ToggleTwoFretOctaveFingering`, and
 `TogglePowerChordFingering` → `ChartMaintenanceService.TogglePowerChordFingering`, both over

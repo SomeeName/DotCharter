@@ -49,8 +49,12 @@ public sealed class WaveformDiskCache
     ///     minutes into a song — the waveform drawn to the RIGHT of its audio).
     ///     Version 2 boundaries are fractional. The stored <c>blockMs</c> is 2.0 either
     ///     way, so nothing but this number can tell the two apart.</para>
+    ///     <para>3: the entry records the SHA-256 of the WHOLE audio file and a load
+    ///     compares it. The key's signature samples three windows, so a
+    ///     same-length edit between them kept serving the old peaks. A version-2
+    ///     entry has no hash and reads as a miss, which deletes it.</para>
     /// </summary>
-    private const int SchemaVersion = 2;
+    private const int SchemaVersion = 3;
 
     /// <summary>Backstop against a corrupt count field allocating gigabytes:
     /// 16M blocks at <see cref="WaveformSamples.GenerationBlockMs"/> is
@@ -81,9 +85,6 @@ public sealed class WaveformDiskCache
     /// a miss (and a corrupt/mismatched file is deleted so it cannot miss
     /// forever). Returns a FRESH <see cref="WaveformSamples"/> instance —
     /// consumers compare by reference.</summary>
-    public async Task<WaveformSamples?> TryLoadAsync(StemCacheIdentity identity, string audioPath)
-        => await Task.Run(() => TryLoad(identity, audioPath)).ConfigureAwait(false);
-
     public WaveformSamples? TryLoad(StemCacheIdentity identity, string audioPath)
     {
         string? path = null;
@@ -95,6 +96,8 @@ public sealed class WaveformDiskCache
 
             path = CachePath(key);
             if (!File.Exists(path)) return null;
+            var fullHash = StemAudioSignature.ComputeFullFileHash(audioPath);
+            if (fullHash == null) return null;
 
             float[]? peaks = null;
             double blockMs = 0;
@@ -105,7 +108,8 @@ public sealed class WaveformDiskCache
                        1 << 16, FileOptions.SequentialScan))
             using (var br = new BinaryReader(fs))
             {
-                if (br.ReadUInt32() == Magic && br.ReadInt32() == SchemaVersion)
+                if (br.ReadUInt32() == Magic && br.ReadInt32() == SchemaVersion
+                    && string.Equals(br.ReadString(), fullHash, StringComparison.Ordinal))
                 {
                     blockMs = br.ReadDouble();
                     var count = br.ReadInt32();
@@ -126,7 +130,7 @@ public sealed class WaveformDiskCache
 
             if (peaks == null)
             {
-                // Corrupt / schema-mismatched entry: delete so it cannot miss
+                // Corrupt / schema-mismatched / other-content entry: delete so it cannot miss
                 // forever (unlike the stem cache, nothing here is precious —
                 // the next open regenerates it in one pass).
                 BestEffortDelete.File(path);
@@ -144,7 +148,7 @@ public sealed class WaveformDiskCache
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Waveform cache read failed ({ex.Message}); regenerating.");
+                "Waveform cache read failed; regenerating.", ex);
             return null;
         }
     }
@@ -160,42 +164,30 @@ public sealed class WaveformDiskCache
         {
             var key = DeriveKey(identity, audioPath);
             if (key == null) return;
+            var fullHash = StemAudioSignature.ComputeFullFileHash(audioPath);
+            if (fullHash == null) return;
 
             Directory.CreateDirectory(_root);
             var path = CachePath(key);
-            var tmp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
 
             var basePeaks = samples.Mipmaps[0];
-            using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            using (var bw = new BinaryWriter(fs))
+            AtomicFile.Write(path, fs =>
             {
+                using var bw = new BinaryWriter(fs, System.Text.Encoding.UTF8, leaveOpen: true);
                 bw.Write(Magic);
                 bw.Write(SchemaVersion);
+                bw.Write(fullHash);
                 bw.Write(samples.BaseBlockMs);
                 bw.Write(basePeaks.Length);
                 var bytes = new byte[basePeaks.Length * sizeof(float)];
                 Buffer.BlockCopy(basePeaks, 0, bytes, 0, bytes.Length);
                 bw.Write(bytes);
-            }
-
-            // Atomic overwrite (no delete-then-move window a concurrent open
-            // could see as a miss). On a losing concurrent-writer race the Move
-            // throws — clean up our temp file so `.dcwave.*.tmp` orphans never
-            // accumulate.
-            try
-            {
-                File.Move(tmp, path, overwrite: true);
-            }
-            catch
-            {
-                BestEffortDelete.File(tmp);
-                throw;
-            }
+            });
         }
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Waveform cache write failed ({ex.Message}); the next open regenerates.");
+                "Waveform cache write failed; the next open regenerates.", ex);
         }
     }
 

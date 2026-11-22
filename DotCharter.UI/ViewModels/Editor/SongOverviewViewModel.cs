@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DotCharter.UI.Views.Shell;
 using DotCharter.Tone.UI.ViewModels.Shell;
 
 namespace DotCharter.UI.ViewModels.Editor;
@@ -24,6 +25,12 @@ public partial class SongOverviewViewModel : ViewModelBase
 
     private bool _suppressKeyEvents;
 
+    /// <summary>
+    ///     The Song tab's "Edit song metadata…" verb: File ▸ Song metadata…, set once by the shell that
+    ///     owns the dialog (null where the pane stands alone, which then leaves the button off).
+    /// </summary>
+    [ObservableProperty] private System.Windows.Input.ICommand? _openSongMetadataCommand;
+
     /// <summary>The Song tab; a section's or tone's place jumps through the editor's deliberate seek.</summary>
     public SongOverviewViewModel(ProjectState projectState, IHistoryService historyService, IAppLogger logger,
         ILocalizationService localization, IChartEditorSurface editor)
@@ -35,12 +42,22 @@ public partial class SongOverviewViewModel : ViewModelBase
             historyService, localization, logger);
         TonesPanel = new MarkerGroupsViewModel(MarkerKind.Tone, () => _projectState.ActiveProject, editor.ExecuteSeek,
             historyService, localization, logger);
+        Details = new SongDetailsDraft(() => _projectState.ActiveProject, historyService);
+        StartingTone = new StartingToneChoice(_projectState, historyService, () => TonesPanel.Groups.Select(g => g.Name));
+        // Unapplied details are a pending draft like the inspector's staged pages: the close and replace prompt
+        // counts them and its Save applies them; a plain Save or an export leaves them staged.
+        editor.AddPendingDraft(() => Details.IsDirty, Details.ApplyPending);
+        Details.PropertyChanged += OnDetailsChanged;
 
         RebuildKeyOptions();
         _projectState.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(ProjectState.ActiveProject) or nameof(ProjectState.ActiveArrangement))
-                Refresh();
+            if (e.PropertyName is nameof(ProjectState.ActiveProject))
+            {
+                // the draft was typed for the project that left: the new one is read whole.
+                Details.ReadNewProject();
+                SurfaceShowTiming.Measure(nameof(SongOverviewViewModel), Refresh);
+            }
         };
         _historyService.HistoryChanged += Refresh;
         Refresh();
@@ -49,12 +66,35 @@ public partial class SongOverviewViewModel : ViewModelBase
     /// <summary>The Sections section: the project's sections, in the Phrases panel's shape.</summary>
     public MarkerGroupsViewModel SectionsPanel { get; }
 
+    /// <summary>The information card's title, artist, album and year, staged until "Apply song details".</summary>
+    public SongDetailsDraft Details { get; }
+
+    /// <summary>The Tones card's starting-tone chooser for the active arrangement.</summary>
+    public StartingToneChoice StartingTone { get; }
+
     /// <summary>The Tones section: every tone the project defines or places.</summary>
     public MarkerGroupsViewModel TonesPanel { get; }
 
     public ObservableCollection<string> KeyOptions { get; } = [];
 
-    public RelayCommand RefreshCommand => new(Refresh);
+    /// <summary>
+    ///     The Phrases section, in the same shape. Set once by the inspector that hosts this
+    ///     pane; null where the pane stands alone, which then shows an empty section.
+    /// </summary>
+    public PhrasesInspectorViewModel? PhrasesPanel { get; set; }
+
+    /// <summary>
+    ///     The information card's Refresh: one pass puts every marker list in time order and drops exact
+    ///     duplicates (one undo node, none when all is tidy; <see cref="SongMarkerTidy" />), then re-reads this pane
+    ///     and the phrases. Unapplied song details stay.
+    /// </summary>
+    public RelayCommand RefreshCommand => new(() =>
+    {
+        if (_projectState.ActiveProject is { } project && SongMarkerTidy.Plan(project) is { } tidy && _historyService.Do(tidy))
+            _logger.Info(AppLogCategory.Project, "Song markers tidied: time order, exact duplicates removed.");
+        Refresh();
+        PhrasesPanel?.Refresh();
+    });
 
     /// <summary>
     ///     Re-reads the open project into this pane.
@@ -85,13 +125,17 @@ public partial class SongOverviewViewModel : ViewModelBase
         RebuildKeyOptions();
         SectionsPanel.Refresh();
         TonesPanel.Refresh();
-        if (project == null)
-        {
-            SetKeyFromModel(0, false);
-            return;
-        }
+        StartingTone.Refresh();
+        Details.Reload();
+        // the picker shows the STAGED key: an unapplied pick survives a history change elsewhere.
+        SetKeyFromModel(project == null ? 0 : Details.KeyAccidentals, project != null && Details.KeyIsMinor);
+    }
 
-        SetKeyFromModel(project.Chart.KeyAccidentals, project.Chart.KeyIsMinor);
+    // Revert, Apply or a re-read moved the staged key: the picker follows.
+    private void OnDetailsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_suppressKeyEvents || e.PropertyName is not (nameof(SongDetailsDraft.KeyAccidentals) or nameof(SongDetailsDraft.KeyIsMinor))) return;
+        SetKeyFromModel(Details.KeyAccidentals, Details.KeyIsMinor);
     }
 
     /// <summary>Number of entries in <see cref="KeyOptions" /> — 7 flats … 7 sharps.</summary>
@@ -119,35 +163,36 @@ public partial class SongOverviewViewModel : ViewModelBase
         OnKeyChanged();
     }
 
-    /// <summary>Re-seats the key controls from the open project, writing nothing back.</summary>
-    private void RestoreKeyFromModel()
-    {
-        var project = _projectState.ActiveProject;
-        SetKeyFromModel(project?.Chart.KeyAccidentals ?? 0, project?.Chart.KeyIsMinor ?? false);
-    }
+    /// <summary>Re-seats the key controls from the staged key, writing nothing back.</summary>
+    private void RestoreKeyFromModel() => SetKeyFromModel(Details.KeyAccidentals, Details.KeyIsMinor);
 
     partial void OnKeyIsMinorChanged(bool value)
     {
-        _ = value;
+        // staged FIRST: a list rebuild that drops the picker's selection restores from the draft, which must
+        // already hold the new mode.
+        if (!_suppressKeyEvents && _projectState.ActiveProject != null) Stage(() => Details.KeyIsMinor = value);
         RebuildKeyOptions();
         OnKeyChanged();
     }
 
+    /// <summary>A picked key or mode is STAGED with the song details; "Apply song details" writes it.</summary>
     private void OnKeyChanged()
     {
         if (_suppressKeyEvents) return;
         if (!IsKeyIndex(KeyAccidentalsIndex)) return;
-        var project = _projectState.ActiveProject;
-        if (project == null) return;
-
-        var accidentals = KeyAccidentalsIndex - 7;
-        var action = new SetKeySignatureAction(project.Chart, accidentals, KeyIsMinor);
-        if (action.HasEffect)
+        if (_projectState.ActiveProject == null) return;
+        Stage(() =>
         {
-            _historyService.Do(action);
-            _logger.Info(AppLogCategory.Project,
-                $"Key signature set. Accidentals={accidentals}, minor={KeyIsMinor}.");
-        }
+            Details.KeyAccidentals = KeyAccidentalsIndex - 7;
+            Details.KeyIsMinor = KeyIsMinor;
+        });
+    }
+
+    private void Stage(Action write)
+    {
+        _suppressKeyEvents = true;
+        try { write(); }
+        finally { _suppressKeyEvents = false; }
     }
 
     private void SetKeyFromModel(int accidentals, bool isMinor)

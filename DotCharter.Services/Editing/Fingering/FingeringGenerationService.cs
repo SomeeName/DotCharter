@@ -102,7 +102,7 @@ public sealed class FingeringGenerationService : IFingeringGenerationService
 
         foreach (var c in chords.Where(c => c.Position >= start && c.Position < end))
         {
-            var existing = arrangement.ChordTemplates.FirstOrDefault(t => t.Id == c.TemplateId);
+            var existing = arrangement.FindChordTemplate(c.TemplateId);
             if (existing != null)
             {
                 foreach (var kv in existing.Frets)
@@ -143,6 +143,7 @@ public sealed class FingeringGenerationService : IFingeringGenerationService
         return arrangement.ChordTemplates.FirstOrDefault(t =>
             flavour.Matches(t) && // BOTH flags: "identical" cannot ignore one of them
             t.NopInRs == template.NopInRs && // an exported mask bit: a Nop-only edit must not resolve to its source
+            t.Unnamed == template.Unnamed && // an empty suggested name can still differ in authored intent
             t.Fingerless == template.Fingerless && // an EOF eflag: turning it on must not resolve to its source
             string.Equals(t.Name, template.Name, StringComparison.Ordinal) &&
             t.HasSameShapeAs(template));

@@ -28,7 +28,7 @@ public sealed class HeadlessStaticLeakGuardTests
         var code = SourceText.StripComments(File.ReadAllText(
             Path.Combine(TestPaths.RepoRoot(), "DotCharter.Tests", "Perf", "HeadlessAppFixture.cs")));
 
-        var dispatches = Regex.Matches(code, @"Get\(\)\.Dispatch\(").Count;
+        var dispatches = Regex.Matches(code, @"(?:Get\(\)|GetForDispatch\([^)]*\))\.Dispatch\(").Count;
         var guarded = Regex.Matches(code,
             @"finally\s*\{\s*DrainAppBackgroundWork\(\);\s*ReleaseIsolatedApp\(\);\s*\}\s*"
             + @"HeadlessStaticLeakGuard\.ThrowIfAnyStaticHoldsAReleasedApp\(\);").Count;

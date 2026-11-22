@@ -1,0 +1,82 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.IssuesReviewView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Issues tab's "Review" card (design D): what an Editor on Fire export of this chart would
+         approximate or drop, computed while the card is open or on screen (IssuesSectionsViewModel), with
+         "Show all", "Open list" and a go-to per place. -->
+    <StackPanel Spacing="{StaticResource FireSpaceXs}">
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" Text="{localization:Loc Dialog_QualityReport_EofTitle}" />
+        <StackPanel x:Name="EofRoundTripSection" DataContext="{Binding ExportReadiness.EofRoundTrip}"
+                    x:DataType="contracts:IEofRoundTripSection" Spacing="{StaticResource FireSpaceXs}">
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+                <ToggleButton x:Name="EofShowAllBox" Grid.Column="0" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                              HorizontalAlignment="Stretch"
+                              Content="{localization:Loc Dialog_QualityReport_EofShowAll}"
+                              AutomationProperties.Name="{localization:Loc Dialog_QualityReport_EofShowAll}"
+                              IsEnabled="{Binding CanShowAll}"
+                              IsChecked="{Binding ShowAll, Mode=TwoWay}" />
+                <Button x:Name="EofOpenListButton" Grid.Column="1" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                        HorizontalAlignment="Stretch"
+                        Content="{localization:Loc Dialog_QualityReport_EofOpenList}"
+                        AutomationProperties.Name="{localization:Loc Dialog_QualityReport_EofOpenList}"
+                        ToolTip.Tip="{localization:Loc Dialog_QualityReport_EofOpenListTip}"
+                        IsEnabled="{Binding HasGroups}"
+                        Command="{Binding OpenListCommand}" />
+            </Grid>
+            <ProgressBar x:Name="EofBusyBar" IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
+            <TextBlock x:Name="EofSummaryText" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap" Text="{Binding Summary}" />
+            <ItemsControl x:Name="EofGroupList" ItemsSource="{Binding Groups}" IsVisible="{Binding HasGroups}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Spacing="{StaticResource FireSpaceMd}" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="contracts:IEofLossGroup">
+                        <StackPanel Spacing="{StaticResource FireSpaceXxs}">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody EofGroupTitle" FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp" Text="{Binding Count}" />
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding Items}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IEofLossPlace">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}" Margin="0,0,0,3">
+                                            <!-- design D: the whole row seeks (Go to stays beside it) -->
+                                            <Button Grid.Column="0" x:Name="EofPlaceRow" Theme="{StaticResource ColumnFlowRow}" Classes="ColumnFlowRow"
+                                                    AutomationProperties.Name="{Binding Subject}" IsEnabled="{Binding HasTime}"
+                                                    Command="{Binding JumpCommand}">
+                                            <StackPanel>
+                                                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextTrimming="CharacterEllipsis"
+                                                           ToolTip.Tip="{Binding Subject}">
+                                                    <Run Text="{Binding Subject}" />
+                                                    <Run Text="{Binding Where}" />
+                                                </TextBlock>
+                                                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody" Text="{Binding Detail}"
+                                                           TextWrapping="Wrap" TextTrimming="None" />
+                                            </StackPanel>
+                                            </Button>
+                                            <Button Grid.Column="1" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton" VerticalAlignment="Center"
+                                                    Content="{localization:Loc Dialog_Export_GoTo}"
+                                                    ToolTip.Tip="{localization:Loc Dialog_Export_JumpTip}"
+                                                    AutomationProperties.Name="{localization:Loc Dialog_Export_JumpTip}"
+                                                    IsVisible="{Binding HasTime}"
+                                                    Command="{Binding JumpCommand}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{Binding MoreNote}" IsVisible="{Binding HasMore}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                       Text="{localization:Loc Dialog_QualityReport_EofHint}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

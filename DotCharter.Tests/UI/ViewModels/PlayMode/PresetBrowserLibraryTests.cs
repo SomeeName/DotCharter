@@ -28,7 +28,7 @@ public sealed class PresetBrowserLibraryTests
 
     private static PresetBrowserViewModel NewVm(Func<string, string>? names = null) =>
         new(new FakeDspTonePresetService(Catalogue), FakeLocalization.English(), () => Rig("amp"), () => { },
-            moduleDisplayName: names);
+            new FakeConfigurationService(), moduleDisplayName: names);
 
     private static PresetRailRow Row(PresetBrowserViewModel vm, PresetFilterKind kind, DspToneCategory cat = default)
         => vm.Rail.First(r => r.Kind == kind && (kind != PresetFilterKind.Category || r.Category == cat));
@@ -109,7 +109,7 @@ public sealed class PresetBrowserLibraryTests
         Assert.False(vm.IsSearching);
         Assert.True(vm.ShowCards, "clearing the search did not bring the cards back");
 
-        var empty = new PresetBrowserViewModel(new FakeDspTonePresetService([Catalogue[0]]), FakeLocalization.English(), () => Rig("amp"), () => { });
+        var empty = new PresetBrowserViewModel(new FakeDspTonePresetService([Catalogue[0]]), FakeLocalization.English(), () => Rig("amp"), () => { }, new FakeConfigurationService());
         empty.SelectedRail = Row(empty, PresetFilterKind.User);
         Assert.True(empty.ShowNoCards);
         Assert.Equal(loc["PresetBrowser_EmptyUser"], empty.EmptyText);

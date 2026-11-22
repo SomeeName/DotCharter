@@ -157,7 +157,7 @@ public sealed class VocalsExportPolicyTests : IDisposable
         var service = new ProjectDocumentService(provider, new FakeAppLogger());
         service.SaveDlcBuilderXmlBundle(Path.Combine(_dir, "project.rscp"), BuildProject());
 
-        var bundle = Path.Combine(_dir, DlcBuilderBundle.DirectoryName);
+        var bundle = Path.Combine(_dir, "export", DlcBuilderBundle.DirectoryName);
         Assert.NotEmpty(UiSourceTree.GetFiles(bundle, "*_Lead_*.xml"));
         Assert.Equal(includeVocals, UiSourceTree.GetFiles(bundle, "*_Vocals_*.xml").Length == 1);
     }

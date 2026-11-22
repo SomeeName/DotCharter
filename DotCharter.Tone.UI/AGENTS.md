@@ -100,8 +100,15 @@ through `UiSourceTree.UiNamespace`.
   (counted `Repaint()`, the `Paint` cache, and the theme-variant subscription
   when constructed with `followsThemeVariant: true`) instead of copying that
   plumbing. Detail: [../docs/agents/ui/fire/custom-controls.md](../docs/agents/ui/fire/custom-controls.md).
+- **Captured knob/mic drags end on capture loss and detach**, as well as release.
+  A later pointer move without a new press must never change the value (#531).
 - **Profiles are a callback** (`PedalboardViewModel`'s `subscribeProfileSwitch`),
   not a Services type.
+- NAM capture insertion and EQ placement use `RigSceneChainEdits`; create the EQ
+  initially bypassed so stored scenes inherit its intended starting state.
+- Preset completion captures its bypass pattern before master bypass is reasserted.
+  Sidechain and accepted control-assignment edits join the rig's undo history.
+- MIDI delivery coalesces bursts but preserves the retained messages' receive order.
 - Banned APIs are on (`DotCharterBannedApis`); `Platform/**` is exempt in
   `.editorconfig` exactly like `DotCharter.UI/Platform/**`.
 - **Tests read this tree through `UiSourceTree`** (`DotCharter.Tests/Infrastructure`):

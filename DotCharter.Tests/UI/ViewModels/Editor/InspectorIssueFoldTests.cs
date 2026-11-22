@@ -82,6 +82,40 @@ public sealed class InspectorIssueFoldTests
         Assert.Equal(2, rows.Count);
     }
 
+    /// <summary>Two different findings whose translations happen to read the same stay two rows: rows
+    /// group by the finding's language-independent identity (its English sentence), never by the
+    /// translation, so the list is the same in every language. Each row still shows the translation.</summary>
+    [Fact]
+    public void TwoFindingsThatTranslateToOneSentence_StayTwoRows_ShowingTheTranslation()
+    {
+        var chord = new Chord();
+        var rows = Fold([
+            new ArrangementIssue(ArrangementIssueType.BendStrengthTooHigh, "Bend of 3.5 steps is too high.", Chord: chord,
+                StringIndex: 0, MessageKey: "Validation_BendStrengthTooHigh", MessageArgs: [3.5]),
+            new ArrangementIssue(ArrangementIssueType.BendStrengthTooHigh, "Bend of 4 steps is too high.", Chord: chord,
+                StringIndex: 1, MessageKey: "Validation_TooManyBendPoints", MessageArgs: [4])
+        ], new OneSentenceLocalization());
+
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, row => Assert.Equal(OneSentenceLocalization.Sentence, row.Message));
+        Assert.Equal([0, 1], rows.Select(r => r.StringIndex ?? -1));
+    }
+
+    /// <summary>The same rule and the same English sentence in two findings is still one row.</summary>
+    [Fact]
+    public void TheSameEnglishSentence_StillFolds_WhateverTheTranslation()
+    {
+        var chord = new Chord();
+        var row = Assert.Single(Fold([
+            new ArrangementIssue(ArrangementIssueType.BendStrengthTooHigh, "Bend of 3.5 steps is too high.", Chord: chord,
+                StringIndex: 0, MessageKey: "Validation_BendStrengthTooHigh", MessageArgs: [3.5]),
+            new ArrangementIssue(ArrangementIssueType.BendStrengthTooHigh, "Bend of 3.5 steps is too high.", Chord: chord,
+                StringIndex: 1, MessageKey: "Validation_BendStrengthTooHigh", MessageArgs: [3.5])
+        ], new OneSentenceLocalization()));
+        Assert.Equal(2, row.Count);
+        Assert.Equal(OneSentenceLocalization.Sentence, row.Message);
+    }
+
     [Fact]
     public void TheExportConsequence_SurvivesTheFold()
     {
@@ -104,5 +138,37 @@ public sealed class InspectorIssueFoldTests
             "InspectorViewModel.SelectionIssues.cs"));
         Assert.Contains("public int SelectionIssueCount => SelectionFieldIssues.Count;", source, StringComparison.Ordinal);
         Assert.Contains("InspectorFieldIssue.Fold(", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>A language in which every finding key reads as the same sentence.</summary>
+    private sealed class OneSentenceLocalization : ILocalizationService
+    {
+        public const string Sentence = "One sentence for two findings.";
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public IReadOnlyList<LanguageOption> LanguageOptions { get; } = [];
+        public string ConfiguredCulture => LocalizationService.SystemLanguage;
+        public System.Globalization.CultureInfo Culture => System.Globalization.CultureInfo.InvariantCulture;
+        public bool IsRightToLeft => false;
+        public string this[string key] => key;
+
+        public string Format(string key, params object[] args) => key.StartsWith("Validation_", StringComparison.Ordinal) ? Sentence : key;
+
+        public string Plural(string oneKey, string manyKey, int count, params object[] extra) => count == 1 ? oneKey : manyKey;
+
+        public string PluralWith(string oneKey, string manyKey, int count, params object[] args) => count == 1 ? oneKey : manyKey;
+
+        public void SetConfiguredCulture(string? configValue)
+        {
+        }
+
+        public void LoadCommunityLanguages(string folder)
+        {
+        }
     }
 }

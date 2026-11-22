@@ -106,6 +106,7 @@ public struct RenderToneChange
 
 public struct RenderLyricWord
 {
+    public bool NeedsReview;
     public double Time;
     public double EndTime;
     public string Text;

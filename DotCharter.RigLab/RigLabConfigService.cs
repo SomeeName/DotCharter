@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DotCharter.Tone.Infrastructure.Configuration;
+using DotCharter.Tone.Infrastructure.Json;
 using DotCharter.Tone.Infrastructure.Storage;
 
 namespace DotCharter.RigLab;
@@ -22,7 +23,7 @@ public sealed class RigLabConfigService : IRigConfigService, IDisposable
 {
     public const string FileName = "riglab.json";
 
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions Json = TolerantJson.Apply(new JsonSerializerOptions { WriteIndented = true });
 
     private readonly object _gate = new();
     private readonly string _path;
@@ -41,6 +42,10 @@ public sealed class RigLabConfigService : IRigConfigService, IDisposable
 
     /// <summary>Where the file lives (shown in Settings, and a test seam).</summary>
     public string FilePath => _path;
+
+    /// <summary>Settings of the last read this build could not interpret (each fell back to
+    /// its own default; the rest of the file was kept). The host logs them once its logger exists.</summary>
+    public IReadOnlyList<string> IgnoredSettings { get; private set; } = [];
 
     /// <summary>The last background write failure, for the status line.</summary>
     public Exception? LastWriteError { get; private set; }
@@ -87,6 +92,13 @@ public sealed class RigLabConfigService : IRigConfigService, IDisposable
 
     void IRigConfigService.UpdateRigConfig(Action<RigConfig> mutate) => Update(c => mutate(c));
 
+    bool IRigConfigService.UpdateRigConfigAndWrite(Action<RigConfig> mutate)
+    {
+        var failures = _writer.FailedWrites;
+        Update(c => mutate(c));
+        return !IsUnreadable && _writer.TryFlush() && _writer.FailedWrites == failures;
+    }
+
     public void Dispose()
     {
         _writer.Flush();
@@ -115,7 +127,8 @@ public sealed class RigLabConfigService : IRigConfigService, IDisposable
 
         try
         {
-            var parsed = JsonSerializer.Deserialize<RigLabConfig>(text);
+            var parsed = JsonSerializer.Deserialize<RigLabConfig>(text, Json);
+            IgnoredSettings = TolerantJson.TakeWarnings();
             if (parsed != null)
             {
                 _unreadable = false;
@@ -138,7 +151,7 @@ public sealed class RigLabConfigService : IRigConfigService, IDisposable
             var dir = Path.GetDirectoryName(_path) ?? ".";
             var aside = Path.Combine(dir,
                 $"{Path.GetFileNameWithoutExtension(_path)}.corrupt-{DateTime.UtcNow:yyyyMMdd-HHmmssfff}.json");
-            File.Move(_path, aside);
+            AtomicFile.MoveAside(_path, aside);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

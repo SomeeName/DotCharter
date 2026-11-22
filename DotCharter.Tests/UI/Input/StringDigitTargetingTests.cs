@@ -6,7 +6,7 @@ namespace DotCharter.Tests.UI.Input;
 ///     The three keyboard families that address a string BY NUMBER —
 ///     <c>Ctrl+1..9</c> (the string-edit mask), bare <c>1..9</c> (the pen) and
 ///     <c>StringUp</c>'s ceiling — must be bounded by the lanes the editor
-///     actually draws, i.e. the ACTIVE arrangement's tuning length.
+///     actually draws, i.e. the focused edit arrangement's tuning length.
 ///     <para>
 ///         Before this guard they were bounded by <c>StringEditMask.MaxStrings</c>
 ///         (9 — a property of the KEYBOARD) and, for <c>StringUp</c>, by the
@@ -86,14 +86,16 @@ public sealed class StringDigitTargetingTests
 
         // The two digit loops refuse a string the arrangement has not got…
         var refusals = Occurrences(source,
-            "if (!StringDigitTargeting.IsAddressable(stringIndex, _projectState.ActiveArrangement)) return;");
+            "if (!StringDigitTargeting.IsAddressable(stringIndex, EditArrangement)) return;");
         Assert.True(refusals == 2,
             "Both digit families (the Ctrl+n string-edit mask and the pen's bare n) must refuse a string the " +
-            $"active arrangement has not got; found {refusals} refusal(s). Without it a bare `6` on a 4-string " +
+            $"focused arrangement has not got; found {refusals} refusal(s). Without it a bare `6` on a 4-string " +
             "bass creates a note on a lane the renderer does not draw.");
 
-        // …and the StringUp ceiling comes from the ACTIVE ARRANGEMENT.
-        Assert.Contains("StringDigitTargeting.StringCountOf(_projectState.ActiveArrangement)", source,
+        // …and the StringUp ceiling comes from the same focused edit arrangement.
+        Assert.Contains("StringDigitTargeting.StringCountOf(EditArrangement)", source,
+            StringComparison.Ordinal);
+        Assert.Contains("_chartEditor.FocusedTrack?.Arrangement ?? _projectState.ActiveArrangement", source,
             StringComparison.Ordinal);
         Assert.DoesNotContain("CurrentChart?.Tuning.Length", source, StringComparison.Ordinal);
     }

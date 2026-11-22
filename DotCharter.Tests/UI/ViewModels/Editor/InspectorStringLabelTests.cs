@@ -101,7 +101,10 @@ public sealed class InspectorStringLabelTests
         Assert.Contains("GuitarStringLabel.MaskReadout(", mask, StringComparison.Ordinal);
         Assert.DoesNotContain("StringEditMask.ToString()", mask, StringComparison.Ordinal);
 
-        Assert.Contains("ItemsSource=\"{Binding NoteStringLabels}\"", view, StringComparison.Ordinal);
+        // The staged Placement page's string picker.
+        var placement = File.ReadAllText(Path.Combine(root, "DotCharter.UI", "ViewModels", "Editor", "Inspector", "StagedPlacementViewModel.cs"));
+        Assert.Contains("GuitarStringLabel.All(", placement, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding Staged.Placement.StringLabels}\"", view, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding ChordBendStringLabels}\"", view, StringComparison.Ordinal);
         Assert.DoesNotContain("Value=\"{Binding NoteStringIndex}\"", view, StringComparison.Ordinal);
         Assert.DoesNotContain("Inspector_StringNumberFmt", view, StringComparison.Ordinal);

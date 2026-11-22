@@ -11,12 +11,37 @@ namespace DotCharter.Tests.UI.ViewModels.Editor;
 /// </summary>
 public sealed class AnnotationsInspectorViewModelTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Resolving_an_annotation_is_one_dirty_undo_step(bool initiallyResolved)
+    {
+        var harness = new ChartEditHarness();
+        var annotation = new ChartAnnotation { Text = "check", Resolved = initiallyResolved };
+        harness.Project.Annotations.Add(annotation);
+        using var dirty = new ProjectDirtyTracker(harness.History);
+        var vm = new AnnotationsInspectorViewModel(harness.State, harness.History, harness.Editor, FakeLocalization.English());
+
+        var command = Assert.IsAssignableFrom<System.Windows.Input.ICommand>(
+            vm.GetType().GetProperty("ToggleAnnotationResolvedCommand")?.GetValue(vm));
+        command.Execute(annotation);
+
+        Assert.Equal(!initiallyResolved, annotation.Resolved);
+        Assert.True(dirty.IsDirty);
+        Assert.Single(harness.History.GetUndoSteps());
+        harness.History.Undo();
+        Assert.Equal(initiallyResolved, annotation.Resolved);
+        Assert.False(dirty.IsDirty);
+        harness.History.Redo();
+        Assert.Equal(!initiallyResolved, annotation.Resolved);
+    }
+
     [Fact]
     public void AddingAtThePlayhead_IsOneUndoNode_AndClearsTheComposer()
     {
         var harness = new ChartEditHarness();
         harness.State.CurrentTimeMs = 1500;
-        var vm = new AnnotationsInspectorViewModel(harness.State, harness.History, harness.Editor)
+        var vm = new AnnotationsInspectorViewModel(harness.State, harness.History, harness.Editor, FakeLocalization.English())
         {
             NewAnnotationText = "  check the bend  ",
             NewAnnotationKindIndex = 9
@@ -41,7 +66,7 @@ public sealed class AnnotationsInspectorViewModelTests
     public void ABlankComposer_AddsNothing()
     {
         var harness = new ChartEditHarness();
-        var vm = new AnnotationsInspectorViewModel(harness.State, harness.History, harness.Editor)
+        var vm = new AnnotationsInspectorViewModel(harness.State, harness.History, harness.Editor, FakeLocalization.English())
         {
             NewAnnotationText = "   "
         };
@@ -58,7 +83,7 @@ public sealed class AnnotationsInspectorViewModelTests
         var harness = new ChartEditHarness();
         var annotation = new ChartAnnotation { TimeMs = 2000, Text = "a" };
         harness.Project.Annotations.Add(annotation);
-        var vm = new AnnotationsInspectorViewModel(harness.State, harness.History, harness.Editor);
+        var vm = new AnnotationsInspectorViewModel(harness.State, harness.History, harness.Editor, FakeLocalization.English());
 
         vm.RemoveAnnotationCommand.Execute(annotation);
 
@@ -74,7 +99,7 @@ public sealed class AnnotationsInspectorViewModelTests
     public void Jumping_SeeksThePlayheadToTheAnnotation()
     {
         var harness = new ChartEditHarness();
-        var vm = new AnnotationsInspectorViewModel(harness.State, harness.History, harness.Editor);
+        var vm = new AnnotationsInspectorViewModel(harness.State, harness.History, harness.Editor, FakeLocalization.English());
 
         vm.JumpToAnnotationCommand.Execute(new ChartAnnotation { TimeMs = 2500, Text = "b" });
 

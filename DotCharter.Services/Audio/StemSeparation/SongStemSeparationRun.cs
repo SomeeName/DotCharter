@@ -3,7 +3,7 @@ namespace DotCharter.Services.Audio.StemSeparation;
 /// <summary>
 /// The separation in flight, as any screen can follow it: the audio it
 ///     separates, its latest progress, how it ends, and a cancel. A screen that did
-///     not start the run — Chart from audio reopened while its own run goes on —
+///     not start the run — a screen reopened while its own run goes on —
 ///     attaches to this instead of starting a second one. The run belongs to the app,
 ///     not to the screen that started it: closing that screen neither cancels nor
 ///     abandons it, and the stems still land in the never-regenerated cache.

@@ -176,6 +176,10 @@ public sealed partial class JuceAudioPlaybackService
     /// </summary>
     private void PushRoutingToEngine(string reason)
     {
+        // The chart sound's seat route is resolved against the live seat
+        // count, so a layout change re-pushes it and re-reads its availability.
+        NotifyChartSeatsIfChanged();
+
         // A fresh engine already stands on the defaults, so an app that never
         // leaves them costs no P/Invokes and a pre-v28 DLL is never asked for
         // exports it lacks. The latch is what makes the way BACK still push:
@@ -190,6 +194,17 @@ public sealed partial class JuceAudioPlaybackService
         // AttachPerPlayerStateToEngine puts it on the next engine.
         if (engine == null) return;
         WriteRoutingTo(engine, reason);
+    }
+
+    // The live seat count the chart synth last saw (one at start, like the engine).
+    private int _chartSeatCount = 1;
+
+    private void NotifyChartSeatsIfChanged()
+    {
+        var seats = _playerRouting.PlayerCount;
+        if (Interlocked.Exchange(ref _chartSeatCount, seats) == seats) return;
+        _chartSynth.OnLiveSeatsChanged();
+        RaiseChartSynthAvailabilityChanged();
     }
 
     /// <summary>The engine write itself, shared by the live push and the rebuild
@@ -223,7 +238,7 @@ public sealed partial class JuceAudioPlaybackService
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Writing the live-input routing failed ({reason}): {ex.Message}");
+                $"Writing the live-input routing failed ({reason})", ex);
         }
     }
 
@@ -247,7 +262,7 @@ public sealed partial class JuceAudioPlaybackService
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Setting player {player + 1}'s drop tune failed: {ex.Message}");
+                $"Setting player {player + 1}'s drop tune failed", ex);
         }
     }
 
@@ -268,7 +283,7 @@ public sealed partial class JuceAudioPlaybackService
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Setting player {player + 1}'s drop-tune mode failed: {ex.Message}");
+                $"Setting player {player + 1}'s drop-tune mode failed", ex);
         }
     }
 

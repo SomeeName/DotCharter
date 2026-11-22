@@ -316,7 +316,8 @@ that the rig came from audio rather than from a model.
 
 | Piece | File |
 |---|---|
-| the whole flow (+ `ToneMatchSource`, `ToneMatchCandidateViewModel`) | `DotCharter.UI/ViewModels/PlayMode/ToneDesignViewModel.Match.cs` |
+| the flow (+ `ToneMatchSource`) | `DotCharter.UI/ViewModels/PlayMode/ToneDesignViewModel.Match.cs` |
+| candidate and feature-block presentation | `DotCharter.UI/ViewModels/PlayMode/ToneMatchCandidateViewModel.cs` |
 | the markup | `ToneDesignPanel.axaml`, `x:Name="ToneMatchBlock"` (inside the body template, above `ToneDesignResult`) |
 | the contract every lane codes against | `DotCharter.Services/Ai/Match/MatchContracts.cs` |
 
@@ -485,6 +486,20 @@ proposed from the audio, and nothing asks for an arrangement until the last step
 | the composition root | `PlayModeToneRigViewModel.cs` — `ConfigureSections(...)` + `PlaceToneSet` |
 | the contract | `DotCharter.Services/Ai/Match/SectionContracts.cs` |
 
+Section ownership uses `ChartProject.ProjectId` and the committed audio revision.
+`ProjectState.SongAudioPath` supplies only declared audio presence for the first-attach
+exception; it is never resolved against the working directory. Audio/project path
+spelling, Library cache normalization, Save As and autosave preserve identity.
+The transport's generated silence and auditioned media do not participate. `CommitSongAudio`
+advances `SongAudioRevision` only for a committed attach/replace/detach; reload and
+Clear/Loaded re-notifications leave it unchanged. First attach on the same project
+keeps sections; a later replacement clears even when its destination is unchanged.
+Add Silence commits a replacement on execute, undo and redo as well.
+The section epoch guards retained callbacks and async publication. The shared core
+receives a generic result validity callback and carries it through Tweak, copied
+prompts, imports and audio matching that uses a section tone as its prior, including
+successful refinements and retained match candidates; Hear/Save check it too.
+
 ### A separate VIEW, hosted through a template
 
 `ToneSectionsPanel` is its own `UserControl` with its own view model, hosted from
@@ -543,8 +558,11 @@ host to wire the transport twice is how the two drift apart.
   none", and the list then keeps the presets and says so. `PlaceToneSet` in
   `PlayModeToneRigViewModel.cs` is the host half: `TimelineMath.PositionFromMs`
   (the app's one ms → `FractionalPosition` conversion) into an
-  `AddToneChangesAction` under `IHistoryService.Do`, so a whole tone set is one
-  Ctrl+Z.
+  `CompositeAction` under `IHistoryService.Do`: unique project tone keys and
+  `UpsertToneDefinitionAction` bodies from `RigToRsToneConverter`, together with
+  `AddToneChangesAction`, so a whole playable tone set is one Ctrl+Z. A conversion
+  refused for slot overflow places no partial set. Existing definitions are
+  preserved even when a section shares their name (`ToneSetPlacementTests`).
 
 Times are **TEXT** (`m:ss`, `m:ss.f`, or bare seconds), parsed on every keystroke;
 an unparseable box, an end before the start or a span under
@@ -742,3 +760,6 @@ it.
 `ToneDesignViewModel.SetResultForTests` is the smoke class's seam: the result
 block is where a silent resource fault would hide, and a block nothing ever
 shows is never laid out.
+
+Applying a project tone set raises `ToneSetApplied`; Play Mode refreshes its
+prepared tone summary before the next run so the first authored set can play.

@@ -54,13 +54,13 @@ public sealed class ExportTargetWriter : IExportTargetWriter
 
     public void WriteAllBytes(string path, byte[] bytes) => File.WriteAllBytes(path, bytes);
 
-    public byte[] ReadAllBytes(string path) => File.ReadAllBytes(path);
+    public byte[] ReadAllBytes(string path) => AtomicFile.ReadAllBytes(path);
 
     public long FileLength(string path) => new FileInfo(path).Length;
 
-    public Task<string> ReadAllTextAsync(string path) => File.ReadAllTextAsync(path);
+    public Task<string> ReadAllTextAsync(string path) => AtomicFile.ReadAllTextAsync(path);
 
-    public Task WriteAllTextAsync(string path, string text) => File.WriteAllTextAsync(path, text);
+    public Task WriteAllTextAsync(string path, string text) => AtomicFile.WriteAllTextAsync(path, text);
 
     public Stream Create(string path)
     {

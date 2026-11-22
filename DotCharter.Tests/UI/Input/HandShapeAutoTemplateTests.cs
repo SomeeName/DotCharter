@@ -95,6 +95,29 @@ public sealed class HandShapeAutoTemplateTests
     }
 
     [Fact]
+    public void RebuildingAFingerlessGrip_KeepsItFingerlessThroughResizeAndUndo()
+    {
+        var grip = Template(0, (0, 7));
+        grip.Fingerless = true;
+        var rebuilt = HandShapeAutoTemplate.Rebuild(grip, Template(-1, (0, 7), (1, 9)), 6)!;
+
+        Assert.True(rebuilt.Fingerless);
+        Assert.Empty(rebuilt.Fingers);
+        var shape = Shape(0, 4, 0);
+        var action = new ResizeHandShapesAction([shape],
+            [shape], [shape.Clone()], [Shape(0, 8, 0)], [grip],
+            [new ResizeHandShapesAction.GripRewrite(grip, grip.Clone(), rebuilt)], [], null);
+        action.Execute();
+        Assert.True(grip.Fingerless);
+        Assert.Empty(grip.Fingers);
+        Assert.Equal(new FractionalPosition(8), shape.EndPosition);
+        action.Undo();
+        Assert.True(grip.Fingerless);
+        Assert.Empty(grip.Fingers);
+        Assert.Single(grip.Frets);
+    }
+
+    [Fact]
     public void TheNameAndArpeggioFlagSurviveTheRebuild()
     {
         var current = Template(0, (0, 7));

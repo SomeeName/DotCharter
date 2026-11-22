@@ -1,3 +1,4 @@
+using System.Globalization;
 using DotCharter.Tone.UI.Controls.Dsp;
 
 namespace DotCharter.Tests.UI;
@@ -36,5 +37,24 @@ public sealed class RigParamCaptionTests
         var (c, u) = DspControlText.SplitUnit(name);
         Assert.Equal(name, c);
         Assert.Null(u);
+    }
+
+    /// <summary>The knob plate is read by a person, so it uses the region's decimal separator.</summary>
+    [Fact]
+    public void TheReadout_UsesTheRegionsDecimalSeparator()
+    {
+        var before = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+            Assert.Equal("0,25", DspControlText.FormatValue(0.25));
+            Assert.Equal("12,5", DspControlText.FormatValue(12.5));
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+            Assert.Equal("0.25", DspControlText.FormatValue(0.25));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = before;
+        }
     }
 }

@@ -60,7 +60,6 @@ public sealed class AnalysisDeterminismTests
 
     private static Pipeline[] Pipelines() =>
     [
-        new(nameof(AudioToChartAnalyzer), RunAudioToChart),
         new(nameof(BeatMapAnalyzer), RunBeatMap),
         new(nameof(ChartAudioLintAnalyzer), RunChartAudioLint),
         new(nameof(CtcForcedAligner), RunCtcForcedAligner),
@@ -85,7 +84,7 @@ public sealed class AnalysisDeterminismTests
     [Fact]
     public void EveryPublicAnalysisEntryPoint_IsDrivenByAReRunPipeline()
     {
-        var declared = typeof(AudioToChartAnalyzer).Assembly.GetExportedTypes()
+        var declared = typeof(BeatMapAnalyzer).Assembly.GetExportedTypes()
             .Where(t => t
                 .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static |
                             BindingFlags.DeclaredOnly)
@@ -145,34 +144,6 @@ public sealed class AnalysisDeterminismTests
     // Each returns the analyzer's whole output, field by field, with "R"
     // round-trip formatting — a comparison of rounded text would hide exactly
     // the last-bit drift these tests exist to catch.
-
-    private static string RunAudioToChart()
-    {
-        var buffer = new float[(int)(3.0 * Rate)];
-        AnalysisTestSignals.AddPluck(buffer, 0.50, 110.00); // A2
-        AnalysisTestSignals.AddPluck(buffer, 1.00, 146.83); // D3
-        AnalysisTestSignals.AddPluck(buffer, 1.75, 196.00); // G3
-
-        // Both pitch stages: the constant-Q one (#391) is what the dialog drafts with.
-        var text = new StringBuilder();
-        foreach (var stage in new[] { AudioToChartPitchStage.Detector, AudioToChartPitchStage.ConstantQ })
-        {
-            var draft = new AudioToChartAnalyzer().Analyze(
-                buffer, Rate, AnalysisTestSignals.ConstantBeats(120, 8),
-                new AudioToChartOptions { MaxNotesPerOnset = 1, PitchStage = stage });
-
-            Assert.NotEmpty(draft.Notes);
-            text.Append(stage).Append('\n');
-            foreach (var note in draft.Notes)
-            {
-                text.Append(CultureInfo.InvariantCulture,
-                    $"{note.TimeSeconds:R}|{note.Midi}|{note.FrequencyHz:R}|{note.Confidence:R}|" +
-                    $"{note.Note.StringIndex}|{note.Note.Fret}|{note.Note.Position.DoubleValue:R}|{note.Note.Hopo}\n");
-            }
-        }
-
-        return text.ToString();
-    }
 
     private static string RunBeatMap()
     {

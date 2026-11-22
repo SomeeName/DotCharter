@@ -82,6 +82,53 @@ public sealed class ChordFingeringFollowerTests
     }
 
     [Fact]
+    public void AHandShapeWithHeldStrings_KeepsItsFingering_WhenItsChordFollowsTheAnchor()
+    {
+        var (arrangement, level, shared) = DoubleStopArrangement();
+        var held = level.HandShapes[0];
+        held.GhostMask = 1 << 3;
+        level.Chords[0].ChordNotes.RemoveAt(0);
+        var ordinary = new HandShape
+        {
+            Position = new FractionalPosition(6), EndPosition = new FractionalPosition(7), TemplateId = shared.Id
+        };
+        level.HandShapes.Add(ordinary);
+        FretAnchor[] anchors = [new(new FractionalPosition(0), 8, 4)];
+
+        var plan = ChordFingeringFollower.Plan(arrangement, level, anchors, t => t, Fingering);
+        plan.ApplyTo(arrangement);
+
+        var variant = Assert.Single(plan.MintedTemplates);
+        Assert.All(level.Chords, chord => Assert.Equal(variant.Id, chord.TemplateId));
+        Assert.Equal(variant.Id, ordinary.TemplateId);
+        Assert.Equal(shared.Id, held.TemplateId);
+        Assert.Equal(1, shared.Fingers[3]);
+        Assert.Equal(1 << 3, held.GetGhostMask(shared));
+        Assert.False(shared.IsPinned);
+    }
+
+    [Fact]
+    public void PendingVariants_KeepDistinctUnnamedStates()
+    {
+        var (arrangement, level, shared) = DoubleStopArrangement();
+        shared.Name = "";
+        shared.Unnamed = true;
+        var named = shared.Clone();
+        named.Id = 1;
+        named.Unnamed = false;
+        arrangement.ChordTemplates.Add(named);
+        level.Chords[1].TemplateId = named.Id;
+        FretAnchor[] anchors = [new(new FractionalPosition(0), 8, 4)];
+
+        var plan = ChordFingeringFollower.Plan(arrangement, level, anchors, t => t, Fingering);
+        plan.ApplyTo(arrangement);
+
+        Assert.Equal(2, plan.MintedTemplates.Count);
+        Assert.True(arrangement.FindChordTemplate(level.Chords[0].TemplateId)!.Unnamed);
+        Assert.False(arrangement.FindChordTemplate(level.Chords[1].TemplateId)!.Unnamed);
+    }
+
+    [Fact]
     public void AnAuthoredFingering_IsNeverFollowed()
     {
         var (arrangement, level, _) = DoubleStopArrangement();

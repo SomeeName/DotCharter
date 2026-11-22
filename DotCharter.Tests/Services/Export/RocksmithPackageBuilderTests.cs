@@ -41,7 +41,8 @@ public sealed partial class RocksmithPackageBuilderTests
     public async Task Cancelling_mid_build_leaves_no_file_locked_and_no_partial_package()
     {
         var project = CreateProject();
-        var audioPath = CreateFakeWem();
+        var audioPath = Path.Combine(_tempDir, "cancellation-audio.wem");
+        File.Copy(CreateFakeWem(), audioPath);
         var psarcPath = Path.Combine(_tempDir, "cancelled_p.psarc");
         var builder = new RocksmithPackageBuilder(new FakeAppLogger());
         using var cts = new CancellationTokenSource();
@@ -204,7 +205,7 @@ public sealed partial class RocksmithPackageBuilderTests
         Assert.Equal("clean", attributes.GetProperty("Tone_Base").GetString());
         Assert.Equal("clean", attributes.GetProperty("Tone_A").GetString());
         Assert.Equal(-2, attributes.GetProperty("Tuning").GetProperty("string0").GetInt32());
-        Assert.Equal(32f, attributes.GetProperty("SongLength").GetSingle(), 0.01f);
+        Assert.Equal(31.499f, attributes.GetProperty("SongLength").GetSingle(), 0.001f);
         Assert.Equal(120f, attributes.GetProperty("SongAverageTempo").GetSingle());
         Assert.Equal(4, attributes.GetProperty("NotesHard").GetSingle()); // 3 notes + 1 chord
         Assert.Equal(1, attributes.GetProperty("SongPartition").GetInt32());

@@ -67,7 +67,7 @@ public partial class App
             var seats = DotCharter.Tone.Audio.Dsp.DspPlayers.MaxPlayers;
             try
             {
-                return DotCharter.Tone.Audio.Dsp.PlayerDspChains.CreateNative(seats, log);
+                return DotCharter.Tone.Audio.Dsp.PlayerDspChains.CreateNative(seats, log, NativeEnginePrefetch.TakeCatalogueSource());
             }
             catch (Exception ex)
             {
@@ -93,11 +93,11 @@ public partial class App
                 // absolute paths under the NAM capture library dir at apply time.
                 () => sp.GetService<DotCharter.Tone.Online.Tone3000.INamCaptureLibrary>()?.RootDirectory,
                 // ABI v28: lets ApplyToPlayer put a DIFFERENT tone on each seat.
-                sp.GetService<DotCharter.Tone.Audio.Dsp.IPlayerDspChains>()));
+                sp.GetService<DotCharter.Tone.Audio.Dsp.IPlayerDspChains>(),
+                sp.GetRequiredService<DotCharter.Tone.Audio.Dsp.IProfileToneRigStore>()));
         // Gives the rig a life longer than one engine: restores the player's last
         // board (or the first-run default preset) whenever a live engine attaches,
-        // and keeps the live chain written back to AppConfig. Without it the
-        // pedalboard starts empty on every launch AND is silently wiped by any
+        // and persists it to the profile store. Without it the board is wiped by any
         // engine rebuild (a device change, say). Started in
         // OnFrameworkInitializationCompleted, after the audio service exists.
         // The live rig is PER PLAYER PROFILE (0.45): one tone-rig.json under

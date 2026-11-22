@@ -51,6 +51,22 @@ public sealed class EofImportViewModelTests : IDisposable
         Assert.True(vocals.IsSelected);
     }
 
+    /// <summary>#595: an instrument track's note count picks the singular or plural resource.</summary>
+    [Theory]
+    [InlineData("en-US", 1, "PART GUITAR (1 note)")]
+    [InlineData("en-US", 3, "PART GUITAR (3 notes)")]
+    [InlineData("de-DE", 1, "PART GUITAR (1 Note)")]
+    [InlineData("de-DE", 3, "PART GUITAR (3 Noten)")]
+    public void It_counts_instrument_notes_in_the_singular_and_plural(string culture, int notes, string expected)
+    {
+        var vm = new EofImportViewModel(new ExportTargetWriter(), FakeLocalization.For(culture), new FakeAppLogger());
+        var track = new EofTrackInfo { Id = 1, Name = "PART GUITAR", Format = EofConstants.TrackFormatProGuitar, NoteCount = notes };
+
+        vm.Configure(new EofImportRequest("song.eof", [track]));
+
+        Assert.Equal(expected, Assert.Single(vm.AvailableTracks).Name);
+    }
+
     /// <summary>A parse failure appears INSIDE the dialog and leaves it open.</summary>
     [Fact]
     public async Task When_the_parse_throws_the_error_shows_in_the_dialog_and_it_stays_open()
@@ -146,8 +162,8 @@ public sealed class EofImportViewModelTests : IDisposable
         var statusBar = new RecordingStatusBarService();
         var dialogs = new ScriptedDialogs(_ => new EofImportViewModel(new ExportTargetWriter(),
             FakeLocalization.English(), new FakeAppLogger()), vm => ((EofImportViewModel)vm).TryCancel());
-        var launcher = new EofImportLauncher(dialogs, h.Storage, h.Config, statusBar, h.State, new DialogBasics(FakeLocalization.English(), new FakeAppLogger()),
-            h.Creator);
+        var launcher = new EofImportLauncher(dialogs, new EofImportFiles(h.Storage, h.Config), statusBar, h.State,
+            new DialogBasics(FakeLocalization.English(), new FakeAppLogger()), h.Creator, QuietOffer(h));
         var path = EofProjectCreatorTests.WriteFixtureEofFile(Path.Combine(_tempDir, "pill"));
 
         await launcher.OpenAsync(path);
@@ -162,6 +178,40 @@ public sealed class EofImportViewModelTests : IDisposable
         Assert.False(string.IsNullOrEmpty(h.State.MainDisplayMessage), "a failed read has no dialog to live in");
     }
 
+    [Fact]
+    public async Task The_launcher_offers_the_tuning_correction_for_the_audio_that_came_with_the_project()
+    {
+        var h = new CreatorHarness();
+        var songDir = Path.Combine(_tempDir, "tuning");
+        var path = EofProjectCreatorTests.WriteFixtureEofFile(songDir);
+        EofProjectCreatorTests.WriteCompanionAudio(songDir);
+        h.Storage.NextFolder = Directory.CreateDirectory(Path.Combine(_tempDir, "out-tuning")).FullName;
+        var dialogs = new ScriptedDialogs(_ => new EofImportViewModel(new ExportTargetWriter(),
+            FakeLocalization.English(), new FakeAppLogger()), vm => ((EofImportViewModel)vm).ImportCommand.Execute(null));
+        var services = new ChartEditDialogServices(h.Editor, new HistoryService(new FakeAppLogger()), h.State, h.Config,
+            FakeLocalization.English(), new FakeAppLogger());
+        var offer = new ReferencePitchOffer(new FixedPitch(-31), services);
+        var launcher = new EofImportLauncher(dialogs, new EofImportFiles(h.Storage, h.Config), new RecordingStatusBarService(), h.State,
+            new DialogBasics(FakeLocalization.English(), new FakeAppLogger()), h.Creator, offer);
+
+        await launcher.OpenAsync(path);
+
+        Assert.IsType<StatusMessageAction>(h.State.MainDisplayAction);
+    }
+
+    private static ReferencePitchOffer QuietOffer(CreatorHarness h) => new(new DotCharter.Tests.Infrastructure.FakeReferencePitchService(),
+        new ChartEditDialogServices(h.Editor, new HistoryService(new FakeAppLogger()), h.State, h.Config,
+            FakeLocalization.English(), new FakeAppLogger()));
+
+    private sealed class FixedPitch(double cents) : DotCharter.Services.Audio.Tuning.IReferencePitchService
+    {
+        public Task<DotCharter.Services.Audio.Tuning.ReferencePitchCheck> MeasureAsync(bool bass, double authoredCentOffset,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(DotCharter.Services.Audio.Tuning.ReferencePitchCheck.From(
+                new DotCharter.Analysis.Tuning.ReferencePitchEstimate(cents, 0.8, 500, 60), authoredCentOffset,
+                DotCharter.Services.Editing.Tempo.RecordingAlignment.RecordingAlignmentSource.Mix));
+    }
+
     /// <summary>Picker → read → dialog → Import → project: the whole door, with the dialog's answer creating the project.</summary>
     [Fact]
     public async Task The_launcher_creates_the_project_from_the_dialogs_answer()
@@ -174,8 +224,8 @@ public sealed class EofImportViewModelTests : IDisposable
         h.Storage.NextFolder = Directory.CreateDirectory(Path.Combine(_tempDir, "out-e2e")).FullName;
         var dialogs = new ScriptedDialogs(_ => new EofImportViewModel(new ExportTargetWriter(),
             FakeLocalization.English(), new FakeAppLogger()), vm => ((EofImportViewModel)vm).ImportCommand.Execute(null));
-        var launcher = new EofImportLauncher(dialogs, h.Storage, h.Config, new RecordingStatusBarService(), h.State,
-            new DialogBasics(FakeLocalization.English(), new FakeAppLogger()), h.Creator);
+        var launcher = new EofImportLauncher(dialogs, new EofImportFiles(h.Storage, h.Config), new RecordingStatusBarService(), h.State,
+            new DialogBasics(FakeLocalization.English(), new FakeAppLogger()), h.Creator, QuietOffer(h));
 
         await launcher.PickAsync();
 

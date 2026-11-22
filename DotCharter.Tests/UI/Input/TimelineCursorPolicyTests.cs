@@ -77,4 +77,29 @@ public sealed class TimelineCursorPolicyTests
         Assert.False(TimelinePanGesture.IsPanStart(middlePressed: false, leftPressed: true, alt: false));
         Assert.False(TimelinePanGesture.IsPanStart(middlePressed: false, leftPressed: false, alt: true));
     }
+
+    [Fact]
+    public void AStickyBadgeGetsTheHand_BecauseAClickOpensTheEventEditor()
+    {
+        Assert.Equal(StandardCursorType.Hand,
+            TimelineCursorPolicy.For(Top - 10, H, Top, Bottom, panning: false, overPinnedBadge: true));
+        Assert.Equal(StandardCursorType.Arrow, TimelineCursorPolicy.For(Top - 10, H, Top, Bottom, panning: false));
+        Assert.Equal(StandardCursorType.SizeAll,
+            TimelineCursorPolicy.For(Top - 10, H, Top, Bottom, panning: true, overPinnedBadge: true));
+    }
+
+    [Fact]
+    public void TheCursorAboveAPinnedBadge_IsReadFromTheRegistryTheClickUses()
+    {
+        var registry = new DotCharter.UI.Controls.Layers.PinnedLabelHitRegistry();
+        var owner = new object();
+        registry.Add(owner, new(new Avalonia.Rect(10, 5, 80, 16), 4000, DotCharter.UI.Controls.Layers.PinnedLabelHitRegistry.PinnedLabelKind.Section));
+        registry.Add(owner, new(new Avalonia.Rect(10, 25, 80, 16), 5000, DotCharter.UI.Controls.Layers.PinnedLabelHitRegistry.PinnedLabelKind.Phrase));
+
+        Assert.True(registry.TryHit(owner, new Avalonia.Point(20, 12), out var section));
+        Assert.Equal(4000, section.TimeMs);
+        Assert.True(registry.TryHit(owner, new Avalonia.Point(20, 30), out var phrase));
+        Assert.Equal(5000, phrase.TimeMs);
+        Assert.False(registry.TryHit(owner, new Avalonia.Point(200, 12), out _));
+    }
 }

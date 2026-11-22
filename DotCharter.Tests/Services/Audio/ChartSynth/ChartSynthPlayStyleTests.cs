@@ -279,8 +279,31 @@ public sealed class ChartSynthPlayStyleTests
         Assert.False(project.SynthPlayStyle.Bass.HandShapesRing);
 
         vm.ResetToDefaultsCommand.Execute(null);
+        Assert.False(project.SynthPlayStyle.Bass.IsDefault); // design D asks first
+        Assert.True(vm.ResetConfirm.IsPending);
+        vm.ResetConfirm.ConfirmCommand.Execute(null);
         Assert.True(project.SynthPlayStyle.Bass.IsDefault);
         Assert.Equal(16, project.SynthPlayStyle.Guitar.ChordGapDivisor);   // reset touches the shown family only
+        vm.Dispose();
+    }
+
+    [Fact]
+    public void AWaitingReset_ResetsTheFamilyShownAtConfirm()
+    {
+        var (vm, _, _, project) = Rows();
+        vm.EditingGuitar = true;
+        vm.HandShapesRing = false;
+        vm.EditingBass = true;
+        vm.HandShapesRing = false;
+        vm.EditingGuitar = true;
+
+        vm.ResetToDefaultsCommand.Execute(null);
+        vm.EditingBass = true; // the Guitar | Bass switch flips while the question waits
+        Assert.True(vm.ResetConfirm.IsPending);
+        vm.ResetConfirm.ConfirmCommand.Execute(null);
+
+        Assert.True(project.SynthPlayStyle.Bass.IsDefault);
+        Assert.False(project.SynthPlayStyle.Guitar.IsDefault);
         vm.Dispose();
     }
 

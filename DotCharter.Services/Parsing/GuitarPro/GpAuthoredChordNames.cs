@@ -24,7 +24,7 @@ namespace DotCharter.Services.Parsing.GuitarPro;
 ///     import, where it lands in <see cref="ChordTemplate.Name" />. It follows
 ///     the SAME two rules the authored fingering does — applied at template
 ///     CREATION only (a template found by shape is shared and must never be
-///     mutated, so the first name a shape is seen with wins), and per TRACK,
+///     mutated, so differing authored names get separate templates), and per TRACK,
 ///     because the key is a position and two tracks strum at the same instant all
 ///     the time.
 ///     </para>

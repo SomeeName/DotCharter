@@ -1039,6 +1039,11 @@ public class VulkanRenderer : IVulkanRenderService, IVulkanComposedPresenter, IV
                     Check(_context.Api.WaitForFences(_context.Device, 1, in _inFlightFences[_activeFrameIndex],
                         true, 5_000_000_000), "EndFrame/headless readback wait");
                 }
+                else if (FrameFencePolicy.NeedsRecreateSignaled(headlessSubmitResult))
+                {
+                    // The fence was reset before recording and a failed submit never signals it.
+                    FrameFencePolicy.RecreateSignaled(_context.Api, _context.Device, ref _inFlightFences[_activeFrameIndex]);
+                }
 
                 _activeFrameIndex = (_activeFrameIndex + 1) % MaxFramesInFlight;
             }
@@ -1092,6 +1097,8 @@ public class VulkanRenderer : IVulkanRenderService, IVulkanComposedPresenter, IV
                     // CompleteComposedPresent). Poison it; BeginFrame's HasBroken
                     // path rebuilds the pool on the deferred path.
                     _composedPool.MarkBroken(_imageIndex);
+                    if (FrameFencePolicy.NeedsRecreateSignaled(composedSubmitResult))
+                        FrameFencePolicy.RecreateSignaled(_context.Api, _context.Device, ref _inFlightFences[_activeFrameIndex]);
                 }
 
                 _activeFrameIndex = (_activeFrameIndex + 1) % MaxFramesInFlight;

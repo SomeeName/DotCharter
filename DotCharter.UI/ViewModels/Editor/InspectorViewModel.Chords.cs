@@ -3,7 +3,6 @@
 using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using DotCharter.Services.Export.Rocksmith;
 using DotCharter.UI.ViewModels.Editor.Inspector;
 using DotCharter.UI.ViewModels.Panels;
@@ -34,6 +33,15 @@ public partial class InspectorViewModel
     private string _chordRepeatVerdict = string.Empty;
 
     public bool HasChordRepeatVerdict => ChordRepeatVerdict.Length > 0;
+
+    /// <summary>"No notes" is moot while "Split notes" is on (split wins at export): the chip is disabled,
+    /// the stored flag is left as it is. A mixed multi-selection (null) keeps it enabled.</summary>
+    public bool IsChordNoNotesEnabled => ChordSplitIntoNotes != true;
+
+    public bool IsChordNoNotesDisabledHintVisible => !IsChordNoNotesEnabled;
+
+    /// <summary>The "No notes" tooltip: what it does, or why it is off right now.</summary>
+    public string ChordNoNotesTip => _localization[IsChordNoNotesEnabled ? "Inspector_NoNotesTip" : "Inspector_NoNotesDisabledTip"];
 
     /// <summary>
     ///     The repeat verdict of <paramref name="chord" /> in the level these lists
@@ -100,7 +108,7 @@ public partial class InspectorViewModel
         // The arrangement's strings, so the chord-bend picker names them the way
         // the Placement card and the lane gutter do.
         NoteStringCount = _chartEditor.ActiveArrangement?.Tuning.Length ?? 6;
-        NoteTuningNames = _chartEditor.ActiveArrangement?.Tuning;
+        NoteTuningNames = TuningDisplayNames.For(_chartEditor.ActiveArrangement);
         SyncChordRepeatVerdict(chords);
         FollowSelectionBends(SelectedChord.ChordNotes.Any(n => n.BendValues.Count > 0));
 
@@ -268,62 +276,6 @@ public partial class InspectorViewModel
         });
     }
 
-    [RelayCommand]
-    private void ApplyTechniquesToAllStrings()
-    {
-        if (_isSyncing || BendTargetChordNote == null || SelectedChord == null) return;
-        var src = BendTargetChordNote;
-        var mute = src.Mute;
-        var harmonic = src.Harmonic;
-        var hopo = src.Hopo;
-        var picking = src.BassPicking;
-        var vibrato = src.Vibrato;
-        var vibratoStrength = src.VibratoStrength;
-        var linkNext = src.LinkNext;
-        var tremolo = src.Tremolo;
-        var unpitchedSlide = src.UnpitchedSlide;
-        // The slide is copied as the source string's OFFSET, never its end fret:
-        // a 5→6 copied onto an 8 is 8→9, not a slide down to 6.
-        var slideOffset = ChordSlideScope.Offset(src);
-        foreach (var chord in ChordEditTargets())
-        {
-            if (CopiedSlide(chord.ChordNotes, slideOffset).Refusal is { } offBoard)
-            {
-                RefuseChordSlide(offBoard);
-                return;
-            }
-        }
-
-        ApplyChordMutation(c =>
-        {
-            foreach (var cn in c.ChordNotes)
-            {
-                cn.Mute = mute;
-                cn.Harmonic = harmonic;
-                cn.Hopo = hopo;
-                cn.BassPicking = picking;
-                SetVibrato(cn, vibrato);
-                // Only when it is ON: the source string may itself be an import
-                // left at Vibrato=false with a depth, and broadcasting that pair
-                // would seed the very state SetVibrato exists to prevent.
-                if (vibrato) cn.VibratoStrength = vibratoStrength;
-                cn.LinkNext = linkNext;
-                cn.Tremolo = tremolo;
-                cn.UnpitchedSlide = unpitchedSlide;
-            }
-
-            CopiedSlide(c.ChordNotes, slideOffset).ApplyTo(c.ChordNotes);
-        });
-    }
-
-    private static ChordSlidePlan CopiedSlide(IReadOnlyList<ChordNote> notes, int? offset)
-    {
-        var strings = notes.OrderBy(n => n.StringIndex).ToArray();
-        return offset is { } frets
-            ? ChordSlideScope.PlanOffset(ChordSlideScope.Movers(strings), frets)
-            : ChordSlideScope.Plan(strings, null);
-    }
-
     /// <summary>
     /// The chords a technique or playback edit reaches past the selection: the
     ///     "Apply to" ladder's lit rung, resolved by the chord panel on the scope its ladder
@@ -400,6 +352,9 @@ public partial class InspectorViewModel
 
     partial void OnChordSplitIntoNotesChanged(bool? value)
     {
+        OnPropertyChanged(nameof(IsChordNoNotesEnabled));
+        OnPropertyChanged(nameof(IsChordNoNotesDisabledHintVisible));
+        OnPropertyChanged(nameof(ChordNoNotesTip));
         if (value is null) return;
         ApplyChordMutation(c => c.SplitIntoNotes = value.Value);
     }

@@ -37,7 +37,7 @@ public static class CommandIdResolver
         var fromCommand = FromCommand(command);
         if (fromCommand != null) return fromCommand;
 
-        if (!string.IsNullOrWhiteSpace(controlName)) return Clean(controlName);
+        if (!string.IsNullOrWhiteSpace(controlName) && !IsTemplatePart(controlName)) return Clean(controlName);
 
         // A plain string header only. A non-string header is a whole control
         // subtree (icon + text panels), whose ToString is a type name.
@@ -54,6 +54,13 @@ public static class CommandIdResolver
     ///         click.
     ///     </para>
     /// </summary>
+    /// <summary>
+    ///     A template part name (<c>PART_IncreaseButton</c>) names a control's own
+    ///     internals, shared by every spinner in the app: it says nothing about
+    ///     which one was used. The caller resolves the owning control instead.
+    /// </summary>
+    public static bool IsTemplatePart(string? controlName) => controlName != null && controlName.StartsWith("PART_", StringComparison.Ordinal);
+
     private static string? FromCommand(ICommand? command)
     {
         if (command == null) return null;
@@ -63,7 +70,15 @@ public static class CommandIdResolver
             foreach (var field in command.GetType()
                          .GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public))
             {
-                if (!typeof(Delegate).IsAssignableFrom(field.FieldType)) continue;
+                if (!typeof(Delegate).IsAssignableFrom(field.FieldType) || field.FieldType == typeof(EventHandler)) continue;
+
+                // Only the delegate that RUNS the command names it. The event
+                // backing field of CanExecuteChanged holds whoever subscribed (the
+                // bound Button's own "CanExecuteChanged" method), and the
+                // canExecute predicate returns bool: neither is the verb.
+                var returns = field.FieldType.GetMethod("Invoke")?.ReturnType;
+                if (returns != typeof(void) && !typeof(Task).IsAssignableFrom(returns)) continue;
+
                 if (field.GetValue(command) is not Delegate handler) continue;
 
                 var name = handler.Method.Name;
@@ -72,6 +87,9 @@ public static class CommandIdResolver
                 // A lambda compiles to "<Ctor>b__12_3" — no more meaningful than
                 // no answer at all, and it would churn whenever the file is edited.
                 if (name.StartsWith('<')) continue;
+
+                // Framework trampolines (Dock's XamlIl glue) are not verbs either.
+                if (IsFrameworkGlue(handler.Method)) continue;
 
                 return Clean(name);
             }
@@ -83,6 +101,10 @@ public static class CommandIdResolver
 
         return null;
     }
+
+    private static bool IsFrameworkGlue(MethodInfo method) => method.Name.Contains("XamlIl", StringComparison.Ordinal)
+        || method.DeclaringType?.Name.Contains("XamlIl", StringComparison.Ordinal) == true
+        || method.Name == "CanExecuteChanged";
 
     private static string Clean(string value)
     {

@@ -49,7 +49,7 @@ public sealed class HandShapeDrawGesture(
         var bar = HandShapeLaneSpan.BuildBar(track.Arrangement, fingering, track.Notes, track.Chords,
             span.Start, span.End, minted);
         var grip = minted.FirstOrDefault(t => t.Id == bar.TemplateId)
-                   ?? ChordTemplateResolver.FindById(track.Arrangement, bar.TemplateId);
+                   ?? track.Arrangement.FindChordTemplate(bar.TemplateId);
         bar.Name = HandShapeLaneSpan.GripLabel(grip, track.StringCount);
         return bar;
     }

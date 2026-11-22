@@ -5,7 +5,7 @@ One file per subject under `editing-invariants/`. Read the one you need:
 - [chord-templates.md](editing-invariants/chord-templates.md) — chord templates, shapes and arpeggios
 - [undo.md](editing-invariants/undo.md) — undo: a gesture is one node
 - [linked-measures.md](editing-invariants/linked-measures.md) — linked measures: link groups, propagation in `HistoryService`, the per-action link policy, the load check
-- [anchors-and-capo.md](editing-invariants/anchors-and-capo.md) — a chord, its hand shape and its anchor as one decision; anchors (FHP); capo
+- [anchors-and-capo.md](editing-invariants/anchors-and-capo.md) — a chord, its hand shape and its anchor as one decision; same-pitch string moves carry FHP; anchors (FHP); capo
 - [validation-and-fixing.md](editing-invariants/validation-and-fixing.md) — `Editing/Validation/` + `Editing/Fixing/`, the inspector and auto-fix
 - [select-alike-and-transposition.md](editing-invariants/select-alike-and-transposition.md) — select-alike, patterns and transposition
 - [chart-spacing-enforcer.md](editing-invariants/chart-spacing-enforcer.md) — `ChartSpacingEnforcer`

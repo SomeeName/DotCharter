@@ -36,8 +36,11 @@ public sealed record TabStripPlan(TabStripMode Mode, IReadOnlyList<int> Shown, I
 ///         tabs that do not fit go into it: the active tab always stays in the strip, the others
 ///         fill the remaining slots in tab order, the rest overflow in tab order.</item>
 ///     </list>
+///     A strip that draws no glyphs (<c>iconsFallback: false</c>, inspector design D) skips rule 2: it stays
+///     labelled, the active tab always stands in the strip, every other tab that still fits beside it follows in strip
+///     order, and the rest go into "More".
 ///     The plan says nothing about slack: the strip shares whatever width is left between the shown
-///     tabs, so it never leaves a gap at its end.
+///     tabs, so it never leaves a gap at its end (unless its <c>ShareSlack</c> is off, D's packed strips).
 /// </summary>
 public static class TabStripLayout
 {
@@ -48,7 +51,9 @@ public static class TabStripLayout
     /// <param name="tabs">The tabs that exist, in strip order (a hidden tab is not in the list).</param>
     /// <param name="active">The index of the active tab in <paramref name="tabs" />, or -1 for none.</param>
     /// <param name="moreWidth">The width of the More button.</param>
-    public static TabStripPlan Decide(double available, double spacing, IReadOnlyList<TabStripTab> tabs, int active, double moreWidth)
+    /// <param name="iconsFallback">False for a strip whose tabs carry no glyph: it never turns into icons.</param>
+    public static TabStripPlan Decide(double available, double spacing, IReadOnlyList<TabStripTab> tabs, int active, double moreWidth,
+        bool iconsFallback = true)
     {
         var count = tabs.Count;
         if (count == 0) return TabStripPlan.Empty;
@@ -61,11 +66,45 @@ public static class TabStripLayout
             return new TabStripPlan(TabStripMode.Labelled, all, []);
         }
 
+        if (!iconsFallback) return LabelledBeside(available - moreWidth - spacing, spacing, tabs, active);
+
         var activeSlot = tabs.Max(t => t.CaptionWidth);
         if (tabs.Sum(t => t.IconWidth) + activeSlot + gaps <= available + Epsilon)
             return new TabStripPlan(TabStripMode.IconsOnly, all, []);
 
-        var slots = SlotsBeside(available - moreWidth - spacing, spacing, tabs, activeSlot);
+        return Overflow(SlotsBeside(available - moreWidth - spacing, spacing, [.. tabs.Select(t => t.IconWidth)], activeSlot), count, active);
+    }
+
+    /// <summary>A captions-only strip over its budget: the active tab first, then every other tab in strip order that
+    /// still fits beside it (a short one after a long one that did not), so no overflowed tab would fit in the gap
+    /// the strip ends in.</summary>
+    private static TabStripPlan LabelledBeside(double budget, double spacing, IReadOnlyList<TabStripTab> tabs, int active)
+    {
+        var shown = new List<int>();
+        var used = 0.0;
+        if (active >= 0 && active < tabs.Count)
+        {
+            shown.Add(active);
+            used = tabs[active].LabelledWidth;
+        }
+
+        for (var i = 0; i < tabs.Count; i++)
+        {
+            if (shown.Contains(i)) continue;
+            var next = used + (shown.Count > 0 ? spacing : 0) + tabs[i].LabelledWidth;
+            if (shown.Count > 0 && next > budget + Epsilon) continue;
+            shown.Add(i);
+            used = next;
+        }
+
+        shown.Sort();
+        return new TabStripPlan(TabStripMode.Labelled, shown, [.. Enumerable.Range(0, tabs.Count).Where(i => !shown.Contains(i))]);
+    }
+
+    /// <summary>The active tab and the first others up to <paramref name="slots" /> stand in the strip; the rest overflow.</summary>
+    private static TabStripPlan Overflow(int slots, int count, int active)
+    {
+        var all = Enumerable.Range(0, count).ToArray();
         var shown = new List<int>(slots);
         if (active >= 0 && active < count) shown.Add(active);
         foreach (var index in all)
@@ -81,9 +120,9 @@ public static class TabStripLayout
     /// <summary>How many tabs fit beside the More button, sized for the worst case — the WIDEST
     /// icons and the widest caption — so the count holds whichever tab is active. At least one:
     /// the active tab always stands in the strip.</summary>
-    private static int SlotsBeside(double budget, double spacing, IReadOnlyList<TabStripTab> tabs, double activeSlot)
+    private static int SlotsBeside(double budget, double spacing, IReadOnlyList<double> widths, double activeSlot)
     {
-        var widest = tabs.Select(t => t.IconWidth).OrderDescending().ToArray();
+        var widest = widths.OrderDescending().ToArray();
         var used = activeSlot;
         var slots = 0;
         for (var i = 0; i < widest.Length - 1; i++)

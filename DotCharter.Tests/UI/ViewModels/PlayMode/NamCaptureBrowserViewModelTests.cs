@@ -1,4 +1,6 @@
 using DotCharter.Tone.Audio.Dsp;
+using DotCharter.Tone.Audio.Dsp.RsToneConversion;
+using DotCharter.Tone.Audio.Dsp.Scenes;
 using DotCharter.Tone.Online;
 using DotCharter.Tone.Online.Tone3000;
 using DotCharter.Tone.UI.Controls.Dsp;
@@ -605,6 +607,39 @@ public sealed class NamCaptureBrowserViewModelTests
     }
 
     [Fact]
+    public void LoadIntoRig_InsertedEqKeepsTheExistingEqsSceneValues()
+    {
+        var catalog = new DspModuleType[]
+        {
+            new("namamp", "NAM Amp", []),
+            new("delay", "Delay", []),
+            new("eq", "EQ", [new("low", "Low", -12, 12, 0)])
+        };
+        var vm = NewVm(out _, out _, out var library, out var dsp, out _, catalog);
+        dsp.AddNode("namamp");
+        dsp.AddNode("delay");
+        var originalEq = dsp.AddNode("eq")!;
+        dsp.SetParam(originalEq.NodeId, "low", 6);
+        var slots = Enumerable.Repeat(RigScene.Empty, RigSceneSet.Count).ToArray();
+        slots[1] = new RigScene("Lead", RigScenes.Capture(DcRigSnapshot.Modules(dsp.GetNodes())));
+        dsp.Scenes = new RigSceneSet(slots, 0);
+        dsp.SetParam(originalEq.NodeId, "low", -3);
+        library.Entries.Add(Entry(41, 9, "Plexi", "amp"));
+        vm.ShowLibraryCommand.Execute(null);
+
+        vm.LoadIntoRigCommand.Execute(vm.LibraryRows.Single());
+
+        var nodes = dsp.GetNodes();
+        Assert.Equal(["namamp", "eq", "delay", "eq"], nodes.Select(n => n.ModuleTypeId));
+        Assert.Equal(originalEq.NodeId, nodes[3].NodeId);
+        var projected = RigScenes.Project(DcRigSnapshot.Modules(nodes), dsp.Scenes!.Slots[1]);
+        Assert.Equal(0f, projected[1].Params["low"]);
+        Assert.True(projected[1].Bypassed);
+        Assert.Equal(6f, projected[3].Params["low"]);
+        Assert.False(projected[3].Bypassed);
+    }
+
+    [Fact]
     public void SaveClientId_writes_through_configuration()
     {
         var config = new DotCharter.Tests.Infrastructure.FakeConfigurationService();
@@ -658,7 +693,8 @@ public sealed class NamCaptureBrowserViewModelTests
     {
         var svc = new FakeDspTonePresetService();
         var browser = new DotCharter.Tone.UI.ViewModels.PlayMode.PresetBrowserViewModel(
-            svc, FakeLocalization.English(), () => new DotCharter.Tone.Audio.Dsp.RsToneConversion.DcRigPreset([]), () => { });
+            svc, FakeLocalization.English(), () => new DotCharter.Tone.Audio.Dsp.RsToneConversion.DcRigPreset([]), () => { },
+            new FakeConfigurationService());
 
         Assert.DoesNotContain(browser.Rail, r => r.Kind == PresetFilterKind.NamCaptures);
         Assert.Null(browser.NamBrowser);
@@ -670,7 +706,7 @@ public sealed class NamCaptureBrowserViewModelTests
         var vm = NewVm(out _, out _, out _, out _, out _);
         var svc = new FakeDspTonePresetService();
         var browser = new DotCharter.Tone.UI.ViewModels.PlayMode.PresetBrowserViewModel(
-            svc, FakeLocalization.English(), () => new DotCharter.Tone.Audio.Dsp.RsToneConversion.DcRigPreset([]), () => { }, vm);
+            svc, FakeLocalization.English(), () => new DotCharter.Tone.Audio.Dsp.RsToneConversion.DcRigPreset([]), () => { }, new FakeConfigurationService(), vm);
 
         var namRail = browser.Rail.Last();
         Assert.Equal(PresetFilterKind.NamCaptures, namRail.Kind);

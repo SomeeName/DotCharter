@@ -58,11 +58,19 @@ public sealed class FakeAppLogger : IAppLogger
             return Entries.ToArray();
     }
 
+    /// <summary>Matches the message or the attached exception (type and message),
+    /// which the real logger writes on the same entry.</summary>
     public bool HasEntryContaining(string level, string fragment)
     {
         lock (Entries)
-            return Entries.Any(e => e.Level == level && e.Message.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+            return Entries.Any(e => e.Level == level && Mentions(e, fragment));
     }
+
+    private static bool Mentions(Entry e, string fragment) =>
+        e.Message.Contains(fragment, StringComparison.OrdinalIgnoreCase)
+        || (e.Exception?.ToString().Contains(fragment, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    public Action<Entry>? OnEntry { get; set; }
 
     /// <summary>Locked: a service may log from several threads at once (the cold
     /// library scan's parsers, #330), and an unlocked List.Add drops entries.</summary>
@@ -70,6 +78,7 @@ public sealed class FakeAppLogger : IAppLogger
     {
         lock (Entries)
             Entries.Add(entry);
+        OnEntry?.Invoke(entry);
     }
 
     public sealed record Entry(string Level, AppLogCategory Category, string Message, Exception? Exception = null);

@@ -113,7 +113,7 @@ public sealed class EditorRocksmithTonePreviewTests : IDisposable
         controller.TurnOff();
         await rocksmith.InGame.LastTask;
 
-        Assert.Equal("tone restore", game.Commands()[^1]);
+        Assert.Equal("tone restore", game.Commands().Last(c => c.StartsWith("tone ", StringComparison.Ordinal)));
         Assert.False(insert.IsOpen);
     }
 
@@ -122,15 +122,16 @@ public sealed class EditorRocksmithTonePreviewTests : IDisposable
     {
         using var game = new TonelabGameMock();
         var insert = new TonelabSessionTests.FakeInsert();
-        var (controller, rocksmith, _) = await Build(game, insert);
+        var (controller, rocksmith, _) = await Build(game, insert, out var session);
         rocksmith.Choose(true);
         controller.TurnOn();
         await Flush(rocksmith);
 
         Assert.True(rocksmith.Choose(false));
         await rocksmith.InGame.LastTask;
+        Assert.Equal(TonelabSessionState.Ready, await session.ProbeAsync(Ct));
 
-        Assert.Equal("tone restore", game.Commands()[^1]);
+        Assert.Equal("tone restore", game.Commands().Last(c => c.StartsWith("tone ", StringComparison.Ordinal)));
         Assert.False(insert.IsOpen);
         Assert.True(controller.IsDriving);
     }
@@ -164,7 +165,7 @@ public sealed class EditorRocksmithTonePreviewTests : IDisposable
     [Fact]
     public async Task WithNoGame_RocksmithIsDisabled_AndSaysWhy()
     {
-        var session = new TonelabSession(() => [], null, null, TonelabSessionTests.Quick);
+        var session = new TonelabSession(() => [], null, null, TonelabSessionTests.Quick, time: TonelabSessionTests.ReplyClock);
         _owned.Add(session);
         await session.ProbeAsync(Ct);
         var (_, rocksmith, _) = Controller(session);
@@ -222,7 +223,7 @@ public sealed class EditorRocksmithTonePreviewTests : IDisposable
     public async Task AStartingGame_IsDisabled_WithTheStartingReason()
     {
         using var game = new TonelabGameMock { Status = "starting v1" };
-        var session = new TonelabSession(() => [game.ProcessId], null, null, TonelabSessionTests.Quick) { Delay = (_, ct) => Task.Delay(Timeout.Infinite, ct) };
+        var session = new TonelabSession(() => [game.ProcessId], null, null, TonelabSessionTests.Quick, time: TonelabSessionTests.ReplyClock) { Delay = (_, ct) => Task.Delay(Timeout.Infinite, ct) };
         _owned.Add(session);
         Assert.Equal(TonelabSessionState.Starting, await session.ProbeAsync(Ct));
         var (_, rocksmith, _) = Controller(session);
@@ -269,7 +270,7 @@ public sealed class EditorRocksmithTonePreviewTests : IDisposable
     private Task<(ChartTonePreviewController, EditorRocksmithTonePreview, ProjectState)> Build(TonelabGameMock game,
         TonelabSessionTests.FakeInsert insert, out TonelabSession session, string baseKey = "clean", string changeKey = "heavy")
     {
-        var s = new TonelabSession(() => [game.ProcessId], insert, null, TonelabSessionTests.Quick);
+        var s = new TonelabSession(() => [game.ProcessId], insert, null, TonelabSessionTests.Quick, time: TonelabSessionTests.ReplyClock);
         _owned.Add(s);
         session = s;
         return ReadyThenController(s, baseKey, changeKey);

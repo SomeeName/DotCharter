@@ -35,7 +35,7 @@ public sealed class ChordTemplateCapoFretTests
         var h = new Harness(capo: 5);
         var (vm, template) = h.LoadedShape((4, 7));
 
-        vm.SetHoveredFretCommand.Execute(new ChordBoxFretEdit(4, 3, ContinuesRun: false));
+        vm.SetHoveredFret(new ChordBoxFretEdit(4, 3, ContinuesRun: false));
 
         Assert.Equal(5, template.Frets[4]);
     }
@@ -51,7 +51,7 @@ public sealed class ChordTemplateCapoFretTests
         var (vm, template) = h.LoadedShape((4, 7));
         template.Fingers[4] = 2;
 
-        vm.SetHoveredFretCommand.Execute(new ChordBoxFretEdit(4, 2, ContinuesRun: false));
+        vm.SetHoveredFret(new ChordBoxFretEdit(4, 2, ContinuesRun: false));
 
         Assert.Equal(5, template.Frets[4]);
         Assert.False(template.Fingers.ContainsKey(4));
@@ -96,7 +96,7 @@ public sealed class ChordTemplateCapoFretTests
         var h = new Harness(capo: 5);
         var (vm, template) = h.LoadedShape((4, 7));
 
-        vm.ToggleNoteCommand.Execute((2, 3));
+        vm.ToggleNote((2, 3));
 
         Assert.Equal(5, template.Frets[2]);
         // Fret 5 under a capo 5 sounds OPEN, so it gets no finger — the same
@@ -113,7 +113,7 @@ public sealed class ChordTemplateCapoFretTests
         var h = new Harness(capo: 5);
         var (vm, template) = h.LoadedShape((4, 7), (2, 5));
 
-        vm.ToggleNoteCommand.Execute((2, 3));
+        vm.ToggleNote((2, 3));
 
         Assert.False(template.Frets.ContainsKey(2));
     }

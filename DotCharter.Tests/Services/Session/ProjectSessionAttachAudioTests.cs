@@ -1,4 +1,4 @@
-﻿using DotCharter.Core.Domain.Vocals;
+using DotCharter.Core.Domain.Vocals;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.Services.Export;
 using DotCharter.Services.Import.Audio;
@@ -24,7 +24,7 @@ namespace DotCharter.Tests.Services.Session;
 ///               <c>song.wav</c> fallback and reopening found nothing.</item>
 ///     </list>
 /// </summary>
-public sealed class ProjectSessionAttachAudioTests : IDisposable
+public sealed partial class ProjectSessionAttachAudioTests : IDisposable
 {
     private readonly string _tempDir =
         Directory.CreateTempSubdirectory("dotcharter-attachaudio-").FullName;
@@ -37,16 +37,24 @@ public sealed class ProjectSessionAttachAudioTests : IDisposable
     {
         public List<string> LoadChartCalls { get; } = [];
 
+        public Func<string, ChartProject>? Load { get; set; }
+        public string? SavedAudioReference { get; private set; }
+
         public ChartProject LoadChart(string filePath)
         {
             // Mirrors the real ResolveFormat: anything that is not a known project
             // format throws, and ProjectSessionService.LoadFile swallows it into
             // "error loading project".
             LoadChartCalls.Add(filePath);
+            if (Load != null) return Load(filePath);
             throw new NotSupportedException($"Unsupported project format: {filePath}");
         }
 
-        public void SaveChart(string filePath, ChartProject project, double? audioLengthMs = null) { }
+        public void SaveChart(string filePath, ChartProject project, double? audioLengthMs = null)
+        {
+            SavedAudioReference = project.AudioFileName;
+            new DotCharter.Services.Parsing.Rscp.RscpChartSerializer().Save(filePath, project);
+        }
         public void RefreshArrangementFileManifest(ChartProject project) { }
 
         public void SaveDlcBuilderXmlBundle(string projectPath, ChartProject project,
@@ -93,10 +101,13 @@ public sealed class ProjectSessionAttachAudioTests : IDisposable
         /// <summary>The project is applied BEFORE the session is built so the dirty
         /// tracker baselines on the loaded state — exactly the real startup order.
         /// Baselining after an ApplyProject would read dirty from the word go.</summary>
-        public Harness(ChartProject project, string projectPath)
+        public Harness(ChartProject project, string projectPath, DotCharter.Services.Diagnostics.IMessagePrompt? prompt = null,
+            DotCharter.Tone.Diagnostics.IUiDispatcher? uiDispatcher = null, FakeAudioPlaybackService? audio = null,
+            IProjectDocumentService? documents = null)
         {
-            var logger = new FakeAppLogger();
-            Transport = new TransportViewModel(new FakeAudioPlaybackService(), State, Config, FakeLocalization.KeysOnly());
+            Audio = audio ?? Audio;
+            var logger = Logger;
+            Transport = new TransportViewModel(Audio, State, Config, FakeLocalization.KeysOnly());
             var selection = new SelectionService();
             History = new HistoryService(logger);
             Editor = new ChartEditorViewModel(
@@ -108,15 +119,24 @@ public sealed class ProjectSessionAttachAudioTests : IDisposable
             State.CurrentAudioFileName = project.AudioFileName;
 
             Session = new ProjectSessionService(
-                new FakeAudioPlaybackService(), Config, logger, new FakeFileStorageService(),
-                Documents, State, Transport, Editor, new TempoService(logger),
+                Audio, Config, logger, Storage,
+                documents ?? Documents, State, Transport, Editor, new TempoService(logger),
                 new NoOpCrashRecoveryService(), History, new NoOpSaveCompanionService(),
-                uiDispatcher: new TestUiDispatcher(),
+                uiDispatcher: uiDispatcher ?? new TestUiDispatcher(),
                 localization: FakeLocalization.English(),
-                pathRekey: new FakeProjectPathRekey());
+                pathRekey: new FakeProjectPathRekey(), messageDialog: prompt,
+                silentAudio: new DotCharter.Services.Audio.SilentTransport.SilentAudioTrack(logger,
+                    Path.Combine(Path.GetDirectoryName(projectPath) ?? Path.GetTempPath(), "silent-cache")));
         }
 
+        public FakeAppLogger Logger { get; } = new();
         public ProjectState State { get; } = new();
+        public FakeAudioPlaybackService Audio { get; } = new()
+        {
+            TotalAudioLengthMs = 1000,
+            WaveformResult = DotCharter.Tone.Audio.Abstractions.WaveformSamples.FromBasePeaks([0.5f], 2)
+        };
+        public FakeFileStorageService Storage { get; } = new();
         public FakeConfigurationService Config { get; } = new();
         public RecordingDocumentService Documents { get; } = new();
         public HistoryService History { get; }
@@ -127,14 +147,14 @@ public sealed class ProjectSessionAttachAudioTests : IDisposable
 
     /// <summary>A project already laid out on disk, exactly like the audio-less
     /// "start without audio" new-project flow leaves things.</summary>
-    private (Harness Harness, string ProjectDir) CreateAudiolessProject(string folderName = "Band - Song")
+    private (Harness Harness, string ProjectDir) CreateAudiolessProject(string folderName = "Band - Song", FakeAudioPlaybackService? audio = null)
     {
         var projectDir = Path.Combine(_tempDir, folderName);
         Directory.CreateDirectory(projectDir);
 
         var project = new ChartProject { AudioFileName = "" };
         project.Arrangements.Add(new Arrangement { Name = "Lead Guitar" });
-        return (new Harness(project, Path.Combine(projectDir, "project.rscp")), projectDir);
+        return (new Harness(project, Path.Combine(projectDir, "project.rscp"), audio: audio), projectDir);
     }
 
     private string CreateSourceAudio(string fileName)
@@ -145,6 +165,145 @@ public sealed class ProjectSessionAttachAudioTests : IDisposable
     }
 
     // ---- the attach itself ----------------------------------------------------
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_silently_refused_decode_never_publishes_the_replacement(bool waveformRejected)
+    {
+        var (h, folder) = CreateAudiolessProject();
+        var previous = Path.Combine(folder, "song.ogg");
+        File.WriteAllText(previous, "previous audio");
+        h.State.ActiveProject!.AudioFileName = "song.ogg";
+        h.State.CurrentAudioFileName = "song.ogg";
+        h.Audio.TotalAudioLengthMs = 0;
+        if (waveformRejected) h.Audio.WaveformResult = DotCharter.Tone.Audio.Abstractions.WaveformSamples.Empty;
+
+        Assert.False(await h.Session.AttachAudioAsync(CreateSourceAudio("corrupt.ogg")));
+
+        Assert.Equal("previous audio", File.ReadAllText(previous));
+        Assert.Equal("song.ogg", h.State.ActiveProject.AudioFileName);
+        Assert.False(h.Session.IsProjectDirty);
+        Assert.Equal(waveformRejected ? 0 : 1, h.Audio.MemoryLoads.Count);
+        Assert.Equal([previous], Directory.GetFiles(folder));
+    }
+
+    [Fact]
+    public async Task An_abandoned_waveform_pass_never_replaces_the_new_sessions_audio()
+    {
+        var (h, folder) = CreateAudiolessProject();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        h.Audio.WaveformPass = async () =>
+        {
+            entered.SetResult();
+            await release.Task;
+        };
+        var attachment = h.Session.AttachAudioAsync(CreateSourceAudio("replacement.ogg"));
+        await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+        var replacement = new ChartProject { AudioFileName = "B.wav" };
+        h.Editor.ApplyProject(replacement, resetHistory: true);
+        h.State.CurrentAudioFileName = "B.wav";
+        h.Audio.WaveformPass = null;
+        var otherAudio = CreateSourceAudio("B.wav");
+        await h.Session.LoadAudioFile(otherAudio, false);
+        var waveform = h.State.WaveformData;
+        release.SetResult();
+
+        Assert.False(await attachment);
+        Assert.Same(replacement, h.State.ActiveProject);
+        Assert.Equal("B.wav", h.State.CurrentAudioFileName);
+        Assert.Equal([otherAudio], h.Audio.LoadedPaths);
+        Assert.Empty(h.Audio.MemoryLoads);
+        Assert.Same(waveform, h.State.WaveformData);
+        Assert.Empty(Directory.GetFiles(folder));
+    }
+
+    [Fact]
+    public async Task A_new_load_wins_even_when_the_old_attachment_is_already_inside_the_engine()
+    {
+        var (h, _) = CreateAudiolessProject();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        h.Audio.MemoryLoadPass = async () =>
+        {
+            entered.SetResult();
+            await release.Task;
+        };
+        var attachment = h.Session.AttachAudioAsync(CreateSourceAudio("replacement.ogg"));
+        await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+        h.Editor.ApplyProject(new ChartProject { AudioFileName = "B.wav" }, resetHistory: true);
+        var otherAudio = CreateSourceAudio("B.wav");
+        var nextLoad = h.Session.LoadAudioFile(otherAudio, false);
+        release.SetResult();
+
+        Assert.False(await attachment);
+        await nextLoad;
+        Assert.Equal(otherAudio, h.Audio.CompletedLoadPath);
+    }
+
+    [Fact]
+    public async Task A_failed_replacement_decode_preserves_the_existing_audio_and_references()
+    {
+        var (h, projectDir) = CreateAudiolessProject();
+        var previous = Path.Combine(projectDir, "song.ogg");
+        File.WriteAllText(previous, "previous audio");
+        h.State.CurrentAudioFileName = "song.ogg";
+        h.State.ActiveProject!.AudioFileName = "song.ogg";
+        h.Audio.LoadAudioFailure = new InvalidDataException("corrupt audio");
+        h.Audio.MemoryLoadFailure = h.Audio.LoadAudioFailure;
+
+        Assert.False(await h.Session.AttachAudioAsync(CreateSourceAudio("corrupt.ogg")));
+
+        Assert.Equal("previous audio", File.ReadAllText(previous));
+        Assert.Equal("song.ogg", h.State.CurrentAudioFileName);
+        Assert.Equal("song.ogg", h.State.ActiveProject.AudioFileName);
+        Assert.False(h.Session.IsProjectDirty);
+        Assert.Equal([previous], Directory.GetFiles(projectDir));
+    }
+
+    [Fact]
+    public async Task Replacement_decodes_before_the_existing_file_is_published()
+    {
+        var (h, projectDir) = CreateAudiolessProject();
+        var previous = Path.Combine(projectDir, "song.ogg");
+        File.WriteAllText(previous, "previous audio");
+        var source = CreateSourceAudio("replacement.ogg");
+        h.Audio.DuringMemoryLoad = () => Assert.Equal("previous audio", File.ReadAllText(previous));
+
+        Assert.True(await h.Session.AttachAudioAsync(source));
+
+        Assert.Single(h.Audio.MemoryLoads);
+        Assert.Equal(previous, Assert.Single(h.Audio.MemoryLoadDisplayPaths));
+        Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(previous));
+        Assert.Equal([previous], Directory.GetFiles(projectDir));
+    }
+
+    [Theory]
+    [InlineData("A.wav")]
+    [InlineData("")]
+    [InlineData("missing.wav")]
+    public async Task ReloadProjectAudio_replaces_playback_and_waveform_with_the_active_projects_media(string reference)
+    {
+        var (h, projectDir) = CreateAudiolessProject();
+        h.Audio.WaveformResult = DotCharter.Tone.Audio.Abstractions.WaveformSamples.Empty;
+        h.Audio.TotalAudioLengthMs = 0;
+        var audio = Path.Combine(projectDir, "A.wav");
+        File.WriteAllText(audio, "audio");
+        h.State.ActiveProject!.AudioFileName = reference;
+        h.State.CurrentAudioFileName = "B.wav";
+        h.State.TotalAudioLengthMs = 1234;
+
+        var reload = typeof(ProjectSessionService).GetMethod("ReloadProjectAudioAsync");
+        Assert.NotNull(reload);
+        await Assert.IsAssignableFrom<Task>(reload.Invoke(h.Session, null));
+
+        Assert.Equal(reference, h.State.CurrentAudioFileName);
+        Assert.Same(DotCharter.Tone.Audio.Abstractions.WaveformSamples.Empty, h.State.WaveformData);
+        Assert.Equal(0, h.State.TotalAudioLengthMs);
+        Assert.Equal(reference == "A.wav" ? new[] { audio } : [], h.Audio.LoadedPaths);
+        Assert.False(h.Session.IsProjectDirty);
+    }
 
     [Theory]
     [InlineData("source.mp3", "song.mp3")]

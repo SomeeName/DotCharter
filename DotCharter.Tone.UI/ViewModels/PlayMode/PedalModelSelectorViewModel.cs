@@ -18,7 +18,7 @@ public enum PedalModelSelectorKind
 
 /// <summary>One selectable model on a picker: its 0-based index (== the param
 /// value) and its ABI label.</summary>
-public sealed class PedalModelOption
+public sealed class PedalModelOption : ObservableObject
 {
     public PedalModelOption(int index, string label)
     {
@@ -27,7 +27,13 @@ public sealed class PedalModelOption
     }
 
     public int Index { get; }
-    public string Label { get; }
+    public string Label { get; private set; }
+
+    internal void Relabel(string label)
+    {
+        Label = label;
+        OnPropertyChanged(nameof(Label));
+    }
 
     /// <summary>Picks THIS model (set by the owning selector) — bound directly by
     /// the amp popup's option button so there's no ElementName/ancestor binding
@@ -62,6 +68,7 @@ public sealed class PedalModelGroupRow
 public sealed partial class PedalModelSelectorViewModel : ObservableObject
 {
     private readonly PedalParamViewModel _param;
+    private readonly ILocalizationService _localization;
     private bool _suppress;
 
     public PedalModelSelectorViewModel(PedalParamViewModel param, PedalModelSelectorKind kind,
@@ -69,7 +76,7 @@ public sealed partial class PedalModelSelectorViewModel : ObservableObject
     {
         _param = param;
         Kind = kind;
-        DisplayName = param.DisplayName;
+        _localization = localization;
 
         var labels = param.ValueLabels ?? [];
         Options = new ObservableCollection<PedalModelOption>(
@@ -87,7 +94,7 @@ public sealed partial class PedalModelSelectorViewModel : ObservableObject
     public PedalModelSelectorKind Kind { get; }
 
     /// <summary>The param's display name ("Voicing" / "Model").</summary>
-    public string DisplayName { get; }
+    public string DisplayName => _param.DisplayName;
 
     /// <summary>The underlying native param id ("voicing", "mode", "capture"…) —
     /// the identity a reachability test can match a face's rendered selectors
@@ -99,7 +106,7 @@ public sealed partial class PedalModelSelectorViewModel : ObservableObject
 
     /// <summary>Models bucketed into named groups (amp popup); a single unnamed
     /// group for a flat picker.</summary>
-    public IReadOnlyList<PedalModelGroupRow> Groups { get; }
+    public IReadOnlyList<PedalModelGroupRow> Groups { get; private set; }
 
     /// <summary>True when the amp popup should show group headers.</summary>
     public bool IsGrouped { get; }
@@ -135,6 +142,16 @@ public sealed partial class PedalModelSelectorViewModel : ObservableObject
 
     private void OnParamChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(PedalParamViewModel.DisplayName)) OnPropertyChanged(nameof(DisplayName));
+        if (e.PropertyName == nameof(PedalParamViewModel.ValueLabels))
+        {
+            var labels = _param.ValueLabels ?? [];
+            foreach (var option in Options) option.Relabel(labels[option.Index]);
+            Groups = BuildGroups(Kind, Options, _localization);
+            OnPropertyChanged(nameof(Groups));
+            OnPropertyChanged(nameof(CurrentLabel));
+        }
+
         if (e.PropertyName is not (nameof(PedalParamViewModel.Value)
             or nameof(PedalParamViewModel.SelectedIndex)))
         {

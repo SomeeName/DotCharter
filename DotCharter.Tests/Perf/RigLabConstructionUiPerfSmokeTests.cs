@@ -80,6 +80,7 @@ public sealed class RigLabConstructionUiPerfSmokeTests
                 AssertMeasured(window, "VstRackAddButton", tab: RigLabTab.Plugins, shell);
                 AssertMeasured(window, "AiProviderCard", tab: RigLabTab.Ai, shell);
                 AssertMeasured(window, "AiTone3000Card", tab: RigLabTab.Ai, shell);
+                CaptureAiKeySaveFailure(window, host, dir);
 
                 // The Codex CLI's model presets: hidden for Claude Code, and for
                 // Codex a panel whose two buttons measure — set on the view model
@@ -183,6 +184,56 @@ public sealed class RigLabConstructionUiPerfSmokeTests
         using var frame = window.CaptureRenderedFrame();
         Assert.NotNull(frame);
         frame.Save(Path.Combine(dir, file), new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
+    }
+
+    private static void CaptureAiKeySaveFailure(Window window, RigLabHost host, string dir)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var store = new DotCharter.Tone.Ai.DpapiAiSecretStore(filePath: Path.Combine(dir, "capture-secrets.bin"));
+        Assert.True(store.Write(DotCharter.Tone.Ai.AiProviderKind.OpenAiCompatible, "other-provider-key"));
+        var view = Find(window, "RigLabAi");
+        var context = view.DataContext;
+        var previous = host.Config.Load().Ai;
+        using var vm = new DotCharter.RigLab.AiSettingsViewModel(host.Config, store, host.AiModels,
+            host.Design, host.Tone3000Auth, new GatedInlineDispatcher(), FakeLocalization.English());
+        try
+        {
+            view.DataContext = vm;
+            vm.SelectedProvider = vm.Providers.Single(p => p.Kind == DotCharter.Tone.Ai.AiProviderKind.Claude);
+            vm.ApiKeyEntry = "synthetic-pending-key";
+            Settle(window);
+            AssertMeasured(window, "AiKeyBox");
+            var keyBox = Assert.IsType<TextBox>(Find(window, "AiKeyBox"));
+            Assert.Equal("synthetic-pending-key", keyBox.Text);
+            Capture(window, "round1-riglab-ai-secret-before.png");
+
+            using (new FileStream(Path.Combine(dir, "capture-secrets.bin"), FileMode.Open,
+                       FileAccess.Read, FileShare.Write | FileShare.Delete))
+            {
+                vm.SaveKeyCommand.Execute(null);
+            }
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Settle(window);
+            Capture(window, "round1-riglab-ai-secret-after.png");
+
+            AssertMeasured(window, "AiKeyBox");
+            AssertMeasured(window, "AiStatus");
+            var status = Assert.IsType<TextBlock>(Find(window, "AiStatus"));
+            Assert.True(status.IsEffectivelyVisible);
+            Assert.True(vm.IsStatusError);
+            Assert.Equal(FakeLocalization.English()["Ai_KeySaveFailed"], status.Text);
+            Assert.Equal("synthetic-pending-key", vm.ApiKeyEntry);
+            Assert.Equal(vm.ApiKeyEntry, keyBox.Text);
+            Assert.True(vm.SaveKeyCommand.CanExecute(null));
+            Assert.Equal("other-provider-key", store.Read(DotCharter.Tone.Ai.AiProviderKind.OpenAiCompatible));
+        }
+        finally
+        {
+            view.DataContext = context;
+            host.Config.Update(c => c.Ai = previous);
+            host.Design.NotifyConfigurationChanged();
+            Settle(window);
+        }
     }
 
     private static void Settle(Window window)

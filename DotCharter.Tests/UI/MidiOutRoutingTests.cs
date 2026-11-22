@@ -50,19 +50,48 @@ public sealed class MidiOutRoutingTests
         Assert.True(audio.IsChartSynthEnabled);
     }
 
-    [Fact]
-    public void MidiIn_IsTheBuiltInSynthsLevel_WithItsMute()
+    [Theory]
+    [InlineData(0.5)]
+    [InlineData(2.0)]
+    public void ChartSound_SendsTheSameFaderToBothInstruments_WithMuteAndSolo(double gain)
     {
         var audio = new FakeChartSynthAudio();
         var transport = new TransportViewModel(audio, new ProjectState(), new FakeConfigurationService(), FakeLocalization.KeysOnly())
         {
-            MidiVolume = 0.5,
+            MidiVolume = gain,
         };
 
-        Assert.Equal(0.5f, audio.ChartSynthGain, 3);
+        Assert.Equal((float)gain, audio.ChartSynthGain);
+        Assert.Equal(gain, audio.VstInstrumentVolume);
 
         transport.IsMidiMuted = true;
         Assert.Equal(0f, audio.ChartSynthGain);
+        Assert.Equal(0.0, audio.VstInstrumentVolume);
+
+        transport.IsMidiMuted = false;
+        transport.IsSongSoloed = true;
+        Assert.Equal(0f, audio.ChartSynthGain);
+        Assert.Equal(0.0, audio.VstInstrumentVolume);
+    }
+
+    [Fact]
+    public void ALoadedRoutedInstrument_CannotBoostTheRigWithMidiOutOff()
+    {
+        var audio = new FakeChartSynthAudio();
+        var transport = new TransportViewModel(audio, new ProjectState(), new FakeConfigurationService(), FakeLocalization.KeysOnly())
+        {
+            SelectedInstrumentVst = Plugin(),
+            RouteInstrumentToRig = true,
+            MidiVolume = 2.0,
+        };
+        Assert.Equal(2.0, audio.VstInstrumentVolume);
+
+        transport.MidiEnabled = false;
+        Assert.Equal(1.0, audio.VstInstrumentVolume);
+        Assert.Equal(2.0, transport.MidiVolume);
+
+        transport.MidiEnabled = true;
+        Assert.Equal(2.0, audio.VstInstrumentVolume);
     }
 
     [Fact]

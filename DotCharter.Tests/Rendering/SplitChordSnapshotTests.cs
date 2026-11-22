@@ -24,7 +24,11 @@ public sealed class SplitChordSnapshotTests
         arrangement.Levels[0].Chords.Add(plain);
         Assert.Equal(4, arrangement.Levels[0].Chords.Count(GpPickScrape.IsScrapeChord));
 
+        Assert.All(arrangement.Levels[0].Chords.Where(GpPickScrape.IsScrapeChord).SelectMany(c => c.ChordNotes), n => Assert.Equal(MuteType.None, n.Mute));
         var snapshot = PartialChordSlideFixture.Snapshot(arrangement);
+
+        Assert.All(snapshot.ChordNotes.AsSpan(0, snapshot.ChordNoteCount).ToArray(),
+            n => Assert.Equal((byte)MuteType.None, n.Mute));
 
         var flags = snapshot.Chords.AsSpan(0, snapshot.ChordCount).ToArray()
             .Select(c => (c.Flags & ChordFlags.SplitIntoNotes) != 0).ToArray();

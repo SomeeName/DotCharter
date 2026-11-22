@@ -44,6 +44,8 @@ internal sealed class ComposedPresentPump
     // resize racing the post can never make two posts present one frame.
     private readonly ConcurrentQueue<PendingFrame> _pending = new();
     private readonly Action _presentNext;
+    private readonly Action<Exception> _reportFailure;
+    private readonly Action<Exception>? _onFailure;
 
     private readonly record struct PendingFrame(int Index, long Generation, long SubmitTimestamp);
     private readonly FrameTimeRing _latency = new();
@@ -64,13 +66,15 @@ internal sealed class ComposedPresentPump
     }
 
     public ComposedPresentPump(IComposedFrameSource source, ICompositionGpuInterop interop,
-        CompositionDrawingSurface surface, bool publishPreview3DDiagnostics)
+        CompositionDrawingSurface surface, bool publishPreview3DDiagnostics, Action<Exception>? onFailure = null)
     {
         _source = source;
         _interop = interop;
         _surface = surface;
         _publishPreview3DDiagnostics = publishPreview3DDiagnostics;
         _presentNext = PresentNext;
+        _reportFailure = ReportFailure;
+        _onFailure = onFailure;
         _source.ComposedFrameReady += OnFrameReady;
     }
 
@@ -108,16 +112,11 @@ internal sealed class ComposedPresentPump
 
     private async void Present(int index, long generation, long submitTimestamp)
     {
-        if (_shutdown)
-        {
-            // The surface is (about to be) dead — fail the present so the
-            // pool marks the image broken and the next attach rebuilds it.
-            _source.CompleteComposedPresent(index, generation, false);
-            return;
-        }
-
+        var success = false;
+        Exception? failure = null;
         try
         {
+            if (_shutdown) return;
             var entry = _imports[index];
             if (entry == null || entry.Generation != generation)
             {
@@ -128,7 +127,6 @@ internal sealed class ComposedPresentPump
                 if (handle == 0)
                 {
                     // Pool moved on (resize raced the post) — nothing to show.
-                    _source.CompleteComposedPresent(index, generation, false);
                     return;
                 }
 
@@ -151,7 +149,7 @@ internal sealed class ComposedPresentPump
             // which is what the completed task proves.
             await _surface.UpdateWithKeyedMutexAsync(entry.Image, 1, 0);
 
-            _source.CompleteComposedPresent(index, generation, true);
+            success = true;
 
             if (!_publishPreview3DDiagnostics) return;
 
@@ -177,13 +175,49 @@ internal sealed class ComposedPresentPump
         }
         catch (Exception ex)
         {
-            _source.CompleteComposedPresent(index, generation, false);
-            if (!_loggedPresentFailure)
-            {
-                _loggedPresentFailure = true;
-                App.Services?.GetService<IAppLogger>()?.Warning(AppLogCategory.Rendering,
-                    $"Composed present failed (pool will rebuild): {ex.Message}");
-            }
+            failure = ex;
+        }
+        finally
+        {
+            CompletePresent(_source, index, generation, success, failure, _reportFailure);
         }
     }
+
+    internal static void CompletePresent(IComposedFrameSource source, int index, long generation, bool success,
+        Exception? failure, Action<Exception> report)
+    {
+        try
+        {
+            source.CompleteComposedPresent(index, generation, success);
+        }
+        catch (Exception ex)
+        {
+            failure = failure is null ? ex : new AggregateException(failure, ex);
+        }
+
+        if (failure is null) return;
+        try
+        {
+            report(failure);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[ComposedPresent] Failure notification failed: {ex}");
+        }
+    }
+
+    private void ReportFailure(Exception error)
+    {
+        if (_onFailure is not null)
+        {
+            _onFailure(error);
+            return;
+        }
+
+        if (_loggedPresentFailure) return;
+        _loggedPresentFailure = true;
+        App.Services?.GetService<IAppLogger>()?.Warning(AppLogCategory.Rendering,
+            "Composed present failed (pool will rebuild)", error);
+    }
+
 }

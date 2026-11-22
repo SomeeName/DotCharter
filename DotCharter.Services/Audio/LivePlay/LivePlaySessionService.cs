@@ -91,6 +91,15 @@ public readonly record struct LivePlayMissInfo(double TimeMs, string Label);
 /// <summary>How a live-play session is configured when it starts.</summary>
 public sealed class LivePlaySessionOptions
 {
+    /// <summary>Reads the persisted chord policy, with the standard fallback shared by judging and UI.</summary>
+    public static LiveChordVoicingStrictness ParseChordStrictness(string? value)
+        => value?.Trim().ToLowerInvariant() switch
+        {
+            "lenient" => LiveChordVoicingStrictness.Lenient,
+            "strict" => LiveChordVoicingStrictness.Strict,
+            _ => LiveChordVoicingStrictness.Standard
+        };
+
     public LiveHitWindowPreset HitWindow { get; init; } = LiveHitWindowPreset.Normal;
 
     /// <summary>Play the leveled chart RS-style, moving per-phrase levels
@@ -362,6 +371,16 @@ public sealed class LivePlaySessionService
         // A hit credited within the onset's reporting delay of the end keeps its
         // credit and is graded untimed, never dropped.
         Matcher?.ResolvePendingGrades();
+        if (Difficulty is { } difficulty)
+        {
+            // The final span is open-ended, so no elapsed-phrase tick can complete it.
+            // Stopping records only judgments actually made, including a partial last pass.
+            foreach (var span in _phraseSpans)
+            {
+                if (_completedPhrases.Add(span.IterationIndex)) CompletePhraseSpan(difficulty, span);
+            }
+        }
+
         var stats = Matcher?.Stats;
         // The ladder OWNS the transport while it is running, so its speed is the
         // authority when there is one; otherwise the slider is.
@@ -384,6 +403,26 @@ public sealed class LivePlaySessionService
         Ladder = null;
         Difficulty = null;
         _arrangement = null;
+        return result;
+    }
+
+    /// <summary>Settles the final late window at audio EOF, including CQT evidence
+    /// and section tallies. Aborts and pauses do not use this path.</summary>
+    public LivePlayTickResult CompleteAt(double endMs)
+    {
+        var result = new LivePlayTickResult();
+        if (Matcher is not { } matcher) return result;
+        var horizon = Math.BitIncrement(endMs + matcher.HitWindowLateMs);
+        foreach (var judged in matcher.AdvanceTo(horizon))
+        {
+            ApplyTally(judged);
+            result.Events.Add(judged);
+        }
+
+        result.TechniqueJudgments.AddRange(matcher.TechniqueJudgments);
+        result.Grades.AddRange(matcher.ProvisionalGrades);
+        if (Difficulty != null) CompleteElapsedPhrases(horizon, result);
+        result.StatsChanged = true;
         return result;
     }
 
@@ -530,7 +569,26 @@ public sealed class LivePlaySessionService
     ///     treating them as seeks is the safe interpretation.
     /// </summary>
     public LivePlayTickResult HandleTick(double playheadMs, bool isPlaying, LivePlayTickResult result,
-        bool externalSeek)
+        bool externalSeek) => HandleTickCore(playheadMs, isPlaying, result, externalSeek, ApplyLoopPass, false);
+
+    /// <summary>
+    ///     Judges the captured tick; reserves loop completion without changing pass state.
+    ///     <paramref name="settlingSongEnd" />: the transport stopped at the song's end and the run
+    ///     waits for the capture that is still on its way. The playhead stands at the end, so no
+    ///     window is expired by it: a note played late in a window that is still open would be a
+    ///     miss before its own capture arrived. <see cref="CompleteAt" /> settles them from that
+    ///     evidence. A loop still wraps.
+    /// </summary>
+    public LivePlayTickResult HandleCapturedTick(double playheadMs, bool isPlaying, LivePlayTickResult result,
+        bool externalSeek, bool settlingSongEnd = false)
+        => HandleTickCore(playheadMs, isPlaying, result, externalSeek, ReserveLoopPass, settlingSongEnd);
+
+    private static void ApplyLoopPass(LivePlaySessionService session, LivePlayTickResult result) => session.CompletePass(result);
+    private static void ReserveLoopPass(LivePlaySessionService session, LivePlayTickResult result) => result.SeekToMs = session._loopCountInStartMs;
+    public void CommitLoopPass(LivePlayTickResult result) => CompletePass(result);
+
+    private LivePlayTickResult HandleTickCore(double playheadMs, bool isPlaying, LivePlayTickResult result,
+        bool externalSeek, Action<LivePlaySessionService, LivePlayTickResult> completeLoop, bool settlingSongEnd)
     {
         result.Reset();
         var matcher = Matcher;
@@ -579,13 +637,21 @@ public sealed class LivePlaySessionService
         // slow transport seek would complete phantom zero-judged passes.
         if (Loop is { } loop && _pendingSeekTargetMs == null && loop.ShouldWrap(playheadMs))
         {
-            CompletePass(result);
+            completeLoop(this, result);
             return result;
         }
 
+        if (settlingSongEnd) return result;
+        AdvanceMatcher(playheadMs, result);
         if (Loop == null && Difficulty != null)
             CompleteElapsedPhrases(playheadMs, result);
 
+        return result;
+    }
+
+    private void AdvanceMatcher(double playheadMs, LivePlayTickResult result)
+    {
+        var matcher = Matcher!;
         foreach (var missed in matcher.AdvanceTo(playheadMs))
         {
             ApplyTally(missed);
@@ -596,7 +662,6 @@ public sealed class LivePlaySessionService
         result.Grades.AddRange(matcher.ProvisionalGrades);
 
         if (result.Events.Count > 0) result.StatsChanged = true;
-        return result;
     }
 
     /// <summary>
@@ -664,6 +729,7 @@ public sealed class LivePlaySessionService
     {
         var matcher = Matcher!;
         var loop = Loop!.Value;
+        ClosePassWindows(matcher, loop, result);
 
         var hits = 0;
         var misses = 0;
@@ -709,6 +775,9 @@ public sealed class LivePlaySessionService
 
             if (changed && _selector != null)
             {
+                // This is a NEW pass: clear the completed pass before Reload freezes
+                // credited iterations. Ordinary mid-song reloads must keep those credits.
+                matcher.RewindToLoop(loop.StartMs);
                 matcher.Reload(arrangement, _beats, _selector, loop.StartMs);
                 RebuildSectionSoundCounts();
                 result.DifficultyChanged = true;
@@ -716,6 +785,30 @@ public sealed class LivePlaySessionService
         }
 
         result.SeekToMs = ArmLoopPass();
+    }
+
+    /// <summary>
+    ///     The pass ends at the loop's B mark, and the wrap re-arms everything from A, so a sound
+    ///     whose late window is still open there is judged NOW, the way its window would have
+    ///     closed, and the pass totals count it. A verdict the advance reaches past B is not
+    ///     tallied: the re-arm clears it.
+    /// </summary>
+    private void ClosePassWindows(LiveNoteMatcher matcher, LivePlayLoop loop, LivePlayTickResult result)
+    {
+        var lastOpenMs = double.NaN;
+        foreach (var sound in matcher.Expected)
+        {
+            if (sound.TimeMs >= loop.EndMs) break;
+            if (sound.TimeMs >= loop.StartMs && sound.Verdict == null) lastOpenMs = sound.TimeMs;
+        }
+
+        if (double.IsNaN(lastOpenMs)) return;
+        foreach (var judged in matcher.AdvanceTo(Math.BitIncrement(lastOpenMs + matcher.HitWindowLateMs)))
+        {
+            if (judged.Sound.TimeMs >= loop.EndMs) continue;
+            ApplyTally(judged);
+            result.Events.Add(judged);
+        }
     }
 
     /// <summary>Free-play dynamic difficulty: once the playhead has fully

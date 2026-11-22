@@ -225,7 +225,7 @@ public sealed class LiveTuner : IDisposable
 
         var clamped = Math.Clamp(frame.CentsOff, -MaxDisplayCents, MaxDisplayCents);
         HasReading = true;
-        HeardNote = ArrangementTunerLogic.NoteNameOf((int)Math.Round(ArrangementTunerLogic.MidiOf(frequencyHz)));
+        HeardNote = _logic.NameForMidi((int)Math.Round(ArrangementTunerLogic.MidiOf(frequencyHz)));
         CentsOff = clamped;
         IsInTune = frame.InTune;
 

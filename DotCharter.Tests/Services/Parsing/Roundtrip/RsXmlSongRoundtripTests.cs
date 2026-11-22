@@ -511,7 +511,10 @@ public sealed class RsXmlSongRoundtripTests : IDisposable
         Assert.Equal("0", iterations[0].PhraseId);
         Assert.Equal("0.500", iterations[1].Time);
         Assert.Equal("1.500", iterations[2].Time);
+        // END sits on the last beat (2.500 s) and is written there, one millisecond past
+        // the song length: the XML keeps the iteration on the grid (only the SNG clips it).
         Assert.Equal("2.500", iterations[3].Time);
+        Assert.Equal("2.499", doc.Root!.Element("songLength")!.Value);
     }
 
     [Fact]

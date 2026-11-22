@@ -18,6 +18,18 @@ public class ChartData
     public string Artist { get; set; } = "";
     public string ArtistSort { get; set; } = "";
 
+    /// <summary>The title's sort name (DLC Builder's <c>Title Sort</c>); empty derives it (the leading article dropped).</summary>
+    public string TitleSort { get; set; } = "";
+
+    /// <summary>The album's sort name (DLC Builder's <c>Album Name Sort</c>); empty derives it.</summary>
+    public string AlbumSort { get; set; } = "";
+
+    /// <summary>
+    ///     The package's DLC key (DLC Builder's <c>DLC Key</c>); empty derives it from the artist and title
+    ///     (<c>RocksmithDlcKey.Create</c>). Saved as <c>&lt;dcDlcKey&gt;</c>, absent when empty.
+    /// </summary>
+    public string DlcKey { get; set; } = "";
+
     /// <summary>
     ///     The song's title and artist in their ORIGINAL script, kept alongside
     ///     the Latin ones rather than instead of them. Rocksmith carries exactly
@@ -57,6 +69,33 @@ public class ChartData
     /// </summary>
     public string Version { get; set; } = "1";
 
+    /// <summary>
+    ///     The song's own export volume in dB (DLC Builder's convention: BS.1770 loudness against -16), measured from
+    ///     the audio that ships; null until measured. Saved as <c>&lt;dcAudioVolume&gt;</c>.
+    /// </summary>
+    public double? AudioVolume { get; set; }
+
+    /// <summary>The preview's volume in dB, measured from the preview that ships (the file or the clip cut from the audio); null until measured.</summary>
+    public double? PreviewVolume { get; set; }
+
+    /// <summary>Content signature of what <see cref="AudioVolume" /> was measured from; a different one means the audio changed.</summary>
+    public string AudioVolumeSignature { get; set; } = "";
+
+    /// <summary>Content signature of what <see cref="PreviewVolume" /> was measured from.</summary>
+    public string PreviewVolumeSignature { get; set; } = "";
+
+    /// <summary>True when the charter typed <see cref="AudioVolume" />: it is never re-measured.</summary>
+    public bool AudioVolumeManual { get; set; }
+
+    /// <summary>True when the charter typed <see cref="PreviewVolume" />: it is never re-measured.</summary>
+    public bool PreviewVolumeManual { get; set; }
+
+    /// <summary>
+    ///     Where in the song (ms) the Rocksmith / <c>.dcsong</c> preview clip starts; null = automatic (a quarter into
+    ///     the song). Saved as <c>&lt;dcPreviewStartMs&gt;</c>, absent when null. The build clamps it so a whole clip fits.
+    /// </summary>
+    public double? PreviewStartMs { get; set; }
+
     // Embedded cover art, stored as a path relative to the project folder (like
     // AudioFileName). Empty when the project has no cover art.
     public string CoverArtPath { get; set; } = "";
@@ -83,6 +122,11 @@ public class ChartData
     // Positive = sharps (1=G, 2=D, 3=A...), negative = flats (-1=F, -2=Bb...), 0 = C/Am.
     public int KeyAccidentals { get; set; }
     public bool KeyIsMinor { get; set; }
+
+    // True when the charter LOCKED the key above as the song's key: chord
+    // spelling then uses it as written instead of checking it against the notes,
+    // and C major counts as a real key. False in every older project.
+    public bool KeyLocked { get; set; }
 
     public ObservableCollection<GuitarNote> SingleNotes { get; set; } = [];
     public ObservableCollection<Chord> Chords { get; set; } = [];

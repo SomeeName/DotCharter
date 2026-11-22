@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using DotCharter.Services.Export.Rocksmith;
+using DotCharter.Services.Parsing.Rscp;
 
 namespace DotCharter.Services.Export;
 
@@ -8,43 +10,18 @@ namespace DotCharter.Services.Export;
 ///     earlier save, by remembering the exact bytes it last put there.
 /// </summary>
 /// <remarks>
-///     <para>
-///         Most save companions are pure derived output — the <c>DTRS XML</c>
-///         bundle, the <c>.psarc</c> — and regenerating them wholesale is correct.
-///         Two are not: the <c>.rs2dlc</c> and the <c>.eof</c> are the NATIVE
-///         PROJECT FORMATS of two other editors, so the charter opens them, edits
-///         them there and saves. Everything they add lives in fields DotCharter
-///         does not author and cannot round-trip.
-///     </para>
-///     <para>
-///         Owner report: tones assigned by hand in DLC Builder were
-///         gone after the next Ctrl+S in DotCharter. <c>Rs2DlcProjectDto.Tones</c>
-///         and the per-arrangement <c>BaseTone</c>/<c>Tones</c> are always written
-///         EMPTY by us — so the rewrite is not a merge that lost them, it is a
-///         blank that replaced them, silently, on a save the charter made for an
-///         unrelated reason.
-///     </para>
-///     <para>
-///         The rule: we overwrite a companion only when the file on disk is
-///         byte-for-byte what we last wrote there. Anything else — edited, replaced,
-///         or simply never stamped — is somebody's work and is left alone. Note
-///         which way that fails: an absent or unreadable stamp means DON'T write.
-///         The cost of a wrong skip is a stale derived file the charter can delete;
-///         the cost of a wrong write is hand-authored data with no undo.
-///     </para>
-///     <para>
-///         The stamps live in one <c>.dotcharter-companions.json</c> beside the
-///         project, keyed by file NAME — so it travels when the folder is moved or
-///         copied. Deliberately NOT hidden: it is the only visible answer to
-///         "why has my <c>.rs2dlc</c> stopped following the chart". It is a cache,
-///         never a source of truth — losing it costs one skipped regeneration, and
-///         the charter recovers by deleting the companion.
-///     </para>
+///     The Charter, DLC Builder and EOF companions are other editors' native project
+///     formats. Only byte-for-byte matches of our last write may be replaced.
+///     Missing or unreadable ownership is a refusal. Stamps travel with the chart
+///     in hidden <c>.dotcharter/companions.json</c>, keyed by chart-relative path.
+///     Generated media and XML use the same evidence before replacement or recycling.
 /// </remarks>
 public static class CompanionOwnership
 {
     /// <summary>The stamp file, a sibling of the companions it describes.</summary>
-    public const string StampFileName = ".dotcharter-companions.json";
+    public const string StampFileName = ".dotcharter/companions.json";
+
+    internal const string LegacyStampFileName = ".dotcharter-companions.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
@@ -68,7 +45,7 @@ public static class CompanionOwnership
         ArgumentNullException.ThrowIfNull(write);
 
         var full = Path.GetFullPath(path);
-        var name = Path.GetFileName(full);
+        var name = KeyFor(full);
 
         if (File.Exists(full))
         {
@@ -97,7 +74,25 @@ public static class CompanionOwnership
 
         write(full);
         skipReason = null;
+        RecordStampBestEffort(full, name);
+        return true;
+    }
 
+    /// <summary>Builds a release and stamps it when it publishes the saved project's companion package.</summary>
+    public static async Task<RocksmithBuildResult> BuildAndRecordReleaseAsync(Func<Task<RocksmithBuildResult>> build,
+        string? projectDirectory, ChartProject snapshot)
+    {
+        var result = await build().ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(projectDirectory)) return result;
+        var name = RocksmithPackageName.For(snapshot, snapshot.Chart.Version, extended: result.IsPsxr);
+        var expected = Path.Combine(projectDirectory, ProjectFolderLayout.ExportFolderName, name);
+        if (result.PackagePaths.Any(path => Path.GetFullPath(path).Equals(expected, StringComparison.OrdinalIgnoreCase)))
+            RecordStampBestEffort(expected, KeyFor(expected));
+        return result;
+    }
+
+    private static void RecordStampBestEffort(string full, string name)
+    {
         // Stamping is best-effort BY DESIGN: if it fails, the next save sees an
         // unstamped file and skips, which is the safe direction.
         try
@@ -108,21 +103,17 @@ public static class CompanionOwnership
         {
             // ignored — see above
         }
-
-        return true;
     }
 
     /// <summary>Forgets the stamp for a companion, so the next save treats whatever
     /// is on disk as somebody else's file.</summary>
-    /// <remarks>Exists for the tests and for a future "stop managing this file"
-    /// action; nothing in the save path calls it.</remarks>
     public static void Forget(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         var full = Path.GetFullPath(path);
         var stamps = ReadStamps(full);
-        if (!stamps.Remove(Path.GetFileName(full))) return;
+        if (!stamps.Remove(KeyFor(full))) return;
         WriteStamps(full, stamps);
     }
 
@@ -136,8 +127,34 @@ public static class CompanionOwnership
         WriteStamps(companionPath, stamps);
     }
 
-    private static string StampPathFor(string companionPath) =>
-        Path.Combine(Path.GetDirectoryName(companionPath) ?? ".", StampFileName);
+    internal static string StampPathFor(string companionPath) =>
+        Path.Combine(ProjectFolderLayout.RootForArtifact(companionPath), StampFileName);
+
+    private static string KeyFor(string path) =>
+        Path.GetRelativePath(ProjectFolderLayout.RootForArtifact(path), path).Replace('\\', '/');
+
+    internal static bool IsUnmodified(string path) =>
+        ReadStamps(path).TryGetValue(KeyFor(path), out var recorded) && HashOf(path) is { } hash && hash == recorded;
+
+    internal static void AdoptMovedFile(string path) => RecordStamp(path, KeyFor(path));
+
+    internal static void ImportLegacyStamps(string projectPath, Action<string> recycle)
+    {
+        var root = ProjectFolderLayout.ProjectDirectory(projectPath);
+        var legacy = Path.Combine(root, LegacyStampFileName);
+        if (!File.Exists(legacy)) return;
+        var imported = JsonSerializer.Deserialize<StampFile>(AtomicFile.ReadAllText(legacy));
+        if (imported?.Version != 1 || imported.Files == null) return;
+        var anchor = ProjectFiles.DefaultPath(root);
+        var stamps = ReadStamps(anchor);
+        foreach (var (key, value) in imported.Files)
+        {
+            if (key != Path.GetFileName(key) || key.IndexOfAny(['/', '\\']) >= 0) continue;
+            stamps.TryAdd(key, value);
+        }
+        WriteStamps(anchor, stamps);
+        recycle(legacy);
+    }
 
     private static Dictionary<string, string> ReadStamps(string companionPath)
     {
@@ -164,6 +181,7 @@ public static class CompanionOwnership
 
     private static void WriteStamps(string companionPath, Dictionary<string, string> stamps)
     {
+        ProjectFolderLayout.MetadataDirectory(ProjectFolderLayout.RootForArtifact(companionPath));
         AtomicFile.WriteAllText(StampPathFor(companionPath),
             JsonSerializer.Serialize(new StampFile { Version = 1, Files = stamps }, JsonOptions));
     }

@@ -14,15 +14,14 @@ public sealed record GhostGemPlan(IChartAction? Action, int Gems, int TemplatesM
 }
 
 /// <summary>
-/// GHOST GEMS: a fret the hand HOLDS but does not play, charted the way Editor on
+/// GHOST GEMS: a fret the hand holds without sounding it at the opening onset, the way Editor on
 ///     Fire charts it. EOF keeps a ghost bitmask on each note (<c>song.h:200</c>) and, on
 ///     Rocksmith export, writes a partially ghosted chord's chord tag from a ghost-less clone
 ///     and its handshape tag from the full shape (<c>rs.c:2369-2420</c>,
 ///     <c>eof_is_partially_ghosted</c> at <c>rs.c:110</c>), so in the game the ghost exists
-///     ONLY in the hand shape's chord template. DotCharter stores it exactly there: a
-///     <see cref="ChordTemplate" /> whose <see cref="ChordTemplate.GhostMask" /> marks the held
-///     strings, named by the <see cref="HandShape" /> over the sound. A ghost is therefore
-///     never a note — nothing plays, scores, detects or exports it as one, by construction.
+///     only in the hand-shape grip. DotCharter stores its frets on the <see cref="ChordTemplate" />
+///     and the mask on the <see cref="HandShape" /> or its template. A ghost gem has no independent
+///     sound. A later pick on the same string is still a note.
 ///     <para>
 ///         Every verb here is PURE: it builds one composite action and commits nothing. A grip
 ///         is never rewritten in place (templates are shared): the bar is repointed at a
@@ -100,7 +99,7 @@ public static class GhostGems
 
             var next = chord.Clone();
             next.ChordNotes = [.. kept.Select(cn => cn.Clone())];
-            var current = ChordTemplateResolver.FindById(arrangement, chord.TemplateId);
+            var current = arrangement.FindChordTemplate(chord.TemplateId);
             next.TemplateId = ChordTemplateResolver.Resolve(arrangement, ChordTemplateResolver.FretsOf(next),
                 ArpeggioFlavour.Of(current), null, work.Minted).Id;
             chordTargets.Add(chord);
@@ -121,7 +120,7 @@ public static class GhostGems
 
     /// <summary>
     ///     Marks <paramref name="stringIndex" /> of <paramref name="shape" />'s grip as a ghost
-    ///     gem (or a played fret again): the inspector's per-string checkbox. Null-plan when the
+    ///     gem or clears its ghost flag through the inspector's per-string checkbox. Null-plan when the
     ///     grip has no fret on that string or already says so.
     /// </summary>
     public static GhostGemPlan SetGhost(Arrangement arrangement, ChartLevel level, HandShape shape, int stringIndex,
@@ -130,8 +129,8 @@ public static class GhostGems
         ArgumentNullException.ThrowIfNull(arrangement);
         ArgumentNullException.ThrowIfNull(level);
         ArgumentNullException.ThrowIfNull(shape);
-        var current = ChordTemplateResolver.FindById(arrangement, shape.TemplateId);
-        if (current == null || !current.Frets.ContainsKey(stringIndex) || current.IsGhost(stringIndex) == ghost)
+        var current = arrangement.FindChordTemplate(shape.TemplateId);
+        if (current == null || !current.Frets.ContainsKey(stringIndex) || shape.IsGhost(current, stringIndex) == ghost)
             return GhostGemPlan.Nothing;
 
         var work = new Work(arrangement, level);
@@ -154,10 +153,10 @@ public static class GhostGems
         foreach (var shape in shapes)
         {
             if (!level.HandShapes.Contains(shape)) continue;
-            var current = ChordTemplateResolver.FindById(arrangement, shape.TemplateId);
-            if (current is not { GhostMask: not 0 }) continue;
+            var current = arrangement.FindChordTemplate(shape.TemplateId);
+            if (current == null || shape.GetGhostMask(current) == 0) continue;
             var bar = work.BarFor(shape);
-            foreach (var stringIndex in current.Frets.Keys.Where(current.IsGhost).ToList())
+            foreach (var stringIndex in current.Frets.Keys.Where(s => shape.IsGhost(current, s)).ToList())
             {
                 bar.SetGhost(stringIndex, false);
                 gems++;
@@ -215,70 +214,65 @@ public static class GhostGems
     }
 
     /// <summary>
-    /// Import: Rocksmith content states a ghost gem only as a hand-shape template
-    ///     fret nothing under the shape plays. Marks those strings ghost on every template
-    ///     that (a) no CHORD names — a chord's template is what it plays, so a shared one is
-    ///     never reinterpreted — and (b) leaves the string unplayed at that fret under EVERY
-    ///     hand shape naming it that covers any sound at all. Returns how many templates
-    ///     changed. Runs at import, before any undo history exists, so it writes in place.
+    ///     Infer Rocksmith XML ghosts from each bar's first covered pitched onset.
+    ///     Soundless bars carry no evidence for inference.
     /// </summary>
     public static int MarkUnplayedHandShapeFrets(Arrangement arrangement)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
-        var namedByChord = new HashSet<int>();
-        foreach (var level in arrangement.Levels)
-        {
-            foreach (var chord in level.Chords)
-            {
-                if (chord.TemplateId >= 0) namedByChord.Add(chord.TemplateId);
-            }
-        }
-
         var byId = ChordTemplateResolver.IndexById(arrangement.ChordTemplates);
-        var unplayed = new Dictionary<ChordTemplate, int>(ReferenceEqualityComparer.Instance);
+        var changed = 0;
         foreach (var level in arrangement.Levels)
         {
+            var onsets = HeldNoteGrips.Strikes(level).Where(s => s.Fret >= 0).ToLookup(s => s.Position);
+            var positions = onsets.Select(g => g.Key).Order().ToArray();
             foreach (var shape in level.HandShapes)
             {
                 if (!byId.TryGetValue(shape.TemplateId, out var template)) continue;
-                if (namedByChord.Contains(template.Id) || template.GhostMask != 0 || template.Frets.Count == 0) continue;
+                if (shape.GhostMask.HasValue || template.GhostMask != 0) continue;
+                var first = Array.BinarySearch(positions, shape.Position);
+                if (first < 0) first = ~first;
+                if (first == positions.Length || !shape.Covers(positions[first])) continue;
 
-                var covered = false;
-                var played = 0;
-                foreach (var note in level.Notes)
-                {
-                    if (!shape.Covers(note.Position)) continue;
-                    covered = true;
-                    if (template.GetFret(note.StringIndex) == note.Fret) played |= ChordTemplate.GhostBit(note.StringIndex);
-                }
-
-                foreach (var chord in level.Chords)
-                {
-                    if (!shape.Covers(chord.Position)) continue;
-                    covered = true;
-                    foreach (var chordNote in chord.ChordNotes)
-                    {
-                        if (template.GetFret(chordNote.StringIndex) == chordNote.Fret)
-                            played |= ChordTemplate.GhostBit(chordNote.StringIndex);
-                    }
-                }
-
-                if (!covered) continue;
-                var mask = unplayed.TryGetValue(template, out var was) ? was : AllStrings(template);
-                unplayed[template] = mask & ~played;
+                var mask = OpeningGhostMask(template, onsets[positions[first]]);
+                if (mask == 0) continue;
+                shape.GhostMask = mask;
+                changed++;
             }
-        }
-
-        var changed = 0;
-        foreach (var (template, mask) in unplayed)
-        {
-            if (mask == 0) continue;
-            template.GhostMask = mask;
-            changed++;
         }
 
         return changed;
     }
+
+    /// <summary>Grip frets absent from the first pitched onset the bar covers.</summary>
+    public static int OpeningGhostMask(ChartLevel level, HandShape shape, ChordTemplate template)
+    {
+        var opening = HeldNoteGrips.Strikes(level).Where(s => s.Fret >= 0 && shape.Covers(s.Position))
+            .GroupBy(s => s.Position).MinBy(g => g.Key);
+        return opening == null ? AllStrings(template) : OpeningGhostMask(template, opening);
+    }
+
+    /// <summary>Indexes pitched onsets for a batch of grip edits.</summary>
+    public static Func<HandShape, ChordTemplate, int> IndexOpeningGhostMasks(ChartLevel level,
+        Func<Chord, int, int, int>? projectChordFret = null)
+    {
+        var onsets = HeldNoteGrips.Strikes(level).Where(s => s.Fret >= 0).ToLookup(s => s.Position);
+        var positions = onsets.Select(g => g.Key).Order().ToArray();
+        return (shape, template) =>
+        {
+            var first = Array.BinarySearch(positions, shape.Position);
+            if (first < 0) first = ~first;
+            if (first == positions.Length || !shape.Covers(positions[first])) return AllStrings(template);
+            var opening = onsets[positions[first]];
+            return OpeningGhostMask(template, projectChordFret == null ? opening : opening.Select(strike =>
+                strike.Source is Chord chord
+                    ? strike with { Fret = projectChordFret(chord, strike.StringIndex, strike.Fret) }
+                    : strike));
+        };
+    }
+
+    private static int OpeningGhostMask(ChordTemplate template, IEnumerable<HeldNoteGrips.Strike> onset) =>
+        AllStrings(template) & ~HeldNoteGrips.StruckStrings(onset.Where(s => template.GetFret(s.StringIndex) == s.Fret));
 
     private static int AllStrings(ChordTemplate template)
     {
@@ -315,7 +309,7 @@ public static class GhostGems
             {
                 // A fresh bar over a chord holds the chord's whole grip, fingered as the chord's
                 // own template fingers it when that template describes the chord.
-                var own = ChordTemplateResolver.FindById(arrangement, seedChord.TemplateId);
+                var own = arrangement.FindChordTemplate(seedChord.TemplateId);
                 foreach (var cn in seedChord.ChordNotes)
                 {
                     grip.Frets[cn.StringIndex] = cn.Fret;
@@ -338,8 +332,9 @@ public static class GhostGems
                 if (ReferenceEquals(bar.Shape, shape)) return bar;
             }
 
-            var current = ChordTemplateResolver.FindById(arrangement, shape.TemplateId);
+            var current = arrangement.FindChordTemplate(shape.TemplateId);
             var grip = current?.Clone() ?? new ChordTemplate();
+            grip.GhostMask = shape.GetGhostMask(grip);
             var made = new Bar(shape, current, grip, isNew: false);
             _bars.Add(made);
             return made;
@@ -372,10 +367,12 @@ public static class GhostGems
                     bar.Shape.Name = target.Name;
                     _added.Add(bar.Shape);
                 }
-                else if (bar.Shape.TemplateId != target.Id)
+                else if (bar.Shape.TemplateId != target.Id || bar.Shape.GhostMask.HasValue)
                 {
                     var next = bar.Shape.Clone();
                     next.TemplateId = target.Id;
+                    // Keep the full grip selected after the last opening ghost is cleared.
+                    next.GhostMask = target.GhostMask == 0 ? 0 : null;
                     _rebound.Add(bar.Shape);
                     _reboundNew.Add(next);
                 }

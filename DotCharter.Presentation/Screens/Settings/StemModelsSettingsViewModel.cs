@@ -220,7 +220,7 @@ public sealed partial class StemModelsSettingsViewModel : ObservableObject,
         catch (Exception ex)
         {
             CustomModelImportStatus = _localization.Format("Settings_Ai_MatchModel_Failed", ex.Message);
-            _logger?.Warning(AppLogCategory.Audio, $"Custom model import failed for '{url}': {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, $"Custom model import failed for '{url}'", ex);
         }
     }
 
@@ -250,12 +250,12 @@ public sealed partial class StemModelsSettingsViewModel : ObservableObject,
         catch (CheckpointConsentException ex)
         {
             CustomModelImportStatus = _localization["Settings_StemModels_PickleChanged"];
-            _logger?.Warning(AppLogCategory.Audio, $"Checkpoint import refused for '{url}': {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, $"Checkpoint import refused for '{url}'", ex);
         }
         catch (Exception ex)
         {
             CustomModelImportStatus = _localization.Format("Settings_Ai_MatchModel_Failed", ex.Message);
-            _logger?.Warning(AppLogCategory.Audio, $"Checkpoint import failed for '{url}': {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, $"Checkpoint import failed for '{url}'", ex);
         }
         finally
         {

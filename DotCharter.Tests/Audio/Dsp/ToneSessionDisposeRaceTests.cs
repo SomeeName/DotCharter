@@ -26,6 +26,7 @@ public sealed class ToneSessionDisposeRaceTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         var chain = new FakeDspChainService();
         var config = new FakeConfigurationService();
+        config.Update(c => c.DefaultTonePresetId = "");
         var store = new ProfileToneRigStore(_dir);
 
         using var entered = new ManualResetEventSlim(false);
@@ -52,28 +53,31 @@ public sealed class ToneSessionDisposeRaceTests : IDisposable
             logger: null, pollInterval: TimeSpan.FromMilliseconds(20));
         session.Start();
         chain.AttachEngine(0x1000);
-        chain.AddNode("overdrive");
+        Assert.NotNull(chain.AddNode("overdrive"));
 
         Assert.True(entered.Wait(TimeSpan.FromSeconds(60), ct), "the persist timer never fired");
 
-        // Dispose while the timer callback is parked inside its snapshot.
-        using var disposeStarted = new ManualResetEventSlim(false);
-        var disposeTask = Task.Run(() =>
+        // Dispose while the timer callback is parked inside its snapshot. #607:
+        // Dispose runs on a thread of its own and must be SEEN parked before the
+        // callback is released; a fixed delay did not prove it had even started.
+        var exitedWhenDisposeReturned = false;
+        var dispose = ParkedCall.Start(() =>
         {
-            disposeStarted.Set();
             session.Dispose();
-            // What Dispose saw when it returned: had the in-flight persist finished?
-            return Volatile.Read(ref callbackExited) == 1;
-        }, ct);
+            exitedWhenDisposeReturned = Volatile.Read(ref callbackExited) == 1;
+        });
 
-        disposeStarted.Wait(ct);
-        // Give an unguarded Dispose every chance to return early before the
-        // callback is released — a delay, not an assertion; with the wait in
-        // place the result below cannot depend on it.
-        await Task.Delay(100, ct);
-        release.Set();
+        try
+        {
+            Assert.True(await dispose.WaitUntilParkedOrReturnedAsync("Dispose()", TimeSpan.FromSeconds(60), ct),
+                "Dispose returned while a timer-thread persist was still inside its snapshot");
+        }
+        finally
+        {
+            release.Set();
+        }
 
-        Assert.True(await disposeTask.WaitAsync(TimeSpan.FromSeconds(60), ct),
-            "Dispose returned while a timer-thread persist was still inside its snapshot");
+        await dispose.Returned.WaitAsync(TimeSpan.FromSeconds(60), ct);
+        Assert.True(exitedWhenDisposeReturned, "Dispose returned before the in-flight persist had left its snapshot");
     }
 }

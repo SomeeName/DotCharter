@@ -66,6 +66,15 @@ public sealed class DevBuildModuleTests : IDisposable
         Assert.Contains(reason, got[3]);
     }
 
+    [Theory]
+    [InlineData("Idle")]
+    [InlineData("Normal")]
+    [InlineData("AboveNormal")]
+    public void SetCpuPlan_PutsTheProcessAtBelowNormal_EvenFromIdle(string start) =>
+        Assert.Equal("BelowNormal", Run(
+            $"$self = [Diagnostics.Process]::GetCurrentProcess()\n$self.PriorityClass = '{start}'\n"
+            + "$null = Set-DevCpuPlan -Quiet\n[Diagnostics.Process]::GetCurrentProcess().PriorityClass"));
+
     [Fact]
     public void CpuPlan_HasNoGameDetectionAndNoHalfCoresSwitch()
     {
@@ -91,7 +100,7 @@ public sealed class DevBuildModuleTests : IDisposable
     {
         var code = Code(Read("tools", "agent", "Merge-Train.ps1"));
         var calls = Regex.Matches(code, @"-File \$gate[^\r\n]*");
-        Assert.Equal(4, calls.Count);
+        Assert.Equal(2, calls.Count);
         Assert.All(calls, c => Assert.Contains("@cpuSwitch", c.Value));
         Assert.Contains("@(if ($cpuPlan.Name -eq 'all') { '-AllCores' })", code);
     }
@@ -104,6 +113,57 @@ public sealed class DevBuildModuleTests : IDisposable
         var code = Code(Read("tools", "release", script));
         Assert.DoesNotContain("Enable-IncrementalDevBuild", code);
         Assert.DoesNotContain("SuppressImplicitGitSourceLink", code);
+    }
+
+    // ---- the gate's result folder (#613): pure, so every case injects its paths ----
+
+    [Fact]
+    public void GateResults_TwoCheckoutsWithTheSameLeaf_GetDifferentFolders() =>
+        Assert.Equal("False|True|True", Run(
+            "$a = Get-GateCheckoutRoot -RepoRoot 'C:\\one\\worktrees\\w1' -TempRoot 'C:\\t'\n"
+            + "$b = Get-GateCheckoutRoot -RepoRoot 'D:\\two\\worktrees\\w1' -TempRoot 'C:\\t'\n"
+            + "'{0}|{1}|{2}' -f ($a -eq $b), $a.StartsWith('C:\\t\\dotcharter-gate-w1-'), $b.StartsWith('C:\\t\\dotcharter-gate-w1-')"));
+
+    [Fact]
+    public void GateResults_TheSameCheckoutSpelledDifferently_GetsOneFolder() =>
+        Assert.Equal("True", Run(
+            "$a = Get-GateCheckoutRoot -RepoRoot 'C:\\Repo\\Worktrees\\W1\\' -TempRoot 'C:\\t'\n"
+            + "$b = Get-GateCheckoutRoot -RepoRoot 'c:\\repo\\worktrees\\w1' -TempRoot 'C:\\t'\n"
+            + "$a -eq $b"));
+
+    [Fact]
+    public void GateResults_TwoRunsInOneCheckout_WriteToDifferentFolders() =>
+        Assert.Equal("False|True", Run(
+            "$now = [datetime]'2026-11-14T10:00:00'\n"
+            + "$r1 = New-GateRunId -Now $now -ProcessId 100\n$r2 = New-GateRunId -Now $now -ProcessId 200\n"
+            + "$a = Get-GateResultRoot -RepoRoot 'C:\\r' -TempRoot 'C:\\t' -RunId $r1\n"
+            + "$b = Get-GateResultRoot -RepoRoot 'C:\\r' -TempRoot 'C:\\t' -RunId $r2\n"
+            + "'{0}|{1}' -f ($a -eq $b), ((Split-Path -Parent $a) -eq (Split-Path -Parent $b))"));
+
+    [Fact]
+    public void GateResults_AnExplicitResultsDir_IsTheCallers() =>
+        Assert.Equal(@"C:\r\out\gate", Run("Get-GateResultRoot -RepoRoot 'C:\\r' -ResultsDir 'out\\gate' -TempRoot 'C:\\t' -RunId 'x'"));
+
+    [Fact]
+    public void GateResults_PruningKeepsTheNewestTenRuns() =>
+        Assert.Equal("20261101-000000-1,20261102-000000-1", Run(
+            "$names = 1..12 | ForEach-Object { '202611{0:D2}-000000-1' -f $_ }\n"
+            + "(Select-StaleGateRuns -Names $names -Keep 10) -join ','"));
+
+    [Fact]
+    public void GateResults_PruningSparesTheCurrentRunEvenWhenItIsTheOldest() =>
+        Assert.Equal("20261102-000000-1", Run(
+            "$names = 1..12 | ForEach-Object { '202611{0:D2}-000000-1' -f $_ }\n"
+            + "(Select-StaleGateRuns -Names $names -Keep 10 -Except '20261101-000000-1') -join ','"));
+
+    [Fact]
+    public void InvokeGate_WritesItsLogsThroughTheSharedResultFolder()
+    {
+        var code = Code(Read("tools", "agent", "Invoke-Gate.ps1"));
+        Assert.Contains("Get-GateResultRoot", code);
+        Assert.Contains("New-GateRunId", code);
+        Assert.DoesNotContain("'dotcharter-gate'", code);
+        Assert.DoesNotContain("\"dotcharter-gate-$", code);
     }
 
     private static string Read(params string[] parts) => File.ReadAllText(Path.Combine([TestPaths.RepoRoot(), .. parts]));

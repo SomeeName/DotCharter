@@ -1,5 +1,6 @@
 // RigDockUnit: the CABINET projection - the two IR slots, the voicing row and the response plot (its mic: RigDockUnit.Mic.cs).
 
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Tone.UI.Controls.Dsp;
 
@@ -46,4 +47,23 @@ public sealed partial class RigDockUnit
     }
 
     public bool HasAnyImpulseResponse => CabinetSlots.Any(s => s.File is { HasValue: true });
+
+    /// <summary>Keeps "Use built-in cabinet" live: an IR loaded or cleared in either
+    /// slot (picker, preset, undo) re-reads <see cref="HasAnyImpulseResponse" />.
+    /// Weakly held, like every subscription this per-selection dock makes.</summary>
+    private void WatchImpulseResponses()
+    {
+        var weak = new WeakReference<RigDockUnit>(this);
+        foreach (var file in CabinetSlots.Select(s => s.File).OfType<PedalStringParamViewModel>())
+        {
+            PropertyChangedEventHandler? changed = null;
+            changed = (_, e) =>
+            {
+                if (!weak.TryGetTarget(out var unit)) file.PropertyChanged -= changed;
+                else if (e.PropertyName == nameof(PedalStringParamViewModel.HasValue))
+                    unit.OnPropertyChanged(nameof(HasAnyImpulseResponse));
+            };
+            file.PropertyChanged += changed;
+        }
+    }
 }

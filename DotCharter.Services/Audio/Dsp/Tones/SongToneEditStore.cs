@@ -407,7 +407,7 @@ public sealed class SongToneEditStore
             $"{Path.GetFileNameWithoutExtension(path)}.corrupt-{DateTime.UtcNow:yyyyMMdd-HHmmssfff}.json");
         try
         {
-            File.Move(path, aside, true);
+            AtomicFile.MoveAside(path, aside);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

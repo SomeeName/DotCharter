@@ -58,9 +58,11 @@ internal sealed class FakeReampEngine : IReampEngine
     public bool RefuseLoads { get; set; }
     public bool Remembered { get; set; }
     public List<double> Seeks { get; } = [];
+    public Action? BeforeLoad { get; set; }
 
     public bool LoadTake(int player, float[] mono, int sampleRate, bool loop)
     {
+        BeforeLoad?.Invoke();
         if (RefuseLoads || !IsReampAvailable) return false;
         LoadedTake = mono;
         LoadedRate = sampleRate;

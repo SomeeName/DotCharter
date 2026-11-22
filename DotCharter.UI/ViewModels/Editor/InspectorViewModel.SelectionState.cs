@@ -170,6 +170,7 @@ public partial class InspectorViewModel
 
     private void NotifySelectionKindChanged()
     {
+        Sections.HasChords = SelectedChords.Count > 0;
         Sections.Kind = SelectionKind;
         OnPropertyChanged(nameof(SelectionKind));
         OnPropertyChanged(nameof(ShowShapeCard));

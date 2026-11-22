@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspectorVm="using:DotCharter.UI.ViewModels.Editor.Inspector"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundBulkValuesView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Selection page's VALUES card (#751 P4, design D's "Values for Apply"): which selected sounds, the
+         sustain, six on/off values (a click cycles Keep, On, Off; the caption says what the selection holds now,
+         or what Apply writes) and the mute, strum, legato, harmonic and slide choices (Keep first). All STAGED
+         (Staged.Selection) and written by the footer's Apply; a chord whose strings disagree reads mixed. -->
+    <StackPanel Spacing="3">
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                   Text="{localization:Loc Inspector_Staged_ValuesTitle}" />
+        <!-- The picker takes the room; the sustain box only what a length needs ("1/16", "2"). -->
+        <Grid x:Name="BulkSourceRow" ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource SpaceXs}">
+            <ComboBox x:Name="BulkSourcePicker" HorizontalAlignment="Stretch" SelectedIndex="{Binding Staged.Selection.SourceIndex}"
+                      AutomationProperties.Name="{localization:Loc Inspector_Staged_BulkSource}"
+                      ToolTip.Tip="{localization:Loc Inspector_Staged_BulkSource}">
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_NotesAndChords}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_Notes}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_Chords}" />
+            </ComboBox>
+            <TextBox x:Name="BulkSustainField" Grid.Column="1" MinWidth="56" Text="{Binding Staged.Selection.SustainText, UpdateSourceTrigger=LostFocus}"
+                     PlaceholderText="{Binding Staged.Selection.SustainHint}"
+                     AutomationProperties.Name="{localization:Loc Inspector_NoteLength}"
+                     ToolTip.Tip="{localization:Loc Inspector_Staged_BulkSustainTip}" />
+        </Grid>
+        <ItemsControl x:Name="BulkFlagButtons" ItemsSource="{Binding Staged.Selection.Flags}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="3" ColumnSpacing="{StaticResource SpaceXs}" RowSpacing="3" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="inspectorVm:StagedBulkFlag">
+                    <ToggleButton Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle" HorizontalAlignment="Stretch"
+                                  Padding="3,0" IsChecked="{Binding IsStaged, Mode=OneWay}"
+                                  Command="{Binding $parent[ItemsControl].((viewModels:InspectorViewModel)DataContext).Staged.Selection.CycleFlagCommand, FallbackValue={x:Null}}"
+                                  CommandParameter="{Binding Flag}"
+                                  AutomationProperties.Name="{Binding Name}" ToolTip.Tip="{Binding Tip}">
+                        <TextBlock Text="{Binding Caption}" TextTrimming="CharacterEllipsis" />
+                    </ToggleButton>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <UniformGrid Columns="2" ColumnSpacing="{StaticResource SpaceXs}">
+            <ComboBox x:Name="BulkMutePicker" HorizontalAlignment="Stretch" SelectedIndex="{Binding Staged.Selection.MuteIndex}"
+                      AutomationProperties.Name="{localization:Loc Inspector_Mute}" ToolTip.Tip="{localization:Loc Inspector_Staged_BulkMuteTip}">
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_KeepMute}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_NoMute}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_FullMute}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_PalmMute}" />
+            </ComboBox>
+            <ComboBox x:Name="BulkStrumPicker" HorizontalAlignment="Stretch" SelectedIndex="{Binding Staged.Selection.StrumIndex}"
+                      AutomationProperties.Name="{localization:Loc Inspector_Strum}" ToolTip.Tip="{localization:Loc Inspector_Staged_BulkStrumTip}">
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_KeepStrum}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_None}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_PickDown}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_PickUp}" />
+            </ComboBox>
+        </UniformGrid>
+        <UniformGrid Columns="2" RowSpacing="3" ColumnSpacing="{StaticResource SpaceXs}">
+            <ComboBox x:Name="BulkLegatoPicker" HorizontalAlignment="Stretch" SelectedIndex="{Binding Staged.Selection.LegatoIndex}"
+                      AutomationProperties.Name="{localization:Loc Inspector_Hopo}" ToolTip.Tip="{localization:Loc Inspector_Hopo}">
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_KeepLegato}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_NoLegato}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_HammerOn}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_PullOff}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_Tap}" />
+            </ComboBox>
+            <ComboBox x:Name="BulkHarmonicPicker" HorizontalAlignment="Stretch" SelectedIndex="{Binding Staged.Selection.HarmonicIndex}"
+                      AutomationProperties.Name="{localization:Loc Inspector_Harmonic}" ToolTip.Tip="{localization:Loc Inspector_Harmonic}">
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_KeepHarmonic}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_NoHarmonic}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_Normal}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_Pinch}" />
+            </ComboBox>
+            <ComboBox x:Name="BulkSlidePicker" HorizontalAlignment="Stretch" SelectedIndex="{Binding Staged.Selection.SlideIndex}"
+                      AutomationProperties.Name="{localization:Loc Inspector_Slide}" ToolTip.Tip="{localization:Loc Inspector_Staged_BulkSlideTip}">
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_KeepSlide}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_NoSlide}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_SlideUp1}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_SlideUp2}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_SlideDown1}" />
+                <ComboBoxItem Content="{localization:Loc Inspector_Staged_SlideDown2}" />
+            </ComboBox>
+        </UniformGrid>
+        <TextBlock x:Name="BulkMixedSummary" Text="{Binding Staged.Selection.MixedSummary}" TextWrapping="Wrap"
+                   IsVisible="{Binding Staged.Selection.HasMixed}"
+                   FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextMuted}" />
+        <TextBlock Text="{Binding BendSummary}" IsVisible="{Binding ShowBendSummary}" TextWrapping="Wrap"
+                   FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextMuted}" />
+    </StackPanel>
+</UserControl>

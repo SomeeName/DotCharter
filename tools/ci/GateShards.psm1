@@ -410,7 +410,74 @@ function Get-FreePhysicalMemoryBytes {
     return [long]$os.FreePhysicalMemory * 1KB
 }
 
+<#
+    THE LANES AT ONCE (#325). A merge train runs the default gate, the headless
+    suite and the release lane side by side, out of ONE budget of testhosts.
+    The lanes do not weigh alike - a headless testhost runs its classes one
+    after the other, a gate testhost runs them in parallel - so the split is
+    measured per lane, in tools/ci/lane-weights.json: Seconds, the lane's
+    testhost-seconds (its shards' wall times summed, in one run of all the
+    lanes together), and Longest, its longest class (one serial chain, a floor
+    no shard count beats).
+
+    Get-LaneShardCounts gives every lane one shard, then deals each further
+    shard to the lane whose estimate max(Seconds / n, Longest) is the highest
+    AND drops by the extra shard (ties: the earlier lane). A shard that cannot
+    shorten its lane is not dealt, so fewer than $Testhosts may come back.
+    Returns an ordered name -> shard count.
+#>
+function Get-LaneShardCounts([object[]]$Lanes, [int]$Testhosts) {
+    if ($Testhosts -lt $Lanes.Count) { throw "Testhosts ($Testhosts) must be at least the lane count ($($Lanes.Count))." }
+    $counts = [ordered]@{}
+    foreach ($l in $Lanes) { $counts[$l.Name] = 1 }
+    for ($left = $Testhosts - $Lanes.Count; $left -gt 0; $left--) {
+        $best = $null; $bestEstimate = -1.0
+        foreach ($l in $Lanes) {
+            $n = $counts[$l.Name]
+            $estimate = [math]::Max([double]$l.Seconds / $n, [double]$l.Longest)
+            $next = [math]::Max([double]$l.Seconds / ($n + 1), [double]$l.Longest)
+            if ($next -lt $estimate -and $estimate -gt $bestEstimate) { $best = $l; $bestEstimate = $estimate }
+        }
+        if (-not $best) { break }
+        $counts[$best.Name]++
+    }
+    return $counts
+}
+
+# The measured lanes (name -> Seconds, Longest). A missing file or lane weighs
+# every lane alike (Seconds 1, Longest 0): an even split, never a lost lane.
+function Read-LaneWeights([string]$Path, [string[]]$Names) {
+    $json = $null
+    if ($Path -and (Test-Path -LiteralPath $Path)) { $json = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json }
+    $lanes = @()
+    foreach ($n in $Names) {
+        $entry = if ($json -and $json.lanes) { $json.lanes.$n } else { $null }
+        $seconds = if ($entry) { [double]$entry.seconds } else { 1.0 }
+        $longest = if ($entry) { [double]$entry.longest } else { 0.0 }
+        $lanes += [pscustomobject]@{ Name = $n; Seconds = $seconds; Longest = $longest }
+    }
+    return , $lanes
+}
+
+# Rewrites the file from one run of the lanes together: $Lanes = Name, Seconds, Longest.
+function Write-LaneWeights([object[]]$Lanes, [string]$Path) {
+    $sorted = @($Lanes | Sort-Object Name)
+    $lines = @()
+    for ($i = 0; $i -lt $sorted.Count; $i++) {
+        $sep = if ($i -lt $sorted.Count - 1) { ',' } else { '' }
+        $lines += ('    "{0}": {{ "seconds": {1}, "longest": {2} }}{3}' -f $sorted[$i].Name, (Format-Seconds $sorted[$i].Seconds), (Format-Seconds $sorted[$i].Longest), $sep)
+    }
+    $header = @(
+        '{',
+        '  "_comment": "Per lane, from ONE run of the lanes together (tools/agent/Invoke-Gate.ps1 -Gate -Headless -ReleaseLane -UpdateShardWeights, as Merge-Train.ps1 runs them): seconds = the shards'' wall times summed, longest = the longest class. Splits the testhosts between the lanes (tools/ci/GateShards.psm1 Get-LaneShardCounts); a stale file costs balance, never coverage.",',
+        '  "lanes": {'
+    )
+    $text = (($header + $lines + @('  }', '}')) -join "`n") + "`n"
+    [System.IO.File]::WriteAllText($Path, $text, (New-Object System.Text.UTF8Encoding($false)))
+}
+
 Export-ModuleMember -Function Read-TrxClassDurations, Get-ClassDurationSummary, Format-ClassDurationSummary, `
     Write-ClassDurationJson, Read-GateShardWeights, Write-GateShardWeights, New-GateShardPlan, `
     Read-TestListingNames, Compare-TestListings, Get-GateConcurrencyDecision, Get-FreePhysicalMemoryBytes, `
-    Read-ReleaseLane, Get-TestLaneFilter, New-ReleaseLaneShardPlan, Write-ReleaseLaneWeights
+    Read-ReleaseLane, Get-TestLaneFilter, New-ReleaseLaneShardPlan, Write-ReleaseLaneWeights, `
+    Get-LaneShardCounts, Read-LaneWeights, Write-LaneWeights

@@ -10,22 +10,22 @@
       "callouts": [
         {
           "title": "Preset",
-          "text": "The tone's name; click it to browse your tones. Save keeps it, the arrows step through your presets.",
+          "text": "The tone's name. Click it to browse your tones. Save keeps it, and the arrows step through your presets.",
           "name": "RigBrowseButton"
         },
         {
           "title": "Compare",
-          "text": "Two versions of the tone, A and B, to switch between while you play.",
+          "text": "Two versions of the tone, A and B, that you can switch between while you play.",
           "name": "RigSceneStrip"
         },
         {
           "title": "Bypass",
-          "text": "Your dry guitar, to hear what the rig adds.",
+          "text": "Plays your dry guitar, so you can hear what the rig adds.",
           "name": "RigMasterBypass"
         },
         {
           "title": "Scenes",
-          "text": "Up to eight variations of the tone, switched by click or MIDI.",
+          "text": "Up to eight variations of the tone. You switch them by click or MIDI.",
           "side": "bottom",
           "name": "RigSceneSlots"
         },
@@ -36,12 +36,12 @@
         },
         {
           "title": "Signal chain",
-          "text": "The units in the order your signal passes them. Drag to reorder, click to edit.",
+          "text": "The units in the order your signal passes them. Drag to reorder them and click to edit.",
           "name": "RigBoard"
         },
         {
           "title": "Routing",
-          "text": "Series, two lanes or three lanes in parallel.",
+          "text": "Series, two lanes in parallel or three lanes in parallel.",
           "name": "RigRoutingRail"
         },
         {
@@ -80,7 +80,7 @@
         },
         {
           "title": "Collections",
-          "text": "Your tones, the song's tones and the presets, by group.",
+          "text": "Your tones, the song's tones and the presets, sorted by group.",
           "name": "RigBrowserRail"
         },
         {
@@ -99,7 +99,7 @@
       "callouts": [
         {
           "title": "Tabs",
-          "text": "RigLab is the rig on its own, without the editor: Rig, Plugins, Audio and AI.",
+          "text": "RigLab is the rig on its own, without the editor. Its tabs are Rig, Plugins, Audio and AI.",
           "name": "RigLabTabs"
         },
         {
@@ -118,7 +118,7 @@
       "callouts": [
         {
           "title": "Plugins",
-          "text": "VST3 plugins in the rig's chain.",
+          "text": "The VST3 plugins in the rig's chain.",
           "name": "RigLabVstRack"
         },
         {
@@ -142,7 +142,7 @@
         },
         {
           "title": "Tone3000",
-          "text": "Signs in to download community amp captures.",
+          "text": "Signs you in to download community amp captures.",
           "name": "AiTone3000Card"
         }
       ]

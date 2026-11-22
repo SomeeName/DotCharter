@@ -50,7 +50,6 @@ namespace DotCharter.Services.Editing.FretAnchors;
 // replaced, so an uncapoed chart generates byte-identical anchors.
 public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationService, IStruckSounds
 {
-    private const int MaxFret = 22;
     private const int BaseAnchorWidth = 4;
 
     private const int NotFree = SoundAtPosition.NotFree;
@@ -143,7 +142,12 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
     // inspector rule L02, so the floor is capo + 1. Clamped into [1, MaxFret]
     // so an absurd capo can never invert a Math.Clamp(value, min, max) range
     // (which throws when min > max). Capo 0 ⇒ 1 ⇒ the pre-capo behaviour.
-    private int MinAnchorFret => Math.Clamp(_capo + 1, 1, MaxFret);
+    private int MinAnchorFret => FretLimits.MinAnchorFret(_capo);
+
+    // The highest root for an anchor of this width: the whole span has to stay on the
+    // neck (FretLimits.MaxAnchorFretFor), never below the floor, so the Clamp cannot invert.
+    private int ClampRoot(int root, int width)
+        => Math.Clamp(root, MinAnchorFret, Math.Max(MinAnchorFret, FretLimits.MaxAnchorFretFor(width)));
 
     // ATTRIBUTION SIDE-CHANNEL (measurement only, null in production). When a
     // dictionary is assigned, every EMITTED anchor records which priority rule
@@ -316,7 +320,7 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
 
         var width = Math.Max(runWidth, maxF - root + 1);
         width = Math.Max(BaseAnchorWidth, width);
-        return new AnchorHint(Math.Clamp(root, MinAnchorFret, MaxFret), width);
+        return new AnchorHint(ClampRoot(root, width), width);
     }
 
     // Highest fret the group has actually PLAYED so far. Not the anchor's
@@ -640,7 +644,7 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
     // (HandAbandonment). Null holds the current anchor.
     private int? AbandonmentRoot(FractionalPosition position, int currentFret) =>
         _struckOrdinal.TryGetValue(position, out var ordinal)
-            ? HandAbandonment.Root(this, ordinal, currentFret, _bassArrangement, MinAnchorFret, MaxFret)
+            ? HandAbandonment.Root(this, ordinal, currentFret, _bassArrangement, MinAnchorFret, Math.Max(MinAnchorFret, FretLimits.MaxAnchorFretFor(BaseAnchorWidth)))
             : null;
 
     // ─── Slide handling ─────────────────────────────────────────────────────
@@ -660,7 +664,7 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
             if (sound.UnpitchedSlide) continue;
             var destPos = position + sound.Sustain;
             var shift = sound.SlideTo!.Value - sound.Fret;
-            var destRoot = Math.Clamp(sourceAnchor.AnchorFret + shift, MinAnchorFret, MaxFret);
+            var destRoot = ClampRoot(sourceAnchor.AnchorFret + shift, BaseAnchorWidth);
             if (!pending.TryGetValue(destPos, out var existing) || destRoot < existing)
                 pending[destPos] = destRoot;
         }

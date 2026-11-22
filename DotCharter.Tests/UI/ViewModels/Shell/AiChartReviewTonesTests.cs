@@ -106,6 +106,23 @@ public sealed class AiChartReviewTonesTests
         Assert.True(_audition.Stops > 0);
     }
 
+    /// <summary>#593: P auditions the keyboard's current row, as its Audition button does.</summary>
+    [Fact]
+    public async Task P_auditions_the_current_tone_row_from_the_keyboard()
+    {
+        await Ask();
+        var item = _run.Review!.Tones[1];
+        Assert.False(_vm.AuditionCurrent(), "nothing is current yet, so P must stay the editor's");
+
+        _vm.Step(1);
+        _vm.Step(1);
+
+        Assert.Same(_vm.Rows[1], _vm.CurrentRow);
+        Assert.True(_vm.AuditionCurrent());
+        Assert.Equal(("Clean", item.ProposedJson, 8000.0, 13000.0), Assert.Single(_audition.Starts));
+        Assert.False(_f.History.CanUndo);
+    }
+
     [Fact]
     public async Task A_tone_with_no_body_in_the_project_yet_cannot_be_auditioned_and_says_why()
     {

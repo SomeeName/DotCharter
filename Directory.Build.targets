@@ -77,10 +77,12 @@
     packages.lock.json covers the release publish graph; pinned here, that lock
     does not go stale each time a machine or CI picks up a newer SDK patch.
     Every project here targets net10.0, so the pin updates each TFM's entry alike.
-    Bump this with the lock files (dotnet restore - -force-evaluate).
+    Keep the pin at or below the .NET runtime running the default test gate.
+    Install the matching .NET SDK before raising it, and regenerate the lock files
+    with the plugin-free force-evaluate restore in tools/release/README.md.
   -->
   <PropertyGroup>
-    <DotCharterPublishToolchainVersion>10.0.13</DotCharterPublishToolchainVersion>
+    <DotCharterPublishToolchainVersion>10.0.14</DotCharterPublishToolchainVersion>
   </PropertyGroup>
   <ItemGroup>
     <KnownILLinkPack Update="Microsoft.NET.ILLink.Tasks" ILLinkPackVersion="$(DotCharterPublishToolchainVersion)" />

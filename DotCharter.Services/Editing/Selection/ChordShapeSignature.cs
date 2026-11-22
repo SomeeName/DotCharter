@@ -73,9 +73,7 @@ public sealed class ChordShapeSignature
         var frets = new Dictionary<int, int>(chord.ChordNotes.Count);
         foreach (var chordNote in chord.ChordNotes) frets[chordNote.StringIndex] = chordNote.Fret;
 
-        var template = arrangement == null
-            ? null
-            : ChordTemplateResolver.FindById(arrangement, chord.TemplateId);
+        var template = arrangement?.FindChordTemplate(chord.TemplateId);
 
         return new ChordShapeSignature(frets, FingersOf(template, frets));
     }
@@ -90,7 +88,7 @@ public sealed class ChordShapeSignature
         ArgumentNullException.ThrowIfNull(handShape);
         if (arrangement == null) return null;
 
-        var template = ChordTemplateResolver.FindById(arrangement, handShape.TemplateId);
+        var template = arrangement.FindChordTemplate(handShape.TemplateId);
         if (template == null || template.Frets.Count == 0) return null;
 
         var frets = new Dictionary<int, int>(template.Frets);

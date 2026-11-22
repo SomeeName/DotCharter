@@ -1,4 +1,5 @@
 ﻿using DotCharter.Core.Domain.Primitives;
+using DotCharter.Core.Utilities;
 
 namespace DotCharter.Core.Domain.Guitar;
 
@@ -24,5 +25,5 @@ public class BendValue : IComparable<BendValue>
         return Position.CompareTo(other.Position);
     }
 
-    public BendValue Clone() => new(Position, Step);
+    public BendValue Clone() => ChartSnapshotIdentities.RememberNestedClone(this, new BendValue(Position, Step));
 }

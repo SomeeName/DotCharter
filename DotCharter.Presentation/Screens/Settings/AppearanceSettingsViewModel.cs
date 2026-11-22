@@ -29,7 +29,10 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
     private const string Prefix = "appearance.";
     private const string ColorKeyPrefix = Prefix + "color.";
 
-    /// <summary>The persisted values the footer counts. The colours are not among them: a colour edit is reverted, not counted.</summary>
+    /// <summary>The colour overrides Save would write, counted as one setting beside <see cref="Tracked" />.</summary>
+    internal const string ColorsKey = Prefix + "colors";
+
+    /// <summary>The persisted values the footer counts; the colour overrides count too, under <see cref="ColorsKey" />.</summary>
     private static readonly string[] Tracked = [nameof(SelectedStringPaletteIndex), nameof(UiScaleChoiceIndex), nameof(AnimatedHomeHero)];
 
     private readonly IConfigurationService _config;
@@ -43,6 +46,9 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
     private string _uiScaleReadout = "";
     private bool _suppressPreview;
     private bool _previewDirty;
+
+    // The string colours the colour count holds while a palette governs them: as they were when it was picked.
+    private string _heldStringColors = "";
 
     [ObservableProperty] private int _selectedStringPaletteIndex;
     [ObservableProperty] private int _uiScaleChoiceIndex;
@@ -63,10 +69,11 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
         _session = session;
         _logger = logger;
         UiScaleChoices = scale.ChoiceLabels();
-        StringPaletteChoices = [.. theme.StringPalettes.Select(p => p.DisplayName)];
+        StringPaletteChoices = [.. theme.StringPalettes.Select(p => localization[p.NameKey])];
         BuildColorGroups();
         ResetColorsCommand = new RelayCommand(ResetColors);
         _changes.TrackProperties(this, Prefix, Tracked, () => OnPropertyChanged(nameof(UnsavedSettings)));
+        _changes.Track(ColorsKey, ColorOverridesSignature);
         _changes.Rebaseline();
         _session.PropertyChanged += OnSessionChanged;
     }
@@ -145,8 +152,7 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
         var config = _config.LoadAppConfig();
         var paletteId = SelectedPaletteId();
         config.StringColorPresetId = paletteId;
-        var paletteActive = !string.Equals(paletteId, _theme.DefaultStringPaletteId, StringComparison.OrdinalIgnoreCase);
-        var overrides = new Dictionary<string, string>(_theme.FreeFormOverrides(excludeStringTokens: paletteActive));
+        var overrides = new Dictionary<string, string>(PendingColorOverrides());
         config.ThemeColorOverrides = overrides;
 
         // Under Auto the manual factor is left as it was, so choosing a percentage
@@ -172,6 +178,7 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
 
     public void Rebaseline()
     {
+        _heldStringColors = "";
         _changes.Rebaseline();
         OnPropertyChanged(nameof(UnsavedSettings));
     }
@@ -190,6 +197,12 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
     }
 
     public void Dispose() => _session.PropertyChanged -= OnSessionChanged;
+
+    /// <summary>Leaving the default palette drops its string colours from Save; that is the palette's change, not a colour edit.</summary>
+    partial void OnSelectedStringPaletteIndexChanging(int value)
+    {
+        if (!PaletteActive()) _heldStringColors = StringColorsSignature();
+    }
 
     partial void OnSelectedStringPaletteIndexChanged(int value)
     {
@@ -211,7 +224,27 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
         _previewDirty = true;
         _theme.ResetColors(SelectedPaletteId());
         RefreshColors();
+        OnPropertyChanged(nameof(UnsavedSettings));
     }
+
+    /// <summary>The free-form colours Save writes: the string colours belong to an active palette, not to the overrides.</summary>
+    private IReadOnlyDictionary<string, string> PendingColorOverrides() => _theme.FreeFormOverrides(excludeStringTokens: PaletteActive());
+
+    private bool PaletteActive() =>
+        !string.Equals(SelectedPaletteId(), _theme.DefaultStringPaletteId, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The free-form colours, then the string colours: live under the default palette, held under another.</summary>
+    private string ColorOverridesSignature() =>
+        Signature(_theme.FreeFormOverrides(excludeStringTokens: true)) + "|" + (PaletteActive() ? _heldStringColors : StringColorsSignature());
+
+    private string StringColorsSignature()
+    {
+        var freeForm = _theme.FreeFormOverrides(excludeStringTokens: true);
+        return Signature(_theme.FreeFormOverrides(excludeStringTokens: false).Where(kv => !freeForm.ContainsKey(kv.Key)));
+    }
+
+    private static string Signature(IEnumerable<KeyValuePair<string, string>> overrides) =>
+        string.Join(";", overrides.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => kv.Key + "=" + kv.Value.ToUpperInvariant()));
 
     /// <summary>A backup import replaced the persisted theme; the palette on screen is the one it replaced.</summary>
     private void OnSessionChanged(object? sender, PropertyChangedEventArgs e)
@@ -221,6 +254,9 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
         _theme.ApplyPersisted(config.ThemeColorOverrides, config.StringColorPresetId);
         _previewDirty = false;
         RefreshColors();
+        _heldStringColors = "";
+        _changes.Rebaseline(ColorsKey);
+        OnPropertyChanged(nameof(UnsavedSettings));
     }
 
     private void RestorePersistedTheme()
@@ -237,6 +273,7 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
         _theme.SetHex(tokenKey, hex);
         var row = _groups.SelectMany(g => g.Rows).First(r => r.TokenKey == tokenKey);
         row.Refresh(row.Name, _theme.GetHex(tokenKey));
+        OnPropertyChanged(nameof(UnsavedSettings));
     }
 
     private void BuildColorGroups()

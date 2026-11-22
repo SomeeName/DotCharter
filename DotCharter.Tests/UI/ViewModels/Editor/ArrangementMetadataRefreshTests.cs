@@ -62,7 +62,8 @@ public sealed class ArrangementMetadataRefreshTests
                 CurrentChart = project.Chart
             };
             Settings = new ArrangementSettingsViewModel(
-                new ChartEditDialogServices(Editor, history, State, config, FakeLocalization.English(), logger));
+                new ChartEditDialogServices(Editor, history, State, config, FakeLocalization.English(), logger),
+                new DotCharter.Tests.Infrastructure.FakeReferencePitchService());
         }
 
         public ProjectState State { get; } = new();

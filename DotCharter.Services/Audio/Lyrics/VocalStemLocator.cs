@@ -1,3 +1,5 @@
+using DotCharter.Services.Audio.StemSeparation;
+
 namespace DotCharter.Services.Audio.Lyrics;
 
 /// <summary>
@@ -13,7 +15,9 @@ namespace DotCharter.Services.Audio.Lyrics;
 ///         mix is used everywhere else.
 ///     </para>
 ///     <para>
-///         Stems live in a <c>stems/</c> folder beside the song audio — written
+///         Project stem declarations take precedence, using the mixer's path resolver.
+///         Without a declared list, search <c>stems/</c> beside the project first,
+///         then beside the song audio — written
 ///         there both by a fresh separation and by the never-regenerate
 ///         <c>StemCacheCoordinator</c> expanding a cached archive, so a song
 ///         separated in an earlier session is found after a restart.
@@ -21,7 +25,36 @@ namespace DotCharter.Services.Audio.Lyrics;
 /// </summary>
 public static class VocalStemLocator
 {
-    /// <summary>The folder separation writes into, beside the song audio.</summary>
+    /// <summary>The declared voice, resolved exactly as the mixer resolves it. An absent
+    /// declaration or missing file never authorizes an unrelated folder guess.</summary>
+    public static string? TryLocate(string projectDir, string legacyDir, IReadOnlyList<Stem> stems,
+        IList<string>? warnings = null)
+    {
+        foreach (var stem in stems)
+        {
+            var fileName = Path.GetFileNameWithoutExtension(stem.Path);
+            if (IsInstrumentalStemName(stem.Name) || IsInstrumentalStemName(fileName)) continue;
+            if (!IsVocalStemName(stem.Name) && !IsVocalStemName(fileName)) continue;
+            var path = StemFolderProbe.ResolveStemPath(projectDir, legacyDir, stem.Path);
+            if (!File.Exists(path)) continue;
+            if (stem.Offset == 0) return path;
+            warnings?.Add(StemTimeBase.DescribeOffset(path, stem.Offset));
+            return null;
+        }
+
+        return null;
+    }
+
+    private static bool IsInstrumentalStemName(string? bareName)
+    {
+        var name = bareName?.Trim().ToLowerInvariant() ?? "";
+        return name.Contains("no_vocal", StringComparison.Ordinal) ||
+               name.Contains("no-vocal", StringComparison.Ordinal) ||
+               name.Contains("novocal", StringComparison.Ordinal) ||
+               name.Contains("instrumental", StringComparison.Ordinal);
+    }
+
+    /// <summary>The folder separation writes into, beside the project or transient song audio.</summary>
     public const string StemsFolderName = "stems";
 
     /// <summary>
@@ -86,13 +119,7 @@ public static class VocalStemLocator
         // Some pipelines prefix the song or the model ("song_vocals", "htdemucs-vocals").
         // The complement never spells itself that way, but guard anyway — being
         // wrong here is silent, so the check is cheap insurance.
-        if (name.Contains("no_vocal", StringComparison.Ordinal) ||
-            name.Contains("no-vocal", StringComparison.Ordinal) ||
-            name.Contains("novocal", StringComparison.Ordinal) ||
-            name.Contains("instrumental", StringComparison.Ordinal))
-        {
-            return false;
-        }
+        if (IsInstrumentalStemName(name)) return false;
 
         return name.EndsWith("_vocals", StringComparison.Ordinal)
                || name.EndsWith("-vocals", StringComparison.Ordinal)
@@ -113,14 +140,26 @@ public static class VocalStemLocator
         try
         {
             var directory = Path.GetDirectoryName(Path.GetFullPath(mixAudioPath));
-            if (string.IsNullOrEmpty(directory)) return null;
+            return TryLocateInDirectory(directory);
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
+    /// <summary>Project output first, then the audio-side legacy output. Never separates audio.</summary>
+    public static string? TryLocate(string? mixAudioPath, string? projectDir) =>
+        TryLocateInDirectory(projectDir) ?? TryLocate(mixAudioPath);
+
+    private static string? TryLocateInDirectory(string? directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory)) return null;
+        try
+        {
             var stemsDirectory = Path.Combine(directory, StemsFolderName);
             if (!Directory.Exists(stemsDirectory)) return null;
-
-            var picked = PickVocalStem(
-                Directory.EnumerateFiles(stemsDirectory, "*", SearchOption.TopDirectoryOnly));
-
+            var picked = PickVocalStem(Directory.EnumerateFiles(stemsDirectory, "*", SearchOption.TopDirectoryOnly));
             return picked != null && File.Exists(picked) ? picked : null;
         }
         catch

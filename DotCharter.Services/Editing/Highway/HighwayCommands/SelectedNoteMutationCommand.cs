@@ -25,6 +25,7 @@ namespace DotCharter.Services.Editing.Highway.HighwayCommands;
 /// </summary>
 internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
 {
+    private readonly bool _followStringMoveAnchors;
     private readonly string _mergeVerb;
     private readonly Action<Chord>? _mutateChord;
     private readonly Action<GuitarNote>? _mutateNote;
@@ -40,12 +41,14 @@ internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
         SelectedSoundMutationTargets targets,
         Action<GuitarNote>? mutateNote,
         Action<Chord>? mutateChord,
-        string mergeVerb = "")
+        string mergeVerb = "",
+        bool followStringMoveAnchors = false)
     {
         _targets = targets;
         _mutateNote = mutateNote;
         _mutateChord = mutateChord;
         _mergeVerb = mergeVerb;
+        _followStringMoveAnchors = followStringMoveAnchors;
     }
 
     public bool Execute(IHistoryService history)
@@ -56,9 +59,11 @@ internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
 
         var actions = new List<IChartAction>();
         var createdTemplates = new List<ChordTemplate>();
+        var projectedNotes = _followStringMoveAnchors ? new Dictionary<GuitarNote, GuitarNote>() : null;
+        var projectedChords = _followStringMoveAnchors ? new Dictionary<Chord, Chord>() : null;
 
         if (notes.Count > 0 && _mutateNote != null)
-            actions.Add(BuildNoteMutation(notes));
+            actions.Add(BuildNoteMutation(notes, projectedNotes));
 
         // The "Apply to" ladder took a technique verb past the selection: the inspector's
         // own per-level write, so the same chords change and one undo puts every level back.
@@ -69,7 +74,7 @@ internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
         }
         else if (chords.Count > 0 && _mutateChord != null)
         {
-            AddChordMutation(actions, chords, createdTemplates);
+            AddChordMutation(actions, chords, createdTemplates, projectedChords);
         }
 
         // Minted templates go in FIRST: MutateChordsAction's post-execute is the
@@ -89,6 +94,12 @@ internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
         if (createdTemplates.Count > 0 && _targets.Arrangement is { } arrangement)
             actions.Insert(0, new AddChordTemplatesAction(arrangement.ChordTemplates, createdTemplates));
 
+        if (projectedNotes != null && projectedChords != null)
+        {
+            var anchors = StringMoveAnchors.BuildAction(_targets, projectedNotes, projectedChords, createdTemplates, _mergeVerb);
+            if (anchors != null) actions.Add(anchors);
+        }
+
         if (actions.Count == 0) return false;
         // A fret or string change can leave the chord's old template with no user: it leaves in the same node.
         return history.Do(StrandedShapes.Wrap(_targets.Arrangement,
@@ -101,7 +112,8 @@ internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
     ///     verb. The clones it produces are what that overload builds internally
     ///     anyway, so this is the same action either way.
     /// </summary>
-    private MutateNotesAction BuildNoteMutation(IReadOnlyList<GuitarNote> notes)
+    private MutateNotesAction BuildNoteMutation(IReadOnlyList<GuitarNote> notes,
+        IDictionary<GuitarNote, GuitarNote>? projectedNotes)
     {
         var oldStates = new List<GuitarNote>(notes.Count);
         var newStates = new List<GuitarNote>(notes.Count);
@@ -112,6 +124,7 @@ internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
             var newState = note.Clone();
             _mutateNote!(newState);
             newStates.Add(newState);
+            projectedNotes?.Add(note, newState);
         }
 
         return new MutateNotesAction(_targets.Notes, notes, oldStates, newStates,
@@ -119,7 +132,7 @@ internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
     }
 
     private void AddChordMutation(ICollection<IChartAction> actions, List<Chord> chords,
-        IList<ChordTemplate> createdTemplates)
+        IList<ChordTemplate> createdTemplates, IDictionary<Chord, Chord>? projectedChords)
     {
         var oldStates = new List<Chord>(chords.Count);
         var newStates = new List<Chord>(chords.Count);
@@ -145,6 +158,7 @@ internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
 
             oldStates.Add(oldState);
             newStates.Add(newState);
+            projectedChords?.Add(chords[i], newState);
         }
 
         actions.Add(new MutateChordsAction(_targets.Chords, chords, oldStates, newStates,

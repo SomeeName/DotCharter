@@ -24,6 +24,34 @@ public sealed class RscpMigrationTests : IDisposable
     public void Dispose() => BestEffortDelete.Directory(_dir);
 
     [Fact]
+    public void Legacy_vocals_are_recovered_on_the_project_grid_and_survive_save()
+    {
+        var path = WriteLegacyProject(declaredVersion: 2, arrangementFile: "lead.xml");
+        var doc = XDocument.Load(path);
+        doc.Descendants("vocals").Remove();
+        doc.Save(path);
+        File.WriteAllText(Path.Combine(_dir, "vocals.xml"), """
+            <vocals count="1">
+              <vocal time="1.234" length="0.567" lyric="hello+" note="64"/>
+            </vocals>
+            """);
+        var serializer = new RscpChartSerializer();
+
+        var recovered = serializer.Load(path);
+        var lyric = Assert.Single(Assert.Single(Assert.Single(recovered.VocalTracks).Phrases).Lyrics);
+        Assert.Equal(1234, TimelineMath.ToWholeMs(lyric.Position.GetPositionMs(recovered.Beats)));
+        Assert.Equal(1801, TimelineMath.ToWholeMs(lyric.EndPosition.GetPositionMs(recovered.Beats)));
+        Assert.Equal(2, lyric.Position.BeatId);
+
+        var saved = Path.Combine(_dir, "recovered.rscp");
+        serializer.Save(saved, recovered);
+        var reloaded = serializer.Load(saved);
+        var savedLyric = Assert.Single(Assert.Single(Assert.Single(reloaded.VocalTracks).Phrases).Lyrics);
+        Assert.Equal(1234, TimelineMath.ToWholeMs(savedLyric.Position.GetPositionMs(reloaded.Beats)));
+        Assert.Equal(1801, TimelineMath.ToWholeMs(savedLyric.EndPosition.GetPositionMs(reloaded.Beats)));
+    }
+
+    [Fact]
     public void A_v2_project_recovers_its_arrangements_from_the_sibling_xml()
     {
         var rscp = WriteLegacyProject(declaredVersion: 2, arrangementFile: "1_Lead_x_RS2.xml");

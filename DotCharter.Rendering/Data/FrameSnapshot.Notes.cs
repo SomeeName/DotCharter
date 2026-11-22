@@ -65,7 +65,7 @@ public partial class FrameSnapshot
                 Fret = (byte)n.Fret, SlideTo = (byte)(n.SlideTo ?? 0), Mute = (byte)n.Mute, Hopo = (byte)n.Hopo,
                 Harmonic = (byte)n.Harmonic, BassPicking = (byte)n.BassPicking,
                 Flags = flags,
-                BendOffset = bOffset, BendCount = (byte)bCount
+                BendOffset = bOffset, BendCount = bCount
             };
         }
     }
@@ -166,7 +166,7 @@ public partial class FrameSnapshot
                     StringIndex = (byte)cn.StringIndex, Fret = (byte)Math.Max(0, cn.Fret), Sustain = endMs - timeMs,
                     Mute = (byte)cn.Mute, Hopo = (byte)cn.Hopo, Harmonic = (byte)cn.Harmonic,
                     BassPicking = (byte)cn.BassPicking,
-                    SlideTo = (byte)(cn.SlideTo ?? 0), Flags = noteFlags, BendOffset = bOffset, BendCount = (byte)bCount
+                    SlideTo = (byte)(cn.SlideTo ?? 0), Flags = noteFlags, BendOffset = bOffset, BendCount = bCount
                 };
             }
         }

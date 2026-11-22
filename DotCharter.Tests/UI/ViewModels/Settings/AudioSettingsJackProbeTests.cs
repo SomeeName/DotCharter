@@ -61,6 +61,94 @@ public sealed class AudioSettingsJackProbeTests
         Assert.Equal(6, vm.InputJackOptions.Count(o => o.Jack >= 0));
     }
 
+    /// <summary>
+    ///     A slow read of capture device A that lands AFTER device B was picked
+    ///     must not list A's jacks for B: the newer device's probe wins whatever
+    ///     order the two reads finish in.
+    /// </summary>
+    [Fact]
+    public async Task ALateProbeOfTheDeviceLeft_DoesNotOverwriteTheCurrentDevicesJacks()
+    {
+        var config = new FakeConfigurationService();
+        var engine = new FakeAudioPlaybackService { InputDeviceChannelCount = 6 };
+        var ui = new HeldPostsDispatcher();
+        var vm = new AudioSettingsViewModel(engine, engine, config, new ProjectState(),
+            new AudioSettingsWindows(new DotCharter.Tests.Presentation.Settings.GraphicsStubs.FakeWizard()), ui, FakeLocalization.English());
+        vm.AsioInputDevicesList.Add("Interface A");
+        vm.AsioInputDevicesList.Add("Interface B");
+        vm.SelectedAsioInputIndex = -1;
+
+        vm.SelectedAsioInputIndex = 0;            // device A: six jacks
+        await vm.JackCountProbe;
+        engine.InputDeviceChannelCount = 3;
+        vm.SelectedAsioInputIndex = 1;            // device B: three jacks
+        await vm.JackCountProbe;
+        await ui.WaitForHeldAsync(2);
+
+        ui.RunNewestFirst();                      // B's read lands, then A's late one
+
+        Assert.Equal(3, vm.InputDeviceJackCount);
+    }
+
+    /// <summary>
+    ///     WASAPI input with an ASIO capture device listed too: filling the ASIO row while the rows
+    ///     load must not read that device, and no read started before the rows' own jack count may
+    ///     land after it.
+    /// </summary>
+    [Fact]
+    public async Task Open_OnWasapiInput_TheListedAsioDevice_DoesNotReplaceTheWasapiJacks()
+    {
+        var config = new FakeConfigurationService();
+        var c = config.AppConfig;
+        c.InputDriver = "WASAPI";
+        c.AsioInputDeviceName = "Focusrite USB ASIO";
+        c.WasapiInputDeviceName = "Line In (Focusrite)";
+        var engine = new FakeAudioPlaybackService();
+        engine.WasapiInputDevices.Add("Line In (Focusrite)");
+        engine.AsioInputDevicesInstalled.Add("Focusrite USB ASIO");
+        engine.InputDeviceChannelCountByDriver["WASAPI"] = 2;
+        engine.InputDeviceChannelCountByDriver["ASIO"] = 8;
+        var ui = new HeldPostsDispatcher();
+        var vm = NewVm(engine, config, ui);
+
+        vm.Open();
+        await vm.DeviceProbe;
+        ui.RunNewestFirst();                      // the rows land with the WASAPI device's own jack count
+        await vm.JackCountProbe;
+        ui.RunNewestFirst();                      // then whatever read the rows started
+
+        Assert.Equal(2, vm.InputDeviceJackCount);
+        Assert.DoesNotContain(engine.InputChannelCountProbes, p => p.Driver == "ASIO");
+    }
+
+    /// <summary>A read of the ASIO device still running when the input driver turns to WASAPI is
+    /// dropped: the WASAPI device's jacks are listed, whichever read lands last.</summary>
+    [Fact]
+    public async Task SwitchingTheInputDriver_DropsTheOldDriversLateRead()
+    {
+        var engine = new FakeAudioPlaybackService();
+        engine.InputDeviceChannelCountByDriver["ASIO"] = 8;
+        engine.InputDeviceChannelCountByDriver["WASAPI"] = 2;
+        var ui = new HeldPostsDispatcher();
+        var vm = NewVm(engine, new FakeConfigurationService(), ui);
+        vm.SelectedInputDriver = "ASIO";
+        vm.AsioInputDevicesList.Add("Interface A");
+        vm.WasapiInputDevicesList.Add("Line In");
+        vm.SelectedWasapiInputIndex = 0;          // not the selected driver: nothing is read
+        vm.SelectedAsioInputIndex = 0;            // the ASIO read starts
+        await vm.JackCountProbe;
+
+        vm.SelectedInputDriver = "WASAPI";
+        await vm.JackCountProbe;
+        ui.RunNewestFirst();                      // the WASAPI read, then the late ASIO one
+
+        Assert.Equal(2, vm.InputDeviceJackCount);
+    }
+
+    private static AudioSettingsViewModel NewVm(FakeAudioPlaybackService engine, FakeConfigurationService config, HeldPostsDispatcher ui) =>
+        new(engine, engine, config, new ProjectState(),
+            new AudioSettingsWindows(new DotCharter.Tests.Presentation.Settings.GraphicsStubs.FakeWizard()), ui, FakeLocalization.English());
+
     private static (AudioSettingsViewModel Vm, FakeAudioPlaybackService Engine) NewVm(string inputDriver)
     {
         var config = new FakeConfigurationService();

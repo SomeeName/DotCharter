@@ -15,7 +15,7 @@ public sealed class ChordTemplateEditorLabelsTests
     [Fact]
     public void EachPicker_HasAVisibleLabel_InItsRow()
     {
-        var doc = XDocument.Load(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Panels", "ChordTemplateEditorView.axaml")));
+        var doc = XDocument.Load(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor", "Inspector", "SoundLibraryTemplateView.axaml")));
         var grid = doc.Descendants(Av + "Grid").Single(g => (string?)g.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "ChordTemplatePickers");
 
         var combos = grid.Elements(Av + "ComboBox").ToList();
@@ -38,7 +38,7 @@ public sealed class ChordTemplateEditorLabelsTests
     [Fact]
     public void TheNopToggle_IsBoundAndNamed()
     {
-        var doc = XDocument.Load(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Panels", "ChordTemplateEditorView.axaml")));
+        var doc = XDocument.Load(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Editor", "Inspector", "SoundLibraryTemplateView.axaml")));
         var toggle = doc.Descendants(Av + "CheckBox")
             .Single(c => (string?)c.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "NopToggle");
 

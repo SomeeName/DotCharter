@@ -9,6 +9,19 @@ public interface IConfigurationService : IRigConfigService
 
     void IRigConfigService.UpdateRigConfig(Action<RigConfig> mutate) => Update(config => mutate(config));
 
+    bool IRigConfigService.UpdateRigConfigAndWrite(Action<RigConfig> mutate) => UpdateAndWrite(config => mutate(config));
+
+    /// <summary>
+    ///     <see cref="Update" />, then the coalesced write performed before returning: false
+    ///     when <c>appconfig.json</c> did not take the change. A service with no file has
+    ///     nothing to fail, which is what this default answers.
+    /// </summary>
+    bool UpdateAndWrite(Action<AppConfig> mutate)
+    {
+        Update(mutate);
+        return true;
+    }
+
     AppConfig LoadAppConfig();
     void SaveAppConfig(AppConfig config);
 

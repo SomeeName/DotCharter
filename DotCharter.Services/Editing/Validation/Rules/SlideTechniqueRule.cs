@@ -1,3 +1,5 @@
+using DotCharter.Services.Export.Rocksmith;
+
 namespace DotCharter.Services.Editing.Validation.Rules;
 
 /// <summary>
@@ -10,7 +12,7 @@ namespace DotCharter.Services.Editing.Validation.Rules;
 public sealed class SlideTechniqueRule : IArrangementRule
 {
     /// <summary>Rocksmith 2014 renders bends up to 3 whole steps (Step is in half steps).</summary>
-    private const double MaxBendHalfSteps = 6.0;
+    private const double MaxBendHalfSteps = RsBendStrength.Maximum;
 
     /// <summary>RS2014 crashes on 33+ bend points per note (EOF guard).</summary>
     private const int MaxBendPoints = 32;
@@ -41,37 +43,31 @@ public sealed class SlideTechniqueRule : IArrangementRule
                 {
                     if (note.Fret <= capo)
                     {
-                        issues.Add(ArrangementIssues.Note(ArrangementIssueType.SlideFromOpenString, note, timeMs,
-                            OpenStringMessage(capo,
-                                "Slide starts on an open string — slides need a fretted start.",
-                                "the slide has no stopped fret to start from")));
+                        issues.Add(OpenString(ArrangementIssueType.SlideFromOpenString, note, timeMs, capo,
+                            "Validation_SlideFromOpenString", "Validation_SlideFromOpenString_Capo"));
                     }
                     else if (slideTo == note.Fret)
                     {
                         issues.Add(ArrangementIssues.Note(ArrangementIssueType.SlideEndsOnStartFret, note, timeMs,
-                            $"Slide ends on its own start fret ({note.Fret}) — it will not export as a slide."));
+                            "Validation_SlideEndsOnStartFret", args: [note.Fret]));
                     }
 
                     if (!note.LinkNext && !note.UnpitchedSlide)
                     {
                         issues.Add(ArrangementIssues.Note(ArrangementIssueType.PitchedSlideNotLinked, note, timeMs,
-                            "Pitched slide is not linked to a following note (link-next is off)."));
+                            "Validation_PitchedSlideNotLinked"));
                     }
                 }
 
                 switch (note.Hopo)
                 {
                     case HopoType.HammerOn when note.Fret <= capo:
-                        issues.Add(ArrangementIssues.Note(ArrangementIssueType.HammerOnOnOpenString, note, timeMs,
-                            OpenStringMessage(capo,
-                                "Hammer-on onto an open string is not playable.",
-                                "there is no fret to hammer onto")));
+                        issues.Add(OpenString(ArrangementIssueType.HammerOnOnOpenString, note, timeMs, capo,
+                            "Validation_HammerOnOnOpenString", "Validation_HammerOnOnOpenString_Capo"));
                         break;
                     case HopoType.Tap when note.Fret <= capo:
-                        issues.Add(ArrangementIssues.Note(ArrangementIssueType.TapOnOpenString, note, timeMs,
-                            OpenStringMessage(capo,
-                                "Tap on an open string is not playable.",
-                                "there is no fret to tap")));
+                        issues.Add(OpenString(ArrangementIssueType.TapOnOpenString, note, timeMs, capo,
+                            "Validation_TapOnOpenString", "Validation_TapOnOpenString_Capo"));
                         break;
                     case HopoType.PullOff:
                         CheckPullOff(context, level, i, note, timeMs, issues);
@@ -92,8 +88,7 @@ public sealed class SlideTechniqueRule : IArrangementRule
                     if (cn.SlideTo is { } slideTo && slideTo == cn.Fret && cn.Fret > capo)
                     {
                         issues.Add(ArrangementIssues.Chord(ArrangementIssueType.SlideEndsOnStartFret, chord, timeMs,
-                            $"Chord slide ends on its own start fret ({cn.Fret}) on string {cn.StringIndex + 1}.",
-                            cn.StringIndex));
+                            "Validation_ChordSlideEndsOnStartFret", cn.StringIndex, [cn.Fret, cn.StringIndex + 1]));
                     }
 
                     CheckBends(cn.BendValues, timeMs, issues, chord: chord, stringIndex: cn.StringIndex);
@@ -105,10 +100,11 @@ public sealed class SlideTechniqueRule : IArrangementRule
     /// <summary>The uncapoed sentence verbatim, or the capo'd one that says WHY
     /// a fretted-looking number is an open string — a charter reading
     /// "open string" against a note on fret 3 needs the capo named.</summary>
-    private static string OpenStringMessage(int capo, string plain, string because) =>
+    private static ArrangementIssue OpenString(ArrangementIssueType type, GuitarNote note, double timeMs, int capo,
+        string plainKey, string capoKey) =>
         capo > 0
-            ? $"This string is played open (stopped by the capo at fret {capo}), so {because}."
-            : plain;
+            ? ArrangementIssues.Note(type, note, timeMs, capoKey, args: [capo])
+            : ArrangementIssues.Note(type, note, timeMs, plainKey);
 
     private static void CheckPullOff(
         ArrangementValidationContext context, ChartLevel level, int noteIndex, GuitarNote note, double timeMs,
@@ -139,12 +135,12 @@ public sealed class SlideTechniqueRule : IArrangementRule
         if (previousFret == null)
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.PullOffWithoutPrecedingNote, note, timeMs,
-                "Pull-off has no preceding note on the same string."));
+                "Validation_PullOffWithoutPrecedingNote"));
         }
         else if (previousFret <= note.Fret)
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.PullOffOntoHigherOrEqualFret, note, timeMs,
-                $"Pull-off from fret {previousFret} onto fret {note.Fret} — the target must be lower."));
+                "Validation_PullOffOntoHigherOrEqualFret", args: [previousFret.Value, note.Fret]));
         }
     }
 
@@ -156,18 +152,20 @@ public sealed class SlideTechniqueRule : IArrangementRule
 
         if (bends.Count > MaxBendPoints)
         {
-            issues.Add(new ArrangementIssue(ArrangementIssueType.TooManyBendPoints,
-                $"{bends.Count} bend points on one note — Rocksmith 2014 crashes above {MaxBendPoints}.",
-                timeMs, Note: note, Chord: chord, StringIndex: stringIndex ?? note?.StringIndex));
+            issues.Add(ArrangementIssues.Make(ArrangementIssueType.TooManyBendPoints,
+                "Validation_TooManyBendPoints",
+                timeMs, note: note, chord: chord, stringIndex: stringIndex ?? note?.StringIndex,
+                args: [bends.Count, MaxBendPoints]));
         }
 
         foreach (var bend in bends)
         {
             if (bend.Step > MaxBendHalfSteps)
             {
-                issues.Add(new ArrangementIssue(ArrangementIssueType.BendStrengthTooHigh,
-                    $"Bend of {bend.Step / 2.0:0.#} steps exceeds Rocksmith's 3-step maximum.",
-                    timeMs, Note: note, Chord: chord, StringIndex: stringIndex ?? note?.StringIndex));
+                issues.Add(ArrangementIssues.Make(ArrangementIssueType.BendStrengthTooHigh,
+                    "Validation_BendStrengthTooHigh",
+                    timeMs, note: note, chord: chord, stringIndex: stringIndex ?? note?.StringIndex,
+                    args: [bend.Step / 2.0]));
                 break;
             }
         }

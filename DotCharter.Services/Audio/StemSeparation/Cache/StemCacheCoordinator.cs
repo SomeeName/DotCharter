@@ -27,10 +27,21 @@ public sealed class StemCacheCoordinator
         _logger = logger;
     }
 
+    /// <summary>After a failed load, an archive left on disk still forbids
+    /// separation. A missing decoder or locked playback file is not a cache miss.</summary>
+    public bool HasArchive(StemCacheIdentity identity, string inputAudioPath)
+    {
+        var source = StemCacheSource.ResolveForStore(_store, identity, inputAudioPath);
+        if (source == null) return false;
+        return File.Exists(_store.ArchivePath(source.Key)) ||
+               source.Key.LegacyLibraryForm is { } legacy && File.Exists(_store.ArchivePath(legacy));
+    }
+
     /// <summary>
     ///     Expands cached stems for this exact song + audio into
     ///     <paramref name="playbackDir" />, or returns <c>null</c> when there is
-    ///     nothing usable cached and the caller must separate.
+    ///     no stems could be loaded. Before separating, the caller also checks
+    ///     <see cref="HasArchive" />: a retained archive forbids regeneration.
     ///
     ///     Never throws for cache problems, and deletes an archive ONLY when it is
     ///     provably corrupt (a partially written archive cannot be allowed to wedge
@@ -110,7 +121,7 @@ public sealed class StemCacheCoordinator
 
         try
         {
-            if (!_store.TryGetManifest(key, out var manifest))
+            if (!_store.TryGetManifest(key, out _))
             {
                 // An archive whose manifest cannot even be read is corrupt (a truncated
                 // write, a half-copied cache dir). Reporting a plain miss would leave it
@@ -126,29 +137,13 @@ public sealed class StemCacheCoordinator
                 return null;
             }
 
-            // The key samples the audio; the archive may record its WHOLE hash.
-            // When it does and today's audio hashes differently, the audio changed
-            // where the samples do not look (a same-length re-render with a fix in
-            // the middle), and these stems are of the old audio. That is a miss; the
-            // archive is kept until the new separation replaces it under this key.
-            //
-            // An archive ADOPTED onto a WEM key records the hash of the WAV it was
-            // separated from, which a re-decode may have changed by design; the
-            // adoption verified it, and the WEM key pins the source from then on.
-            var hashedPath = !source.SignsSourceWem
-                ? inputAudioPath
-                : string.Equals(manifest.Key, key.Canonical, StringComparison.Ordinal) ? source.SignedPath : null;
-            if (hashedPath != null && !string.IsNullOrEmpty(manifest.SourceFullHash))
+            // Adoption has resolved any historical name. Lookup, refusal and save
+            // now share the same full-hash collision decision without replacing a keeper.
+            var resolved = StemCacheSource.ResolveForStore(_store, identity, inputAudioPath);
+            if (resolved != null && resolved.Key != source.Key)
             {
-                var current = StemAudioSignature.ComputeFullFileHash(hashedPath);
-                if (current != null && !string.Equals(current, manifest.SourceFullHash, StringComparison.OrdinalIgnoreCase))
-                {
-                    _logger?.Info(AppLogCategory.Audio,
-                        $"Stem cache entry for '{identity.LogicalId ?? identity.SourceLabel}' (token={key.DirectoryToken}) " +
-                        "was made from different audio of the same length; treating it as a miss so the stems " +
-                        "are separated from the current audio.");
-                    return null;
-                }
+                key = resolved.Key;
+                if (!_store.TryGetManifest(key, out _)) return null;
             }
         }
         catch (Exception ex)
@@ -158,19 +153,14 @@ public sealed class StemCacheCoordinator
             // corruption — honour the "never throws for cache problems" contract
             // with a plain miss and leave the archive alone.
             _logger?.Warning(AppLogCategory.Audio,
-                $"Stem cache manifest probe failed ({ex.Message}); treating as a miss.");
+                "Stem cache manifest probe failed; treating as a miss.", ex);
             return null;
         }
 
         try
         {
             var cached = await _store.ExtractAsync(key, playbackDir, ct).ConfigureAwait(false);
-            if (cached.Count == 0) return null;
-
-            _logger?.Info(AppLogCategory.Audio,
-                $"Stem cache HIT for '{identity.LogicalId ?? identity.SourceLabel}' " +
-                $"(token={key.DirectoryToken}). Skipping separation.");
-            return cached;
+            return AcceptCacheHit(identity, key, cached);
         }
         catch (OperationCanceledException)
         {
@@ -183,7 +173,7 @@ public sealed class StemCacheCoordinator
             // destroy the durable never-regenerate copy over a transient/tooling
             // problem, so keep it and report a miss.
             _logger?.Warning(AppLogCategory.Audio,
-                $"Stem cache hit could not be decoded ({ex.Message}); keeping the archive.");
+                "Stem cache hit could not be decoded; keeping the archive.", ex);
             return null;
         }
         catch (Exception ex) when (IsArchiveCorruption(ex))
@@ -212,6 +202,17 @@ public sealed class StemCacheCoordinator
                 "keeping the archive and reporting a miss.");
             return null;
         }
+    }
+
+    private IReadOnlyList<StemTrack>? AcceptCacheHit(
+        StemCacheIdentity identity, StemCacheKey key, IReadOnlyList<StemTrack> cached)
+    {
+        if (cached.Count == 0) return null;
+
+        _logger?.Info(AppLogCategory.Audio,
+            $"Stem cache HIT for '{identity.LogicalId ?? identity.SourceLabel}' " +
+            $"(token={key.DirectoryToken}). Skipping separation.");
+        return cached;
     }
 
     /// <summary>

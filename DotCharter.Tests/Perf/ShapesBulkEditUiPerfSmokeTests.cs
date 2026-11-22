@@ -14,17 +14,19 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DotCharter.Tests.Perf;
 
 /// <summary>
-///     The Shapes panel's bulk edit over the app's own inspector view model and a real arrangement, driven
-///     with real pointer clicks: the tick shows on a hovered card and keeps its card open once ticked, the bulk
-///     bar names what is ticked, Merge into one and Delete wait in the one confirmation bar (its buttons laid
-///     out, the delete one in the danger tier) and one yes applies each as one undo step. Captures
+///     The Shapes panel's bulk edit over the app's own inspector view model and a real arrangement at 530 x 370 (inspector
+///     design D's primary size), driven with real pointer clicks: every line wears its tick, the Checked page names what
+///     is ticked and enables its verbs, Merge into one and Delete wait in that page's one confirmation bar (its buttons
+///     laid out, the delete one in the danger tier) and one yes applies each as one undo step. Captures
 ///     <c>shapes-bulk-*</c> with <c>DOTCHARTER_UI_SWEEP_DUMP=1</c>.
 /// </summary>
 [Collection("HeadlessUI")]
 public sealed class ShapesBulkEditUiPerfSmokeTests
 {
-    private const double Width = 600;
-    private const double Height = 524;
+    private const double Width = 530;
+    private const double Height = 370;
+
+    private static readonly string[] BulkVerbs = ["ShapesEditSelected", "ShapesMergeSelected", "ShapesDeleteSelected", "ShapesClearSelection"];
 
     [Fact]
     public Task TickedCards_OfferTheBulkBar_AndMergeAndDeleteWaitInTheBarForTheirYes() =>
@@ -51,37 +53,46 @@ public sealed class ShapesBulkEditUiPerfSmokeTests
                 window.Show();
                 Settle(window);
                 var tab = view.GetVisualDescendants().OfType<ShapesPanelView>().Single();
-                var selectionBar = tab.FindControl<Border>("ShapesSelectionBar")!;
-                Assert.False(selectionBar.IsEffectivelyVisible, "the bulk bar shows with nothing ticked");
+                var selectionBar = tab.FindControl<StackPanel>("ShapesSelectionBar")!;
+                Assert.All(BulkVerbs, name => Assert.False(tab.FindControl<Button>(name)!.IsEnabled, $"{name} is on with nothing ticked"));
 
                 // The three copies of the Am grip, ticked by real clicks on the tick of each hovered card.
                 foreach (var template in arrangement.ChordTemplates.Take(3)) TickByClick(window, tab, screen, template);
-                Assert.Equal("3 shapes selected · 5 chords", screen.SelectionText);
+                Assert.True(LocalizedText.Matches("Shapes_Selection", screen.SelectionText), $"the selection text '{screen.SelectionText}' is not Shapes_Selection's format");
+                ShowCard(tab, "ShapesCheckedCard");
+                Settle(window);
                 Assert.True(selectionBar.IsEffectivelyVisible && selectionBar.Bounds is { Width: > 1, Height: > 1 }, $"the bulk bar laid out {selectionBar.Bounds}");
-                foreach (var name in new[] { "ShapesEditSelected", "ShapesMergeSelected", "ShapesDeleteSelected", "ShapesClearSelection" })
+                foreach (var name in BulkVerbs)
                 {
                     var button = tab.FindControl<Button>(name)!;
                     Assert.True(button.IsEffectivelyVisible && button.IsEnabled && button.Bounds is { Width: > 1, Height: > 1 }, $"{name} laid out {button.Bounds}");
                 }
 
-                var tickedCards = Cards(tab).Where(c => c.Classes.Contains("Record")).ToList();
-                Assert.Equal(3, tickedCards.Count);
+                // By ROW: the list is virtual, so the three ticked cards need not all be in view at once.
+                var tickedRows = screen.AllRows.Where(r => r.IsSelected).ToList();
+                Assert.Equal(3, tickedRows.Count);
                 var away = tab.FindControl<TextBox>("ShapesSearch")!.TranslatePoint(new Point(4, 4), window)!.Value;
                 window.MouseMove(away);
                 Settle(window);
-                Assert.All(tickedCards, c =>
+                Assert.All(tickedRows, row =>
                 {
-                    var tick = c.GetVisualDescendants().OfType<CheckBox>().First(b => b.Name == "ShapeTick");
+                    var card = ShapesPanelCards.Card(tab, row);
+                    Assert.Contains("Record", card.Classes);
+                    var tick = card.GetVisualDescendants().OfType<CheckBox>().First(b => b.Name == "ShapeTick");
                     Assert.True(tick.IsEffectivelyVisible && tick.Bounds is { Width: > 1, Height: > 1 }, "a ticked card hid its tick");
                 });
+                tab.Scroll.Offset = default;
+                ShowCard(tab, "ShapesCheckedCard");
+                Settle(window);
                 NarrowWidthLayout.Capture(window, "shapes-bulk-ticked");
 
                 // Merge into one: the bar says what moves where, nothing changes until its yes.
                 Click(window, tab.FindControl<Button>("ShapesMergeSelected")!);
                 Settle(window);
-                var bar = tab.FindControl<Border>("ShapesPendingBar")!;
+                var bar = tab.FindControl<StackPanel>("ShapesPendingBar")!;
                 Assert.True(bar.IsEffectivelyVisible && bar.Bounds is { Width: > 1, Height: > 1 }, $"the confirmation bar laid out {bar.Bounds}");
-                Assert.StartsWith("Merge 3 shapes into", screen.PendingText, StringComparison.Ordinal);
+                Assert.True(LocalizedText.Matches("Shapes_Pending_MergeMany", screen.PendingText, (0, "3")) || LocalizedText.Matches("Shapes_Pending_MergeManyOne", screen.PendingText, (0, "3")),
+                    $"the pending text '{screen.PendingText}' is not a Shapes_Pending_MergeMany for 3 shapes");
                 Assert.Equal(6, arrangement.ChordTemplates.Count);
                 NarrowWidthLayout.Capture(window, "shapes-bulk-merge");
                 var confirm = tab.FindControl<Button>("ShapesConfirm")!;
@@ -90,7 +101,8 @@ public sealed class ShapesBulkEditUiPerfSmokeTests
                 Settle(window);
                 Assert.Equal(4, arrangement.ChordTemplates.Count);
                 Assert.False(bar.IsEffectivelyVisible, "the bar stayed after the merge");
-                Assert.False(selectionBar.IsEffectivelyVisible, "the bulk bar stayed after the merge");
+                Assert.False(screen.HasSelection, "the ticks stayed after the merge");
+                Assert.False(tab.FindControl<Button>("ShapesMergeSelected")!.IsEnabled, "Merge selected stayed on after the merge");
                 Assert.Equal(4, screen.Rows.Count);
 
                 history.Undo();
@@ -100,6 +112,8 @@ public sealed class ShapesBulkEditUiPerfSmokeTests
 
                 // Delete: the two copies of the Am grip outside the first card move onto it; the danger button asks once.
                 foreach (var template in arrangement.ChordTemplates.Skip(1).Take(2)) TickByClick(window, tab, screen, template);
+                ShowCard(tab, "ShapesCheckedCard");
+                Settle(window);
                 Click(window, tab.FindControl<Button>("ShapesDeleteSelected")!);
                 Settle(window);
                 Assert.True(bar.IsEffectivelyVisible && screen.IsPendingDestructive, "the delete did not wait in the bar");
@@ -121,25 +135,24 @@ public sealed class ShapesBulkEditUiPerfSmokeTests
             }
         }, CancellationToken.None);
 
+    private static void ShowCard(ShapesPanelView tab, string name) => tab.Cards.ShowPage(tab.FindControl<Control>(name)!);
+
     private static void TickByClick(Window window, ShapesPanelView tab, ShapesPanelViewModel screen, ChordTemplate template)
     {
         var row = screen.AllRows.Single(r => ReferenceEquals(r.Template, template));
-        var list = tab.FindControl<ItemsControl>("ShapesRows")!;
-        var card = list.ContainerFromIndex(list.Items.Cast<object>().ToList().IndexOf(row))!
-            .GetVisualDescendants().OfType<Border>().First(b => b.Name == "ShapeCard");
+        var card = ShapesPanelCards.Card(tab, row);
         card.BringIntoView();
         Settle(window);
         window.MouseMove(card.TranslatePoint(new Point(card.Bounds.Width - 6, 6), window)!.Value);
         Settle(window);
         var tick = card.GetVisualDescendants().OfType<CheckBox>().First(b => b.Name == "ShapeTick");
-        Assert.True(tick.IsEffectivelyVisible && tick.Bounds is { Width: > 1, Height: > 1 }, $"the tick laid out {tick.Bounds} on a hovered card");
+        tick.BringIntoView();
+        Settle(window);
+        Assert.True(tick.IsEffectivelyVisible && tick.Bounds is { Width: > 1, Height: > 1 }, $"the tick laid out {tick.Bounds} on a line");
         Click(window, tick);
         Settle(window);
         Assert.True(row.IsSelected, "the click did not tick the card");
     }
-
-    private static IEnumerable<Border> Cards(Control view) =>
-        view.GetVisualDescendants().OfType<Border>().Where(b => b.Name == "ShapeCard");
 
     private static void Click(Window window, Control control)
     {

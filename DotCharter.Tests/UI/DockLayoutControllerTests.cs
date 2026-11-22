@@ -433,9 +433,9 @@ public sealed class DockLayoutControllerTests
 
     /// <summary>
     ///     Dock's pin leaves the tool dock's ActiveDockable on the pane it just removed ("TODO: Handle
-    ///     ActiveDockable state", still there in 12.1.0.8): the dock keeps drawing the pinned pane and its
+    ///     ActiveDockable state"): the dock keeps drawing the pinned pane and its
     ///     close button later becomes the CloseDockable(null) crash. The factory hooks PinDockableCore,
-    ///     which Dock 12.1.0.8 runs for every pin toggle.
+    ///     which Dock runs for every pin toggle.
     /// </summary>
     [Fact]
     public void PinningAPane_MovesItsDocksActiveTabOffIt()
@@ -509,6 +509,101 @@ public sealed class DockLayoutControllerTests
         snapshot.AfterGameplay(controller);
 
         Assert.False(controller.IsPaneFloating("Inspector"));
+    }
+
+    /// <summary>A reset discards pre-run closed, pinned and floating placements over the rebuilt dock.</summary>
+    [Theory]
+    [InlineData("Closed")]
+    [InlineData("Pinned")]
+    [InlineData("Floating")]
+    public void AResetDuringGameplay_DiscardsThePreviousPanePlacement(string mode)
+    {
+        var (controller, flag) = NewController();
+        controller.Rebuild();
+        if (mode == "Floating")
+            FloatThePaneInto(controller, x: 300, y: 200, width: 720, height: 540);
+        else
+            controller.RestoreState(SnapshotWith(("Inspector", new DockPaneState { Mode = mode })));
+        var before = new DockLayoutState();
+        controller.CaptureState(before);
+        Assert.Equal(mode, before.Panes["Inspector"].Mode);
+        var snapshot = new GameplayDockSnapshot();
+        snapshot.BeforeGameplay(controller);
+
+        flag.Visible = true;
+        controller.Rebuild();
+        snapshot.Reset();
+        snapshot.AfterGameplay(controller);
+
+        var state = new DockLayoutState();
+        controller.CaptureState(state);
+        Assert.True(flag.Visible);
+        Assert.Equal("Docked", state.Panes["Inspector"].Mode);
+    }
+
+    /// <summary>
+    ///     #603 row 2: Reset Layout with the Inspector floated. The rebuild unhooks the old
+    ///     factory before closing its windows, so no event says the pane is docked again; the
+    ///     shell's "dock it back" card stayed over the docked pane. Rebuild publishes the state.
+    /// </summary>
+    [Fact]
+    public void Rebuild_PublishesThatAFloatedPaneIsDockedAgain()
+    {
+        var floating = new List<bool>();
+        var controller = new DockLayoutController(new DockControl { Name = "Bottom" },
+        [
+            new DockPaneDefinition
+            {
+                Id = "Inspector",
+                Title = "Inspector",
+                Context = new FakePaneViewModel(),
+                IsVisible = () => true,
+                SetVisible = _ => { },
+                SetFloating = floating.Add
+            }
+        ]);
+        controller.Rebuild();
+        FloatThePaneInto(controller, x: 300, y: 200, width: 720, height: 540);
+        floating.Add(true); // what the shell's flag reads while the pane floats
+        Assert.True(controller.IsPaneFloating("Inspector"));
+
+        controller.Rebuild();
+
+        Assert.False(controller.IsPaneFloating("Inspector"));
+        Assert.False(floating[^1], "the rebuilt layout never told the shell the pane is docked again");
+    }
+
+    /// <summary>
+    ///     #603 row 3: Dock's PinDockable is a toggle. Restoring a snapshot (the gameplay one or the
+    ///     start-up one) that says Pinned over a layout where the pane already IS pinned docked it.
+    /// </summary>
+    [Fact]
+    public void RestoringPinned_OverAnAlreadyPinnedPane_KeepsItPinned()
+    {
+        var (controller, _) = NewController();
+        controller.Rebuild();
+        controller.PinPane("Inspector");
+        Assert.True(controller.IsPanePinned("Inspector"));
+
+        controller.RestoreState(SnapshotWith(("Inspector", new DockPaneState { Mode = "Pinned" })));
+
+        Assert.True(controller.IsPanePinned("Inspector"), "restoring Pinned toggled the pinned pane back into the dock");
+        var state = new DockLayoutState();
+        controller.CaptureState(state);
+        Assert.Equal("Pinned", state.Panes["Inspector"].Mode);
+    }
+
+    /// <summary>The idempotence guard does not stop the first pin.</summary>
+    [Fact]
+    public void PinPane_PinsADockedPane_AndASecondCallChangesNothing()
+    {
+        var (controller, _) = NewController();
+        controller.Rebuild();
+
+        controller.PinPane("Inspector");
+        controller.PinPane("Inspector");
+
+        Assert.True(controller.IsPanePinned("Inspector"));
     }
 
     /// <summary>Moves the built layout's pane into a float window sitting at the

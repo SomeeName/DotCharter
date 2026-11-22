@@ -292,14 +292,15 @@
                                   Margin="12,0,0,0"
                                   Foreground="{DynamicResource TextDim}"
                                   IsHitTestVisible="False" />
-                        <TextBlock Text="{localization:Loc Settings_SearchPlaceholder}"
+                        <TextBlock x:Name="SettingsSearchPlaceholder" Text="{localization:Loc Settings_SearchPlaceholder}"
                                    VerticalAlignment="Center"
                                    HorizontalAlignment="Left"
-                                   Margin="34,0,0,0"
+                                   Margin="34,0,74,0"
+                                   TextTrimming="CharacterEllipsis"
                                    Foreground="{DynamicResource TextDim}"
                                    IsHitTestVisible="False"
                                    IsVisible="{Binding !HasSearchQuery}" />
-                        <Border Classes="SearchShortcutChip"
+                        <Border x:Name="SettingsSearchShortcut" Classes="SearchShortcutChip"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center"
                                 Margin="0,0,8,0"

@@ -242,7 +242,7 @@ internal sealed class RecordingAlignmentFeatures
         return result;
     }
 
-    private static float[][] Chroma(ReadOnlySpan<float> mono, int sampleRate, double hopMs, int frames, CancellationToken ct)
+    internal static float[][] Chroma(ReadOnlySpan<float> mono, int sampleRate, double hopMs, int frames, CancellationToken ct)
     {
         const int n = ChromaFftSize;
         var fft = new JuceFft(n);

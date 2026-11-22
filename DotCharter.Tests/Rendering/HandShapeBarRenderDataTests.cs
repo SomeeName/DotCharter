@@ -213,8 +213,8 @@ public sealed class HandShapeBarRenderDataTests
             "Inspector", "InspectorIssuesViewModel.cs"));
         var publish = inspector.IndexOf("_chartEditor.PublishHandShapeFindings(HandShapeFindings.Collect(results));",
             StringComparison.Ordinal);
-        var filter = inspector.IndexOf("results = [.. results.Where(i => !easier.Contains(i))];", StringComparison.Ordinal);
-        Assert.True(publish >= 0, "RecomputeIssues must publish the hand-shape findings");
+        var filter = inspector.IndexOf("results = [.. results.Where((_, i) => !onEasier[i])];", StringComparison.Ordinal);
+        Assert.True(publish >= 0, "the Issues tab must publish the hand-shape findings");
         Assert.True(filter > publish, "the findings are collected before the easier-level filter");
 
         var renderer = File.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Controls",

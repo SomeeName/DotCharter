@@ -205,7 +205,7 @@ public enum ArrangementIssueType
     ///         it would judge the shape against whichever UNNUMBERED template sat
     ///         first in the collection (a false positive), while
     ///         <c>HandShapeContentRule</c> would use
-    ///         <c>ChordTemplateResolver.FindById</c>, get null and skip (a
+    ///         <c>Arrangement.FindChordTemplate</c>, get null and skip (a
     ///         false negative). Both therefore ask
     ///         <c>ArrangementValidationContext.HandShapeTemplate</c>, and the
     ///         null case is stated rather than swallowed.
@@ -244,7 +244,34 @@ public enum ArrangementIssueType
     /// Auto-fix covers them with the "Generate hand shapes" planner.
     ///     </para>
     /// </summary>
-    ChordOutsideHandShape
+    ChordOutsideHandShape,
+
+    /// <summary>Authored showlights lack a fog or beam note, or need a closing fog change.</summary>
+    ShowlightSequence,
+
+    /// <summary>
+    ///     A lyric line starts lowercase, carries a stray period or comma, or holds several words
+    ///     in one syllable (<c>LyricStyleRule</c>). Style only, from the community charting guides.
+    /// </summary>
+    LyricStyle,
+
+    /// <summary>
+    ///     Repeats of one phrase have different dynamic-difficulty level counts, or a playable
+    ///     phrase has fewer than 2 levels or more than 30 (<c>DifficultyLevelRule</c>).
+    /// </summary>
+    DifficultyLevelCount,
+
+    /// <summary>
+    ///     A hand shape ends closer to the next note or chord than the community charting guides
+    ///     allow, measured in beats.
+    /// </summary>
+    HandShapeGap,
+
+    /// <summary>
+    ///     One section name covers most of an arrangement's sections (<c>SectionNameVarietyRule</c>).
+    ///     Rocksmith's recommendations read section names, so a chart of nothing but intros gets poor ones.
+    /// </summary>
+    SectionNameVariety
 }
 
 /// <summary>
@@ -324,21 +351,31 @@ public static class ArrangementIssueTypeExtensions
             ArrangementIssueType.SoundViolatesHandShape => "E05",
             ArrangementIssueType.AnchorMissingAtPhraseStart => "E06",
             ArrangementIssueType.OpenNoteWithBend => "E07",
-            // D## = DotCharter native pre-export gates (live in the FEHLER inspector)
-            ArrangementIssueType.ToneChangeWithoutMatchingTone => "D01",
-            ArrangementIssueType.FirstNoteTooEarly => "D02",
-            ArrangementIssueType.EmptyPhrase => "D03",
-            ArrangementIssueType.ToneChangeWithoutDefinition => "D04",
-            ArrangementIssueType.SongEndUnverifiedNoAudio => "D05",
-            ArrangementIssueType.NoBeatGridSoNoChecksRan => "D06",
-            ArrangementIssueType.ValidationRuleCrashed => "D07",
-            ArrangementIssueType.ChordWithoutTemplate => "D08",
-            ArrangementIssueType.HandShapeWithoutTemplate => "D09",
-            ArrangementIssueType.PhraseNameRewrittenForRocksmith => "D10",
-            ArrangementIssueType.ChordOutsideHandShape => "D11",
-            _ => type.ToString()
+            _ => GetDotCharterCode(type)
         };
     }
+
+    // D## = DotCharter-native checks in the Issues tab.
+    private static string GetDotCharterCode(ArrangementIssueType type) => type switch
+    {
+        ArrangementIssueType.ToneChangeWithoutMatchingTone => "D01",
+        ArrangementIssueType.FirstNoteTooEarly => "D02",
+        ArrangementIssueType.EmptyPhrase => "D03",
+        ArrangementIssueType.ToneChangeWithoutDefinition => "D04",
+        ArrangementIssueType.SongEndUnverifiedNoAudio => "D05",
+        ArrangementIssueType.NoBeatGridSoNoChecksRan => "D06",
+        ArrangementIssueType.ValidationRuleCrashed => "D07",
+        ArrangementIssueType.ChordWithoutTemplate => "D08",
+        ArrangementIssueType.HandShapeWithoutTemplate => "D09",
+        ArrangementIssueType.PhraseNameRewrittenForRocksmith => "D10",
+        ArrangementIssueType.ChordOutsideHandShape => "D11",
+        ArrangementIssueType.ShowlightSequence => "D12",
+        ArrangementIssueType.LyricStyle => "D13",
+        ArrangementIssueType.DifficultyLevelCount => "D14",
+        ArrangementIssueType.HandShapeGap => "D15",
+        ArrangementIssueType.SectionNameVariety => "D16",
+        _ => type.ToString()
+    };
 
     public static ArrangementIssueSeverity GetSeverity(this ArrangementIssueType type)
     {

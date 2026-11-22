@@ -187,7 +187,7 @@ public static class ChartNoteEventBuilder
             Velocity = accent ? 0.95f : 0.8f,
             StringIndex = s.StringIndex,
             Fret = s.Fret,
-            Capo = Math.Clamp(arrangement.Capo, 0, 24),
+            Capo = Math.Clamp(arrangement.Capo, 0, FretLimits.MaxFret),
             SlideToFret = s.SlideTo is { } to and >= 0 ? to : -1f,
             Flags = flags,
             ChordId = chordId,
@@ -456,8 +456,8 @@ public static class ChartNoteEventBuilder
     ///     A cheap, allocation-free summary of everything <see cref="Build" /> reads,
     ///     so a caller can poll for chart edits and re-upload only on a change.
     ///     Covers every note and chord field the upload depends on, the hand shapes,
-    ///     the whole tempo map and the arrangement's tuning, capo, cent offset and
-    ///     type. Not a content hash in the cryptographic sense: equal input gives an
+    ///     the whole tempo map (times and note denominators) and the arrangement's
+    ///     tuning (offsets, letters, string count), capo, cent offset and type. Not a content hash in the cryptographic sense: equal input gives an
     ///     equal value, and a realistic edit changes it. Positions hash through
     ///     <c>HashCode.Combine</c>, which is seeded per process — compare values from
     ///     ONE process only, never persist one.
@@ -480,10 +480,21 @@ public static class ChartNoteEventBuilder
         h.Add(arrangement.PickedBass ? 1 : 0);
         h.Add(arrangement.TuningPitches.Count);
         foreach (var t in arrangement.TuningPitches) h.Add(t.Step);
+        // The open pitches also follow the string count and, without authored
+        // offsets, the tuning letters (TuningOffsetResolution's fallback).
+        h.Add(arrangement.StringCount);
+        var letters = arrangement.Tuning;
+        h.Add(letters.Length);
+        for (var i = 0; i < letters.Length; i++) h.Add(StringComparer.Ordinal.GetHashCode(letters[i] ?? string.Empty));
         h.Add(bpm);
-        // Every beat: a moved beat in the middle of the map re-times every note after it.
+        // Every beat: a moved beat in the middle of the map re-times every note after
+        // it, and a beat's denominator sets how long a beat-relative release lasts.
         h.Add(beats.Count);
-        for (var i = 0; i < beats.Count; i++) h.Add(beats[i].Time);
+        for (var i = 0; i < beats.Count; i++)
+        {
+            h.Add(beats[i].Time);
+            h.Add(beats[i].NoteDenominator);
+        }
 
         h.Add(notes.Count);
         for (var i = 0; i < notes.Count; i++)

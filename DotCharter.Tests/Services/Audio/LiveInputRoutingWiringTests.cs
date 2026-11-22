@@ -223,7 +223,7 @@ public sealed class LiveInputRoutingWiringTests
         var source = SourceText.StripComments(UiSourceTree.ReadAllText(Path.Combine(
             TestPaths.RepoRoot(), "DotCharter.Tone", "Audio", "JuceAudioPlaybackService.EngineConfig.cs")));
 
-        Assert.Contains("SetLiveInputBaseline(LiveInputSeatLayout.FromInputConfig(config))", source);
+        Assert.Contains("SetLiveInputBaseline(LiveInputSeatLayout.FromInputConfig(config, inputCount))", source);
     }
 
     /// <summary>The settings apply has to REACH that path. A seat-layout change

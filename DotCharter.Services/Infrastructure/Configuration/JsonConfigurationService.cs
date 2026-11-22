@@ -1,18 +1,19 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Avalonia.Input;
+using DotCharter.Tone.Infrastructure.Json;
 using DotCharter.Services.Library;
 
 namespace DotCharter.Services.Infrastructure.Configuration;
 
 public class JsonConfigurationService : IConfigurationService, IDisposable
 {
-    private readonly JsonSerializerOptions _jsonOptions = new()
+    private readonly JsonSerializerOptions _jsonOptions = TolerantJson.Apply(new JsonSerializerOptions
     {
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter() }
-    };
+    });
 
     private readonly object _loggerSync = new();
 
@@ -164,6 +165,8 @@ public class JsonConfigurationService : IConfigurationService, IDisposable
                     // old content.
                     var json = AtomicFile.ReadAllText(path);
                     var config = JsonSerializer.Deserialize<AppConfig>(json, _jsonOptions);
+                    foreach (var skipped in TolerantJson.TakeWarnings())
+                        ReportWarning($"App config '{path}': {skipped}");
                     if (config != null)
                     {
                         NormalizeAppConfig(config);
@@ -244,11 +247,8 @@ public class JsonConfigurationService : IConfigurationService, IDisposable
 
         try
         {
-            // ReplaceWithRetry, not a bare File.Move: whatever left this file
-            // unparseable may well still have it open, and a rename denied by an
-            // AV or indexer hold would otherwise report the config as
-            // unquarantinable and refuse the write for the whole session.
-            AtomicFile.ReplaceWithRetry(path, quarantine);
+            // The source is the user's only copy, never a disposable stage.
+            AtomicFile.MoveAside(path, quarantine);
             ReportError($"{label} was unparseable ({cause}); moved to " +
                         $"'{Path.GetFileName(quarantine)}' and starting fresh.", null);
             return true;
@@ -306,6 +306,16 @@ public class JsonConfigurationService : IConfigurationService, IDisposable
         }
     }
 
+    public bool UpdateAndWrite(Action<AppConfig> mutate)
+    {
+        var failures = _appConfigWriter.FailedWrites;
+        Update(mutate);
+        bool degraded;
+        lock (_configSync) degraded = _degraded != null;
+        // Flushed outside _configSync: the write takes that lock.
+        return !degraded && _appConfigWriter.TryFlush() && _appConfigWriter.FailedWrites == failures;
+    }
+
     /// <summary>
     ///     Caller must hold _configSync. Publishes the new config to the cache
     ///     SYNCHRONOUSLY — several callers <c>LoadAppConfig()</c> straight after
@@ -344,6 +354,7 @@ public class JsonConfigurationService : IConfigurationService, IDisposable
         string json;
         lock (_configSync)
         {
+            config.UnknownSettings?.Remove("ExtendedRangeFormat");
             json = JsonSerializer.Serialize(config, _jsonOptions);
         }
 
@@ -396,6 +407,8 @@ public class JsonConfigurationService : IConfigurationService, IDisposable
                 // read is the collision rather than merely risking it.
                 var json = AtomicFile.ReadAllText(path);
                 var config = JsonSerializer.Deserialize<KeybindConfig>(json, _jsonOptions);
+                foreach (var skipped in TolerantJson.TakeWarnings())
+                    ReportWarning($"Keybinds: {skipped}");
                 if (config != null)
                 {
                     var stampBefore = config.MigrationVersion;

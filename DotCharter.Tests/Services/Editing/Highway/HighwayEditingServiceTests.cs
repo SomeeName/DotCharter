@@ -9,6 +9,48 @@ namespace DotCharter.Tests.Services.Editing.Highway;
 public sealed class HighwayEditingServiceTests
 {
     [Fact]
+    public void SpacingRedo_PrunesTheRestoredAnchorSelection()
+    {
+        var h = new Harness();
+        var project = h.State.ActiveProject!;
+        var level = h.State.ActiveLevel!;
+        level.Anchors.Add(new FretAnchor(new FractionalPosition(0), 5));
+        var redundant = new FretAnchor(new FractionalPosition(1), 5);
+        level.Anchors.Add(redundant);
+        h.History.Do(ProjectSpacingEdit.Plan(project, h.Config.AppConfig, () => { }));
+        Assert.Single(level.Anchors);
+        h.History.Undo();
+        Assert.Same(redundant, level.Anchors[1]);
+        h.Selection.SelectedAnchors.Add(redundant);
+
+        h.History.Redo();
+
+        Assert.DoesNotContain(redundant, level.Anchors);
+        Assert.Empty(h.Selection.SelectedAnchors);
+        var oldFret = redundant.Fret;
+        h.Service.MoveSelectedFretUp();
+        Assert.Equal(oldFret, redundant.Fret);
+        h.Service.Dispose();
+    }
+
+    [Fact]
+    public void OpeningAnotherProject_ReleasesTheCachedEditingGraph()
+    {
+        var h = new Harness();
+        h.AddNote(1, 0, 5);
+        _ = h.Service.GetLinkNextUpdater();
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        Assert.NotNull(typeof(HighwayEditingService).GetField("_linkNextUpdater", flags)!.GetValue(h.Service));
+
+        h.State.ActiveProject = new ChartProject();
+        h.State.ActiveArrangement = null;
+        h.History.Clear();
+
+        foreach (var name in new[] { "_linkNextUpdater", "_spacingLevel", "_spacingBeats" })
+            Assert.Null(typeof(HighwayEditingService).GetField(name, flags)!.GetValue(h.Service));
+    }
+
+    [Fact]
     public void RemoveNote_RemovesFromPlacedNotesAndIsUndoable()
     {
         var h = new Harness();
@@ -253,6 +295,87 @@ public sealed class HighwayEditingServiceTests
         Assert.Equal([keeper], h.Selection.SelectedHandShapes);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UndoingADragOrPaste_DropsDetachedSelectionsBeforeTheNextFretEdit(bool paste)
+    {
+        var h = new Harness();
+        var source = h.AddNote(1, 0, 5);
+        var moved = new GuitarNote { Position = new FractionalPosition(4), StringIndex = 0, Fret = 7 };
+        Assert.True(h.Service.CommitHandShapeDragAndDrop(
+            paste ? [] : [source], [moved], [], [], [], [], [], []));
+        var result = Assert.Single(h.Selection.SelectedNotes);
+
+        h.History.Undo();
+
+        Assert.Empty(h.Selection.SelectedNotes);
+        var node = h.History.CurrentNodeId;
+        h.Service.MoveSelectedFretUp();
+        Assert.Equal(node, h.History.CurrentNodeId);
+        Assert.Equal(5, source.Fret);
+        Assert.Equal(7, result.Fret);
+        Assert.True(h.History.CanRedo);
+
+        h.Selection.SelectedNotes.Add(source);
+        h.History.Redo();
+        Assert.All(h.Selection.SelectedNotes, n => Assert.Contains(n, h.State.PlacedNotes));
+    }
+
+    [Fact]
+    public void UndoingAPaste_PrunesAllFourResultSelections()
+    {
+        var h = new Harness();
+        var note = new GuitarNote { Position = new FractionalPosition(2), StringIndex = 0, Fret = 5 };
+        var chord = new Chord { Position = new FractionalPosition(4) };
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 7 });
+        var shape = new HandShape { Position = new FractionalPosition(6), EndPosition = new FractionalPosition(8) };
+        var anchor = new FretAnchor { Position = new FractionalPosition(2), Fret = 5, Width = 4 };
+
+        Assert.True(h.Service.CommitHandShapeDragAndDrop([], [note], [], [chord], [], [shape], [], [anchor]));
+        Assert.Single(h.Selection.SelectedNotes);
+        Assert.Single(h.Selection.SelectedChords);
+        Assert.Single(h.Selection.SelectedHandShapes);
+        Assert.Single(h.Selection.SelectedAnchors);
+
+        h.History.Undo();
+
+        Assert.Empty(h.Selection.SelectedNotes);
+        Assert.Empty(h.Selection.SelectedChords);
+        Assert.Empty(h.Selection.SelectedHandShapes);
+        Assert.Empty(h.Selection.SelectedAnchors);
+    }
+
+    [Fact]
+    public void ASpacingUpdater_KeepsTheEditedLevelAndBeatGridAcrossAFocusChange()
+    {
+        var h = new Harness();
+        h.Config.AppConfig.MinNoteDistanceMode = MinNoteDistanceMode.Milliseconds;
+        h.Config.AppConfig.MinNoteDistanceMs = 100;
+        var originalLevel = h.State.ActiveLevel!;
+        var first = h.AddNote(1, 0, 5);
+        first.Sustain = new FractionalPosition(4);
+        h.AddNote(2, 1, 7);
+        var updater = h.Service.GetLinkNextUpdater();
+        Assert.Same(updater, h.Service.GetLinkNextUpdater());
+        var ladderUpdater = h.Service.GetLevelSpacingUpdater(originalLevel);
+
+        var other = new ChartLevel();
+        var otherNote = new GuitarNote { Position = new FractionalPosition(1), Sustain = new FractionalPosition(4) };
+        other.Notes.Add(otherNote);
+        other.Notes.Add(new GuitarNote { Position = new FractionalPosition(2), StringIndex = 1 });
+        h.Scope.SetResolver(() => new EditingTarget(h.State.ActiveArrangement!, other));
+        // Replacing the project also changes the grid resolved by the scope.
+        h.State.ActiveProject = new ChartProject();
+
+        updater();
+        Assert.True(first.Sustain < new FractionalPosition(1));
+        Assert.Equal(new FractionalPosition(4), otherNote.Sustain);
+        first.Sustain = new FractionalPosition(4);
+        ladderUpdater();
+        Assert.True(first.Sustain < new FractionalPosition(1));
+    }
+
     private sealed class Harness
     {
         public Harness()
@@ -260,10 +383,9 @@ public sealed class HighwayEditingServiceTests
             var logger = new FakeAppLogger();
             History = new HistoryService(logger);
             var collisions = new StrictCollisionService();
-            var config = new FakeConfigurationService();
             Scope = new EditingScope(State);
-            Service = new HighwayEditingService(State, Selection, History, collisions, config, Scope,
-                new EditTargetService(Selection, Scope, config), logger);
+            Service = new HighwayEditingService(State, Selection, History, collisions, Config, Scope,
+                new EditTargetService(Selection, Scope, Config), logger);
 
             var project = new ChartProject();
             for (var i = 0; i < 16; i++)
@@ -279,6 +401,7 @@ public sealed class HighwayEditingServiceTests
 
         public ProjectState State { get; } = new();
         public SelectionService Selection { get; } = new();
+        public FakeConfigurationService Config { get; } = new();
         public HistoryService History { get; }
         public EditingScope Scope { get; }
         public HighwayEditingService Service { get; }

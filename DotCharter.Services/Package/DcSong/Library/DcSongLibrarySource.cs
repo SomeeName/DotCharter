@@ -146,23 +146,14 @@ public sealed class DcSongLibrarySource : ILibraryPackageSource
             using var package = DcSongPackage.Open(song.PackagePath);
             if (package.ReadCover() is not { } cover) return "";
             Directory.CreateDirectory(Path.GetDirectoryName(cached)!);
-            var staging = cached + $".part-{Guid.NewGuid():N}";
-            try
-            {
-                // A JPEG keeps its bytes: every reader of this cache sniffs the format.
-                File.WriteAllBytes(staging, cover.Bytes);
-                File.Move(staging, cached, overwrite: true);
-            }
-            finally
-            {
-                BestEffortDelete.File(staging);
-            }
+            // A JPEG keeps its bytes: every reader of this cache sniffs the format.
+            AtomicFile.WriteAllBytes(cached, cover.Bytes);
 
             return DdsImageConverter.IsUsablePng(cached) ? cached : "";
         }
         catch (Exception ex) when (ex is DcSongReadException or IOException or UnauthorizedAccessException)
         {
-            _logger.Warning(AppLogCategory.Import, $".dcsong cover not read from '{song.PackagePath}': {ex.Message}");
+            _logger.Warning(AppLogCategory.Import, $".dcsong cover not read from '{song.PackagePath}'", ex);
             return "";
         }
     }

@@ -97,15 +97,14 @@ public sealed class PhraseAnchorRule : IArrangementRule
 
                 var inherited = context.ActiveAnchor(level, firstSound.Value);
                 var suffix = inherited == null
-                    ? " No earlier anchor exists to carry in, so this phrase has no hand position at all."
-                    : $" The anchor in force starts in an earlier phrase (fret {inherited.Fret}); restate it " +
-                      "at this phrase's start so it stops crossing the boundary.";
+                    ? new IssueTextRef("Validation_AnchorMissingAtPhraseStart_NoAnchor")
+                    : new IssueTextRef("Validation_AnchorMissingAtPhraseStart_Inherited", [inherited.Fret]);
 
-                issues.Add(new ArrangementIssue(
+                issues.Add(ArrangementIssues.Make(
                     ArrangementIssueType.AnchorMissingAtPhraseStart,
-                    $"Phrase '{phrases[i].Name}' plays notes in this difficulty but defines no anchor." + suffix,
+                    "Validation_AnchorMissingAtPhraseStart",
                     start.GetPositionMs(beats),
-                    Anchor: inherited));
+                    anchor: inherited, args: [phrases[i].Name, suffix]));
             }
         }
     }

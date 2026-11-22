@@ -62,15 +62,18 @@ public class MultiTrackOverlayViewModel : ViewModelBase
             }
             else if (e.PropertyName == nameof(ProjectState.ActiveArrangement))
             {
-                RefreshActiveFlags();
-                // ...and the ROW TEXT, which is not a function of which
+                // Refresh the ROW TEXT as well as the active flags. It is not a function of which
                 // arrangement is active. Arrangement is a plain domain object, so
                 // renaming or retuning one in the Arrangement Settings dialog
                 // changes nothing any binding can see; ProjectState re-raises
                 // this property for exactly that case (see
                 // NotifyActiveArrangementChanged) and it is the only signal that
                 // reaches here.
-                RefreshArrangementMetadata();
+                DotCharter.UI.Views.Shell.SurfaceShowTiming.Measure(nameof(MultiTrackOverlayViewModel), () =>
+                {
+                    RefreshActiveFlags();
+                    RefreshArrangementMetadata();
+                });
             }
         };
 

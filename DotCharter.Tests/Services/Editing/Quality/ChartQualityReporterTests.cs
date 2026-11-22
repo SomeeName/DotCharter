@@ -50,6 +50,18 @@ public sealed class ChartQualityReporterTests
         return project;
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(59)]
+    public void Audio_finding_messages_preserve_elapsed_hours(int? observedMidi)
+    {
+        var audio = new ChartAudioFinding(3_723_456, 60, 0.9f, observedMidi, 0.8f);
+        var finding = new QualityFinding(QualityChecks.AudioLint, QualitySeverity.Warning, "audio",
+            null, null, audio.TimeMs, null, null, null, audio);
+
+        Assert.Contains("1:02:03.4", QualityFindingText.Message(finding, FakeLocalization.English()), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AShippableChart_IsReady()
     {

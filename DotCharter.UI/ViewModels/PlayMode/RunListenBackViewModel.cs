@@ -44,6 +44,14 @@ public sealed partial class RunListenBackViewModel : ObservableObject
     // What the transport had before listen-back borrowed it.
     private string? _takeRestoreAudioPath;
     private double _takeRestorePositionMs;
+    private StemTrackViewModel? _takeRestoreMaster;
+    private bool _takeRestoreMasterMuted;
+    private long _takeMediaGeneration;
+    private CancellationTokenSource? _takeLoad;
+    private Task? _pendingTakeLoad;
+    private Task _stopping = Task.CompletedTask;
+    private string? _borrowedTakePath;
+    private int _requestGeneration;
 
     /// <summary>Results screen: a listen-back recording of this run exists.</summary>
     [ObservableProperty] private bool _canListenBackToRun;
@@ -77,6 +85,7 @@ public sealed partial class RunListenBackViewModel : ObservableObject
     /// <summary>A new run supersedes the last one's take (its own lands on finalize).</summary>
     public void Reset()
     {
+        _ = StopAsync();
         _resultTakeFile = null;
         CanListenBackToRun = false;
         TakePlaybackStatus = "";
@@ -119,23 +128,81 @@ public sealed partial class RunListenBackViewModel : ObservableObject
             return;
         }
 
-        if (IsTakePlaying) await StopAsync();
+        var stopping = StopAsync();
+        var generation = _requestGeneration;
+        await stopping;
+        if (generation != _requestGeneration) return;
+
+        var load = new CancellationTokenSource();
+        _takeLoad = load;
+        _borrowedTakePath = path;
 
         _takeRestoreAudioPath = _audio.CurrentAudioPath is { Length: > 0 } loaded ? loaded : null;
         _takeRestorePositionMs = _audio.CurrentTimeMs;
-        _audio.Stop();
         // Stems ride the same transport as the master source, so they would play
         // the SONG underneath the take. Run-scoped mutes only (never the domain
         // Stem.Muted flag — see ApplyBackingTrackMutes).
-        MuteStemsForTake(true);
+        try
+        {
+            var pending = _audio.LoadTemporaryAudioAsync(path, load.Token, out var owner);
+            _takeMediaGeneration = owner;
+            _pendingTakeLoad = pending;
+            await pending;
+            if (load.IsCancellationRequested || !ReferenceEquals(_takeLoad, load)) return;
+            if (await LostTakeAsync(path, owner)) return;
+            if (!_audio.RunIfOwned(path, owner, _audio.Stop) ||
+                !_audio.RunIfOwned(path, owner, PrepareTakeMix) ||
+                !_audio.RunIfOwned(path, owner, () => _audio.SeekTo(0)) ||
+                !_audio.RunIfOwned(path, owner, _audio.Play))
+            {
+                await StopAsync();
+                return;
+            }
 
-        await _audio.LoadAudioAsync(path);
-        _audio.SeekTo(0);
-        _audio.Play();
-        IsTakePlaying = true;
-        TakePlaybackStatus = _localization["PlayMode_Take_Playing"];
-        _takeWatchTimer.Start();
-        _logger.Info(AppLogCategory.Audio, $"Listen-back: playing take '{Path.GetFileName(path)}'.");
+            IsTakePlaying = true;
+            TakePlaybackStatus = _localization["PlayMode_Take_Playing"];
+            _takeWatchTimer.Start();
+            _logger.Info(AppLogCategory.Audio, $"Listen-back: playing take '{Path.GetFileName(path)}'.");
+        }
+        catch (OperationCanceledException) when (load.IsCancellationRequested)
+        {
+            // The Results screen (or this take) lost ownership during decode.
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(AppLogCategory.Audio, "Listen-back: take load failed.", ex);
+            if (ReferenceEquals(_takeLoad, load))
+            {
+                await StopAsync();
+                TakePlaybackStatus = _localization["PlayMode_Take_Missing"];
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_takeLoad, load))
+            {
+                _takeLoad = null;
+                _pendingTakeLoad = null;
+            }
+            load.Dispose();
+        }
+    }
+
+    private void PrepareTakeMix()
+    {
+        _takeRestoreMaster = _stemMixer?.Tracks.FirstOrDefault(t => t.IsMasterMix);
+        _takeRestoreMasterMuted = _takeRestoreMaster?.IsMuted ?? false;
+        MuteStemsForTake(true);
+        _takeRestoreMaster?.SetMutedForRun(false);
+        _audio.SetMasterMixMuted(false);
+    }
+
+    /// <summary>True, after handing the transport back, when the take lost the media.</summary>
+    private async Task<bool> LostTakeAsync(string path, long owner)
+    {
+        if (_audio.OwnsMedia(path, owner)) return false;
+        await StopAsync();
+        return true;
     }
 
     [RelayCommand]
@@ -144,29 +211,60 @@ public sealed partial class RunListenBackViewModel : ObservableObject
     /// <summary>Hands the transport back: stops, un-mutes the stems and reloads
     /// the song that was open (at the position it was at). Safe to call when no
     /// take is playing.</summary>
-    public async Task StopAsync()
+    public Task StopAsync()
     {
-        if (!IsTakePlaying) return;
+        _requestGeneration++;
+        var load = _takeLoad;
+        _takeLoad = null;
+        load?.Cancel();
+        if (!IsTakePlaying && _borrowedTakePath == null) return _stopping;
+        return _stopping = StopCoreAsync();
+    }
+
+    private async Task StopCoreAsync()
+    {
+        var pending = _pendingTakeLoad;
+        var take = _borrowedTakePath;
+        var owner = _takeMediaGeneration;
+        var restore = _takeRestoreAudioPath;
+        var position = _takeRestorePositionMs;
+        var master = _takeRestoreMaster;
+        var masterMuted = _takeRestoreMasterMuted;
+        _takeRestoreMaster = null;
+        _pendingTakeLoad = null;
+        _borrowedTakePath = null;
+        _takeRestoreAudioPath = null;
         IsTakePlaying = false;
         TakePlaybackStatus = "";
         _takeWatchTimer.Stop();
-        _audio.Stop();
-        MuteStemsForTake(false);
 
-        var restore = _takeRestoreAudioPath;
-        var position = _takeRestorePositionMs;
-        _takeRestoreAudioPath = null;
-
-        if (restore != null && _files.FileExists(restore))
+        if (pending != null)
         {
-            await _audio.LoadAudioAsync(restore);
-            _audio.SeekTo(position);
+            try { await pending; }
+            catch (OperationCanceledException) { /* The cancelled decode kept the song. */ }
+            catch (Exception ex) { _logger.Warning(AppLogCategory.Audio, "Listen-back: pending load failed while stopping.", ex); }
         }
-        else
+        if (take is not null)
         {
-            // Nothing was loaded before (or it vanished): don't leave the take
-            // sitting on the transport pretending to be the song.
-            _audio.FreeAudio();
+            try
+            {
+                _audio.RunIfOwned(take, owner, () =>
+                {
+                    MuteStemsForTake(false);
+                    if (master != null && _stemMixer?.Tracks.Contains(master) == true)
+                    {
+                        master.SetMutedForRun(masterMuted);
+                        _audio.SetMasterMixMuted(masterMuted);
+                    }
+                });
+                _mutedForTake.Clear();
+                await _audio.TryRestoreAudioAsync(restore, take, owner, position);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(AppLogCategory.Audio, "Listen-back: restoring the song failed.", ex);
+                TakePlaybackStatus = _localization["PlayMode_Take_Missing"];
+            }
         }
     }
 
@@ -180,9 +278,13 @@ public sealed partial class RunListenBackViewModel : ObservableObject
             return;
         }
 
-        var length = _audio.GetTotalAudioLengthMs();
-        var ended = !_audio.IsPlaying || (length > 0 && _audio.CurrentTimeMs >= length - 100);
-        if (ended) _ = StopAsync();
+        var ended = false;
+        var owned = _borrowedTakePath is { } take && _audio.RunIfOwned(take, _takeMediaGeneration, () =>
+        {
+            var length = _audio.GetTotalAudioLengthMs();
+            ended = !_audio.IsPlaying || (length > 0 && _audio.CurrentTimeMs >= length - 100);
+        });
+        if (!owned || ended) _ = StopAsync();
     }
 
     private void MuteStemsForTake(bool mute)
@@ -199,7 +301,7 @@ public sealed partial class RunListenBackViewModel : ObservableObject
             return;
         }
 
-        foreach (var track in _mutedForTake)
+        foreach (var track in _mutedForTake.Where(track => _stemMixer.Tracks.Contains(track)))
         {
             track.SetMutedForRun(false);
             track.RestoreSoloFromProject();

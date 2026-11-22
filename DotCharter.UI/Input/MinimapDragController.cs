@@ -56,15 +56,21 @@ public sealed class MinimapDragController
 
     public bool IsDragging { get; private set; }
 
-    public void OnPointerPressed(Control control, PointerPressedEventArgs e,
+    /// <summary>
+    ///     Starts a drag on a left press. Returns true only when this press STARTED
+    ///     one, so the host acquires per-drag resources (the continuous-render pin)
+    ///     exactly once per drag and never for a right or middle click.
+    /// </summary>
+    public bool OnPointerPressed(Control control, PointerPressedEventArgs e,
         MainWindowViewModel vm, Action redraw)
     {
-        if (!e.GetCurrentPoint(control).Properties.IsLeftButtonPressed) return;
-        IsDragging = true;
+        if (!e.GetCurrentPoint(control).Properties.IsLeftButtonPressed) return false;
+        var started = !IsDragging;
         BeginDrag(_nowTicks());
         e.Pointer.Capture(control);
         Seek(control, e, vm, redraw);
         e.Handled = true;
+        return started;
     }
 
     public void OnPointerMoved(Control control, PointerEventArgs e,
@@ -81,31 +87,34 @@ public sealed class MinimapDragController
     /// <summary>
     ///     Ends the drag, and flushes the position the throttle dropped so the
     ///     transport finishes where the user let go rather than up to one frame
-    ///     behind it.
+    ///     behind it. Returns true when this release ended a drag.
     /// </summary>
-    public void OnPointerReleased(Control control, PointerReleasedEventArgs e,
+    public bool OnPointerReleased(Control control, PointerReleasedEventArgs e,
         MainWindowViewModel vm, Action redraw)
     {
-        if (e.InitialPressMouseButton != MouseButton.Left) return;
+        if (e.InitialPressMouseButton != MouseButton.Left) return false;
         var wasDragging = IsDragging;
-        IsDragging = false;
-        e.Pointer.Capture(null);
+        var flush = EndDrag(() => e.Pointer.Capture(null));
         e.Handled = true;
 
         // Only when a move was actually discarded — a release that dropped
         // nothing must not re-issue a seek the transport already performed.
-        if (wasDragging && TakePendingSeek()) Seek(control, e, vm, redraw);
+        if (flush) Seek(control, e, vm, redraw);
+        return wasDragging;
     }
 
     /// <summary>
     ///     Capture loss ends the drag with no position to flush — the args carry
     ///     none, and the pointer may be off the control entirely. The pending flag
-    ///     is dropped so it cannot leak into the next drag.
+    ///     is dropped so it cannot leak into the next drag. Returns true when this
+    ///     call ended a drag.
     /// </summary>
-    public void OnPointerCaptureLost()
+    public bool OnPointerCaptureLost()
     {
+        var wasDragging = IsDragging;
         IsDragging = false;
         _pendingSeek = false;
+        return wasDragging;
     }
 
     /// <summary>Visible-for-testing: the press half of the throttle. A new drag
@@ -113,8 +122,23 @@ public sealed class MinimapDragController
     /// pending.</summary>
     internal void BeginDrag(long nowMs)
     {
+        IsDragging = true;
         _lastSeekTicks = nowMs;
         _pendingSeek = false;
+    }
+
+    /// <summary>
+    ///     Visible-for-testing: the release half. The pending seek is taken BEFORE
+    ///     capture is released, because releasing capture raises
+    ///     <c>PointerCaptureLost</c> synchronously and that handler clears the flag
+    ///    . Returns whether the release must flush a dropped move.
+    /// </summary>
+    internal bool EndDrag(Action releaseCapture)
+    {
+        var flush = IsDragging && TakePendingSeek();
+        IsDragging = false;
+        releaseCapture();
+        return flush;
     }
 
     /// <summary>

@@ -56,6 +56,35 @@ public sealed class LinkedMeasuresConstructionUiPerfSmokeTests
             });
         }, CancellationToken.None);
 
+    /// <summary>#338: a long arrangement name is trimmed with an ellipsis inside the 400 px card.</summary>
+    [Fact]
+    public async Task LinkPanelView_trimsALongArrangementName_insideTheCard() =>
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var (t, group) = Linked();
+            const string longName = "Rhythm Guitar (Doubled, Left Channel, Drop D, Capo 2) - Extended Live Variation";
+            t.Links.Rhythm.Name = longName;
+            t.Links.Lead.Name = longName + " Lead";
+            t.Vm.OpenPanel(group.Id, t.Links.Lead, At(4, 2));
+            var view = new LinkPanelView { DataContext = t.Vm.Panel };
+
+            WithWindow(view, () =>
+            {
+                var card = view.FindControl<Border>("LinkPanelCard")!;
+                var names = view.GetVisualDescendants().OfType<TextBlock>()
+                    .Where(x => x.Text != null && x.Text.StartsWith("Rhythm Guitar (Doubled") || x.Text != null && x.Text.StartsWith(longName)).ToList();
+                Assert.NotEmpty(names);
+                Assert.All(names, n =>
+                {
+                    Assert.Equal(Avalonia.Media.TextTrimming.CharacterEllipsis, n.TextTrimming);
+                    Assert.True(n.DesiredSize.Width <= n.Bounds.Width + 0.5,
+                        $"'{n.Text}' wants {n.DesiredSize.Width:0.#} px but is laid out {n.Bounds.Width:0.#} px wide");
+                    var right = n.TranslatePoint(new Point(n.Bounds.Width, 0), card)!.Value.X;
+                    Assert.True(right <= card.Bounds.Width + 0.5, $"'{n.Text}' ends at x={right:0.#}, past the {card.Bounds.Width:0.#} px card");
+                });
+            });
+        }, CancellationToken.None);
+
     [Fact]
     public async Task LinkOverlayView_shows_the_toast_inside_the_timeline_and_opens_the_panel() =>
         await HeadlessSessionFixture.Dispatch(() =>
@@ -86,6 +115,37 @@ public sealed class LinkedMeasuresConstructionUiPerfSmokeTests
                 AssertMeasured(panel, "the opened link panel");
                 Assert.Equal(group.Id, t.Editor.LinkHighlight.SelectedGroupId);
             });
+        }, CancellationToken.None);
+
+    [Theory]
+    [InlineData(420)]
+    [InlineData(900)]
+    public Task A_long_toast_keeps_both_actions_inside_the_timeline(double width) =>
+        HeadlessSessionFixture.Dispatch(() =>
+        {
+            var (t, _) = Linked();
+            t.Links.Lead.Name = new string('L', 120) + " Lead Guitar";
+            t.Links.Rhythm.Name = new string('R', 120) + " Rhythm Guitar";
+            var overlay = new LinkOverlayView { DataContext = t.Vm };
+            var window = new Window { Width = width, Height = 500, Content = overlay };
+            window.Show();
+            try
+            {
+                t.Links.Edit(t.Links.Lead, LinkHarness.NoteAt(t.Links.Lead, At(4, 1), 1), n => n.Fret = 8);
+                NarrowWidthLayout.Settle(window);
+                NarrowWidthLayout.Capture(window, $"link-toast-{width}");
+                var toast = overlay.FindControl<Border>("LinkToast")!;
+                AssertMeasured(overlay, "overlay");
+                AssertMeasured(toast, "toast");
+                foreach (var control in new Control[] { toast, overlay.FindControl<Button>("LinkToastOnlyHere")!, overlay.FindControl<Button>("LinkToastClose")! })
+                {
+                    Assert.True(control.IsEffectivelyVisible);
+                    var left = control.TranslatePoint(default, overlay)!.Value.X;
+                    Assert.True(left >= 0 && left + control.Bounds.Width <= overlay.Bounds.Width + 0.5,
+                        $"{control.Name}: {left} + {control.Bounds.Width} exceeds {overlay.Bounds.Width}");
+                }
+            }
+            finally { window.Close(); }
         }, CancellationToken.None);
 
     [Fact]

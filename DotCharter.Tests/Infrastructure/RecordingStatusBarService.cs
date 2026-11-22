@@ -21,8 +21,13 @@ public sealed class RecordingStatusBarService : IStatusBarService
     /// <see cref="StatusBarTask.CancelAction" /> is the pill's cancel button.</summary>
     public StatusBarTask? LastTask { get; private set; }
 
+    /// <summary>Runs on every <see cref="BeginTask" />, with the task id: the work the pill
+    /// brackets has not started yet.</summary>
+    public Action<string>? OnBegin { get; set; }
+
     public StatusBarTask BeginTask(string id, string label, bool indeterminate = true, Action? cancel = null)
     {
+        OnBegin?.Invoke(id);
         Log.Add($"begin:{id}:{label}");
         return LastTask = new StatusBarTask(id, label, indeterminate) { CancelAction = cancel };
     }

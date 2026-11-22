@@ -52,22 +52,25 @@ public sealed class RigRsAmpUiPerfSmokeTests
                 Assert.All(knobs, k => Assert.True(k.Bounds.Width > 10 && k.Bounds.Height > 10, "a knob rendered nothing"));
                 Assert.Single(enclosure.GetVisualDescendants().OfType<ComboBox>());   // the amp picker
 
-                // The synthetic Amp_TestA: Gain, Bass, Mode.
+                // The synthetic Amp_TestA: Gain, Bass, Mode. A knob shows the amp's name as every
+                // parameter caption is shown: translated where the language has an entry for it.
+                string Shown(string english) => DspParamText.Of(LocalizationService.Instance, english);
                 string Name(string id) => node.Params.Single(p => p.Id == id).DisplayName;
+                string Caption(string id) => node.Params.Single(p => p.Id == id).Caption;
                 bool Active(string id) => node.Params.Single(p => p.Id == id).IsControlActive;
                 node.Params.Single(p => p.Id == "model").Value = SyntheticRsGame.Model("Amp_TestA");
                 for (var pass = 0; pass < 2; pass++) window.UpdateLayout();
-                Assert.Equal(["Gain", "Bass", "Mode"], new[] { "k1", "k2", "k3" }.Select(Name));
+                Assert.Equal(new[] { "Gain", "Bass", "Mode" }.Select(Shown), new[] { "k1", "k2", "k3" }.Select(Name));
                 Assert.False(Active("k4"));
-                Assert.Contains(enclosure.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Mode");
+                Assert.Contains(enclosure.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == Caption("k3"));
 
                 // Pick DI_Amp_TestC: two knobs, Level and Tone.
                 node.Params.Single(p => p.Id == "model").Value = SyntheticRsGame.Model("DI_Amp_TestC");
                 for (var pass = 0; pass < 2; pass++) window.UpdateLayout();
-                Assert.Equal("Tone", Name("k2"));
+                Assert.Equal(Shown("Tone"), Name("k2"));
                 Assert.True(Active("k2"));
                 Assert.False(Active("k3"));
-                Assert.Contains(enclosure.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Tone");
+                Assert.Contains(enclosure.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == Caption("k2"));
             }
             finally { window.Close(); }
         }, TestContext.Current.CancellationToken);

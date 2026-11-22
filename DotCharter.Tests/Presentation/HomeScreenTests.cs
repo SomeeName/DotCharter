@@ -281,6 +281,22 @@ public sealed class HomeScreenTests
         Assert.Equal("Home_Library_Summary(7)", home.LibrarySummary);
     }
 
+    /// <summary>#350: a read that throws is logged and the previous snapshot stays; it is no unobserved fault.</summary>
+    [Fact]
+    public void AShowWhoseReadThrows_LogsIt_AndKeepsThePreviousFigures()
+    {
+        var rig = new Rig { Library = new LibraryIndexFacts(7, 2), Logger = new FakeAppLogger() };
+        var home = rig.Screen();
+        var before = home.LibrarySummary;
+        rig.OffThread = _ => Task.FromException<HomeSnapshot>(new IOException("index busy"));
+
+        home.OnShown();
+
+        Assert.Equal(before, home.LibrarySummary);
+        var entry = Assert.Single(rig.Logger.Entries);
+        Assert.Equal("ERROR", entry.Level);
+    }
+
     /// <summary>
     ///     A return that finds nothing changed announces nothing and keeps every
     ///     card: re-raising every binding and rebuilding the cards on each return
@@ -421,6 +437,8 @@ public sealed class HomeScreenTests
         public int FactReads { get; private set; }
 
         /// <summary>Where a show's read runs. Inline by default, so a show is observable at once.</summary>
+        public FakeAppLogger? Logger { get; set; }
+
         public Func<Func<HomeSnapshot>, Task<HomeSnapshot>> OffThread { get; set; } = read => Task.FromResult(read());
 
         public HomeViewModel Screen()
@@ -436,7 +454,7 @@ public sealed class HomeScreenTests
                     CoverQueries.Add(key);
                     return Covers.GetValueOrDefault(key, "");
                 })), Device, new EchoLocalization());
-            return new HomeViewModel(source, Shell, Session, new EchoLocalization(),
+            return new HomeViewModel(source, Shell, Session, new EchoLocalization(), Logger ?? new FakeAppLogger(),
                 () => new DateTime(2026, 9, 20, 12, 0, 0, DateTimeKind.Utc), read => OffThread(read));
         }
     }
@@ -565,7 +583,8 @@ public sealed class HomeScreenTests
         public Task<bool> AttachAudioAsync(string sourcePath) => Task.FromResult(true);
         public Task LoadSilentTransportAsync(double projectLengthMs) => Task.CompletedTask;
         public Task OpenProject() => Task.CompletedTask;
-        public Task<bool> SaveProjectAsync() => Task.FromResult(true);
+        public bool HasUnsavedWork() => IsProjectDirty;
+        public Task<bool> SaveProjectAsync(SaveInitiator initiator) => Task.FromResult(true);
         public Task<bool> SaveProjectAsAsync() => Task.FromResult(true);
         public IReadOnlyList<RecentProjectEntry> GetRecentProjects() => Recent;
         public void Dispose() { }

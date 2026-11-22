@@ -45,6 +45,22 @@ internal static class FakeShapePanelData
         .. OldChart(panel)
     ];
 
+    /// <summary>
+    ///     A seven- and an eight-string chart: fret patterns as wide as a list line gets (two-digit frets on every
+    ///     string) beside long names, so the pattern can never squeeze the name to nothing.
+    /// </summary>
+    public static List<FakeShapePanelRow> ExtendedRange(FakeShapePanelScreen panel) =>
+    [
+        new(new FakeShape("Gesperrter Septakkord (sieben Saiten, Barré im zwölften Bund)", [12, 14, 14, 13, 12, 12, 12],
+            [1, 3, 4, 2, 1, 1, 1]), 24, 6, null, panel),
+        new(new FakeShape("8弦のパワーコード(ブリッジミュート)", [10, 12, 12, 11, 10, 10, 10, 10],
+            [1, 3, 4, 2, 1, 1, 1, 1]), 41, 9, new FakeShapeIssue("Same grip as “x x 9 8 11 x”", "Merge"), panel),
+        new(new FakeShape("", [11, 13, 13, 12, 11, 11, 11, 11], [1, 3, 4, 2, 1, 1, 1, 1]), 3, 1, null, panel),
+        new(new FakeShape("Bm11 (7)", [-1, 14, 12, 14, 12, 12, -1], [-1, 3, 1, 4, 1, 1, -1]), 0, 0, null, panel),
+        new(FakeShapeGrips.EightString, 7, 2, null, panel),
+        .. OldChart(panel)
+    ];
+
     /// <summary>Ninety shapes, built by index so every run is the same: every third a duplicate, every seventh unused.</summary>
     public static List<FakeShapePanelRow> Many(FakeShapePanelScreen panel, int count)
     {

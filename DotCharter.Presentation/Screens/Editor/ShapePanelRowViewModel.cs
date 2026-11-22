@@ -52,9 +52,12 @@ public sealed partial class ShapePanelRowViewModel : ObservableObject, IShapePan
     private readonly IShapeRowOwner _owner;
     private string _readName = "";
     private bool _isNoName;
+    private string _suggestedName = "";
 
     [ObservableProperty] private string _nameText = "";
     [ObservableProperty] private string _namePlaceholder = "";
+    [NotifyPropertyChangedFor(nameof(HasSuggestion))]
+    [ObservableProperty] private string _suggestionLabel = "";
     [ObservableProperty] private string _fretsText = "";
     [ObservableProperty] private ChordTemplate _diagram = new();
     [ObservableProperty] private Chord _diagramChord = new();
@@ -70,6 +73,7 @@ public sealed partial class ShapePanelRowViewModel : ObservableObject, IShapePan
     [ObservableProperty] private bool _canMerge;
     [ObservableProperty] private bool _canMergeHere;
     [ObservableProperty] private bool _canSplitSelection;
+    [ObservableProperty] private bool _isCurrent;
 
     internal ShapePanelRowViewModel(ChordTemplate template, IShapeRowOwner owner, ILocalizationService localization)
     {
@@ -77,6 +81,7 @@ public sealed partial class ShapePanelRowViewModel : ObservableObject, IShapePan
         _owner = owner;
         _localization = localization;
         CommitNameCommand = new RelayCommand(() => _owner.CommitName(this, NameText));
+        UseSuggestionCommand = new RelayCommand(() => _owner.CommitName(this, _suggestedName));
         FixCommand = new RelayCommand(() => _owner.Fix(this));
         EditCommand = new RelayCommand(() => _owner.Edit(this));
         PlaceCommand = new RelayCommand(() => _owner.Place(this));
@@ -121,6 +126,10 @@ public sealed partial class ShapePanelRowViewModel : ObservableObject, IShapePan
 
     public ICommand CommitNameCommand { get; }
 
+    public ICommand UseSuggestionCommand { get; }
+
+    public bool HasSuggestion => SuggestionLabel.Length > 0;
+
     public ICommand FixCommand { get; }
 
     public ICommand EditCommand { get; }
@@ -148,7 +157,7 @@ public sealed partial class ShapePanelRowViewModel : ObservableObject, IShapePan
     public ICommand DeleteCommand { get; }
 
     /// <summary>Re-reads the card from a fresh catalog entry; a value that did not move raises nothing.</summary>
-    internal void Update(ChordShapeEntry entry, ChordShapeIssue issue, string keeperTitle, int stringCount)
+    internal void Update(ChordShapeEntry entry, ChordShapeIssue issue, string keeperTitle, int stringCount, string suggestedName)
     {
         Entry = entry;
         Issue = issue;
@@ -167,6 +176,10 @@ public sealed partial class ShapePanelRowViewModel : ObservableObject, IShapePan
             _isNoName = template.Unnamed;
             OnPropertyChanged(nameof(IsNoName));
         }
+
+        // The namer's first name, offered only to a shape with no name that is not deliberately nameless.
+        _suggestedName = template.Unnamed || template.Name.Length > 0 ? "" : suggestedName;
+        SuggestionLabel = _suggestedName.Length == 0 ? "" : _localization.Format("Shapes_UseSuggestion", _suggestedName);
 
         if (!SameDrawing(Diagram, template))
         {

@@ -89,9 +89,11 @@ public sealed class OutputLatencyCacheTests
     public void EstimatedOutputLatencyMs_ReadsThroughTheCache_AndReconfigureInvalidatesIt()
     {
         var playhead = Source("JuceAudioPlaybackService.Playhead.cs");
-        var getter = Body(playhead, "public double EstimatedOutputLatencyMs");
-        Assert.Contains("_latencyCache.TryGet(eng, now, out var cached)", getter);
-        Assert.Contains("_latencyCache.Store(eng, now, ms)", getter);
+        Assert.Contains("Engine.PlayheadReadback.EstimateOutputLatency(_engine, _latencyCache", playhead);
+        var readback = Source(Path.Combine("Engine", "PlayheadReadback.cs"));
+        var getter = Body(readback, "internal static double EstimateOutputLatency");
+        Assert.Contains("cache.TryGet(eng, now, out var cached)", getter);
+        Assert.Contains("cache.Store(eng, now, ms)", getter);
 
         var config = Source("JuceAudioPlaybackService.EngineConfig.cs");
         var reconfigure = config.IndexOf("engine.Reconfigure(sr, buf, outDev, inDev);", StringComparison.Ordinal);

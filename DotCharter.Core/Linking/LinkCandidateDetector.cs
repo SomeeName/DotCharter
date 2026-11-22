@@ -60,19 +60,22 @@ public sealed record LinkDetectionResult(IReadOnlyList<LinkCandidateGroup> Group
 /// </summary>
 public static class LinkCandidateDetector
 {
-    /// <summary>Above this many equal-measure pairs the search stops (a drone of hundreds of
-    /// identical bars) and the result says <see cref="LinkDetectionResult.Truncated" />.</summary>
+    /// <summary>Above this many measure comparisons, including unequal keys and rests, the search stops
+    /// and the result says <see cref="LinkDetectionResult.Truncated" />.</summary>
     public const int MaxPairs = 4_000_000;
 
     public static LinkDetectionResult Detect(IReadOnlyList<MeasureContentIndex> parts)
     {
         ArgumentNullException.ThrowIfNull(parts);
         var flat = Flatten(parts);
+
+        var comparedPairs = (long)flat.Ids.Length * (flat.Ids.Length - 1) / 2;
+        if (comparedPairs > MaxPairs) return new LinkDetectionResult([], Truncated: true);
+
         var positionsById = StartsById(flat);
 
         long pairCount = 0;
         foreach (var list in positionsById.Values) pairCount += (long)list.Count * (list.Count - 1) / 2;
-        if (pairCount > MaxPairs) return new LinkDetectionResult([], Truncated: true);
 
         var search = new Search(parts, flat, LongestCommonRuns(flat.Ids, flat.Ids.Length), positionsById, Pairs(positionsById, pairCount));
         var found = new List<(MeasureContentKey Key, int Length, List<LinkCandidatePlacement> Placements)>();

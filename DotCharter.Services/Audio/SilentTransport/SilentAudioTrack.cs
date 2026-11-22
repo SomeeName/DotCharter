@@ -1,3 +1,4 @@
+
 namespace DotCharter.Services.Audio.SilentTransport;
 
 /// <summary>
@@ -126,8 +127,7 @@ public sealed class SilentAudioTrack
             try
             {
                 WriteSilentWav(tmp, seconds);
-                if (File.Exists(path)) File.Delete(path);
-                File.Move(tmp, path);
+                AtomicFile.Publish(tmp, path);
                 _logger?.Info(AppLogCategory.Audio,
                     $"Generated {seconds}s silent transport WAV '{path}' ({new FileInfo(path).Length / 1024} KB).");
             }

@@ -4,7 +4,7 @@
 /// Durable, per-song stem cache. Each song's stems live as ONE compressed
 /// <c>.dcstems</c> archive under
 /// <c>%LocalAppData%/DotCharter/StemCache/&lt;token&gt;.dcstems</c> (LocalAppData,
-/// not Roaming — this is large, regenerable data). On a cache hit the archive
+/// not Roaming — this is large, durable data). On a cache hit the archive
 /// is expanded to WAV on demand for JUCE; separation never re-runs.
 /// </summary>
 public sealed class StemCacheStore
@@ -13,13 +13,16 @@ public sealed class StemCacheStore
     private readonly IStemEncoder _encoder;
     private readonly IAppLogger? _logger;
     private readonly Func<DateTime> _clock;
+    private readonly Func<TimeSpan, CancellationToken, Task>? _lockRetryDelay;
 
     public StemCacheStore(
         IStemEncoder? encoder = null,
         IAppLogger? logger = null,
         string? rootOverride = null,
-        Func<DateTime>? clock = null)
+        Func<DateTime>? clock = null,
+        Func<TimeSpan, CancellationToken, Task>? lockRetryDelay = null)
     {
+        _lockRetryDelay = lockRetryDelay;
         _encoder = encoder ?? new FfmpegStemEncoder(logger);
         _logger = logger;
         _clock = clock ?? (() => DateTime.UtcNow);
@@ -66,7 +69,7 @@ public sealed class StemCacheStore
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Stem cache: could not search the archives: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Stem cache: could not search the archives", ex);
         }
 
         return found;
@@ -99,7 +102,7 @@ public sealed class StemCacheStore
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Stem cache: could not adopt '{Path.GetFileName(archivePath)}': {ex.Message}");
+                $"Stem cache: could not adopt '{Path.GetFileName(archivePath)}'", ex);
             return false;
         }
     }
@@ -184,7 +187,7 @@ public sealed class StemCacheStore
             // A failed adoption is a plain miss at worst — never a reason to throw
             // out of the never-throws-for-cache-problems front door.
             _logger?.Warning(AppLogCategory.Audio,
-                $"Stem cache: could not adopt the archive for '{superseded.DirectoryToken}': {ex.Message}");
+                $"Stem cache: could not adopt the archive for '{superseded.DirectoryToken}'", ex);
             return false;
         }
     }
@@ -235,13 +238,13 @@ public sealed class StemCacheStore
                 catch (Exception ex)
                 {
                     _logger?.Warning(AppLogCategory.Audio,
-                        $"Stem cache: could not remove abandoned staging dir '{Path.GetFileName(dir)}': {ex.Message}");
+                        $"Stem cache: could not remove abandoned staging dir '{Path.GetFileName(dir)}'", ex);
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Stem cache staging sweep failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Stem cache staging sweep failed", ex);
             return swept;
         }
 
@@ -340,8 +343,8 @@ public sealed class StemCacheStore
 
     /// <summary>
     /// Encodes the freshly separated WAV stems, packages them (plus a manifest)
-    /// into the archive, and writes it atomically. The codec is chosen by the
-    /// encoder (Opus when ffmpeg is present, else WAV) and recorded in the
+    /// into the archive, and publishes it atomically only if none exists.
+    /// The encoder chooses the codec (Opus when ffmpeg is present, else WAV), recorded in the
     /// manifest so the archive is portable.
     /// </summary>
     public async Task SaveAsync(
@@ -354,6 +357,9 @@ public sealed class StemCacheStore
         CancellationToken ct = default,
         string? sourceFullHash = null)
     {
+        // A cache archive is the only durable copy. Even a decode outage or a
+        // second save with more stems must never replace it.
+        if (File.Exists(ArchivePath(key))) return;
         if (wavStems.Count == 0)
         {
             _logger?.Warning(AppLogCategory.Audio, "Stem cache save skipped: no stems to store.");
@@ -427,33 +433,18 @@ public sealed class StemCacheStore
                 Stems = manifestStems,
             };
 
-            // A save may ADD to the cache or REPLACE an entry with an equal-or-better
-            // one; it may never SHRINK one. `usable` above silently drops any stem
-            // whose WAV has gone (a cleaned playback dir, a failed run, a file still
-            // open in the mixer), so a six-stem archive could be atomically replaced
-            // by a four-stem one — and because stems are never regenerated, the two
-            // missing stems were gone for good, with an Info line reading like a
-            // success. The archive on disk is the durable artifact; when it already
-            // holds more than we are about to write, keep it.
-            if (TryGetManifest(key, out var existing) && existing.Stems.Count > manifestStems.Count)
-            {
-                _logger?.Warning(AppLogCategory.Audio,
-                    $"Stem cache save skipped: the archive for '{key.DirectoryToken}' already holds " +
-                    $"{existing.Stems.Count} stem(s) and this save would leave only {manifestStems.Count} " +
-                    $"({wavStems.Count - usable.Count} of {wavStems.Count} separated stem(s) were missing on disk). " +
-                    "Keeping the existing archive.");
-                return;
-            }
-
             var tmpArchive = Path.Combine(work, "archive" + StemArchive.ArchiveExtension);
             StemArchive.Write(tmpArchive, manifest, entries);
 
             var finalPath = ArchivePath(key);
             Directory.CreateDirectory(_root);
-            // Atomic overwrite (mirror WaveformDiskCache): no delete-then-move
-            // window a concurrent open could see as a miss, and no crash gap
-            // between the delete and the move that would lose the archive.
-            AtomicFile.ReplaceWithRetry(tmpArchive, finalPath);
+            // Same-volume publication without overwrite: another save may have
+            // won since the early probe. Its archive wins, byte for byte.
+            if (!AtomicFile.PublishNew(tmpArchive, finalPath))
+            {
+                _logger?.Info(AppLogCategory.Audio, "Stem cache: another save published first; keeping its archive.");
+                return;
+            }
 
             _logger?.Info(AppLogCategory.Audio,
                 $"Stem cache: stored {manifestStems.Count} stem(s) as {actualCodec} at '{finalPath}' ({new FileInfo(finalPath).Length:N0} bytes).");
@@ -472,6 +463,7 @@ public sealed class StemCacheStore
     /// </summary>
     public async Task<IReadOnlyList<StemTrack>> ExtractAsync(StemCacheKey key, string destDir, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         var archivePath = ArchivePath(key);
         // Typed, because the coordinator's delete decision keys on the TYPE: this
         // is a genuine corruption signal (the manifest probe accepted the archive a
@@ -491,18 +483,11 @@ public sealed class StemCacheStore
         // back, and the old stems would be handed to the mixer. Only take the
         // fast path when the marker says these WAVs came from THIS archive.
         var marker = Path.Combine(destDir, ExpandedMarkerFileName);
-        var alreadyThere = manifest.Stems.Count > 0 &&
-                           ReadMarker(marker) == key.DirectoryToken &&
-                           manifest.Stems.All(s =>
-                               File.Exists(Path.Combine(destDir, Path.GetFileNameWithoutExtension(s.FileName) + ".wav")));
-        if (alreadyThere)
-        {
-            return manifest.Stems
-                .Select(s => new StemTrack { Name = s.Name, Path = Path.Combine(destDir, Path.GetFileNameWithoutExtension(s.FileName) + ".wav") })
-                .ToList();
-        }
+        if (await TryFastPathAsync(manifest, key, destDir, marker, ct).ConfigureAwait(false) is { } existing)
+            return existing;
 
-        var encodedDir = Path.Combine(destDir, ".encoded");
+        var stage = destDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + ".restore-" + Guid.NewGuid().ToString("N");
+        var encodedDir = Path.Combine(stage, ".encoded");
         var tracks = new List<StemTrack>(manifest.Stems.Count);
         try
         {
@@ -510,6 +495,20 @@ public sealed class StemCacheStore
             // Keys are file names of real extracted archive entries, so
             // Path.GetFileName never returns null here (never called with null).
             var byName = encodedFiles.ToDictionary(p => Path.GetFileName(p)!, p => p, StringComparer.OrdinalIgnoreCase);
+
+            // Validate the WHOLE manifest before any worker owns the payloads.
+            // Otherwise a missing later entry unwinds past running decoders and
+            // disposes their semaphore / deletes their inputs underneath them.
+            foreach (var stem in manifest.Stems)
+            {
+                if (!byName.ContainsKey(stem.FileName))
+                {
+                    throw new StemArchiveCorruptException(
+                        $"Stem cache archive '{Path.GetFileName(archivePath)}' promises stem " +
+                        $"'{stem.Name}' as entry '{stem.FileName}', which the archive does not contain " +
+                        $"({byName.Count} of {manifest.Stems.Count} entries present).");
+                }
+            }
 
             // CONCURRENT, because this is the blocking half of opening a cached
             // song. Each stem is its own ffmpeg process writing its own distinct
@@ -522,59 +521,42 @@ public sealed class StemCacheStore
             // collected per index and appended in MANIFEST ORDER afterwards: the
             // mixer's channel order is the manifest's, and completion order is
             // not.
-            var pending = new Task[manifest.Stems.Count];
+            var pending = new List<Task>(manifest.Stems.Count);
             var decoded = new string?[manifest.Stems.Count];
             using (var slots = new SemaphoreSlim(
                        Math.Max(1, Math.Min(manifest.Stems.Count,
                            StemSeparationResourcePolicy.RecommendedWorkerThreads()))))
             {
-                for (var i = 0; i < manifest.Stems.Count; i++)
+                try
                 {
-                    var index = i;
-                    var stem = manifest.Stems[i];
-                    if (!byName.TryGetValue(stem.FileName, out var encodedPath))
+                    for (var i = 0; i < manifest.Stems.Count; i++)
                     {
-                        // The archive's central directory disagrees with its OWN
-                        // manifest — the exact torn-write case StemArchive.Write's
-                        // FlushFile exists to prevent, and a truncated payload can
-                        // leave a readable manifest behind. Skipping the
-                        // entry silently would report a cache HIT with
-                        // fewer channels than the mixer expects, write the marker
-                        // naming this archive so the fast path served the
-                        // short set forever, and — because stems are never
-                        // regenerated — lose a stem for good with nothing in
-                        // the log. It is provably unusable, so it is corruption
-                        // (StemCacheCoordinator deletes it and re-separates) rather
-                        // than a decode outage (which keeps it).
-                        throw new StemArchiveCorruptException(
-                            $"Stem cache archive '{Path.GetFileName(archivePath)}' promises stem " +
-                            $"'{stem.Name}' as entry '{stem.FileName}', which the archive does not contain " +
-                            $"({byName.Count} of {manifest.Stems.Count} entries present).");
+                        var index = i;
+                        var stem = manifest.Stems[i];
+                        var encodedPath = byName[stem.FileName];
+                        var wavPath = Path.Combine(stage,
+                            Path.GetFileNameWithoutExtension(stem.FileName) + ".wav");
+                        pending.Add(Task.Run(async () =>
+                        {
+                            await slots.WaitAsync(ct).ConfigureAwait(false);
+                            try
+                            {
+                                await _encoder.DecodeToWavAsync(encodedPath, manifest.Codec, wavPath, ct)
+                                    .ConfigureAwait(false);
+                                decoded[index] = wavPath;
+                            }
+                            finally
+                            {
+                                slots.Release();
+                            }
+                        }, ct));
                     }
-
-                    var wavPath = Path.Combine(destDir,
-                        Path.GetFileNameWithoutExtension(stem.FileName) + ".wav");
-                    pending[index] = Task.Run(async () =>
-                    {
-                        await slots.WaitAsync(ct).ConfigureAwait(false);
-                        try
-                        {
-                            await _encoder.DecodeToWavAsync(encodedPath, manifest.Codec, wavPath, ct)
-                                .ConfigureAwait(false);
-                            decoded[index] = wavPath;
-                        }
-                        finally
-                        {
-                            slots.Release();
-                        }
-                    }, ct);
                 }
-
-                // WhenAll so every decode is awaited even when one throws — an
-                // unawaited sibling would keep writing into a directory the
-                // caller has already abandoned, and its failure would surface
-                // later as an unobserved task fault.
-                await Task.WhenAll(pending).ConfigureAwait(false);
+                finally
+                {
+                    // Drain started workers even if scheduling a later one fails.
+                    await Task.WhenAll(pending).ConfigureAwait(false);
+                }
             }
 
             for (var i = 0; i < manifest.Stems.Count; i++)
@@ -582,16 +564,70 @@ public sealed class StemCacheStore
                 if (decoded[i] is { } path)
                     tracks.Add(new StemTrack { Name = manifest.Stems[i].Name, Path = path });
             }
+
+            // Taken before the last cancellation check: a wait cancelled here publishes nothing.
+            using var exclusion = await StemCacheExpansion.AcquireAsync(destDir, _lockRetryDelay, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            return StemCacheExpansion.PublishLocked(tracks, destDir, key.DirectoryToken);
         }
         finally
         {
-            // Also runs when a decode throws (e.g. ffmpeg missing) so the
-            // temporary Opus payloads never linger in the playback dir.
-            BestEffortDelete.Directory(encodedDir);
+            // Workers have drained, including a decoder that wrote before cancellation.
+            // Neither its payloads nor its incomplete WAVs are recoverable project stems.
+            BestEffortDelete.Directory(stage);
+        }
+    }
+
+    /// <summary>
+    ///     The fast path: the folder already holds THIS archive's expansion. A probe may
+    ///     hold the folder for a moment, so the exclusion is waited for, bounded. When it is
+    ///     not this archive's set, the old completion marker goes and the publication is
+    ///     recorded as STARTED, both under the exclusion, so a probe during the decode never
+    ///     adopts the old WAVs. A folder whose exclusion cannot be opened at all (no
+    ///     write access and no lock file) is checked without it; only a real publication
+    ///     then fails.
+    /// </summary>
+    private async Task<List<StemTrack>?> TryFastPathAsync(StemCacheManifest manifest, StemCacheKey key,
+        string destDir, string marker, CancellationToken ct)
+    {
+        FileStream exclusion;
+        try
+        {
+            exclusion = await StemCacheExpansion.AcquireAsync(destDir, _lockRetryDelay, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && !StemCacheExpansion.IsBusy(ex))
+        {
+            if (StemCacheExpansion.CanReadUnlocked(destDir, ex, _logger)
+                && ExistingExpansion(manifest, key, destDir, marker) is { } unlocked)
+            {
+                return unlocked;
+            }
+
+            throw;
         }
 
-        WriteMarker(marker, key.DirectoryToken);
-        return tracks;
+        using (exclusion)
+        {
+            if (StemCacheExpansion.CanRecoverLocked(destDir) && ExistingExpansion(manifest, key, destDir, marker) is { } existing)
+                return existing;
+
+            // Fail closed if the old marker cannot be removed: no WAV may be
+            // overwritten while a previous archive is still advertised as complete.
+            File.Delete(marker);
+            AtomicFile.WriteAllText(Path.Combine(destDir, StemCacheExpansion.PendingFileName), key.DirectoryToken);
+            return null;
+        }
+    }
+
+    /// <summary>The set the marker says came from THIS archive, when every WAV of it is there.</summary>
+    private static List<StemTrack>? ExistingExpansion(StemCacheManifest manifest, StemCacheKey key, string destDir,
+        string marker)
+    {
+        if (manifest.Stems.Count == 0 || ReadMarker(marker) != key.DirectoryToken) return null;
+        var tracks = manifest.Stems
+            .Select(s => new StemTrack { Name = s.Name, Path = Path.Combine(destDir, Path.GetFileNameWithoutExtension(s.FileName) + ".wav") })
+            .ToList();
+        return tracks.All(track => File.Exists(track.Path)) ? tracks : null;
     }
 
     /// <summary>Names which archive the loose WAVs in a playback dir came from,
@@ -602,7 +638,7 @@ public sealed class StemCacheStore
     {
         try
         {
-            return File.Exists(path) ? File.ReadAllText(path).Trim() : null;
+            return File.Exists(path) ? AtomicFile.ReadAllText(path).Trim() : null;
         }
         catch (IOException)
         {
@@ -611,22 +647,6 @@ public sealed class StemCacheStore
         catch (UnauthorizedAccessException)
         {
             return null;
-        }
-    }
-
-    private static void WriteMarker(string path, string token)
-    {
-        try
-        {
-            File.WriteAllText(path, token);
-        }
-        catch (IOException)
-        {
-            // Best effort: a missing marker only costs a re-decode next time.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // ditto
         }
     }
 
@@ -682,7 +702,7 @@ public sealed class StemCacheStore
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Stem cache measure failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Stem cache measure failed", ex);
             return StemCacheUsage.Empty;
         }
     }
@@ -714,13 +734,13 @@ public sealed class StemCacheStore
                 catch (Exception ex)
                 {
                     _logger?.Warning(AppLogCategory.Audio,
-                        $"Stem cache clear skipped '{Path.GetFileName(file)}': {ex.Message}");
+                        $"Stem cache clear skipped '{Path.GetFileName(file)}'", ex);
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Stem cache clear failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Stem cache clear failed", ex);
         }
         // "Clear" is the user reclaiming the folder, so it has to reach the bytes
         // a hard exit stranded as well — otherwise the row keeps reporting space
@@ -746,14 +766,13 @@ public sealed class StemCacheStore
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Stem cache delete failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Stem cache delete failed", ex);
         }
     }
 
     private static string SafeName(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return "stem";
-        foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
-        return name;
+        return SafeFileName.ReplaceInvalid(name);
     }
 }

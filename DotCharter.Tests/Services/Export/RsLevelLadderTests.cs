@@ -13,6 +13,22 @@ namespace DotCharter.Tests.Services.Export;
 /// </summary>
 public sealed class RsLevelLadderTests
 {
+    [Fact]
+    public void EmptyXmlLadder_RefusesTheBucketProductBeforeAllocatingIt()
+    {
+        var doc = new XDocument(new XElement("song",
+            new XElement("ebeats", new XElement("ebeat", new XAttribute("time", 0), new XAttribute("measure", 0)),
+                new XElement("ebeat", new XAttribute("time", 0.5), new XAttribute("measure", -1))),
+            new XElement("phrases", new XElement("phrase", new XAttribute("name", "riff"), new XAttribute("maxDifficulty", 0))),
+            new XElement("phraseIterations", Enumerable.Range(0, 1024).Select(i =>
+                new XElement("phraseIteration", new XAttribute("time", i * 0.5), new XAttribute("phraseId", 0)))),
+            new XElement("levels", Enumerable.Range(0, 1024).Select(i =>
+                new XElement("level", new XAttribute("difficulty", i))))));
+        Assert.InRange(doc.ToString(SaveOptions.DisableFormatting).Length, 1, 128 * 1024);
+
+        Assert.Throws<InvalidDataException>(() => new RsXmlSongReader().ReadDocument(doc, "hostile.xml"));
+    }
+
     // COUNT (max 0) @0, riff (max 2) @4 and @8, outro (max 1) @12.
     private static ChartProject SparseProject()
     {
@@ -77,6 +93,62 @@ public sealed class RsLevelLadderTests
         new() { Position = new FractionalPosition(beat), Fret = fret, StringIndex = 0 };
 
     private static int Sounds(ChartLevel level) => level.Notes.Count + level.Chords.Count;
+
+    [Fact]
+    public void Import_enforces_one_clone_budget_across_levels_and_entity_kinds()
+    {
+        var arr = SparseProject().Arrangements[0];
+
+        Assert.Throws<InvalidDataException>(() => RsLevelLadder.FillInheritedPhrases(arr, maxClonedEntities: 7));
+    }
+
+    [Fact]
+    public void Import_counts_chord_notes_inside_each_clone()
+    {
+        var arr = new Arrangement();
+        arr.Phrases.Add("riff");
+        arr.PhraseInfos["riff"] = new PhraseInfo(0, false);
+        arr.PhraseIterations.Add(new PhraseIteration(FractionalPosition.Zero, 0));
+        var source = new ChartLevel { DifficultyIndex = 0 };
+        source.Chords.Add(new Chord { ChordNotes = [new ChordNote(), new ChordNote()] });
+        arr.Levels.Add(source);
+        arr.Levels.Add(new ChartLevel { DifficultyIndex = 1 });
+
+        Assert.Throws<InvalidDataException>(() => RsLevelLadder.FillInheritedPhrases(arr, maxClonedEntities: 2));
+        Assert.Empty(arr.Levels[1].Chords);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Import_counts_bends_inside_notes_and_chords(bool chord)
+    {
+        var arr = new Arrangement();
+        arr.Phrases.Add("riff");
+        arr.PhraseInfos["riff"] = new PhraseInfo(0, false);
+        arr.PhraseIterations.Add(new PhraseIteration(FractionalPosition.Zero, 0));
+        var source = new ChartLevel { DifficultyIndex = 0 };
+        if (chord)
+            source.Chords.Add(new Chord { ChordNotes = [new ChordNote { BendValues = [new BendValue()] }] });
+        else
+            source.Notes.Add(new GuitarNote { BendValues = [new BendValue(), new BendValue()] });
+        arr.Levels.Add(source);
+        arr.Levels.Add(new ChartLevel { DifficultyIndex = 1 });
+
+        Assert.Throws<InvalidDataException>(() => RsLevelLadder.FillInheritedPhrases(arr, maxClonedEntities: 2));
+        Assert.Empty(arr.Levels[1].Notes);
+        Assert.Empty(arr.Levels[1].Chords);
+    }
+
+    [Fact]
+    public void Import_at_the_clone_budget_still_fills_every_inherited_phrase()
+    {
+        var arr = SparseProject().Arrangements[0];
+
+        Assert.Equal(8, RsLevelLadder.FillInheritedPhrases(arr, maxClonedEntities: 10));
+        Assert.Equal(0, RsLevelLadder.FillInheritedPhrases(arr, maxClonedEntities: 0));
+        Assert.Single(arr.Levels[2].Chords);
+    }
 
     [Fact]
     public void Import_fills_each_level_above_a_phrases_max_with_that_phrases_max_level()

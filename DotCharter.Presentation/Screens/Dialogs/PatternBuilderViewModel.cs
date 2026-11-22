@@ -196,7 +196,7 @@ public sealed class PatternBuilderViewModel : DialogViewModel<bool>, IPatternBui
 
     private MatchPatternRowViewModel NewRow(MatchPattern pattern)
     {
-        var row = new MatchPatternRowViewModel(pattern.Normalized(), Choices);
+        var row = new MatchPatternRowViewModel(pattern.Normalized(), Choices, _edit.Localization);
         row.Summary = PatternSummary.Describe(row.ToPattern(), _edit.Localization);
         row.FacetChanged += OnFacetChanged;
         return row;
@@ -208,7 +208,7 @@ public sealed class PatternBuilderViewModel : DialogViewModel<bool>, IPatternBui
         if (e.AffectsMatchCount && ReferenceEquals(sender, SelectedPattern)) RefreshPreview();
     }
 
-    /// <summary>A key on the selected pattern owned by another pattern, or by a built-in keybind other than this pattern's own.</summary>
+    /// <summary>A key on the selected pattern owned by another verb, another pattern or a built-in keybind.</summary>
     private void RefreshConflicts()
     {
         var row = SelectedPattern;
@@ -227,12 +227,20 @@ public sealed class PatternBuilderViewModel : DialogViewModel<bool>, IPatternBui
     private void Check(MatchPatternRowViewModel row, KeyChord chord, string verbKey, List<string> conflicts)
     {
         if (!chord.IsBound) return;
-        var other = Patterns.FirstOrDefault(p =>
-            !ReferenceEquals(p, row) && (p.SelectKey == chord || p.NextKey == chord || p.PreviousKey == chord));
-        if (other is not null)
+        foreach (var pattern in Patterns)
         {
-            conflicts.Add($"{chord} ({Loc(verbKey)}) → {other.Name}");
-            return;
+            var bindings = new[]
+            {
+                (pattern.SelectKey, "Pattern_Verb_Select"),
+                (pattern.NextKey, "Pattern_Verb_Next"),
+                (pattern.PreviousKey, "Pattern_Verb_Previous")
+            };
+            foreach (var (binding, otherVerb) in bindings)
+            {
+                if (binding != chord || (ReferenceEquals(pattern, row) && otherVerb == verbKey)) continue;
+                conflicts.Add($"{chord} ({Loc(verbKey)}) → {pattern.Name} ({Loc(otherVerb)})");
+                return;
+            }
         }
 
         var owner = _keybinds.DescribeBinding(chord);
@@ -289,7 +297,9 @@ public sealed class PatternBuilderViewModel : DialogViewModel<bool>, IPatternBui
         if (SelectedPattern is null) return;
         var added = _editing.SelectByPattern(SelectedPattern.ToPattern());
         RefreshPreview();
-        MatchSummary = _edit.Localization.Format("Pattern_SelectedSummary", added);
+        MatchSummary = _edit.Localization.Format("Pattern_SelectedSummary", added.Total);
+        var (text, severity) = SelectionAdditionStatus.Describe(added, _edit.Localization);
+        _edit.State.SetMessage(text, severity);
     }
 
     private void Step(int direction)

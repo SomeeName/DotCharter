@@ -21,7 +21,7 @@ public sealed record GpProbeOptions(bool RoundTrip = true, string? TempDirectory
 /// </summary>
 public static class GpImportHealthProbe
 {
-    private const int MaxFret = 24;
+    private const int MaxFret = FretLimits.MaxFret;
 
     /// <summary>The app's default clean-up settings, as "add as new arrangements" uses them.</summary>
     private static readonly AppConfig Config = new();
@@ -78,9 +78,7 @@ public static class GpImportHealthProbe
     {
         var warnings = new List<string>();
         var meta = imported.Metadata;
-        var beats = GpBeatMapBuilder.Build(meta, GpBeatMapBuilder.InitialBpm(meta, 120), 0);
-        foreach (var arrangement in imported.Arrangements)
-            ChartSpacingEnforcer.EnforceArrangement(arrangement, beats, Config);
+        var beats = PrepareArrangements(imported);
 
         if (tracks.Count == 0) warnings.Add("no-tracks");
         if (imported.Arrangements.Count != tracks.Count) warnings.Add("tracks-dropped");
@@ -137,6 +135,14 @@ public static class GpImportHealthProbe
             Arrangements = results,
             Warnings = [.. warnings.Distinct()]
         };
+    }
+
+    internal static List<BeatMarker> PrepareArrangements(GpImportResult imported)
+    {
+        var meta = imported.Metadata;
+        var beats = GpBeatMapBuilder.Build(meta, GpBeatMapBuilder.InitialBpm(meta, 120), 0);
+        foreach (var arrangement in imported.Arrangements) ChartSpacingEnforcer.EnforceArrangement(arrangement, beats, Config);
+        return beats;
     }
 
     private static GpProbeArrangement Describe(int track, Arrangement arrangement, PartFacts facts, MeasureContentIndex index,

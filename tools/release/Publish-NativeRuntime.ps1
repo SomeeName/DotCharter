@@ -7,8 +7,12 @@
 
 .DESCRIPTION
     1. Reads the gitlink (git ls-tree HEAD JuceSharp) and DCA_ABI_VERSION from the header.
-    2. Refuses unless -NativeDir holds both files and the DLL's dca_abi_version()
-       equals the header's.
+    2. Refuses unless -NativeDir holds both files, the DLL's dca_abi_version()
+       equals the header's, and the build provenance record (-ProvenancePath, default
+       artifacts/native-runtime/native-build.provenance.json) holds both files' hashes
+       and the gitlink's native source tree (src/JuceSharp.Native). Build with
+       tools/setup/Build-NativeRuntime.ps1, which records the deployed pair automatically
+       from a checkout whose native sources are committed.
     3. Writes <OutDir>/juce-sharp-native-win-x64-<sha12>.zip (the two files at its root).
     4. Pins the pair in tools/setup/native-runtime.json: adds the entry, keeps an
        identical one, and REFUSES to repin a commit whose pinned files differ.
@@ -29,6 +33,8 @@ param(
     # The folder holding the matched pair a native build deployed.
     [string]$NativeDir,
     [string]$OutDir,
+    # The record Write-NativeBuildProvenance wrote for this pair's build.
+    [string]$ProvenancePath,
     [switch]$Upload
 )
 
@@ -54,6 +60,15 @@ foreach ($file in Get-NativeRuntimePairFiles) {
 }
 $dllAbi = Read-DllAbiVersion (Join-Path $NativeDir 'juce_sharp.dll')
 if ($dllAbi -ne $headerAbi) { throw "juce_sharp.dll reports ABI $dllAbi but the header says $headerAbi; it was not built from JuceSharp $commit." }
+# The same ABI is not the same sources: only a pair whose build record names the gitlink's
+# native source tree, with exactly these two files, is pinned or published.
+if (-not $ProvenancePath) { $ProvenancePath = Get-NativeBuildProvenancePath $repoRoot }
+$sourceTree = Get-NativeSourceTree -JuceSharpDir (Join-Path $repoRoot 'JuceSharp') -Rev $commit
+$provenanceProblems = @(Test-NativeBuildProvenance -Path $ProvenancePath -NativeSourceTree $sourceTree -Hashes $hashes)
+if ($provenanceProblems.Count -gt 0) {
+    throw ("The pair is not bound to the native sources of JuceSharp $commit (tree $sourceTree); nothing pinned or published:`n  - " +
+        ($provenanceProblems -join "`n  - ") + "`nRebuild with tools/setup/Build-NativeRuntime.ps1 from that commit to record the pair automatically.")
+}
 
 # --- the zip --------------------------------------------------------------
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null

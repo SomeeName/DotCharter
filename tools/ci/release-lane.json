@@ -17,6 +17,10 @@
       "seconds": 197.4,
       "why": "Renders the reference DI through converted Rocksmith tones on the real native rig and holds the result to relational fidelity targets: an end-to-end calibration harness for the tone conversion."
     },
+    "DotCharter.Tests.Audio.Dsp.RsToneConversion.Fidelity.RsToneFidelityHarnessTests+AmpVoicing": {
+      "seconds": 103.4,
+      "why": "Re-measures every amp voicing's level trim through the real native rig (four renders per voicing): the harness's longest fact, split out of RsToneFidelityHarnessTests (#325) so it runs beside the targets instead of after them."
+    },
     "DotCharter.Tests.Infrastructure.PublicSnapshotExportTests": {
       "seconds": 23.4,
       "why": "Runs Export-PublicSnapshot.ps1 end to end over fixture git repositories under pwsh. Only a change under tools/release or the export rename map can break it, and every release runs the export."
@@ -60,6 +64,10 @@
     "DotCharter.Tests.Infrastructure.PublicSyncGuardTests+SnapshotIdentityCase": {
       "seconds": 29,
       "why": "Runs the public-to-dev sync guard and Import-PublicCommit.ps1 over fixture git repositories under pwsh. Only a change under tools/release can break it."
+    },
+    "DotCharter.Tests.Services.Parsing.GuitarPro.GpAutoLinkCorpusTests": {
+      "seconds": 62.5,
+      "why": "Imports the local Guitar Pro corpus and measures the placements Link All creates with exact note and hand shape checks."
     },
     "DotCharter.Tests.Services.Audio.Dsp.ToneLowEndResponseTests": {
       "seconds": 109.6,

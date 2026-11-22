@@ -86,6 +86,39 @@ public sealed class ShowlightChipTests
         Assert.NotEqual(before, Fretboard3DEngine.ComputeRegisterSignature(snapshot));
     }
 
+    /// <summary>A song with no show-lights keeps the corner clear; the chip appears while a light is active
+    /// at the playhead or the Showlights editor is open.</summary>
+    [Theory]
+    [InlineData(false, null, null, null, false)]
+    [InlineData(false, null, 42, null, false)] // beams "off" is not active
+    [InlineData(false, null, null, 67, false)] // a laser note that is not "on"
+    [InlineData(false, 24, null, null, true)]
+    [InlineData(false, null, 49, null, true)]
+    [InlineData(false, null, null, 66, true)]
+    [InlineData(true, null, null, null, true)]
+    public void The_chip_shows_only_while_a_light_is_active_or_the_editor_is_open(
+        bool editorOpen, int? fog, int? beam, int? laser, bool shown) =>
+        Assert.Equal(shown, ShowlightChipLabels.ShouldShow(editorOpen, fog, beam, laser));
+
+    [Fact]
+    public void The_chip_state_hides_with_nothing_active_and_shows_again_when_a_light_or_the_editor_comes_on()
+    {
+        var labels = English();
+        var state = new ShowlightChipState();
+        Assert.Equal(string.Empty, state.Update(labels, false, null, null, null));
+        var lit = state.Update(labels, false, 24, null, null);
+        Assert.Equal("Fog: Green · Beams: off · Lasers: off", lit);
+        Assert.Same(lit, state.Update(labels, false, 24, null, null));
+        Assert.Equal(string.Empty, state.Update(labels, false, null, 42, null));
+        Assert.Equal("Fog: none · Beams: off · Lasers: off", state.Update(labels, true, null, null, null));
+        Assert.Equal(string.Empty, state.Clear());
+    }
+
+    [Fact]
+    public void The_driver_tells_the_snapshot_whether_the_editor_is_open() =>
+        Assert.Contains("_updateContext.ShowlightEditorOpen = localEditor.IsShowlightsEditorOpen;",
+            Preview3DRenderDriverSource.ReadAllText());
+
     [Fact]
     public void Play_mode_hands_the_renderer_no_chip_labels()
     {

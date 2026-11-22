@@ -5,6 +5,14 @@
     to a log file whose path is printed once.
 
 .DESCRIPTION
+    Full lanes are selected once for dispatch and cache revocation, even with a
+    trailing -FilterClass. Filtered/affected-only checks record no full lane.
+    Failed or incomplete planned lanes revoke again in finally; evidence uses
+    one exclusive store lock with a 10-second contention deadline.
+    A non-default -Project has no configured class weights: its default gate
+    runs once without foreign class filters. Exit 8 stays red for an empty run;
+    -UpdateShardWeights never writes its results into the default project's file.
+
     Wraps the three commands in AGENTS.md > Validation:
 
         dotnet build DotCharter.sln --nologo -v:m
@@ -39,13 +47,18 @@
     gate-durations.json next to gate.trx (also for -FilterClass:
     filtered-durations.json).
 
-    -Gate -Headless runs the two suites' shards AT THE SAME TIME (separate
-    testhosts already), when at least -MinFreeGB of physical memory is free
-    (default 12; the headless shards alone peak around 5-7 GB), otherwise one
-    after the other, as before (-Sequential forces that). Concurrent runs
-    report both suites, even when the gate is red, then a
-    `gate + headless: gate exit G, headless exit H` line; the exit code is the
-    gate's when it failed, else the headless suite's.
+    -Gate, -Headless and -ReleaseLane, given together, run their shards AT THE
+    SAME TIME (separate testhosts already, #325), when at least -MinFreeGB of
+    physical memory is free per two lanes (default 12, so 18 GB for all three;
+    the headless shards alone peak around 5-7 GB), otherwise one after the other,
+    as before (-Sequential forces that; the release lane then starts only after
+    a green gate). Together the lanes share -Shards testhosts per lane, split by
+    tools/ci/lane-weights.json (GateShards.psm1 Get-LaneShardCounts: the lane
+    whose shards would run longest gets the next testhost). Concurrent runs
+    report every lane, even when one is red, then a
+    `lanes: gate exit G, headless exit H, release exit R` line naming the lanes
+    that ran; the exit code is the first red lane's in that order.
+    -UpdateShardWeights in such a run also rewrites tools/ci/lane-weights.json.
 
     -Headless does not run that third line as ONE process: it splits the suite
     across -Shards concurrent testhosts (default as above) through
@@ -106,6 +119,11 @@
     testhost with the gate). Results are read from the TRX the runner writes,
     the same schema tools/release/New-Release.ps1 parses.
 
+    Full-lane attempts revoke prior green cache evidence before build/execution.
+    This script writes no green records; its callers save only accepted lanes.
+    Every headless shard/retry uses the shared CI/release exit grader before
+    automatic harness recovery; an unexplained exit blocks recovery.
+
     Runs under Windows PowerShell 5.1 and pwsh 7.
 
 .EXAMPLE
@@ -127,7 +145,7 @@
 
 .OUTPUTS
     Green run, build + gate:
-        build OK (0 warnings) - log: C:\...\Temp\dotcharter-gate\build.log
+        build OK (0 warnings) - log: C:\...\Temp\dotcharter-gate-<checkout>-<hash>\<run>\build.log
         gate: 12960 passed, 0 failed, 57 skipped, 13017 total, 264s (exit 0) - log: ...\gate.log
           slowest classes: top 20 of 2082 = 57.0 % of 1986.0 s summed case time (22003 cases)
              1.   186.0 s   9.3 %  Audio.RsToneFidelityHarnessTests (45)
@@ -174,11 +192,12 @@ param(
     # List the gate unsharded and shard by shard and prove the shards together
     # are exactly the gate's cases. Runs no test.
     [switch]$SelfTest,
-    # -Gate -Headless: run the two suites one after the other, never at the same time.
+    # -Gate / -Headless / -ReleaseLane together: run them one after the other, never at the same time.
     [switch]$Sequential,
-    # -Gate -Headless: the free physical memory (GB) below which they run one after the other.
+    # Two or more of -Gate / -Headless / -ReleaseLane: the free physical memory (GB) per TWO lanes
+    # below which they run one after the other.
     [double]$MinFreeGB = 12,
-    # Build configuration and runtime of the tested output (CI: Release, win-x64).
+    # Build configuration and runtime of the tested output (CI and Merge-Train.ps1: Release).
     [string]$Configuration = '',
     [string]$Runtime = '',
     # Where logs, TRX files and the durations JSON go (default: a folder under %TEMP%).
@@ -204,13 +223,21 @@ $ErrorActionPreference = 'Stop'
 if ($FilterClass) { $FilterClass = @($FilterClass | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim(' ', '"', "'") } | Where-Object { $_ }) }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $repoRoot
-# One log folder PER CHECKOUT: agent worktrees run the gate at the same time,
-# and a shared folder made one run's Out-File fail on the other's open log.
-$checkoutName = Split-Path -Leaf $repoRoot
-$inWorktree = (Split-Path -Leaf (Split-Path -Parent $repoRoot)) -eq 'worktrees'
-$logDir = if ($ResultsDir) { [System.IO.Path]::GetFullPath((Join-Path $repoRoot $ResultsDir)) } `
-    elseif ($inWorktree) { Join-Path $env:TEMP "dotcharter-gate-$checkoutName" } else { Join-Path $env:TEMP 'dotcharter-gate' }
+# One log folder PER RUN inside one PER CHECKOUT (keyed by its canonical path):
+# agent worktrees and a merge train run the gate at the same time, and a shared
+# folder made one run's Out-File fail on, or its TRX overwrite, the other's.
+# DevBuild.psm1 > Get-GateResultRoot decides; the oldest runs past ten are pruned.
+Import-Module (Join-Path $PSScriptRoot 'DevBuild.psm1') -Force
+$runId = New-GateRunId -Now (Get-Date) -ProcessId $PID
+$logDir = Get-GateResultRoot -RepoRoot $repoRoot -ResultsDir $ResultsDir -TempRoot $env:TEMP -RunId $runId
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+if (-not $ResultsDir) {
+    $checkoutRoot = Get-GateCheckoutRoot -RepoRoot $repoRoot -TempRoot $env:TEMP
+    $runs = @(Get-ChildItem -LiteralPath $checkoutRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object Name)
+    foreach ($stale in (Select-StaleGateRuns -Names $runs -Keep 10 -Except $runId)) {
+        Remove-Item -LiteralPath (Join-Path $checkoutRoot $stale) -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 # -c / -r for both the build and every `dotnet test`.
 $outputArgs = @()
 if ($Configuration) { $outputArgs += @('-c', $Configuration) }
@@ -224,14 +251,27 @@ $GateExclusion = '*UiPerfSmokeTests'
 $ReleaseLanePath = Join-Path $repoRoot 'tools\ci\release-lane.json'
 Import-Module (Join-Path $repoRoot 'tools\ci\GateShards.psm1') -Force
 
+# Weights and release classes belong to the default test assembly. A second
+# project has no configured weights here: run its gate once, without foreign
+# class includes, and keep exit 8 blocking when that run unexpectedly is empty.
+function Test-DefaultGateProject {
+    $path = if ([IO.Path]::IsPathRooted($Project)) { $Project } else { Join-Path $repoRoot $Project }
+    return [IO.Path]::GetFullPath($path) -eq [IO.Path]::GetFullPath((Join-Path $repoRoot 'DotCharter.Tests/DotCharter.Tests.csproj'))
+}
+
+function Get-GateProjectWeights {
+    if (Test-DefaultGateProject) { return Read-GateShardWeights $script:GateWeightsPath }
+    return [pscustomobject]@{ Classes = @{}; OtherSeconds = 0.0 }
+}
+
 # The default gate's exclusions: the headless suite and every release-lane class
 # (the lane runs exactly those). Read-ReleaseLane throws on a missing list.
 function Get-GateExclusions {
     Import-Module (Join-Path $repoRoot 'tools\ci\GateShards.psm1') -Force
+    if (-not (Test-DefaultGateProject)) { return , [string[]]@($GateExclusion) }
     return , [string[]](@($GateExclusion) + @((Read-ReleaseLane $ReleaseLanePath).Classes.Keys))
 }
 
-Import-Module (Join-Path $PSScriptRoot 'DevBuild.psm1') -Force
 # Pin this process (testhosts inherit) and print the choice: DevBuild.psm1 > Set-DevCpuPlan.
 if (-not $ParseTrx) {
     $cpuPlan = Set-DevCpuPlan -AllCores:$AllCores
@@ -373,17 +413,20 @@ function Show-ShardLines([object[]]$Runs) {
 # ---- the default gate, sharded (tools/ci/GateShards.psm1) --------------------
 # Start: plan from the weights file and start every shard; returns the context
 # Complete-GateShardedRun grades once the shards have exited.
-function Start-GateShardedRun([string]$Label, [string]$Lane = 'gate') {
+function Start-GateShardedRun([string]$Label, [string]$Lane = 'gate', [int]$Count = $Shards) {
     Import-Module (Join-Path $repoRoot 'tools\ci\HeadlessShards.psm1') -Force
     Import-Module (Join-Path $repoRoot 'tools\ci\GateShards.psm1') -Force
+    $foreignProject = -not (Test-DefaultGateProject)
     if ($Lane -eq 'release') {
+        if ($foreignProject) { throw 'The configured release lane belongs to the default test project; no release lane is configured for this Project.' }
         # The release lane: exactly the declared classes, whole, dealt by their measured seconds.
         $weights = [pscustomobject]@{ Classes = (Read-ReleaseLane $ReleaseLanePath).Classes; OtherSeconds = 0.0 }
-        $plan = @(New-ReleaseLaneShardPlan $weights.Classes $Shards)
+        $plan = @(New-ReleaseLaneShardPlan $weights.Classes $Count)
     }
     else {
-        $weights = Read-GateShardWeights $script:GateWeightsPath
-        $plan = @(New-GateShardPlan $weights.Classes $weights.OtherSeconds $Shards (Get-GateExclusions))
+        $weights = Get-GateProjectWeights
+        if ($foreignProject) { $Count = 1; Write-Host "gate: $Project has no configured class weights; one unsharded run" }
+        $plan = @(New-GateShardPlan $weights.Classes $weights.OtherSeconds $Count (Get-GateExclusions))
     }
     $results = Join-Path $logDir $Label
     if (Test-Path $results) { Remove-Item $results -Recurse -Force }
@@ -394,7 +437,7 @@ function Start-GateShardedRun([string]$Label, [string]$Lane = 'gate') {
         $p = $plan | Where-Object { $_.Index -eq $r.Index }
         Add-Member -InputObject $r -NotePropertyName Remainder -NotePropertyValue $p.Remainder -Force
     }
-    return [pscustomobject]@{ Label = $Label; Results = $results; Runs = $runs; Started = $started; Weights = $weights; Lane = $Lane }
+    return [pscustomobject]@{ Label = $Label; Results = $results; Runs = $runs; Started = $started; Weights = $weights; Lane = $Lane; ForeignProject = $foreignProject }
 }
 
 function Complete-GateShardedRun($Run, [switch]$Together) {
@@ -441,6 +484,10 @@ function Complete-GateShardedRun($Run, [switch]$Together) {
         }
         return $exit
     }
+    if ($Run.ForeignProject) {
+        if ($UpdateShardWeights) { Write-Host '  no weights written: this project has no configured weights file' }
+        return $exit
+    }
     # Classes the weights file does not list ran in the remainder: worth a
     # refresh once they weigh clearly more than the file's otherSeconds
     # predicts, scaled by how much slower this run was than the measured one
@@ -465,8 +512,9 @@ function Complete-GateShardedRun($Run, [switch]$Together) {
 # The gate: one process (-Shards 1, the old command line) or sharded.
 function Invoke-GateRun([string]$Label) {
     if ($Shards -le 1) {
-        $exit = Invoke-TestRun $Label (Get-TestLaneFilter 'default' @((Read-ReleaseLane $ReleaseLanePath).Classes.Keys) $GateExclusion)
-        if ($UpdateShardWeights -and $script:LastDurations) {
+        $filter = @(); foreach ($exclude in (Get-GateExclusions)) { $filter += @('--filter-not-class', $exclude) }
+        $exit = Invoke-TestRun $Label $filter
+        if ($UpdateShardWeights -and (Test-DefaultGateProject) -and $script:LastDurations) {
             Write-GateShardWeights $script:LastDurations $script:GateWeightsPath
             Write-Host "  gate shard weights rewritten: $($script:GateWeightsPath)"
         }
@@ -491,10 +539,11 @@ function Invoke-ReleaseLaneRun([string]$Label) {
 function Invoke-GateShardSelfTest {
     Import-Module (Join-Path $repoRoot 'tools\ci\HeadlessShards.psm1') -Force
     Import-Module (Join-Path $repoRoot 'tools\ci\GateShards.psm1') -Force
-    $weights = Read-GateShardWeights $script:GateWeightsPath
-    $plan = @(New-GateShardPlan $weights.Classes $weights.OtherSeconds $Shards (Get-GateExclusions))
+    $weights = Get-GateProjectWeights
+    $count = if (Test-DefaultGateProject) { $Shards } else { 1 }
+    $plan = @(New-GateShardPlan $weights.Classes $weights.OtherSeconds $count (Get-GateExclusions))
     # The release lane's shards continue the numbering, so every listing has its own file.
-    $lanePlan = @(New-ReleaseLaneShardPlan (Read-ReleaseLane $ReleaseLanePath).Classes $Shards)
+    $lanePlan = @(if (Test-DefaultGateProject) { New-ReleaseLaneShardPlan (Read-ReleaseLane $ReleaseLanePath).Classes $Shards })
     foreach ($l in $lanePlan) { $l.Index += $plan.Count }
     $plan = @($plan) + @($lanePlan)
     $dir = Join-Path $logDir 'selftest'
@@ -539,7 +588,7 @@ function Invoke-HeadlessShardedRun([string]$Label, [string[]]$Filter) {
 # Discovery, plan, and every shard started; returns the context
 # Complete-HeadlessShardedRun grades once the shards have exited (Failed is
 # the exit code when discovery found nothing to run).
-function Start-HeadlessShardedRun([string]$Label, [string[]]$Filter) {
+function Start-HeadlessShardedRun([string]$Label, [string[]]$Filter, [int]$Count = $Shards) {
     Import-Module (Join-Path $repoRoot 'tools\ci\HeadlessShards.psm1') -Force
     $weightsPath = Join-Path $repoRoot 'tools\ci\headless-shard-weights.json'
     $results = Join-Path $logDir $Label
@@ -549,13 +598,17 @@ function Start-HeadlessShardedRun([string]$Label, [string[]]$Filter) {
     $base = $testBase
 
     $discoveryLog = Join-Path $results 'discovery.log'
-    $discovered = Get-HeadlessDiscovery $base $Filter $discoveryLog
+    try { $discovered = Get-HeadlessDiscovery $base $Filter $discoveryLog }
+    catch {
+        Write-Host "$Label`: $($_.Exception.Message)"
+        return [pscustomobject]@{ Failed = 1 }
+    }
     if ($discovered.Count -eq 0) {
         Write-Host "$Label`: DISCOVERY LISTED NO CLASSES - nothing to shard; tail of $discoveryLog`:"
         Get-Content $discoveryLog -Tail 15 | ForEach-Object { Write-Host "  $_" }
         return [pscustomobject]@{ Failed = 1 }
     }
-    $plan = @(New-HeadlessShardPlan $discovered (Read-HeadlessShardWeights $weightsPath) $Shards)
+    $plan = @(New-HeadlessShardPlan $discovered (Read-HeadlessShardWeights $weightsPath) $Count)
     $runs = @(Start-TestShards -Plan $plan -DotnetTestArgs $base -ResultsDir $results -Label $Label -WorkingDirectory $repoRoot)
     return [pscustomobject]@{ Failed = 0; Label = $Label; Results = $results; Runs = $runs; Started = $started
         Discovered = $discovered; DiscoveryLog = $discoveryLog; WeightsPath = $weightsPath; Base = $base }
@@ -594,6 +647,12 @@ function Complete-HeadlessShardedRun($Run, [switch]$Together) {
         }
         if ($exit -eq 0) { $exit = 1 }
     }
+    # The shared CI/release grader inspects EVERY shard, not just the first exit.
+    $incomplete = @(Get-HeadlessIncompleteClasses ([pscustomobject]@{ Shards = $runs }) @($discovered.Keys))
+    if ($incomplete.Count -gt 0) {
+        Write-Host "  INCOMPLETE: unexplained shard exit; race recovery blocked: $($incomplete -join ', ')"
+        if ($exit -eq 0) { $exit = 1 }
+    }
     # Keep the ORIGINAL failure's TRX, messages, stacks and stdout before any re-run
     # can overwrite or outvote them (#55); a green re-run does not delete this.
     $script:HeadlessEvidenceDir = $null
@@ -601,7 +660,7 @@ function Complete-HeadlessShardedRun($Run, [switch]$Together) {
         $script:HeadlessEvidenceDir = Save-HeadlessFailureEvidence -TrxPath @($runs | ForEach-Object { $_.TrxPath }) `
             -LogPath @($runs | ForEach-Object { $_.LogPath }) -Label 'first-run' -Always
     }
-    if ($exit -ne 0 -and $RaceReruns -gt 0) {
+    if ($exit -ne 0 -and $RaceReruns -gt 0 -and $incomplete.Count -eq 0) {
         $exit = Invoke-HeadlessRaceReruns $Label $trx $absent $discovered $weightsPath $results $base $exit
     }
     if ($script:HeadlessEvidenceDir) { Write-Host "  headless failure evidence kept: $($script:HeadlessEvidenceDir)" }
@@ -645,6 +704,11 @@ function Invoke-HeadlessRaceReruns([string]$Label, [string]$Trx, [string[]]$Abse
             $ran[(Get-HeadlessClassName ([string]$n.testName))] = $true
         }
         $missing = @($classes | Where-Object { -not $ran.ContainsKey($_) })
+        $incomplete = @(Get-HeadlessIncompleteClasses ([pscustomobject]@{ Shards = @($run) }) $classes)
+        if ($incomplete.Count -gt 0) {
+            Write-Host "  headless race re-run: INCOMPLETE exit $($run.ExitCode); no narrower retry: $($incomplete -join ', ')"
+            if ($run.ExitCode -ne 0) { return $run.ExitCode } else { return $FirstExit }
+        }
         $next = Get-HeadlessRaceRerunDecision $failures $missing
         Write-Host ("  headless race re-run {0}/{1}: {2} class(es), {3} failed, exit {4}, {5:0}s - {6} - log: {7}" -f `
             $attempt, $RaceReruns, $classes.Count, $failures.Count, $run.ExitCode, $run.Elapsed.TotalSeconds, $next.Reason, $run.LogPath)
@@ -766,54 +830,104 @@ if ($Affected) {
     if ($affectedSelection.Fallback) { Write-Host 'affected: running the full default gate (-Gate); add -Headless after a view change'; $Gate = $true; $Affected = $false }
 }
 
+# Measurements from another assembly must never overwrite any default-project weights.
+if ($UpdateShardWeights -and -not (Test-DefaultGateProject)) {
+    Write-Host 'no weights will be written: this project has no configured weights files'
+    $UpdateShardWeights = $false
+}
+
 $wantsTests = $Gate -or $ReleaseLane -or $Headless -or $Goldens -or [bool]$FilterClass -or $SelfTest -or $Affected
 if ($Public -and -not ($Build -or $wantsTests)) { $Gate = $true; $wantsTests = $true }
 if (-not ($Build -or $wantsTests)) { $Build = $true; $Gate = $true; $wantsTests = $true }
 if ($wantsTests -and -not $NoBuild) { $Build = $true }
 
-$exit = 0
-if ($Build) { $exit = Invoke-Build; if ($exit -ne 0) { exit $exit } }
-if ($SelfTest) { $exit = Invoke-GateShardSelfTest; if ($exit -ne 0) { exit $exit } }
-if ($Affected) { $exit = Invoke-AffectedRun $affectedSelection; exit $exit }
+# One canonical full-lane selection drives BOTH evidence and dispatch. A trailing
+# filtered pass does not turn an explicitly requested full lane into an iteration.
+$lanes = @(if ($Gate) { 'gate' }; if ($Headless) { 'headless' }; if ($ReleaseLane) { 'release' })
+$recordTrees = @(); $recordKinds = @(); $acceptedKinds = @(); $recordScope = @{}
+if ($lanes.Count -gt 0) {
+    Import-Module (Join-Path $repoRoot 'tools/release/ReleaseCache.psm1') -Force
+    $tree = Get-CleanTreeId -Repo $repoRoot
+    $recordScope = Get-GateRecordInputs -RepoRoot $repoRoot -Configuration $(if ($Configuration) { $Configuration } else { 'Debug' })
+    $recordTrees = @(Get-GateRecordTrees -RepoRoot $repoRoot -Tree $tree)
+    $recordKinds = @($lanes | ForEach-Object { if ($_ -eq 'release') { 'releaseLane' } else { $_ } })
+    Start-GateRecordRun -Trees $recordTrees -Kinds $recordKinds @recordScope
+}
 
-# Both suites at once when memory allows (each in its own testhosts already).
-$together = $false
-if ($Gate -and $Headless -and -not $Sequential) {
-    Import-Module (Join-Path $repoRoot 'tools\ci\GateShards.psm1') -Force
-    $decision = Get-GateConcurrencyDecision (Get-FreePhysicalMemoryBytes) $MinFreeGB
-    Write-Host "gate + headless: $($decision.Reason)"
-    $together = $decision.Concurrent
+try {
+    $exit = 0
+    if ($Build) { $exit = Invoke-Build; if ($exit -ne 0) { exit $exit } }
+    if ($SelfTest) { $exit = Invoke-GateShardSelfTest; if ($exit -ne 0) { exit $exit } }
+    if ($Affected) { $exit = Invoke-AffectedRun $affectedSelection; exit $exit }
+
+    # Every lane asked for at once when memory allows (#325; each lane is in its own
+    # testhosts already): the gate, the headless suite and the release lane share ONE
+    # budget of testhosts, -Shards per lane, split by tools/ci/lane-weights.json
+    # (GateShards.psm1 Get-LaneShardCounts). The memory floor grows with the lanes:
+    # -MinFreeGB per two of them.
+    $laneText = $lanes -join ' + '
+    $together = $false
+    if ($lanes.Count -gt 1 -and -not $Sequential) {
+        Import-Module (Join-Path $repoRoot 'tools\ci\GateShards.psm1') -Force
+        $decision = Get-GateConcurrencyDecision (Get-FreePhysicalMemoryBytes) ($MinFreeGB * $lanes.Count / 2)
+        Write-Host "$laneText`: $($decision.Reason)"
+        $together = $decision.Concurrent
+    }
+    if ($together) {
+        $laneWeightsPath = Join-Path $repoRoot 'tools\ci\lane-weights.json'
+        $counts = Get-LaneShardCounts (Read-LaneWeights $laneWeightsPath $lanes) ($Shards * $lanes.Count)
+        Write-Host ("$laneText`: " + (($lanes | ForEach-Object { "$_ $($counts[$_])" }) -join ', ') + " shard(s) of $($Shards * $lanes.Count) testhosts (tools/ci/lane-weights.json)")
+        $started = @{}
+        if ($lanes -contains 'headless') { $started['headless'] = Start-HeadlessShardedRun 'headless' $HeadlessFilter $counts['headless'] }
+        if ($lanes -contains 'gate') { $started['gate'] = Start-GateShardedRun 'gate' 'gate' $counts['gate'] }
+        if ($lanes -contains 'release') { $started['release'] = Start-GateShardedRun 'release' 'release' $counts['release'] }
+        $all = @()
+        foreach ($l in $lanes) { if (-not $started[$l].PSObject.Properties['Failed'] -or -not $started[$l].Failed) { $all += @($started[$l].Runs) } }
+        $all = @(Wait-TestShards -Runs $all)
+        Write-Host ("$laneText`: {0} testhost(s) concurrent; peak working set of all together {1:0.00} GB" -f $all.Count, ($all[0].PeakSumBytes / 1GB))
+        $exits = [ordered]@{}; $measured = @()
+        foreach ($l in $lanes) {
+            $run = $started[$l]
+            if ($l -eq 'headless') { $exits[$l] = if ($run.Failed) { $run.Failed } else { Complete-HeadlessShardedRun $run -Together } }
+            else { $exits[$l] = Complete-GateShardedRun $run -Together }
+            if ($UpdateShardWeights -and $run.Runs) {
+                $trx = Join-Path $run.Results "$($run.Label).trx"
+                $longest = 0.0
+                if (Test-Path -LiteralPath $trx) { foreach ($d in @(Read-TrxClassDurations @($trx))) { $longest = [math]::Max($longest, $d.Seconds) } }
+                $seconds = 0.0; foreach ($r in $run.Runs) { $seconds += $r.Elapsed.TotalSeconds }
+                $measured += [pscustomobject]@{ Name = $l; Seconds = $seconds; Longest = $longest }
+            }
+        }
+        if ($UpdateShardWeights -and $measured.Count -eq $lanes.Count) {
+            Write-LaneWeights $measured $laneWeightsPath
+            Write-Host "  lane weights rewritten: $laneWeightsPath"
+        }
+        # One line naming every lane's exit: Merge-Train.ps1 reads each verdict from it.
+        Write-Host ("lanes: " + (($lanes | ForEach-Object { "$_ exit $($exits[$_])" }) -join ', '))
+        $acceptedKinds = @($lanes | Where-Object { $exits[$_] -eq 0 } | ForEach-Object { if ($_ -eq 'release') { 'releaseLane' } else { $_ } })
+        foreach ($l in $lanes) { if ($exits[$l] -ne 0) { exit $exits[$l] } }
+    }
+    else {
+        if ($lanes -contains 'gate') { $exit = Invoke-GateRun 'gate'; if ($exit -ne 0) { exit $exit }; $acceptedKinds += 'gate' }
+        if ($lanes -contains 'headless') { $exit = Invoke-HeadlessShardedRun 'headless' $HeadlessFilter; if ($exit -ne 0) { exit $exit }; $acceptedKinds += 'headless' }
+        # After the default gate, so a red gate stops first.
+        if ($lanes -contains 'release') { $exit = Invoke-ReleaseLaneRun 'release'; if ($exit -ne 0) { exit $exit }; $acceptedKinds += 'releaseLane' }
+    }
+    if ($Goldens) {
+        $saved = @{ Dump = $env:DOTCHARTER_UI_SWEEP_DUMP; Culture = $env:DOTCHARTER_HEADLESS_CULTURE }
+        $env:DOTCHARTER_UI_SWEEP_DUMP = '1'
+        $env:DOTCHARTER_HEADLESS_CULTURE = 'en-US'
+        try { $exit = Invoke-TestRun 'goldens' @('--filter-class', $GoldenClass) }
+        finally { $env:DOTCHARTER_UI_SWEEP_DUMP = $saved.Dump; $env:DOTCHARTER_HEADLESS_CULTURE = $saved.Culture }
+        if ($exit -ne 0) { exit $exit }
+    }
+    if ($FilterClass) {
+        $filter = @()
+        foreach ($f in $FilterClass) { $filter += @('--filter-class', $f) }
+        $exit = Invoke-TestRun 'filtered' $filter
+    }
+    exit $exit
 }
-if ($together) {
-    $h = Start-HeadlessShardedRun 'headless' $HeadlessFilter
-    $g = Start-GateShardedRun 'gate'
-    $all = @($g.Runs)
-    if (-not $h.Failed) { $all += @($h.Runs) }
-    $all = @(Wait-TestShards -Runs $all)
-    Write-Host ("gate + headless: {0} testhost(s) concurrent; peak working set of all together {1:0.00} GB" -f $all.Count, ($all[0].PeakSumBytes / 1GB))
-    $gateExit = Complete-GateShardedRun $g -Together
-    $headlessExit = if ($h.Failed) { $h.Failed } else { Complete-HeadlessShardedRun $h -Together }
-    Write-Host "gate + headless: gate exit $gateExit, headless exit $headlessExit"
-    $exit = if ($gateExit -ne 0) { $gateExit } else { $headlessExit }
-    if ($exit -ne 0) { exit $exit }
+finally {
+    if ($recordKinds.Count -gt 0) { Complete-GateRecordRun -Trees $recordTrees -Kinds $recordKinds -AcceptedKinds $acceptedKinds @recordScope }
 }
-else {
-    if ($Gate) { $exit = Invoke-GateRun 'gate'; if ($exit -ne 0) { exit $exit } }
-    if ($Headless) { $exit = Invoke-HeadlessShardedRun 'headless' $HeadlessFilter; if ($exit -ne 0) { exit $exit } }
-}
-# After the default gate, so a red gate stops first; before the goldens.
-if ($ReleaseLane) { $exit = Invoke-ReleaseLaneRun 'release'; if ($exit -ne 0) { exit $exit } }
-if ($Goldens) {
-    $saved = @{ Dump = $env:DOTCHARTER_UI_SWEEP_DUMP; Culture = $env:DOTCHARTER_HEADLESS_CULTURE }
-    $env:DOTCHARTER_UI_SWEEP_DUMP = '1'
-    $env:DOTCHARTER_HEADLESS_CULTURE = 'en-US'
-    try { $exit = Invoke-TestRun 'goldens' @('--filter-class', $GoldenClass) }
-    finally { $env:DOTCHARTER_UI_SWEEP_DUMP = $saved.Dump; $env:DOTCHARTER_HEADLESS_CULTURE = $saved.Culture }
-    if ($exit -ne 0) { exit $exit }
-}
-if ($FilterClass) {
-    $filter = @()
-    foreach ($f in $FilterClass) { $filter += @('--filter-class', $f) }
-    $exit = Invoke-TestRun 'filtered' $filter
-}
-exit $exit

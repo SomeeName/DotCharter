@@ -125,9 +125,19 @@ internal sealed class EofParseSession
         var currentBeatsInMeasure = 4;
         var currentDenominator = 4;
         var beatsSinceTsChange = 0;
+        var hasKeySignature = false;
         for (var i = 0; i < rawBeats.Count; i++)
         {
-            var (ppqn, pos, flags, _) = rawBeats[i];
+            var (ppqn, pos, flags, key) = rawBeats[i];
+            if (!hasKeySignature && (flags & EofConstants.BeatFlagKeySig) != 0)
+            {
+                var accidentals = (sbyte)key;
+                if (accidentals is >= -7 and <= 7)
+                {
+                    _meta.KeyAccidentals = accidentals;
+                    hasKeySignature = true;
+                }
+            }
 
             var prevBpm = currentBeatsInMeasure;
             var prevDen = currentDenominator;

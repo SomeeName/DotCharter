@@ -252,7 +252,7 @@ public sealed class ToneDesignCaptureSearchTests
 
     // ---- fixtures --------------------------------------------------------------
 
-    private static readonly string Dir = Path.Combine(Path.GetTempPath(), "dotcharter-capture-search");
+    private static readonly string Dir = Path.Combine(Path.GetTempPath(), "dotcharter-capture-search-" + Guid.NewGuid().ToString("N"));
 
     private static ToneDesignService Service(IToneDesignModel model, FakeLibrary library, INamCaptureSource source)
     {

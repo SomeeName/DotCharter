@@ -12,20 +12,23 @@ namespace DotCharter.Tone.UI.Platform;
 /// </summary>
 public sealed class DesktopShellLauncher : IShellLauncher
 {
-    public void OpenUrl(string url) => Process.Start(ForShellOpen(url));
+    public void OpenUrl(string url)
+    {
+        using var _ = Process.Start(ForShellOpen(url));
+    }
 
     public bool OpenFolder(string path, bool create = false)
     {
         if (create) Directory.CreateDirectory(path);
         else if (!Directory.Exists(path)) return false;
-        Process.Start(ForShellOpen(path));
+        using var _ = Process.Start(ForShellOpen(path));
         return true;
     }
 
     public bool RevealInFileManager(string path)
     {
         if (!File.Exists(path)) return false;
-        Process.Start(ForReveal(path));
+        using var _ = Process.Start(ForReveal(path));
         return true;
     }
 

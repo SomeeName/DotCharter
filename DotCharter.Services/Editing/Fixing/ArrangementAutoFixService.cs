@@ -214,8 +214,7 @@ public sealed class ArrangementAutoFixService : IArrangementAutoFixService
                     || current.SlideTo != null || current.UnpitchedSlide
                     || next.Position != current.EndPosition
                     || next.Fret != current.Fret
-                    || next.Vibrato != current.Vibrato
-                    || next.Tremolo != current.Tremolo)
+                    || !ContinuationTechniquesMatch(current, next))
                 {
                     i++;
                     continue;
@@ -234,6 +233,17 @@ public sealed class ArrangementAutoFixService : IArrangementAutoFixService
         }
 
         return joined;
+    }
+
+    private static bool ContinuationTechniquesMatch(GuitarNote current, GuitarNote next)
+    {
+        return next.Vibrato == current.Vibrato && next.VibratoStrength == current.VibratoStrength &&
+               next.Tremolo == current.Tremolo && next.Ignore == current.Ignore && next.IgnoreDerived == current.IgnoreDerived &&
+               next.Mute == current.Mute && next.Harmonic == current.Harmonic && next.BassPicking == current.BassPicking &&
+               next.Hopo == current.Hopo && next.Accent == current.Accent && next.PassOtherNotes == current.PassOtherNotes &&
+               next.NotationDuration == current.NotationDuration && next.GraceFret == current.GraceFret &&
+               next.GraceSlide == current.GraceSlide && next.LeftHandFinger == current.LeftHandFinger &&
+               next.PickDirection == current.PickDirection;
     }
 
     private static GuitarNote? FindNextOnString(IList<GuitarNote> notes, int fromIndex, int stringIndex)

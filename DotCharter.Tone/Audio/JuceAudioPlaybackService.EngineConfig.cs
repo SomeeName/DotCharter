@@ -22,12 +22,10 @@ public sealed partial class JuceAudioPlaybackService
 
     private const string NeuralAmpModuleTypeId = "namamp";
 
-    private readonly object _neuralRateGate = new();
-
     // Reset on every engine (re)create so a fresh device gets exactly one 48 kHz
     // attempt; prevents fighting a device physically stuck at 44.1 kHz.
     // Written from three threads under three different (or no) locks: the
-    // NodesChanged handler, the _neuralRateGate worker, and ReplaceEngineGated
+    // NodesChanged handler, the rate-request worker, and ReplaceEngineGated
     // under _gate. volatile so the one-shot guard is actually observed.
     private volatile bool _neuralRateAttempted;
 
@@ -176,7 +174,7 @@ public sealed partial class JuceAudioPlaybackService
         // single-seat stereo fill with one guitar in each ear.
         // An override in flight is NOT disturbed: the baseline is recorded under
         // it and taken up when it ends.
-        SetLiveInputBaseline(LiveInputSeatLayout.FromInputConfig(config));
+        SetLiveInputBaseline(LiveInputSeatLayout.FromInputConfig(config, inputCount));
 
         // Push user-tunable audio/MIDI offsets into the running engine so the
         // position interpolator + MIDI scheduler can apply them right away.
@@ -206,7 +204,7 @@ public sealed partial class JuceAudioPlaybackService
         ApplyMasterLimiter();
 
         // (Re)open the configured MIDI output device.
-        ApplyMidiDevice(config.MidiOutputDevice);
+        ApplyMidiDevice(ResolveMidiDeviceIndex(config));
     }
 
     /// <summary>
@@ -294,7 +292,7 @@ public sealed partial class JuceAudioPlaybackService
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio,
-                $"Master limiter apply failed ({ex.GetType().Name}: {ex.Message}). The bus runs unlimited.");
+                "Master limiter apply failed. The bus runs unlimited.", ex);
         }
     }
 
@@ -397,7 +395,7 @@ public sealed partial class JuceAudioPlaybackService
                     // routing rides along: a Reconfigure re-opens the device, and the
                     // seat channels are not part of the config it re-applies.
                     try { AttachPerPlayerStateToEngine(engine); }
-                    catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, $"DSP rig re-attach after reconfigure failed: {ex.Message}"); }
+                    catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, "DSP rig re-attach after reconfigure failed", ex); }
                     // Re-query the VSTi's reported latency: many plugins
                     // re-report after prepareToPlay with a new sample rate.
                     if (_instrumentPlugin != null)
@@ -425,11 +423,11 @@ public sealed partial class JuceAudioPlaybackService
                 if (!allowReplaceFallback)
                 {
                     _logger?.Warning(AppLogCategory.Audio,
-                        $"In-place reconfigure failed ({ex.Message}); leaving the engine as it is.");
+                        "In-place reconfigure failed; leaving the engine as it is.", ex);
                     return;
                 }
                 _logger?.Warning(AppLogCategory.Audio,
-                    $"In-place reconfigure failed ({ex.Message}); falling back to full engine restart.");
+                    "In-place reconfigure failed; falling back to full engine restart.", ex);
             }
         }
         if (!allowReplaceFallback) return;
@@ -483,7 +481,7 @@ public sealed partial class JuceAudioPlaybackService
     /// CPU.</summary>
     private void RequestNeuralAmpSampleRate()
     {
-        lock (_neuralRateGate)
+        lock (_engineConfigGate)
         {
             try
             {
@@ -525,7 +523,7 @@ public sealed partial class JuceAudioPlaybackService
             catch (Exception ex)
             {
                 _logger?.Warning(AppLogCategory.Audio,
-                    $"48 kHz request for neural amp failed (non-fatal): {ex.Message}");
+                    "48 kHz request for neural amp failed (non-fatal)", ex);
             }
         }
     }
@@ -538,7 +536,7 @@ public sealed partial class JuceAudioPlaybackService
     /// insert's open stays refused with the reason. Never call it under <c>_gate</c>.</summary>
     private bool RequestExternalInsertSampleRate(int sampleRate)
     {
-        lock (_neuralRateGate)
+        lock (_engineConfigGate)
         {
             try
             {
@@ -559,7 +557,7 @@ public sealed partial class JuceAudioPlaybackService
             }
             catch (Exception ex)
             {
-                _logger?.Warning(AppLogCategory.Audio, $"{sampleRate} Hz request for the external process insert failed: {ex.Message}");
+                _logger?.Warning(AppLogCategory.Audio, $"{sampleRate} Hz request for the external process insert failed", ex);
                 return false;
             }
         }

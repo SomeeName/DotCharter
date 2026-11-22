@@ -220,13 +220,55 @@ public sealed class ToneMatcher(
         // render below; held for the whole search so no row is queued in front of
         // a candidate.
         using var growthHold = library.PauseGrowth();
-        var sw = Stopwatch.StartNew();
-        var notes = new List<string>();
-        var budget = new MatchBudget(
-            _options.MaxRenders,
-            request.Budget ?? _options.Budget ?? DefaultWallBudget,
-            sw);
+        var run = PrepareTarget(request, status, ct);
 
+        await TakeReferenceAnchorAsync(run).ConfigureAwait(false);
+        await AssembleSeedsAsync(run).ConfigureAwait(false);
+        RejectUnbuildableSeeds(run);
+        await ScoreSeedsAsync(run).ConfigureAwait(false);
+        NotePlausibility(run);
+        await RefineAsync(run).ConfigureAwait(false);
+        return Finish(run);
+    }
+
+    /// <summary>The state one search threads through its phases.</summary>
+    private sealed class MatchRun(
+        ToneMatchRequest request,
+        IProgress<string>? status,
+        CancellationToken ct,
+        MatchBudget budget,
+        Stopwatch clock)
+    {
+        public ToneMatchRequest Request { get; } = request;
+        public IProgress<string>? Status { get; } = status;
+        public CancellationToken Ct { get; } = ct;
+        public MatchBudget Budget { get; } = budget;
+        public Stopwatch Clock { get; } = clock;
+        public List<string> Notes { get; } = [];
+        public ToneFeatures TargetFeatures { get; set; } = null!;
+        public double[]?[]? TargetSpectra { get; set; }
+        public double Floor { get; set; }
+        public bool TargetTooShort { get; set; }
+        public ToneFeatures? ReferenceFeatures { get; set; }
+        public ToneMatchPrior? Prior => Request.Prior;
+        public List<(DcRigPreset Rig, string Origin)> Seeds { get; } = [];
+        public List<ToneMatchCandidate> Scored { get; } = [];
+        public List<ToneMatchCandidate> Refined { get; } = [];
+        public List<string> Plan { get; } = [];
+
+        public Scoring ScoringFor(ToneFeatures wet)
+            => new(TargetFeatures, wet, ReferenceFeatures, Floor, TargetTooShort);
+    }
+
+    private MatchRun PrepareTarget(ToneMatchRequest request, IProgress<string>? status, CancellationToken ct)
+    {
+        var sw = Stopwatch.StartNew();
+        var run = new MatchRun(
+            request,
+            status,
+            ct,
+            new MatchBudget(_options.MaxRenders, request.Budget ?? _options.Budget ?? DefaultWallBudget, sw),
+            sw);
         var extractor = similarity.Extractor;
 
         // The window the caller picked is a window of SONG, not of playing. Cut the
@@ -237,38 +279,44 @@ public sealed class ToneMatcher(
         // the floor into the distance between nothing and something. Reported in the
         // notes, never silent — see MatchTargetAudio.
         var trimmed = MatchTargetAudio.Trim(request.Target);
-        if (trimmed.Note is { } trimNote) notes.Add(trimNote);
+        if (trimmed.Note is { } trimNote) run.Notes.Add(trimNote);
         var target = trimmed.Content > TimeSpan.Zero ? trimmed.Audio : request.Target;
 
-        var targetFeatures = extractor.Extract(target);
-        var targetSpectra = TargetSpectra(request, target);
-        var floor = SelfDistance(target, extractor, request.TargetIsRender);
-        var targetTooShort = !MatchTargetAudio.IsMeasurable(trimmed);
+        run.TargetFeatures = extractor.Extract(target);
+        run.TargetSpectra = TargetSpectra(request, target);
+        run.Floor = SelfDistance(target, extractor, request.TargetIsRender);
+        run.TargetTooShort = !MatchTargetAudio.IsMeasurable(trimmed);
+        return run;
+    }
 
-        // THE 0 % ANCHOR, and it is taken FIRST — before the prior, before retrieval,
-        // out of the same budget. One render of the information-free reference rig
-        // over the caller's own DI. Without it a percentage has one anchor, which is
-        // what made `100 x floor / max(d, floor)` report 100 for everything (W5b);
-        // with it, "no better than plugging straight into an amp" has a number.
-        // Taking it first is what makes a candidate's SCORE independent of the
-        // budget: a tighter budget changes which candidates exist, never what a
-        // given one scores.
-        ToneFeatures? referenceFeatures = null;
-        if (budget.TryTake())
+    // THE 0 % ANCHOR, and it is taken FIRST — before the prior, before retrieval,
+    // out of the same budget. One render of the information-free reference rig
+    // over the caller's own DI. Without it a percentage has one anchor, which is
+    // what made `100 x floor / max(d, floor)` report 100 for everything (W5b);
+    // with it, "no better than plugging straight into an amp" has a number.
+    // Taking it first is what makes a candidate's SCORE independent of the
+    // budget: a tighter budget changes which candidates exist, never what a
+    // given one scores.
+    private async Task TakeReferenceAnchorAsync(MatchRun run)
+    {
+        if (!run.Budget.TryTake())
         {
-            status?.Report(localization.Format("Progress_MeasuringScale", budget.Used, budget.MaxRenders));
-            var referenceWet = await renderer
-                .RenderAsync(request.ReferenceDi, MatchScale.ReferenceRig(), ct).ConfigureAwait(false);
-            referenceFeatures = extractor.Extract(referenceWet);
-        }
-        else
-        {
-            notes.Add("no scale: the budget was gone before the reference rig could be rendered");
+            run.Notes.Add("no scale: the budget was gone before the reference rig could be rendered");
+            return;
         }
 
-        // (a)+(b)+(d) — assemble the candidate structures before spending a render.
-        var seeds = new List<(DcRigPreset Rig, string Origin)>();
-        var prior = request.Prior;
+        run.Status?.Report(localization.Format("Progress_MeasuringScale", run.Budget.Used, run.Budget.MaxRenders));
+        var referenceWet = await renderer
+            .RenderAsync(run.Request.ReferenceDi, MatchScale.ReferenceRig(), run.Ct).ConfigureAwait(false);
+        run.ReferenceFeatures = similarity.Extractor.Extract(referenceWet);
+    }
+
+    // (a)+(b)+(d) — assemble the candidate structures before spending a render.
+    private async Task AssembleSeedsAsync(MatchRun run)
+    {
+        var request = run.Request;
+        var seeds = run.Seeds;
+        var prior = run.Prior;
         if (prior is not null)
         {
             seeds.Add((prior.Rig, string.IsNullOrEmpty(prior.Source)
@@ -276,9 +324,9 @@ public sealed class ToneMatcher(
                 : $"{ToneMatchOrigins.Prior}:{prior.Source}"));
         }
 
-        var lib = await library.GetAsync(status, ct).ConfigureAwait(false);
-        if (lib.RenderCount > 0) notes.Add($"library built: {lib.RenderCount} renders");
-        foreach (var seed in RetrievalSeeds(lib, targetFeatures, prior, notes))
+        var lib = await library.GetAsync(run.Status, run.Ct).ConfigureAwait(false);
+        if (lib.RenderCount > 0) run.Notes.Add($"library built: {lib.RenderCount} renders");
+        foreach (var seed in RetrievalSeeds(lib, run.TargetFeatures, prior, run.Notes))
             seeds.Add(seed);
 
         // A caller that knows the target is a BASS part gets the best bass-family rows
@@ -289,202 +337,230 @@ public sealed class ToneMatcher(
         // measurement of the tone, and it must never remove the row that actually
         // measured closest.
         if (string.Equals(request.StemHint, ToneStems.Bass, StringComparison.OrdinalIgnoreCase))
-        {
-            var already = new HashSet<DcRigPreset>(seeds.Select(static s => s.Rig));
-            var added = 0;
-            foreach (var rig in BassSeeds(lib, targetFeatures, similarity))
-            {
-                if (added >= _options.RetrievalTopK) break;
-                // Walk DOWN the bass ranking past anything ordinary retrieval already
-                // found, rather than taking the top k and deduplicating them away: when
-                // the target really is a bass part the two rankings agree at the top,
-                // and taking-then-deduplicating adds nothing in exactly the case the
-                // hint was given for.
-                if (!already.Add(rig)) continue;
-                seeds.Add((rig, "retrieval:bass"));
-                added++;
-            }
-
-            notes.Add($"bass hint: {added} extra bass-family seeds");
-        }
+            AddBassSeeds(run, lib);
 
         if (estimator is { IsAvailable: true })
+            await AddEstimatorSeedAsync(run, estimator).ConfigureAwait(false);
+    }
+
+    private void AddBassSeeds(MatchRun run, RigLibrary lib)
+    {
+        var already = new HashSet<DcRigPreset>(run.Seeds.Select(static s => s.Rig));
+        var added = 0;
+        foreach (var rig in BassSeeds(lib, run.TargetFeatures, similarity))
         {
-            try
-            {
-                var estimate = await estimator.EstimateAsync(request.Target, ct).ConfigureAwait(false);
-                seeds.Add((estimate.Rig, ToneMatchOrigins.Estimator));
-                notes.Add($"estimator {estimate.ModelId} confidence {estimate.Confidence:0.00}");
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // A missing/broken model must not lose the retrieval result.
-                notes.Add($"estimator unavailable: {ex.GetType().Name}");
-            }
+            if (added >= _options.RetrievalTopK) break;
+            // Walk DOWN the bass ranking past anything ordinary retrieval already
+            // found, rather than taking the top k and deduplicating them away: when
+            // the target really is a bass part the two rankings agree at the top,
+            // and taking-then-deduplicating adds nothing in exactly the case the
+            // hint was given for.
+            if (!already.Add(rig)) continue;
+            run.Seeds.Add((rig, "retrieval:bass"));
+            added++;
         }
 
-        // CATALOG GATE, before a render is spent on any of them. A rig this app
-        // cannot build is REJECTED and NAMED — never clamped into range, never
-        // dropped without saying so — because a matcher that hands out gear the
-        // catalogue does not have, or a knob outside its declared range, produces a
-        // tone the player cannot actually get. Retrieval cannot trip this (every
-        // library row is a sampler draw built from the catalogue's own specs); the
-        // caller's PRIOR and the estimator's decoded chain can, and nothing else
-        // checked them before this.
+        run.Notes.Add($"bass hint: {added} extra bass-family seeds");
+    }
+
+    private static async Task AddEstimatorSeedAsync(MatchRun run, IRigEstimator estimator)
+    {
+        try
+        {
+            var estimate = await estimator.EstimateAsync(run.Request.Target, run.Ct).ConfigureAwait(false);
+            run.Seeds.Add((estimate.Rig, ToneMatchOrigins.Estimator));
+            run.Notes.Add($"estimator {estimate.ModelId} confidence {estimate.Confidence:0.00}");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // A missing/broken model must not lose the retrieval result.
+            run.Notes.Add($"estimator unavailable: {ex.GetType().Name}");
+        }
+    }
+
+    // CATALOG GATE, before a render is spent on any of them. A rig this app
+    // cannot build is REJECTED and NAMED — never clamped into range, never
+    // dropped without saying so — because a matcher that hands out gear the
+    // catalogue does not have, or a knob outside its declared range, produces a
+    // tone the player cannot actually get. Retrieval cannot trip this (every
+    // library row is a sampler draw built from the catalogue's own specs); the
+    // caller's PRIOR and the estimator's decoded chain can, and nothing else
+    // checked them before this.
+    private static void RejectUnbuildableSeeds(MatchRun run)
+    {
+        var seeds = run.Seeds;
         for (var i = seeds.Count - 1; i >= 0; i--)
         {
             if (RigCatalogValidation.FirstFault(seeds[i].Rig) is not { } fault) continue;
-            notes.Add($"rejected {seeds[i].Origin}: {fault.Message}");
+            run.Notes.Add($"rejected {seeds[i].Origin}: {fault.Message}");
             seeds.RemoveAt(i);
         }
+    }
 
-        // Score every seed once.
-        var scored = new List<ToneMatchCandidate>();
+    // Score every seed once.
+    private async Task ScoreSeedsAsync(MatchRun run)
+    {
+        var seeds = run.Seeds;
         for (var i = 0; i < seeds.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
-            if (!budget.TryTake()) break;
-            status?.Report(localization.Format("Progress_RenderingCandidate", i + 1, seeds.Count, budget.Used, budget.MaxRenders));
-            var (d, wet) = await EvaluateAsync(seeds[i].Rig, request, targetSpectra, targetFeatures, ct).ConfigureAwait(false);
-            scored.Add(Candidate(seeds[i].Rig, d, seeds[i].Origin, request,
-                new Scoring(targetFeatures, wet, referenceFeatures, floor, targetTooShort)));
+            run.Ct.ThrowIfCancellationRequested();
+            if (!run.Budget.TryTake()) break;
+            run.Status?.Report(localization.Format(
+                "Progress_RenderingCandidate", i + 1, seeds.Count, run.Budget.Used, run.Budget.MaxRenders));
+            var (d, wet) = await EvaluateAsync(
+                seeds[i].Rig, run.Request, run.TargetSpectra, run.TargetFeatures, run.Ct).ConfigureAwait(false);
+            run.Scored.Add(Candidate(seeds[i].Rig, d, seeds[i].Origin, run.Request, run.ScoringFor(wet)));
         }
 
-        scored.Sort(static (a, b) => a.RankingDistance.CompareTo(b.RankingDistance));
+        run.Scored.Sort(static (a, b) => a.RankingDistance.CompareTo(b.RankingDistance));
+    }
 
-        if (_options.UsePlausibility && _options.PlausibilityWeight > 0.0)
-        {
-            var markedDown = scored.Count(c => c.PlausibilityPenalty > 0.0);
-            if (markedDown > 0)
-            {
-                var worst = scored.MaxBy(c => c.PlausibilityPenalty)!;
-                notes.Add(string.Create(CultureInfo.InvariantCulture,
-                    $"plausibility: {markedDown} of {scored.Count} candidates marked down " +
-                    $"(worst {worst.PlausibilityPenalty:0.00}: " +
-                    $"{string.Join(", ", RigPlausibility.Explain(worst.Rig, request.StemHint).Select(f => f.Code))})"));
-            }
-        }
+    private void NotePlausibility(MatchRun run)
+    {
+        if (!_options.UsePlausibility || _options.PlausibilityWeight <= 0.0) return;
+        var scored = run.Scored;
+        var markedDown = scored.Count(c => c.PlausibilityPenalty > 0.0);
+        if (markedDown <= 0) return;
+        var worst = scored.MaxBy(c => c.PlausibilityPenalty)!;
+        run.Notes.Add(string.Create(CultureInfo.InvariantCulture,
+            $"plausibility: {markedDown} of {scored.Count} candidates marked down " +
+            $"(worst {worst.PlausibilityPenalty:0.00}: " +
+            $"{string.Join(", ", RigPlausibility.Explain(worst.Rig, run.Request.StemHint).Select(f => f.Code))})"));
+    }
 
-        // (c) refine the best few, sharing what is left of the budget equally.
-        var refineCount = Math.Min(_options.RefineCandidates, scored.Count);
-        var refined = new List<ToneMatchCandidate>();
-        var plan = new List<string>();
+    // (c) refine the best few, sharing what is left of the budget equally.
+    private async Task RefineAsync(MatchRun run)
+    {
+        var refineCount = Math.Min(_options.RefineCandidates, run.Scored.Count);
         for (var i = 0; i < refineCount; i++)
         {
-            ct.ThrowIfCancellationRequested();
-            var remaining = budget.Remaining;
-            if (remaining <= 0 || budget.Expired) break;
+            run.Ct.ThrowIfCancellationRequested();
+            var remaining = run.Budget.Remaining;
+            if (remaining <= 0 || run.Budget.Expired) break;
             var share = Math.Max(0, remaining / (refineCount - i));
-            var candidate = scored[i];
-            var layout = KnobLayout.For(candidate.Rig);
-            if (layout.Count == 0) continue; // nothing continuous to tune
+            var refined = await RefineOneAsync(run, i, refineCount, share).ConfigureAwait(false);
+            if (refined is not null) run.Refined.Add(refined);
+        }
+    }
 
-            // SHRINK THE POPULATION RATHER THAN SKIPPING THE REFINEMENT. The old gate
-            // was a flat `share < 8`: under a tight budget the whole refinement stage
-            // silently did nothing and the lane measured retrieval only, which is
-            // exactly what the first end-to-end eval had to work around by hand
-            // (RetrievalTopK 3 / RefineCandidates 1). A smaller λ is a real CMA-ES run
-            // — it explores less per generation and adapts over more of them — and it
-            // is strictly better than no run at all. Below CmaEs's own minimum of 4
-            // there is genuinely nothing to do.
-            var lambda = _options.PopulationSize ?? 4 + (int)Math.Floor(3.0 * Math.Log(layout.Count));
-            lambda = Math.Clamp(lambda, 4, Math.Max(4, share));
-            if (share < 4) continue;
-            plan.Add(string.Create(CultureInfo.InvariantCulture,
-                $"{layout.Count}D λ{lambda}×{share / lambda}gen"));
+    /// <summary>One CMA-ES run on the i-th best seed; null when there is nothing to
+    /// tune, no budget for a run, or the run did not beat its start point.</summary>
+    private async Task<ToneMatchCandidate?> RefineOneAsync(MatchRun run, int i, int refineCount, int share)
+    {
+        var request = run.Request;
+        var budget = run.Budget;
+        var prior = run.Prior;
+        var candidate = run.Scored[i];
+        var layout = KnobLayout.For(candidate.Rig);
+        if (layout.Count == 0) return null; // nothing continuous to tune
 
-            status?.Report(
-                localization.Format("Progress_RefiningCandidate", i + 1, refineCount, budget.Used, budget.MaxRenders));
+        // SHRINK THE POPULATION RATHER THAN SKIPPING THE REFINEMENT. The old gate
+        // was a flat `share < 8`: under a tight budget the whole refinement stage
+        // silently did nothing and the lane measured retrieval only, which is
+        // exactly what the first end-to-end eval had to work around by hand
+        // (RetrievalTopK 3 / RefineCandidates 1). A smaller λ is a real CMA-ES run
+        // — it explores less per generation and adapts over more of them — and it
+        // is strictly better than no run at all. Below CmaEs's own minimum of 4
+        // there is genuinely nothing to do.
+        var lambda = _options.PopulationSize ?? 4 + (int)Math.Floor(3.0 * Math.Log(layout.Count));
+        lambda = Math.Clamp(lambda, 4, Math.Max(4, share));
+        if (share < 4) return null;
+        run.Plan.Add(string.Create(CultureInfo.InvariantCulture,
+            $"{layout.Count}D λ{lambda}×{share / lambda}gen"));
 
-            // The PRIOR's own candidate starts from the PRIOR'S KNOB VECTOR and gets
-            // a wider sigma. The start point is the same array either way — the
-            // candidate IS the prior's rig — but saying so explicitly is what keeps
-            // it true if a later stage ever rewrites a candidate before refinement,
-            // and it is where the wider step size is decided.
-            var fromPrior = prior is not null && ToneMatchOrigins.IsPriorRig(candidate.Origin);
-            var sigma = fromPrior ? _options.PriorInitialSigma : _options.InitialSigma;
-            var seedVector = fromPrior && SameChain(layout.Template, prior!.Rig)
-                ? layout.Encode(prior.Rig)
-                : layout.Encode();
-            if (fromPrior)
-            {
-                notes.Add(string.Create(CultureInfo.InvariantCulture,
-                    $"candidate {i + 1} seeded from the prior (sigma {sigma:0.00})"));
-            }
+        run.Status?.Report(
+            localization.Format("Progress_RefiningCandidate", i + 1, refineCount, budget.Used, budget.MaxRenders));
 
-            var start = Array.ConvertAll(seedVector, static f => (double)f);
-
-            // The BEST evaluation's feature vector, kept as it goes past. The refined
-            // rig has to be SCORED like any other candidate, and its vector was
-            // already computed inside the objective — re-rendering it afterwards would
-            // spend a render on an answer we already had, and a score derived from a
-            // second render of a deterministic pipeline is the same number anyway.
-            ToneFeatures? bestWet = null;
-            var bestSeen = double.PositiveInfinity;
-            var result = await CmaEs.MinimizeAsync(
-                async (x, token) =>
-                {
-                    if (!budget.TryTake()) return double.PositiveInfinity;
-                    var rig = layout.Decode(Array.ConvertAll(x, static v => (float)v));
-                    var (d, wet) = await EvaluateAsync(rig, request, targetSpectra, targetFeatures, token)
-                        .ConfigureAwait(false);
-                    if (d < bestSeen) { bestSeen = d; bestWet = wet; }
-                    status?.Report(
-                        localization.Format("Progress_RefiningCandidate", i + 1, refineCount, budget.Used, budget.MaxRenders));
-                    return d;
-                },
-                start,
-                new CmaEsOptions(
-                    Seed: _options.Seed + i,
-                    PopulationSize: lambda,
-                    InitialSigma: sigma,
-                    MaxEvaluations: share),
-                ct).ConfigureAwait(false);
-
-            if (double.IsFinite(result.BestValue) && result.BestValue < candidate.Distance)
-            {
-                // The optimiser moves KNOBS only, so the refined rig's structure — and
-                // therefore its plausibility penalty — is the one it started from. That
-                // is also why the objective above is the RAW distance: a constant scale
-                // cannot move an optimum, and comparing against `candidate.Distance`
-                // then compares two numbers in one space.
-                refined.Add(Candidate(
-                    layout.Decode(Array.ConvertAll(result.Best, static v => (float)v)),
-                    result.BestValue,
-                    candidate.Origin + ToneMatchOrigins.RefinedSuffix,
-                    request,
-                    bestWet is null
-                        ? null
-                        : new Scoring(targetFeatures, bestWet, referenceFeatures, floor, targetTooShort)));
-            }
-            else
-            {
-                // A refinement that did not beat its start point is DISCARDED, not
-                // returned: "a prior that is already right must not be made worse".
-                notes.Add($"candidate {i + 1} ({candidate.Origin}) not improved by refinement");
-            }
+        // The PRIOR's own candidate starts from the PRIOR'S KNOB VECTOR and gets
+        // a wider sigma. The start point is the same array either way — the
+        // candidate IS the prior's rig — but saying so explicitly is what keeps
+        // it true if a later stage ever rewrites a candidate before refinement,
+        // and it is where the wider step size is decided.
+        var fromPrior = prior is not null && ToneMatchOrigins.IsPriorRig(candidate.Origin);
+        var sigma = fromPrior ? _options.PriorInitialSigma : _options.InitialSigma;
+        var seedVector = fromPrior && SameChain(layout.Template, prior!.Rig)
+            ? layout.Encode(prior.Rig)
+            : layout.Encode();
+        if (fromPrior)
+        {
+            run.Notes.Add(string.Create(CultureInfo.InvariantCulture,
+                $"candidate {i + 1} seeded from the prior (sigma {sigma:0.00})"));
         }
 
-        var all = new List<ToneMatchCandidate>(scored);
-        all.AddRange(refined);
+        var start = Array.ConvertAll(seedVector, static f => (double)f);
+
+        // The BEST evaluation's feature vector, kept as it goes past. The refined
+        // rig has to be SCORED like any other candidate, and its vector was
+        // already computed inside the objective — re-rendering it afterwards would
+        // spend a render on an answer we already had, and a score derived from a
+        // second render of a deterministic pipeline is the same number anyway.
+        ToneFeatures? bestWet = null;
+        var bestSeen = double.PositiveInfinity;
+        var result = await CmaEs.MinimizeAsync(
+            async (x, token) =>
+            {
+                if (!budget.TryTake()) return double.PositiveInfinity;
+                var rig = layout.Decode(Array.ConvertAll(x, static v => (float)v));
+                var (d, wet) = await EvaluateAsync(rig, request, run.TargetSpectra, run.TargetFeatures, token)
+                    .ConfigureAwait(false);
+                if (d < bestSeen) { bestSeen = d; bestWet = wet; }
+                run.Status?.Report(
+                    localization.Format("Progress_RefiningCandidate", i + 1, refineCount, budget.Used, budget.MaxRenders));
+                return d;
+            },
+            start,
+            new CmaEsOptions(
+                Seed: _options.Seed + i,
+                PopulationSize: lambda,
+                InitialSigma: sigma,
+                MaxEvaluations: share),
+            run.Ct).ConfigureAwait(false);
+
+        if (double.IsFinite(result.BestValue) && result.BestValue < candidate.Distance)
+        {
+            // The optimiser moves KNOBS only, so the refined rig's structure — and
+            // therefore its plausibility penalty — is the one it started from. That
+            // is also why the objective above is the RAW distance: a constant scale
+            // cannot move an optimum, and comparing against `candidate.Distance`
+            // then compares two numbers in one space.
+            return Candidate(
+                layout.Decode(Array.ConvertAll(result.Best, static v => (float)v)),
+                result.BestValue,
+                candidate.Origin + ToneMatchOrigins.RefinedSuffix,
+                request,
+                bestWet is null ? null : run.ScoringFor(bestWet));
+        }
+
+        // A refinement that did not beat its start point is DISCARDED, not
+        // returned: "a prior that is already right must not be made worse".
+        run.Notes.Add($"candidate {i + 1} ({candidate.Origin}) not improved by refinement");
+        return null;
+    }
+
+    private ToneMatchResult Finish(MatchRun run)
+    {
+        var notes = run.Notes;
+        var budget = run.Budget;
+        var all = new List<ToneMatchCandidate>(run.Scored);
+        all.AddRange(run.Refined);
         all.Sort(static (a, b) => a.RankingDistance.CompareTo(b.RankingDistance));
-        if (all.Count > request.Candidates) all = all.GetRange(0, request.Candidates);
+        if (all.Count > run.Request.Candidates) all = all.GetRange(0, run.Request.Candidates);
 
         // The effective PLAN, not the configured one: what was actually affordable
         // once the seeds were paid for. A reader of the notes can then see that a run
         // refined nothing, or refined one candidate for one generation, instead of
         // inferring it from a render count.
-        var planDetail = plan.Count > 0
-            ? $" [{string.Join(", ", plan)}]"
+        var planDetail = run.Plan.Count > 0
+            ? $" [{string.Join(", ", run.Plan)}]"
             : " (budget exhausted by the seeds)";
         notes.Add(string.Create(CultureInfo.InvariantCulture,
-            $"plan: {scored.Count} seeds, {plan.Count} refinement(s){planDetail}, " +
+            $"plan: {run.Scored.Count} seeds, {run.Plan.Count} refinement(s){planDetail}, " +
             $"cap {budget.MaxRenders} renders / {budget.Wall.TotalSeconds:0} s"));
-        notes.Add($"{budget.Used} renders in {sw.Elapsed.TotalSeconds:0.0} s");
+        notes.Add($"{budget.Used} renders in {run.Clock.Elapsed.TotalSeconds:0.0} s");
 
         // The SCALE, in the notes, always — a headline percentage that does not say
         // what its two ends were measured at is the number W5b replaced.
@@ -506,14 +582,14 @@ public sealed class ToneMatcher(
             }
         }
 
-        var referenceDistance = referenceFeatures is null
+        var referenceDistance = run.ReferenceFeatures is null
             ? double.NaN
-            : similarity.Distance(targetFeatures, referenceFeatures);
+            : similarity.Distance(run.TargetFeatures, run.ReferenceFeatures);
 
-        var result0 = new ToneMatchResult(all, floor, sw.Elapsed, notes)
+        var result = new ToneMatchResult(all, run.Floor, run.Clock.Elapsed, notes)
         {
-            TargetFeatures = targetFeatures.Vector,
-            ReferenceFeatures = referenceFeatures?.Vector,
+            TargetFeatures = run.TargetFeatures.Vector,
+            ReferenceFeatures = run.ReferenceFeatures?.Vector,
             ReferenceDistance = referenceDistance
         };
 
@@ -522,12 +598,12 @@ public sealed class ToneMatcher(
         // and the notes say so.
         if (artifacts is not null)
         {
-            var path = artifacts.TryWrite(result0, extractor.Id, request.StemHint, out var why);
-            if (path is not null) result0 = result0 with { ArtifactPath = path };
+            var path = artifacts.TryWrite(result, similarity.Extractor.Id, run.Request.StemHint, out var why);
+            if (path is not null) result = result with { ArtifactPath = path };
             else if (why is not null) notes.Add("features not persisted: " + why);
         }
 
-        return result0;
+        return result;
     }
 
     /// <summary>

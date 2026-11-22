@@ -8,7 +8,7 @@ namespace DotCharter.Services.Parsing.Xml.Song;
 /// RS XML has no spelling of its own for a split chord — EOF
 ///     writes one <c>&lt;note&gt;</c> per string (<c>EOF_SRC/rs.c:2082-2124</c>) —
 ///     so this gives the editor back the unit the charter selected. A Guitar Pro
-/// pick scrape on two or more strings (tap + tremolo + fret-hand mute +
+/// pick scrape on two or more strings (tap + tremolo +
 ///     unpitched slide + ignore) ships the same way and comes back the same way.
 ///     <para>
 ///         <b>What marks a split chord.</b> EOF's own RS import merges EVERY pair of

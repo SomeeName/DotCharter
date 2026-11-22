@@ -34,7 +34,7 @@ internal static class AppearanceStubs
         ];
 
         public IReadOnlyList<StringPaletteEntry> StringPalettes { get; } =
-            [new("default", "Default (theme)"), new("okabe-ito", "Okabe-Ito"), new("ibm", "IBM")];
+            [new("default", "StringPalette_Default"), new("okabe-ito", "StringPalette_OkabeIto"), new("ibm", "StringPalette_Ibm")];
 
         public string DefaultStringPaletteId => "default";
 

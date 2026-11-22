@@ -93,7 +93,7 @@ public sealed class BarNumberAgreementTests
 
         var audio = new FakeAudioPlaybackService();
         using var rail = new StatusBarViewModel(
-            new StatusBarService(ui), state, audio, ui, new StubProfiles(), new FakeFileStorageService(), FakeLocalization.English());
+            new StatusBarService(ui), state, audio, ui, new StubProfiles(), new FakeFileStorageService(), FakeLocalization.English(), new FakeConfigurationService());
 
         // The rail carries cached indices across ticks; the location cell walks
         // from scratch every time. Drive the rail forward one beat at a time

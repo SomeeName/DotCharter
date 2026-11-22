@@ -4,7 +4,15 @@ namespace DotCharter.Core.Domain.Vocals;
 
 public class LyricEvent
 {
+    /// <summary>The auto-sync model's score; null for a syllable authored without alignment.</summary>
+    public double? AlignmentConfidence { get; set; }
+
+    /// <summary>Advisory alignment findings, retained until the chart is reviewed.</summary>
+    public LyricReviewReason ReviewReasons { get; set; }
+
     public FractionalPosition EndPosition { get; set; } = FractionalPosition.Zero;
+    /// <summary>The wheel deliberately shortened this sustain below the in-phrase end limit.</summary>
+    public bool IsSustainShortened { get; set; }
     public bool IsWordPart { get; set; }
 
     /// <summary>

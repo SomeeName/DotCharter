@@ -51,6 +51,8 @@ public interface IHighwayEditingService
     ///         and which must be added inside this same history node, BEFORE the
     ///         elements referencing them.
     ///     </para>
+    ///     <para><c>preserveUnpastedSounds</c> keeps a pasted hand shape from deleting
+    ///     other sounds in its newly covered ground; the clipboard supplies its own removals.</para>
     /// </summary>
     bool CommitHandShapeDragAndDrop(
         List<GuitarNote> targetNotes, List<GuitarNote> newNotes,
@@ -59,7 +61,7 @@ public interface IHighwayEditingService
         List<FretAnchor> targetAnchors, List<FretAnchor> newAnchors,
         IEnumerable<IChartAction>? additionalActions = null,
         IReadOnlyDictionary<int, ChordTemplate>? incomingTemplates = null,
-        IEnumerable<ChordTemplate>? mintedTemplates = null);
+        IEnumerable<ChordTemplate>? mintedTemplates = null, bool preserveUnpastedSounds = false);
 
     // Modifiers
     void MoveSelectedStringUp(int maxStrings);
@@ -72,7 +74,32 @@ public interface IHighwayEditingService
     ///     string stays put; a chord moves whole or not at all.
     /// </summary>
     void MoveSelectedStringPreservingPitch(int delta, int maxStrings);
+
+    /// <summary>
+    ///     Moves every selected sound <paramref name="delta" /> frets WHOLE, slide ends included; a sound
+    ///     that would leave the neck stays (<see cref="WholeFretMove" />). One history node.
+    /// </summary>
+    void MoveSelectedFretsWhole(int delta);
+
     void MoveSelectedFretUp();
+
+    /// <summary>
+    ///     Nudges the selected notes, chords, hand shapes and anchors in time as ONE history
+    ///     entry: <paramref name="direction" /> is -1 (earlier) or +1 (later); with
+    ///     <paramref name="milliseconds" /> &gt; 0 they move by that many ms, else by one
+    ///     <paramref name="gridDivisor" /> grid step. A move across the first beat is clamped to
+    ///     it, one onto an unselected item is refused; the result says which.
+    /// </summary>
+    TimeMoveResult MoveSelectedInTime(int direction, int milliseconds, int gridDivisor);
+
+    /// <summary>True when something a time nudge can move is selected.</summary>
+    bool HasTimeMovableSelection { get; }
+
+    /// <summary>
+    ///     True when a technique verb below has sounds to act on: a selection, or the implied
+    ///     hand-shape / pen target. Reads the target without promoting it.
+    /// </summary>
+    bool HasTechniqueTarget { get; }
     void MoveSelectedFretDown();
 
     /// <summary>
@@ -107,6 +134,9 @@ public interface IHighwayEditingService
     void ToggleSelectedLinkNext();
     void ToggleSelectedVibrato();
     void ToggleSelectedTremolo();
+
+    /// <summary>Converts resolved sounds, flips an all-scrape target, or places a pick slide at the pen.</summary>
+    void PickSlide();
     void ToggleSelectedPicking();
     void ToggleSelectedAccent();
     void ToggleSelectedIgnore();
@@ -129,6 +159,13 @@ public interface IHighwayEditingService
     // Sustain
     bool AdjustSelectedNotesSustain(int deltaGridSteps, double totalAudioLengthMs, int gridDivisor,
         IList<BeatMarker> beats);
+
+    /// <summary>
+    ///     What <see cref="AdjustSelectedNotesSustain" /> would do to each selected note and chord, writing
+    ///     nothing: the same step, floor, next-sound gap and audio-end clamp.
+    /// </summary>
+    IReadOnlyList<SustainStepOutcome> PreviewSelectedNotesSustain(int deltaGridSteps, double totalAudioLengthMs,
+        int gridDivisor, IList<BeatMarker> beats);
 
     /// <summary>
     ///     Nudges every selected FHP anchor's fret (or width) by

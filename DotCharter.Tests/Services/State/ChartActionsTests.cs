@@ -11,6 +11,25 @@ public class ChartActionsTests
 
     private static FractionalPosition GetPos(Item i) => i.Pos;
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(20)]
+    public void RepeatedRemovalTargets_AreRestoredExactlyOnce(int count)
+    {
+        var notes = Enumerable.Range(0, count)
+            .Select(i => new GuitarNote { Position = new FractionalPosition(i) }).ToList();
+        var collection = new ObservableCollection<GuitarNote>(notes);
+        var action = new RemoveNotesAction(collection, notes.Concat(notes));
+
+        for (var cycle = 0; cycle < 3; cycle++)
+        {
+            action.Execute();
+            Assert.Empty(collection);
+            action.Undo();
+            Assert.Equal(notes, collection);
+        }
+    }
+
     private static ObservableCollection<Item> Sorted(params Item[] items)
     {
         var coll = new ObservableCollection<Item>();

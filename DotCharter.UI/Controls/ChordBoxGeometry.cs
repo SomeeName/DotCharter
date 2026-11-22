@@ -39,14 +39,22 @@ public readonly record struct ChordBoxGeometry(
     /// <summary>Where an open-string / capo dot is drawn on the rail.</summary>
     public const double OpenDotX = 27.0;
 
-    public double FretboardWidth => Math.Max(0, Width - FretboardStartX - RightPadding);
+    public double MaskWidth { get; init; } = PipZoneWidth;
+    public double OpenWidth { get; init; } = FretboardStartX - PipZoneWidth;
+    public double StringTopInset { get; init; } = TopPadding;
+    public double StringBottomInset { get; init; } = BottomPadding;
+    public double FretRightInset { get; init; } = RightPadding;
+
+    public double NutX => MaskWidth + OpenWidth;
+    public double OpenMarkerX => MaskWidth + OpenWidth / 2;
+    public double FretboardWidth => Math.Max(0, Width - NutX - FretRightInset);
 
     public int FretCount => Math.Max(1, MaxFret - MinFret + 1);
 
     public double FretSpacing => FretboardWidth / FretCount;
 
     public double StringSpacing =>
-        Math.Max(0, Height - TopPadding - BottomPadding) / Math.Max(1, StringCount - 1);
+        Math.Max(0, Height - StringTopInset - StringBottomInset) / Math.Max(1, StringCount - 1);
 
     /// <summary>
     ///     Y of string <paramref name="stringIndex" />, laid out the way the
@@ -62,14 +70,13 @@ public readonly record struct ChordBoxGeometry(
     ///         being the top the purple (high E) is on the top".
     ///     </para>
     ///     <para>
-    ///         <see cref="FlipStrings" /> is the viewport's own
-    ///         <c>LeftyFlip ^ InvertStrings</c>, so the toggle inverts this
-    ///         control with the highway rather than leaving the two disagreeing
-    ///         in the other direction.
+    ///         <see cref="FlipStrings" /> follows <c>InvertStrings</c> alone,
+    ///         matching timeline lanes and per-string editor rows. Strings are
+    ///         rows in this diagram; profile handedness does not reverse them.
     ///     </para>
     /// </summary>
     public double StringY(int stringIndex) =>
-        TopPadding + LaneOf(stringIndex) * StringSpacing;
+        StringTopInset + LaneOf(stringIndex) * StringSpacing;
 
     /// <summary>The lane a string occupies, 0 at the TOP — the highway's rule.</summary>
     public int LaneOf(int stringIndex) =>
@@ -78,10 +85,12 @@ public readonly record struct ChordBoxGeometry(
     /// <summary>Centre X of a fretted cell. Only meaningful for a fret inside
     /// [<see cref="MinFret" />, <see cref="MaxFret" />].</summary>
     public double FretCenterX(int fret) =>
-        FretboardStartX + (fret - MinFret) * FretSpacing + FretSpacing / 2;
+        NutX + (fret - MinFret) * FretSpacing + FretSpacing / 2;
 
     /// <summary>True while the pointer is over the mask-pip column.</summary>
     public static bool IsOverMaskPip(double x) => x is >= 0 and < PipZoneWidth;
+
+    public bool IsInMaskZone(double x) => x >= 0 && x < MaskWidth;
 
     /// <summary>The string under <paramref name="y" />, or <c>-1</c>.</summary>
     public int HitString(double y)
@@ -90,7 +99,7 @@ public readonly record struct ChordBoxGeometry(
         if (spacing <= 0)
             return StringCount > 0 && y >= 0 && y <= Height ? 0 : -1;
 
-        if (y < TopPadding - spacing / 2 || y > Height - BottomPadding + spacing / 2)
+        if (y < StringTopInset - spacing / 2 || y > Height - StringBottomInset + spacing / 2)
             return -1;
 
         for (var i = 0; i < StringCount; i++)
@@ -113,7 +122,7 @@ public readonly record struct ChordBoxGeometry(
         stringIndex = HitString(y);
         if (stringIndex < 0) return false;
 
-        if (x < FretboardStartX)
+        if (x < NutX)
         {
             fret = capo > 0 ? capo : 0;
             return true;
@@ -122,7 +131,7 @@ public readonly record struct ChordBoxGeometry(
         var spacing = FretSpacing;
         if (spacing <= 0) return false;
 
-        var index = (int)((x - FretboardStartX) / spacing);
+        var index = (int)((x - NutX) / spacing);
         if (index < 0 || index >= FretCount) return false;
 
         fret = MinFret + index;

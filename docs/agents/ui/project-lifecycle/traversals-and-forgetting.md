@@ -45,7 +45,12 @@ project.
   arrangement that is not in the open project** — `ApplyProject` publishes `ActiveProject`
   BEFORE `ActiveArrangement`, so on the first notification the active arrangement is still
   the CLOSED project's, and focusing it would re-create the context the prune just
-  dropped. Pinned by `UI/TrackContextRegistryProjectSwitchTests`, whose load-bearing case
+  dropped. `Focus` rejects foreign-project arrangements too: an undo/redo focus
+  request can still carry the closed track while the new project is published.
+  Recreating that context would clear the new project's selection before the
+  history subscribers refresh (including the lyric inspector's Phrase End value).
+  Valid stacked-track focus changes still drop the old track's selection.
+  Pinned by `UI/TrackContextRegistryProjectSwitchTests`, whose load-bearing case
   is the WeakReference one: the count assertions are satisfied by a registry that merely
   stops adding, while a stale KEY still pins the graph.
 - **`Services/Audio/Coordination/StemWaveformCoordinator` caches a peak pyramid per stem PATH**, and only
@@ -177,22 +182,18 @@ model, which is why the cycle test cannot see them.
 - **`LanScoreboardViewModel`'s unbounded avatar cache** went with the LAN scoreboard on
   2026-09-19; `BoundedLruCache<T>` stays for the next cache of that shape.
 
-### One residual, and it is NOT a memory problem — read this before "fixing" it
+### Font atlas registrations are project-scoped
 
-`DotCharter.Rendering/Vulkan/FontAtlas`'s `_charsToRender` is only ever ADDED to
-(`RegisterCharacters`), and nothing narrows it back to the open chart. **That is not a
-leak**: the sheet is a FIXED 2048×2048 RGBA texture regardless of how many characters are in
-the set, and `RebuildIfNeeded` disposes the old texture before uploading the new one.
+The 2D and 3D atlases return to their seed characters on a project switch,
+forgetting the closed song's glyph registrations (`FontAtlasProjectSwitchTests`).
+The 2D reset runs on the UI thread, which owns its entire frame path. The 3D
+notification only publishes an atomic request: `Preview3DRenderDriver` consumes
+it on the render worker before chart-text pre-registration, resetting the atlas,
+visible-text signature and weak collection latch together. The UI thread must
+never clear the atlas's character set while the render worker enumerates it
+(`Preview3DDriverWiringTests`).
 
-What it can cost instead is CORRECTNESS on a long CJK session. `Fretboard3DEngine
-.PreRegisterChartText` registers every lyric syllable and every section/phrase name of each
-chart opened, the set accumulates across the session, and `FontAtlas.Rasterize` `break`s out
-of its packing loop once a glyph would fall past the sheet's bottom edge — absent glyphs
-fall back to `?`. So a session that opens enough Japanese charts could start drawing `?` for
-a LATER song's lyrics because an earlier song's kanji are still in the set. **This has NOT
-been reproduced** — it is a reading of the code, not a measurement. Before acting on it,
-count the real glyphs: the fix (narrow the set on switch, then rebuild) costs a full
-rasterize plus a `WaitDeviceIdle` at exactly the moment the switch is trying to stay inside
-the 150 ms budget, and would have to account for every other registrant — the per-frame
-visible scan, HUD labels, the debug text.
-
+This prevents old CJK songs from crowding the registered set indefinitely. It
+still costs a rasterize/upload after a switch. The 3D sheet can grow to 2048 by
+4096 texels; overflow is reported and missing glyphs fall back to a question mark. Atlas replacement
+builds and swaps the new texture before disposing the previous one.

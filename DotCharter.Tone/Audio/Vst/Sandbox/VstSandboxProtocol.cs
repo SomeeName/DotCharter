@@ -44,6 +44,10 @@ public sealed record VstSandboxRequest
     public int? Sr { get; init; }
     public int? Block { get; init; }
     public string? State { get; init; }
+
+    /// <summary>Bridge v4: on <c>load</c>, the seat whose input the slot
+    /// processes. Absent means seat 0 to the child.</summary>
+    public int? Seat { get; init; }
 }
 
 /// <summary>One parsed line from the child: response or event.</summary>

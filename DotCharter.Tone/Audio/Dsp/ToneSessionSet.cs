@@ -92,7 +92,7 @@ public sealed class ToneSessionSet : IDisposable
         try { return config.LoadRigConfig().RigSpillover; }
         catch (Exception ex)
         {
-            logger?.Warning(AppLogCategory.Audio, $"Reading the spillover setting failed; using on. {ex.Message}");
+            logger?.Warning(AppLogCategory.Audio, "Reading the spillover setting failed; using on.", ex);
             return true;
         }
     }

@@ -615,9 +615,7 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
             if (!PayloadManifestMatchesPublishedDigest(manifestBytes, update, digests))
                 return null;
 
-            // Never fetch the copies only a pre-0.63 updater needs.
-            var published = PayloadManifest.FromJson(DecodeUtf8(manifestBytes));
-            var release = published == null ? null : LegacyUpdaterShim.StripFrom(published);
+            var release = PayloadManifest.FromJson(DecodeUtf8(manifestBytes));
             if (release == null || release.Files.Count == 0)
             {
                 _logger?.Info(AppLogCategory.Application,

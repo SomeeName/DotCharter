@@ -1,5 +1,6 @@
 ﻿using DotCharter.UI.Controls;
 using Microsoft.Extensions.DependencyInjection;
+using DotCharter.UI.Controls.Layers;
 using DotCharter.UI.Input.Tools;
 using DotCharter.UI.ViewModels.Shell;
 
@@ -36,6 +37,7 @@ public sealed class TimelineInteractionFactory : ITimelineInteractionFactory
     private readonly IHighwayEditingService _highwayEditing;
     private readonly IConfigurationService _configService;
     private readonly IFingeringGenerationService _fingeringService;
+    private readonly PinnedLabelHitRegistry _pinnedRegistry;
 
     public TimelineInteractionFactory(
         IServiceProvider services,
@@ -43,7 +45,8 @@ public sealed class TimelineInteractionFactory : ITimelineInteractionFactory
         IHighwayEditingService highwayEditing,
         IHistoryService history,
         IConfigurationService configService,
-        IFingeringGenerationService fingeringService)
+        IFingeringGenerationService fingeringService,
+        PinnedLabelHitRegistry pinnedRegistry)
     {
         _services = services;
         _trackContexts = trackContexts;
@@ -51,6 +54,7 @@ public sealed class TimelineInteractionFactory : ITimelineInteractionFactory
         History = history;
         _configService = configService;
         _fingeringService = fingeringService;
+        _pinnedRegistry = pinnedRegistry;
     }
 
     public IHistoryService History { get; }
@@ -61,7 +65,7 @@ public sealed class TimelineInteractionFactory : ITimelineInteractionFactory
         if (boundArrangement != null) _trackContexts.GetOrCreate(boundArrangement);
         var (tools, scope) = CreateToolScope();
         return new TimelineInteractionManager(
-            vm, renderer, _trackContexts, tools, History, boundArrangement, scope);
+            vm, renderer, _trackContexts, tools, History, boundArrangement, scope, _pinnedRegistry);
     }
 
     /// <summary>

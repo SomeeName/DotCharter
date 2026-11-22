@@ -8,4 +8,5 @@ public interface IEditorTool
     void OnPointerMoved(PointerEventArgs e, ToolContext context);
     void OnPointerReleased(PointerReleasedEventArgs e, ToolContext context);
     void OnPointerExited(PointerEventArgs e, ToolContext context);
+    void Cancel(ToolContext context);
 }

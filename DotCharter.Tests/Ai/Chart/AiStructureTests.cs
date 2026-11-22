@@ -68,6 +68,13 @@ public sealed class AiStructureTests
     private Dictionary<(string, double?), int> Findings() =>
         _reporter.Build(_f.Project).Findings.GroupBy(f => (f.Code, f.TimeMs)).ToDictionary(g => g.Key, g => g.Count());
 
+    [Theory]
+    [InlineData(3_599_999, "59:59.9")]
+    [InlineData(3_600_000, "1:00:00.0")]
+    [InlineData(90_061_456, "25:01:01.4")]
+    public void Structure_clock_preserves_elapsed_hours(double ms, string expected) =>
+        Assert.Equal(expected, AiStructureText.Clock(ms));
+
     [Fact]
     public async Task Sections_land_on_bar_lines_and_phrases_on_beats()
     {

@@ -96,6 +96,22 @@ public sealed class GlobalChordGateTests
         Assert.True(GlobalChordGate.AllowsEscape(Editor(text: true)));
     }
 
+    /// <summary>
+    ///     #588 row 4: an open inline FHP / section / lyric editor on the timeline
+    ///     cancels its draft on Escape in its card's own handler, but the window
+    ///     tunnel ran first, cleared the selection and handled the key, so the
+    ///     editor never cancelled in the real shell. It gets first refusal now.
+    /// </summary>
+    [Fact]
+    public void Escape_StandsDownForAnOpenInlineEditor()
+    {
+        var inline = new GlobalChordGate.Context(TextInputFocused: true, KeybindCaptureFocused: false,
+            PaletteOpen: false, HasOpenDialog: false, ChartEditorVisible: true, InlineEditorClaimsEscape: true);
+
+        Assert.False(GlobalChordGate.AllowsEscape(inline));
+        Assert.True(GlobalChordGate.AllowsEscape(inline with { InlineEditorClaimsEscape = false }));
+    }
+
     /// <summary>The palette focuses its own search TextBox on open, so gating
     /// its navigation keys on text input would kill its keyboard entirely.</summary>
     [Fact]

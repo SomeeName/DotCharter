@@ -91,6 +91,7 @@ public partial class SoundQueueViewModel : ViewModelBase
     private readonly ISelectionService _selection;
     private readonly Action<double> _seek;
     private readonly ILocalizationService _localization;
+    private readonly Func<Arrangement, (ChordNamingOptions Naming, DoubleStopNameOptions DoubleStops)> _naming;
 
     /// <summary>
     ///     <c>level</c> is the level being EDITED, not the arrangement's first
@@ -105,8 +106,10 @@ public partial class SoundQueueViewModel : ViewModelBase
         Func<IReadOnlyList<ArrangementIssue>> issues,
         ISelectionService selection,
         Action<double> seek,
-        ILocalizationService localization)
+        ILocalizationService localization,
+        Func<Arrangement, (ChordNamingOptions Naming, DoubleStopNameOptions DoubleStops)> naming)
     {
+        _naming = naming;
         _localization = localization;
         _arrangement = arrangement;
         _level = level;
@@ -430,7 +433,8 @@ public partial class SoundQueueViewModel : ViewModelBase
         _ => FractionalPosition.Zero
     };
 
-    private void SelectAndSeek(ITimedElement sound)
+    /// <summary>Selects <paramref name="sound" /> alone and seeks to it (a queue step; the Note footer's way back to a draft).</summary>
+    internal void SelectAndSeek(ITimedElement sound)
     {
         var beats = _beats();
         if (beats.Count > 0) _seek(PositionOf(sound).GetPositionMs(beats));
@@ -469,7 +473,7 @@ public partial class SoundQueueViewModel : ViewModelBase
         var level = ActiveLevelOf(arr);
         return arr == null || level == null
             ? SoundQueueWork.Empty
-            : new SoundQueueWork(arr, level, _issues());
+            : new SoundQueueWork(arr, level, _issues(), _naming(arr));
     }
 
     /// <summary>
@@ -496,7 +500,7 @@ public partial class SoundQueueViewModel : ViewModelBase
         public static readonly SoundQueueWork Empty = new();
 
         private readonly List<ITimedElement> _sounds = [];
-        private readonly Dictionary<int, ChordTemplate> _templatesById = [];
+        private readonly ChordWorkEligibility? _chordWork;
         private readonly HashSet<object> _hasIssue = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<object> _noAnchorCoverage = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<object> _blocksExport = new(ReferenceEqualityComparer.Instance);
@@ -509,7 +513,8 @@ public partial class SoundQueueViewModel : ViewModelBase
         {
         }
 
-        public SoundQueueWork(Arrangement arr, ChartLevel level, IReadOnlyList<ArrangementIssue> issues)
+        public SoundQueueWork(Arrangement arr, ChartLevel level, IReadOnlyList<ArrangementIssue> issues,
+            (ChordNamingOptions Naming, DoubleStopNameOptions DoubleStops) naming)
         {
             // ITimedElement, not IGuitarSound: a Chord does NOT implement
             // IGuitarSound (that interface is the per-STRING contract, which
@@ -521,9 +526,7 @@ public partial class SoundQueueViewModel : ViewModelBase
                 .OrderBy(PositionOf)
                 .ToList();
 
-            // First id wins, which is what FirstOrDefault(x => x.Id == …) did.
-            foreach (var template in arr.ChordTemplates)
-                _templatesById.TryAdd(template.Id, template);
+            _chordWork = new ChordWorkEligibility(arr, level, naming.Naming, naming.DoubleStops);
 
             // Findings sweep EVERY level; the tile counts this one.
             var onLevel = new HashSet<object>(_sounds, ReferenceEqualityComparer.Instance);
@@ -569,39 +572,16 @@ public partial class SoundQueueViewModel : ViewModelBase
             return matches;
         }
 
-        private bool IsMatch(ITimedElement sound, SoundQueueFilter filter)
+        private bool IsMatch(ITimedElement sound, SoundQueueFilter filter) => filter switch
         {
-            switch (filter)
-            {
-                case SoundQueueFilter.MissingFingering:
-                {
-                    if (sound is not Chord chord) return false;
-                    var t = TemplateOf(chord);
-                    // A FRETTED string with no finger. An open string legitimately
-                    // has none (that is inspector rule L06 the other way round).
-                    return t != null && t.Frets.Any(kv => kv.Value > 0 && !t.Fingers.ContainsKey(kv.Key));
-                }
-                case SoundQueueFilter.UnnamedChord:
-                {
-                    if (sound is not Chord chord) return false;
-                    var t = TemplateOf(chord);
-                    return t != null && string.IsNullOrWhiteSpace(t.Name);
-                }
-                case SoundQueueFilter.Untemplated:
-                    return sound is Chord { TemplateId: -1 };
-                case SoundQueueFilter.NoAnchorCoverage:
-                    return _noAnchorCoverage.Contains(sound);
-                case SoundQueueFilter.HasIssue:
-                    return _hasIssue.Contains(sound);
-                case SoundQueueFilter.BlocksExport:
-                    return _blocksExport.Contains(sound);
-                default:
-                    return true;
-            }
-        }
-
-        private ChordTemplate? TemplateOf(Chord chord) =>
-            _templatesById.TryGetValue(chord.TemplateId, out var template) ? template : null;
+            SoundQueueFilter.MissingFingering => sound is Chord missing && _chordWork!.NeedsFingering(missing),
+            SoundQueueFilter.UnnamedChord => sound is Chord unnamed && _chordWork!.NeedsName(unnamed),
+            SoundQueueFilter.Untemplated => sound is Chord untemplated && _chordWork!.NeedsStoredTemplate(untemplated),
+            SoundQueueFilter.NoAnchorCoverage => _noAnchorCoverage.Contains(sound),
+            SoundQueueFilter.HasIssue => _hasIssue.Contains(sound),
+            SoundQueueFilter.BlocksExport => _blocksExport.Contains(sound),
+            _ => true
+        };
     }
 
     /// <summary>

@@ -6,7 +6,7 @@ using DotCharter.Rendering.Vulkan;
 namespace DotCharter.Rendering.Components;
 
 /// <summary>
-///     Draws the bend-peak labels ("v 1/2", "v Full", …) in the <b>Ui (3D text)
+///     Draws the bend-gesture labels ("↗Full", "↘Full", "PB Full", …) in the <b>Ui (3D text)
 ///     pass</b>, from the queue the transparent pass filled.
 ///     <para>
 ///         <b>The pass is the whole point of this type.</b> The labels are produced

@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using DotCharter.Services.Audio.LivePlay;
+using DotCharter.UI.Theming;
 using DotCharter.UI.ViewModels.Editor;
 using DotCharter.UI.ViewModels.Shell;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,7 +51,6 @@ public sealed class LivePlaySectionGraph : Control
     private ImmutablePen _loopEdgePen = new(new ImmutableSolidColorBrush(Color.Parse("#F59E0B")), 1.5);
     private ImmutableSolidColorBrush _phraseBrush = new(Color.Parse("#5E9FF2"));
     private ImmutableSolidColorBrush _phraseDimBrush = new(Color.Parse("#3C7BD1"));
-    private ImmutableSolidColorBrush _sectionBandBrush = new(Color.Parse("#F59E0B"));
 
     // Pure white at 10 %: a hover veil, not a colour — it has no token and
     // wants none.
@@ -67,7 +67,6 @@ public sealed class LivePlaySectionGraph : Control
         // `FireAccentDim`, and asking for one would have silently kept the old
         // `#3C7BD1` forever.
         _phraseDimBrush = Solid("FireAccentDeep", _phraseDimBrush);
-        _sectionBandBrush = Solid("FireWarning", _sectionBandBrush);
 
         var loop = Solid("FireWarning", _loopEdgePen.Brush as ImmutableSolidColorBrush
                                         ?? new ImmutableSolidColorBrush(Color.Parse("#F59E0B")));
@@ -162,7 +161,7 @@ public sealed class LivePlaySectionGraph : Control
         InvalidateVisual();
     }
 
-    /// <summary>Height of the orange section band at the bottom — clicking
+    /// <summary>Height of the section band at the bottom — clicking
     /// IN the band picks a riff-repeater section loop (Rocksmith semantics),
     /// clicking anywhere above it seeks to the exact time under the cursor.</summary>
     private const double SectionBandHeight = 8.0;
@@ -294,15 +293,13 @@ public sealed class LivePlaySectionGraph : Control
             }
         }
 
-        // ORANGE section band at the bottom — the riff-repeater targets.
-        // Judged sections tint toward their accuracy heat so progress and
-        // trouble spots stay visible at a glance.
+        // Riff-repeater targets use the song map colours until they have accuracy data.
         for (var i = 0; i < sections.Count; i++)
         {
             var s = sections[i];
             var x0 = (s.StartMs - songStart) / span * w;
             var x1 = (s.EndMs - songStart) / span * w;
-            var brush = s.Hits + s.Misses > 0 ? HeatBrush(s, _blockIdle) : _sectionBandBrush;
+            var brush = s.Hits + s.Misses > 0 ? HeatBrush(s, _blockIdle) : SongMapPalette.FillFor(s.Name);
             context.DrawRectangle(brush, null,
                 new RoundedRect(new Rect(x0 + 1, barsBottom + 2,
                     Math.Max(1.0, x1 - x0 - 2.0), SectionBandHeight - 3), 1.5));

@@ -346,7 +346,7 @@ public class HistoryServiceTests
 
     private sealed class FakeEditingScope : IEditingScope
     {
-        public ChartProject? Project => null;
+        public ChartProject? Project { get; init; }
         public Arrangement? Arrangement { get; set; }
         public ChartLevel? Level => null;
         public System.Collections.ObjectModel.ObservableCollection<GuitarNote> Notes { get; } = [];
@@ -359,6 +359,231 @@ public class HistoryServiceTests
         public void SetResolver(Func<EditingTarget?> resolver)
         {
         }
+    }
+
+    /// <summary>
+    ///     A <c>Do</c> asked for while an undo/redo step is being applied (here from the focus request,
+    ///     as a selection cleared by it would) is refused by contract: run then, it landed under the node
+    ///     being undone and the step moved the history past it, so the chart kept the edit and the
+    ///     history lost it. The same request from the change notification is an ordinary new step.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ADoDuringAnUndoOrRedoStep_IsRefused_AndTheStepStaysIntact(bool undo)
+    {
+        var svc = new HistoryService(new FakeAppLogger());
+        var edit = new RecordingAction();
+        svc.Do(edit);
+        if (!undo) svc.Undo();
+        var intruder = new RecordingAction();
+        var during = new List<bool>();
+        bool? refusedDo = null;
+        svc.FocusRequested += _ =>
+        {
+            during.Add(svc.IsApplyingStep);
+            refusedDo ??= svc.Do(intruder);
+        };
+        var after = new List<bool>();
+        svc.HistoryChanged += () => after.Add(svc.IsApplyingStep);
+
+        if (undo) svc.Undo();
+        else svc.Redo();
+
+        Assert.Equal([true], during);
+        Assert.False(refusedDo);
+        Assert.Equal(0, intruder.ExecuteCount);
+        Assert.Equal([false], after);
+        Assert.False(svc.IsApplyingStep);
+        Assert.Equal(undo, svc.CanRedo);
+        Assert.Equal(!undo, svc.CanUndo);
+        Assert.Equal(2, svc.GetTree().Count);
+        Assert.True(svc.Do(intruder));
+        Assert.Equal(1, intruder.ExecuteCount);
+    }
+
+    /// <summary>A step whose apply throws clears the flag (in a <c>finally</c>): the next edit records at once.</summary>
+    [Fact]
+    public void AStepThatThrows_LeavesIsApplyingStepClear()
+    {
+        var svc = new HistoryService(new FakeAppLogger());
+        var failed = new List<bool>();
+        svc.ActionFailed += () => failed.Add(svc.IsApplyingStep);
+        svc.Do(new ThrowingUndoAction());
+
+        Assert.Throws<InvalidOperationException>(svc.Undo);
+
+        Assert.Equal([true], failed);
+        Assert.False(svc.IsApplyingStep);
+        var next = new RecordingAction();
+        Assert.True(svc.Do(next));
+        Assert.Equal(1, next.ExecuteCount);
+    }
+
+    /// <summary>
+    ///     A jump to a node on another branch is ONE step for everyone outside the service: every focus
+    ///     request of its walk sees a step being applied, a Do from one is refused, and the listeners hear
+    ///     one change notification, when the chosen node is current.
+    /// </summary>
+    [Fact]
+    public void AJump_IsOneGuardedStep_WithOneChangeNotification()
+    {
+        var svc = new HistoryService(new FakeAppLogger());
+        svc.Do(new RecordingAction());
+        svc.Do(new RecordingAction());
+        var target = svc.CurrentNodeId;
+        svc.Undo();
+        svc.Undo();
+        svc.Do(new RecordingAction());
+        svc.Do(new RecordingAction());
+        var nodes = svc.GetTree().Count;
+        var intruder = new RecordingAction();
+        var during = new List<bool>();
+        var refused = new List<bool>();
+        svc.FocusRequested += _ =>
+        {
+            during.Add(svc.IsApplyingStep);
+            refused.Add(!svc.Do(intruder));
+        };
+        var notified = new List<int>();
+        svc.HistoryChanged += () => notified.Add(svc.CurrentNodeId);
+
+        Assert.True(svc.NavigateTo(target));
+
+        Assert.Equal([true, true, true, true], during);
+        Assert.Equal([true, true, true, true], refused);
+        Assert.Equal(0, intruder.ExecuteCount);
+        Assert.Equal([target], notified);
+        Assert.Equal(target, svc.CurrentNodeId);
+        Assert.Equal(nodes, svc.GetTree().Count);
+        Assert.False(svc.IsApplyingStep);
+    }
+
+    /// <summary>A direct push (an already-applied action) is refused during a step exactly as a Do is.</summary>
+    [Fact]
+    public void APushDuringAStep_IsRefused()
+    {
+        var svc = new HistoryService(new FakeAppLogger());
+        svc.Do(new RecordingAction());
+        bool? pushed = null;
+        svc.FocusRequested += _ => pushed ??= svc.PushAction(new RecordingAction());
+
+        svc.Undo();
+
+        Assert.False(pushed);
+        Assert.Equal(2, svc.GetTree().Count);
+        Assert.False(svc.CanUndo);
+        Assert.True(svc.PushAction(new RecordingAction()));
+        Assert.True(svc.CanUndo);
+    }
+
+    /// <summary>
+    ///     Every outermost step tells its end exactly once, completed or not, after the depth is back to 0:
+    ///     an undo, a redo, a jump (once, not per walked step), an apply that throws and a link rebuild
+    ///     that throws after the action applied (a group the reconciler cannot read).
+    /// </summary>
+    [Theory]
+    [InlineData("undo", true)]
+    [InlineData("redo", true)]
+    [InlineData("jump", true)]
+    [InlineData("failed apply", false)]
+    [InlineData("failed link rebuild", false)]
+    public void StepEnded_IsRaisedOnce_OnEveryExit_WithTheStepOver(string step, bool completed)
+    {
+        var project = new ChartProject();
+        var svc = new HistoryService(new FakeAppLogger(), new FakeEditingScope { Project = project });
+        svc.Do(new RecordingAction());
+        svc.Do(step == "failed apply" ? new ThrowingUndoAction() : new RecordingAction());
+        var last = svc.CurrentNodeId;
+        if (step == "redo") svc.Undo();
+        if (step == "jump")
+        {
+            svc.Undo();
+            svc.Undo();
+        }
+
+        if (step == "failed link rebuild") project.LinkGroups.Add(null!);
+        var ended = new List<(bool Completed, bool Applying)>();
+        svc.StepEnded += c => ended.Add((c, svc.IsApplyingStep));
+
+        var thrown = Record.Exception(() =>
+        {
+            if (step == "redo") svc.Redo();
+            else if (step == "jump") Assert.True(svc.NavigateTo(last));
+            else svc.Undo();
+        });
+
+        Assert.Equal(completed, thrown == null);
+        Assert.Equal([(completed, false)], ended);
+        Assert.False(svc.IsApplyingStep);
+    }
+
+    /// <summary>A StepEnded listener that throws after a failed step hides nothing: the step's exception surfaces.</summary>
+    [Fact]
+    public void AThrowingStepEndedListener_AfterAFailedStep_LetsTheStepsOwnExceptionOut()
+    {
+        var svc = new HistoryService(new FakeAppLogger());
+        svc.Do(new ThrowingUndoAction());
+        svc.StepEnded += _ => throw new ApplicationException("listener");
+
+        var ex = Assert.Throws<InvalidOperationException>(svc.Undo);
+
+        Assert.Equal("undo failed", ex.Message);
+        Assert.False(svc.IsApplyingStep);
+        Assert.True(svc.Do(new RecordingAction()));
+    }
+
+    /// <summary>
+    ///     A jump whose second step throws stops where the walk stopped: one change notification, for
+    ///     that node, the step no longer applying, and the next edit records.
+    /// </summary>
+    [Fact]
+    public void AJumpThatThrowsPartway_NotifiesOnceForWhereItStopped()
+    {
+        var svc = new HistoryService(new FakeAppLogger());
+        var root = svc.CurrentNodeId;
+        svc.Do(new RecordingAction());
+        svc.Do(new ThrowingUndoAction());
+        var stuck = svc.CurrentNodeId;
+        svc.Do(new RecordingAction());
+        var notified = new List<int>();
+        svc.HistoryChanged += () => notified.Add(svc.CurrentNodeId);
+
+        Assert.Throws<InvalidOperationException>(() => svc.NavigateTo(root));
+
+        Assert.Equal([stuck], notified);
+        Assert.False(svc.IsApplyingStep);
+        var next = new RecordingAction();
+        Assert.True(svc.Do(next));
+        Assert.Equal(1, next.ExecuteCount);
+    }
+
+    /// <summary>A change listener that throws while a failed jump notifies does not replace the jump's own exception.</summary>
+    [Fact]
+    public void AThrowingChangeListener_DuringAFailedJump_LetsTheJumpsOwnExceptionOut()
+    {
+        var svc = new HistoryService(new FakeAppLogger());
+        var root = svc.CurrentNodeId;
+        svc.Do(new RecordingAction());
+        svc.Do(new ThrowingUndoAction());
+        svc.Do(new RecordingAction());
+        svc.HistoryChanged += () => throw new ApplicationException("listener");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => svc.NavigateTo(root));
+
+        Assert.Equal("undo failed", ex.Message);
+        Assert.False(svc.IsApplyingStep);
+    }
+
+    private sealed class ThrowingUndoAction : IChartAction
+    {
+        public bool HasEffect => true;
+
+        public void Execute()
+        {
+        }
+
+        public void Undo() => throw new InvalidOperationException("undo failed");
     }
 
     private sealed class RecordingAction : IChartAction

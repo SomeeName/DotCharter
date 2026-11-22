@@ -29,6 +29,9 @@ public sealed partial class ToneGearSlot : ObservableObject, IToneGearSlot
         _selectedOption = options[0];
     }
 
+    /// <summary>Raised just before the change notification when the user PICKED another gear (not when a knob moved).</summary>
+    internal Action? GearChosen { get; set; }
+
     public string Label { get; }
 
     public RsGearRole Role { get; }
@@ -127,6 +130,7 @@ public sealed partial class ToneGearSlot : ObservableObject, IToneGearSlot
             ? RsToneAuthoring.DefaultKnobValues(gear)
             : new Dictionary<string, float>(StringComparer.Ordinal);
         RebuildKnobs(newValue.Gear, _rawValues);
+        GearChosen?.Invoke();
         _onChanged();
     }
 

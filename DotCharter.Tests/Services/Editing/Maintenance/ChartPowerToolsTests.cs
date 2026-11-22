@@ -25,6 +25,52 @@ namespace DotCharter.Tests.Services.Editing.Maintenance;
 public sealed class ChartPowerToolsTests
 {
     [Fact]
+    public void PropagatePhraseUsesEditorMarkersAndRemainsUndoable()
+    {
+        var h = new Harness();
+        var arrangement = h.State.ActiveArrangement!;
+        foreach (var (beat, phrase) in new[] { (0, "verse"), (4, "chorus"), (8, "verse"), (12, "chorus") })
+            arrangement.EventPoints.Add(new EventPoint { Position = new FractionalPosition(beat), Phrase = phrase });
+        h.State.CurrentTimeMs = 500;
+
+        Assert.Equal(1, h.Maintenance.PropagatePhraseAtPlayhead());
+        var level = arrangement.Levels[0];
+        Assert.Equal(4, level.Notes.Count(n => n.Position >= new FractionalPosition(8)));
+        Assert.Single(h.History.GetUndoSteps());
+        h.History.Undo();
+        Assert.DoesNotContain(level.Notes, n => n.Position >= new FractionalPosition(8));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GenerateLevels_SelectsTheGeneratedHardestOnlyOnInitialApply(bool offThread)
+    {
+        var h = new Harness();
+        var arrangement = h.State.ActiveArrangement!;
+        var original = h.State.ActiveLevel!;
+        Assert.Equal(0, original.DifficultyIndex);
+
+        var generated = offThread
+            ? await h.Maintenance.GenerateLevelsAsync(4)
+            : h.Maintenance.GenerateLevels(4);
+
+        Assert.True(generated);
+        Assert.Same(arrangement.Levels[3], h.State.ActiveLevel);
+        Assert.Equal(6, h.State.ActiveLevel!.Notes.Count);
+
+        // A later level choice is view state: undo/redo must keep the surviving instance.
+        h.State.ActiveLevel = arrangement.Levels[0];
+        h.History.Undo();
+        Assert.Same(original, h.State.ActiveLevel);
+        Assert.Single(arrangement.Levels);
+        Assert.False(h.History.CanUndo);
+        h.History.Redo();
+        Assert.Same(original, h.State.ActiveLevel);
+        Assert.Equal(4, arrangement.Levels.Count);
+    }
+
+    [Fact]
     public void GenerateLevels_expands_the_single_level_and_undo_restores_it()
     {
         var h = new Harness();
@@ -73,6 +119,43 @@ public sealed class ChartPowerToolsTests
         h.History.Undo();
         Assert.Single(h.State.ActiveArrangement!.Levels);
         Assert.False(h.History.CanUndo);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GenerateLevelsAsync_DiscardsAResultAfterTheProjectOrArrangementChanges(bool replaceProject)
+    {
+        var h = new Harness();
+        var project = h.State.ActiveProject!;
+        var original = h.State.ActiveArrangement!;
+        var before = ChartProjectCloner.Clone(project, retainIdentities: true);
+        var replacement = new Arrangement { Name = "Replacement" };
+        replacement.Levels.Add(new ChartLevel());
+        var changed = false;
+        var progress = new InlineProgress(_ =>
+        {
+            if (changed) return;
+            changed = true;
+            if (replaceProject)
+            {
+                var next = new ChartProject();
+                next.Arrangements.Add(replacement);
+                h.State.ActiveProject = next;
+            }
+
+            h.State.ActiveArrangement = replacement;
+            h.State.ActiveLevel = replacement.Levels[0];
+        });
+
+        Assert.False(await h.Maintenance.GenerateLevelsAsync(4, progress));
+
+        Assert.True(changed);
+        Assert.Same(replacement, h.State.ActiveArrangement);
+        Assert.Single(replacement.Levels);
+        Assert.Single(original.Levels);
+        Assert.Empty(h.History.GetUndoSteps());
+        Assert.Empty(DeepCompare.Diff("project", before, project, new HashSet<string>()));
     }
 
     /// <summary>A refused request reports nothing and records nothing — a
@@ -370,7 +453,7 @@ public sealed class ChartPowerToolsTests
         Assert.Equal(1, chord.ChordNotes.Single(n => n.StringIndex == 0).GraceFret);
         Assert.Null(chord.ChordNotes.Single(n => n.StringIndex == 1).GraceFret);
 
-        h.Selection.SelectedNotes.Clear();
+        h.Selection.ClearAll();
         h.Selection.SelectedChords.Add(chord);
         h.Maintenance.SplitSelectedChordsIntoNotes();
 
@@ -469,7 +552,7 @@ public sealed class ChartPowerToolsTests
     {
         public Harness(ILevelSquashService? squash = null,
             DotCharter.Services.Import.Audio.IAudioSilenceSplicer? splicer = null,
-            IArrangementAutoFixService? autoFix = null)
+            IArrangementAutoFixService? autoFix = null, IChartImprovementService? improvement = null)
         {
             var logger = new FakeAppLogger();
             History = new HistoryService(logger);
@@ -514,7 +597,7 @@ public sealed class ChartPowerToolsTests
             Session = new NoOpProjectSessionService();
             Maintenance = new ChartMaintenanceService(
                 config,
-                new NoOpImprovementService(),
+                improvement ?? new NoOpImprovementService(),
                 squash ?? new NoOpSquashService(),
                 new LevelGenerationService(),
                 new PhraseIterationPropagationService(History, scope, logger),
@@ -615,7 +698,8 @@ public sealed class ChartPowerToolsTests
         public Task LoadSilentTransportAsync(double projectLengthMs) => Task.CompletedTask;
 
         public Task OpenProject() => Task.CompletedTask;
-        public Task<bool> SaveProjectAsync() => Task.FromResult(true);
+        public bool HasUnsavedWork() => IsProjectDirty;
+        public Task<bool> SaveProjectAsync(SaveInitiator initiator) => Task.FromResult(true);
         public Task<bool> SaveProjectAsAsync() => Task.FromResult(true);
         public IReadOnlyList<RecentProjectEntry> GetRecentProjects() => [];
         public event Action? RecentProjectsChanged { add { } remove { } }

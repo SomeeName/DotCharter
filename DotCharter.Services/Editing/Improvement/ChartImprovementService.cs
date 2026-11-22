@@ -1,4 +1,7 @@
-﻿namespace DotCharter.Services.Editing.Improvement;
+﻿using DotCharter.Core.Linking;
+using DotCharter.Services.Editing.HandShapes;
+
+namespace DotCharter.Services.Editing.Improvement;
 
 public sealed class ChartImprovementService : IChartImprovementService
 {
@@ -22,11 +25,12 @@ public sealed class ChartImprovementService : IChartImprovementService
         using var _ = _logger?.BeginTimedOperation(AppLogCategory.Editing, "Chart Improvement",
             $"arrangements={project.Arrangements.Count}, beats={project.Beats.Count}, audioMs={totalAudioLengthMs:0.##}");
 
-        ChartSpacingEnforcer.EnforceProject(project, config);
+        result.Add("spacing cleanup", ImprovementSpacing.Enforce(project, config));
 
         result.Add("song-end cleanup", TrimProjectToAudioLength(project, totalAudioLengthMs));
         result.Add("extra beats", RemoveExtraBeats(project, totalAudioLengthMs));
 
+        var spacing = ChartSpacingEnforcer.SpacingGapOf(config);
         foreach (var arrangement in project.Arrangements)
         {
             result.ArrangementsProcessed++;
@@ -39,11 +43,11 @@ public sealed class ChartImprovementService : IChartImprovementService
                 result.Add("dangling link-next targets", RemoveUnnecessaryLinkNextTargets(level));
                 result.Add("invalid link-nexts", RemoveInvalidLinkNextPatterns(level));
                 result.Add("slide handshapes", FixChordSlideHandShapes(level));
-                result.Add("handshape spacing", ImproveHandShapeLengths(level, project.Beats));
+                result.Add("handshape spacing", ImproveHandShapeLengths(level, project.Beats, spacing));
             }
         }
 
-        ChartSpacingEnforcer.EnforceProject(project, config);
+        result.Add("spacing cleanup", ImprovementSpacing.Enforce(project, config));
         _logger?.Info(AppLogCategory.Editing, $"Chart improvement complete: {result.ToLogDetails()}");
         return result;
     }
@@ -109,21 +113,20 @@ public sealed class ChartImprovementService : IChartImprovementService
 
     private static int RemoveExtraBeats(ChartProject project, double totalAudioLengthMs)
     {
-        if (totalAudioLengthMs <= 0 || project.Beats.Count < 2) return 0;
+        if (project.IsBeatMapLocked || totalAudioLengthMs <= 0 || project.Beats.Count < 2) return 0;
 
-        var changes = RemoveAll(project.Beats, b => b.Time > totalAudioLengthMs);
-        if (project.Beats.Count == 0) return changes;
+        // Positions interpolate between ORIGINAL beats. Replacing the next beat
+        // with the audio end retimes everything in that interval, including the
+        // sustains just trimmed above. Keep the beat at/after the cutoff and at
+        // least one interval; a shorter map already extrapolates correctly.
+        var lastKept = 1;
+        while (lastKept < project.Beats.Count - 1 && project.Beats[lastKept].Time < totalAudioLengthMs)
+            lastKept++;
 
-        var lastBeat = project.Beats[^1];
-        if (Math.Abs(lastBeat.Time - totalAudioLengthMs) > 0.001)
+        var changes = 0;
+        for (var i = project.Beats.Count - 1; i > lastKept; i--)
         {
-            project.Beats.Add(new BeatMarker
-            {
-                Time = totalAudioLengthMs,
-                Bpm = lastBeat.Bpm,
-                BeatsInMeasure = lastBeat.BeatsInMeasure,
-                NoteDenominator = lastBeat.NoteDenominator
-            });
+            project.Beats.RemoveAt(i);
             changes++;
         }
 
@@ -152,7 +155,7 @@ public sealed class ChartImprovementService : IChartImprovementService
     ///         a strict no-op.
     ///     </para>
     /// </summary>
-    private static int EnsurePhraseStartAnchors(Arrangement arrangement)
+    internal static int EnsurePhraseStartAnchors(Arrangement arrangement)
     {
         var phrasePositions = PhraseMarkers.Playable(arrangement)
             .Select(m => m.Position)
@@ -176,8 +179,8 @@ public sealed class ChartImprovementService : IChartImprovementService
             {
                 if (level.Anchors.Any(a => a.Position == phrasePosition)) continue;
 
-                var source = level.Anchors.LastOrDefault(a => a.Position <= phrasePosition)
-                             ?? level.Anchors.FirstOrDefault(a => a.Position > phrasePosition);
+                var source = FretAnchorLookup.InEffectAt(level.Anchors, phrasePosition)
+                             ?? level.Anchors.Where(a => a.Position > phrasePosition).MinBy(a => a.Position);
                 if (source == null) continue;
 
                 InsertAnchorSorted(level.Anchors,
@@ -193,9 +196,8 @@ public sealed class ChartImprovementService : IChartImprovementService
     /// never past the neck (an unclamped <c>capo + 1</c> can invert a
     /// <see cref="Math.Clamp(int,int,int)" /> range and THROW). Mirrors
     /// <c>FretAnchorGenerationService.MinAnchorFret</c>.</summary>
-    internal static int MinAnchorFret(int capo) => Math.Clamp(capo + 1, 1, MaxFret);
+    internal static int MinAnchorFret(int capo) => FretLimits.MinAnchorFret(capo);
 
-    private const int MaxFret = 24;
 
     private static int NormalizeChordNoteSustains(ChartLevel level)
     {
@@ -453,7 +455,7 @@ public sealed class ChartImprovementService : IChartImprovementService
         return changes;
     }
 
-    private static int ImproveHandShapeLengths(ChartLevel level, IList<BeatMarker> beats)
+    private static int ImproveHandShapeLengths(ChartLevel level, IList<BeatMarker> beats, SpacingGap spacing)
     {
         if (beats.Count < 2 || level.HandShapes.Count == 0) return 0;
 
@@ -463,6 +465,8 @@ public sealed class ChartImprovementService : IChartImprovementService
         // Position, and this pass writes only HandShape.EndPosition, so nothing
         // it does can invalidate them.
         var index = new HandShapeLengthIndex(level);
+        // The D15 check's own gap: no shape this pass leaves may be reported by it.
+        var gaps = HandShapeGap.For(level, beats, spacing);
 
         for (var i = 0; i < orderedHandShapes.Count; i++)
         {
@@ -491,6 +495,8 @@ public sealed class ChartImprovementService : IChartImprovementService
                 if (latestEnd > handShape.Position && handShape.EndPosition > latestEnd)
                     handShape.EndPosition = latestEnd;
             }
+
+            gaps.TrimToGap(handShape);
 
             if (handShape.EndPosition < handShape.Position)
                 handShape.EndPosition = handShape.Position;

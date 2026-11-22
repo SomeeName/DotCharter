@@ -36,7 +36,7 @@ public sealed class InspectorIssueRebuildTests
         Assert.Contains("BulkObservableCollection<ArrangementIssue> Items { get; }", src);
         Assert.Contains("BulkObservableCollection<InspectorIssueGroup> IssueGroups { get; }", src);
 
-        var recompute = BodyOf(src, "internal void RecomputeIssues()");
+        var recompute = BodyOf(src, "private void ShowIssues(");
         Assert.Contains("Items.ResetWith(results)", recompute);
         Assert.DoesNotContain("Items.Clear()", recompute);
         Assert.DoesNotContain("Items.Add(", recompute);
@@ -58,8 +58,17 @@ public sealed class InspectorIssueRebuildTests
         // The dot does not depend on the groups being built.
         Assert.Contains("TopIssueSeverity = IssueGrouping.TopSeverity(Items);", rebuild);
 
-        var tabChange = BodyOf(src, "partial void OnSelectedTabIndexChanged(int value)");
-        Assert.Contains("if (value == IssuesTabIndex) Issues.EnsureIssueGroupsCurrent();", tabChange);
+        // The tab strip hands every move to its activation collaborator.
+        Assert.Contains("_tabActivation.Activated(value);", BodyOf(src, "partial void OnSelectedTabIndexChanged(int value)"));
+        var tabChange = BodyOf(src, "public void Activated(int tab)");
+        // Opening the tab does the deferred work: the groups, then the "Whole project" report (#497),
+        // both inside the one IssuesTabIndex branch so nothing of it runs while the tab is hidden.
+        var branch = tabChange.IndexOf("if (tab == InspectorViewModel.IssuesTabIndex)", StringComparison.Ordinal);
+        Assert.True(branch >= 0, "the Issues tab branch is gone");
+        var inBranch = tabChange[branch..];
+        var groups = inBranch.IndexOf("issues.EnsureIssueGroupsCurrent();", StringComparison.Ordinal);
+        var report = inBranch.IndexOf("exportReadiness.RefreshChartReport();", StringComparison.Ordinal);
+        Assert.True(groups >= 0 && report > groups, "the Issues tab must rebuild the groups, then refresh the report");
 
         var ensure = BodyOf(src, "internal void EnsureIssueGroupsCurrent()");
         Assert.Contains("if (_issueGroupsStale) SyncIssueGroups();", ensure);
@@ -163,6 +172,10 @@ public sealed class InspectorIssueRebuildTests
         var issues = UiSourceTree.Resolve(Path.Combine(dir, "Inspector", "InspectorIssuesViewModel.cs"));
         Assert.True(File.Exists(issues), $"{issues} does not exist — repoint this lint.");
         files.Add(issues);
+        // The tab strip's activation work lives in its own collaborator.
+        var activation = UiSourceTree.Resolve(Path.Combine(dir, "Inspector", "InspectorTabActivation.cs"));
+        Assert.True(File.Exists(activation), $"{activation} does not exist — repoint this lint.");
+        files.Add(activation);
         return Regex.Replace(string.Join("\n", files.Select(UiSourceTree.ReadAllText)), @"^\s*//.*$", "", RegexOptions.Multiline);
     }
 

@@ -86,7 +86,10 @@ public enum DcSongWriteFailure
     ImageUnsupported,
 
     /// <summary>A stem has a bad or duplicate name, a missing file, or there are too many.</summary>
-    InvalidStem
+    InvalidStem,
+
+    /// <summary>The serialized chart or manifest exceeds the reader's size limit.</summary>
+    PackageTooLarge
 }
 
 /// <summary>A <c>.dcsong</c> write refused, with the reason. Nothing is left at the destination.</summary>

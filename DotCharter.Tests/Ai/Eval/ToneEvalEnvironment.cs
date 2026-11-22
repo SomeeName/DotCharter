@@ -142,17 +142,26 @@ public sealed record ToneEvalEnvironment(
     ///     is not fully configured — a half-configured run is a skip, never a
     ///     failure, because "I forgot to export the key" is not a regression.
     /// </summary>
-    public static bool TryResolve(out ToneEvalEnvironment? environment, out string reason)
+    public static bool TryResolve(out ToneEvalEnvironment? environment, out string reason) =>
+        TryResolve(Environment.GetEnvironmentVariable, out environment, out reason);
+
+    /// <summary>
+    ///     <see cref="TryResolve(out ToneEvalEnvironment?, out string)" /> over a
+    ///     variable lookup the caller hands in. A test passes its own table
+    ///     (<see cref="FakeEnvironment" />) and so never writes the process
+    ///     environment, which every class in the run shares.
+    /// </summary>
+    public static bool TryResolve(Func<string, string?> read, out ToneEvalEnvironment? environment, out string reason)
     {
         environment = null;
 
-        if (Read(EnableVariable) != "1")
+        if (read(EnableVariable) != "1")
         {
             reason = SkipMessage;
             return false;
         }
 
-        var providerText = (Read(ProviderVariable) ?? "").ToLowerInvariant();
+        var providerText = (read(ProviderVariable) ?? "").ToLowerInvariant();
 
         // The transcript provider answers AS Claude — it is the transport that was
         // replaced, not the model — so it resolves to the same kind and differs only
@@ -174,29 +183,29 @@ public sealed record ToneEvalEnvironment(
             return false;
         }
 
-        var model = Read(ModelVariable);
+        var model = read(ModelVariable);
         if (string.IsNullOrWhiteSpace(model))
         {
             reason = $"{ModelVariable} is not set. {SkipMessage}";
             return false;
         }
 
-        var baseUrl = Read(BaseUrlVariable);
+        var baseUrl = read(BaseUrlVariable);
         if (provider == AiProviderKind.OpenAiCompatible && string.IsNullOrWhiteSpace(baseUrl))
         {
             reason = $"{BaseUrlVariable} is required for an OpenAI-compatible provider. {SkipMessage}";
             return false;
         }
 
-        var transcriptDir = isTranscript ? Read(TranscriptDirVariable) : null;
+        var transcriptDir = isTranscript ? read(TranscriptDirVariable) : null;
         if (isTranscript && string.IsNullOrWhiteSpace(transcriptDir))
         {
             reason = $"{TranscriptDirVariable} is required for the transcript provider. {SkipMessage}";
             return false;
         }
 
-        var key = Read(KeyVariable);
-        if (string.IsNullOrWhiteSpace(key)) key = Read(AnthropicKeyVariable);
+        var key = read(KeyVariable);
+        if (string.IsNullOrWhiteSpace(key)) key = read(AnthropicKeyVariable);
 
         // Claude cannot be reached without one; a local OpenAI-compatible server
         // usually wants none, and demanding one here would block the FREE way to
@@ -210,7 +219,7 @@ public sealed record ToneEvalEnvironment(
         }
 
         var max = DefaultMaxSongs;
-        var maxText = Read(MaxVariable);
+        var maxText = read(MaxVariable);
         if (!string.IsNullOrWhiteSpace(maxText) &&
             int.TryParse(maxText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) &&
             parsed > 0)
@@ -221,9 +230,9 @@ public sealed record ToneEvalEnvironment(
         environment = new ToneEvalEnvironment(
             provider, model.Trim(), string.IsNullOrWhiteSpace(baseUrl) ? null : baseUrl.Trim(),
             string.IsNullOrWhiteSpace(key) ? null : key,
-            max, Read(ShortVariable) == "1", Read(AnchorVariable) == "1",
+            max, read(ShortVariable) == "1", read(AnchorVariable) == "1",
             string.IsNullOrWhiteSpace(transcriptDir) ? null : transcriptDir.Trim(),
-            ReadPrice(PriceInVariable), ReadPrice(PriceOutVariable));
+            ReadPrice(read, PriceInVariable), ReadPrice(read, PriceOutVariable));
         reason = "";
         return true;
     }
@@ -258,14 +267,12 @@ public sealed record ToneEvalEnvironment(
         return options;
     }
 
-    private static string? Read(string name) => Environment.GetEnvironmentVariable(name);
-
     /// <summary>A price, or null when it is unset, unparseable or not positive —
     /// never a throw, because a research harness that refuses to start over a
     /// cosmetic column is worse than one that prints the default price it used.</summary>
-    private static double? ReadPrice(string name)
+    private static double? ReadPrice(Func<string, string?> read, string name)
     {
-        var text = Read(name);
+        var text = read(name);
         if (string.IsNullOrWhiteSpace(text)) return null;
 
         return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)

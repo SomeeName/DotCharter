@@ -125,6 +125,9 @@ public static class LinkGroupEdits
     private sealed class SetLinkGroupsAction(ChartProject project, List<LinkGroup> before, List<LinkGroup> after)
         : IChartAction, ILinkPolicyAction
     {
+        public long EstimatedBytes { get; } =
+            ChartProjectFootprint.EstimateHistoryBytes(before) + ChartProjectFootprint.EstimateHistoryBytes(after);
+
         /// <summary>It sets the groups itself; nothing is copied or compared.</summary>
         public LinkPolicy LinkPolicy => LinkPolicy.Retain;
 
@@ -144,6 +147,9 @@ public static class LinkGroupEdits
     private sealed class AddLinkPlacementAction(ChartProject project, List<LinkGroup> before, List<LinkGroup> after,
         List<LinkRunEdges.Edit> edges, Arrangement arrangement) : IChartAction, ILinkPolicyAction
     {
+        public long EstimatedBytes { get; } =
+            ChartProjectFootprint.EstimateHistoryBytes(before) + ChartProjectFootprint.EstimateHistoryBytes(after);
+
         /// <summary>The run already plays the same; nothing is copied, compared or unlinked.</summary>
         public LinkPolicy LinkPolicy => LinkPolicy.Retain;
 

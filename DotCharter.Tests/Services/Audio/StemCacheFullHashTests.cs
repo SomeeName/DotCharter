@@ -114,6 +114,55 @@ public sealed class StemCacheFullHashTests : IDisposable
         Assert.True(File.Exists(store.ArchivePath(StemCacheKey.Derive(id, sig))), "the archive must be kept until replaced");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_verified_sample_collision_gets_its_own_archive_and_neither_audio_is_separated_twice(bool library)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var song = Song(7);
+        var audio = WriteAudio("collision.wav", song);
+        var identity = library ? StemCacheIdentity.ForLibrary("lib:COLLISION") : StemCacheIdentity.ForAudioFile(audio);
+        var store = new StemCacheStore(new CopyEncoder(), rootOverride: Path.Combine(_tmp, "collision-cache"));
+        var signature = StemAudioSignature.ComputeFile(audio);
+        var firstKey = StemCacheKey.Derive(identity, signature);
+        await store.SaveAsync(firstKey, identity, signature,
+            [new StemTrack { Name = "drums", Path = WriteStemWav(1) }], "m", "", ct,
+            StemAudioSignature.ComputeFullFileHash(audio));
+        var firstArchive = File.ReadAllBytes(store.ArchivePath(firstKey));
+        var coordinator = new StemCacheCoordinator(store);
+        Assert.NotNull(await coordinator.TryLoadCachedAsync(identity, audio, Path.Combine(_tmp, "first"), ct));
+
+        File.WriteAllBytes(audio, EditedAtAQuarter(song));
+        File.SetLastWriteTimeUtc(audio, File.GetLastWriteTimeUtc(audio).AddSeconds(5));
+        Assert.Equal(signature, StemAudioSignature.ComputeFile(audio));
+        Assert.Null(await coordinator.TryLoadCachedAsync(identity, audio, Path.Combine(_tmp, "changed"), ct));
+        Assert.False(coordinator.HasArchive(identity, audio));
+        var resolve = typeof(StemCacheSource).GetMethod("ResolveForStore");
+        Assert.NotNull(resolve);
+        var source = Assert.IsType<StemCacheSource>(resolve.Invoke(null, [store, identity, audio]));
+        Assert.NotEqual(firstKey, source.Key);
+        var changedStem = WriteStemWav(2);
+        await store.SaveAsync(source.Key, identity, source.Signature,
+            [new StemTrack { Name = "drums", Path = changedStem }], "m", "", ct,
+            StemAudioSignature.ComputeFullFileHash(audio));
+        var secondArchive = File.ReadAllBytes(store.ArchivePath(source.Key));
+        Assert.True(coordinator.HasArchive(identity, audio));
+        var changed = Assert.Single((await coordinator.TryLoadCachedAsync(identity, audio, Path.Combine(_tmp, "changed"), ct))!);
+        Assert.Equal(File.ReadAllBytes(changedStem), File.ReadAllBytes(changed.Path));
+        await store.SaveAsync(source.Key, identity, source.Signature,
+            [new StemTrack { Name = "drums", Path = WriteStemWav(3) }], "m", "", ct);
+        Assert.Equal(secondArchive, File.ReadAllBytes(store.ArchivePath(source.Key)));
+
+        File.WriteAllBytes(audio, song);
+        File.SetLastWriteTimeUtc(audio, File.GetLastWriteTimeUtc(audio).AddSeconds(10));
+        Assert.True(coordinator.HasArchive(identity, audio));
+        var original = Assert.Single((await coordinator.TryLoadCachedAsync(identity, audio, Path.Combine(_tmp, "first"), ct))!);
+        Assert.Equal(Enumerable.Repeat((byte)1, 256), File.ReadAllBytes(original.Path));
+        Assert.Equal(firstArchive, File.ReadAllBytes(store.ArchivePath(firstKey)));
+        Assert.Equal(secondArchive, File.ReadAllBytes(store.ArchivePath(source.Key)));
+    }
+
     [Fact]
     public async Task AnArchiveWrittenBeforeTheFullHash_StillHits()
     {

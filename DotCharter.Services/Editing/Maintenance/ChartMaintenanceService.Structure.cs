@@ -1,6 +1,7 @@
 // ChartMaintenanceService: copying a song's STRUCTURE — its section and phrase
 // markers — from the arrangement being charted onto the others.
 
+using DotCharter.Services.Editing.Structure;
 using DotCharter.Services.Editing.Sync;
 using DotCharter.Services.State;
 
@@ -50,7 +51,7 @@ public sealed partial class ChartMaintenanceService
             return 0;
         }
 
-        if (source.EventPoints.Count == 0)
+        if (source.EventPoints.Count == 0 && PhraseMarkers.All(source).Count == 0)
         {
             _projectState.MainDisplayMessage = L("Status_CopyStructureNothingToCopy");
             return 0;
@@ -101,79 +102,8 @@ public sealed partial class ChartMaintenanceService
     ///     Writes <paramref name="source" />'s markers into <paramref name="target" />
     ///     and returns how many actually changed something. Visible for testing.
     /// </summary>
-    internal static int MergeStructureInto(Arrangement source, Arrangement target)
-    {
-        var written = 0;
-        var byPosition = new Dictionary<FractionalPosition, EventPoint>();
-        foreach (var existing in target.EventPoints) byPosition.TryAdd(existing.Position, existing);
-
-        foreach (var marker in source.EventPoints)
-        {
-            if (byPosition.TryGetValue(marker.Position, out var existing))
-            {
-                if (string.Equals(existing.Section, marker.Section, StringComparison.Ordinal) &&
-                    string.Equals(existing.Phrase, marker.Phrase, StringComparison.Ordinal) &&
-                    string.Equals(existing.Events, marker.Events, StringComparison.Ordinal) &&
-                    existing.Status == marker.Status)
-                {
-                    continue;
-                }
-
-                existing.Section = marker.Section;
-                existing.Phrase = marker.Phrase;
-                existing.Events = marker.Events;
-                existing.Status = marker.Status;
-                written++;
-                continue;
-            }
-
-            var copy = new EventPoint
-            {
-                Position = marker.Position,
-                Section = marker.Section,
-                Phrase = marker.Phrase,
-                Events = marker.Events,
-                Status = marker.Status
-            };
-            target.EventPoints.Add(copy);
-            byPosition[copy.Position] = copy;
-            written++;
-        }
-
-        if (written > 0)
-        {
-            var ordered = target.EventPoints.OrderBy(e => e.Position).ToList();
-            target.EventPoints.Clear();
-            foreach (var e in ordered) target.EventPoints.Add(e);
-        }
-
-        // The solo flag is keyed by phrase NAME, so it has to follow the phrases
-        // that were copied or a solo phrase silently stops being one.
-        //
-        // ONLY the solo flag. MaxDifficulty is a fact about the TARGET's own
-        // level stack, not about the phrase: a lead with eight generated levels
-        // copied its structure onto a single-level rhythm and left every phrase
-        // there claiming a ceiling of 7. LiveExpectedTimeline.BuildPhraseSpans and
-        // LevelSquashService.ResolveSourceLevelId both read that number back —
-        // only the matcher clamps it, and the value is what the RS export writes.
-        var targetCeiling = TopDifficultyIndex(target);
-        foreach (var marker in source.EventPoints)
-        {
-            if (string.IsNullOrWhiteSpace(marker.Phrase)) continue;
-            if (!source.PhraseInfos.TryGetValue(marker.Phrase, out var info)) continue;
-            if (target.PhraseInfos.TryGetValue(marker.Phrase, out var existingInfo)) existingInfo.Solo = info.Solo;
-            else target.PhraseInfos[marker.Phrase] = new PhraseInfo(targetCeiling, info.Solo);
-        }
-
-        return written;
-    }
-
-    /// <summary>The highest difficulty an arrangement actually has — the same
-    /// value <c>LiveExpectedTimeline.BuildPhraseSpans</c> falls back to for a phrase
-    /// carrying no <see cref="PhraseInfo" />, so it is the neutral ceiling for a
-    /// phrase this copy has to invent one for.</summary>
-    private static int TopDifficultyIndex(Arrangement arrangement) =>
-        arrangement.Levels.Count == 0 ? 0 : Math.Max(0, arrangement.Levels.Max(level => level.DifficultyIndex));
+    internal static int MergeStructureInto(Arrangement source, Arrangement target) =>
+        StructureMarkerMerge.MergeInto(source, target);
 
     /// <summary>
     ///     Carries the charting work done on <paramref name="source" /> over to

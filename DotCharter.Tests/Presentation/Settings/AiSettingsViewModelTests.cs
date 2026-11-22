@@ -22,14 +22,17 @@ public sealed class AiSettingsViewModelTests
     {
         public readonly Dictionary<AiProviderKind, string?> Secrets = [];
         public int Writes;
+        public bool AcceptWrites = true;
 
         public string? Read(AiProviderKind kind) =>
             Secrets.TryGetValue(kind, out var value) ? value : null;
 
-        public void Write(AiProviderKind kind, string? secret)
+        public bool Write(AiProviderKind kind, string? secret)
         {
             Writes++;
+            if (!AcceptWrites) return false;
             Secrets[kind] = secret;
+            return true;
         }
 
         /// <summary>Settable, because the Settings page's session-only row is
@@ -41,11 +44,12 @@ public sealed class AiSettingsViewModelTests
     {
         public AiProviderKind Kind { get; init; }
         public AiProbeResult Probe = new(true, "ok", "claude-opus-5");
+        public Task<AiProbeResult>? PendingProbe;
 
         public Task<ToneDesignModelReply> CompleteAsync(ToneDesignPrompt prompt, CancellationToken ct) =>
             throw new NotSupportedException();
 
-        public Task<AiProbeResult> ProbeAsync(CancellationToken ct) => Task.FromResult(Probe);
+        public Task<AiProbeResult> ProbeAsync(CancellationToken ct) => PendingProbe ?? Task.FromResult(Probe);
     }
 
     private sealed class FakeFactory : IToneDesignModelFactory
@@ -126,6 +130,135 @@ public sealed class AiSettingsViewModelTests
         Assert.Equal("sk-abc", secrets.Read(AiProviderKind.Claude));
         Assert.Equal(string.Empty, vm.ApiKeyEntry);
         Assert.True(vm.HasStoredKey);
+    }
+
+    [Fact]
+    public void AnUnreadableBlob_KeepsTheTypedKeyAndFailureUntilSaveRetries()
+    {
+        if (!OperatingSystem.IsWindows()) Assert.Skip("DPAPI is Windows-only.");
+        var path = Path.Combine(Path.GetTempPath(), $"dc-ai-tab-{Guid.NewGuid():N}.bin");
+        try
+        {
+            var store = new DpapiAiSecretStore(filePath: path);
+            store.Write(AiProviderKind.Claude, "previous-key");
+            store.Write(AiProviderKind.OpenAiCompatible, "other-provider-key");
+            var before = File.ReadAllBytes(path);
+            using var vm = AiTabRig.Create(new FakeConfigurationService(), store, new FakeFactory());
+            vm.Load();
+            vm.SelectedProvider = vm.Providers.Single(p => p.Kind == AiProviderKind.Claude);
+            vm.ApiKeyEntry = "  entered-key  ";
+
+            using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Write | FileShare.Delete))
+                vm.Save();
+
+            Assert.Equal("  entered-key  ", vm.ApiKeyEntry);
+            Assert.True(vm.IsStatusError);
+            Assert.Equal(FakeLocalization.English()["Ai_KeySaveFailed"], vm.StatusText);
+            Assert.Contains("ai.ApiKeyEntry", vm.UnsavedSettings);
+            Assert.Equal(before, File.ReadAllBytes(path));
+            vm.Rebaseline();
+            Assert.Contains("ai.ApiKeyEntry", vm.UnsavedSettings);
+
+            vm.Save();
+
+            Assert.Empty(vm.ApiKeyEntry);
+            Assert.False(vm.IsStatusError);
+            Assert.Empty(vm.UnsavedSettings);
+            Assert.Equal("entered-key", new DpapiAiSecretStore(filePath: path).Read(AiProviderKind.Claude));
+            Assert.Equal("other-provider-key", store.Read(AiProviderKind.OpenAiCompatible));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task TestConnection_DoesNotProbeOrHideAFailedKeySave()
+    {
+        var vm = NewVm(out _, out var secrets, out var factory);
+        vm.Load();
+        vm.SelectedProvider = vm.Providers.Single(p => p.Kind == AiProviderKind.Claude);
+        vm.ApiKeyEntry = "pending-key";
+        secrets.AcceptWrites = false;
+
+        await vm.TestConnectionCommand.ExecuteAsync(null);
+
+        Assert.Empty(factory.Created);
+        Assert.False(vm.IsBusy);
+        Assert.Equal("pending-key", vm.ApiKeyEntry);
+        Assert.True(vm.IsStatusError);
+        Assert.Equal(FakeLocalization.English()["Ai_KeySaveFailed"], vm.StatusText);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ALateProbe_CannotHideAFailedKeySave(bool throws)
+    {
+        using var vm = NewVm(out _, out var secrets, out var factory);
+        vm.Load();
+        vm.SelectedProvider = vm.Providers.Single(p => p.Kind == AiProviderKind.Claude);
+        var pending = new TaskCompletionSource<AiProbeResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        factory.Model.PendingProbe = pending.Task;
+        var probe = vm.TestConnectionCommand.ExecuteAsync(null);
+        Assert.False(probe.IsCompleted);
+        vm.ApiKeyEntry = "pending-key";
+        secrets.AcceptWrites = false;
+        vm.Save();
+
+        if (throws) pending.SetException(new InvalidOperationException("probe failed"));
+        else pending.SetResult(new AiProbeResult(true, "ok", "model"));
+        await probe;
+
+        Assert.Equal("pending-key", vm.ApiKeyEntry);
+        Assert.True(vm.IsStatusError);
+        Assert.Equal(FakeLocalization.English()["Ai_KeySaveFailed"], vm.StatusText);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ALateProbe_CannotPublishAfterRevertOrDispose(bool dispose)
+    {
+        var vm = NewVm(out _, out _, out var factory);
+        vm.Load();
+        vm.SelectedProvider = vm.Providers.Single(p => p.Kind == AiProviderKind.Claude);
+        var pending = new TaskCompletionSource<AiProbeResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        factory.Model.PendingProbe = pending.Task;
+        var probe = vm.TestConnectionCommand.ExecuteAsync(null);
+        Assert.False(probe.IsCompleted);
+        if (dispose) vm.Dispose();
+        else vm.Revert();
+        var status = vm.StatusText;
+        pending.SetResult(new AiProbeResult(true, "ok", "model"));
+        await probe;
+        Assert.Equal(status, vm.StatusText);
+        if (!dispose) vm.Dispose();
+    }
+
+    [Fact]
+    public void ClearFailure_KeepsTheTypedAndStoredKeysUntilClearRetries()
+    {
+        var vm = NewVm(out _, out var secrets, out _);
+        secrets.Secrets[AiProviderKind.Claude] = "stored-key";
+        vm.Load();
+        vm.SelectedProvider = vm.Providers.Single(p => p.Kind == AiProviderKind.Claude);
+        vm.ApiKeyEntry = "pending-key";
+        secrets.AcceptWrites = false;
+
+        vm.ClearKeyCommand.Execute(null);
+
+        Assert.Equal("pending-key", vm.ApiKeyEntry);
+        Assert.Equal("stored-key", secrets.Read(AiProviderKind.Claude));
+        Assert.True(vm.IsStatusError);
+        Assert.Equal(FakeLocalization.English()["Ai_KeyClearFailed"], vm.StatusText);
+
+        secrets.AcceptWrites = true;
+        vm.ClearKeyCommand.Execute(null);
+        Assert.Empty(vm.ApiKeyEntry);
+        Assert.Null(secrets.Read(AiProviderKind.Claude));
+        Assert.False(vm.IsStatusError);
     }
 
     [Fact]
@@ -261,10 +394,9 @@ public sealed class AiSettingsViewModelTests
     }
 
     /// <summary>
-    ///     The change set tracks the four PERSISTED values and nothing else: not
-    ///     the combo's option object, which it cannot compare, and above all not
-    ///     the key box — the set keeps a baseline copy of every value it watches,
-    ///     and a typed key has no business living in one.
+    ///     Four persisted values get baseline copies; pending key input contributes
+    ///     only a fixed marker so Save stays enabled after failure. The secret itself
+    ///     must never enter the change-set values or their baseline copies.
     /// </summary>
     [Fact]
     public void The_change_set_counts_the_four_persisted_values_and_never_the_key()
@@ -274,14 +406,15 @@ public sealed class AiSettingsViewModelTests
         Assert.Empty(vm.UnsavedSettings);
 
         vm.ApiKeyEntry = "sk-ant-not-a-real-key";
-        Assert.Empty(vm.UnsavedSettings);
+        Assert.Equal(["ai.ApiKeyEntry"], vm.UnsavedSettings);
+        Assert.DoesNotContain(vm.ApiKeyEntry, vm.UnsavedSettings);
 
         vm.SelectedProvider = Row(vm, AiProviderKind.Claude);
         vm.ModelId = "claude-opus-5";
         vm.BaseUrl = "http://localhost:1234/v1";
         vm.UseLibraryTones = false;
         Assert.Equal(
-            ["ai.ProviderKind", "ai.ModelId", "ai.BaseUrl", "ai.UseLibraryTones"],
+            ["ai.ProviderKind", "ai.ModelId", "ai.BaseUrl", "ai.UseLibraryTones", "ai.ApiKeyEntry"],
             vm.UnsavedSettings);
 
         vm.Save();

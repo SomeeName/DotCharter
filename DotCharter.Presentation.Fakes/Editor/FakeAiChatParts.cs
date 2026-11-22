@@ -224,3 +224,86 @@ public sealed class FakeAiChatHistoryEntry : ObservableObject, IAiChatHistoryEnt
 
     public override string ToString() => Title;
 }
+
+/// <summary>The arrangement picker, for the gallery: the rows' checks move its text.</summary>
+public sealed class FakeAiChatArrangementPicker : ObservableObject, IAiChatArrangementPicker
+{
+    public FakeAiChatArrangementPicker(IReadOnlyList<IAiChatArrangementChoice> choices)
+    {
+        Choices = choices;
+        foreach (var choice in choices.OfType<FakeAiChatArrangementChoice>())
+        {
+            choice.Changed += () =>
+            {
+                OnPropertyChanged(nameof(PickerText));
+                Changed?.Invoke();
+            };
+        }
+    }
+
+    public IReadOnlyList<IAiChatArrangementChoice> Choices { get; }
+
+    public string PickerText => FakeAiChatArrangementChoice.PickerText(Choices);
+
+    /// <summary>Raised after a check changed any row.</summary>
+    public event Action? Changed;
+}
+
+/// <summary>A row of the arrangement picker, for the gallery: checking works like the real one's.</summary>
+public sealed class FakeAiChatArrangementChoice : ObservableObject, IAiChatArrangementChoice
+{
+    private bool _isChecked;
+    private IReadOnlyList<FakeAiChatArrangementChoice> _all = [];
+
+    private FakeAiChatArrangementChoice(string label, bool isAll)
+    {
+        Label = label;
+        IsAll = isAll;
+    }
+
+    public string Label { get; }
+
+    public string Detail => "";
+
+    public bool IsAll { get; }
+
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set
+        {
+            if (!SetProperty(ref _isChecked, value)) return;
+            Toggled();
+        }
+    }
+
+    /// <summary>Raised after a check changed any row.</summary>
+    public event Action? Changed;
+
+    public static IReadOnlyList<IAiChatArrangementChoice> Build(IReadOnlyList<string> names)
+    {
+        var rows = new List<FakeAiChatArrangementChoice> { new("All arrangements", true) };
+        rows.AddRange(names.Select(n => new FakeAiChatArrangementChoice(n, false)));
+        foreach (var row in rows) row._all = rows;
+        rows[1]._isChecked = true;
+        return rows;
+    }
+
+    /// <summary>"Lead", "2 arrangements" or "All arrangements".</summary>
+    public static string PickerText(IReadOnlyList<IAiChatArrangementChoice> rows)
+    {
+        var each = rows.Skip(1).Where(r => r.IsChecked).ToList();
+        return each.Count == 1 ? each[0].Label : each.Count == rows.Count - 1 ? rows[0].Label : $"{each.Count} arrangements";
+    }
+
+    private void Toggled()
+    {
+        var each = _all.Where(r => !r.IsAll).ToList();
+        if (IsAll) each.ForEach(r => r.Set(IsChecked || r == each[0]));
+        else if (!each.Any(r => r.IsChecked)) Set(true);
+        _all[0].Set(each.All(r => r.IsChecked));
+        foreach (var row in _all) row.Changed?.Invoke();
+    }
+
+    private void Set(bool value) => SetProperty(ref _isChecked, value, nameof(IsChecked));
+}

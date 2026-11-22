@@ -33,11 +33,18 @@ public sealed class AiChatViewModelTests : IDisposable
     public AiChatViewModelTests()
     {
         Directory.CreateDirectory(_root);
-        _store = new AiChatHistory(new ProjectStateAiChatChartSource(_state), _time);
+        _store = new AiChatHistory(new ProjectStateAiChatChartSource(_state), _time, null, RecycleConversation);
         _config.AppConfig.Ai = new AiProviderSettings(AiProviderKind.ClaudeCli, "claude-sonnet-5-5", null);
     }
 
     public void Dispose() => BestEffortDelete.Directory(_root);
+
+    private void RecycleConversation(string path)
+    {
+        var archive = Directory.CreateDirectory(Path.Combine(_root, ".recycled"));
+        if (OperatingSystem.IsWindows()) archive.Attributes |= FileAttributes.Hidden;
+        File.Move(path, Path.Combine(archive.FullName, Guid.NewGuid().ToString("N") + ".json"));
+    }
 
     private static readonly ResourceManager Translations =
         new("DotCharter.Localization.Resources", typeof(LocalizationService).Assembly);
@@ -78,9 +85,10 @@ public sealed class AiChatViewModelTests : IDisposable
     public async Task Send_RunsTheTaskThePickerNames_SectionsAndPhrasesOnlyWhenPicked()
     {
         var vm = Build(OpenProject("a"));
-        Assert.Equal(5, vm.Jobs.Count);
+        Assert.Equal(8, vm.Jobs.Count);
         Assert.Same(vm.Jobs[0], vm.SelectedJob);
-        Assert.Equal([_loc["AiChat_Job_FingeringOnly"], _loc["AiChat_Job_Fingering"], _loc["AiChat_Job_Structure"],
+        Assert.Equal([_loc["AiChat_Job_FingeringOnly"], _loc["AiChat_Job_Fingering"], _loc["AiChat_Job_FhpOnly"],
+            _loc["AiChat_Job_ChordNamesEof"], _loc["AiChat_Job_ChordNamesMusical"], _loc["AiChat_Job_Structure"],
             _loc["AiChat_Job_Explain"], _loc["AiChat_Job_Tones"]], vm.Jobs.Select(j => j.Label));
 
         vm.InputText = "Use 1-3 on the power chords";
@@ -88,16 +96,106 @@ public sealed class AiChatViewModelTests : IDisposable
         vm.SelectedJob = vm.Jobs[1];
         vm.InputText = "Keep the hand in 5th position in this section";
         await ((IAsyncRelayCommand)vm.SendCommand).ExecuteAsync(null);
-        vm.SelectedJob = vm.Jobs[2];
+        vm.SelectedJob = vm.Jobs[5];
         vm.InputText = "Mark the sections";
         await ((IAsyncRelayCommand)vm.SendCommand).ExecuteAsync(null);
         // #563: Ask / explain, a question answered in text.
-        vm.SelectedJob = vm.Jobs[3];
+        vm.SelectedJob = vm.Jobs[6];
         vm.InputText = "Why 1-3 here?";
         await ((IAsyncRelayCommand)vm.SendCommand).ExecuteAsync(null);
 
         Assert.Equal([AiChartJob.FingeringOnly, AiChartJob.FhpAndFingering, AiChartJob.SectionsAndPhrases, AiChartJob.Explain],
             _actions.Requests.Select(r => r.Job));
+    }
+
+    /// <summary>
+    ///     #497: the Tools menu's AI fix rows are tasks of the pane. Each new task sends the request the old row
+    ///     ran (job and, for chord names, the style), and a fix task sends with an empty box: the task's own line
+    ///     goes as the charter's words. Sections and Ask still need words.
+    /// </summary>
+    [Theory]
+    [InlineData(2, AiChartJob.FhpOnly, ChordNamingStyle.Eof, "AiChat_Default_FhpOnly")]
+    [InlineData(3, AiChartJob.ChordNames, ChordNamingStyle.Eof, "AiChat_Default_ChordNames")]
+    [InlineData(4, AiChartJob.ChordNames, ChordNamingStyle.Musical, "AiChat_Default_ChordNames")]
+    [InlineData(0, AiChartJob.FingeringOnly, ChordNamingStyle.Eof, "AiChat_Default_FingeringOnly")]
+    [InlineData(1, AiChartJob.FhpAndFingering, ChordNamingStyle.Eof, "AiChat_Default_Fingering")]
+    public async Task AFixTask_SendsWithAnEmptyBox_AsTheOldMenuRowDid(int index, AiChartJob job, ChordNamingStyle style, string line)
+    {
+        var vm = Build(OpenProject("a"));
+        vm.SelectedJob = vm.Jobs[index];
+        Assert.True(vm.SendCommand.CanExecute(null));
+
+        await ((IAsyncRelayCommand)vm.SendCommand).ExecuteAsync(null);
+
+        var request = Assert.Single(_actions.Requests);
+        Assert.Equal((job, style, _loc[line]), (request.Job, request.Style, request.Instruction));
+
+        vm.SelectedJob = vm.Jobs[5];
+        Assert.False(vm.SendCommand.CanExecute(null));
+        vm.SelectedJob = vm.Jobs[6];
+        Assert.False(vm.SendCommand.CanExecute(null));
+    }
+
+    /// <summary>#497: a palette id of a removed row shows the pane and runs its task at once, without making it the
+    /// arrangement type's remembered default.</summary>
+    [Theory]
+    [InlineData(AiChartJob.FhpOnly, ChordNamingStyle.Eof)]
+    [InlineData(AiChartJob.ChordNames, ChordNamingStyle.Eof)]
+    [InlineData(AiChartJob.ChordNames, ChordNamingStyle.Musical)]
+    [InlineData(AiChartJob.FingeringOnly, ChordNamingStyle.Eof)]
+    [InlineData(AiChartJob.FhpAndFingering, ChordNamingStyle.Eof)]
+    public async Task StartJob_ShowsThePane_PicksTheTask_AndRunsIt_WithoutRememberingIt(AiChartJob job, ChordNamingStyle style)
+    {
+        var vm = Build(OpenProject("a"));
+        var shown = 0;
+        vm.ShowRequested += () => shown++;
+
+        Assert.True(await vm.StartJobAsync(job, style));
+
+        Assert.Equal(1, shown);
+        var request = Assert.Single(_actions.Requests);
+        Assert.Equal((job, style), (request.Job, request.Style));
+        Assert.Equal((job, style), (JobOf(vm.SelectedJob), vm.SelectedJob is AiChatOptionItem { Key: AiChatChordNamesKey k } ? k.Style : ChordNamingStyle.Eof));
+        Assert.Null(_config.AppConfig.AiFingeringJobGuitar);
+    }
+
+    /// <summary>
+    ///     #497: the old Tools rows ran on the editor's selection, the whole arrangement when nothing was
+    ///     selected. A palette id does the same whatever scope the pane shows, and leaves the pane's pick alone.
+    /// </summary>
+    [Fact]
+    public async Task StartJob_RunsOnTheSelection_OrTheWholeArrangement_LikeTheOldRows_AndKeepsThePanesScope()
+    {
+        var project = OpenProject("a");
+        var vm = Build(project);
+        vm.SelectedScope = vm.Scopes[1];
+        var picked = vm.SelectedScope;
+        Assert.Equal(AiChatScopeKind.Section, ((AiChatOptionItem)picked!).Key);
+
+        Assert.True(await vm.StartJobAsync(AiChartJob.FingeringOnly));
+        Assert.Equal(AiChatScopeKind.Arrangement, _actions.Requests[^1].Scope.Kind);
+
+        _selection.SelectedNotes.Add(project.Arrangements[0].Levels[0].Notes[0]);
+        Assert.True(await vm.StartJobAsync(AiChartJob.FingeringOnly));
+        Assert.Equal(AiChatScopeKind.Selection, _actions.Requests[^1].Scope.Kind);
+
+        Assert.Same(picked, vm.SelectedScope);
+        Assert.Equal(AiChatScopeKind.Section, ((AiChatOptionItem)vm.SelectedScope!).Key);
+    }
+
+    [Fact]
+    public async Task StartJob_WithoutAProvider_ShowsThePane_AndSaysWhy()
+    {
+        _config.AppConfig.Ai = AiProviderSettings.Disabled;
+        var vm = Build(OpenProject("a"));
+        var shown = 0;
+        vm.ShowRequested += () => shown++;
+
+        Assert.False(await vm.StartJobAsync(AiChartJob.ChordNames, ChordNamingStyle.Musical));
+
+        Assert.Equal(1, shown);
+        Assert.Equal(vm.NoProviderText, vm.ErrorText);
+        Assert.Empty(_actions.Requests);
     }
 
     /// <summary>
@@ -468,6 +566,79 @@ public sealed class AiChatViewModelTests : IDisposable
         Assert.True(vm.History.Entries[0].IsCurrent);
     }
 
+    /// <summary>The pane is a singleton: a language switch relabels the Task and Scope pickers in place,
+    /// so the picks (by item) survive and the labels are the new language's.</summary>
+    [Fact]
+    public void ALanguageSwitch_RelabelsTheTaskAndScopePickers_AndKeepsThePicks()
+    {
+        var loc = FakeLocalization.English();
+        var vm = Build(OpenProject("a"), loc);
+        var job = vm.Jobs[5];
+        vm.SelectedJob = job;
+        var scope = vm.SelectedScope;
+        var german = CultureInfo.GetCultureInfo("de-DE");
+
+        loc.SwitchTo("de-DE");
+
+        Assert.Same(job, vm.SelectedJob);
+        Assert.Same(scope, vm.SelectedScope);
+        Assert.Equal(Translations.GetString("AiChat_Job_Structure", german), vm.SelectedJob!.Label);
+        Assert.Equal(Translations.GetString("AiChat_Scope_Arrangement", german), vm.Scopes[2].Label);
+        Assert.NotEqual(_loc["AiChat_Job_Structure"], vm.Jobs[5].Label);
+        Assert.Equal(Translations.GetString("AiChat_Hint_Structure", german), vm.InputHint);
+    }
+
+    /// <summary>A chat whose load is still on disk when the charter starts a new chat or opens another
+    /// chart: the loaded conversation answers nothing any more and is not shown.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task APendingOpen_AfterNewChatOrAChartSwitch_DoesNotShowTheOldConversation(bool switchChart)
+    {
+        var store = new GatedLoads(_store);
+        var vm = new AiChatViewModel(_config, _state, _selection, new AiChatServices(store, _actions, new FakeAppLogger(), _time),
+            new TestUiDispatcher(), _loc);
+        _ = OpenProject("a");
+        await Send(vm, "Mark the sections");
+        vm.NewChatCommand.Execute(null);
+        await Open(vm);
+        var entry = Assert.Single(vm.History.Entries);
+        var gate = store.Gate = new TaskCompletionSource();
+
+        var opening = ((IAsyncRelayCommand)entry.OpenCommand).ExecuteAsync(null);
+        if (switchChart) _ = OpenProject("b");
+        else vm.NewChatCommand.Execute(null);
+        gate.SetResult();
+        await opening;
+
+        Assert.False(vm.HasTurns);
+        Assert.Null(vm.CurrentConversationId);
+    }
+
+    private sealed class GatedLoads(DotCharter.Services.Ai.Chat.IAiChatHistory inner) : DotCharter.Services.Ai.Chat.IAiChatHistory
+    {
+        public TaskCompletionSource? Gate { get; set; }
+        public string? OpenChartId => inner.OpenChartId;
+        public AiChatConversation? StartNew(string modelId) => inner.StartNew(modelId);
+        public Task<AiChatListing> ListAsync(CancellationToken ct = default) => inner.ListAsync(ct);
+
+        public async Task<AiChatLoadResult> LoadAsync(string id, CancellationToken ct = default)
+        {
+            // Read before the switch, handed back after it: the file was this chart's when it was read.
+            var result = await inner.LoadAsync(id, ct);
+            if (Gate is { } gate) await gate.Task.WaitAsync(ct);
+            return result;
+        }
+
+        public Task<AiChatWriteResult> SaveAsync(AiChatConversation conversation, CancellationToken ct = default) =>
+            inner.SaveAsync(conversation, ct);
+
+        public Task<AiChatWriteResult> RenameAsync(string id, string title, CancellationToken ct = default) =>
+            inner.RenameAsync(id, title, ct);
+
+        public Task<AiChatWriteResult> DeleteAsync(string id, CancellationToken ct = default) => inner.DeleteAsync(id, ct);
+    }
+
     [Fact]
     public async Task AnotherChartsChat_InThisChartsFolder_IsNotListed_AndTheNoticeSaysWhy()
     {
@@ -476,7 +647,7 @@ public sealed class AiChatViewModelTests : IDisposable
         await Send(vm, "Mark the sections");
 
         // A conversation of ANOTHER chart, copied into this chart's folder.
-        var folder = Path.Combine(_root, "a", "ai-chats", project.ProjectId);
+        var folder = Path.Combine(_root, "a", ".dotcharter", "ai-chats", project.ProjectId);
         var mine = Directory.GetFiles(folder, "*.json").Single();
         var foreignId = ProjectIdentity.NewId();
         var json = File.ReadAllText(mine)
@@ -517,7 +688,7 @@ public sealed class AiChatViewModelTests : IDisposable
         vm.SelectedScope = vm.Scopes[0];
         Assert.Equal(_loc["AiChat_Summary_NothingSelected"], vm.ScopeSummary);
         _selection.SelectedNotes.Add(project.Arrangements[0].Levels[0].Notes[0]);
-        Assert.Equal(_loc.Format("AiChat_Summary_Selection", 1, 0), vm.ScopeSummary);
+        Assert.Equal("1 note · 0 chords selected", vm.ScopeSummary);
 
         vm.SelectedScope = vm.Scopes[1];
         Assert.Equal(_loc["AiChat_Summary_NoSection"], vm.ScopeSummary);
@@ -525,7 +696,7 @@ public sealed class AiChatViewModelTests : IDisposable
         Assert.Equal(_loc.Format("AiChat_Summary_Section", "Verse 2"), vm.ScopeSummary);
 
         vm.SelectedScope = vm.Scopes[2];
-        Assert.Equal(_loc.Format("AiChat_Summary_Arrangement", "Lead", 2, 0), vm.ScopeSummary);
+        Assert.Equal("Lead: 2 notes · 0 chords", vm.ScopeSummary);
     }
 
     /// <summary>
@@ -542,11 +713,13 @@ public sealed class AiChatViewModelTests : IDisposable
         {
             [AiChartJob.FingeringOnly] = "FingeringOnly",
             [AiChartJob.FhpAndFingering] = "Fingering",
+            [AiChartJob.FhpOnly] = "FhpOnly",
+            [AiChartJob.ChordNames] = "ChordNames",
             [AiChartJob.SectionsAndPhrases] = "Structure",
             [AiChartJob.Explain] = "Explain",
             [AiChartJob.Tones] = "Tones"
         };
-        Assert.Equal(names.Keys.Order(), vm.Jobs.Select(j => JobOf(j)!.Value).Order());
+        Assert.Equal(names.Keys.Order(), vm.Jobs.Select(j => JobOf(j)!.Value).Distinct().Order());
         Assert.Equal("AiChat_Empty_FingeringOnly", vm.EmptyText);
         Assert.Equal("AiChat_Hint_FingeringOnly", vm.InputHint);
 
@@ -758,16 +931,53 @@ public sealed class AiChatViewModelTests : IDisposable
         return review;
     }
 
+    /// <summary>#350: the save behind an accepted review throws; it is logged and shown, never left in an unobserved task.</summary>
+    [Fact]
+    public async Task AnAcceptWhoseSaveThrows_IsLoggedAndShown()
+    {
+        var logger = new FakeAppLogger();
+        var store = new ThrowingSaves(_store);
+        var vm = new AiChatViewModel(_config, _state, _selection, new AiChatServices(store, _actions, logger, _time),
+            new TestUiDispatcher(), _loc);
+        _ = OpenProject("a");
+        await LinkLastTurnToReview(vm, "review-1");
+        store.Throw = true;
+
+        _actions.RaiseApplied(new AiChatApplied("review-1", "left: L05", null));
+
+        Assert.Contains(logger.Entries, e => e.Level == "ERROR");
+        Assert.NotEqual(string.Empty, vm.ErrorText);
+    }
+
+    private sealed class ThrowingSaves(DotCharter.Services.Ai.Chat.IAiChatHistory inner) : DotCharter.Services.Ai.Chat.IAiChatHistory
+    {
+        public bool Throw { get; set; }
+        public string? OpenChartId => inner.OpenChartId;
+        public AiChatConversation? StartNew(string modelId) => inner.StartNew(modelId);
+        public Task<AiChatListing> ListAsync(CancellationToken ct = default) => inner.ListAsync(ct);
+        public Task<AiChatLoadResult> LoadAsync(string id, CancellationToken ct = default) => inner.LoadAsync(id, ct);
+
+        public Task<AiChatWriteResult> SaveAsync(AiChatConversation conversation, CancellationToken ct = default) =>
+            Throw ? throw new IOException("disk full") : inner.SaveAsync(conversation, ct);
+
+        public Task<AiChatWriteResult> RenameAsync(string id, string title, CancellationToken ct = default) =>
+            inner.RenameAsync(id, title, ct);
+
+        public Task<AiChatWriteResult> DeleteAsync(string id, CancellationToken ct = default) => inner.DeleteAsync(id, ct);
+    }
+
     private AiChatViewModel Build(ChartProject project, ILocalizationService? localization = null)
     {
         _ = project;
-        var vm = new AiChatViewModel(_config, _state, _selection, new AiChatServices(_store, _actions, _time),
+        var vm = new AiChatViewModel(_config, _state, _selection, new AiChatServices(_store, _actions, new FakeAppLogger(), _time),
             new TestUiDispatcher(), localization ?? _loc);
         vm.SelectedScope = vm.Scopes[2];
         return vm;
     }
 
-    private static AiChartJob? JobOf(IAiChatOption? option) => option is AiChatOptionItem { Key: AiChartJob job } ? job : null;
+    private static AiChartJob? JobOf(IAiChatOption? option) => option is AiChatOptionItem { Key: var key }
+        ? key switch { AiChartJob job => job, AiChatChordNamesKey => AiChartJob.ChordNames, _ => null }
+        : null;
 
     private (ChartProject Project, Arrangement Bass) OpenGuitarAndBass()
     {
@@ -829,7 +1039,7 @@ public sealed class AiChatViewModelTests : IDisposable
     }
 
     private string ChatFile(ChartProject project, string conversationId) =>
-        Path.Combine(_root, "a", "ai-chats", project.ProjectId, conversationId + ".json");
+        Path.Combine(_root, "a", ".dotcharter", "ai-chats", project.ProjectId, conversationId + ".json");
 
     /// <summary>The chart pass as the pane sees it: records each request and answers with a held reply,
     /// or with the next of <see cref="Replies" />; <see cref="Gate" /> holds the answer until it is set.</summary>

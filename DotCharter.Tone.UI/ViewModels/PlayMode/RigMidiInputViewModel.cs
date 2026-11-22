@@ -21,10 +21,12 @@ public sealed partial class RigMidiInputViewModel : ObservableObject, IDisposabl
     private readonly Action<int, int, int> _consume;
     private readonly Action<int, int>? _consumeProgram;
     private readonly object _pendingGate = new();
-    private readonly Dictionary<int, (int Generation, int Value)> _pending = [];
+    private readonly Dictionary<int, PendingMessage> _pending = [];
     // ONE slot: a burst of program changes is "go to the last one", never a queue
     // of tone switches the rig would then play through one by one.
-    private (int Generation, int Channel, int Program)? _pendingProgram;
+    private PendingMessage? _pendingProgram;
+    private long _messageOrder;
+    private readonly record struct PendingMessage(int Generation, int Channel, int Number, int Value, long Order, bool IsProgram);
     private readonly SemaphoreSlim _connectionGate = new(1, 1);
     private bool _posted;
     private bool _connecting;
@@ -145,7 +147,7 @@ public sealed partial class RigMidiInputViewModel : ObservableObject, IDisposabl
         lock (_pendingGate)
         {
             if (_disposed || !_accepting || generation != _source?.RigMidiInputGeneration) return;
-            _pending[channel * 128 + controller] = (generation, value); // at most 2,048 keys
+            _pending[channel * 128 + controller] = new(generation, channel, controller, value, ++_messageOrder, false); // at most 2,048 keys
             if (_posted) return;
             _posted = true;
         }
@@ -158,7 +160,7 @@ public sealed partial class RigMidiInputViewModel : ObservableObject, IDisposabl
         lock (_pendingGate)
         {
             if (_disposed || !_accepting || generation != _source?.RigMidiInputGeneration) return;
-            _pendingProgram = (generation, channel, program);
+            _pendingProgram = new(generation, channel, program, 0, ++_messageOrder, true);
             if (_posted) return;
             _posted = true;
         }
@@ -167,32 +169,33 @@ public sealed partial class RigMidiInputViewModel : ObservableObject, IDisposabl
 
     private void Drain()
     {
-        KeyValuePair<int, (int Generation, int Value)>[] values;
-        (int Generation, int Channel, int Program)? program;
+        PendingMessage[] messages;
         lock (_pendingGate)
         {
             _posted = false;
             if (_disposed) return;
-            values = _pending.ToArray();
+            messages = _pending.Values.ToArray();
             _pending.Clear();
-            program = _pendingProgram;
+            if (_pendingProgram is { } program) messages = [.. messages, program];
             _pendingProgram = null;
         }
-        foreach (var (key, message) in values)
+        // Coalescing keeps each message's LAST arrival order too: a scene CC
+        // received after a program change must target the incoming preset.
+        foreach (var message in messages.OrderBy(m => m.Order))
         {
-            if (!_disposed && _accepting && message.Generation == _source?.RigMidiInputGeneration)
+            if (_disposed || !_accepting || message.Generation != _source?.RigMidiInputGeneration) continue;
+            if (message.IsProgram)
             {
                 LastMessage = string.Format(System.Globalization.CultureInfo.CurrentCulture,
-                    _loc["Rig_Midi_LastControl"], key % 128, message.Value, key / 128 + 1);
-                _consume(key / 128, key % 128, message.Value);
+                    _loc["Rig_Midi_LastProgram"], message.Number, message.Channel + 1);
+                _consumeProgram?.Invoke(message.Channel, message.Number);
             }
-        }
-
-        if (program is { } pc && !_disposed && _accepting && pc.Generation == _source?.RigMidiInputGeneration)
-        {
-            LastMessage = string.Format(System.Globalization.CultureInfo.CurrentCulture,
-                _loc["Rig_Midi_LastProgram"], pc.Program, pc.Channel + 1);
-            _consumeProgram?.Invoke(pc.Channel, pc.Program);
+            else
+            {
+                LastMessage = string.Format(System.Globalization.CultureInfo.CurrentCulture,
+                    _loc["Rig_Midi_LastControl"], message.Number, message.Value, message.Channel + 1);
+                _consume(message.Channel, message.Number, message.Value);
+            }
         }
     }
 

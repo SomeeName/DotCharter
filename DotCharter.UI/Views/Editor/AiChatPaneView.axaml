@@ -1,6 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:contracts="using:DotCharter.Presentation.Contracts.Editor"
+             xmlns:shell="using:DotCharter.UI.Views.Shell"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              x:Class="DotCharter.UI.Views.Editor.AiChatPaneView"
              x:DataType="contracts:IAiChatScreen"
@@ -151,7 +153,12 @@
                                             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}"
                                                   IsVisible="{Binding IsRenaming}">
                                                 <TextBox Grid.Column="0" Text="{Binding TitleDraft}"
-                                                         AutomationProperties.Name="{localization:Loc AiChat_TitleBox}" />
+                                                         AutomationProperties.Name="{localization:Loc AiChat_TitleBox}">
+                                                    <TextBox.KeyBindings>
+                                                        <KeyBinding Gesture="Enter" Command="{Binding CommitRenameCommand}" />
+                                                        <KeyBinding Gesture="Escape" Command="{Binding CancelRenameCommand}" />
+                                                    </TextBox.KeyBindings>
+                                                </TextBox>
                                                 <Button Grid.Column="1" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
                                                         Content="{localization:Loc AiChat_RenameApply}"
                                                         AutomationProperties.Name="{localization:Loc AiChat_RenameApply}"
@@ -313,7 +320,7 @@
                                   ToolTip.Tip="{localization:Loc AiChat_Job_Tip}">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate x:DataType="contracts:IAiChatOption">
-                                    <TextBlock TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{Binding Label}" />
+                                    <TextBlock TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{Binding Label}" ToolTip.Tip="{Binding Label}" />
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
@@ -323,20 +330,48 @@
                                   ToolTip.Tip="{localization:Loc AiChat_Scope_Tip}">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate x:DataType="contracts:IAiChatOption">
-                                    <TextBlock TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{Binding Label}" />
+                                    <TextBlock TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{Binding Label}" ToolTip.Tip="{Binding Label}" />
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <ComboBox Grid.Column="2" x:Name="AiChatArrangement" Classes="FireCombo Compact" HorizontalAlignment="Stretch"
-                                  ItemsSource="{Binding Arrangements}" SelectedItem="{Binding SelectedArrangement}"
-                                  AutomationProperties.Name="{localization:Loc Toolbar_Arrangement}"
-                                  ToolTip.Tip="{localization:Loc Toolbar_Arrangement}">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="contracts:IAiChatOption">
-                                    <TextBlock TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{Binding Label}" />
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
+                        <!-- #478: one or several arrangements (or all) for one request: a button
+                             naming the choice, its flyout one checkbox per arrangement under
+                             "All arrangements". The flyout is realized when opened, not before. -->
+                        <Button Grid.Column="2" x:Name="AiChatArrangement"
+                                Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                Height="{StaticResource FireFieldHeightCompact}" Padding="{StaticResource FirePadFieldCompact}"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                AutomationProperties.Name="{localization:Loc Toolbar_Arrangement}"
+                                ToolTip.Tip="{localization:Loc AiChat_Arrangements_Tip}">
+                            <Button.Flyout>
+                                <shell:PrewarmableFlyout Placement="BottomEdgeAlignedRight">
+                                    <controls:FirePopover Padding="{StaticResource FirePadPopoverBody}" MinWidth="180"
+                                                          Icon="{DynamicResource IconFilter}"
+                                                          Title="{localization:Loc Toolbar_Arrangement}">
+                                        <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                            <ItemsControl x:Name="AiChatArrangementList" ItemsSource="{Binding ArrangementPicker.Choices}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="contracts:IAiChatArrangementChoice">
+                                                        <CheckBox AutomationProperties.Name="{Binding Label}"
+                                                                  IsChecked="{Binding IsChecked, Mode=TwoWay}">
+                                                            <TextBlock Text="{Binding Label}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                                                       ToolTip.Tip="{Binding Label}" />
+                                                        </CheckBox>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </controls:FirePopover>
+                                </shell:PrewarmableFlyout>
+                            </Button.Flyout>
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                <TextBlock x:Name="AiChatArrangementText" Grid.Column="0" VerticalAlignment="Center" FontWeight="Normal"
+                                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           Text="{Binding ArrangementPicker.PickerText}" ToolTip.Tip="{Binding ArrangementPicker.PickerText}" />
+                                <PathIcon Grid.Column="1" Data="{DynamicResource IconChevronDown}" Width="10" Height="10"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
                     </Grid>
                     <!-- What that covers right now: one line, the whole of it on hover. -->
                     <TextBlock x:Name="AiChatScopeSummary" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"

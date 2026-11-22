@@ -17,6 +17,21 @@ generators — hand shapes, anchors — as measured on the import path)
 
 ## Chord templates, shapes and arpeggios
 
+
+- **`Unnamed` participates in authored edit identity (#557).** An empty name
+  from double-stop suppression is distinct from an explicitly unnamed grip.
+  `FindIdenticalTemplate` and the FHP follower's pending variants compare it;
+  selected-chord edits preserve other strums, including through undo/redo.
+
+- **Scoped grip edits preserve other template users (#556).** Hand-shape resize
+  checks ownership across every level and notation voice before rebuilding a grip.
+  `ArrangementSoundSync` reuses a fully compatible template or clones the source;
+  it never writes fingering into a same-fret target template. Bulk shape deletion
+  excludes selected merge targets by reference, since value-equal survivors are valid.
+  Power-chord conversion groups selected notes by position: the lowest convertible
+  string supplies the root, authored notes override generated fifths/octaves, and
+  an existing chord at that onset is combined in the same undo node.
+
 - **A `ChordTemplate` is SHARED — never mutate one in place.** Templates are
   find-or-create/deduped by shape, so a single instance backs every chord AND
   hand shape with that shape; editing one silently rewrites all of them. To
@@ -62,6 +77,11 @@ generators — hand shapes, anchors — as measured on the import path)
   whose frets they play (`ChordHandShapeSync.TemplateOfChordPlaying`) instead of a
   private copy or the first equal-fret template. Pinned by
   `ChordHandShapeSyncTests`, `HandShapeSplitSyncTests`, `HandShapeResizeSyncTests`.
+  A resized bar on a SHARED grip grown over a note that grip does not hold
+  resolves (equal frets, plain flavour) or mints the grown grip and is repointed in
+  the same resize action; the shared template is never edited. A covered note
+  that does not fit (`Editing/HandShapes/HandShapeGripFit`: same string at another
+  fret, or a stretch past 5 frets) leaves every grip alone; notes never change.
   **An edit that leaves a template with no user removes it in the SAME undo
   node.** `Editing/ChordShapes/StrandedShapes.Wrap(arrangement, action)` is the one
   rule: every action reports the chords and hand shapes it repoints, adds or
@@ -87,9 +107,14 @@ generators — hand shapes, anchors — as measured on the import path)
   `StrandedShapePathTests`, `StrandedShapeResizeTests`,
   `ChordTemplateStrandedShapeTests`.
   **The find-or-create KEY is FRETS within one ARPEGGIO flavour** —
-  `ChordTemplateResolver.Resolve` (editing), `ChordHandShapeBuilder`/
-  `GpHandShapeBuilder` (import) and `RscpTemplateManager` (save) all use exactly
-  that; the hand-shape planner's editing grip source
+  `ChordTemplateResolver.Resolve` (reshaping), `GpHandShapeBuilder` (let-ring import)
+  and `RscpTemplateManager` (repair on save) use that. Transferring an authored
+  template uses `ChordTemplateResolver.ResolveAuthored`: all authored fields,
+  including fingers, names and flags, must agree; only the arrangement-local id
+  changes. A drop resolves both live and pending templates and keeps that identity
+  while its played frets stay unchanged. Guitar Pro's `ChordHandShapeBuilder`
+  also checks the file's authored names and fingers, including between repeated
+  strums, so distinct variants get separate bars. The hand-shape planner's editing grip source
   (`Editing/HandShapes/ResolvedGripSource`, #478) goes through the resolver in
   the chord's OWN flavour, and keeps a chord's own template when it already
   describes the chord's frets. `Arpeggio` is part of the key because it is load-bearing on export
@@ -388,7 +413,7 @@ generators — hand shapes, anchors — as measured on the import path)
   `ChordShapePlacementTests` and `ChordShapePlacementServiceTests`.
 
 - **"Muted strums → muted chord" is `Editing/ChordShapes/MutedStrumChords` — ONE composite
-  node, the chord's OWN template (#566).** Tools ▸ Chords, `Ctrl+Shift+M`, palette
+  node, the chord's OWN template (#566).** Edit ▸ Chord, `Ctrl+Shift+M`, palette
   `tools.mutedStrumsToChord`; `ChartMaintenanceService.ConvertMutedStrumsToChords` scopes it to
   the selected notes, else every note of the phrase iteration under the playhead (the whole
   level when there are none). A run starts at a chord and takes, position by position, a group
@@ -403,3 +428,51 @@ generators — hand shapes, anchors — as measured on the import path)
   `CoverEveryChord` rule (the last sound's span, clipped at the next sound, bar or anchor), so it
   never runs over another bar. Pinned by `Services/Editing/ChordShapes/MutedStrumChordsTests` and
   `Services/Editing/Maintenance/MutedStrumsToChordCommandTests`.
+
+- **Send to arrangement resolves template identities in the destination (#527).**
+  `GlobalEditingCoordinator.SendSelectionToArrangement` reuses an identical grip
+  (frets, fingers, name and export flags), otherwise clones the source under a fresh
+  destination id. Template creation, chord/hand-shape id changes and the move are
+  one undo node. An unresolved source id becomes the untemplated `-1` sentinel.
+
+### Grips from held notes
+
+`HeldNoteGrips` carries frets across the selected, touching hand shapes in the
+focused level, using the configured minimum note distance. Open-only or
+fret-hand-muted onsets clear the carried frets. The current bar keeps every
+fret played within it, including the open fret at an open-only reset. A grip
+string absent from the first pitched onset the bar covers is a ghost, whether
+it is picked later or held throughout. The timeline draws those gems at the
+bar start. A later pick remains a playable note. A bar with two frets on one
+string stays as authored and appears in the result count.
+
+The pass reuses fingered templates by frets and suggests fingers once for each
+unmatched grip. The bar owns the ghost mask, so the same grip can back bars that
+open with different strings. An explicit zero tells the inspector to use the
+bar's grip when every string is struck at the opening. Adding templates and
+rebinding bars takes one history step. A re-run of the same selection adds no
+history.
+
+**Hand shapes from let ring** (#742) builds bars from selected sustained notes
+and selected chord strings in the focused level. A different fret on an already
+held string starts the next bar. Re-picks and newly played strings join the
+current bar. A break in the selection, an unsustained note or a silence beyond
+the configured spacing resets the grip. Existing bars form protected boundaries
+and the status reports how many were skipped. `HeldGripBatch` supplies the
+grip, fingering and per-bar ghost mask to both editor commands. The default
+linked-edit path copies new bars to every placement and preserves the group.
+New bars, templates and linked copies share one undo step. Guitar Pro import
+groups let-ring beats in `GpHandShapeBuilder`.
+
+EOF stores the opening ghosts on the note carrying the grip. Later notes keep
+their played gems. Rocksmith XML stores the grip and notes separately, so the
+reader derives the opening mask for each bar. Adding a string in the grip
+editor uses that first covered pitched onset and preserves existing strings'
+ghost settings. The inspector lists every grip string for manual ghost edits.
+Unticking a string keeps its fret in the grip.
+
+Resize, drop and the anchor fingering follower preserve a bar's grip when its
+effective ghost mask is set.
+That protection belongs to the bar and leaves the shared template's pin
+state intact. Splitting keeps the original mask on the head and on tails
+that retain the original grip. Arrangement sync copies the mask with the bar.

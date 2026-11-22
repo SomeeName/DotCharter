@@ -30,6 +30,8 @@
     (`snapshot.CurrentTimeMs`) — never the wall clock, so it freezes on pause;
     `StageLightsTests` lints the three files for it. The `EnableShowlightFog`
     toggle gates the haze, `EnableShowlightBeams` the cones, pools and lasers.
+    A laser-only lane is sufficient for a visible stage-light state; it does
+    not require a fog or beam event (`StageLightsTests`).
     Tests: `StageLightsTests`, `StageLightsShapeTests`, `ShowlightPaletteTests`,
     and `HeadlessStageLightsTests` (one GPU frame per state; asserts heads, haze
     and cones land, the far highway centre stays dark, and a 15-fret anchor's
@@ -41,6 +43,10 @@
     `ShowlightChipLabels` the UI hands in (`DotCharter.UI/Controls/ShowlightChipLabelSource`,
     keys `Preview3D_ShowlightChip*` / `Preview3D_ShowlightColor_*`); the driver
     passes null while `_gameplayPresentation` (Play Mode), which means no chip.
+    In the editor the chip shows only while a show-light is ACTIVE at the playhead or the
+    Showlights editor is open (`ShowlightChipLabels.ShouldShow`, fed by
+    `SnapshotUpdateContext.ShowlightEditorOpen` from `EditorUiState.IsShowlightsEditorOpen`);
+    a song with no show-lights keeps the corner clear.
     The HUD's section/phrase/tone/lyric block moves down while the chip shows.
     `ShowlightChipTests`.
   - **Board-face depth stack (`BoardGeometryComponent`) — keep the opaque
@@ -165,6 +171,11 @@
     a far box overlaps the near stretch of an earlier chord's tail (no depth
     write, so no order is exact there). Pinned by `SustainTailDrawOrderTests`
     and the GPU `HeadlessTailOverlapRenderTests`.
+  - **A single note's stem and floor marker are staged BEFORE every tail**
+    (`NoteHeadRenderer.RenderNoteFloor`, called first in `NotesRenderComponent`; the
+    head walk skips them). They lie on the board, so every tail is nearer; staged with
+    the heads, a far note's marker painted over a nearer tail (no depth write).
+    Pinned by the GPU `HeadlessFloorMarkerOcclusionRenderTests`.
   - **Heads, arpeggio brackets and chord boxes are staged by ONE walk,
     FARTHEST FIRST** (`NotesRenderComponent.RenderHeadsFarthestFirst`, merging
     `NoteHeadRenderer.RenderNote`, `HandShapeRenderer.RenderHandShape` and

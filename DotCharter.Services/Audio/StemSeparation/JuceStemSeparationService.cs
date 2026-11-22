@@ -82,12 +82,12 @@ public sealed class JuceStemSeparationService : IStemSeparationService
         CancellationToken ct = default)
     {
         if (!_native.IsSupported)
-            return Task.FromResult(StemSeparationResult.Failure("Native stem separation backend not compiled in."));
+            return Task.FromResult(StemSeparationResult.Failure("Native stem separation backend not compiled in.", StemFailureKind.NativeNotCompiled));
         if (string.IsNullOrWhiteSpace(inputAudioPath) || !File.Exists(inputAudioPath))
-            return Task.FromResult(StemSeparationResult.Failure($"Input audio not found: '{inputAudioPath}'."));
+            return Task.FromResult(StemSeparationResult.Failure($"Input audio not found: '{inputAudioPath}'.", StemFailureKind.InputMissing, inputAudioPath ?? ""));
         var model = ResolveModelPath();
         if (model == null)
-            return Task.FromResult(StemSeparationResult.Failure(ModelMissingMessage));
+            return Task.FromResult(StemSeparationResult.Failure(ModelMissingMessage, StemFailureKind.ModelMissing));
 
         Directory.CreateDirectory(outputDirectory);
         return Task.Run(() =>
@@ -112,7 +112,7 @@ public sealed class JuceStemSeparationService : IStemSeparationService
 
                 var stems = CollectStems(outputDirectory);
                 if (stems.Count == 0)
-                    return StemSeparationResult.Failure($"Native stem separation reported success but no stems found under '{outputDirectory}'.");
+                    return StemSeparationResult.Failure($"Native stem separation reported success but no stems found under '{outputDirectory}'.", StemFailureKind.NoStemsFound, outputDirectory);
                 _logger?.Info(AppLogCategory.Audio, $"Native stem separation finished. Stems={stems.Count}.");
                 return new StemSeparationResult
                 {
@@ -146,7 +146,7 @@ public sealed class JuceStemSeparationService : IStemSeparationService
                 // the UI offers the download instead of reporting a path.
                 _logger?.Error(AppLogCategory.Audio,
                     $"Native stem separation: model weights missing at '{ex.FileName ?? model}'.", ex);
-                return StemSeparationResult.Failure(ModelMissingMessage);
+                return StemSeparationResult.Failure(ModelMissingMessage, StemFailureKind.ModelMissing);
             }
             catch (Exception ex)
             {

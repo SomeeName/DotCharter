@@ -136,13 +136,17 @@ public sealed class HomeViewUiPerfSmokeTests
                     var stage = view.FindControl<DotCharter.UI.Controls.Hero.HeroStage>("HomeHeroStage")!;
                     // The stage decodes the cover off the UI thread and posts it back.
                     Assert.NotNull(DotCharter.UI.Controls.Hero.HeroStage.DecodeRgba(path).Rgba);
-                    Assert.True(stage.PendingLoad?.Wait(TimeSpan.FromSeconds(30)), "the cover decode never finished");
-                    for (var i = 0; i < 200 && !stage.HasCover; i++)
+                    Assert.NotNull(stage.PendingLoad);
+                    // Pump until the decode has ended AND its post has published the cover; the one
+                    // minute covers both and is a deadlock detector, not a budget.
+                    var deadlock = System.Diagnostics.Stopwatch.StartNew();
+                    while (!(stage.PendingLoad.IsCompleted && stage.HasCover) && deadlock.Elapsed < TimeSpan.FromSeconds(60))
                     {
                         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-                        Thread.Sleep(25);
+                        Thread.Sleep(1);
                     }
 
+                    Assert.True(stage.PendingLoad.IsCompleted, "the cover decode never finished (or the box was starved for a minute)");
                     Assert.True(stage.HasCover, $"the hero stage never took the cover (CoverPath={stage.CoverPath ?? "null"}, exists={File.Exists(path)})");
                     Assert.True(stage.IsStaging, "the hero stage is not animating on a shown Home");
                     Assert.True(hero.Bounds.Height < 900,

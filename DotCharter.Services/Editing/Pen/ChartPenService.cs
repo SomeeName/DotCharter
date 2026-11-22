@@ -40,6 +40,7 @@ public sealed class ChartPenService : IChartPenService
     /// undo the fret written on the first sound and apply the extended value to
     /// the second. Reference identity on purpose.</summary>
     private object? _runTarget;
+    private SelectedSoundMutationTargets? _runTargets;
 
     public ChartPenService(
         ProjectState projectState,
@@ -74,6 +75,7 @@ public sealed class ChartPenService : IChartPenService
 
         var decision = _pen.PressString(stringIndex);
         _runTarget = null;
+        _runTargets = null;
 
         var position = PenPosition(gridDivisor);
         var command = new ApplyNotePlacementCommand(
@@ -123,7 +125,7 @@ public sealed class ChartPenService : IChartPenService
         if (_scope.Level == null) return;
 
         var targets = ResolveFretTargets(gridDivisor, out var targetKey);
-        if (!ReferenceEquals(targetKey, _runTarget)) _pen.EndTypingRun();
+        if (!ReferenceEquals(targetKey, _runTarget) || !SameTypingTargets(targets)) _pen.EndTypingRun();
 
         var decision = _pen.PressDigit(digit, Environment.TickCount64,
             _projectState.StringEditMask.IsEmpty, _history.CurrentNodeId);
@@ -144,6 +146,7 @@ public sealed class ChartPenService : IChartPenService
 
         _pen.Settle(_history.CurrentNodeId, committed);
         _runTarget = targetKey;
+        _runTargets = targets;
 
         // The keyboard route to frets 10..24 the editor never had: the ambient
         // placement fret was mouse-wheel-only, so the next note the pen creates
@@ -164,6 +167,7 @@ public sealed class ChartPenService : IChartPenService
 
         var decision = _pen.PressEscape(Environment.TickCount64, _history.CurrentNodeId);
         _runTarget = null;
+        _runTargets = null;
         if (decision.Verb != PenVerb.RevertTyping) return false;
 
         _history.Undo();
@@ -215,6 +219,15 @@ public sealed class ChartPenService : IChartPenService
             _scope.Arrangement,
             _projectState.StringEditMask,
             _highway.GetLinkNextUpdater());
+    }
+
+    private bool SameTypingTargets(SelectedSoundMutationTargets targets)
+    {
+        return _runTargets is { } previous && previous.Mask == targets.Mask &&
+               ReferenceEquals(previous.Arrangement, targets.Arrangement) &&
+               ReferenceEquals(previous.Notes, targets.Notes) && ReferenceEquals(previous.Chords, targets.Chords) &&
+               previous.SelectedNotes.SequenceEqual(targets.SelectedNotes, ReferenceEqualityComparer.Instance) &&
+               previous.SelectedChords.SequenceEqual(targets.SelectedChords, ReferenceEqualityComparer.Instance);
     }
 
     private void SelectSoundAt(FractionalPosition position)

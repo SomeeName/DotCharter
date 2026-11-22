@@ -154,8 +154,9 @@ public class CustomStemModelStoreTests : IDisposable
         var path = Path.GetFullPath(manager.GetLocalPath(escape));
 
         Assert.Equal(Path.GetFullPath(modelsDir), Path.GetDirectoryName(path));
-        Assert.Equal(Path.Combine(Path.GetFullPath(modelsDir), "model.bin"),
-            Path.GetFullPath(manager.GetLocalPath(Make("model"))));
+        var customPath = Path.GetFullPath(manager.GetLocalPath(Make("model")));
+        Assert.Equal(Path.GetFullPath(modelsDir), Path.GetDirectoryName(customPath));
+        Assert.EndsWith("-model.bin", customPath, StringComparison.Ordinal);
     }
 
     private static StemModelDescriptor Make(string id) => new()

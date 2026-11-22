@@ -41,6 +41,27 @@ public sealed class RigLibraryTests
     }
 
     [Fact]
+    public async Task Save_SucceedsWhileAShareDeleteReaderHoldsTheCacheFile()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows rename semantics.");
+        var (lib, _, _, _) = await BuildAsync(8);
+        var path = Path.Combine(Path.GetTempPath(), $"dc-riglib-{Guid.NewGuid():N}.bin");
+        try
+        {
+            lib.Save(path, 8);
+            using var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+            lib.Save(path, 8);
+
+            Assert.Empty(Directory.GetFiles(Path.GetTempPath(), Path.GetFileName(path) + "*.tmp"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task SurvivesARoundTripThroughTheCacheFile()
     {
         var (lib, _, sim, _) = await BuildAsync(24);

@@ -17,9 +17,12 @@ namespace DotCharter.Services.Audio.StemSeparation;
 /// </remarks>
 public sealed class InFlightStemSeparationTracker
 {
+    private readonly TimeProvider _time;
     private int _inFlight;
     private readonly object _gate = new();
     private TaskCompletionSource _idleTcs = NewTcs();
+
+    public InFlightStemSeparationTracker(TimeProvider? timeProvider = null) => _time = timeProvider ?? TimeProvider.System;
 
     public int InFlight => Volatile.Read(ref _inFlight);
 
@@ -50,7 +53,7 @@ public sealed class InFlightStemSeparationTracker
     {
         Task task;
         lock (_gate) { if (_inFlight == 0) return Task.CompletedTask; task = _idleTcs.Task; }
-        return Task.WhenAny(task, Task.Delay(timeout));
+        return Task.WhenAny(task, Task.Delay(timeout, _time));
     }
 
     private static TaskCompletionSource NewTcs() =>

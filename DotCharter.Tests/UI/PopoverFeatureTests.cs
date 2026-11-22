@@ -45,17 +45,17 @@ public sealed class PopoverFeatureTests
     {
         var h = new Harness();
 
-        Assert.True(double.IsNegativeInfinity(h.Transport.InputLevelDb));
-        h.Transport.PollInputMeter();
-        Assert.True(double.IsNegativeInfinity(h.Transport.InputLevelDb));
+        Assert.True(double.IsNegativeInfinity(h.Transport.InputMeter.LevelDb));
+        h.Transport.InputMeter.Poll();
+        Assert.True(double.IsNegativeInfinity(h.Transport.InputMeter.LevelDb));
 
         // −6 dBFS is 0.5 linear.
         h.Audio.InputCaptureWindow = [0.1f, -0.5f, 0.25f];
-        h.Transport.PollInputMeter();
+        h.Transport.InputMeter.Poll();
 
-        Assert.Equal(-6.02, h.Transport.InputLevelDb, 1);
-        Assert.False(h.Transport.IsInputClipping);
-        Assert.Contains("dB PEAK", h.Transport.InputPeakLabel, StringComparison.Ordinal);
+        Assert.Equal(-6.02, h.Transport.InputMeter.LevelDb, 1);
+        Assert.False(h.Transport.InputMeter.IsClipping);
+        Assert.Contains("dB PEAK", h.Transport.InputMeter.PeakLabel, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -63,10 +63,10 @@ public sealed class PopoverFeatureTests
     {
         var h = new Harness();
         h.Audio.InputCaptureWindow = [1.0f];
-        h.Transport.PollInputMeter();
+        h.Transport.InputMeter.Poll();
 
-        Assert.Equal(0.0, h.Transport.InputLevelDb, 3);
-        Assert.True(h.Transport.IsInputClipping);
+        Assert.Equal(0.0, h.Transport.InputMeter.LevelDb, 3);
+        Assert.True(h.Transport.InputMeter.IsClipping);
     }
 
     // ── 2. Tempo: "Keep pitch when slowing down" ────────────────────────────
@@ -400,7 +400,6 @@ public sealed class PopoverFeatureTests
     [InlineData("Toolbar_Tracks_Solo_Tip")]
     [InlineData("Toolbar_Tracks_Mute")]
     [InlineData("Toolbar_Tracks_Mute_Tip")]
-    [InlineData("Toolbar_Tracks_Settings")]
     [InlineData("Toolbar_Vocals_Track")]
     public void EveryNewPopoverString_isInBothResxFiles(string key) => AssertKeyInBothResx(key);
 

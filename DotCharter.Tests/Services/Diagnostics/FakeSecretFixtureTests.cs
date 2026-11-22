@@ -24,6 +24,7 @@ public sealed class FakeSecretFixtureTests
         new(@"\b" + "AK" + @"IA[0-9A-Z]{16}\b", RegexOptions.CultureInvariant),
         new(@"\b" + "xo" + @"x[baprs]-[A-Za-z0-9-]{10,}", RegexOptions.CultureInvariant),
         new(@"\b" + "sk" + @"-ant-[a-z]+[0-9]{2}-[A-Za-z0-9_-]{20,}", RegexOptions.CultureInvariant),
+        new(@"\b" + "sk" + @"-proj-[A-Za-z0-9_-]{20,}", RegexOptions.CultureInvariant),
         new(@"\b" + "sk" + @"-(?:proj-)?[A-Za-z0-9]{20,}\b", RegexOptions.CultureInvariant),
         new(@"\b" + "AI" + @"za[0-9A-Za-z_-]{35}", RegexOptions.CultureInvariant),
         new("ey" + @"J[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}", RegexOptions.CultureInvariant),

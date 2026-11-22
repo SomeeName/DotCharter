@@ -51,32 +51,44 @@ public static class ChordTechniqueEdit
         ObservableCollection<Chord> activeChords, IReadOnlyList<Chord> targets, Action<Chord> mutation,
         Action? activePostPass, Func<ChartLevel, Action?> levelPostPass)
     {
-        var wanted = new HashSet<Chord>(targets, ReferenceEqualityComparer.Instance);
+        var each = new Dictionary<Chord, Action<Chord>>(ReferenceEqualityComparer.Instance);
+        foreach (var target in targets) each.TryAdd(target, mutation);
+        return BuildPerChord(levels, activeChords, each, activePostPass, levelPostPass);
+    }
+
+    /// <summary>
+    ///     The same per-level actions, with a mutation of its OWN for each chord: the inspector's staged
+    ///     Apply writes what each target takes (a slide interval, a remapped bend), still one node.
+    /// </summary>
+    public static List<IChartAction> BuildPerChord(IReadOnlyList<ChartLevel> levels,
+        ObservableCollection<Chord> activeChords, IReadOnlyDictionary<Chord, Action<Chord>> mutations,
+        Action? activePostPass, Func<ChartLevel, Action?> levelPostPass)
+    {
         var actions = new List<IChartAction>();
         var activeSeen = false;
         foreach (var level in levels)
         {
             var isActive = ReferenceEquals(level.Chords, activeChords);
             activeSeen |= isActive;
-            AddLevel(actions, level.Chords, wanted, mutation, isActive ? activePostPass : levelPostPass(level));
+            AddLevel(actions, level.Chords, mutations, isActive ? activePostPass : levelPostPass(level));
         }
 
         // The level on screen is not always one of the arrangement's (a test scope, a notation voice).
-        if (!activeSeen) AddLevel(actions, activeChords, wanted, mutation, activePostPass);
+        if (!activeSeen) AddLevel(actions, activeChords, mutations, activePostPass);
 
         return actions;
     }
 
-    private static void AddLevel(List<IChartAction> actions, ObservableCollection<Chord> chords, HashSet<Chord> wanted,
-        Action<Chord> mutation, Action? postPass)
+    private static void AddLevel(List<IChartAction> actions, ObservableCollection<Chord> chords,
+        IReadOnlyDictionary<Chord, Action<Chord>> mutations, Action? postPass)
     {
-        var onLevel = chords.Where(wanted.Contains).ToList();
+        var onLevel = chords.Where(mutations.ContainsKey).ToList();
         if (onLevel.Count == 0) return;
         var oldStates = onLevel.Select(c => c.Clone()).ToList();
         var newStates = onLevel.Select(c =>
         {
             var clone = c.Clone();
-            mutation(clone);
+            mutations[c](clone);
             return clone;
         }).ToList();
         actions.Add(new MutateChordsAction(chords, onLevel, oldStates, newStates, postPass));

@@ -13,6 +13,7 @@ using DotCharter.Presentation.Contracts.Settings;
 using DotCharter.Presentation.Screens.Settings;
 using DotCharter.Presentation.Shared;
 using DotCharter.UI;
+using DotCharter.UI.Controls;
 using DotCharter.UI.Views.Settings;
 using DotCharter.UI.Views.Shell;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,6 +35,28 @@ namespace DotCharter.Tests.Perf;
 [Collection("HeadlessUI")]
 public sealed class SettingsShellUiPerfSmokeTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task AnArmedKeybindBox_CapturesTheFindChord(bool shift) =>
+        HeadlessSessionFixture.Dispatch(() =>
+        {
+            using var s = new Surface();
+            s.Session.IsOpen = true;
+            s.Shell.Select(SettingsTabKeys.Keybinds);
+            s.Settle();
+            var capture = s.ShellView.GetVisualDescendants().OfType<KeybindCaptureBox>()
+                .First(c => c.IsEffectivelyVisible && c.Bounds.Height > 1);
+            Assert.True(capture.Bounds.Width > 1);
+            Assert.True(capture.Focus());
+            Assert.True(capture.IsCapturing);
+            var modifiers = RawInputModifiers.Control | (shift ? RawInputModifiers.Shift : RawInputModifiers.None);
+            s.Window.KeyPressQwerty(PhysicalKey.F, modifiers);
+            s.Window.KeyReleaseQwerty(PhysicalKey.F, modifiers);
+            Assert.Equal(new KeyChord(Key.F, KeyModifiers.Control | (shift ? KeyModifiers.Shift : KeyModifiers.None)), capture.Chord);
+            Assert.False(s.ShellView.FindControl<TextBox>("SettingsSearchBox")!.IsFocused);
+        }, CancellationToken.None);
+
     private sealed class Surface : IDisposable
     {
         public Surface()

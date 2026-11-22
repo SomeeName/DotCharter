@@ -1,0 +1,806 @@
+{
+  "g6_control_standard": {
+    "FileName": "g6_control_standard_p.psarc",
+    "MagicHex": "50534152",
+    "PackageHash": "fde6c2833b66087338ebaa2d84bbb1118ead2b5a4eb694673af7912a57c189bf",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg6controlstandard_lead.sng": "1ba8953cd7c09d3d21b7f7818359c058bb75d943404a963a112512b4e0f03818"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg6controlstandard/songs_dlc_rs7tg6controlstandard.hsan": "e569189f20d22790fdbcd3625ea337bc93f51a4464fcb7d53e930776e4aa361f",
+      "manifests/songs_dlc_rs7tg6controlstandard/rs7tg6controlstandard_lead.json": "8908c68b8f80a488a85291038efe2a2f78385d690ce0e43c3f97d6991d3530ea"
+    },
+    "ArrangementXml": {
+      "Lead g6": "ec76ec46cfc38c1d7780393c1c649e24f5b33033c0896cb05a52c26eca37048f"
+    }
+  },
+  "b4_control_standard": {
+    "FileName": "b4_control_standard_p.psarc",
+    "MagicHex": "50534152",
+    "PackageHash": "bc69395c46ec74bd5c2fa5ed3eadfa9209407a854e8a9123a148846fecf62044",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb4controlstandard_bass.sng": "f877ef88bb0c7c0feb4f29c1b56d4ac798d408e3531af0537cf455ab90997e22"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb4controlstandard/songs_dlc_rs7tb4controlstandard.hsan": "16a81054b530f961f7dee68f870dab207130959b5bdfe19e618167b7042f8069",
+      "manifests/songs_dlc_rs7tb4controlstandard/rs7tb4controlstandard_bass.json": "8406d8643bd8ea7fb2cbdef04903997ea6fc9e7b09c1e367b2c1a3e9cd9edbe6"
+    },
+    "ArrangementXml": {
+      "Bass b4": "b7fff97aba3d29a33c19180b3dabfb4590c5dc640f7ae236e364111ffea97522"
+    }
+  },
+  "b5_b_standard": {
+    "FileName": "b5_b_standard_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "183a42f1335d6d76fe7563a67cf7e8afddaa67ed85ca2dd2b1e063aa936c2e0f",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb5bstandard_bass.sng": "ddb9a270fa5456c921a97baa0238d20fd3f0b55ec6bb0a45c72f168cbe9fb81d"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb5bstandard/songs_dlc_rs7tb5bstandard.hsan": "cdc6d606b82646b790aa5f333d5272196772dcf2a7be224a7447a1c8aae4ec50",
+      "manifests/songs_dlc_rs7tb5bstandard/rs7tb5bstandard_bass.json": "8e38905b634c7eb97fa71bd6d78490b70d314b46dc4f1473b88a8aac89dbc767"
+    },
+    "ArrangementXml": {
+      "Bass b5": "a07c2a728dff22dd5a67141c58952aa6b9e9603e242f23dc738a37c659aecf31"
+    }
+  },
+  "b5_drop_a": {
+    "FileName": "b5_drop_a_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "5e5dcac18f0cb337d1c8b957678d365dc9715da09fce6cbfaefe7f7c458f30b9",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb5dropa_bass.sng": "44060023783d52c505c85839ab88ce53534ff7ef6289555f402219569b98ab2f"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb5dropa/songs_dlc_rs7tb5dropa.hsan": "6e71ad53e5ad6c6e8c63d376fe4096282c47c0a64fe0328b3d65a72dc718d69a",
+      "manifests/songs_dlc_rs7tb5dropa/rs7tb5dropa_bass.json": "aac91c4b960a9ff05a58411b80744fcbc9ef41a3ec66e9c2eaada8744889387a"
+    },
+    "ArrangementXml": {
+      "Bass b5": "705579df6f4a400a40492d4296316170ec787a24fd10fa5b223e963a74896921"
+    }
+  },
+  "b5_a_standard_step_down": {
+    "FileName": "b5_a_standard_step_down_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "8df8bc1d90c39c6ccd8467f05000807c0fbc9b342167f2b2ca14444bc26cc1f3",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb5astandardstepdown_bass.sng": "f0c0790390ff84166c0fb9da7eeb3d6af24b518ba6a25a3d46390e8b13dc3a2b"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb5astandardstepdown/songs_dlc_rs7tb5astandardstepdown.hsan": "6cf9e8924340797f15dd482e2ba58b4b0b53686a1bf313495fd37742e5f5e4f6",
+      "manifests/songs_dlc_rs7tb5astandardstepdown/rs7tb5astandardstepdown_bass.json": "8fd7fdc694d877e5242f342c8ce92854a529b0fe490d172f156b3bc01c85a729"
+    },
+    "ArrangementXml": {
+      "Bass b5": "2dd6e10b94501503d65ee0a15cb99c93b95fba3930b40ff7e46ba39e58cb8ed2"
+    }
+  },
+  "b5_drop_g_lowest": {
+    "FileName": "b5_drop_g_lowest_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "cb9ae445be2ea7d0177879fe25c14f9909117ba2803b71d03dec49dc8eb1ed4e",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb5dropglowest_bass.sng": "671c1297c35833a07f0487a8424ea7fd8655779fdc7f159acc4e045957699338"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb5dropglowest/songs_dlc_rs7tb5dropglowest.hsan": "d90abf796091281766f16f2eddbf982aa7ad6eeca04e2c5f21ea5fa66e4e28a8",
+      "manifests/songs_dlc_rs7tb5dropglowest/rs7tb5dropglowest_bass.json": "e679c3437907ef96aae45ccebde26a6ab16afe714915defb50db75d99c01f87c"
+    },
+    "ArrangementXml": {
+      "Bass b5": "01bc3c23827c8f50a3a22ee80f323afc3361e4adb163a16b5678f8a5656ca1c5"
+    }
+  },
+  "b5_custom": {
+    "FileName": "b5_custom_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "a305a3610d2c49702473d41b218abf310b667cc1744c35a26ff9202840e52b2d",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb5custom_bass.sng": "1e33cc1cb8507dc393156cba53be82fff56c5ba7989ca39a474f92b7c39f4462"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb5custom/songs_dlc_rs7tb5custom.hsan": "f82d8d0ea49294caea40f6bce425c988007ee014edb5b86448f937cdee336a0a",
+      "manifests/songs_dlc_rs7tb5custom/rs7tb5custom_bass.json": "cb333af97067fc49775d4d07eb96ab486aab4f2ec33f3c0b0554fd92ebe356d4"
+    },
+    "ArrangementXml": {
+      "Bass b5": "462d2ad7d1e46798ffe4a68e0bb662a49ab38c4ff4a4a312b60e6c308165997b"
+    }
+  },
+  "b6_b_standard": {
+    "FileName": "b6_b_standard_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "5572409319ae08edba30836ed3aa98847bf497a1347e3286401d73a2ac674e5a",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb6bstandard_bass.sng": "351d543d7a7f5070ae56bde31b8f67a5712d5e4797a2f54823859e9b444fa5d1"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb6bstandard/songs_dlc_rs7tb6bstandard.hsan": "d8795ee3e9bd426d8aae53f69384d91ebde95d29ee75b2a8a7d3816b1101e188",
+      "manifests/songs_dlc_rs7tb6bstandard/rs7tb6bstandard_bass.json": "92d2fdc90e26a40f141345fa6aafff7d8220aab7636a85d7e36f4351ae8d7f6c"
+    },
+    "ArrangementXml": {
+      "Bass b6": "dd0f2231d473da46339dc946787b734dc4764e4f7a03bad6a2bd8a919641ae15"
+    }
+  },
+  "b6_drop_a": {
+    "FileName": "b6_drop_a_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "6e70ca254d9b07227c5db2e2bfe90ed00b1d39c68193bcfdd87caa8125f17830",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb6dropa_bass.sng": "9e9eecac8e920fec64bc78d0840b05cf45fd324806988bb236dabce472c7929d"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb6dropa/songs_dlc_rs7tb6dropa.hsan": "46f2c90e5adfc71f8da32e2e0a3018b8ca24e6d060bd43295378fd8e21af3aa0",
+      "manifests/songs_dlc_rs7tb6dropa/rs7tb6dropa_bass.json": "615f823f95e3e2f3c533a138cdd615f55896d206028cce90d6ced81d53e510db"
+    },
+    "ArrangementXml": {
+      "Bass b6": "7aa1abc4135399e8057405287b72c881fee9efbad9c01a9d24fb155306c137b4"
+    }
+  },
+  "b6_a_standard_step_down": {
+    "FileName": "b6_a_standard_step_down_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "ce3617fc24f54a3d3d45e7a8122ea025791e2459d55bedb748bc9f0b06b5cd7f",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb6astandardstepdown_bass.sng": "826a9376f5138c65fc2aafc39b65d187ce91f3e32dd9cb06ddfc516747a2c9ec"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb6astandardstepdown/songs_dlc_rs7tb6astandardstepdown.hsan": "d32c36465d424b596f7a2cae4a0ffe3ad1be64afbd90c29dccab90ef26b1fd11",
+      "manifests/songs_dlc_rs7tb6astandardstepdown/rs7tb6astandardstepdown_bass.json": "4edc905ee32066e6afd91cee71325a72619e085d498d108e62c52dbddb140d06"
+    },
+    "ArrangementXml": {
+      "Bass b6": "d09958dbb0044ecdc0659da4818de0ea963eb591841c9dbda96744b3b6c983e4"
+    }
+  },
+  "b6_custom": {
+    "FileName": "b6_custom_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "09ef3df5a2abf4b375cc0946e9ff70bfe4e7aef46990476a8d0fd5ddd5f07312",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb6custom_bass.sng": "47049a7a2ed699370a7b73684b2629f847a94879d5c491271d6b3c38063bfa7d"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb6custom/songs_dlc_rs7tb6custom.hsan": "d944ff0934baa4a8ef78648f3b7610cc09c6f1021a2b700282668ac8a43e8d04",
+      "manifests/songs_dlc_rs7tb6custom/rs7tb6custom_bass.json": "8ab0cdeb52d6604490d62e6e4177fbbc14fb12269c26cb2e03b52202e7a6c830"
+    },
+    "ArrangementXml": {
+      "Bass b6": "a7df07ecac3076106b60dc1ee3d0f31394b1f0a91d31df73d8e634752a3f6b0e"
+    }
+  },
+  "g7_b_standard": {
+    "FileName": "g7_b_standard_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "1ce3cf7ca49f8e05fe8b184d73751a031d5d924277a9e7f228d68b77f913d9e7",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg7bstandard_lead.sng": "e5c97a9c8ebb6ebdef2d1a3bbf6be28bdb12d324d8eec8dab13e6ccca7e9ea37"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg7bstandard/songs_dlc_rs7tg7bstandard.hsan": "fceb7e94ff950bd98427636622c7d087c77717e571b558b8f74c410200f34c87",
+      "manifests/songs_dlc_rs7tg7bstandard/rs7tg7bstandard_lead.json": "51caab762db56b24a56a2b0479d3a126213c5cf3efe3a765e7e002bfc1a0a84c"
+    },
+    "ArrangementXml": {
+      "Lead g7": "6fea44e5dde4ccc11877c9b553a4ff0a43b4047112c5a77f9671d1857c4faa79"
+    }
+  },
+  "g7_drop_a": {
+    "FileName": "g7_drop_a_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "37f835a5da99347462e7ede4957b36267b71ce7c9a088ae3395c54b9b60275e0",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg7dropa_lead.sng": "2554d597d053a8ab09811a4e0466b061621d3d5058c45406f11233de125cb993"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg7dropa/songs_dlc_rs7tg7dropa.hsan": "0ff3c3e6f845f8a4430c1161467ba47fb10cedbc077cac32054e427aab171d3a",
+      "manifests/songs_dlc_rs7tg7dropa/rs7tg7dropa_lead.json": "2f509e77cf2ee82a1883b1c43a617f93706d986fdcb9bbd58144c6ba5deb4c78"
+    },
+    "ArrangementXml": {
+      "Lead g7": "b4b33a40f1037031b86bdc212319c07043e83b87fe53a92168a47e2dd3ea8472"
+    }
+  },
+  "g7_a_standard_step_down": {
+    "FileName": "g7_a_standard_step_down_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "731c3a2da9518868d044ff29fe3d14e365ef5deca89c9c24aef5aa9009db8ab8",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg7astandardstepdown_lead.sng": "691156b48145154da862e47088d57487c0dff646b0494fe76307754eebcfdfd2"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg7astandardstepdown/songs_dlc_rs7tg7astandardstepdown.hsan": "35f72d18bb9b5b10c224e5177a5d41057eebbfd9196a77a6565330b99bc0636f",
+      "manifests/songs_dlc_rs7tg7astandardstepdown/rs7tg7astandardstepdown_lead.json": "433c7a4daefe86c08b6a052a8aa81dbe9e747ee79912a31f9bb1bf2f9620e14e"
+    },
+    "ArrangementXml": {
+      "Lead g7": "16134224ba0e332a7d9eb5422ced319313fbec9edf77be5875fe22b70cdae61a"
+    }
+  },
+  "g7_extended_drop_d": {
+    "FileName": "g7_extended_drop_d_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "3c8baa2738ca2e1d98fee1d9b2691100fc782aa98ccdab25006a9a2e49c94fc8",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg7extendeddropd_lead.sng": "046aed2c830948b0bf3bc4603d1188945f54886c2313775ae1846bc01c4086a3"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg7extendeddropd/songs_dlc_rs7tg7extendeddropd.hsan": "b956141b2dc787e6776d3d0f60d2983ef2e0f889126cf17cb0ce711463853cf3",
+      "manifests/songs_dlc_rs7tg7extendeddropd/rs7tg7extendeddropd_lead.json": "d3a7e2178a6a5d25624c4d5b3869e2230c3352b032013afa2755c5130bb2cf6c"
+    },
+    "ArrangementXml": {
+      "Lead g7": "3ceed29e19301734c84297ddb819fcd51b59dbf9b50e488933d596d14ea0b372"
+    }
+  },
+  "g7_custom": {
+    "FileName": "g7_custom_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "3c22e65402d0f409685ade9f593316f4ef58796d4823b6a938998d6fc439928e",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg7custom_lead.sng": "dd710558b26f617ef18a0171088ede38db32dae0d4594bcc33135449f2e31645"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg7custom/songs_dlc_rs7tg7custom.hsan": "306fd6118b90624f2ec2947712888b8c6e0a44c538e0a5259bd6063d725f60d0",
+      "manifests/songs_dlc_rs7tg7custom/rs7tg7custom_lead.json": "66d6cf71562940ab480e560ef14975beb673aeaf9fb4b46d7feafda7f809b3dd"
+    },
+    "ArrangementXml": {
+      "Lead g7": "eef1f4a330c9df8982a0e1609a7ac4630d4426f6e98d27abae1f71786b95554c"
+    }
+  },
+  "g8_fsharp_standard": {
+    "FileName": "g8_fsharp_standard_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "a1611d108a8afc996d016efc96ab518775f92db553d1dce08d823ec065591022",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg8fsharpstandard_lead.sng": "e3a0d98014a271a7e31a331d5889138e599a8e18fd4316f2e429130421610238"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg8fsharpstandard/songs_dlc_rs7tg8fsharpstandard.hsan": "4de27e17574d842c2b581c7bde6ec2cfce0c3d0fd6eb3229970470b867665aa2",
+      "manifests/songs_dlc_rs7tg8fsharpstandard/rs7tg8fsharpstandard_lead.json": "4736cc86af0958a603576d5c64e5c4d7e3a9a823b10999e8fc27256c2ed652c7"
+    },
+    "ArrangementXml": {
+      "Lead g8": "688bb1a409440e910ddfbd25fa4ec8797f151dc2f197e10b619692d174291129"
+    }
+  },
+  "g8_drop_e": {
+    "FileName": "g8_drop_e_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "a675fab912a3b1db52c16294c3c1ad57f429f8cb20baad83660d681b12d29eae",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg8drope_lead.sng": "dbb16667aae229110cb94e137162d4ab4cb07ab35cfa55e39eca12f3e2254cad"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg8drope/songs_dlc_rs7tg8drope.hsan": "a947deabbe299ec8cb5235eda5749a41e72bc0af80d6d0b3c14c76314a6f8c15",
+      "manifests/songs_dlc_rs7tg8drope/rs7tg8drope_lead.json": "5b5ac2c7d2347e05246d69a34960887dc5ee0793e4d700b4be9267d1b45431f4"
+    },
+    "ArrangementXml": {
+      "Lead g8": "606c168867f8ee201ee5f9398efdb86fd70eca7c1854ca9783d35444e4351a13"
+    }
+  },
+  "g8_e_standard_step_down": {
+    "FileName": "g8_e_standard_step_down_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "2e563d2bcaa83ddbca30eac01984430b6a56fc18a42829e735f4688b9086d0a7",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg8estandardstepdown_lead.sng": "ceb02fac8c4ed85831c3a2d8d48c579200fe363ecf47c3a2220e5d01f40a8836"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg8estandardstepdown/songs_dlc_rs7tg8estandardstepdown.hsan": "c1f478ec6eec34ba0b39adddfe299e86ef98eb5f9073f2a3ecb884741a08a1e0",
+      "manifests/songs_dlc_rs7tg8estandardstepdown/rs7tg8estandardstepdown_lead.json": "8e61cef83c3f95f9a1c8a843c443030329d6cb68b6cce1f2d0b5b10c135056e3"
+    },
+    "ArrangementXml": {
+      "Lead g8": "f9e7ca417fc1f8d1f16d86ed9ffaac526b4e3e3817dfbc60bf12e2adab809263"
+    }
+  },
+  "g8_b_standard_lowest": {
+    "FileName": "g8_b_standard_lowest_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "2b69f49f671789dae2bfcdb8b964663ab33df78cf35e6ad98264ac01a92a3f6c",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg8bstandardlowest_lead.sng": "094e0907ed4578ee2afc42fbf3cc6d74289e7bd5f570deef471467c6ce557580"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg8bstandardlowest/songs_dlc_rs7tg8bstandardlowest.hsan": "ea05355d0e150b299a156cfa55429d2f9c81f8837b75b784558d25cdbd664da6",
+      "manifests/songs_dlc_rs7tg8bstandardlowest/rs7tg8bstandardlowest_lead.json": "00500541bccbce9f91944bb3c4ddcd9fea02c6ee34462a98460a6f830308b3c4"
+    },
+    "ArrangementXml": {
+      "Lead g8": "2fac76e7a3a0ef972c7b5cfe75f6927c867e26baae715e913eaebc994240d924"
+    }
+  },
+  "g8_custom": {
+    "FileName": "g8_custom_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "f761bacecab96d1a73d580e5c5bb9202b6aa07ff9b8c6761c72f91b124421800",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg8custom_lead.sng": "b98c695be34c20cb563f5706a2176a8734c49ab8fda4486e34e36dee8e3734f2"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg8custom/songs_dlc_rs7tg8custom.hsan": "80db061bec76eba6c7a8e0729cb3a9ce58ce5155ed9ebad1ac89f9335ca9d6d7",
+      "manifests/songs_dlc_rs7tg8custom/rs7tg8custom_lead.json": "451cca9b0421ad4943449872467a534813e1d475a8be56327b3d0b244e7f306b"
+    },
+    "ArrangementXml": {
+      "Lead g8": "b723c481bf0cadabcdd65ccd8de76579d0bd9dd4a5aa2f6806e138a726b89513"
+    }
+  },
+  "b5_all_strings_all_frets": {
+    "FileName": "b5_all_strings_all_frets_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "e69a358b844557629a76268cff56db0de512e4ac11967a6bbf904c7d548e0df0",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb5allstringsallfrets_bass.sng": "2feb5c557f9ae21a4b35d60996fc6b107b4f122c9ebf107f814266970d2e90ef"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb5allstringsallfrets/songs_dlc_rs7tb5allstringsallfrets.hsan": "7c4bddda7e347b10d344136456e8152f65890cee752db0e41b95d01af57a3e42",
+      "manifests/songs_dlc_rs7tb5allstringsallfrets/rs7tb5allstringsallfrets_bass.json": "7fca115621afc0ac65764a952e149712f6bad1d1829c412d9f25d447319bd749"
+    },
+    "ArrangementXml": {
+      "Bass b5": "bc63272b29a5f74f43ffa242d5bd64a27a4e476f756b60656bfda636e4b076e0"
+    }
+  },
+  "b5_chords": {
+    "FileName": "b5_chords_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "5b56f4117bc4ba0c75421808cd0594081a2ccc4550b9aacf8879ef42baa4a789",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb5chords_bass.sng": "7d5dc039a67839634fcce46ce1ad6222a2b1eea1a1ec09c10d6f63aac9c8d356"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb5chords/songs_dlc_rs7tb5chords.hsan": "a6bf99d53d335ac19d87e6cf78f5ded05a9a4d60e642012ee2835cada9a70e3d",
+      "manifests/songs_dlc_rs7tb5chords/rs7tb5chords_bass.json": "12348d4f1f39a4705133909c9229d024f9c48e82427f36a23481032286d65819"
+    },
+    "ArrangementXml": {
+      "Bass b5": "d838b404e035e91470cc880b3594ea42ad6f81beab76ca4315fe2ab09b45810f"
+    }
+  },
+  "b5_techniques_alone_low_b": {
+    "FileName": "b5_techniques_alone_low_b_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "4f0ba9245c66e442f711eab70fc8c989e6c95dc121e214b79dd4080ef2cf4f7a",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb5techniquesalonelowb_bass.sng": "f980b527f05e7ecf26c0a3b5464e9815d1cd11ca8f8cda32fa15f65240d9c968"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb5techniquesalonelowb/songs_dlc_rs7tb5techniquesalonelowb.hsan": "8222729e03fe2518da7cd06453137532aa3997f78be7681c253f93b7f7d5ebe5",
+      "manifests/songs_dlc_rs7tb5techniquesalonelowb/rs7tb5techniquesalonelowb_bass.json": "f8b775642709f49aefa753e1afa6110e1ff17d86108768704a8d3d6cc5b9a212"
+    },
+    "ArrangementXml": {
+      "Bass b5": "915d6536e7d83b3b6e2069dbec62736496ccbd40aa299152a22414cc1613c04a"
+    }
+  },
+  "b5_techniques_in_chords": {
+    "FileName": "b5_techniques_in_chords_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "2e2996f9a7aaa6fd9923d226aa9d1ce5d4e6dacfc32569ad4ed10f089063325f",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb5techniquesinchords_bass.sng": "49ad3b2353473e4bb341d6e5fca6810043c1e11da126fcc31ed35619446e0e67"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb5techniquesinchords/songs_dlc_rs7tb5techniquesinchords.hsan": "6fe7855db3575d90049749548e3325da83ce04554ecc3a9d819fb6b315e3cdbe",
+      "manifests/songs_dlc_rs7tb5techniquesinchords/rs7tb5techniquesinchords_bass.json": "9edd8fd43100c034329555c67d00de667006e977d7ba6d2ed484218f4b8fa914"
+    },
+    "ArrangementXml": {
+      "Bass b5": "ef4bb6ec09c74db8867258d0a954ba4611a4b762a97b1215ed4f8085c630593d"
+    }
+  },
+  "b5_sections_levels": {
+    "FileName": "b5_sections_levels_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "fb4e61eef48e8d8e56fefd372f6a95882d86265e4fdd3b6482b04f9b6b83abbb",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb5sectionslevels_bass.sng": "44aa1ce05ff2e456ba01041d232000ccfbe12ded23f9ea7b7305d84e075b4ecb"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb5sectionslevels/songs_dlc_rs7tb5sectionslevels.hsan": "678df1642dddac06f48a850ab035e46a2da2f5a03846d2d4d22df87c11c84701",
+      "manifests/songs_dlc_rs7tb5sectionslevels/rs7tb5sectionslevels_bass.json": "623870c9dfde240a124ebf3eba177a7433c99f23172df939812e5c2db58ed285"
+    },
+    "ArrangementXml": {
+      "Bass b5": "6145b241a26a27be1cf72f95e58de805638906b7cb0631a6a4534a2083c4f607"
+    }
+  },
+  "b6_all_strings_all_frets": {
+    "FileName": "b6_all_strings_all_frets_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "965f1c9af94df6e294656881a6a3a083302a01efc594622da8a7f18c2f8812e9",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb6allstringsallfrets_bass.sng": "664bb67fdf4bf11e191e2e1382c1008ae8c2d13e08ededda0d6e211797742c5b"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb6allstringsallfrets/songs_dlc_rs7tb6allstringsallfrets.hsan": "a7dff9a6c0fa043792613050c57c3871efcf243f1f1fc7390d7bd62347910b9f",
+      "manifests/songs_dlc_rs7tb6allstringsallfrets/rs7tb6allstringsallfrets_bass.json": "6f39853cce0404a90da38403bf4f6623fd30f0acea60f15630a3d20eb9883734"
+    },
+    "ArrangementXml": {
+      "Bass b6": "18c21ccf63ef8e28a9ca71c94f274deef0ba175a3865aeca4c20e12691fd3502"
+    }
+  },
+  "b6_chords": {
+    "FileName": "b6_chords_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "208be1ddbc9fdb6f0ca438fd46eee9d974992e6b245a6b78ac073c47f6c0ce4f",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb6chords_bass.sng": "93929309c954454eed207f483e15e2f180fb7244eb3e7eb976b03b4082acf3c9"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb6chords/songs_dlc_rs7tb6chords.hsan": "a3ceb09de4ef182738101721d4e86e8ea10f211498e95b9026b4a9837e043a36",
+      "manifests/songs_dlc_rs7tb6chords/rs7tb6chords_bass.json": "827c1935497d010263273ce12aa701ed941abe8f8a0d49e4847149f637b84004"
+    },
+    "ArrangementXml": {
+      "Bass b6": "d07e31540583664bdb4aab0e56d0903ea69fdc39a7fa99e0d750be23f20dd7fa"
+    }
+  },
+  "b6_techniques_alone_low_b": {
+    "FileName": "b6_techniques_alone_low_b_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "bff9b29d4c18d0e1c5bca985cc8a6017305316b66b3964730797b719b34beeaa",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb6techniquesalonelowb_bass.sng": "42211c679863ece9c81eba59ba0028babf87f6f1cc66477759e056051bb93434"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb6techniquesalonelowb/songs_dlc_rs7tb6techniquesalonelowb.hsan": "fec1f2b7ce377824494e6249dbcc06568fce6c7dd95fa35ee51f13a05d127f4e",
+      "manifests/songs_dlc_rs7tb6techniquesalonelowb/rs7tb6techniquesalonelowb_bass.json": "55602f840a8cc3f1e018c4c737ccb5463d49434394d8f64a11544fc641745172"
+    },
+    "ArrangementXml": {
+      "Bass b6": "0a938070fb97e057b62ee72bc023e6513df73b315625bd4836435fa61b2e8a7b"
+    }
+  },
+  "b6_techniques_alone_high_c": {
+    "FileName": "b6_techniques_alone_high_c_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "71b5e21a051bb9ce50117907b671ec02cade70e052425ae59edbcf7a3dcb6762",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb6techniquesalonehighc_bass.sng": "ef5b45591abe1e6bd56d12d3943bf1e6f235aa55ba4fc34a49da0c24444dfd27"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb6techniquesalonehighc/songs_dlc_rs7tb6techniquesalonehighc.hsan": "477bf7d5bd42acdccd46debd1168d93e143f65f8ec250ac9b6e36cfa2a06942c",
+      "manifests/songs_dlc_rs7tb6techniquesalonehighc/rs7tb6techniquesalonehighc_bass.json": "99234891211ddc50c71ad64c665676a2c7a6d2ead98376d261650587bbcc13a5"
+    },
+    "ArrangementXml": {
+      "Bass b6": "23640b827c1ac8ae5ca029bab65866919d9173a459faea16969abfa9ca9f2e5a"
+    }
+  },
+  "b6_techniques_in_chords": {
+    "FileName": "b6_techniques_in_chords_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "6fc2888e8ca83a41e52d21903553f50bc6e163d5dac9260c380ccae143de5aac",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb6techniquesinchords_bass.sng": "d829616a8e7affdae02d8bfffb01bd83a437c72d9678d03d6ca27d67bebc90a3"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb6techniquesinchords/songs_dlc_rs7tb6techniquesinchords.hsan": "b27fe61847cbe011c5df5f426984626701cc3aa9eefdd6591843e88bf0d67cb6",
+      "manifests/songs_dlc_rs7tb6techniquesinchords/rs7tb6techniquesinchords_bass.json": "a6f15ab142d16e72658b16f2eecbf7a26629a4ae139c9892c347d50678ff6860"
+    },
+    "ArrangementXml": {
+      "Bass b6": "1da3d9045388d8be941557ca1daa84f5cb4b24387be42919b9cec31ced79d819"
+    }
+  },
+  "b6_sections_levels": {
+    "FileName": "b6_sections_levels_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "3fda65fe1afad59e1ed036f95df7414fde2fda7bd34433453879f3ef2fd4f003",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tb6sectionslevels_bass.sng": "0c45a14969667350a0c6b25470b269885b00538b996276c0fa43f493052713d8"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tb6sectionslevels/songs_dlc_rs7tb6sectionslevels.hsan": "d0f140580b5a0e48ba31250afc4a23132e617697fa2edd12350e081404868336",
+      "manifests/songs_dlc_rs7tb6sectionslevels/rs7tb6sectionslevels_bass.json": "826a0b693f8fc09633813157dda6058399839466db2c4fb3faa13ea23151977a"
+    },
+    "ArrangementXml": {
+      "Bass b6": "90b7df5a3543e1a34e70d095c0c51153bdfdb62dc9fd7084c6cd13b85ff58a24"
+    }
+  },
+  "g7_all_strings_all_frets": {
+    "FileName": "g7_all_strings_all_frets_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "69f062f48060125c62e2de138b874f2842332601e6fcb057615d0bd029ec25c5",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg7allstringsallfrets_lead.sng": "01d1167a846e3a0251a4282051b429d2784011e3d4f125242cbf5342219d5b8d"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg7allstringsallfrets/songs_dlc_rs7tg7allstringsallfrets.hsan": "e32a92407c8185a7a35759c0381e8e2159e27c011dcfb28977ff1f4528d070f6",
+      "manifests/songs_dlc_rs7tg7allstringsallfrets/rs7tg7allstringsallfrets_lead.json": "516f5441e7fd6db1421e60aefdca1bae0ddf766fa2f87c2736a1818160b9d68f"
+    },
+    "ArrangementXml": {
+      "Lead g7": "9dc337d7f673d973f2be05d552ec06b1123c5a31a969b52a6b1ced68fb6394b1"
+    }
+  },
+  "g7_chords": {
+    "FileName": "g7_chords_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "2055e8ad5d4a3acb546083ce51cb43eeef984e19dc4c3b70da70bdeff156434e",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg7chords_lead.sng": "76e4d56ea1020a685d7beff1272f5709af2cf37841b5b7b72a0515a945f5eb48"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg7chords/songs_dlc_rs7tg7chords.hsan": "07616d13ae777fdd83269b4fdde21ba5c574b0059a7a931d891251c86cb0bf66",
+      "manifests/songs_dlc_rs7tg7chords/rs7tg7chords_lead.json": "d285a743c5732ebb0e13a03919cce0a1642232eaf6527fd84532acc97877fc1d"
+    },
+    "ArrangementXml": {
+      "Lead g7": "6bda8fa9e92878bf6837d8d956448edb62c128ab3762058191f465fcf76a284e"
+    }
+  },
+  "g7_techniques_alone_low_b": {
+    "FileName": "g7_techniques_alone_low_b_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "90c182d03f9d64038df0362223380e92f1ef2c79c674b9ffee0eab5e666a82e6",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg7techniquesalonelowb_lead.sng": "6141367fde19a68e2615d3b963a3981864425c5d2280b20b95f82b57cefe407b"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg7techniquesalonelowb/songs_dlc_rs7tg7techniquesalonelowb.hsan": "399e121bffa4ccefa68fdfb0d6f4bd6cdb6500ddad76b1d09dfea64383ae6bfa",
+      "manifests/songs_dlc_rs7tg7techniquesalonelowb/rs7tg7techniquesalonelowb_lead.json": "cfcc2ccf9a5214074a50dc191da60d96b3ba7a4445660659c8933379108eaf69"
+    },
+    "ArrangementXml": {
+      "Lead g7": "ce2d35123d4eaf6e41332ca654f3f4e3cb449378dda376623537311a66182730"
+    }
+  },
+  "g7_techniques_in_chords": {
+    "FileName": "g7_techniques_in_chords_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "c371c2f4896660147593d230fc77cf2fb23ef69f7e067885f5f6d10c172f3b6d",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg7techniquesinchords_lead.sng": "70c94bdb46d32c19d17e7897b15457beeb5e1ea81b4d3381d620d6978982d5ca"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg7techniquesinchords/songs_dlc_rs7tg7techniquesinchords.hsan": "4e8845a6d565c1bc20f1f7d834526b8d03bbd36a55851ac0b84f23895407fa9a",
+      "manifests/songs_dlc_rs7tg7techniquesinchords/rs7tg7techniquesinchords_lead.json": "0a4ca860cf059b542dfdcf1c08abe3d6870ef243d53b373e0fd9a8fafbc85703"
+    },
+    "ArrangementXml": {
+      "Lead g7": "68f749ff901f2417aaaeb89b94ec1d7a66de2e1b1befa913a65bcdef4bbb3f34"
+    }
+  },
+  "g7_sections_levels": {
+    "FileName": "g7_sections_levels_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "fa8dd8114e2103d16e96793c438b6803c314f2a2dbce919d546455b3c1aba88d",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg7sectionslevels_lead.sng": "94644cff4515e3e4163ca2fa0010408fcf581c456457a5cbfaa1aa8e17a7d7dd"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg7sectionslevels/songs_dlc_rs7tg7sectionslevels.hsan": "4272154062b515a6586f5cb15634fd824a8e2aa7181dfeaa7b7bdea9982d40f6",
+      "manifests/songs_dlc_rs7tg7sectionslevels/rs7tg7sectionslevels_lead.json": "5ebae2869f0c3a59526c20d1668b8ea1f4655e3476e8fb46350ca0bb994cc389"
+    },
+    "ArrangementXml": {
+      "Lead g7": "b63e5c803445d5a8b037ba4c36b866f18e895a7071c13bdbc4285eb4b1fbfa5d"
+    }
+  },
+  "g8_all_strings_all_frets": {
+    "FileName": "g8_all_strings_all_frets_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "12679e6c976e6a71dc51b6149d9cfdb20718fcbf51b292a27507335c37e29834",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg8allstringsallfrets_lead.sng": "2e12388f3727a26cd1006c6c775e7f84cc79c50c91d11c35cb75f5135c9e1a88"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg8allstringsallfrets/songs_dlc_rs7tg8allstringsallfrets.hsan": "b36ab79ee10d59d26ee8eb097934f561c217e522855669c2780aff9ed9af98bc",
+      "manifests/songs_dlc_rs7tg8allstringsallfrets/rs7tg8allstringsallfrets_lead.json": "2fa540b701cb4b2ddb0694a24d31249c62ea04d86072d6d84903371763d33ead"
+    },
+    "ArrangementXml": {
+      "Lead g8": "ad167275545bbac97fb8829670502c883bc974f051408bc685212a41a51e8c71"
+    }
+  },
+  "g8_chords": {
+    "FileName": "g8_chords_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "74a8bdc70d1549d7a71c5c49809fdea508b60f812320176b8ee51b7cda29b0e5",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg8chords_lead.sng": "46b3ed9e2c2445cd09b6f82717e1fd17aedf13764d9e76f529fb37ab90958371"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg8chords/songs_dlc_rs7tg8chords.hsan": "1027b5506cd74119268e0b6764fe0dcc80b1facb6dad812b2d90d2e5959a8c70",
+      "manifests/songs_dlc_rs7tg8chords/rs7tg8chords_lead.json": "e4cf9e06b62f767ec95dcc05150bebc69bf5d226c1bb174de88871516de1eb1b"
+    },
+    "ArrangementXml": {
+      "Lead g8": "9e7c0ce25c46002f2f7ba85f002529a08e244fcc670e3ec2bcc60435c5d50bdd"
+    }
+  },
+  "g8_techniques_alone_low_fsharp": {
+    "FileName": "g8_techniques_alone_low_fsharp_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "2dc70623e8606565e965a275b2a96081c78b73d830a4daf0d2e2bc0ac92b4d35",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg8techniquesalonelowfsharp_lead.sng": "c74aa881a2b4d9820155a3c186d5465461f7f64994026b71b32f949d9e24f840"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg8techniquesalonelowfsharp/songs_dlc_rs7tg8techniquesalonelowfsharp.hsan": "32b2da8ebbb82b4713057977d26b86de8c966d9dda3b2a4b73fee81b66e1a873",
+      "manifests/songs_dlc_rs7tg8techniquesalonelowfsharp/rs7tg8techniquesalonelowfsharp_lead.json": "62b05c0e3555170cd4bc61aa648b5a2ceb3870dbb42b4b6bf13cbca8308bcdcf"
+    },
+    "ArrangementXml": {
+      "Lead g8": "5482455a04a2f045d95f184aa6bda829239d91f9280d100bb40b19486410730c"
+    }
+  },
+  "g8_techniques_alone_low_b": {
+    "FileName": "g8_techniques_alone_low_b_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "f570fe50c4116b7cdece924fe1a27fba6c32dcd8235449f20fb61aa60de2e89b",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg8techniquesalonelowb_lead.sng": "6d1ac6573948cc13ed82d4f79161c096329bbc320d340e839f5e99f9dbb9cfe3"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg8techniquesalonelowb/songs_dlc_rs7tg8techniquesalonelowb.hsan": "3a08f7016dcc968d3273b4c28855c9ca51bdfc8864c2d72eaf89053fc7272f3d",
+      "manifests/songs_dlc_rs7tg8techniquesalonelowb/rs7tg8techniquesalonelowb_lead.json": "cd4e476c8899e6fe2205fc591671e6693906e9165530cc7323aab6147ce008e1"
+    },
+    "ArrangementXml": {
+      "Lead g8": "7ebd8452c73623d05605b755daa54ff24bc070ef0bb68ce1b3ef87c24b349579"
+    }
+  },
+  "g8_techniques_in_chords": {
+    "FileName": "g8_techniques_in_chords_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "36fbfefa30faad5eabe203f176f95d8feac85491369e8b09a11ae6188c1938b8",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg8techniquesinchords_lead.sng": "4db33e0eebdeab88a708dbd2459b863090bdfa8ee983254455a240b20b9c461e"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg8techniquesinchords/songs_dlc_rs7tg8techniquesinchords.hsan": "f02c867aee9c8943cadedc92666d08ed6326a560ec708ca5cb737fc1eae13aaf",
+      "manifests/songs_dlc_rs7tg8techniquesinchords/rs7tg8techniquesinchords_lead.json": "9b14fe4c689c6eaecfba172dae1677f17ed980ff206ec98e3957c795eea8c420"
+    },
+    "ArrangementXml": {
+      "Lead g8": "6736795ebdd62fdb14c804bfe21b2fde547c0fe82096f26d691ff4352d785752"
+    }
+  },
+  "g8_sections_levels": {
+    "FileName": "g8_sections_levels_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "db52583faac1601ed5eb7a7a285cc69e3c113d34862fdbf0214ba0917ef25c53",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tg8sectionslevels_lead.sng": "9e2b5de2fbd650b3061c27ce44408fa9379d8e551a576835ddb1d209f4c462f9"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tg8sectionslevels/songs_dlc_rs7tg8sectionslevels.hsan": "7afaf70c307810614e0df63f7e557c2724e1d4c2c73bc7e780152157cf0d4a95",
+      "manifests/songs_dlc_rs7tg8sectionslevels/rs7tg8sectionslevels_lead.json": "541d069f3586e272867b8298640473422c5830a01cca541cb8a9dc3ed887b7a5"
+    },
+    "ArrangementXml": {
+      "Lead g8": "f38a2466989ca852a1210908b7f72f1b9e89056f926b179ded1c2c7fe0a27291"
+    }
+  },
+  "multi_5_arrangements": {
+    "FileName": "multi_5_arrangements_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "ad2e44a67e8c4a0ff4ddced90bd245fa4d035cbd107ca1068f7bacbc5a533302",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tmulti5arrangements_lead.sng": "a92cf0093ed19e0015b96a8c0a9d2f748676540d859813627c9800f0d696d07e",
+      "songs/bin/generic/rs7tmulti5arrangements_rhythm.sng": "481e21af508fb222a7a885d2bf1848408a90a5f1091d003941a92b395dd0a441",
+      "songs/bin/generic/rs7tmulti5arrangements_bass.sng": "8fe5380be8f0fe112143a3b3d3d9a93c6fcb45313c642ce8beb78bc9e2d12d5b",
+      "songs/bin/generic/rs7tmulti5arrangements_bass2.sng": "0706d72fca40f967bc73cb9e46dc7407c70d17db5c081e6848c8d9840dcb7cef",
+      "songs/bin/generic/rs7tmulti5arrangements_lead2.sng": "ef7f90cc0399e4f8e80a0eaa8541ca6b5aa69ec98ef202e3aa9c31b28183fd93"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tmulti5arrangements/songs_dlc_rs7tmulti5arrangements.hsan": "6307171b107064605e6675aa50264fea0bb22654e6679eca832fd93ba2666cfc",
+      "manifests/songs_dlc_rs7tmulti5arrangements/rs7tmulti5arrangements_lead.json": "c7dd54146ef6b18a04252af0f98c6a46983ca08045fe6722ea985600f0469092",
+      "manifests/songs_dlc_rs7tmulti5arrangements/rs7tmulti5arrangements_rhythm.json": "5ce5f2b10f7a67d066ca897e263b92fe3ad157f84150f3a49aa6527354ad41d7",
+      "manifests/songs_dlc_rs7tmulti5arrangements/rs7tmulti5arrangements_bass.json": "26aed4c770a39c5298646ec11ee8fc1467ccbe5ced4df9be8492d68ae77b40f7",
+      "manifests/songs_dlc_rs7tmulti5arrangements/rs7tmulti5arrangements_bass2.json": "726dd691284e5d479c473a939ae2047e526ef8cc54b73d4c61ee4b71b57f8669",
+      "manifests/songs_dlc_rs7tmulti5arrangements/rs7tmulti5arrangements_lead2.json": "9bc21e6dda20c2ad723599ccbf9fb495ae67c0bbe2fdedf040de77a5f60b8b45"
+    },
+    "ArrangementXml": {
+      "Lead g8": "56f629561d590bd12acb40cb790b4ceca02feb20f5040267a3012051169460de",
+      "Rhythm g7": "89783d0d542d7a4616032cbd702b8f9180aee1d7333a2f117db3ba28ddd48645",
+      "Bass b5": "0a09472c83f9591dfddc9f89a186269ee6cc0ac2e8372902dfa9b283c23600ba",
+      "Bass b6": "813639e7c042de9436cea6085443a23c3fce263e9dd59f56e0457a5962ebb850",
+      "Lead g6": "5f564918b83babe72aaabfa0ee4d64a6413f176cdab244009cddc5143a55a9d9"
+    }
+  },
+  "multi_8_arrangements": {
+    "FileName": "multi_8_arrangements_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "1b197e8fe0f6022af049c35b3f4a8b1a1f8c8a72094645e69af0b9466bdd6d89",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tmulti8arrangements_lead.sng": "481e21af508fb222a7a885d2bf1848408a90a5f1091d003941a92b395dd0a441",
+      "songs/bin/generic/rs7tmulti8arrangements_lead2.sng": "a92cf0093ed19e0015b96a8c0a9d2f748676540d859813627c9800f0d696d07e",
+      "songs/bin/generic/rs7tmulti8arrangements_rhythm.sng": "481e21af508fb222a7a885d2bf1848408a90a5f1091d003941a92b395dd0a441",
+      "songs/bin/generic/rs7tmulti8arrangements_rhythm2.sng": "a92cf0093ed19e0015b96a8c0a9d2f748676540d859813627c9800f0d696d07e",
+      "songs/bin/generic/rs7tmulti8arrangements_bass.sng": "8fe5380be8f0fe112143a3b3d3d9a93c6fcb45313c642ce8beb78bc9e2d12d5b",
+      "songs/bin/generic/rs7tmulti8arrangements_bass2.sng": "0706d72fca40f967bc73cb9e46dc7407c70d17db5c081e6848c8d9840dcb7cef",
+      "songs/bin/generic/rs7tmulti8arrangements_lead3.sng": "ef7f90cc0399e4f8e80a0eaa8541ca6b5aa69ec98ef202e3aa9c31b28183fd93",
+      "songs/bin/generic/rs7tmulti8arrangements_bass3.sng": "ffb23cca60cb82946a761c876a4f28fb3642b603f2e3bfc0fe7af97370ad2ef7"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tmulti8arrangements/songs_dlc_rs7tmulti8arrangements.hsan": "8350adc2194266999bc3ffa6567eb89eab53247c3e45602957c595df0e36c6cc",
+      "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_lead.json": "24deedf5cb7d799ca269e932fe32976e6e708d3da9949262ac7c71d5d86f4229",
+      "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_lead2.json": "85d8361b0ea10826d532a8e3d15b51add19250ea757b26b1fec2ded3d83afbdb",
+      "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_rhythm.json": "4aa5d9e37f6bb1a0022d5ab0332e7d4cd55ce8eef5fd038d3ce2281a41ff20e5",
+      "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_rhythm2.json": "837726abb81487747d1dc0c60d31eaf8640a385653b869e1efcf375dea3198f3",
+      "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_bass.json": "50e45dcca16876c89784fc2123ed4e541a5e5045c2390644cd6290ae1458610b",
+      "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_bass2.json": "93005b659c6a202d5267baf8542f7b5be1bf0c868fcf52fb6faa9ab43d104e9d",
+      "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_lead3.json": "322830883bddc5b9ca86c4821cc34343557de2408c3b4f79d0f6ca7691042ead",
+      "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_bass3.json": "932303e3e6cdb237a8aef882abc861da1dcbb38c4e38c2cf37c0bf4af944c01f"
+    },
+    "ArrangementXml": {
+      "Lead g7": "4654c18a745a90a1408f7e56bd373263e3881668d47e1bdeab2af91ae0b5c554",
+      "Lead g8": "c541b876fb8c620537e4e43ed28805d8ace28a549d80d27ddf4700bb239cd23e",
+      "Rhythm g7": "bae9715143faf8273ee111a13d1ba60b3d71a5044635c37872329694c5d2f642",
+      "Rhythm g8": "c8a2cf9e43f6a840209dcef725104b72e4b4121daa587093886af02e58c44e49",
+      "Bass b5": "ae00175f4cfcde872fc6b1de6991620b060ba204ae93a7e1f98b34a584b1cbe6",
+      "Bass b6": "1332e0d1315030c02323f450d11e5ba9831f6d65a9623bfc8a07d5d804671739",
+      "Lead g6": "e65c3e18d24168cc60de4bf53338a52f6ea404ca50acc79d69375a36f38ab300",
+      "Bass b4": "6540d75cc6f5f8aa7c3927e54335207cedb8d486ec8eba45eade6c15f098485d"
+    }
+  },
+  "multi_10_arrangements": {
+    "FileName": "multi_10_arrangements_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "3e4ec394a62ec996acda2f6afe4567db59457c99f268bd126e61b988c5ef3100",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tmulti10arrangements_lead.sng": "481e21af508fb222a7a885d2bf1848408a90a5f1091d003941a92b395dd0a441",
+      "songs/bin/generic/rs7tmulti10arrangements_lead2.sng": "a92cf0093ed19e0015b96a8c0a9d2f748676540d859813627c9800f0d696d07e",
+      "songs/bin/generic/rs7tmulti10arrangements_rhythm.sng": "481e21af508fb222a7a885d2bf1848408a90a5f1091d003941a92b395dd0a441",
+      "songs/bin/generic/rs7tmulti10arrangements_rhythm2.sng": "a92cf0093ed19e0015b96a8c0a9d2f748676540d859813627c9800f0d696d07e",
+      "songs/bin/generic/rs7tmulti10arrangements_bass.sng": "8fe5380be8f0fe112143a3b3d3d9a93c6fcb45313c642ce8beb78bc9e2d12d5b",
+      "songs/bin/generic/rs7tmulti10arrangements_bass2.sng": "0706d72fca40f967bc73cb9e46dc7407c70d17db5c081e6848c8d9840dcb7cef",
+      "songs/bin/generic/rs7tmulti10arrangements_lead3.sng": "ef7f90cc0399e4f8e80a0eaa8541ca6b5aa69ec98ef202e3aa9c31b28183fd93",
+      "songs/bin/generic/rs7tmulti10arrangements_bass3.sng": "ffb23cca60cb82946a761c876a4f28fb3642b603f2e3bfc0fe7af97370ad2ef7",
+      "songs/bin/generic/rs7tmulti10arrangements_lead4.sng": "719b01b4055e4c62ce96a181f04bc0598a1a5e9dea3d5582a12ed665e445a1be",
+      "songs/bin/generic/rs7tmulti10arrangements_rhythm3.sng": "7ae814f4e441944f144058958ebd85d2834bf07efdfab1c243527a36d8404eae"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tmulti10arrangements/songs_dlc_rs7tmulti10arrangements.hsan": "674395b034b4e370f9b93525be739f073ca079a8ff3059e9c54bc8aab852f2e5",
+      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_lead.json": "e939e0c77fa5431b40b277859bc2661a105be65fe9f661aa45996619d3c9b3f7",
+      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_lead2.json": "c9ef23756736361a6b83d34de65f56eec720b7d948de512ebaed36fa8c9bddf8",
+      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_rhythm.json": "f65c1ae5f3b5dbd44d737a2da55bc8a317ff7b2e4569e34b8cf37d33d53dae6a",
+      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_rhythm2.json": "82eb374d812ffddea68fedcb1c5bdfa5a062c1d6d6d4ddb120ecb0c3b890330a",
+      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_bass.json": "4974279780e1d7ecfd4244c1ecd8559be8feb2ef5af24b6ddc03e255a01c3d72",
+      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_bass2.json": "fd0f8111cdf75228a6359b4852fbefb687413e788bdcf23002de7dcee37da8d0",
+      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_lead3.json": "7319f5016e2c86670bcd3e1840b177c7fcd4c7fdc402e15ed5b1688dca661400",
+      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_bass3.json": "a6a4bd2dee2cce07c65e01e36e296c81c658e88df68cbcd4004878aa88c135f2",
+      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_lead4.json": "fa1b8dde179536eaead78e9d00883e8d4126b793c23831443330e2fd1a7da288",
+      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_rhythm3.json": "a05cebc6e6161181494e13ff9478978146117468feb877635ad20573012ad47b"
+    },
+    "ArrangementXml": {
+      "Lead g7": "01847797060219697dc09f0bb47a5828813e8c9514d9bc927959fec875f6c709",
+      "Lead g8": "28b31f296a1c8b98fd8e07e0d578623b1f46f3fec0a8ed18410dfd9b99884fd5",
+      "Rhythm g7": "8afb07ff071e531842adc736f67f33bd1c40eb52fcb77505bb7f9765334790ba",
+      "Rhythm g8": "2aa28f777331ae66b1870ff2f1533496c9dd196b153a25deae5ea3dd030a0e00",
+      "Bass b5": "31dc258ffea19893566efc4a64884e9eb8267f84eca849bffd77a43426c8eff8",
+      "Bass b6": "16a610e2019174a50e4c66752d6e1a7eef783678569befc6b15d9afacd3f434e",
+      "Lead g6": "0bbb79ef2e6f882ed505f1c85d6c7e8b9cf1cfd5340ef61a17d0fe41f8e4f2c0",
+      "Bass b4": "614e99f66eb1cdf2af259bb8604573e7561a63c257a1927bdb8398af2ef9ac9e",
+      "Lead g7 #2": "2bb0c731a04267116a246fb025e794458006678e2f632c4c0da798b807dc0e91",
+      "Rhythm g8 #2": "8f7f71a2be8efedb8e7a796d05c28f1bbbd82732038448d951fd947b7f12d54b"
+    }
+  },
+  "coop_g7_b5": {
+    "FileName": "coop_g7_b5_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "bb9f7124276a5c2cfa7520e73c4f13480ade9e7070301e1c92cc5bef8d2b4799",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tcoopg7b5_lead.sng": "db8c91c9cf0ae8ed526f80e759594869cea66c9f5fe4bfcfb3984ebb674d4e54",
+      "songs/bin/generic/rs7tcoopg7b5_bass.sng": "dee8cf6e7ee46adb1afdff699a9cc9c89d5f2239f6beb857c8c4c802c952eba1"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tcoopg7b5/songs_dlc_rs7tcoopg7b5.hsan": "881fb6879a43802642c54c4708b6d22d7e34d11e5e8e275cd63b3bb258a41e86",
+      "manifests/songs_dlc_rs7tcoopg7b5/rs7tcoopg7b5_lead.json": "04db648b3829e3fdb4c7e51cff12c039c21f016115408632744f37daecb518fb",
+      "manifests/songs_dlc_rs7tcoopg7b5/rs7tcoopg7b5_bass.json": "7e92aae80f4702421b3d7d2d61c50c4b205dc4da98275a02c4d7bd170ce4bdf1"
+    },
+    "ArrangementXml": {
+      "Lead g7": "cbba48ba3ee4366ee9c6192d33bf0f619c1b3fbcaab49defcfce2aef94ae0f73",
+      "Bass b5": "96405cdbee56dc02ec5479f3c5fe2dd98ee02a7e6bdb3401ff444616c38de78d"
+    }
+  },
+  "coop_g8_b6": {
+    "FileName": "coop_g8_b6_rsxr_p.psarc",
+    "MagicHex": "50535852",
+    "PackageHash": "aa777dfe262183eeb7b81e7f0a39f83927a6c1111818dd821955d82429206aee",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tcoopg8b6_lead.sng": "a92cf0093ed19e0015b96a8c0a9d2f748676540d859813627c9800f0d696d07e",
+      "songs/bin/generic/rs7tcoopg8b6_bass.sng": "0706d72fca40f967bc73cb9e46dc7407c70d17db5c081e6848c8d9840dcb7cef"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tcoopg8b6/songs_dlc_rs7tcoopg8b6.hsan": "d005ff72bf7db68f2a72a695fa1aeadee34878ac6234f0c10d6731ca451d8c9f",
+      "manifests/songs_dlc_rs7tcoopg8b6/rs7tcoopg8b6_lead.json": "b318c1bf8fe898e4595e37fa35c96845766f1cb0fe5f39a6bdca299ec35924c4",
+      "manifests/songs_dlc_rs7tcoopg8b6/rs7tcoopg8b6_bass.json": "678b779cea3fbc2530f02f76475cfa00cd5914ea8dc2091120b6ab2321991016"
+    },
+    "ArrangementXml": {
+      "Lead g8": "56f4a6d6d11c7fe575ceb9ddca281f41e75bfc3e12aa3d82f95a8bf7c932516f",
+      "Bass b6": "208a462d2b26e9d4495c4b7cb4599948891fb59c1e1bb67e1cd76212b068cbc8"
+    }
+  },
+  "coop_g6_b4": {
+    "FileName": "coop_g6_b4_p.psarc",
+    "MagicHex": "50534152",
+    "PackageHash": "960e99967e260a40457e0b11279fcdbaa4c81faa0b12390a4f787ba77e65ad74",
+    "ChartBodies": {
+      "songs/bin/generic/rs7tcoopg6b4_lead.sng": "f6c6443c93596868982be021ef4b8dd3ff10516e7dbfcd1c0298737fbc3ab023",
+      "songs/bin/generic/rs7tcoopg6b4_bass.sng": "2a3b3cc6c83706eeabca1083c9aed85b837dbd9673ef2511bff6660570a2cef6"
+    },
+    "Manifests": {
+      "manifests/songs_dlc_rs7tcoopg6b4/songs_dlc_rs7tcoopg6b4.hsan": "5cda1a561538a55893c9be5fa38439917c342c0550a2160ea1f43a2fecdbf751",
+      "manifests/songs_dlc_rs7tcoopg6b4/rs7tcoopg6b4_lead.json": "d68bd300e57db01a8375488cae2cfc069bca1e0a65cc68bb5d9c44ed3f26d247",
+      "manifests/songs_dlc_rs7tcoopg6b4/rs7tcoopg6b4_bass.json": "a27e8f050001cb9b004e11878b453372126fb86c90f0c47aaf2a2bcc28f928f7"
+    },
+    "ArrangementXml": {
+      "Lead g6": "24d3b424a41ca587b36b8145970e1ce3750b86a4937c75a2d28a2b43ace25c1a",
+      "Bass b4": "4241a0fad425e2142c7ce7078e87ce3af5abb0c105262d08b432d816a19a9d13"
+    }
+  }
+}

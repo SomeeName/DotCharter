@@ -118,8 +118,11 @@ public sealed class ToneMatcherTests
             var hidden = HiddenRig();
             var target = await rig.Renderer.RenderAsync(rig.Di, hidden, CancellationToken.None);
 
+            // The product's wall budget (DefaultWallBudget, 150 s) must not decide this
+            // test: under CPU load the wall expired mid-refinement and an unrefined stage
+            // won (#258). The 1000-render cap is the only bound here.
             var result = await rig.Matcher.MatchAsync(
-                new ToneMatchRequest(target, rig.Di, null) { TargetIsRender = true }, null, CancellationToken.None);
+                new ToneMatchRequest(target, rig.Di, null, Budget: TimeSpan.FromDays(1)) { TargetIsRender = true }, null, CancellationToken.None);
 
             var best = result.Candidates[0];
             var layout = KnobLayout.For(hidden);

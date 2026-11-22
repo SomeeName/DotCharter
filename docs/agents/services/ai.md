@@ -34,7 +34,7 @@ Three halves, built in parallel against one contract:
 | `ToneDraftJson.cs` | the JSON Schema, the serializer options, `ExtractJsonObject` |
 | `ToneDesignPromptBuilder.cs` | rules + catalogue + few-shot, and the conversation |
 | `ToneDraftValidator.cs` | reply → a `DspTonePreset` this build can apply, plus warnings |
-| `ClaudeToneModel.cs` | the Claude provider (`Anthropic` 12.55.0) |
+| `ClaudeToneModel.cs` | the Claude provider (`Anthropic` 13.9.0) |
 | `ClaudeCliToneModel.cs` | the Claude Code (local CLI) provider - the installed `claude` binary, headless, no API key |
 | `ClaudeCliProcess.cs` | `IClaudeCliLocator` / `IClaudeCliRunner` and their real implementations: where the binary is, and how a child of it is run |
 | `ClaudeCliSystemPrompt.cs` | `IClaudeCliCapabilityProbe` (does this binary take `--system-prompt-file`?) and the hash-named system-prompt FILE that makes the CLI path cacheable |
@@ -72,6 +72,10 @@ entropy), written through `AtomicFile`. The same shape as
 - **A blob this build cannot decrypt reads as "no key" and is LOGGED, never
   thrown.** Wrong user, wrong machine, truncated, tampered — the caller is a
   settings page, and every one of them means the same thing to it.
+  A failed read or decryption also blocks writes and key removals: an empty
+  fallback must never replace another provider's credentials. Each operation
+  retries the read; an undecryptable blob remains intact until repaired or
+  explicitly removed outside the store (`AiSecretStoreTests`).
 - **Non-Windows persists nothing** (`IsPersistent` is false) rather than writing a
   plaintext key. The Settings page says so, and since 0.55.1 it asks the STORE:
   `IsPersistent` is on `IAiSecretStore` and is an instance member, because the
@@ -149,6 +153,9 @@ them).
 - **Order is bundled-first, then the player's own, each block by id.** It sits in
   the cacheable prefix, so a dictionary order would miss the provider's cache on
   every process restart — the same reason `RsConverterIdiom` pins its ordering.
+  `ToneDesignPromptCache` bounds retained prompts to eight recently used non-empty
+  capture libraries (all anchored/search variants); empty-library prompts remain cached.
+  Its instance seam makes retention tests independent of the process-wide builder.
   `NamCaptureCatalog.Fingerprint` (FNV-1a over the ordered ids) is what keys the
   cached system prompt, so a library that gained a capture gets a NEW prefix and
   an unchanged one keeps hitting the old.
@@ -478,7 +485,7 @@ validation, no UI. Both map every failure onto `ToneDesignException` with a
 `ToneDesignFault`; **no SDK or HTTP type ever reaches the UI**, and
 `ToneDesignService` carries a net under a provider that forgets.
 
-### Claude (`Anthropic` 12.55.0)
+### Claude (`Anthropic` 13.9.0)
 
 - **Structured output**: `OutputConfig.Format = new JsonOutputFormat { Schema }`,
   so the reply is schema-valid JSON by construction.
@@ -498,7 +505,7 @@ validation, no UI. Both map every failure onto `ToneDesignException` with a
   for the session, so the SECOND request inside the hour already pays for it
   (2× + 0.1× against 2× uncached). Multipliers:
   [prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
-  The SDK exposes it as a plain property (`Anthropic` 12.55.0,
+  The SDK exposes it as a plain property (`Anthropic` 13.9.0,
   `CacheControlEphemeral.Ttl`) and no beta header is needed. Asserted on
   `BuildParams` AND as `cache_control.ttl == "1h"` on the wire.
 - **`stop_reason == "refusal"` → `ModelRefused`.** Read it with
@@ -757,13 +764,21 @@ passed, and each design spends that user's own usage.
   --sandbox read-only --color never --json --output-schema <file> -o <file>
   [-m <model>] -`. The prompt goes on STDIN (`-`), never the command line.
   `--ignore-user-config` / `--ignore-rules` keep the user's own `config.toml`
-  and AGENTS rules out of a tone request; `--sandbox read-only` means the agent
-  can change nothing on the machine.
+  and AGENTS rules out of a tone request. Read-only still permits local reads,
+  so every run also passes `-c features.shell_tool=false`,
+  `-c features.view_image=false`, `-c features.js_repl=false` and
+  `-c features.multi_agent=false`. Web research keeps its independent
+  `web_search="live"` / `"disabled"` switch; it never enables local tools.
+  These switches are documented in the [official configuration schema](https://developers.openai.com/codex/config-schema.json).
+  Conversation turns are JSON strings under the trusted framing: imported
+  chart names and metadata are untrusted data, including embedded instructions.
 - **The reply is read from the `-o` FILE**, validated against the schema file
   the CLI enforces, not scraped from stdout. Usage comes from the JSONL events
   (`turn.completed.usage`; output counts `reasoning_output_tokens` too).
   `turn.failed` / `error` events are the fault text. Both scratch files live in
-  `%TEMP%\DotCharter\ai-codex` and are deleted afterwards.
+  a unique per-request subfolder of `%TEMP%\DotCharter\ai-codex`; the folder
+  and its files are deleted afterwards, including on failure. An unavailable
+  scratch folder fails the request; it never falls back to the general TEMP folder.
 - An **empty model id means GPT-6 Luna** (`CodexCliToneModel.DefaultModelId`,
   owner's call 2026-10-07), so `-m` is always passed — `IsEnabled` treats Codex
   as configured without one, unlike every other provider. The Settings tab

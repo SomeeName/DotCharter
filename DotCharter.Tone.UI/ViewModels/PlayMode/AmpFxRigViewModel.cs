@@ -1045,7 +1045,7 @@ public sealed partial class AmpFxRigViewModel : ObservableObject
 
     /// <summary>"100 modules" under the panel title (57 before the JuceSharp
     /// 0.9 gear wave) — whatever the native catalogue really reports.</summary>
-    public string ModuleCountLabel => _loc.Format("Rig_Gear_ModuleCount", UnitCount);
+    public string ModuleCountLabel => _loc.Plural("Rig_Gear_ModuleCountOne", "Rig_Gear_ModuleCount", UnitCount);
 
     // ── the highlighted gear row and "Add to rig" ──────────────────────────
 

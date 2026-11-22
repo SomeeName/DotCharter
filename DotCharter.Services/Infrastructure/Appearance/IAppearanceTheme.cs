@@ -3,8 +3,8 @@ namespace DotCharter.Services.Infrastructure.Appearance;
 /// <summary>One customizable theme colour: its resource key, and the localization keys of its name and its heading.</summary>
 public sealed record ThemeTokenEntry(string Key, string NameKey, string GroupKey);
 
-/// <summary>One colour-blind string palette: the id <c>AppConfig.StringColorPresetId</c> persists, and its display name.</summary>
-public sealed record StringPaletteEntry(string Id, string DisplayName);
+/// <summary>One colour-blind string palette: the id <c>AppConfig.StringColorPresetId</c> persists, and the localization key of its name.</summary>
+public sealed record StringPaletteEntry(string Id, string NameKey);
 
 /// <summary>
 ///     The app's ONE theme as a settings screen drives it, with every colour

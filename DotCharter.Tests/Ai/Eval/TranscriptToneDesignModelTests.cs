@@ -143,39 +143,24 @@ public sealed class TranscriptToneDesignModelTests : IDisposable
     [Fact]
     public void TheEnvironmentResolvesTheTranscriptProviderWithoutAKey()
     {
-        var names = new[]
-        {
-            ToneEvalEnvironment.EnableVariable, ToneEvalEnvironment.ProviderVariable,
-            ToneEvalEnvironment.ModelVariable, ToneEvalEnvironment.KeyVariable,
-            ToneEvalEnvironment.AnthropicKeyVariable, ToneEvalEnvironment.TranscriptDirVariable
-        };
-        var saved = names.ToDictionary(n => n, Environment.GetEnvironmentVariable);
+        var env = new FakeEnvironment();
+        env.Set(ToneEvalEnvironment.EnableVariable, "1");
+        env.Set(ToneEvalEnvironment.ProviderVariable, "transcript");
+        env.Set(ToneEvalEnvironment.ModelVariable, "claude-opus-5");
 
-        try
-        {
-            foreach (var name in names) Environment.SetEnvironmentVariable(name, null);
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.EnableVariable, "1");
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.ProviderVariable, "transcript");
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.ModelVariable, "claude-opus-5");
+        // The directory is the one thing it cannot do without.
+        Assert.False(ToneEvalEnvironment.TryResolve(env.Read, out _, out var noDir));
+        Assert.Contains(ToneEvalEnvironment.TranscriptDirVariable, noDir, StringComparison.Ordinal);
 
-            // The directory is the one thing it cannot do without.
-            Assert.False(ToneEvalEnvironment.TryResolve(out _, out var noDir));
-            Assert.Contains(ToneEvalEnvironment.TranscriptDirVariable, noDir, StringComparison.Ordinal);
+        env.Set(ToneEvalEnvironment.TranscriptDirVariable, _dir);
+        Assert.True(ToneEvalEnvironment.TryResolve(env.Read, out var resolved, out _));
+        Assert.Equal(_dir, resolved!.TranscriptDir);
+        Assert.Null(resolved.ApiKey); // no key, and none demanded
+        Assert.Equal("transcript", resolved.ToOptions().Provider);
 
-            Environment.SetEnvironmentVariable(ToneEvalEnvironment.TranscriptDirVariable, _dir);
-            Assert.True(ToneEvalEnvironment.TryResolve(out var resolved, out _));
-            Assert.Equal(_dir, resolved!.TranscriptDir);
-            Assert.Null(resolved.ApiKey); // no key, and none demanded
-            Assert.Equal("transcript", resolved.ToOptions().Provider);
-
-            // …and the locator builds the REAL service over the transcript factory.
-            Assert.True(ToneDesignServiceLocator.TryCreate(
-                resolved, null, out var service, out _, ToneEvalCorpus.Fixtures));
-            Assert.IsType<ToneDesignService>(service);
-        }
-        finally
-        {
-            foreach (var (name, value) in saved) Environment.SetEnvironmentVariable(name, value);
-        }
+        // …and the locator builds the REAL service over the transcript factory.
+        Assert.True(ToneDesignServiceLocator.TryCreate(
+            resolved, null, out var service, out _, ToneEvalCorpus.Fixtures));
+        Assert.IsType<ToneDesignService>(service);
     }
 }

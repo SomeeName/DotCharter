@@ -20,42 +20,66 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
   - The old **`WarningFaint` "applies to all" strip is cut** — it used the
     warning colour for an entirely normal state. Every card header now carries
     `AppliesToLabel` ("applies to 8 sounds") instead.
-  - **The tab is an icon-only RAIL of sections, ONE section at a time (#601,
-    "Rail (dense)", the owner's pick from the design study).** Which sections the
-    rail offers is a function of the selection type —
+  - **The tab is a STRIP of sections over ONE section's card, ONE section at a
+    time (#601; since #751 in inspector design D's shell).** Which sections the
+    strip offers is a function of the selection type —
     `ViewModels/Editor/Inspector/SoundSectionsViewModel` (`Inspector.Sections`, fed
     `SelectionKind`): nothing selected → Task · Library; a note → Placement ·
     Technique · Bends · Findings; a chord → Shape · Technique · Bends · Findings; a
     hand shape → Shape (+ Span) · Findings; shape + sounds → Shape · Technique ·
     Findings; several sounds → Selection · Technique · Findings. The open section
     is remembered PER TYPE for the session (a chord stays on Technique across a
-    detour through a note). The rail is 38 px of `FireSegmentItem` toggles, each
-    named and tipped off ONE key (the tooltip comes after the app's hover dwell);
-    the open entry carries an accent bar, Findings a count badge (red when a
-    finding blocks the export), Bends a dot when the selected sound bends
-    (`SelectionHasBends` — the rail never switches sections by itself, so it MARKS
+    detour through a note). The strip (`NoteSectionStrip`) is one row of caption
+    toggles in `ColumnFlowNavToggle` (`Styles/ColumnFlowCardTheme.axaml`, app-wide), each
+    named and tipped off ONE key, packed at the start of an `OverflowTabStrip`
+    with `IconsFallback` and `ShareSlack` off (a caption that does not fit goes
+    into the strip's More menu); the selection summary ends the row. The open
+    entry is lit (accent text, 2 px underline), Findings carries a count badge (red
+    when a finding blocks the export), Bends a dot when the selected sound bends
+    (`SelectionHasBends` — the strip never switches sections by itself, so it MARKS
     a bent sound; the #118 auto-opening Bends disclosure and `BendDisclosurePolicy`
     are gone). **Playback is not a section:** the whole-chord flags (Accent,
     Ignore, Pass other, Split notes, No notes) are the "Whole chord" group of a
     chord's Technique section, with the repeat line under them and "Clear
-    techniques" in the group's header (`ResetChordFlags` clears exactly those).
-    Above every section, PINNED: ONE 28 px navigation row (`SoundNavRow`: the
-    selection, `Queue.PositionLabel`, ‹ › = the queue's own step, the filter
-    behind a funnel) and, over a chord's Shape, Technique and Bends only
-    (`SoundSectionsViewModel.ShowApplyBar`), ONE "Apply to" row
+    techniques" in the group's header (it resets the staged draft: `StagedChordTechniqueViewModel.Reset`).
+    Each section is a `Controls/ColumnFlowCard` in the `ColumnFlowPanel`
+    `NoteCards` (D's column flow: tiers by width in `ColumnFlowTiers`, the paging
+    plan in the pure `ColumnFlowPages`, a `CardPager` when cards are paged; the
+    card scrolls inside its own slot and shows a "More below" cue; at the Tiny tier the cue rides at the right
+    end of the pager row instead (`ColumnFlowCard.CueHosted`), so the card keeps its whole height). Under every
+    section, PINNED with no scroller above it: the footer (`NoteFooter`, a
+    `Controls/FooterRail`): on the left the filter (`NoteFooterFilter`), ‹ › = the
+    queue's own step, the "?" help, the playhead time (`NoteFooterTime`, `m:ss.cc`
+    from `Inspector/InspectorPlayheadClock`, refreshed like `PlayheadLabel`: while
+    stopped and once when playback stops) and `Queue.PositionLabel`; on the right,
+    over a chord's Shape, Technique and Bends only
+    (`SoundSectionsViewModel.ShowApplyBar`), ONE "Apply to" ladder
     (`SoundApplyBarView`: the #484 ladder as a picker that always shows
-    `Ladder.Effective`, the reach beside it, the #485 preview row and the refused
-    reshape hint; it is a preview host like `ChordApplyScopeBar`). No section
-    repeats its name as a heading. Each section is a view of its own —
+    `Ladder.Effective` — closed, by its short label `ChordApplyRungRow.ShortLabel`
+    ("every use"), named "Apply to" — and the SHORT reach `Ladder.EffectiveShortDetail`
+    beside it, the whole one in the tooltips; it is a preview host, the job the
+    deleted `ChordApplyScopeBar` had). The footer is ONE row: short of room, the rail drops
+    the place in the queue, then the time (`FooterRail.DropOrder`), and stacks the
+    ladder over the navigation only when it still does not fit whole (the dock's
+    320 px floor); it never squeezes the ladder. The #485 preview (its own ‹ ›)
+    and the refused reshape hint stand in a strip PINNED over the footer
+    (`NoteApplyStrip`), outside the card scroller. In the markup the footer and
+    that strip come before the cards, so Tab reaches the ladder before the card's
+    controls. Pinned by `Perf/NoteFooterUiPerfSmokeTests`. No section repeats its
+    name as a heading. Each section is a view
+    of its own —
     `SoundTaskView`, `SoundPlacementView`, `SoundShapeView`, `SoundBulkCardView`,
     `SoundNoteTechniqueView`, `SoundChordTechniqueView`, `SoundFindingsView` —
-    named by the tab for the prewarm (`SoundInspectorView.SectionBodyNames`); lints
+    hosted in a card named by the tab for the prewarm (`SoundInspectorView.SectionBodyNames`); lints
     that read the tab's markup read the `Sound*View.axaml` set. The technique
     sections are DENSE GROUPED rows ("label | value", worded chips, icon
     segments). Pinned by `SoundSectionsViewModelTests` (default gate) and
-    `Perf/SoundTabRailUiPerfSmokeTests` (the rail, the pinned rows, the default
-    size acceptance, the chips, the picker, no clipped text at 320–600 px; in the
-    release's culture filter).
+    `Perf/NoteSectionStripUiPerfSmokeTests` (the strip, the pinned footer, the
+    default size acceptance, the chips, the picker, no clipped text at 320–600 px),
+    `UI/ColumnFlowTiersTests` (the tiers and paging plans) and
+    `Perf/NoteShellUiPerfSmokeTests` (every section at 530x370, 480x370, 640x450 and
+    1100x450 with 6 and 8 strings: one card, the footer pinned and uncut, both
+    strips one row); both headless classes are in the release's culture filter.
   - **A chord's "Per string" header IS the string mask (#601).** One chip per
     string the selected chords play (`StringMaskViewModel.Chips`, synced from
     `NotifyMaskScopeChanged`), in the string's colour and named the way the lane
@@ -66,7 +90,7 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
     a mask is set, and ⧉ copies the active string's techniques to all strings.
   - **Nothing selected leads with the NEXT task (#601).** `SoundNextTaskViewModel`
     (`Inspector.NextTask`) orders the queue's own counts — fingerings, then names,
-    then export blockers — into one sentence and one verb ("Fix the next one" =
+    then export blockers — into one sentence and one verb ("Show first problem" =
     `Queue.TriageFilter`), the other open tasks one line each, then the playhead
     block (with the keyboard readout) and the two verbs the old footer carried
     (auto-fill, the export check). The "needs work" tiles, the pinned footer and
@@ -75,6 +99,14 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
     auto-switch between, so `OnUserOrProgrammaticSelection(kind)` is just "go to
     Sound unless the tab is pinned". The pin, and the rule that an issue jump
     never switches tabs, both survive.
+- **Sound fingering rows share the Chord panel's `DisplayStringInputs`.**
+  They follow `ProjectState.InvertStrings` live; Up/Down between fret boxes uses
+  `ChordTemplateEditorViewModel.AdjacentStringInput` in that visual order. String and pitch labels use
+  `Core/Utilities/TuningDisplayNames`; persisted `Arrangement.Tuning` is not a
+  display spelling table. `NewChordNames` gives the inspector, Shapes panel, and
+  Edit Shape dialog the same spelling used to name new templates. Suggestion
+  lists remove enharmonic duplicates. The selected naming style's resolved key
+  takes precedence over the tuning. Authored names stay verbatim.
 - **One fretboard: `Controls/ChordBoxControl` (0.36, was `MiniFretboardControl`).**
   `Role` (`MoveNote` / `Shape` / `ReadOnly`) decides what the primary click
   means, so two look-alike instruments can no longer mean different things. It
@@ -91,8 +123,10 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
   FRESH references (`Mask` is a value type for the same reason). The pure
   `ChordBoxGeometry` + `DigitFor`/`FingerFor` are unit-tested in the default
   gate (`ChordBoxGeometryTests`).
+  The 800 ms window gates both fret accumulation and `ContinuesRun`: an expired
+  run starts a separate undo step (`SoundEntryUiPerfSmokeTests`).
   - **Every fret the panel WRITES goes through
-    `ChordTemplateEditorViewModel.SnapFretToNeck` → `SoundingPitch.SnapToNeck`**
+    `ChordFingerDraftEditor.SnapFretToNeck` → `SoundingPitch.SnapToNeck`**
     (legal set `{0} ∪ [capo, 24]`, direction 0 = absolute, so a sub-capo write
     lands ON the capo). The POINTER path cannot produce an illegal fret —
     `ChordBoxGeometry.DisplayFrets` floors its window at `capo + 1` and its open
@@ -126,11 +160,11 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
   target that would put any string outside frets 1–24 changes nothing and shows
   `ChordSlideRefusal`. That revert is POSTED: the binding that wrote the refused
   number ignores a value raised during its own write. "Apply techniques to all
-  strings" copies the slide as an offset too. Pinned by `ChordSlideScopeTests`
-  (default gate, incl. a lint that the inspector asks the rule) and
-  `SoundTabFitUiPerfSmokeTests` (headless, through the real spinner).
+  strings" (the staged Technique page's "Copy to N") copies the slide as an interval too. Pinned by
+  `ChordSlideScopeTests` (default gate, incl. a lint that the inspector asks the rule),
+  `ChordCopyTechniquesTests` and `SoundTabFitUiPerfSmokeTests` (headless, through the real field).
 - **One selected chord says whether it ships as a repeat, and why not (#564).**
-  `ChordRepeatVerdictLine` in the chord's Technique section, "Whole chord" group (`SoundChordTechniqueView`), binds
+  `ChordRepeatVerdictLine` in the chord's Technique section, "Whole chord" card (`SoundChordWholeView`), binds
   `InspectorViewModel.ChordRepeatVerdict`, refreshed in `SyncChordProperties`
   (so on every selection change and history step): `ExplainRepeat` asks the
   export's own `RepeatChords.Explain` over the active level, and
@@ -222,12 +256,47 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
     (`IssueBadgeTip`). That list leaves out the findings on easier difficulty levels
     other than the one on screen until "Show easier difficulty levels" is ticked
     (#397: `InspectorIssuesViewModel.OnEasierLevels` over `Editing/Quality/QualityLevelScope`,
-    the same rule the Chart quality report uses; there a finding that stops the
-    export always shows). Pinned by `InspectorEasierLevelIssuesTests`,
-    `ChartQualityReportViewModelTests` and `Perf/QualityReportEasierLevelsUiPerfSmokeTests`. "Check export" (`ExportReadiness.CheckExportReadinessCommand`)
-    is bound by `IssuesInspectorView` ONLY; the Sound tab's empty footer opens
-    that tab (`ShowExportReadinessCommand`). Pinned by
-    `InspectorProblemCountTests`.
+    the rule the Chart quality report dialog used; a finding that stops the
+    export always shows). Pinned by `InspectorEasierLevelIssuesTests`.
+    The dialog is gone (#497): everything it showed lives on this tab. Since inspector design D (#751 P8) the tab
+    is four cards on one `ColumnFlowPanel` (`IssuesFindingsCard` = `IssuesListView`, `IssuesFixesCard` =
+    `IssuesDetailView`, `IssuesProjectCard` = `IssuesProjectView`, `IssuesReviewCard` = `IssuesReviewView`), as many
+    side by side as the pane is wide and the rest behind the card pager, whose captions keep the old rail's badges
+    (`IssueRowConverters.PageTitle`: the findings count, a dot; the view follows the pager through
+    `ColumnFlowPanel.ShownCardsChanged`, raised only when a card moves on or off stage, never per layout pass). `InspectorViewModel.IssuesSections`
+    (`IssuesSectionsViewModel`, `IssuesSection`) owns which is open; `IssuesInspectorView.CardFor` maps it to a card
+    and a page click back to it. **Findings** (default): this arrangement's list and the all-clear state; a row
+    whose rule the fix menu can repair carries Fix (`InspectorIssuesViewModel.FixIssueCommand`; Fix shows only when
+    `IssueFixViewModel.CanOffer` — the same check the fix menu's `Offer` makes — finds a fix: jump, then the default
+    fix, one undo step), and a click on a finding brings the **Fixes** card on screen with that finding (jump, the
+    "Export blocker / Needs review" status, the offline About flyout — message, code, status, the fix menu's remedy,
+    "Ask the assistant" — the fix menu, the AI row, or a disabled "No default fix"), its row marked by the accent
+    spine (`IssueListRow.IsOnFixesCard`). The list is ONE flat list of row models (`Issues.Rows` =
+    `InspectorIssueRows`, `IssueListRow`: no `$parent` lookups, message / stamp / Fix check computed on first read),
+    with a Difficulty filter once the arrangement has levels (arrangement-wide findings always show), and Auto-fix
+    asks first through the card's `InspectorConfirmRow` over an `InspectorPendingAction`
+    (`Issues.AutoFixConfirm`, withdrawn by a project / arrangement switch or an undoable edit) — the confirm
+    grammar every design-D reset shares. Not virtualized on purpose: the list's ScrollViewer sizes from its content
+    inside a card, and a `VirtualizingStackPanel` there realized one row and sized the viewport to it
+    (`Perf/IssuesLanguageSwitchUiPerfSmokeTests`). **Whole project**: the verdict, totals, an Arrangement choice over
+    the project's findings (`ExportReadiness.ProjectFindings` = `ProjectFindingsList`: Jump makes the arrangement
+    active and seeks; Fix only for the active arrangement, with the same `CanOffer` check), one row per arrangement (a row makes that arrangement
+    active and opens Findings) and, when there are any, a song-wide row for the findings no arrangement owns (the
+    D13 lyric checks, vocal export findings; it opens Findings and keeps the arrangement), so the rows add up to the
+    totals (`ProjectFindingCount`, `WholeProjectReportTests`), then Audio check and Export readiness; its dot says a finding sits in some
+    arrangement, the project is not ready or an export check found something. **Editor on Fire**: the round trip
+    (`ExportReadinessViewModel.ChartReport`), checked while its section is open OR its card is on screen beside
+    the others (`IssuesSectionsViewModel.ShowEditorOnFire`, `UI/ViewModels/Editor/IssuesSectionsEditorOnFireTests`;
+    `IEofRoundTripSection.IsExpanded` follows, and a project switch that closes it falls back to Findings — or, with the
+    card still on screen in a wide pane, computes the round trip again); a whole Review row seeks (`EofPlaceRow`); its dot shows once a computed round trip drops something. **Doors**: the status rail counters, Jump to
+    issue and the Sound tab's selection findings open Findings; Tools ▸ Chart quality report (palette entry too),
+    the Rocksmith export's "Show in Issues tab" (`ChartIssuesDoor`) and the Sound tab's export verdict
+    (`ShowExportReadinessCommand`) open Whole project; the Editor on Fire export's "Show" opens Editor on Fire
+    (`MainWindowViewModel.OpenChartIssues(section)`). The check runs `ChartQualityReporter` over a
+    `QualityReportSnapshot` OFF the UI thread (the refresh only posts; a stale result is dropped), on Refresh and when
+    the tab opens. "Check export" (`ExportReadiness.CheckExportReadinessCommand`) is bound by `IssuesInspectorView`
+    ONLY. Pinned by `InspectorProblemCountTests` and, for the layout and the doors,
+    `Perf/IssuesTabCardsUiPerfSmokeTests` (in the release's de-DE / ja-JP filter).
 - **Field-level validation: `ViewModels/Editor/Inspector/InspectorIssueFieldMap`
   (0.36).** Two pure tables — `Map(type)` → `InspectorField` and
   `BlocksExport(type)` — both **exhaustive over `ArrangementIssueType` BY TEST**,
@@ -337,16 +406,109 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
   Technique and Bends with the chord panel hidden. With no chord in the selection (a note,
   a multi-selection; `SoundSectionsViewModel.HasChordScope`) nothing pins a
   ladder, so edits stay on the selection. Pinned by `ChordTechniqueApplyToTests`
-  (default gate) and `SoundTabRailUiPerfSmokeTests.OverTheTechniques_*` (headless).
+  (default gate) and `NoteSectionStripUiPerfSmokeTests.OverTheTechniques_*` (headless).
+- **Apply step: optional, OFF by default (#805).** Settings ▸ Editor ▸ "Inspector edits wait for Apply"
+  (`AppConfig.InspectorApplyStep`, mirrored live into `ProjectState.InspectorApplyStep` at startup and on the
+  tab's Save; read as `InspectorStagedEdits.ApplyStep`). OFF: a page still stages, but
+  `StagedPageViewModel.Staged` → `InspectorStagedPages.Staged` writes it at once through
+  `InspectorStagedEdits.ApplyNow` → the same `Apply` (same plan, targets, skips; ONE undo step per edit, the
+  status rail says what was written, or why nothing landed) and drops the draft even when nothing landed — so the
+  leave prompt, the close prompt and `NoteDraftsElsewhere` never see one. The footer hides only the Apply button
+  (`StagedFooterViewModel.ShowsApplyButton`); the scope button/text stays and counts the sounds an edit reaches.
+  Selection ▸ Move and Findings' "Fix all" still ask through the footer. ON: everything below, unchanged.
+  Switching it off with a draft waiting runs `ApplyAll` (never dropped). Pinned by `InspectorImmediateApplyTests`
+  and `EditorSettingsViewModelTests`; the staged tests set it ON in their setup
+  (`InspectorStagedEditsTests.Engine(applyStep: true)`).
+- **Staged Apply engine (#751 P3; Placement, Selection and Technique bind it since P4, Bends in P5).** `Inspector/InspectorStagedEdits`
+  (`Inspector.StagedEdits`, a plain collaborator, not DI) stages Placement, Selection, Technique and Bends
+  edits per source sound and writes them with ONE `Apply` (one history node; chords through
+  `ChordTechniqueEdit.BuildPerChord`, a mutation per chord, on every level the rung covers). `Plan(page)`
+  → `StagedEditPlan` (writes / skips / "only in part" notes on written targets, each with a
+  `StagedSkipReason` / replaced bends; a target that already holds every staged value is not counted,
+  by the history node's own `ChartActionStateComparer` test), `Review(page)` → the footer sentence
+  (`Inspector_Staged_*`; confirm when >1 target, a skip, a part or a replacement; a sound Apply still
+  writes is never listed as skipped), `Discard`, `CanLeave` (the leave guard; the Selection draft is
+  dropped on any change of the selected sounds instead), `PlanMove`/`ApplyMove` (Selection ▸ Move). The
+  rules are pure:
+  `StagedTechnique` (per-string values by string index, silent strings named, a slide copied as an
+  INTERVAL and SKIPPED on an off-neck target instead of refusing the edit — decision 2), `StagedBulk`
+  (tri-state reads: a chord whose strings disagree reads mixed; "no staged value lands there"; a chord
+  slide moves only fretted strings inside the string mask), Reset keeps the slide of a target whose
+  staged slide would leave the neck,
+  `StagedBends` (only an edited curve writes; a target's differing authored bend is named),
+  `StagedPlacement` (a fret move carries the slide end). Selection ▸ Move by frets is
+  `IHighwayEditingService.MoveSelectedFretsWhole` (`WholeFretMove`: whole sound or none, open strings
+  stay, slide ends move with their strings; the fret KEYS still clamp per string); by strings, one up or
+  down only; by sustain, the keyboard's `]`/`[` (`AdjustSelectedNotesSustain` on the timeline's
+  `GridDivisor`), planned by `PreviewSelectedNotesSustain` (`SustainStepOutcome`: the same floor,
+  next-sound gap, audio-end clamp and linked rule, so plan = write). A history change
+  re-reads the baselines (`Rebase`: a staged technique value the sound now holds by a keyboard edit is PARKED,
+  so Apply never reverts it, and comes back when an undo returns to the node before that edit); "still in the
+  project" reads `ProjectSoundIndex`, rebuilt only when a level gains, loses or swaps a sound. Another level or
+  arrangement KEEPS each sound's draft (a sound that left the project is pruned); another project drops every
+  draft. A draft counts as unsaved work (`IChartEditorSurface.HasPendingDrafts` →
+  `ProjectSessionService.HasUnsavedWork`), so close asks; the prompt's Save (`SaveInitiator.Prompt`) runs
+  `ApplyPendingDrafts` → `ApplyAll` first (every draft, one undo step; a draft left on another sound writes that
+  sound only). A chord "Apply to" rung or family change re-reads the footer's plan. Pinned by
+  `InspectorStagedEditsTests` and `InspectorStagedApplyTests`.
+- **The staged Note pages (#751 P4, design D).** `Inspector/InspectorStagedPages` (`Inspector.Staged`)
+  holds one view model per page — `StagedPlacementViewModel` (Placement: the board, Position and Import
+  cards), `StagedSelectionViewModel` (Selection: Move, Values for Apply, Summary), `StagedNoteTechniqueViewModel`
+  and `StagedChordTechniqueViewModel` (Technique: a note's techniques and detail; a chord's string card, one
+  string at a time with its key lit and a Mask key, and its Whole chord card) — and `StagedFooterViewModel`.
+  A page control STAGES and writes nothing; the footer's Apply writes at once for one sound with nothing
+  passed by and otherwise shows the review sentence with Confirm / Cancel in the footer's place
+  (`NoteFooterAsk`); a draft that lands nowhere still offers Apply, so the review can say why. Leaving a page
+  with a draft (the section strip, the footer's ‹ ›) asks Stay / Discard / Apply; a selection or history change
+  withdraws an open question with its held action (`StagedFooterViewModel.Dismiss`). A timeline click, level or
+  arrangement switch away from a draft keeps it: `NoteDraftsElsewhere` over the footer names it and jumps back
+  (`JumpToDraft` → `InspectorStagedPages.Show`). A stage re-reads the staging page, the page on screen and the
+  footer only; the footer works its plan out once per re-read. "Copy to strings" puts the slide on the movers
+  only (`ChordSlideScope.Movers`, never an open string) and carries the vibrato depth. The Placement sustain
+  spinner stops at the audio end. Selection ▸ Move writes at once through the same ask. Timeline and keyboard edits stay immediate. A re-read must not stage: the
+  pickers' item lists are kept while they hold (a new list resets a ComboBox, whose reset writes its first
+  item back). Under Split notes, No notes takes no edit and its STORED flag stays. Pinned by
+  `InspectorStagedPagesTests`, `ChordCopyTechniquesTests` (bug c: Copy stages the per-string Ignore) and
+  headless `NoteShellUiPerfSmokeTests` (every card of every page at the design's sizes, and "showing a page
+  stages nothing"), `NoteSectionStripUiPerfSmokeTests`, `NoteFooterUiPerfSmokeTests`.
+- **The Task, Library, Bends and Findings pages (#751 P5, design D).** Each page is several `ColumnFlowCard`s.
+  **Task**: Fix the next sound (`SoundNextTaskViewModel`; the three triage rows always shown, disabled at zero),
+  Export readiness (`ReadinessTitle` / `ReadinessDetail`, the Issues tab's check, Generate all fingerings) and At
+  the playhead. **Library** (nothing selected): `Inspector/ChordLibraryViewModel` (`Inspector.Library`) searches
+  the templates by name AND frets (`TemplateSearch`, "x07") through a `CoalescedFilterPass` into a fixed-height
+  virtualizing list, each row its frets and name; picking one browses `ChordTemplateEditorViewModel` (a
+  non-visual collaborator now: the old `ChordTemplateEditorView` and `ChordApplyScopeBar` are deleted) through
+  `Browse` (never re-templating a chord; Edit template opens the Edit shape dialog on the pick), whose fields —
+  template picker, New, name and suggestions, Arpeggio, No name, Nop, Pinned, containing shapes, Fingerless,
+  finger rows (frets read-only), Save fingering / Save & next / Next missing / Generate all — are the Template
+  card (`SoundLibraryTemplateView`); Grip draws it read-only, Uses has Select uses / Next use (a seek only). **Bends**:
+  `Inspector/StagedBendsViewModel` (`Staged.Bends`) builds the inspector's note and chord `BendEditorViewModel`s
+  so a curve edit or preset STAGES (`InspectorStagedEdits.StageBend`) and the footer's Apply writes it onto the
+  rung, remapped per target; the curve is `Controls/ColumnFlowBendPlot` (28 px handles, drag, click to add,
+  Tab / arrows / Delete / Insert; a curve that stops before the sustain's end holds flat to the right edge,
+  `BendEditorViewModel.HoldFrom`, display only), with presets (`ColumnFlowBendPreview` glyphs) and a Scope card (rung, ‹ ›
+  targets, chart target, range, points; the rung is also picked here as "Bend scope"). **Findings**: `Inspector/SelectionFindingsViewModel`
+  (`Inspector.Findings`) — the list (pick → Detail), Open Issues, Fix all (n) (`IssueFixViewModel.DefaultFix`,
+  asked first in the footer, ONE undo step for all), Detail (Open this issue, Jump to sound, Open grip editor) and Review (Previous / Next sound). The
+  Shape page's Undo save / Save / Save and next / Save & next missing sit in the footer (`NoteFooterShapeSave`).
+  Pinned by `BendScopeApplyTests`, `TemplateSearchTests` and headless `NoteShellUiPerfSmokeTests.ThePageParts_LayOut`.
 - **…and so do the chord bend editor and the technique KEYS (#604).**
-  - **Bends.** The chord curve commits through the same `ApplyChordMutation`
-    (`InspectorViewModel.ChordBendWrite`), so the picker pins over a chord's
+  - **Bends.** The chord curve stages on the Bends page and the footer's Apply commits it through the same
+    `ApplyChordMutation` (`Inspector/BendCurveRemap.ChordWrite`), so the picker pins over a chord's
     Bends section too and the rung, the preview and the write are the
     technique family's. A bend is per string and the bend picker's string is
     its mask: the curve lands on that STRING (by index) of every target, a
     target without it is left alone; the string-edit mask does not widen it.
     Before #604 the curve already followed the rung while no picker showed
     over Bends — the one edit broader than its bar.
+  - **Bend times follow each target (#751).** Bend points are absolute chart
+    positions, so every target (chord string or selected note) gets the curve
+    through `BendCurveRemap.Remap`: moved onto ITS onset, each point keeping its
+    fraction of the source sustain, clamped into the target's sustain
+    (`BendCurveRemapTests`, `ChordBendApplyToTests`). The Technique page's "Copy to
+    strings" (`StagedChordTechniqueViewModel.CopyToStrings`) stages the per-string
+    Ignore flag too, onto the played strings the string-edit mask includes, and the
+    slide as an interval (`ChordCopyTechniquesTests`).
   - **Keys.** `IHighwayEditingService.TechniqueReach` is the inspector's
     `Inspector/ChordTechniqueKeyboardReach` (set in the inspector's
     constructor): every technique verb (mute, HOPO, harmonic, picking,
@@ -361,7 +523,7 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
   - Pinned by `ChordTechniqueKeyboardApplyToTests` and `ChordBendApplyToTests`
     (default gate, the shared `ChordLadderFixture`; "selected" is deep-compared
     against the same key with no ladder wired) and
-    `SoundTabRailUiPerfSmokeTests.OverTheBends_*` /
+    `NoteSectionStripUiPerfSmokeTests.OverTheBends_*` /
     `TheMuteKey_FollowsTheLadderOnScreen_AndOnlyTheLadderOnScreen` (headless).
   - Known limit: over a chord's SHAPE section the pinned ladder previews the
     shape's reach, so a technique key there marks the bars too (the chord
@@ -394,7 +556,7 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
   reshape, not a reshape to fret 1 followed by one to 12.
   The default is pinned by `ChordTemplateEditorViewModelTests`.
   **Compact and pinnable since #572**: the ladder is its own view,
-  `Views/Panels/ChordApplyScopeBar` (same view model), its rungs side by side
+  the old `ChordApplyScopeBar` (deleted; the footer's `SoundApplyBarView` picker has the rungs now), its rungs side by side
   with only the LIT rung's count printed under them (`Ladder.EffectiveDetail`)
   and every rung's count in its tooltip (`ChordApplyRungRow.ToolTipText`). The
   chord panel embeds it; the Sound tab turns that copy off (`ShowsApplyScope`)
@@ -487,7 +649,7 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
   Pinned by `UI/SoundTabPitchReadoutTests` (pure + markup + resx, default gate)
   and, outside it, by `Perf/InspectorConstructionUiPerfSmokeTests
   .TheSoundTabsPitchRow_LaysOutNonZero` +
-  `Perf/ChordTemplateEditorConstructionUiPerfSmokeTests
+  `Perf/SoundLibraryTemplateConstructionUiPerfSmokeTests
   .APerStringRow_ShowsThePitchAndLeavesAMutedStringBlank`.
 ## Five rules the panel broke on itself
 
@@ -508,11 +670,6 @@ gate; the mechanisms are in the commit bodies.
   ORs the RS bit from `Vibrato || VibratoStrength > 0` and every import arrives
   at strength 80, so a flag cleared without its depth still exports as vibrato —
   which is what "Reset" and `ApplyNoteValuesToAll` did.
-- **The Span card only ever rewrites the endpoint the user TYPED.** Both boxes
-  print through `FractionalLengthFormat.Format`, which spells one beat or more
-  with `"0.##"`; re-parsing the untouched box therefore moved a triplet-placed
-  bar by 1/300 of a beat per edit, as a real undo node
-  (`HandShapeEditorViewModel.ResolveHandShapeSpan`).
 - **The chord box's ✕ reads the SOUND, not `PreviewChord`.** The preview is
   synthesised from `Template.Frets` and a `ChordTemplate` carries no mute, so
   `MutedStrings` was structurally always empty and the marker never rendered
@@ -550,15 +707,160 @@ gate; the mechanisms are in the commit bodies.
   handler records its picker as agreed on the way past.
   `InspectorEnumAgreementTests`.
 
-Outside this file but the same wave: `BendEditorControl.OnCanvasPointerPressed`
-opened a `BendEditorViewModel` transaction BEFORE it knew whether the press had
-grabbed anything, and a press in the canvas padding captured no pointer — so
-the release never arrived, `_transactionDepth` stuck above zero and every later
-bend edit was swallowed for the life of the control
-(`UI/BendEditorTransactionTests`).
+Outside this file but the same wave: the old bend graph opened a
+`BendEditorViewModel` transaction BEFORE it knew whether the press had grabbed
+anything, and a press in the canvas padding captured no pointer — so the release
+never arrived, `_transactionDepth` stuck above zero and every later bend edit was
+swallowed for the life of the control. That graph (`BendEditorControl` +
+`BendEditorGeometry`) was deleted in #751 P9; its successor, the Bends page's
+`Controls/ColumnFlowBendPlot`, opens a transaction only on a left press that always
+hands back a point to drag, so its release closes it
+(`UI/BendEditorTransactionTests.ALeftPress_AlwaysGrabsThePointItsTransactionIsClosedBy`).
+
+The bend plot's keyboard is `Views/Panels/BendEditorKeys` (pure over the view
+model, one undo entry per key): Enter / Insert adds a point after the selected
+one, Home / End and Page Up / Page Down pick points, the arrows pick a point
+when none is selected and nudge it when one is, Delete removes it, Esc clears
+the selection. The plot is a Tab stop. The point readout under it comes from
+`BendEditorViewModel` (`Inspector_Bends_PointReadout`), so the view model takes
+an `ILocalizationService` (`UI/Views/Panels/BendEditorKeysTests`,
+`UI/Controls/ColumnFlowBendPlotInputTests`; the old graph's hover callout went
+with it in P9).
 
 ## Vocals / the Lyrics inspector tab
 
+- Auto-sync review findings stay on each syllable (`AlignmentConfidence` /
+  `ReviewReasons`). The lyrics lane marks doubtful pills; the inspector's
+  previous/next review commands select and seek to them, wrapping within the
+  active vocal track. The selected syllable shows its score and localized
+  reasons. Navigation and automatic repair never clear findings; an EDIT does:
+  `MoveLyricAction` and `ResizeLyricAction` clear the syllable's reasons in
+  their own undo node (undo restores them), and the inspector's "Mark reviewed"
+  button (`MarkLyricReviewedAction`) accepts a syllable that was right all
+  along. `LyricReviewCount` shows "n to review"; with nothing flagged it says
+  so and the three review buttons are disabled (`LyricReviewUiPerfSmokeTests`,
+  `LyricReviewClearingTests`). A text edit (`RenameLyricAction`) keeps them.
+
+- The lyric row places on right-click in empty space and renames on double-click
+  or F2 / Enter on a selected syllable. `LyricInlineEditorViewModel` uses the
+  existing `InlineEditOverlayView`: trailing `-` marks a word part; Enter commits,
+  Esc cancels, Tab commits and edits the next syllable (Shift+Tab the previous).
+  Closing by Enter, the end of Tab traversal or Esc returns focus to the timeline;
+  clicking away cancels the draft and leaves focus on the clicked control.
+  A new draft writes nothing until non-empty text is committed, including its
+  first vocal track if needed. Placement joins the line spanning the snapped
+  position or adds a sorted line; the line end and flags share the same undo step.
+  These actions retain linked measures and leave the inspector's tap queue alone.
+  Existing right-click deletion remains. Coverage: `LyricInlineEditorViewModelTests`
+  and `LyricInlineEditingUiPerfSmokeTests`.
+
+- Auto-sync captures its destination before any model download or inference.
+  Completion requires the same project, active vocal track and live track
+  membership; a switch or removal discards the result. An initially missing
+  track is still added with its phrases as one undo node.
+  `LyricAutoSyncProjectIdentityTests` covers switching and removal.
+- Tap-sync queue removal belongs to `LyricTapAction.Execute` for both the
+  initial tap and redo. `LyricTapSession.TapNext` must not pop it beforehand:
+  repeated words would be consumed twice and undo could not restore the queue
+  (`LyricTapSessionTests`).
+- Phrase-end edits (checkbox and keybind) use `SetLyricPhraseEndAction`: setting
+  a mid-line syllable splits its container after that syllable; clearing a line's
+  last syllable joins the next container. The last line refuses the clear and
+  explains why in the status bar. A line cannot end mid-word: setting the end on a
+  word part clears its word join, and turning a line's last syllable into a word
+  part (the inspector's Word part toggle, keybind, a trailing `-` COMMITTED in the inspector text box
+  (Enter, lost focus, leaving the Lyrics tab, or `IChartEditorSurface.CommitPendingEdits`,
+  which a USER-started save (`SaveInitiator.User`, or `Prompt` from the close/replace prompt), export, the export check and
+  close/replace call first; an unattended save (`SaveInitiator.Unattended`, after stem
+  separation) leaves the draft pending; the box is a draft while typing, so "x-ray" stays
+  text, and a typed draft survives a history change that left its syllable's stored text
+  alone; a commit asked for while the history applies an undo/redo step
+  (`IHistoryService.IsApplyingStep`, set before the focus request, so the app's own focus
+  handler clearing the selection first is covered) is deferred to the step's end
+  (`IHistoryService.StepEnded`, raised on every exit): a step that applied commits it, a failed
+  one (failed apply, failed link rebuild, a throwing focus listener) hands it back to the box,
+  `LyricsInspectorDraftTests`; the history refuses any `Do` during a step, `HistoryServiceTests`)
+  or the inline editor, or placing `hel-` after a line's last syllable) joins the
+  next line, each in the same undo step (`Services/State/LyricWordPartEdit`,
+  `JoinNextLyricLineAction`); on the track's last line the end stays and the word
+  part is dropped. The rule lives once in `Core/Domain/Vocals/LyricLineRule`; the tap
+  queue joins a line ending in `-` to the next one and sets a tapped syllable's word
+  part only when the next syllable of its line lands.
+  One history node retains the same lyric objects,
+  phrase collections and original containers through undo/redo. `LyricPhrases`
+  aliases the active track's collection, so the next timeline snapshot sees the
+  changed grouping; `HistoryChanged` refreshes the inspector and the main window's
+  renderer, and the edit also requests a redraw. Covered by
+  `UI/ViewModels/Editor/LyricsInspectorPhraseEndTests` and
+  `Services/State/SetLyricPhraseEndActionTests`, `LyricInlineEditorViewModelTests`
+  and `Services/Parsing/Roundtrip/RsXmlVocalsLineRoundTripTests`.
+- Tapping, placeholder insertion and deletion also move the end flag to the
+  remaining last syllable inside their existing undo step. Only the last
+  syllable stays flagged (`LyricTapSessionTests`, `ChartChordEditingRegressionTests`,
+  `RemoveLyricPhraseEndTests`).
+- `LyricTapTarget` resolves tap appends from the current chart: the newest surviving
+  tap in the queued line owns the next tap, even after deletion or split/join.
+  Only the nearest chronological predecessor can have its tail shortened; a later
+  or equal-start syllable retains its end. Undo/redo restores the anchor history,
+  end flags, spans and trimmed tail within the tap's history node.
+- Split spans use every retained syllable's minimum start and maximum end, keeping
+  the original leading padding on the prefix and trailing padding on the suffix.
+  A join contains both original spans and every syllable. Placeholder insertion
+  first resolves an exact syllable start, so overlapping split spans cannot steal
+  its owner; equal starts in multiple lines choose the first collection owner.
+  It normalizes end flags from the resulting collection and restores old flags on
+  undo. Covered by `LyricTapBoundaryOwnershipTests`, `VocalInsertionBoundaryTests`,
+  `LyricEditSequenceTests`, the pure state table in `LyricTapTargetTests`, and
+  the 300 fixed seeds in `LyricEditInvariantTests` (spans, duration, ownership,
+  future-tail preservation, queue state and undo/redo identity).
 - Vocals editing lives in the Lyrics inspector (`ViewModels/Editor/LyricsInspectorViewModel` + `Views/Editor/Inspector/LyricsInspectorView`): syllable tapping, LRC/UltraStar import+export (codecs in `Services/Parsing/{LRC,UltraStar}`; an UltraStar DUET's first voice replaces the active track and every further voice is added as its own track through `Services/State/AddVocalTrackAction`, all in ONE `CompositeAction` so one undo takes the import back — `UI/ViewModels/Editor/LyricsInspectorUltraStarImportTests`), per-syllable text/word-part/phrase-end/pitch edits (all through `IHistoryService`). Lyric drags snap to waveform onsets via `ChartEditorViewModel.SnapLyricStartMs` — **onset snapping is lyric-only**; note-highway placement still uses plain `SnapToGrid`.
+- The selected lyric's fields refresh on `HistoryChanged` as well as selection
+  changes, under the same sync guard (#531). Undo/redo of text, word/phrase flags
+  and pitch must update the inspector without writing another history node
+  (`UI/ViewModels/Editor/LyricsInspectorStaleSelectionTests`).
 - **A BULK phrase replacement must drop the lyric selection it orphaned** (fixed 2026-09-04, `UI/ViewModels/Editor/LyricsInspectorStaleSelectionTests`). `SetVocalPhrasesAction` clears the track's phrase collection and refills it with new objects, so a `Selection.SelectedLyric` from before an LRC import, an UltraStar import or an auto-sync points at a `LyricEvent` in no phrase — and it is not inert: the inspector still shows it, and the text box / word-part / phrase-end / pitch editors each push a REAL undo node against the detached object (an edit that reports success, burns an undo slot and changes nothing), `DeleteSelectedLyric` finds no owning phrase and no-ops, `ChartRenderer` reads it into the frame snapshot and `TimelineWheelAdjuster` RESIZES it. All three call sites go through one `ReplacePhrases` seam. The test is REACHABILITY across `ChartEditorViewModel.VocalTracks`, not track identity — a pick in a SECOND vocal track survived the replacement and must not be thrown away. (`SelectionService.ClearSelections` covers the project-swap and snapshot-restore paths for the same reason; a phrase replacement goes through neither.)
-- **A lyric can NOT be dragged or wheel-resized past its neighbouring syllable** — the drag (after the snap) and the wheel resize both clamp through `Input/Tools/EventInteractionGestures/LyricDragBounds` with the note-style minimum gap (`ChartSpacingEnforcer.GetMinDistance`), and the neighbour may live in the ADJACENT phrase. This matters because **no spacing pass covers vocals on save** — the gesture is the only enforcement (notes get re-checked by the enforcer; lyrics do not). Pure math + both call sites pinned by `LyricDragBoundsTests` (the call sites by source lint, since the gestures need the app booted).
+- Drag and wheel use the configured note minimum distance at the earlier syllable's start. A move resizes the previous syllable inside the phrase and fills the moved syllable to the same end limit the wheel uses. An intentional wheel shortening carries through a move, and the previous syllable retains a minimum visible length. Drag preview, cancel and undo restore both ends together.
+- **Close gaps in phrases** repairs the active track in one undo step. It trims overlaps and fills gaps inside phrases with the configured note distance. Starts, phrase-final ends and deliberate wheel shortenings keep their timing. The word-span setting controls whether word endings are extended. Review marks clear only on syllables whose timing changes.
+
+## Held grip editing
+
+Select a hand shape to edit the frets and fingers of its grip. Save fingering
+preserves its frets and ghost strings, including a per-bar mask set by
+**Grips from held notes**. Editing a grip shared by multiple bars rebinds the
+selected bar to an equal template or a new copy.
+
+**The Shape page** (`SoundShapeView` over `GripInspectorViewModel`, inspector
+design D): one 28 px row per string (label, Note fret, Grip fret, ghost box,
+finger cells, mask dot) beside `Controls/ColumnFlowFretboard`, whose lanes are
+the rows' 28 px (pinned by `Perf/SoundShapeViewUiPerfSmokeTests`). Pages Board,
+Name, Scope, Flags and Double-stop sit beside the rows; **Full board** keeps
+the board and moves the page below (one tree, placed by `PageRow`/`PageColumn`).
+The header (fret pager or title, page toggles, Full board) is a `Controls/SplitRowPanel`: one 18 px row
+while both halves fit (German at 530 px included), else the page strip moves under the pager and wraps; no
+toggle is ever hidden or painted under another (`TheHeader_KeepsThePagerAndEveryToggle_VisibleApartAndClickable`).
+The footer's Save and next / Save & next missing print where they go under their captions and drop with them.
+Every edit is a DRAFT until Save / Save and next / Save & next missing; Undo
+save takes back exactly that save. **A grip edit writes hand shapes and
+templates only and never adds a note**, even with a chord of the grip selected
+(`GripInspectorViewModelTests`). The page's scope IS the footer's Apply-to rung
+(`ChordTemplateEditor.ApplyRung`, two-way). A ghosted grip edited from the
+chord-template editor rebinds every target of the rung through
+`GripInspectorTargets.Resolve`, each bar keeping its own ghost mask; on Every
+use and Same grip the grip's chords follow, and on Same grip a fingering also
+reaches the grip's other templates (same frets or moved) in place, one undo
+step (`HandShapeGripGrid`, `GhostedGripApplyToTests`, `GripInspectorRungTests`).
+
+The page holds ONE grid, ONE board, ONE template list, ONE Pin and ONE Save set;
+the old `ChordTemplateEditorView` is not on it (`ThePageHoldsOneOfEach_AndTheOldEditorsTools`).
+Its tools live on the pages: the template list (virtualized, with the shapes
+that contain this grip as its "Part of shape" group), New template and the
+suggested names ("Use …", one click) on Name; Next missing, Auto-fill (on the
+Apply-to rung only) and Generate all fingerings on Scope; Arpeggio, No name,
+Fingerless, Pin and the Nop flag (Double-stop) on Flags; the issue pips on the
+board; Up / Down walk a fret-box column. The Name page's lists are built only
+while it shows and only when the frets, the struck notes or the search change
+(a search burst is one `CoalescedFilterPass`). An inferred ghost (held, not
+struck at the opening) is never stored: it is read off the opening's notes each
+time, so a later note edit cannot leave a stale mask for the exporters
+(`GripInspectorPageTests`). At 530 x 370 all six rows show unscrolled in en,
+de and ja (an 18 px header, 2 px gaps).

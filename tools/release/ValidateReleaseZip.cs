@@ -51,25 +51,16 @@ if (problem != null)
     return 1;
 }
 
-// A SPLIT payload (#413) is validated in app/ above. It must ALSO pass the flat
-// rule every v0.62-and-older updater applies at the payload root, or none of those
-// installs can update to it: that is what LegacyUpdaterShim's four top-level
-// copies are for. And it carries its manifest in app/, where the updater reads it.
+// A SPLIT payload (#413) is validated in app/ above. It must NOT carry the four
+// pre-0.63 updater shim files at its top, and it carries its manifest in
+// app/, where the updater reads it.
 var names = archive.Entries.Select(e => e.FullName).ToHashSet(StringComparer.OrdinalIgnoreCase);
 if (names.Contains(root + AppPayload.SplitPrefix + AppPayload.ExeName))
 {
-    string? rootRuntimeConfig = null;
-    var configEntry = archive.GetEntry(root + AppPayload.RuntimeConfigName);
-    if (configEntry != null)
+    var shim = SplitInstallCleanup.FindShimAtTop(name => names.Contains(root + name));
+    if (shim != null)
     {
-        using var reader = new StreamReader(configEntry.Open());
-        rootRuntimeConfig = reader.ReadToEnd();
-    }
-
-    var legacy = LegacyUpdaterShim.CheckLegacyUpdaterAccepts(name => names.Contains(root + name), rootRuntimeConfig);
-    if (legacy != null)
-    {
-        Console.Error.WriteLine($"INVALID: a v0.62 updater would refuse this split payload: {legacy}.");
+        Console.Error.WriteLine($"INVALID: the split payload carries {shim} at its top; the legacy updater shim was dropped.");
         return 1;
     }
 
@@ -79,7 +70,7 @@ if (names.Contains(root + AppPayload.SplitPrefix + AppPayload.ExeName))
         return 1;
     }
 
-    Console.WriteLine("split layout: app/ validated, and the top passes the v0.62 updater's flat rule.");
+    Console.WriteLine("split layout: app/ validated, and the top carries no updater shim files.");
 }
 
 if (expectedRoot != null && !string.Equals(root, expectedRoot, StringComparison.OrdinalIgnoreCase))

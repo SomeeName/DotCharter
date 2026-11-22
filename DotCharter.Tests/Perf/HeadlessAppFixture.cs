@@ -6,8 +6,10 @@ using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using DotCharter.Tests.Perf;
+using DotCharter.Tone.Audio.Tonelab;
 using DotCharter.Tone.Infrastructure.Storage;
 using DotCharter.UI;
+using Microsoft.Extensions.DependencyInjection;
 
 [assembly: AvaloniaTestApplication(typeof(HeadlessAppHelper))]
 
@@ -19,7 +21,9 @@ public static class HeadlessSessionFixture
     private static HeadlessUnitTestSession? _session;
     private static string? _isolatedRoot;
 
-    public static HeadlessUnitTestSession Get()
+    public static HeadlessUnitTestSession Get() => GetForDispatch(null);
+
+    private static HeadlessUnitTestSession GetForDispatch(Action<IServiceCollection>? compose)
     {
         // The prewarm pacer waits for QUIET input; this fixture's bounded drain
         // runs queued jobs, not timers, so a test that moved the mouse would
@@ -34,6 +38,13 @@ public static class HeadlessSessionFixture
             AppContext.SetSwitch(DotCharter.Services.Audio.StemSeparation.Cache.WemKeyAdoption.DisableStartupPassSwitch, true);
             // …and the tonelab RS_ASIO.ini startup restore off the developer's game folder.
             AppContext.SetSwitch(DotCharter.Tone.Audio.Tonelab.TonelabGameLauncher.DisableStartupRestoreSwitch, true);
+            // …and the tonelab session off the machine's pipes: a real one connects to the newest
+            // tonelab-<pid> pipe anywhere, which is a mock of a test in another process or a running game.
+            App.ComposeLast = services =>
+            {
+                services.AddSingleton<ITonelabSession>(_ => new FakeTonelabSession());
+                compose?.Invoke(services);
+            };
             EnsureWindowTracking();
             if (_session == null)
             {
@@ -120,7 +131,11 @@ public static class HeadlessSessionFixture
 
     /// <inheritdoc cref="Dispatch(Action,CancellationToken)" />
     public static Task Dispatch(Func<Task> action, CancellationToken cancellationToken) =>
-        Get().Dispatch(async () =>
+        Dispatch(action, cancellationToken, null);
+
+    /// <summary>Dispatches with opt-in service replacements for this isolated app; the next dispatch resets them.</summary>
+    internal static Task Dispatch(Func<Task> action, CancellationToken cancellationToken, Action<IServiceCollection>? compose) =>
+        GetForDispatch(compose).Dispatch(async () =>
         {
             try
             {

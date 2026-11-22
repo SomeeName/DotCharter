@@ -19,9 +19,9 @@ internal sealed partial class OutputPairPicker(
     Func<(int Left, int Right)> read,
     Action<int, int> write) : ObservableObject
 {
+    private readonly CuttableProbe<(int Count, IReadOnlyList<string> Names)> _probe = new(ui);
     private bool _rebuilding;
     private IReadOnlyList<string> _names = [];
-    private int _probeGeneration;
     private string? _probeKey;
 
     [ObservableProperty] private int _selectedIndex = -1;
@@ -72,29 +72,33 @@ internal sealed partial class OutputPairPicker(
         var key = driver + "|" + name;
         if (key == _probeKey) return;
         _probeKey = key;
-        // A probe for a device the user has since left must not overwrite the rows of the current one.
-        var generation = ++_probeGeneration;
-        Probe = Task.Run(() =>
-        {
-            int count;
-            IReadOnlyList<string> names;
-            try
-            {
-                count = devices.GetOutputDeviceChannelCount(driver, name);
-                names = devices.GetOutputChannelNames(driver, name);
-            }
-            catch
-            {
-                (count, names) = (0, []);
-            }
+        // Starting this read cuts the landing of the one for a device the user has since left.
+        Probe = _probe.Start((devices, driver, name), static args => ReadChannels(args.devices, args.driver, args.name), Land);
+    }
 
-            ui.PostNormal(() =>
-            {
-                if (generation != _probeGeneration) return;
-                if (count > 0) Refresh(count, names);
-                else _probeKey = null;
-            });
-        });
+    /// <summary>Ends the read in flight with its owner: it lands nowhere, and a queued one never runs.</summary>
+    public void Cancel()
+    {
+        _probe.Cancel();
+        _probeKey = null;
+    }
+
+    private void Land((int Count, IReadOnlyList<string> Names) read)
+    {
+        if (read.Count > 0) Refresh(read.Count, read.Names);
+        else _probeKey = null;
+    }
+
+    private static (int Count, IReadOnlyList<string> Names) ReadChannels(IAudioDeviceControl devices, string driver, string name)
+    {
+        try
+        {
+            return (devices.GetOutputDeviceChannelCount(driver, name), devices.GetOutputChannelNames(driver, name));
+        }
+        catch
+        {
+            return (0, []);
+        }
     }
 
     private int IndexOf(int left, int right)

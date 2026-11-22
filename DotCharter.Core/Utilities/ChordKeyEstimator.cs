@@ -44,10 +44,14 @@ public static class ChordKeyEstimator
     /// <param name="arrangement">Supplies the notes (and tuning + capo to hear them at).</param>
     /// <param name="chart">
     ///     Supplies the authored key. <c>KeyAccidentals == 0</c> with a major
-    ///     mode is indistinguishable from "never set", so it is treated as absent.
+    ///     mode is indistinguishable from "never set", so it is treated as absent,
+    ///     unless <see cref="ChartData.KeyLocked" />: a locked key always wins.
     /// </param>
     public static ChordKeySignature? Resolve(Arrangement? arrangement, ChartData? chart)
     {
+        // A LOCKED key is the charter's override: used as written, C major included.
+        if (chart is { KeyLocked: true }) return new ChordKeySignature(Math.Clamp(chart.KeyAccidentals, -7, 7), chart.KeyIsMinor);
+
         ChordKeySignature? authored = chart != null && (chart.KeyAccidentals != 0 || chart.KeyIsMinor)
             ? new ChordKeySignature(Math.Clamp(chart.KeyAccidentals, -7, 7), chart.KeyIsMinor)
             : null;
@@ -171,7 +175,7 @@ public static class ChordKeyEstimator
         return histogram;
     }
 
-    private static double Correlation(IReadOnlyList<double> histogram, int tonic, bool minor)
+    internal static double Correlation(IReadOnlyList<double> histogram, int tonic, bool minor)
     {
         var profile = minor ? MinorProfile : MajorProfile;
         double meanX = 0, meanY = 0;

@@ -32,6 +32,11 @@ public sealed class RscpFixtureCoverageTests
             "An official rich fixture would be play-only, and DcSongChartTests / DcSongRoundTripTests EXPORT it "
             + "(#822). OfficialContentProvenanceTests.The_flags_round_trip_through_the_rscp owns the round trip."),
 
+        new(typeof(ChartProject), nameof(ChartProject.NewerWriterVersion),
+            "Load-time only, never persisted: RscpChartSerializer sets it when the file was written by a newer build "
+            + "so the session can warn and the saver can keep a .bak. A fixture value would assert a round trip that "
+            + "is deliberately not implemented; RscpForwardCompatibilityTests owns it (#355)."),
+
         new(typeof(Arrangement), nameof(Arrangement.Provenance),
             "Same as ChartProject.Provenance: OfficialContentProvenanceTests round-trips it per arrangement (#822)."),
 

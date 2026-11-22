@@ -31,7 +31,8 @@ public sealed class ShapeCleanupOfferTests : IDisposable
             if (screen is IShapeCleanupScreen cleanup) cleanup.CancelCommand.Execute(null);
         });
 
-    private RsXmlImportViewModel NewRsXmlCard() => new(_h.State, _h.Editor, FakeLocalization.English(), new FakeAppLogger());
+    private RsXmlImportViewModel NewRsXmlCard() => HistoryTestActivation.Create<RsXmlImportViewModel>(
+        _h.History, _h.State, _h.Editor, FakeLocalization.English(), new FakeAppLogger());
 
     private MessyShapesFixture MakeChartMessy()
     {

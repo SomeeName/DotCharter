@@ -238,10 +238,29 @@ public sealed class GpTripletFeelImportTests
             "first shape must be clipped to the second's start");
     }
 
-    /// <summary>An authored slide-out on an OPEN string (scrape/fall effect) has
-    /// no fretted start — the note survives, the ornament is dropped (L09).</summary>
     [Fact]
-    public void OpenStringSlideOut_DropsTheSlideKeepsTheNote()
+    public void SoundingOpenStringSlideOut_DropsTheSlideKeepsTheNote()
+    {
+        var gpif = Envelope(
+            "<MasterBar><Time>4/4</Time><Bars>0</Bars></MasterBar>",
+            "0 1",
+            """
+            <Beat id="0"><Rhythm ref="0" /><Notes>0</Notes></Beat>
+            <Beat id="1"><Rhythm ref="0" /><Notes>1</Notes></Beat>
+            """,
+            Note(0, 5, 0, """<Property name="Slide"><Flags>8</Flags></Property>""") + Note(1, 5, 12),
+            """<Rhythm id="0"><NoteValue>Half</NoteValue></Rhythm>""");
+        var notes = ImportSingleTrack(gpif).Levels[0].Notes.OrderBy(n => n.Position).ToList();
+        Assert.Equal(2, notes.Count);
+        Assert.Equal(0, notes[0].Fret);
+        Assert.Equal(MuteType.None, notes[0].Mute);
+        Assert.False(notes[0].UnpitchedSlide);
+        Assert.Null(notes[0].SlideTo);
+    }
+
+    /// <summary>A dead slide-out on fret zero gets a fretted start and a directional landing.</summary>
+    [Fact]
+    public void DeadOpenStringSlideOut_UsesFrettedStartAndNextFret()
     {
         var gpif = Envelope(
             "<MasterBar><Time>4/4</Time><Bars>0</Bars></MasterBar>",
@@ -260,9 +279,9 @@ public sealed class GpTripletFeelImportTests
         Assert.Equal(2, notes.Count);
 
         var open = notes[0];
-        Assert.Equal(0, open.Fret);
+        Assert.Equal(5, open.Fret);
         Assert.Equal(MuteType.Full, open.Mute);
-        Assert.False(open.UnpitchedSlide);
-        Assert.Null(open.SlideTo);
+        Assert.True(open.UnpitchedSlide);
+        Assert.Equal(12, open.SlideTo);
     }
 }

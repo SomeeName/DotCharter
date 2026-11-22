@@ -13,6 +13,42 @@ public sealed class PlayerProfileServiceTests : IDisposable
     private PlayerProfileService NewService(string defaultName = "Player 1")
         => new(FakeLocalization.English(), logger: null, filePath: StorePath, defaultProfileName: defaultName);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExportProfile_UnreadableData_PreservesPreviousExportAndRemovesStage(bool existing)
+    {
+        var service = NewService();
+        var profile = service.ActiveProfile;
+        var data = Path.Combine(service.GetDataDirectory(profile.Id), "scores.json");
+        File.WriteAllText(data, "scores");
+        var destination = Path.Combine(_dir, "backup.dcprofile");
+        if (existing) File.WriteAllText(destination, "previous export");
+        using var locked = new FileStream(data, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        Assert.False(service.ExportProfile(profile.Id, destination));
+
+        if (existing) Assert.Equal("previous export", File.ReadAllText(destination));
+        else Assert.False(File.Exists(destination));
+        Assert.Empty(Directory.GetFiles(_dir, "*.tmp"));
+    }
+
+    [Fact]
+    public void ExportProfile_InsideDataDirectory_DoesNotIncludeItsStage()
+    {
+        var service = NewService();
+        var profile = service.ActiveProfile;
+        var dataDirectory = service.GetDataDirectory(profile.Id);
+        File.WriteAllText(Path.Combine(dataDirectory, "scores.json"), "scores");
+        var destination = Path.Combine(dataDirectory, "backup.dcprofile");
+        File.WriteAllText(destination, "previous export");
+
+        Assert.True(service.ExportProfile(profile.Id, destination));
+
+        using var zip = ZipFile.OpenRead(destination);
+        Assert.Equal(["data/scores.json", "profile.json"], zip.Entries.Select(e => e.FullName).Order().ToArray());
+    }
+
     [Fact]
     public void FirstRun_CreatesActiveDefaultProfile()
     {
@@ -158,6 +194,24 @@ public sealed class PlayerProfileServiceTests : IDisposable
         var service = NewService();
         Assert.Single(service.Profiles);
         Assert.True(service.ActiveProfile.IsDefault);
+    }
+
+    [Fact]
+    public void WrongTypedValue_ResetsOnlyThatProperty_NoQuarantine()
+    {
+        Directory.CreateDirectory(_dir);
+        var id = Guid.NewGuid();
+        File.WriteAllText(StorePath, $$"""
+            { "ActiveProfileId": "{{id}}", "Profiles": [ { "Id": "{{id}}", "Name": "Alex", "LeftyFlip": "yes", "CreatedUtc": 5 } ] }
+            """);
+
+        var service = NewService();
+
+        var profile = Assert.Single(service.Profiles);
+        Assert.Equal("Alex", profile.Name);
+        Assert.Equal(id, profile.Id);
+        Assert.False(profile.LeftyFlip);
+        Assert.Empty(Directory.GetFiles(_dir, "player-profiles.corrupt-*.json"));
     }
 
     // --- The registry is the only map from profiles/<id>/ back to a person ----
@@ -458,6 +512,29 @@ public sealed class PlayerProfileServiceTests : IDisposable
         Assert.Null(service.ImportProfile(garbage));
         Assert.Null(service.ImportProfile(Path.Combine(_dir, "missing.dcprofile")));
         Assert.Single(service.Profiles);
+    }
+
+    [Fact]
+    public void ImportProfile_OversizedManifest_IsRefusedBeforeDataIsExtracted()
+    {
+        var service = NewService();
+        Assert.Single(service.Profiles);
+        var path = Path.Combine(_dir, "manifest-bomb.dcprofile");
+        using (var zip = ZipFile.Open(path, ZipArchiveMode.Create))
+        {
+            using (var writer = new StreamWriter(zip.CreateEntry("profile.json", CompressionLevel.Optimal).Open()))
+            {
+                writer.Write("{\"Name\":\"Manifest\"}");
+                writer.Write(new string(' ', 2 * 1024 * 1024));
+            }
+
+            using var data = new StreamWriter(zip.CreateEntry("data/payload.txt").Open());
+            data.Write("must not be extracted");
+        }
+
+        Assert.Null(service.ImportProfile(path));
+        Assert.Single(service.Profiles);
+        Assert.False(Directory.Exists(Path.Combine(_dir, "profiles")));
     }
 
     [Fact]

@@ -29,6 +29,12 @@ public partial class App : Application
     private ServiceProvider? _serviceProvider;
     public static IServiceProvider? Services { get; private set; }
 
+    /// <summary>
+    ///     Registrations applied LAST in <see cref="ConfigureServices" />, so they replace the product's. The product
+    ///     leaves it null; a test host sets it once to put a machine-wide resource behind a fake.
+    /// </summary>
+    internal static Action<IServiceCollection>? ComposeLast { get; set; }
+
     public override void Initialize()
     {
         // Before ANY markup is parsed: a tooltip that is opened without its
@@ -76,6 +82,8 @@ public partial class App : Application
         // measurable instead of anecdotal.
         var bootStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+        // Off the UI thread: the tone-rig catalogue + engine DLL load while the container builds.
+        Tone.Audio.NativeEnginePrefetch.Start();
         var collection = new ServiceCollection();
         ConfigureServices(collection, _configService, AppPlugins.PackageReaderFromEnvironment());
         _serviceProvider = collection.BuildServiceProvider();
@@ -158,7 +166,7 @@ public partial class App : Application
         projectState.EnableStringShimmer = appConfig.EnableStringShimmer;
         projectState.EnableHitSparks = appConfig.EnableHitSparks;
         projectState.EnableFilmicTonemap = appConfig.EnableFilmicTonemap;
-        projectState.ApplyStringOrders(appConfig);
+        projectState.ApplyEditorPreferences(appConfig);
         // v0.34 lefty flip: PROFILE-level, not AppConfig — lefties are lefty on
         // every machine they play (the flag rides profile.json, incl. the
         // roaming/export bundle). Mirrored here at startup and re-staged on
@@ -255,6 +263,11 @@ public partial class App : Application
         // The same for an Inspector tab switch and a hosted dialog open.
         Views.Shell.SurfaceShowTiming.Sink = (name, ms) =>
             logger.Info(AppLogCategory.Application, $"Surface '{name}' shown in {ms:F0} ms (gesture → first idle tick).");
+        Views.Shell.ArrangementSwitchTiming.Observe(Services.GetRequiredService<ProjectState>());
+        Views.Shell.SurfaceShowTiming.DetailSink = (name, ms) =>
+        {
+            if (ms >= 3) logger.Debug(AppLogCategory.Performance, $"Surface subscriber '{name}' took {ms:F1} ms.");
+        };
 
         // Flush any buffered early-startup errors that were captured before the logger existed.
         if (configService is JsonConfigurationService jsonConfig) jsonConfig.Logger = logger;
@@ -570,7 +583,7 @@ public partial class App : Application
         // as one IEnumerable<T> and the container hands them over as registered.
         AddAudioServices(services);
         AddEditingServices(services);
-        AddValidationServices(services);
+        AppValidationServices.AddValidationServices(services);
         AddGameplayServices(services);
         AddOnlineServices(services);
         AddAiServices(services);
@@ -591,5 +604,6 @@ public partial class App : Application
         // …and the keyboard-shortcuts seam: the palette catalog needs the shell.
         services.AddSingleton<Presentation.Contracts.Shell.IShortcutCatalog>(
             sp => sp.GetRequiredService<ViewModels.Shell.MainWindowViewModel>());
+        ComposeLast?.Invoke(services);
     }
 }

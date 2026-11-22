@@ -2,6 +2,13 @@ namespace DotCharter.Tests.Core.Utilities;
 
 public class TuningUtilitiesTests
 {
+    [Theory]
+    [InlineData(int.MinValue, "G#")]
+    [InlineData(int.MaxValue, "B")]
+    [InlineData(-13, "Eb")]
+    public void GetTuningNames_ExtremeOffset_NormalizesWithoutOverflow(int offset, string expected)
+        => Assert.Equal(expected, TuningUtilities.GetTuningNames(6, [offset])[0]);
+
     private static readonly string[] ExpectedSixStringE = ["E", "A", "D", "G", "B", "E"];
     private static readonly string[] ExpectedFourStringE = ["E", "A", "D", "G"];
     private static readonly string[] ExpectedSixStringEbHalfStep = ["Eb", "G#", "C#", "F#", "Bb", "Eb"];

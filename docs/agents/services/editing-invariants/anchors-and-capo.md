@@ -13,6 +13,17 @@
   the caller**, because the answer differs per verb — a fingering edit repoints the
   bar, a copy clones it, a delete must NOT cascade to it.
 
+- **Same-pitch string moves carry fret-hand positions in the sound's undo node.**
+  `StringMoveAnchors` reads spans in stable position order, including unselected
+  and unreachable sounds. Uniform moved spans shift their anchor with width kept
+  and the width-aware neck ceiling; mixed spans use `IFretAnchorGenerationService`
+  with the Refret range arguments. Unmoved spans stay in place, apart from a
+  matching boundary made redundant by the moved span. Phrase starts from both
+  stores and anchors covering a phrase's first sound are retained through
+  `PhraseMarkers.Playable` and `PhraseStartAnchors.FirstSound`. Undo and redo
+  restore sounds, synced hand shapes, anchors and removed-anchor selection
+  together (`StringMoveAnchorTests`). The verb edits only the focused level.
+
 ## Anchors (FHP)
 
 - **Three anchor derivations, three different questions — do not merge them.**
@@ -307,7 +318,7 @@
   mutated. A variant has no finger 1, so I46 / L08 stay quiet, and its
   inferred index (the base grip's lowest finger shifted up the hand) lands on
   the anchor that caused the shift, so E04 does too.
-  Tools ▸ Generate FHP puts the minted templates, the repoints and the anchors
+  Tools ▸ Generate ▸ Fret hand positions puts the minted templates, the repoints and the anchors
   in ONE undo node (`ChordFingeringFollowerTests`), and so does the AI chart
   pass's FHP-only mode (`AiChartApplier`, over the chords the model's anchors
   govern; `AiChartModeTests`). Generate FHP → save → reopen → delete the held

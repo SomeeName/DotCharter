@@ -1,4 +1,5 @@
 using DotCharter.Services.Package.DcSong;
+using DotCharter.Services.Audio.StemSeparation.Cache;
 using DotCharter.Tone.Infrastructure.Storage;
 
 namespace DotCharter.Tests.Services.Package.DcSong;
@@ -13,6 +14,76 @@ public sealed class DcSongExporterTests : IDisposable
     private readonly string _dir = Directory.CreateTempSubdirectory("dotcharter-dcsong-exporter-").FullName;
 
     public void Dispose() => BestEffortDelete.Directory(_dir);
+
+    [Theory]
+    [InlineData(@"\\?\")]
+    [InlineData(@"\\.\")]
+    public async Task TheAudioProbe_RefusesADeviceReferenceEvenWhenItsLocalFileExists(string prefix)
+    {
+        var audio = Write(Path.Combine(_dir, "elsewhere.wav"), 12);
+
+        var probe = await Exporter(encoder: true).ProbeAsync(
+            new DcSongProbeRequest(prefix + audio, "", []), TestContext.Current.CancellationToken);
+
+        Assert.False(probe.AudioExists);
+        Assert.Equal(0, probe.AudioBytes);
+    }
+
+    [Fact]
+    public async Task AnEmptyAudioReference_IsReportedAsMissing()
+    {
+        var probe = await Exporter(encoder: true).ProbeAsync(
+            new DcSongProbeRequest("", "", []), TestContext.Current.CancellationToken);
+
+        Assert.False(probe.AudioExists);
+        Assert.Equal(0, probe.AudioBytes);
+    }
+
+    [Fact]
+    public async Task ARelativeAudioReference_IsResolvedAtTheParentSongRoot()
+    {
+        Write(Path.Combine(_dir, "song.wav"), 17);
+        var chartFolder = Directory.CreateDirectory(Path.Combine(_dir, "lead")).FullName;
+
+        var probe = await Exporter(encoder: true).ProbeAsync(
+            new DcSongProbeRequest("song.wav", chartFolder, []), TestContext.Current.CancellationToken);
+
+        Assert.True(probe.AudioExists);
+        Assert.Equal(17, probe.AudioBytes);
+    }
+
+    [Fact]
+    public async Task Renamed_and_colliding_stems_keep_their_own_mixer_state_after_export_and_reopen()
+    {
+        var project = new ChartProject();
+        var song = DcSongTestKit.WriteWav(Path.Combine(_dir, "song.wav"), 48000, 2, 0.1);
+        project.Stems.Add(new Stem { Name = "Lead Guitar", Path = "lead.opus", Volume = 0.25, Offset = 123, Muted = true });
+        project.Stems.Add(new Stem { Name = "lead-guitar", Path = "other.opus", Volume = 0.75, Offset = -45, Solo = true });
+        foreach (var stem in project.Stems) Write(Path.Combine(_dir, stem.Path), 10);
+        var probe = await Exporter(encoder: true).ProbeAsync(new DcSongProbeRequest(song, _dir, project.Stems),
+            TestContext.Current.CancellationToken);
+        var encoder = new FfmpegStemEncoder(ffmpegResolver: () => "ffmpeg", runner: (_, args, _) =>
+        {
+            File.WriteAllText(args[^1], "encoded audio");
+            return Task.FromResult(true);
+        });
+        await new DcSongWriter(encoder).WriteAsync(new DcSongWriteRequest
+        {
+            Project = project, AudioPath = song, OutputPath = Path.Combine(_dir, "song.dcsong"),
+            Stems = probe.Stems.Select(s => new DcSongStemSource(s.Name, s.SourcePath, s.Original)).ToList()
+        }, cancellationToken: TestContext.Current.CancellationToken);
+
+        using var package = DcSongPackage.Open(Path.Combine(_dir, "song.dcsong"));
+        var loaded = package.LoadChart();
+        Assert.Equal(new[] { "lead-guitar", "lead-guitar-2" }, loaded.Stems.Select(s => s.Name));
+        Assert.Equal(new[] { 0.25, 0.75 }, loaded.Stems.Select(s => s.Volume));
+        Assert.Equal(new[] { 123.0, -45.0 }, loaded.Stems.Select(s => s.Offset));
+        Assert.Equal(new[] { true, false }, loaded.Stems.Select(s => s.Muted));
+        Assert.Equal(new[] { false, true }, loaded.Stems.Select(s => s.Solo));
+        Assert.Equal(new[] { "stems/lead-guitar.opus", "stems/lead-guitar-2.opus" }, loaded.Stems.Select(s => s.Path));
+        Assert.Equal(new[] { "Lead Guitar", "lead-guitar" }, project.Stems.Select(s => s.Name));
+        Assert.Equal(new[] { "lead.opus", "other.opus" }, project.Stems.Select(s => s.Path));
+    }
 
     [Fact]
     public async Task The_probe_offers_only_stems_on_disk_once_each_under_package_names()

@@ -2,6 +2,7 @@ using DotCharter.Localization;
 using DotCharter.Services.Audio.Coordination;
 using DotCharter.Services.Editing;
 using DotCharter.Services.Editing.Tempo;
+using DotCharter.Services.Export.Audio;
 using DotCharter.Services.Import.Audio;
 using DotCharter.Services.Infrastructure.Documents;
 using DotCharter.Services.Parsing.Rscp;
@@ -21,7 +22,13 @@ public sealed record NewProjectDetails(
     string JapaneseArtist,
     string JapaneseTitle,
     byte[]? CoverArtPng,
-    string? AudioFilePath);
+    string? AudioFilePath,
+    string ArtistSort = "",
+    string TitleSort = "",
+    string AlbumSort = "",
+    string DlcKey = "",
+    string Version = "1",
+    string Charter = "");
 
 /// <summary>
 ///     Creates the project the New project dialog described, once it has closed: asks
@@ -120,6 +127,7 @@ public sealed class NewProjectCreator(
             session.MarkProjectDirty();
 
             await session.LoadAudioFile(destAudioPath, false);
+            await MeasureVolumesAsync(project, destAudioPath, appConfig.ExportAutoVolumeTargetLufs);
             if (transport.Bpm <= 0) transport.Bpm = 120.0;
             tempo.GenerateInitialBeats(editor.Beats, state.TotalAudioLengthMs, transport.Bpm, leadingMs);
             editor.ExecuteSeek(leadingMs);
@@ -210,6 +218,20 @@ public sealed class NewProjectCreator(
         if (!string.IsNullOrWhiteSpace(details.AlbumYear)) project.Chart.AlbumYear = details.AlbumYear;
         if (!string.IsNullOrWhiteSpace(details.ReleaseDate)) project.Chart.ReleaseDate = details.ReleaseDate;
         if (!string.IsNullOrWhiteSpace(details.Genre)) project.Chart.Genre = details.Genre;
+        if (!string.IsNullOrWhiteSpace(details.ArtistSort)) project.Chart.ArtistSort = details.ArtistSort.Trim();
+        project.Chart.TitleSort = details.TitleSort.Trim();
+        project.Chart.AlbumSort = details.AlbumSort.Trim();
+        project.Chart.DlcKey = details.DlcKey.Trim();
+        if (!string.IsNullOrWhiteSpace(details.Version)) project.Chart.Version = details.Version.Trim();
+        if (!string.IsNullOrWhiteSpace(details.Charter)) project.Chart.Charter = details.Charter.Trim();
+    }
+
+    /// <summary>The song's export volumes, measured from its own audio. A failure leaves them unset.</summary>
+    private async Task MeasureVolumesAsync(ChartProject project, string audioPath, int targetLufs)
+    {
+        var chart = project.Chart;
+        await Task.Run(() => ProjectVolumes.Measure(chart, audioPath, null, null,
+            warning => logger.Warning(AppLogCategory.Project, warning), targetLufs));
     }
 
     /// <summary>Writes the cover as <c>cover.png</c>; best-effort, a failure never aborts the creation.</summary>
@@ -225,14 +247,11 @@ public sealed class NewProjectCreator(
         }
         catch (Exception ex)
         {
-            logger.Warning(AppLogCategory.Project, $"Failed to write cover art to project folder. {ex.Message}");
+            logger.Warning(AppLogCategory.Project, "Failed to write cover art to project folder.", ex);
         }
     }
 
+    // No trim: the replacement policy alone, so a name keeps its exact spelling.
     private static string FolderName(NewProjectDetails details)
-    {
-        var folderName = $"{details.Artist} - {details.Title}";
-        foreach (var c in Path.GetInvalidFileNameChars()) folderName = folderName.Replace(c, '_');
-        return folderName;
-    }
+        => SafeFileName.ReplaceInvalid($"{details.Artist} - {details.Title}");
 }

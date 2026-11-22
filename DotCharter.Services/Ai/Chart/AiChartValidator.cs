@@ -26,7 +26,7 @@ namespace DotCharter.Services.Ai.Chart;
 public static class AiChartValidator
 {
     /// <summary>The highest fret an anchor may sit on (the rules' own limit).</summary>
-    public const int MaxFret = 24;
+    public const int MaxFret = FretLimits.MaxFret;
 
     /// <summary>The widest anchor accepted. Rocksmith charts use 4–6; anything past this
     /// is a misunderstanding, not a hand position.</summary>
@@ -187,9 +187,23 @@ public static class AiChartValidator
             : level.Anchors.Where(a => chunk.Contains(a.Position)).OrderBy(a => a.Position)
                 .Select(a => new AiAnchorPlacement(a.Position, a.Fret, a.Width)).ToList();
         plan = new AiChartChunkPlan(chunk.Index, chunk.Start, chunk.End, anchors, changes,
-            FingersFollowAnchors: job == AiChartJob.FhpOnly, Guards: guards, SeenAnchors: shown);
+            NotesShown(job, level, chunk), FingersFollowAnchors: job == AiChartJob.FhpOnly, Guards: guards, SeenAnchors: shown);
         return true;
     }
+
+    /// <summary>The single notes inside <paramref name="chunk" />, in the order the apply re-reads them.</summary>
+    /// <param name="level">The level the plan is made over.</param>
+    /// <param name="chunk">The chunk.</param>
+    public static List<AiNoteGuard> SeenNotes(ChartLevel level, AiChartChunk chunk) =>
+        [.. level.Notes.Where(n => chunk.Contains(n.Position)).OrderBy(n => n.Position).ThenBy(n => n.StringIndex)
+            .Select(n => new AiNoteGuard(n.Position, n.StringIndex, n.Fret))];
+
+    /// <summary>
+    ///     The single notes a hand-position job fitted its anchors to: a note re-fretted while
+    ///     the proposal waited for review makes it stale too. Null for the other jobs.
+    /// </summary>
+    private static List<AiNoteGuard>? NotesShown(AiChartJob job, ChartLevel level, AiChartChunk chunk) =>
+        job.ProposesAnchors() ? SeenNotes(level, chunk) : null;
 
     /// <summary>The fret signature an <see cref="AiChordChange" /> is re-checked against.</summary>
     /// <param name="template">The template.</param>

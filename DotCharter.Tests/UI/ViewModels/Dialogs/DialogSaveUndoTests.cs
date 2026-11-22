@@ -69,7 +69,7 @@ public sealed class DialogSaveUndoTests
         h.Project.Chart.Genre = "Rock";
         h.Project.Chart.KeyAccidentals = 2;
 
-        var vm = new SongMetadataViewModel(h.State, h.History, FakeLocalization.English(), h.Logger)
+        var vm = new SongMetadataViewModel(h.State, h.History, FakeLocalization.English(), h.Logger, new InertNewProjectSources(), new DotCharter.Tests.Infrastructure.FakeSongKeyAudioEstimator())
         {
             Artist = "New Artist",
             SongName = "New Song",
@@ -98,7 +98,7 @@ public sealed class DialogSaveUndoTests
     public void SongMetadataSave_WithNothingChanged_RecordsNothing()
     {
         var h = new Harness();
-        var vm = new SongMetadataViewModel(h.State, h.History, FakeLocalization.English(), h.Logger);
+        var vm = new SongMetadataViewModel(h.State, h.History, FakeLocalization.English(), h.Logger, new InertNewProjectSources(), new DotCharter.Tests.Infrastructure.FakeSongKeyAudioEstimator());
         vm.SaveCommand.Execute(null);
 
         Assert.False(h.History.CanUndo, "an unchanged Save grew the undo tree");
@@ -108,7 +108,8 @@ public sealed class DialogSaveUndoTests
 
     private static ArrangementSettingsViewModel NewArrangementSettings(Harness h) =>
         new(new ChartEditDialogServices(h.Editor, h.History, h.State, new FakeConfigurationService(),
-            FakeLocalization.English(), h.Logger));
+            FakeLocalization.English(), h.Logger),
+            new DotCharter.Tests.Infrastructure.FakeReferencePitchService());
 
     [Fact]
     public void ArrangementSave_UndoRestoresTheArrangementInPlace()

@@ -27,8 +27,8 @@ namespace DotCharter.UI.ViewModels.Panels;
 //
 // Loading projects existing BendValues back onto the slot grid by the same
 // rule: the relative offset of each value's position between start and end
-// is mapped to the nearest slot. Duplicate slots (multiple values landing
-// on the same slot after rounding) keep the latest Step seen.
+// is mapped to the nearest slot. A value landing on the slot before it moves
+// one slot on; only when none is left do the two collapse (latest Step wins).
 //
 // The preset buttons seed the same control-point set a Guitar Pro user would
 // get by clicking those presets.
@@ -54,6 +54,7 @@ public sealed partial class BendEditorViewModel : ObservableObject
     private readonly Action _commit;
     private readonly Func<FractionalPosition> _getEndPosition;
     private readonly Func<FractionalPosition> _getStartPosition;
+    private readonly ILocalizationService _localization;
     private readonly Func<IReadOnlyList<BendValue>> _read;
     private readonly Action<IReadOnlyList<BendValue>> _write;
 
@@ -78,13 +79,15 @@ public sealed partial class BendEditorViewModel : ObservableObject
         Action<IReadOnlyList<BendValue>> write,
         Func<FractionalPosition> getStartPosition,
         Func<FractionalPosition> getEndPosition,
-        Action commit)
+        Action commit,
+        ILocalizationService localization)
     {
         _read = read;
         _write = write;
         _getStartPosition = getStartPosition;
         _getEndPosition = getEndPosition;
         _commit = commit;
+        _localization = localization;
 
         ReloadFromDomain();
     }
@@ -136,9 +139,12 @@ public sealed partial class BendEditorViewModel : ObservableObject
     }
 
     // Project existing BendValues onto our slot grid using the relative
-    // offset of each value's position between start and end. Duplicate
-    // slots (after rounding) collapse to the latest value seen, which
-    // preserves the bend's shape when it was authored in-editor.
+    // offset of each value's position between start and end, in time order.
+    // A value that rounds onto the slot of the value before it moves one slot
+    // on, so a quick bend (Full within the first 1/24 of a long note) keeps
+    // both its start and its peak instead of the peak overwriting the start
+    // and reading as a prebend. Only when no slot is left (or the pitch is the
+    // same) do the two collapse, the later one winning.
     private IEnumerable<ControlPoint> ProjectBendValuesToPoints(IReadOnlyList<BendValue> values)
     {
         if (values.Count == 0) yield break;
@@ -147,31 +153,26 @@ public sealed partial class BendEditorViewModel : ObservableObject
         var end = _getEndPosition();
         var span = end.DoubleValue - start.DoubleValue;
 
-        var seenSlots = new HashSet<int>();
-        var ordered = values
-            .Select(v =>
-            {
-                double t;
-                if (span <= 0) t = 0;
-                else t = (v.Position.DoubleValue - start.DoubleValue) / span;
-
-                var slot = (int)Math.Round(Math.Clamp(t, 0.0, 1.0) * TimeSlotCount);
-                return (slot, step: Math.Clamp(v.Step, 0.0, MaxStep));
-            })
-            .ToList();
-
-        // Walk in reverse so "latest wins" when two source values collapse
-        // into the same slot, then reverse the result to keep left-to-right
-        // order.
-        var result = new List<ControlPoint>(ordered.Count);
-        for (var i = ordered.Count - 1; i >= 0; i--)
+        var result = new List<ControlPoint>(values.Count);
+        foreach (var v in values.OrderBy(v => v.Position))
         {
-            var (slot, step) = ordered[i];
-            if (seenSlots.Add(slot)) result.Add(new ControlPoint(slot, step));
-        }
+            var t = span <= 0 ? 0 : (v.Position.DoubleValue - start.DoubleValue) / span;
+            var slot = (int)Math.Round(Math.Clamp(t, 0.0, 1.0) * TimeSlotCount);
+            var step = Math.Clamp(v.Step, 0.0, MaxStep);
+            if (result.Count > 0 && slot <= result[^1].TimeSlot)
+            {
+                var last = result[^1];
+                if (Math.Abs(last.Step - step) <= 1e-9 || last.TimeSlot >= TimeSlotCount)
+                {
+                    last.Step = step;
+                    continue;
+                }
 
-        result.Reverse();
-        result.Sort((a, b) => a.TimeSlot.CompareTo(b.TimeSlot));
+                slot = last.TimeSlot + 1;
+            }
+
+            result.Add(new ControlPoint(slot, step));
+        }
 
         foreach (var p in result) yield return p;
     }
@@ -245,36 +246,45 @@ public sealed partial class BendEditorViewModel : ObservableObject
 
     public void ClearSelection() => SelectedPoint = null;
 
-    // Human-readable label for a step value. Domain Step is in semitones
-    // (1.0 = half-step = ½ tone, 2.0 = full tone, 3.0 = 1½ tones) so we
-    // display it as tones to match the timeline's bend annotations.
-    public static string StepLabel(double step)
+    // --- Keyboard traversal and creation (BendEditorKeys drives these) ---
+
+    /// <summary>Selects the first (<paramref name="last" /> false) or last point; false when there is none.</summary>
+    public bool SelectEnd(bool last)
     {
-        // Quantize to eighth-steps in semitones (= sixteenth-tones, finest grid).
-        var q = Math.Round(step * 8) / 8.0;
-        if (Math.Abs(q - 0.0) < 1e-6) return "0";
-        if (Math.Abs(q - 0.25) < 1e-6) return "⅛";
-        if (Math.Abs(q - 0.5) < 1e-6) return "¼";
-        if (Math.Abs(q - 0.75) < 1e-6) return "⅜";
-        if (Math.Abs(q - 1.0) < 1e-6) return "½";
-        if (Math.Abs(q - 1.25) < 1e-6) return "⅝";
-        if (Math.Abs(q - 1.5) < 1e-6) return "¾";
-        if (Math.Abs(q - 1.75) < 1e-6) return "⅞";
-        if (Math.Abs(q - 2.0) < 1e-6) return "Full";
-        if (Math.Abs(q - 2.25) < 1e-6) return "1⅛";
-        if (Math.Abs(q - 2.5) < 1e-6) return "1¼";
-        if (Math.Abs(q - 2.75) < 1e-6) return "1⅜";
-        if (Math.Abs(q - 3.0) < 1e-6) return "1½";
-        if (Math.Abs(q - 3.25) < 1e-6) return "1⅝";
-        if (Math.Abs(q - 3.5) < 1e-6) return "1¾";
-        if (Math.Abs(q - 3.75) < 1e-6) return "1⅞";
-        if (Math.Abs(q - 4.0) < 1e-6) return "2";
-        if (Math.Abs(q - 4.5) < 1e-6) return "2¼";
-        if (Math.Abs(q - 5.0) < 1e-6) return "2½";
-        if (Math.Abs(q - 5.5) < 1e-6) return "2¾";
-        if (Math.Abs(q - 6.0) < 1e-6) return "3";
-        // Fractional fallback in tones.
-        return (step / 2.0).ToString("0.##");
+        if (Points.Count == 0) return false;
+        SelectedPoint = last ? Points[^1] : Points[0];
+        return true;
+    }
+
+    /// <summary>
+    ///     Moves the selection to the next point (<paramref name="direction" /> +1) or the previous
+    ///     one (-1) along the time axis; with nothing selected it picks the first or the last point.
+    ///     False when there is no point to move to.
+    /// </summary>
+    public bool SelectAdjacent(int direction)
+    {
+        if (SelectedPoint is not { } current) return SelectEnd(direction < 0);
+        var index = Points.IndexOf(current) + Math.Sign(direction);
+        if (index < 0 || index >= Points.Count) return false;
+        SelectedPoint = Points[index];
+        return true;
+    }
+
+    /// <summary>
+    ///     Adds a point in the first free slot after the selected one (or from slot 0 when nothing
+    ///     is selected), at the selected point's step, and selects it. Null when every slot after it
+    ///     is taken.
+    /// </summary>
+    public ControlPoint? InsertPointAfterSelection()
+    {
+        var from = SelectedPoint is { } current ? current.TimeSlot + 1 : 0;
+        var step = SelectedPoint?.Step ?? 0.0;
+        for (var slot = from; slot <= TimeSlotCount; slot++)
+        {
+            if (Points.All(p => p.TimeSlot != slot)) return AddOrMovePoint(slot, step);
+        }
+
+        return null;
     }
 
     [RelayCommand]
@@ -424,7 +434,31 @@ public sealed partial class BendEditorViewModel : ObservableObject
         RefreshActivePreset();
     }
 
-    private void RefreshActivePreset() => ActivePreset = DetectPreset(Points);
+    private void RefreshActivePreset()
+    {
+        ActivePreset = DetectPreset(Points);
+        OnPropertyChanged(nameof(PointReadout));
+    }
+
+    partial void OnSelectedPointChanged(ControlPoint? value) => OnPropertyChanged(nameof(PointReadout));
+
+    /// <summary>The Bends page's line under the plot: the selected point ("Point 2 of 3: 5/12, +2 st"), else how many
+    /// points the curve has, or how to start one.</summary>
+    public string PointReadout => SelectedPoint is { } point && Points.IndexOf(point) is var index and >= 0
+        ? _localization.Format("Inspector_Bends_PointReadout", index + 1, Points.Count, point.TimeSlot, TimeSlotCount,
+            point.Step.ToString("0.##", System.Globalization.CultureInfo.CurrentCulture))
+        : Points.Count == 0
+            ? _localization["Inspector_Bends_NoPoints"]
+            : _localization.Format("Inspector_Bends_PointCount", Points.Count);
+
+    /// <summary>
+    ///     Where the graph's flat HOLD line starts: the last point, when it stops before the sustain's end, so the
+    ///     held rest of the note shows as Guitar Pro draws it; null without points or when the curve already reaches the
+    ///     end. Display only — no point is stored for the hold.
+    /// </summary>
+    public ControlPoint? HoldFrom => Points.Count > 0 && Points.MaxBy(p => p.TimeSlot) is { TimeSlot: < TimeSlotCount } last
+        ? last
+        : null;
 
     private static BendPreset DetectPreset(IReadOnlyList<ControlPoint> pts)
     {

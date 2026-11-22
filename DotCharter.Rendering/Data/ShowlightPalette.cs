@@ -67,12 +67,5 @@ public static class ShowlightPalette
         _ => FogColor(note)
     };
 
-    /// <summary>The BEAMS_OFF tip: the fog colour lifted 45 % toward white, the
-    /// same hue, so a beams-off sky reads as one colour.</summary>
-    public static Color LighterShade(Color c) => Color.FromArgb(255,
-        (byte)(c.R + (255 - c.R) * 0.45f),
-        (byte)(c.G + (255 - c.G) * 0.45f),
-        (byte)(c.B + (255 - c.B) * 0.45f));
-
     private static Color Rgb(byte r, byte g, byte b) => Color.FromArgb(255, r, g, b);
 }

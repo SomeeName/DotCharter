@@ -28,7 +28,12 @@ public partial class MessageDialogViewModel : ObservableObject, IDialogViewModel
     /// <summary>Test seam: how long a second message waits behind a first one
     /// that is never dismissed before it displaces it.</summary>
     internal MessageDialogViewModel(TimeSpan stuckDialogTimeout)
-        => _queue = new DialogTurnstile(stuckDialogTimeout);
+        : this(stuckDialogTimeout, TimeProvider.System)
+    {
+    }
+
+    internal MessageDialogViewModel(TimeSpan stuckDialogTimeout, TimeProvider time)
+        => _queue = new DialogTurnstile(stuckDialogTimeout, time);
 
     /// <summary>How many stuck dialogs have been displaced so a later message
     /// could show. Diagnostic; non-zero means a dialog opened with no view to

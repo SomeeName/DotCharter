@@ -36,6 +36,36 @@ public sealed class RsToneKnobSpaceTests
     }
 
     [Fact]
+    public void Two_instances_of_one_pedal_are_two_axes_each_decoded_onto_its_own_slot()
+    {
+        var catalog = RsGearCatalog.Shared;
+        var pedal = RsToneAuthoring.GearOptions(catalog, RsGearType.Pedal).First(g => g.Knobs?.Any(Continuous) == true);
+        var knob = pedal.Knobs!.First(Continuous);
+        var lo = Math.Min(knob.MinValue, knob.MaxValue);
+        var hi = Math.Max(knob.MinValue, knob.MaxValue);
+        RsPedal Slot(int slot, float value) => new(RsGearRole.PrePedal, slot, pedal.Key, RsGearType.Pedal, pedal.Category,
+            pedal.Knobs!.ToDictionary(k => k.Key, k => k.Key == knob.Key ? value : k.DefaultValue, StringComparer.Ordinal));
+        var tone = MakeTone(AmpA, 40) with { PrePedals = [Slot(1, lo), Slot(2, hi)] };
+        var space = RsToneKnobSpace.Of(tone, catalog);
+
+        var axes = space.Keys.Select((key, i) => (key, i)).Where(x => x.key == knob.Key).Select(x => x.i).ToArray();
+        Assert.Equal(2, axes.Length);
+        var encoded = space.Encode(tone);
+        Assert.Equal(0.0, encoded[axes[0]], 6);
+        Assert.Equal(1.0, encoded[axes[1]], 6);
+
+        var point = encoded.ToArray();
+        point[axes[0]] = 1.0;
+        point[axes[1]] = 0.0;
+        var decoded = space.Decode(tone, point);
+
+        Assert.Equal(lo, decoded.PrePedals[1].KnobValues[knob.Key]);
+        Assert.True(decoded.PrePedals[0].KnobValues[knob.Key] > lo);
+    }
+
+    private static bool Continuous(RsGearKnob knob) => knob.UnitType != RsKnobUnit.Enum && knob.MaxValue != knob.MinValue;
+
+    [Fact]
     public void A_point_of_the_wrong_length_is_refused()
     {
         var tone = MakeTone(AmpA, 40);

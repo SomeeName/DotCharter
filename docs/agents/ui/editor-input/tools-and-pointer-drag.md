@@ -14,9 +14,24 @@ disposal is load-bearing, not hygiene. `UI/Input/EditorToolLifetimeTests`
 pins the registration lifetime, the per-call resolution, the manager's
 disposal and the actual unsubscription (counting fake).
 
+Tool gestures capture the renderer just like middle-button pans (#531). An exit
+while capture is held keeps the gesture alive; release commits normally. Capture
+loss and manager disposal share `EndToolGesture`, which calls
+`ToolCoordinator.CancelGesture`: each tool cancels through `IEditorTool.Cancel`,
+drops its previews (including marquee / drawn hand shape), rolls back live beat
+and lyric edits, clears routing state and closes the history gesture. The manager
+balances its continuous-render pin exactly once. Pinned by
+`Perf/TimelineMiddlePanUiPerfSmokeTests`.
+
 ## What a POINTER DRAG owes the chart
 
-Four rules, all found broken on 2026-09-05 and each pinned in the default gate.
+`BeatDragGesture` captures beat identities as well as values. An insert, remove,
+replacement or reorder invalidates that snapshot before the next move, commit or
+cancel. The structural edit owns the current grid, including any drag preview it
+captured; the stale drag must neither restore values by index nor push history
+(`BeatDragStructureTests`).
+
+The original four rules were found broken on 2026-09-05 and pinned in the default gate.
 They apply to every drag on the timeline, not just the one you are editing.
 
 - **A click is not a drag, and the three EVENT-ribbon gestures did not know
@@ -52,7 +67,32 @@ They apply to every drag on the timeline, not just the one you are editing.
   release; `HighwayInteractionTool` and `FretAnchorInteractionTool` did not, and
   both do now (the FHP tool's preview build is ONE `RefreshDragPreviews` the move
   and the release share). Same fault the minimap drag had.
-  (`DragEndsAtTheReleaseTests`.)
+  The coordinator delivers one final move from the RELEASE coordinates, with
+  the gesture's held-button properties, before releasing any tool. This covers
+  beat, lyric and event drags, ruler scrubbing, highway drags and marquee,
+  FHP drags and hand-shape moving/drawing. An unchanged final position delivers
+  no additional move or seek. It never replays a queued, older sample.
+  (`DragEndsAtTheReleaseTests`, `TimelineInputRoutingUiPerfSmokeTests`.)
+- **A tone change drags on the Tone row (#881).** A left press selects it
+  (Ctrl/Shift add), then `EventInteractionGestures/ToneChangeDragGesture` moves it
+  and every selected tone change rigidly, grid-snapped, behind the same
+  `GestureDragThreshold`. The rules live in the pure
+  `Services/Editing/Tones/ToneChangeDrag` and are `ToneChangeNudge`'s: the start
+  is clamped at zero (the delta shortens for the set); a drop that would stack
+  on a change that stays (exact or within `ValidationTimeMatch` slop) or pass it
+  is REFUSED, so the set stops at the last legal delta. The release pushes ONE
+  undo step (`MoveToneChangeAction`, a `CompositeAction` for several);
+  double-click still opens the event dialog, right-click still deletes.
+  (`ToneChangeDragTests`.)
+- **Esc cancels any held tool gesture.** `TimelineInteractionManager` hooks a
+  tunnel Esc on the top level while a tool holds the pointer and ends the
+  gesture as a capture loss does (`CancelGesture`: live tone, beat and lyric
+  edits roll back, nothing commits on the later release).
+- **A highway drag moves the whole selected payload.** The winning hit anchors
+  the delta; a neighbouring near-miss note must not preserve an unrelated
+  selection when a chord wins. Notes and chords both get previews and both are
+  passed to the release commit, even when only one class was clicked. Otherwise
+  a chord can be removed with no replacement. (`HighwayDragSelectionTests`.)
 - **Switching arrangement or level DROPS the content selection.** Every
   `TrackEditorContext` shares the app-wide `ISelectionService`, and only a
   project swap, a snapshot restore and a vocal-phrase replacement ever cleared
@@ -65,6 +105,10 @@ They apply to every drag on the timeline, not just the one you are editing.
   re-raises after a rename without changing anything, and a rename must not cost
   the charter their selection. `InspectorIssuesViewModel.JumpToIssue` is safe because it
   switches the level FIRST and selects afterwards; keep that order.
+  This includes `TrackContextRegistry.Focus` on a stacked row without changing
+  `ActiveArrangement`: selection, hover and previews are cleared before
+  `FocusedTrackChanged` is published. Ownership follows the focused context's
+  arrangement and level, and re-focusing the same context preserves selection.
   (`UI/TrackSwitchSelectionTests`.)
 
 ## Where the detail lives

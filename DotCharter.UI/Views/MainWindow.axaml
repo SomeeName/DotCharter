@@ -409,12 +409,11 @@
                                                           DataContext="{Binding ShellDialogs.AiChart.Review}"
                                                           HorizontalAlignment="Right" VerticalAlignment="Top"
                                                           Margin="{StaticResource PaddingCardSm}" />
-                            <!-- Chart from audio's merge card (#647): the same corner, the same
-                                 non-modal contract; a draft is decided phrase by phrase. -->
-                            <shellViews:DraftMergeReviewView x:Name="DraftMergeOverlay"
-                                                             DataContext="{Binding ShellDialogs.DraftMerge}"
-                                                             HorizontalAlignment="Right" VerticalAlignment="Top"
-                                                             Margin="{StaticResource PaddingCardSm}" />
+                            <!-- The in-place fret-hand position and section editors (#498): cards
+                                 on the timeline's own rows, hung at a song time through the view anchor. -->
+                            <editorViews:InlineEditOverlayView x:Name="InlineEditOverlay"
+                                                               DataContext="{Binding ShellDialogs.InlineEdit}"
+                                                               Renderer="{Binding #MainChartRenderer}" />
                                 </Panel>
                             </Grid>
                         </DockPanel>

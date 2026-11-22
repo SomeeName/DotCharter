@@ -10,10 +10,10 @@
          the bright curve; the other stays faint behind it. A host with no offline
          renderer prints why instead of a dead button. -->
     <StackPanel Spacing="{StaticResource FireSpaceSm}">
-        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+        <WrapPanel ItemSpacing="{StaticResource FireSpaceSm}" LineSpacing="{StaticResource FireSpaceSm}">
             <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
                        Text="{localization:Loc Rig_Spectrum}" />
-            <Border Grid.Column="1" Theme="{StaticResource FireModeStripBorder}" Classes="FireModeStrip">
+            <Border Theme="{StaticResource FireModeStripBorder}" Classes="FireModeStrip">
                 <StackPanel Orientation="Horizontal">
                     <ToggleButton Theme="{StaticResource FireModeToggle}" Classes="FireModeButton" x:Name="RigSpectrumPre"
                                   IsChecked="{Binding IsPre, Mode=OneWay}" Command="{Binding SelectTapCommand}" CommandParameter="Pre"
@@ -27,10 +27,10 @@
                     </ToggleButton>
                 </StackPanel>
             </Border>
-            <Button Grid.Column="2" Theme="{StaticResource FireOutlineButton}" Classes="FireOutlineButton" x:Name="RigSpectrumMeasure"
+            <Button Theme="{StaticResource FireOutlineButton}" Classes="FireOutlineButton" x:Name="RigSpectrumMeasure"
                     Command="{Binding MeasureCommand}" Content="{localization:Loc Rig_SpectrumMeasure}"
                     ToolTip.Tip="{localization:Loc Rig_SpectrumMeasure_Tip}" />
-        </Grid>
+        </WrapPanel>
         <fire:RigSpectrumPlot x:Name="RigSpectrumPlot" Height="72"
                               Bands="{Binding Bands}" ReferenceBands="{Binding ReferenceBands}" />
         <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" TextWrapping="Wrap"

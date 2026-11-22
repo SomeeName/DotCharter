@@ -55,7 +55,7 @@ public sealed class SearchCoalescingTests
         catalog.Store.Add(Entry("verse-lick", "Verse lick"));
         catalog.Store.Add(Entry("chorus-stab", "Chorus stab"));
         var queue = new List<Action>();
-        var vm = new PhraseCatalogViewModel(catalog, null!, null!, null!, null!, FakeLocalization.English(), queue.Add);
+        var vm = new PhraseCatalogViewModel(catalog, null!, null!, null!, new ProjectState(), FakeLocalization.English(), queue.Add);
         vm.EnsureLoaded();
 
         vm.SearchText = "c";

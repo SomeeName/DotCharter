@@ -134,7 +134,7 @@ public sealed class PhraseCatalogService : IPhraseCatalogService
             catch (Exception ex)
             {
                 _logger?.Warning(AppLogCategory.Editing,
-                    $"Phrase catalog: could not write '{path}': {ex.Message}");
+                    $"Phrase catalog: could not write '{path}'", ex);
                 return null;
             }
 
@@ -188,7 +188,7 @@ public sealed class PhraseCatalogService : IPhraseCatalogService
             catch (Exception ex)
             {
                 _logger?.Warning(AppLogCategory.Editing,
-                    $"Phrase catalog: could not rename '{entry.Id}': {ex.Message}");
+                    $"Phrase catalog: could not rename '{entry.Id}'", ex);
                 return false;
             }
 
@@ -223,7 +223,7 @@ public sealed class PhraseCatalogService : IPhraseCatalogService
             catch (Exception ex)
             {
                 _logger?.Warning(AppLogCategory.Editing,
-                    $"Phrase catalog: could not delete '{path}': {ex.Message}");
+                    $"Phrase catalog: could not delete '{path}'", ex);
                 return false;
             }
 
@@ -256,7 +256,7 @@ public sealed class PhraseCatalogService : IPhraseCatalogService
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Editing,
-                $"Phrase catalog: could not read '{_directory}': {ex.Message}");
+                $"Phrase catalog: could not read '{_directory}'", ex);
             return entries;
         }
 
@@ -282,7 +282,7 @@ public sealed class PhraseCatalogService : IPhraseCatalogService
             catch (Exception ex)
             {
                 _logger?.Warning(AppLogCategory.Editing,
-                    $"Phrase catalog: '{file}' is unreadable and was skipped: {ex.Message}");
+                    $"Phrase catalog: '{file}' is unreadable and was skipped", ex);
             }
         }
 

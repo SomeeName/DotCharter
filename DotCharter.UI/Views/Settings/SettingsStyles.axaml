@@ -21,8 +21,9 @@
              overrode setter for setter; only these tabs wear them, so each is now
              ONE theme here with the look the tabs had. `SettingDescText` is based on
              `MonoText` for the one `SettingDesc Mono` row. A theme ranks BELOW
-             every style, so the tab-local rules (`Border.Intro TextBlock.GroupTitle`,
-             `ItemsControl.KeybindRows Grid.FormRow`, …) still win, as they did.
+             every style, so the tab-local rules (`ItemsControl.KeybindRows Grid.FormRow`, …)
+             still win, as they did; the Keybinds intro title wears the derived
+             theme `KeybindsIntroTitleText`.
              UI/StyleIncludeScopeTests. -->
         <ControlTheme x:Key="SettingsGroupBorder" TargetType="Border">
             <!-- ─── The section ──────────────────────────────────────────────────

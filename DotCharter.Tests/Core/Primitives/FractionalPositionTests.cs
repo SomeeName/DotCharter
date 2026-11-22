@@ -2,6 +2,37 @@ namespace DotCharter.Tests.Core.Primitives;
 
 public class FractionalPositionTests
 {
+    [Theory]
+    [InlineData("2147483647 1/1")]
+    [InlineData("2147483647 2147483647/1")]
+    [InlineData("-2147483648 -1/2")]
+    [InlineData("-2147483648 -2147483648/1")]
+    public void TryParse_WholeBeatCarryOutsideIntRange_IsRejected(string text)
+    {
+        Assert.False(FractionalPosition.TryParse(text, out var result));
+        Assert.Equal(FractionalPosition.Zero, result);
+        Assert.Throws<FormatException>(() => FractionalPosition.Parse(text));
+    }
+
+    [Theory]
+    [InlineData(int.MaxValue, 1, 1)]
+    [InlineData(int.MinValue, -1, 2)]
+    public void Constructor_WholeBeatCarryOutsideIntRange_Throws(int beatId, int numerator, int denominator)
+        => Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new FractionalPosition(beatId, new Fraction(numerator, denominator)));
+
+    [Theory]
+    [InlineData("2147483647 0/1", int.MaxValue)]
+    [InlineData("2147483646 1/1", int.MaxValue)]
+    [InlineData("-2147483648 0/1", int.MinValue)]
+    [InlineData("-2147483647 -1/1", int.MinValue)]
+    public void TryParse_RepresentableBoundaryCarry_IsAccepted(string text, int expectedBeat)
+    {
+        Assert.True(FractionalPosition.TryParse(text, out var result));
+        Assert.Equal(expectedBeat, result.BeatId);
+        Assert.Equal(Fraction.Zero, result.Fraction);
+    }
+
     [Fact]
     public void Constructor_NormalizesOverflowFraction()
     {

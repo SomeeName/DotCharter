@@ -57,7 +57,7 @@ public sealed class ArrangementTuningAuthoringTests
 
             _services = new ChartEditDialogServices(editor, history, State, config, FakeLocalization.English(),
                 logger);
-            ViewModel = new ArrangementSettingsViewModel(_services);
+            ViewModel = new ArrangementSettingsViewModel(_services, new DotCharter.Tests.Infrastructure.FakeReferencePitchService());
         }
 
         private readonly ChartEditDialogServices _services;
@@ -65,7 +65,7 @@ public sealed class ArrangementTuningAuthoringTests
         /// <summary>One instance per open, as on the dialog host.</summary>
         public void Open()
         {
-            ViewModel = new ArrangementSettingsViewModel(_services);
+            ViewModel = new ArrangementSettingsViewModel(_services, new DotCharter.Tests.Infrastructure.FakeReferencePitchService());
             ViewModel.Configure(new ArrangementSettingsRequest());
         }
 

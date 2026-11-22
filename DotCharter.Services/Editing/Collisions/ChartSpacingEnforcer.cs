@@ -1,5 +1,4 @@
 using DotCharter.Core.Linking;
-using DotCharter.Services.State;
 
 namespace DotCharter.Services.Editing.Collisions;
 
@@ -21,8 +20,6 @@ public static class ChartSpacingEnforcer
             EnforceArrangement(arrangement, project.Beats, config);
     }
 
-    public static void EnforceActiveLevel(ProjectState projectState, AppConfig config) => EnforceLevel(projectState.ActiveLevel, projectState.Beats, config);
-
     public static void EnforceLevel(ChartLevel? level, IList<BeatMarker> beats, AppConfig config)
     {
         if (level == null) return;
@@ -33,6 +30,7 @@ public static class ChartSpacingEnforcer
     {
         if (arrangement == null) return;
 
+        BeatSpacingSnapshot.Current?.Capture(arrangement);
         NormalizeArrangementMetadata(arrangement);
         foreach (var level in arrangement.Levels)
             EnforceLevel(level, arrangement, beats, config, true);
@@ -265,7 +263,7 @@ public static class ChartSpacingEnforcer
     ///         ALSO user-authorable (the inspector chip, the highway toggle), so
     ///         an unconditional re-derivation on every save silently discarded
     ///         that intent. <c>IgnoreDerived</c> is the discriminator: we set
-    ///         both when the structural reason holds, clear both when a reason
+    ///         both when introducing Ignore for a structural reason, clear both when a reason
     ///         WE recorded has gone, and never touch a flag the user set.
     ///     </para>
     ///     <para>
@@ -282,7 +280,8 @@ public static class ChartSpacingEnforcer
     {
         if (required)
         {
-            if (!sound.Ignore) sound.Ignore = true;
+            if (sound.Ignore) return;
+            sound.Ignore = true;
             sound.IgnoreDerived = true;
             return;
         }
@@ -298,7 +297,8 @@ public static class ChartSpacingEnforcer
     {
         if (required)
         {
-            if (!sound.Ignore) sound.Ignore = true;
+            if (sound.Ignore) return;
+            sound.Ignore = true;
             sound.IgnoreDerived = true;
             return;
         }
@@ -384,7 +384,7 @@ public static class ChartSpacingEnforcer
             foreach (var mutedNote in mutedNotes)
                 chord.ChordNotes.Remove(mutedNote);
 
-            var template = FindTemplate(arrangement, chord.TemplateId);
+            var template = arrangement.FindChordTemplate(chord.TemplateId);
             if (template == null) continue;
 
             var reduced = FindOrCreateReducedTemplate(arrangement, template,
@@ -513,7 +513,7 @@ public static class ChartSpacingEnforcer
 
     /// <summary>
     ///     Returns the index of the sound nearest to <paramref name="timeMs"/> with
-    ///     0 &lt; distance &lt;= <see cref="AnchorSnapToleranceMs"/>, or -1. Ties between
+    ///     0 &lt;= distance &lt;= <see cref="AnchorSnapToleranceMs"/>, or -1. Ties between
     ///     an earlier and a later sound resolve to the earlier one, matching the
     ///     stable ordering of the previous LINQ implementation.
     /// </summary>
@@ -528,13 +528,15 @@ public static class ChartSpacingEnforcer
             else hi = mid;
         }
 
-        // lo = first index with TimeMs >= timeMs. Candidates: the run of equal
-        // times below, and the first strictly-greater / equal time at lo.
+        // An anchor already on a sound must stay there, even when another sound
+        // is inside the tolerance; otherwise every enforce swaps its target.
+        if (lo < sortedSounds.Count && sortedSounds[lo].TimeMs == timeMs) return lo;
+
+        // lo = first index with TimeMs > timeMs after ruling out exact matches.
         var bestIndex = -1;
         var bestDistance = double.MaxValue;
 
-        // Below candidate: last sound strictly earlier than timeMs. Skip any
-        // exact matches (distance 0 is excluded by the original predicate).
+        // Below candidate: last sound strictly earlier than timeMs.
         var below = lo - 1;
         if (below >= 0)
         {
@@ -550,10 +552,8 @@ public static class ChartSpacingEnforcer
             }
         }
 
-        // Above candidate: first sound at/after timeMs; skip exact matches.
+        // Above candidate: first sound strictly after timeMs.
         var above = lo;
-        while (above < sortedSounds.Count && sortedSounds[above].TimeMs == timeMs)
-            above++;
         if (above < sortedSounds.Count)
         {
             var distance = sortedSounds[above].TimeMs - timeMs;
@@ -627,43 +627,6 @@ public static class ChartSpacingEnforcer
 
         foreach (var anchor in anchorsToRemove)
             level.Anchors.Remove(anchor);
-    }
-
-    /// <summary>
-    ///     Resolves a chord's template by ID, or null.
-    ///     <para>
-    ///     There is deliberately NO fallback to <c>ChordTemplates[templateId]</c>.
-    ///     The ID lookup runs first, so such a fallback only ever fired on an
-    ///     ALREADY dangling id — and it answered with a completely unrelated
-    ///     template picked by list POSITION.
-    ///     <see cref="RemoveMutedNotesFromPartiallyMutedChords" /> would then clone
-    ///     that stranger, strip the muted strings from it and permanently repoint
-    ///     the chord at a reduction of a shape it never played, straight into the
-    ///     .dcproj; <see cref="DeriveIgnoreFlags" /> would flag a chord from another
-    ///     chord's frets. It is the same list-index-as-id confusion the inspector
-    ///     avoids.
-    ///     </para>
-    ///     Latent rather than live today (every template creator keeps ids dense
-    ///     and append-only, and nothing removes templates), which is exactly why it
-    ///     is worth deleting before something makes ids sparse. Both callers
-    ///     null-check, and the documented untemplated id is <c>-1</c>, so null is
-    ///     the honest answer. Compare <c>RefretPlanner.ResolveTemplate</c>, which
-    ///     uses the index ONLY after confirming <c>list[templateId].Id ==
-    ///     templateId</c>.
-    /// </summary>
-    private static ChordTemplate? FindTemplate(Arrangement arrangement, int templateId)
-    {
-        // Plain loop, not FirstOrDefault: the predicate captures templateId, so
-        // the LINQ form allocated a display class, a delegate and a boxed
-        // ObservableCollection enumerator on every call. Same first-match answer.
-        var templates = arrangement.ChordTemplates;
-        for (var i = 0; i < templates.Count; i++)
-        {
-            if (templates[i].Id == templateId)
-                return templates[i];
-        }
-
-        return null;
     }
 
     /// <summary>

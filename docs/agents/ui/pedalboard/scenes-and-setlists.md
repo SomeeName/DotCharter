@@ -101,7 +101,8 @@ Helix / Quad Cortex / Fractal are the reference for every convention below.
   decoder; `JuceAudioPlaybackService.RigMidi` raises
   `IRigMidiInputSource.RigMidiProgramReceived` (default no-op members on the
   interface). `RigMidiInputViewModel` queues ONE pending program (a burst is "go
-  to the last one"), drains it on the UI post with the CCs, and keeps
+  to the last one"), drains it on the UI post with the CCs in their last received
+  order (so PC then scene CC selects the incoming tone's scene), and keeps
   `LastMessage` (the card and the bar's monitor show it).
 - `RigMidiRouting` (Tone, pure): `RigMidiChannel` (0 = omni, 1..16),
   `RigMidiProgramChange` (default on), `RigMidiSceneCc` (default 69 — Helix's

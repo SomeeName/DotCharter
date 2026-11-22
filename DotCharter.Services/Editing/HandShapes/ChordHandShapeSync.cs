@@ -115,7 +115,7 @@ public static class ChordHandShapeSync
             if (chord.TemplateId < 0 || chord.Position < start || chord.Position >= end) continue;
             if (first != null && chord.Position >= first.Position) continue;
 
-            var template = arrangement.ChordTemplates.FirstOrDefault(t => t.Id == chord.TemplateId);
+            var template = arrangement.FindChordTemplate(chord.TemplateId);
             if (template == null || !template.HasFrets(seed.Frets)) continue;
             first = chord;
             match = template;

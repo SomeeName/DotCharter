@@ -2,11 +2,14 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
+using Avalonia.Media;
+using System.Reflection;
 using DotCharter.Services.Editing.HandShapes;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.Services.Editing.Tracks;
 using DotCharter.UI.Controls;
 using DotCharter.UI;
+using DotCharter.UI.Theming;
 using DotCharter.UI.ViewModels.Editor;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -29,6 +32,32 @@ namespace DotCharter.Tests.Perf;
 [Collection("HeadlessUI")]
 public sealed class MinimapUseMarksUiPerfSmokeTests
 {
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(5, false)]
+    [InlineData(0, true)]
+    [InlineData(5, true)]
+    public Task SelectedNotesAreDrawnBelowTheSectionBandOnTheirOwnLane(int stringIndex, bool flip) =>
+        HeadlessSessionFixture.Dispatch(() =>
+        {
+            var (editor, _, _) = CreateEditor();
+            editor.SelectedNotes.Add(new GuitarNote { StringIndex = stringIndex });
+            var map = new MinimapOverviewControl();
+            var drawing = new DrawingGroup();
+            using (var context = drawing.Open())
+            {
+                var draw = typeof(MinimapOverviewControl).GetMethod("DrawSelection",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                draw.Invoke(map, [context, editor, 1d, 40d, flip]);
+            }
+
+            var (top, height) = MinimapOverviewControl.NoteBody(40);
+            var lane = flip ? 5 - stringIndex : stringIndex;
+            var bounds = drawing.GetBounds();
+            Assert.Equal(top + (lane + 0.5) * height / 6, bounds.Center.Y, 6);
+            Assert.True(bounds.Width > 0 && bounds.Height > 0);
+        }, CancellationToken.None);
+
     [Fact]
     public async Task ThePreviewsMarks_AreExactlyItsMembersOnTheLevelOnScreen()
     {
@@ -315,6 +344,64 @@ public sealed class MinimapUseMarksUiPerfSmokeTests
         using var frame = window.CaptureRenderedFrame();
         Assert.NotNull(frame);
         frame.Save(Path.Combine(dir, $"song-map-{state}.png"), new PngBitmapEncoderOptions());
+    }
+
+    [Fact]
+    public Task SongMapPhrasesUseTheSectionPalette() => HeadlessSessionFixture.Dispatch(() =>
+    {
+        var (editor, arrangement, _) = CreateEditor(dense: true);
+        foreach (var (beat, section, phrase) in new (int, string, string)[]
+        {
+            (0, "intro", ""), (5, "verse", ""), (12, "postvs", ""), (16, "chorus", ""),
+            (19, "", "CHORUS"), (23, "postchorus", ""), (27, "verse", ""), (33, "bridge", ""),
+            (39, "solo", ""), (42, "", "lead turn"), (47, "prechorus", ""), (51, "chorus", ""), (59, "outro", "")
+        })
+        {
+            arrangement.EventPoints.Add(new EventPoint
+            {
+                Position = new FractionalPosition(beat), Section = section, Phrase = phrase
+            });
+        }
+
+        var map = new MinimapOverviewControl { Editor = editor, TotalTimeMs = 32000, Height = 40 };
+        var window = new Window
+        {
+            Width = 1120,
+            Height = 52,
+            Content = map,
+            Background = new SolidColorBrush(ThemePresets.Default.Colors[ThemeTokens.FireSurfaceChrome]),
+            RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark
+        };
+        window.Show();
+        try
+        {
+            Shoot(window, map, "section-colours");
+            var bands = Draw("DrawSectionBand", map, editor, 1d, 32000d);
+            var events = Draw("DrawEvents", map, editor, 1d, 27d, 32000d);
+            var chorus = ColourAt(bands, 8000);
+            Assert.Equal(chorus, ColourAt(events, 9500));
+            Assert.Equal(chorus, ColourAt(events, 8000));
+            Assert.NotEqual(chorus, ColourAt(events, 21000));
+        }
+        finally
+        {
+            window.Content = null;
+            window.Close();
+        }
+    }, CancellationToken.None);
+
+    private static Color ColourAt(GeometryDrawing[] drawings, double x) =>
+        ((ISolidColorBrush)drawings.Single(d => d.Geometry!.Bounds.X == x).Brush!).Color;
+
+    private static GeometryDrawing[] Draw(string method, MinimapOverviewControl map, params object[] args)
+    {
+        var group = new DrawingGroup();
+        using (var context = group.Open())
+        {
+            typeof(MinimapOverviewControl).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(map, [context, .. args]);
+        }
+        return group.Children.OfType<GeometryDrawing>().ToArray();
     }
 
     private static void RenderOnce(MinimapOverviewControl minimap)

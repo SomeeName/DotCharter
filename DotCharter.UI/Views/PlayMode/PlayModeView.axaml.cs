@@ -399,7 +399,7 @@ public partial class PlayModeView : UserControl, IPrewarmableSurfaces, IPrewarmC
     /// </summary>
     private void OnGetReadyKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Handled || _vm is not { IsTuningCheckScreen: true }) return;
+        if (e.Handled || _vm is not { CanHandleGetReadyKeys: true }) return;
 
         // A text input keeps its keys. The screen carries combo boxes and a
         // slider, and a bare "T" has to stay typeable inside one.

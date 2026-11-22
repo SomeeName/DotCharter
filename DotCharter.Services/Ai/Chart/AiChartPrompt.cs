@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using DotCharter.Services.Editing.ChordShapes;
 using DotCharter.Tone.Ai;
 
 namespace DotCharter.Services.Ai.Chart;
@@ -10,6 +11,8 @@ namespace DotCharter.Services.Ai.Chart;
 /// <param name="Key">The song's key signature in words, or null when unknown.</param>
 public sealed record AiChartSongFacts(Arrangement Arrangement, bool Bass, string? Key)
 {
+    internal ChordKeySignature? NamingKey { get; init; }
+
     /// <summary>Strings on the instrument, the way the fingering code counts them.</summary>
     public int StringCount => Arrangement.Tuning.Length > 0 ? Arrangement.Tuning.Length : Arrangement.StringCount;
 }
@@ -232,6 +235,7 @@ public static class AiChartPrompt
         Strings are numbered from 0 = the lowest-pitched string. A fret list has one entry per string; -1 = the string is not played. Each chord line also gives the notes it sounds (lowest first) and the names an automatic namer found, best first.
 
         {STYLE}
+        Follow the accidental spelling in the automatic namer's candidates. When no key applies, use flats if the tuning only lowers strings, and sharps otherwise.
 
         Lines marked "ctx" are context before and after the chunk; never list them.
 
@@ -241,11 +245,11 @@ public static class AiChartPrompt
         """;
 
     private const string EofStyle = """
-        Naming style: Editor on Fire (EOF). Roots are spelled with SHARPS only (C, C#, D, D#, E, F, F#, G, G#, A, A#, B), even in flat keys. Qualities: major is the bare root ("A"), minor "min" ("A#min"), "Maj7", "min7", "7", "dim", "aug", "sus2", "sus4", "add9", "5" for a power chord (root + fifth, with or without the octave), "3" for root + major third. No slash chords unless the bass note is not part of the chord's own name. Two-string shapes other than power chords and root+third usually carry no name.
+        Naming style: Editor on Fire (EOF). Qualities: major is the bare root ("A"), minor "min" ("A#min"), "Maj7", "min7", "7", "dim", "aug", "sus2", "sus4", "add9", "5" for a power chord (root + fifth, with or without the octave), "3" for root + major third. No slash chords unless the bass note is not part of the chord's own name. Two-string shapes other than power chords and root+third usually carry no name.
         """;
 
     private const string MusicalStyle = """
-        Naming style: musical, key-aware. Spell roots the way the song's key spells them (flats in flat keys: Bb, Eb, Ab; sharps in sharp keys). Qualities: major is the bare root ("Bb"), minor "m" ("Gm"), "maj7", "m7", "7", "dim", "aug", "sus2", "sus4", "add9", "5" for a power chord. Use a slash chord ("Cm7/Bb") when the lowest note is not the root. Two-string shapes other than power chords usually carry no name.
+        Naming style: musical, key-aware. When a key applies, spell roots and slash basses in that key. Qualities: major is the bare root ("Bb"), minor "m" ("Gm"), "maj7", "m7", "7", "dim", "aug", "sus2", "sus4", "add9", "5" for a power chord. Use a slash chord ("Cm7/Bb") when the lowest note is not the root. Two-string shapes other than power chords usually carry no name.
         """;
 
     /// <summary>
@@ -347,7 +351,7 @@ public static class AiChartPrompt
         ArgumentNullException.ThrowIfNull(level);
         ArgumentNullException.ThrowIfNull(chunk);
 
-        var text = Listing(job, facts, level, beats, chunk) + InstructionSection(instruction);
+        var text = Listing(job, facts, level, beats, chunk, style) + InstructionSection(instruction);
         return new ToneDesignPrompt(
             System(job, style),
             [new ToneDesignTurn(ToneDesignRole.User, text)],
@@ -420,15 +424,18 @@ public static class AiChartPrompt
 
     /// <summary>The per-chunk listing (internal for the tests).</summary>
     internal static string Listing(
-        AiChartJob job, AiChartSongFacts facts, ChartLevel level, IList<BeatMarker> beats, AiChartChunk chunk)
+        AiChartJob job, AiChartSongFacts facts, ChartLevel level, IList<BeatMarker> beats, AiChartChunk chunk,
+        ChordNamingStyle style = ChordNamingStyle.Eof)
     {
         var arrangement = facts.Arrangement;
         var strings = facts.StringCount;
+        var naming = ListingNaming(job, facts, style);
         var sb = new StringBuilder(4096);
         var inv = CultureInfo.InvariantCulture;
 
         sb.Append(inv, $"Instrument: {(facts.Bass ? "bass" : "guitar")}, {strings} strings, tuning ");
-        sb.Append(string.Join(" ", arrangement.Tuning.Take(strings)));
+        var tuning = job == AiChartJob.ChordNames ? TuningDisplayNames.For(arrangement) ?? arrangement.Tuning : arrangement.Tuning;
+        sb.Append(string.Join(" ", tuning.Take(strings)));
         sb.Append(inv, $" (lowest first), capo {arrangement.Capo}.");
         if (job == AiChartJob.ChordNames && !string.IsNullOrWhiteSpace(facts.Key)) sb.Append(" Key: ").Append(facts.Key).Append('.');
         sb.AppendLine();
@@ -467,7 +474,7 @@ public static class AiChartPrompt
         foreach (var s in chunk.Before)
         {
             AnchorsUpTo(s.Position, inclusive: true);
-            Sound(sb, "ctx ", s, job, facts, templates, free, strings, fix: false);
+            Sound(sb, "ctx ", s, job, arrangement, naming, templates, free, strings, fix: false);
         }
 
         AnchorsUpTo(chunk.Start, inclusive: false);
@@ -479,7 +486,7 @@ public static class AiChartPrompt
         {
             AnchorsUpTo(s.Position, inclusive: true);
             marks?.PhrasesUpTo(sb, s.Position, beats);
-            Sound(sb, "", s, job, facts, templates, free, strings, fix: job.ListsChords() && IsFixable(s, templates),
+            Sound(sb, "", s, job, arrangement, naming, templates, free, strings, fix: job.ListsChords() && IsFixable(s, templates),
                 inShape: marks?.InShape(s.Position) ?? false);
         }
 
@@ -487,11 +494,16 @@ public static class AiChartPrompt
         foreach (var s in chunk.After)
         {
             AnchorsUpTo(s.Position, inclusive: true);
-            Sound(sb, "ctx ", s, job, facts, templates, free, strings, fix: false);
+            Sound(sb, "ctx ", s, job, arrangement, naming, templates, free, strings, fix: false);
         }
 
         return sb.ToString();
     }
+
+    private static ChordNamingOptions ListingNaming(AiChartJob job, AiChartSongFacts facts, ChordNamingStyle style) =>
+        job == AiChartJob.ChordNames && style == ChordNamingStyle.Musical
+            ? new ChordNamingOptions(style, facts.NamingKey ?? ChordKeyEstimator.Resolve(facts.Arrangement, null))
+            : ChordNamingOptions.Default;
 
     /// <summary>
     ///     True when the reply must list this sound: a chord bound to a template that has at
@@ -526,7 +538,7 @@ public static class AiChartPrompt
     }
 
     private static void Sound(
-        StringBuilder sb, string prefix, AiChartSound s, AiChartJob job, AiChartSongFacts facts,
+        StringBuilder sb, string prefix, AiChartSound s, AiChartJob job, Arrangement arrangement, ChordNamingOptions naming,
         Dictionary<int, ChordTemplate> templates, Func<ChordTemplate, ChordTemplate?>? free, int strings, bool fix,
         bool inShape = false)
     {
@@ -564,8 +576,8 @@ public static class AiChartPrompt
         }
         else
         {
-            sb.Append(" notes ").Append(string.Join(" ", SoundingNotes(facts.Arrangement, template)));
-            var candidates = ChordNameSuggester.SuggestChordNames(facts.Arrangement, template.Frets).Take(3).ToList();
+            sb.Append(" notes ").Append(string.Join(" ", SoundingNotes(arrangement, template, naming)));
+            var candidates = NewChordNames.Offers(arrangement, template.Frets, naming).Take(3).ToList();
             if (candidates.Count > 0) sb.Append(" namer [").Append(string.Join(", ", candidates)).Append(']');
             sb.Append(" name \"").Append(template.Name).Append('"');
         }
@@ -627,13 +639,12 @@ public static class AiChartPrompt
 
     /// <summary>The sounding pitch of each played string, lowest string first — through the
     /// namer's own tuning arithmetic, one string at a time, so this has no second copy of it.</summary>
-    private static IEnumerable<string> SoundingNotes(Arrangement arrangement, ChordTemplate template)
+    private static IEnumerable<string> SoundingNotes(Arrangement arrangement, ChordTemplate template, ChordNamingOptions naming)
     {
         foreach (var (stringIndex, fret) in template.Frets.Where(kv => kv.Value >= 0).OrderBy(kv => kv.Key))
         {
-            var single = ChordNameSuggester.SuggestChordNames(
-                arrangement.Tuning, new Dictionary<int, int> { [stringIndex] = fret }, arrangement.Capo);
-            if (single.Count > 0) yield return single[0];
+            var pitch = new Dictionary<int, int> { [stringIndex] = fret };
+            if (NewChordNames.Offers(arrangement, pitch, naming).FirstOrDefault() is { } name) yield return name;
         }
     }
 

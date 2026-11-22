@@ -1,4 +1,3 @@
-using System.Globalization;
 using DotCharter.Localization;
 
 namespace DotCharter.Services.Ai.Chart;
@@ -16,6 +15,7 @@ public static class AiStructureText
     {
         ArgumentNullException.ThrowIfNull(change);
         ArgumentNullException.ThrowIfNull(loc);
+        if (change.Event is not null) return loc["AiStructure_EventLabel"];
         var name = change.NameAfter ?? change.OldName ?? "";
         return change.Kind == AiStructureKind.Section
             ? loc.Format("AiStructure_Section", RsSectionCatalog.DisplayName(name))
@@ -29,6 +29,7 @@ public static class AiStructureText
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(loc);
         var change = item.Change;
+        if (change.Event is { } edit) return EventDetail(edit, loc);
         var detail = change.Op switch
         {
             AiStructureOp.Add => loc["AiStructure_Add"],
@@ -39,6 +40,27 @@ public static class AiStructureText
             _ => loc["AiStructure_Remove"]
         };
         return AnchorNote(change, loc) is { } note ? $"{detail} · {note}" : detail;
+    }
+
+    /// <summary>The fields an event change sets, one phrase each, then the arrangements it covers: "Section · Chorus · Status Draft · On Lead, Rhythm".</summary>
+    private static string EventDetail(AiEventEdit e, ILocalizationService loc)
+    {
+        var parts = new List<string>();
+        if (e.Section is { } section)
+        {
+            parts.Add(section.Length == 0
+                ? loc["AiStructure_EventClearSection"]
+                : loc.Format("AiStructure_Section", RsSectionCatalog.DisplayName(section)));
+        }
+
+        if (e.Status is { } status) parts.Add(loc.Format("AiStructure_EventStatus", loc["SectionStatus_" + status]));
+        if (e.Phrase is { } phrase) parts.Add(phrase.Length == 0 ? loc["AiStructure_EventClearPhrase"] : loc.Format("AiStructure_Phrase", phrase));
+        if (e.Solo is { } solo) parts.Add(loc[solo ? "AiStructure_EventSolo" : "AiStructure_EventNotSolo"]);
+        if (e.Tone is { } tone) parts.Add(tone.Length == 0 ? loc["AiStructure_EventClearTone"] : loc.Format("AiStructure_EventTone", tone));
+        if (e.Events is { } codes)
+            parts.Add(codes.Count == 0 ? loc["AiStructure_EventNoCodes"] : loc.Format("AiStructure_EventCodes", string.Join(", ", codes)));
+        parts.Add(loc.Format("AiStructure_EventOn", string.Join(", ", e.Arrangements)));
+        return string.Join(" · ", parts);
     }
 
     /// <summary>"+ hand position at fret 5" (one fret on every level that gets one) or "+ hand
@@ -56,7 +78,7 @@ public static class AiStructureText
         };
     }
 
-    /// <summary>m:ss.f, the way the review card reads a time.</summary>
+    /// <summary>Elapsed song time with tenths, the way the review card reads a time.</summary>
     public static string Clock(double ms) =>
-        TimeSpan.FromMilliseconds(Math.Max(0, ms)).ToString(@"m\:ss\.f", CultureInfo.InvariantCulture);
+        ElapsedTimeLabel.Format(ms, 1);
 }

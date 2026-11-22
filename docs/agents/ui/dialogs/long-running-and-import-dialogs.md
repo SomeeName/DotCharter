@@ -95,9 +95,8 @@ that tier: its callers close the owning dialog first — see
 ### …and what the awaited half must re-check before it applies
 
 **Anything read BEFORE the await and used AFTER it has to be re-checked, or the
-dialog applies a result to something that moved.** The chart-from-audio wizard
-(`Presentation/Screens/Dialogs/ChartFromAudioViewModel` since wave 2)
-had both halves of this wrong: `Services/Import/Audio/ChartFromAudioOptions` spells the draft's frets
+dialog applies a result to something that moved.** The former chart-from-audio wizard (removed, #445)
+had both halves of this wrong: it spelled the draft's frets
 from the active arrangement's tuning/capo/string count and `Apply` stamps those
 same three onto the new arrangement, but the two reads sat on opposite sides of
 the awaited analysis — switch track while it runs and the draft is spelled for
@@ -105,11 +104,11 @@ one tuning and stamped with another, silently. It records what the draft was
 made for and discards it with a reason now. The MIDI dialog's `_draftGeneration`
 counter is the same idea for a result still in flight.
 
-**State a dialog keeps between opens has to be scoped to the PROJECT.** The same
-wizard pre-filled `AudioPath` only while it was empty, so one song's WAV was
+**State a dialog keeps between opens has to be scoped to the PROJECT.** That same
+wizard pre-filled its audio path only while it was empty, so one song's WAV was
 offered — pre-filled and plausible — for the next song opened. Key such state to
 `ProjectState.ActiveProject` and clear it when that changes. A hosted dialog's
-view model lives only while it is open, so the path lives in the
+view model lives only while it is open, so such state lives in the
 `Presentation/Screens/Dialogs/DialogMemory` singleton beside the project it was
 chosen for.
 
@@ -117,14 +116,13 @@ chosen for.
 (an add-arrangement action), never straight into the collection.** The
 unsaved-changes state is DERIVED from the undo history (`ProjectDirtyTracker`
 compares node ids), so a bare Add leaves the project reading CLEAN with a new
-arrangement in it: closing the app never prompts. Pinned by
-`Presentation/Dialogs/ChartFromAudioViewModelTests`.
+arrangement in it: closing the app never prompts. The MIDI import dialog is pinned the same way.
 
 ## The four import dialects: off-thread work, busy, in-dialog errors
 
 **Guitar Pro, EOF, MIDI and RS-XML all parsed on the UI thread with no busy
 state and reported every failure to the STATUS BAR — behind their own still-open
-modal.** All four now follow the chart-from-audio wizard's split, and the
+modal.** All four now follow the split the chart-from-audio wizard pioneered, and the
 split is the rule, not the pattern: **parse and convert OFF the UI thread, apply
 ON it.** What mutates the live project stays on the thread that owns it —
 `GpImportApplier.ApplyTempoAndKey`, `ChartSpacingEnforcer` against

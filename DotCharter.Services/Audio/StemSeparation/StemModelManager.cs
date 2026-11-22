@@ -84,6 +84,7 @@ public sealed class StemModelManager
             var store = new CustomStemModelStore(ModelsDirectory, logger);
             foreach (var custom in store.Load())
                 StemModelCatalog.RegisterCustom(custom);
+            MigrateLegacyCustomModels();
             return store;
         }, LazyThreadSafetyMode.ExecutionAndPublication);
     }
@@ -161,7 +162,34 @@ public sealed class StemModelManager
 
     /// <summary>Absolute path the model would have on disk (whether or not it exists).</summary>
     public string GetLocalPath(StemModelDescriptor descriptor) =>
-        Path.Combine(ModelsDirectory, StemModelFileName.Contained(descriptor.FileName));
+        Path.Combine(ModelsDirectory, StemModelDownloadPlan.LocalFileName(descriptor));
+
+    private void MigrateLegacyCustomModels()
+    {
+        // A shared legacy filename cannot tell us which import produced it.
+        // Keep ambiguous files untouched; never load or delete one as either model.
+        foreach (var group in StemModelCatalog.All.GroupBy(d => d.FileName, StringComparer.OrdinalIgnoreCase))
+        {
+            if (group.Count() != 1) continue;
+            var desc = group.First();
+            var legacy = Path.Combine(ModelsDirectory, StemModelFileName.Contained(desc.FileName));
+            var destination = GetLocalPath(desc);
+            if (legacy == destination || !File.Exists(legacy) || File.Exists(destination)) continue;
+            try
+            {
+                AtomicFile.Write(destination, output =>
+                {
+                    using var input = File.OpenRead(legacy);
+                    input.CopyTo(output);
+                });
+                File.Delete(legacy);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger?.Warning(AppLogCategory.Audio, $"Could not migrate custom model '{desc.Id}'.", ex);
+            }
+        }
+    }
 
     public string? GetLocalPathIfInstalled(string id)
     {
@@ -257,19 +285,27 @@ public sealed class StemModelManager
     /// </summary>
     public string? ResolveActiveModelPath()
     {
+        var installed = ResolveInstalledModel();
+        if (installed is { } model) return model.Path;
+        var env = Environment.GetEnvironmentVariable("DOTCHARTER_HTDEMUCS_MODEL");
+        if (!string.IsNullOrWhiteSpace(env) && File.Exists(env)) return env;
+        return null;
+    }
+
+    /// <summary>Resolves the descriptor and its installed bytes together, including fallback.</summary>
+    internal (StemModelDescriptor Descriptor, string Path)? ResolveInstalledModel()
+    {
         var active = ActiveModelId;
         if (!string.IsNullOrWhiteSpace(active))
         {
-            var p = GetLocalPathIfInstalled(active);
-            if (p != null) return p;
+            var desc = FindById(active);
+            if (desc != null && GetLocalPathIfInstalled(active) is { } path) return (desc, path);
         }
         foreach (var d in Catalog)
         {
             var p = GetLocalPath(d);
-            if (File.Exists(p)) return p;
+            if (File.Exists(p)) return (d, p);
         }
-        var env = Environment.GetEnvironmentVariable("DOTCHARTER_HTDEMUCS_MODEL");
-        if (!string.IsNullOrWhiteSpace(env) && File.Exists(env)) return env;
         return null;
     }
 
@@ -475,7 +511,7 @@ public sealed class StemModelManager
         {
             // An UNREADABLE file is a file presumed intact, not a corrupt one.
             _logger?.Warning(AppLogCategory.Audio,
-                $"Could not read '{path}' to verify model '{id}': {ex.Message}");
+                $"Could not read '{path}' to verify model '{id}'", ex);
             return null;
         }
     }
@@ -578,10 +614,11 @@ public sealed class StemModelManager
             throw new CheckpointConsentException($"'{ckptName}' can run code when loaded and was not allowed.");
 
         Directory.CreateDirectory(ModelsDirectory);
-        var ckptPath = Path.Combine(ModelsDirectory, ckptName);
+        var importToken = StemModelDownloadPlan.IdentityToken(uri.AbsoluteUri);
+        var ckptPath = Path.Combine(ModelsDirectory, importToken + "-" + ckptName);
         var onnxName = Path.GetFileNameWithoutExtension(ckptName) + ".onnx";
-        var onnxPath = Path.Combine(ModelsDirectory, onnxName);
-        var yamlPath = Path.Combine(ModelsDirectory, Path.GetFileNameWithoutExtension(ckptName) + ".yaml");
+        var onnxPath = Path.Combine(ModelsDirectory, importToken + "-" + onnxName);
+        var yamlPath = Path.ChangeExtension(ckptPath, ".yaml");
 
         await DownloadToAsync(ckptUrl, ckptPath, progress, ct).ConfigureAwait(false);
 
@@ -628,9 +665,8 @@ public sealed class StemModelManager
         // Register the produced ONNX as a custom catalog entry. Reuse the
         // synchronous importer's metadata logic by feeding it a faux URL so
         // the kind/stems inference picks the right backend.
-        var fauxUrl = "https://local.imported/" + onnxName;
-        var desc = ImportFromUrl(fauxUrl, displayName ?? $"{ckptName} (ckpt → onnx)", sourceCount);
-        return desc;
+        var fauxUrl = new UriBuilder(uri) { Path = Path.ChangeExtension(uri.AbsolutePath, ".onnx") }.Uri.AbsoluteUri;
+        return PublishConvertedCheckpoint(fauxUrl, onnxPath, displayName ?? $"{ckptName} (ckpt → onnx)", sourceCount);
     }
 
     /// <summary>
@@ -660,8 +696,24 @@ public sealed class StemModelManager
             ct).ConfigureAwait(false);
     }
 
+    internal StemModelDescriptor PublishConvertedCheckpoint(string url, string stagedPath, string? displayName, int? sourceCount)
+    {
+        var descriptor = RegisterFromUrl(url, displayName, sourceCount);
+        AtomicFile.Publish(stagedPath, GetLocalPath(descriptor));
+        ModelsChanged?.Invoke(this, EventArgs.Empty);
+        return descriptor;
+    }
+
     public StemModelDescriptor ImportFromUrl(string url, string? displayName = null, int? sourceCount = null)
     {
+        var descriptor = RegisterFromUrl(url, displayName, sourceCount);
+        ModelsChanged?.Invoke(this, EventArgs.Empty);
+        return descriptor;
+    }
+
+    private StemModelDescriptor RegisterFromUrl(string url, string? displayName, int? sourceCount)
+    {
+        _ = _customStore.Value;
         if (string.IsNullOrWhiteSpace(url))
             throw new ArgumentException("URL is required.", nameof(url));
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
@@ -713,7 +765,7 @@ public sealed class StemModelManager
             if (segments.Length >= 2)
                 idBase = $"{segments[0]}-{idBase}".ToLowerInvariant();
         }
-        var id = "custom-" + Sanitize(idBase);
+        var id = "custom-" + Sanitize(idBase) + "-" + StemModelDownloadPlan.IdentityToken(uri.AbsoluteUri);
 
         var desc = new StemModelDescriptor
         {
@@ -734,7 +786,6 @@ public sealed class StemModelManager
             !StemModelCatalog.BuiltIn.Any(b => string.Equals(b.Id, d.Id, StringComparison.OrdinalIgnoreCase))));
         _logger?.Info(AppLogCategory.Audio,
             $"Registered custom stem model '{id}' (kind={kind}, stems={stems}, file='{fileName}').");
-        ModelsChanged?.Invoke(this, EventArgs.Empty);
         return desc;
     }
 

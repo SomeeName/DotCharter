@@ -18,24 +18,24 @@ public interface IRocksmithExportScreen : IDialogScreen<bool>
 
     IReadOnlyList<IExportArrangementRow> Arrangements { get; }
 
-    bool IncludeVocals { get; set; }
+    /// <summary>What the Include vocals box shows: ticked only while there is a vocal track to include. Ticking while there is none keeps the choice for later.</summary>
+    bool VocalsTicked { get; set; }
 
     /// <summary>A lyric track exists; without one the vocals box is greyed and says so.</summary>
     bool HasVocals { get; }
 
-    /// <summary>
-    ///     Write a 7-string guitar's chords on the 7th string as simultaneous single notes
-    /// (rs7chart's "split") instead of one chord whose 7th string is in the SNG's
-    /// RS7X block — for an rs7string build from before the block. Off by default.
-    /// </summary>
-    bool SplitExtendedStringChords { get; set; }
-
-    /// <summary>An arrangement is a 7-/8-string guitar; the split option shows only then.</summary>
-    bool HasExtendedStringGuitar { get; }
-
     string AudioPath { get; set; }
 
+    /// <summary>The localized main-audio placeholder describing accepted file formats.</summary>
+    string MainAudioWatermark { get; }
+
     string PreviewAudioPath { get; set; }
+
+    /// <summary>Where the auto-cut preview starts, <c>m:ss.fff</c>; blank = automatic (a quarter into the song).</summary>
+    string PreviewStartText { get; set; }
+
+    /// <summary>The start text is neither blank nor a readable time; Export is greyed while that holds.</summary>
+    bool HasInvalidPreviewStart { get; }
 
     double AudioVolume { get; set; }
 
@@ -75,7 +75,8 @@ public interface IRocksmithExportScreen : IDialogScreen<bool>
 
     string DlcKey { get; set; }
 
-    /// <summary>The song's package version ("1" by default): in the package and in the release file name.</summary>
+    /// <summary>The song's package version ("1" by default), also followed by an automatically derived
+    /// release filename. A filename the user chose keeps its name.</summary>
     string Version { get; set; }
 
     /// <summary>Where Test export writes; blank uses a "test" folder beside the output file.</summary>
@@ -101,11 +102,11 @@ public interface IRocksmithExportScreen : IDialogScreen<bool>
     IReadOnlyList<IExportFinding> ValidationItems { get; }
 
     /// <summary>
-    /// Opens the Chart quality report over the export: the non-blocking findings too,
-    ///     each with Go to and Fix; the export re-checks when it closes. The build itself still
-    ///     only refuses on the blocking findings above.
+    /// Closes the export and opens the Inspector's Issues tab, where the whole-project report lists
+    ///     every finding (the non-blocking ones too, each with Go to and Fix). Disabled while a build
+    ///     runs, and where the host has no Inspector.
     /// </summary>
-    ICommand ReviewReportCommand { get; }
+    ICommand ShowInIssuesCommand { get; }
 
 
     /// <summary>
@@ -168,13 +169,15 @@ public interface IExportTarget : INotifyPropertyChanged
 
     IExportChoice SelectedPlatformOption { get; set; }
 
-    /// <summary>Encrypted (the default) or Plain.</summary>
+    /// <summary>Encrypted and Plain; without encryption keys, Plain is the only choice.</summary>
     IReadOnlyList<IExportChoice> PackageOptions { get; }
 
     IExportChoice SelectedPackageOption { get; set; }
 
-    /// <summary>The picker is live; without keys it is not and Plain is the only form.</summary>
+    /// <summary>The package picker is enabled when the content permits a choice and encryption is available.</summary>
     bool CanChoosePackage { get; }
+
+    bool WritesExtendedRange { get; }
 
     /// <summary>
     ///     The PC package will be written unencrypted, by choice or because no encrypted one can be:
@@ -214,6 +217,12 @@ public interface IExportFinding
 
     /// <summary>An existing verb repairs this finding.</summary>
     bool HasFix { get; }
+
+    /// <summary>The finding is about a Song metadata field (a title or artist the game's font cannot show).</summary>
+    bool HasSongMetadataLink { get; }
+
+    /// <summary>Opens Song metadata over the export; the file name and the findings follow what is saved there.</summary>
+    ICommand OpenSongMetadataCommand { get; }
 
     /// <summary>What Fix will do, for its tooltip: "Auto-fix Lead: …".</summary>
     string FixDescription { get; }

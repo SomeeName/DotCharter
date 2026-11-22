@@ -13,6 +13,12 @@ public sealed partial class ChordApplyRungRow(ChordApplyRung rung) : ObservableO
 
     [ObservableProperty] private bool _isAvailable;
 
+    /// <summary>The rung in a word or two ("every use"): the Note footer's closed picker, one row at 480 px.</summary>
+    [ObservableProperty] private string _shortLabel = string.Empty;
+
+    /// <summary>The first part of <see cref="Detail" /> ("12 chords"), or a word for "unused": the footer's reach.</summary>
+    [ObservableProperty] private string _shortDetail = string.Empty;
+
     /// <summary>Lit when the next edit takes this rung — the chosen one, or the
     /// one an unavailable choice falls through to.</summary>
     [ObservableProperty] private bool _isEffective;
@@ -97,16 +103,16 @@ public sealed partial class ChordApplyLadder : ObservableObject
 
     public bool HasEffectiveDetail => EffectiveDetail.Length > 0;
 
-    /// <summary>
-    ///     What the next fret or shape edit does, in one sentence, BEFORE it is made: "“Am” itself
-    ///     changes, so every use plays the new grip" or "A new shape is made for these 4 chords; the
-    ///     other 10 keep “Am”". The old "Selected" rung silently meant either one, depending on
-    ///     whether the selection happened to cover every use. Empty when the edit is refused or is a
-    ///     technique edit, which never writes the shape.
-    /// </summary>
-    public string ResultText { get; private set; } = string.Empty;
+    /// <summary>The lit rung's <see cref="ChordApplyRungRow.ShortDetail" /> ("4 chords"): the Note footer's one-row
+    /// reach, whose tooltip carries the whole one.</summary>
+    public string EffectiveShortDetail => Rows.FirstOrDefault(r => r.Rung == Effective)?.ShortDetail ?? string.Empty;
 
-    public bool HasResultText => ResultText.Length > 0;
+    /// <summary>The first part of a reach ("4 chords · all levels" gives "4 chords").</summary>
+    internal static string ShortOf(string detail)
+    {
+        var cut = detail.IndexOf(Separator, StringComparison.Ordinal);
+        return cut < 0 ? detail : detail[..cut];
+    }
 
     /// <summary>
     ///     How many sounds one press of Save re-fingers with the pending draft —
@@ -139,9 +145,7 @@ public sealed partial class ChordApplyLadder : ObservableObject
             Fill(row, scope);
         OnPropertyChanged(nameof(EffectiveDetail));
         OnPropertyChanged(nameof(HasEffectiveDetail));
-        ResultText = family == ChordApplyFamily.Shape ? ResultOf(scope, chosen) : string.Empty;
-        OnPropertyChanged(nameof(ResultText));
-        OnPropertyChanged(nameof(HasResultText));
+        OnPropertyChanged(nameof(EffectiveShortDetail));
         UpdateFingering(draft);
     }
 
@@ -155,27 +159,6 @@ public sealed partial class ChordApplyLadder : ObservableObject
             : targets.ChordCount + targets.HandShapeCount;
     }
 
-    private string ResultOf(ChordApplyScope? scope, ChordApplyRung chosen)
-    {
-        if (scope is null) return string.Empty;
-        var targets = scope.Resolve(chosen, ChordTemplateEditKind.Shape);
-        var shape = scope.Loaded;
-        var name = shape.Unnamed || shape.Name.Length == 0 ? shape.GetTemplateFrets() : shape.Name;
-        switch (targets.Path)
-        {
-            case ChordApplyPath.InPlace:
-                return _loc.Format("ShapeEdit_Result_Changes", name);
-            case ChordApplyPath.Rebind:
-                var reached = targets.Sounds.Chords.Count;
-                var kept = Math.Max(0, scope.Reach(ChordApplyRung.EveryUse).Chords - reached);
-                return reached == 1
-                    ? _loc.Format("ShapeEdit_Result_NewOne", kept, name)
-                    : _loc.Format("ShapeEdit_Result_NewMany", reached, kept, name);
-            default:
-                return string.Empty;
-        }
-    }
-
     private void Fill(ChordApplyRungRow row, ChordApplyScope? scope)
     {
         var reach = scope?.Reach(row.Rung, _family) ?? default;
@@ -184,7 +167,9 @@ public sealed partial class ChordApplyLadder : ObservableObject
         row.IsEffective = Effective == row.Rung;
         row.Republish();
         row.Label = LabelOf(row.Rung, scope, reach);
+        row.ShortLabel = ShortLabelOf(row.Rung, row.Label);
         row.Detail = reach.IsAvailable ? DetailOf(row.Rung, reach, scope!) : string.Empty;
+        row.ShortDetail = row.Detail == _loc["ChordTemplate_Reach_Unused"] ? _loc["ChordTemplate_ReachShort_Unused"] : ShortOf(row.Detail);
         row.Tip = TipOf(row.Rung, reach.IsAvailable);
         row.AccessibleName = row.Detail.Length > 0 ? $"{row.Label}, {row.Detail}" : row.Label;
     }
@@ -196,6 +181,15 @@ public sealed partial class ChordApplyLadder : ObservableObject
         ChordApplyRung.Selected => _loc.Format("ChordTemplate_Apply_Selected", reach.Sounds),
         ChordApplyRung.EveryUse => _loc["ChordTemplate_Apply_EveryUse"],
         _ => _loc["ChordTemplate_Apply_SameGrip"]
+    };
+
+    /// <summary>The closed picker's word for a rung; "selected (N)" and a plain "this chord" are short already.</summary>
+    private string ShortLabelOf(ChordApplyRung rung, string label) => rung switch
+    {
+        ChordApplyRung.ThisChord when label == _loc["ChordTemplate_Apply_ThisChordAndHandShape"] => _loc["ChordTemplate_ApplyShort_ThisAndHandShape"],
+        ChordApplyRung.EveryUse => _loc["ChordTemplate_ApplyShort_EveryUse"],
+        ChordApplyRung.SameGrip => _loc["ChordTemplate_ApplyShort_SameGrip"],
+        _ => label
     };
 
     /// <summary>"this chord", or — when the hand-shape sync folded the bar over

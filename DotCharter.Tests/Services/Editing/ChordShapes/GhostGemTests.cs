@@ -159,17 +159,22 @@ public sealed class GhostGemTests : IDisposable
         Assert.Empty(level.HandShapes);
     }
 
-    [Fact]
-    public void ASoundOnAGhostString_IsNotAContradictionOfTheHeldFret()
+    [Theory]
+    [InlineData(HarmonicType.Normal, HopoType.Tap, true)]
+    [InlineData(HarmonicType.None, HopoType.Tap, false)]
+    [InlineData(HarmonicType.Normal, HopoType.None, false)]
+    public void OnlyATappedHarmonicCanDifferFromTheHeldGhostFret(HarmonicType harmonic, HopoType hopo, bool exempt)
     {
         var (arrangement, chord, _) = PowerChordWithOctave();
         var level = arrangement.Levels[0];
         GhostGems.Ghost(arrangement, level, [], [chord], s => s == 2).Action!.Execute();
-        // Under the bar, string 2 is played at 7 (a tap over the held 5).
-        level.Notes.Add(new GuitarNote { Position = new FractionalPosition(2, new Fraction(1, 2)), StringIndex = 2, Fret = 7 });
+        level.Notes.Add(new GuitarNote
+        {
+            Position = new(2, new Fraction(1, 2)), StringIndex = 2, Fret = 17, Harmonic = harmonic, Hopo = hopo
+        });
         var grip = arrangement.ChordTemplates.Single(t => t.GhostMask != 0);
 
-        Assert.Empty(ContentFindings(arrangement));
+        Assert.Equal(exempt ? 0 : 1, ContentFindings(arrangement).Count);
 
         // The same bar without the ghost mark: the rule reports it (the guard is not vacuous).
         grip.GhostMask = 0;
@@ -213,11 +218,12 @@ public sealed class GhostGemTests : IDisposable
     }
 
     [Fact]
-    public void RsXml_WritesTheGhostOnlyIntoTheHandShapesTemplate_AndReadsItBackAsAGhost()
+    public void RsXmlPreservesTheOpeningGhostAndTheLaterPlayedNote()
     {
         var (arrangement, chord, _) = PowerChordWithOctave();
         var level = arrangement.Levels[0];
         GhostGems.Ghost(arrangement, level, [], [chord], s => s == 2).Action!.Execute();
+        level.Notes.Add(new GuitarNote { Position = chord.Position + new Fraction(1, 2), StringIndex = 2, Fret = 5 });
         var project = new ChartProject();
         foreach (var beat in Beats()) project.Beats.Add(beat);
         project.Arrangements.Add(arrangement);
@@ -232,14 +238,16 @@ public sealed class GhostGemTests : IDisposable
         var xmlChord = xmlLevel.Element("chords")!.Element("chord")!;
         Assert.Null(templates[int.Parse(xmlChord.Attribute("chordId")!.Value)].Attribute("fret2"));
         Assert.DoesNotContain(xmlChord.Elements("chordNote"), n => n.Attribute("string")?.Value == "2");
-        Assert.DoesNotContain(xmlLevel.Descendants("note"), n => n.Attribute("string")?.Value == "2");
+        var later = Assert.Single(xmlLevel.Element("notes")!.Elements("note"));
+        Assert.Equal("2", later.Attribute("string")?.Value);
 
         var back = new RsXmlSongReader().ReadDocument(document, "ghost.xml").Arrangements[0];
         var backShape = Assert.Single(back.Levels[0].HandShapes);
         var grip = back.ChordTemplates.Single(t => t.Id == backShape.TemplateId);
-        Assert.Equal(ChordTemplate.GhostBit(2), grip.GhostMask);
+        Assert.Equal(ChordTemplate.GhostBit(2), backShape.GetGhostMask(grip));
         Assert.Equal(new Dictionary<int, int> { [0] = 3, [1] = 5, [2] = 5 }, grip.Frets);
         Assert.Equal([0, 1], Assert.Single(back.Levels[0].Chords).ChordNotes.Select(n => n.StringIndex).Order());
+        Assert.Equal(5, Assert.Single(back.Levels[0].Notes).Fret);
     }
 
     [Fact]
@@ -268,21 +276,31 @@ public sealed class GhostGemTests : IDisposable
     }
 
     [Fact]
-    public void Import_NeverReadsAGhostIntoATemplateAChordPlays_NorUnderAShapeThatCoversNothing()
+    public void RsXmlImportInfersOpeningGhostsPerShapeAndLeavesTheSharedTemplatePlain()
     {
         var (arrangement, chord, template) = PowerChordWithOctave();
         var level = arrangement.Levels[0];
-        // A chord plays template 0 with only two of its strings, and a bar names it too.
-        chord.ChordNotes.RemoveAt(2);
-        level.HandShapes.Add(new HandShape { Position = chord.Position, EndPosition = new FractionalPosition(4), TemplateId = 0 });
+        var partial = chord.Clone();
+        partial.ChordNotes.RemoveAt(2);
+        partial.Position = new(4);
+        level.Chords.Add(partial);
+        var full = new HandShape { Position = chord.Position, EndPosition = new(4), TemplateId = 0 };
+        var split = new HandShape { Position = partial.Position, EndPosition = new(8), TemplateId = 0 };
+        level.HandShapes.Add(full);
+        level.HandShapes.Add(split);
+        level.Notes.Add(new GuitarNote { Position = new(5), StringIndex = 2, Fret = 5 });
         // A bar over nothing names a template no chord plays.
         var lonely = new ChordTemplate { Id = 1, Frets = { [3] = 7 } };
         arrangement.ChordTemplates.Add(lonely);
         level.HandShapes.Add(new HandShape { Position = new FractionalPosition(8), EndPosition = new FractionalPosition(9), TemplateId = 1 });
 
-        Assert.Equal(0, GhostGems.MarkUnplayedHandShapeFrets(arrangement));
+        GhostGems.MarkUnplayedHandShapeFrets(arrangement);
+        Assert.Equal(0, full.GetGhostMask(template));
+        Assert.Equal(1 << 2, split.GhostMask);
+        Assert.Equal(5, Assert.Single(level.Notes).Fret);
         Assert.Equal(0, template.GhostMask);
         Assert.Equal(0, lonely.GhostMask);
+        Assert.Null(level.HandShapes[^1].GhostMask);
     }
 
     [Fact]

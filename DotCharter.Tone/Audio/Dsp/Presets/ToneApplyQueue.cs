@@ -36,12 +36,14 @@ public sealed class ToneApplyQueue
     private readonly IAppLogger? _logger;
 
     private readonly object _gate = new();
-    private readonly Dictionary<int, DspTonePreset> _pending = [];
+    private readonly Dictionary<int, (DspTonePreset Preset, long Generation, long Version)> _pending = [];
+    private readonly Dictionary<int, long> _versions = [];
     private readonly HashSet<int> _running = [];
 
     /// <param name="presets">The preset service the apply goes through.</param>
-    /// <param name="applied">Raised once per completed apply, through
-    /// <paramref name="postBack"/> — the board refresh.</param>
+    /// <param name="applied">Raised for the latest settled apply, through
+    /// <paramref name="postBack"/> — the board refresh. A thrown apply reports
+    /// nonzero FailedOps so partially changed chains are refreshed too.</param>
     /// <param name="runOnWorker">How to get OFF the gesture's thread. The
     /// product passes <c>a =&gt; Task.Run(a)</c>; omitting it runs inline, which
     /// is the deterministic shape tests want and is exactly the pre-0.62
@@ -85,7 +87,9 @@ public sealed class ToneApplyQueue
         {
             // Last writer wins: a burst of card clicks costs ONE apply of the
             // final tone, not one apply each.
-            _pending[player] = preset;
+            var version = _versions.GetValueOrDefault(player) + 1;
+            _versions[player] = version;
+            _pending[player] = (preset, _presets.ProfileGeneration, version);
             start = _running.Add(player);
         }
 
@@ -99,7 +103,7 @@ public sealed class ToneApplyQueue
     {
         while (true)
         {
-            DspTonePreset? next;
+            (DspTonePreset Preset, long Generation, long Version) next;
             lock (_gate)
             {
                 if (!_pending.Remove(player, out next))
@@ -109,25 +113,34 @@ public sealed class ToneApplyQueue
                 }
             }
 
-            DcRigApplyResult result;
+            DcRigApplyResult? result;
             try
             {
-                result = _presets.ApplyToPlayer(player, next);
+                result = _presets.ApplyToPlayerForProfile(player, next.Preset, next.Generation);
             }
             catch (Exception ex)
             {
                 _logger?.Warning(AppLogCategory.Audio,
-                    $"Tone apply for player {player + 1} threw: {ex.GetType().Name}: {ex.Message}");
-                continue;
+                    $"Tone apply for player {player + 1} threw", ex);
+                // A failed apply may have changed the chain; the latest settlement must still sync it.
+                result = new DcRigApplyResult(0, 0, 0, 0, 0, NoOp: false, FailedOps: 1);
             }
 
-            if (_applied is null) continue;
-            try { _postBack(() => _applied(player, result)); }
+            if (_applied is null || result is not { } appliedResult) continue;
+            try { _postBack(() => Publish(player, next.Version, next.Generation, appliedResult)); }
             catch (Exception ex)
             {
                 _logger?.Warning(AppLogCategory.Audio,
-                    $"Tone apply completion for player {player + 1} threw: {ex.Message}");
+                    $"Tone apply completion for player {player + 1} threw", ex);
             }
+        }
+    }
+
+    private void Publish(int player, long version, long generation, DcRigApplyResult result)
+    {
+        lock (_gate)
+        {
+            if (_versions.GetValueOrDefault(player) == version && generation == _presets.ProfileGeneration) _applied?.Invoke(player, result);
         }
     }
 }

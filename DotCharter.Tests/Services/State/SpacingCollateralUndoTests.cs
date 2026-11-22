@@ -32,6 +32,89 @@ public class SpacingCollateralUndoTests
         => () => ChartSpacingEnforcer.EnforceLevel(level, beats, Config());
 
     [Fact]
+    public void PlaceThenBpm_UndoBothRestoresTheLiveChordNote()
+    {
+        var level = new ChartLevel();
+        var arrangement = new Arrangement();
+        arrangement.Levels.Add(level);
+        var beats = Beats(16);
+        var chord = new Chord { Position = Pos(1) };
+        var child = new ChordNote { StringIndex = 0, Fret = 5, Sustain = Pos(4) };
+        chord.ChordNotes.Add(child);
+        level.Chords.Add(chord);
+        var history = new HistoryService(new FakeAppLogger());
+        history.Do(new AddNotesAction(level.Notes,
+            [new GuitarNote { Position = Pos(2), StringIndex = 1, Fret = 7 }], Enforcer(level, beats)));
+        Assert.True(child.Sustain < Pos(4));
+        ChangeBpm(history, beats, arrangement);
+
+        history.Undo();
+        history.Undo();
+
+        Assert.Equal(Pos(4), chord.ChordNotes[0].Sustain);
+        Assert.Same(child, chord.ChordNotes[0]);
+    }
+
+    [Fact]
+    public void DoubleTimeThenBpm_UndoBothRestoresTheLiveBendPoints()
+    {
+        var project = new ChartProject();
+        foreach (var beat in Beats(16)) project.Beats.Add(beat);
+        var arrangement = new Arrangement();
+        var level = new ChartLevel();
+        arrangement.Levels.Add(level);
+        project.Arrangements.Add(arrangement);
+        var note = new GuitarNote { Position = Pos(1), Sustain = Pos(4), Fret = 5 };
+        var bend = new BendValue(Pos(3), 1);
+        note.BendValues.Add(bend);
+        level.Notes.Add(note);
+        var history = new HistoryService(new FakeAppLogger());
+        var scale = new DotCharter.Services.Editing.Tempo.BeatScaleService(new FakeAppLogger())
+            .BuildScaleAction(project, 0, 7000, 2);
+        history.Do(Assert.IsType<BeatScaleAction>(scale));
+        Assert.NotEqual(Pos(3), bend.Position);
+        ChangeBpm(history, project.Beats, arrangement);
+
+        history.Undo();
+        history.Undo();
+
+        Assert.Equal(Pos(3), note.BendValues[0].Position);
+        Assert.Same(bend, note.BendValues[0]);
+    }
+
+    private static void ChangeBpm(HistoryService history, IList<BeatMarker> beats, Arrangement arrangement)
+    {
+        var before = beats.Select(b => b.Clone()).ToList();
+        var after = beats.Select(b => b.Clone()).ToList();
+        after[0].Bpm += 30;
+        history.Do(new MutateBeatsAction(beats, before, after,
+            () => ChartSpacingEnforcer.EnforceArrangement(arrangement, beats.ToList(), Config())));
+    }
+
+    [Fact]
+    public void BeatMutation_WithALevelSpacingCallback_RestoresSustainsOnEveryUndo()
+    {
+        var level = new ChartLevel();
+        var beats = Beats(16);
+        var oldBeats = beats.Select(b => b.Clone()).ToList();
+        var newBeats = beats.Select(b => b.Clone()).ToList();
+        newBeats[0].Bpm = 240;
+        var sustained = new GuitarNote { Position = Pos(1), StringIndex = 0, Fret = 5, Sustain = Pos(4) };
+        level.Notes.Add(sustained);
+        level.Notes.Add(new GuitarNote { Position = Pos(2), StringIndex = 1, Fret = 7 });
+        var action = new MutateBeatsAction(beats, oldBeats, newBeats, Enforcer(level, beats));
+
+        for (var cycle = 0; cycle < 3; cycle++)
+        {
+            action.Execute();
+            Assert.True(sustained.Sustain < Pos(4));
+            action.Undo();
+            Assert.Equal(Pos(4), sustained.Sustain);
+            Assert.Equal(120, beats[0].Bpm);
+        }
+    }
+
+    [Fact]
     public void AddingANoteTruncatesTheNeighbour_AndUndoGivesItBack()
     {
         var level = new ChartLevel();

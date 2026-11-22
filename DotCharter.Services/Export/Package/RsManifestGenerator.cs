@@ -260,7 +260,19 @@ internal static class RsManifestGenerator
         attr["SongNameSort"] = meta.TitleSort;
         AddOriginalScriptNames(attr, meta.JapaneseTitle, meta.JapaneseArtist);
         if (meta.Year.HasValue) attr["SongYear"] = meta.Year.Value;
-        attr["Tuning"] = CreateTuning(sng);
+        if (sng.Extension is { } extension)
+        {
+            attr["ExtendedRange"] = new JsonObject { ["Version"] = RsxrStringLayout.FormatVersion };
+            var tuning = new JsonObject();
+            var type = extension.Instrument == RsExtensionBlock.InstrumentBass ? ArrangementType.Bass : ArrangementType.Lead;
+            for (var i = 0; i < extension.StringCount; i++)
+                tuning[$"string{i}"] = sng.MetaData.Tuning[RsxrStringLayout.SlotOf(i, extension.StringCount, type)];
+            attr["Tuning"] = tuning;
+        }
+        else
+        {
+            attr["Tuning"] = CreateTuning(sng);
+        }
     }
 
     private static JsonObject CreateTuning(RocksmithSng sng)
@@ -268,10 +280,6 @@ internal static class RsManifestGenerator
         var tuning = new JsonObject();
         for (var i = 0; i < 6; i++)
             tuning[$"string{i}"] = i < sng.MetaData.Tuning.Length ? sng.MetaData.Tuning[i] : (short)0;
-        // A 7-/8-string guitar: the rs7string tuner reads Rs7String6/7 after
-        // string5. Never "string6": the game's song list reads six ints and overflows.
-        for (var i = 6; i < sng.MetaData.Tuning.Length; i++)
-            tuning[Rs7StringLayout.ManifestKey(i)] = sng.MetaData.Tuning[i];
         return tuning;
     }
 
@@ -282,6 +290,9 @@ internal static class RsManifestGenerator
         var sorted = new JsonObject();
         foreach (var pair in attr.OrderBy(p => p.Key, StringComparer.Ordinal).ToList())
         {
+            if (pair.Key == "ExtendedRange") continue;
+            if (pair.Key == "Tuning" && attr.Remove("ExtendedRange", out var marker))
+                sorted["ExtendedRange"] = marker;
             attr.Remove(pair.Key);
             sorted[pair.Key] = pair.Value;
         }
@@ -391,26 +402,32 @@ internal static class RsManifestGenerator
     /// <summary>Sum of all regions of DNA ID → DNA None (or the end of the
     /// song) — the iteration version 2 algorithm. One forward walk: a chart can carry
     /// tens of thousands of DNA events, so nothing here recurses or rescans.</summary>
-    internal static double GetDnaTime(RocksmithSng sng, int dnaId)
+    internal static double GetDnaTime(RocksmithSng sng, int dnaId) => GetDnaTime(sng.Dnas, sng.MetaData.SongLength, dnaId);
+
+    /// <summary>The walk itself, over any list: each event is looked at a bounded number of
+    /// times, which a counting list in the tests holds it to.</summary>
+    internal static double GetDnaTime(IReadOnlyList<RsDna> dnas, float songLength, int dnaId)
     {
-        var dnas = sng.Dnas;
         var regions = new List<float>();
         var tail = 0f;
         var from = 0;
 
         while (from < dnas.Count)
         {
-            var next = dnas.FindIndex(from, dna => dna.DnaId == dnaId);
-            if (next < 0) break;
+            var next = from;
+            while (next < dnas.Count && dnas[next].DnaId != dnaId) next++;
+            if (next == dnas.Count) break;
 
-            var none = dnas.FindIndex(next, dna => dna.DnaId == 0);
-            if (none < 0)
+            var start = dnas[next].Time;
+            var none = next;
+            while (none < dnas.Count && dnas[none].DnaId != 0) none++;
+            if (none == dnas.Count)
             {
-                tail = sng.MetaData.SongLength - dnas[next].Time;
+                tail = songLength - start;
                 break;
             }
 
-            regions.Add(dnas[none].Time - dnas[next].Time);
+            regions.Add(dnas[none].Time - start);
             from = none + 1;
         }
 

@@ -152,49 +152,6 @@ public sealed class RocksmithExportLayoutUiPerfSmokeTests(ITestOutputHelper outp
         }), CancellationToken.None);
     }
 
-    [Theory]
-    [MemberData(nameof(Sizes))]
-    public async Task ReviewReport_IsAnOutlinedFireButton_OnTheSummaryLine(int width, int height)
-    {
-        await HeadlessSessionFixture.Dispatch(() => WithDialog(FakeRocksmithExportScreen.Default(), width, height, (view, _) =>
-        {
-            // #952: Prepare for Rocksmith is gone; the report button keeps the summary's line.
-            Assert.DoesNotContain(view.GetVisualDescendants().OfType<Button>(), b => b.Name == "PrepareButton");
-            var review = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ReviewReportButton");
-            Assert.Contains("FireGhost", review.Classes);
-            Assert.True(review.Bounds is { Width: > 1, Height: >= 30 }, $"Review laid out as {review.Bounds}");
-            Assert.True(review.BorderThickness.Top >= 1 && review.BorderBrush is not null, "Review draws no outline: it reads as a caption");
-            Assert.Equal(LocalizationService.Instance["Dialog_Export_ReviewReport"], ControlAutomationPeer.CreatePeerForElement(review).GetName());
-
-            var summary = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "ValidationSummaryText");
-            var r = RectIn(review, view);
-            var s = RectIn(summary, view);
-            Assert.True(r.Top < s.Bottom && s.Top < r.Bottom, $"Review {r} is not on the summary's line {s}");
-        }), CancellationToken.None);
-    }
-
-    /// <summary>#743: the split-chords row shows for a 7-/8-string guitar (the LongText
-    /// variant), lays out with a size and names its box; every other project hides it.</summary>
-    [Fact]
-    public async Task SplitExtendedChords_ShowsOnlyForASevenOrEightStringGuitar()
-    {
-        await HeadlessSessionFixture.Dispatch(() =>
-        {
-            WithDialog(FakeRocksmithExportScreen.LongText(), 1280, 720, (view, _) =>
-            {
-                var row = view.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "SplitExtendedChordsRow");
-                Assert.True(row.IsEffectivelyVisible);
-                Assert.True(row.Bounds is { Width: > 1, Height: > 1 }, $"split row laid out as {row.Bounds}");
-                var box = row.GetVisualDescendants().OfType<CheckBox>().Single();
-                Assert.True(box.Bounds is { Width: > 1, Height: > 1 }, $"split box laid out as {box.Bounds}");
-                Assert.Equal(LocalizationService.Instance["Dialog_Export_SplitExtendedChords"],
-                    ControlAutomationPeer.CreatePeerForElement(box).GetName());
-            });
-            WithDialog(FakeRocksmithExportScreen.Default(), 1280, 720, (view, _) =>
-                Assert.False(view.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "SplitExtendedChordsRow").IsEffectivelyVisible));
-        }, CancellationToken.None);
-    }
-
     /// <summary>
     ///     A plain package comes with a warning box under the package form (the Plain variant): it lays out
     ///     with a size inside the body, its text and its DLC Builder button fit whole (in de-DE and ja-JP
@@ -334,6 +291,33 @@ public sealed class RocksmithExportLayoutUiPerfSmokeTests(ITestOutputHelper outp
 
             if (lefts.Count != 1) problems.Add($"{at}: the links in column {column} start at {string.Join(", ", lefts)}");
         }
+    }
+
+    [Theory]
+    [MemberData(nameof(Sizes))]
+    public async Task ThePreviewStartField_IsMeasured_InsideTheBody_AndTheFooterStaysClear(int width, int height)
+    {
+        await HeadlessSessionFixture.Dispatch(() => WithDialog(FakeRocksmithExportScreen.Full(), width, height, (view, window) =>
+        {
+            var box = view.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "PreviewStartBox");
+            Assert.True(box.IsEffectivelyVisible);
+            var rect = RectIn(box, view);
+            Assert.True(rect.Width > 100 && rect.Height > 10, $"the preview start box measured {rect}");
+            var footer = RectIn(view.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("DialogFooter")), view);
+            var body = RectIn(Body(view), view);
+            Assert.True(rect.Right <= body.Right + 0.5, $"the box {rect} runs past the body {body}");
+            Assert.True(body.Bottom <= footer.Top + 0.5, $"the body {body} runs into the footer {footer}");
+            Assert.False(view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "PreviewStartInvalidHint").IsEffectivelyVisible);
+
+            // The row is scrolled into view for the capture; "before" is the same dialog with the row collapsed.
+            box.BringIntoView();
+            Dispatcher.UIThread.RunJobs();
+            Capture(window, $"rocksmith-export-preview-start-after-{width}x{height}.png");
+            var row = (Control)box.Parent!;
+            row.IsVisible = false;
+            window.UpdateLayout();
+            Capture(window, $"rocksmith-export-preview-start-before-{width}x{height}.png");
+        }), CancellationToken.None);
     }
 
     private static void Capture(Window window, string file)

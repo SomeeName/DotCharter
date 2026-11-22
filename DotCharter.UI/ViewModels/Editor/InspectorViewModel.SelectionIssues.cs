@@ -80,7 +80,7 @@ public partial class InspectorViewModel : IInspectorIssuesHost
             var issues = SelectionIssues();
             if (!ReferenceEquals(_foldedFrom, issues))
             {
-                var tuning = _chartEditor.ActiveArrangement?.Tuning;
+                var tuning = TuningDisplayNames.For(_chartEditor.ActiveArrangement);
                 var format = _localization["Inspector_StringLabelFmt"];
                 _folded = InspectorFieldIssue.Fold(issues,
                     strings => GuitarStringLabel.List(strings, tuning?.Length ?? 6, tuning, format),
@@ -110,7 +110,7 @@ public partial class InspectorViewModel : IInspectorIssuesHost
 
     /// <summary>Open the FEHLER tab on the selection's findings.</summary>
     [RelayCommand]
-    private void ShowSelectionIssues() => SelectedTabIndex = IssuesTabIndex;
+    private void ShowSelectionIssues() => ShowIssuesSection(IssuesSection.Findings);
 
     internal const int IssuesTabIndex = 4;
 
@@ -122,7 +122,14 @@ public partial class InspectorViewModel : IInspectorIssuesHost
     ///     blockers" from the lint alone.
     /// </summary>
     [RelayCommand]
-    private void ShowExportReadiness() => SelectedTabIndex = IssuesTabIndex;
+    private void ShowExportReadiness() => ShowIssuesSection(IssuesSection.Project);
+
+    /// <summary>Opens the Issues tab on one of its sections.</summary>
+    public void ShowIssuesSection(IssuesSection section)
+    {
+        IssuesSections.Open(section);
+        SelectedTabIndex = IssuesTabIndex;
+    }
 
     /// <summary>"4 findings" — the Sound rail's Findings badge, spoken and tipped; the count, in rows (<see cref="SelectionIssueCount" />).</summary>
     public string SelectionIssueSummary =>
@@ -137,6 +144,7 @@ public partial class InspectorViewModel : IInspectorIssuesHost
         OnPropertyChanged(nameof(SelectionBlocksExport));
         OnPropertyChanged(nameof(SelectionFieldIssues));
         OnPropertyChanged(nameof(SelectionIssuePips));
+        Findings.Reread();
     }
 
     // ---- IInspectorIssuesHost: what the Issues tab asks of the inspector ----

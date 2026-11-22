@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Microsoft.Win32;
 
 namespace DotCharter.Tone.Audio.Tonelab;
 
@@ -93,22 +92,17 @@ public static class RocksmithGame
     }
 
     /// <summary>
-    ///     The game folder from Steam's uninstall key (<c>Steam App 221680</c>, 32-bit registry view,
-    ///     <c>InstallLocation</c>), as tonelab's launcher reads it; null when there is none. Read only.
+    ///     The game folder (<see cref="RocksmithGameLocator" />: the configured folder, Steam's library data, then the uninstall key);
+    ///     null when there is none. Read only. The source is logged when a <paramref name="logger" /> is given.
     /// </summary>
-    public static string? FindGameDirectory()
+    public static string? FindGameDirectory(IAppLogger? logger = null) => FindGameDirectory(WindowsGameLocatorSystem.Instance, logger);
+
+    internal static string? FindGameDirectory(IGameLocatorSystem system, IAppLogger? logger)
     {
-        if (!OperatingSystem.IsWindows()) return null;
-        try
-        {
-            using var hive = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
-            using var key = hive.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App " + SteamAppId);
-            return key?.GetValue("InstallLocation") is string { Length: > 0 } dir && Directory.Exists(dir) ? dir : null;
-        }
-        catch (Exception ex) when (ex is System.Security.SecurityException or IOException or UnauthorizedAccessException)
-        {
-            return null;
-        }
+        var finding = RocksmithGameLocator.Find(system);
+        if (finding.Directory is null) logger?.Warning(AppLogCategory.Audio, $"tonelab: the Rocksmith folder was not found ({finding.Reason}).");
+        else logger?.Info(AppLogCategory.Audio, $"tonelab: the Rocksmith folder came from {finding.Source}: {finding.Directory}.");
+        return finding.Directory;
     }
 }
 

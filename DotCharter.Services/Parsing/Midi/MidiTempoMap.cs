@@ -23,7 +23,7 @@ public sealed class MidiTempoMap
 
         _segments =
         [
-            new(0, 0.0, DefaultMicrosecondsPerQuarterNote)
+            new(0, 0, DefaultMicrosecondsPerQuarterNote)
         ];
 
         foreach (var tempo in tempoEvents.Where(t => t.Ticks >= 0 && t.MicrosecondsPerQuarterNote > 0)
@@ -37,16 +37,36 @@ public sealed class MidiTempoMap
                 continue;
             }
 
-            var startMs = previous.StartMs + TicksToMsWithin(previous, tempo.Ticks - previous.StartTicks);
-            _segments.Add(new Segment(tempo.Ticks, startMs, tempo.MicrosecondsPerQuarterNote));
+            var startTime = previous.StartTickTime + (decimal)(tempo.Ticks - previous.StartTicks) * previous.MicrosecondsPerQuarterNote;
+            _segments.Add(new Segment(tempo.Ticks, startTime, tempo.MicrosecondsPerQuarterNote));
         }
     }
 
-    public double TicksToMs(long ticks)
+    public double TicksToMs(long ticks) => (double)(TickTime(ticks) / _ticksPerQuarterNote / 1000);
+
+    // Integer microseconds multiplied by PPQ: exact across tempo boundaries,
+    // even when the absolute song time is too large for a long product.
+    internal decimal TickTime(long ticks)
     {
-        if (ticks <= 0) return 0.0;
+        if (ticks <= 0) return 0;
         var segment = SegmentAt(ticks);
-        return segment.StartMs + TicksToMsWithin(segment, ticks - segment.StartTicks);
+        return segment.StartTickTime + (decimal)(ticks - segment.StartTicks) * segment.MicrosecondsPerQuarterNote;
+    }
+
+    internal long TicksAtTickTime(decimal time)
+    {
+        var lo = 1;
+        var hi = _segments.Count;
+        while (lo < hi)
+        {
+            var mid = lo + ((hi - lo) >> 1);
+            if (_segments[mid].StartTickTime <= time) lo = mid + 1;
+            else hi = mid;
+        }
+
+        var segment = _segments[lo - 1];
+        var ticks = segment.StartTicks + decimal.Ceiling((time - segment.StartTickTime) / segment.MicrosecondsPerQuarterNote);
+        return (long)Math.Clamp(ticks, 0, long.MaxValue);
     }
 
     public int MicrosecondsPerQuarterNoteAt(long ticks) => SegmentAt(ticks).MicrosecondsPerQuarterNote;
@@ -134,7 +154,7 @@ public sealed class MidiTempoMap
             tick = next;
         }
 
-        return new MidiBeatGrid(beats, beatTicks);
+        return new MidiBeatGrid(beats, beatTicks.Select(TickTime).ToList(), this);
     }
 
     /// <summary>
@@ -180,59 +200,101 @@ public sealed class MidiTempoMap
         return _segments[lo - 1];
     }
 
-    private double TicksToMsWithin(Segment segment, long ticksIntoSegment) => ticksIntoSegment * (segment.MicrosecondsPerQuarterNote / 1000.0) / _ticksPerQuarterNote;
-
-    private readonly record struct Segment(long StartTicks, double StartMs, int MicrosecondsPerQuarterNote);
+    private readonly record struct Segment(long StartTicks, decimal StartTickTime, int MicrosecondsPerQuarterNote);
 }
 
 /// <summary>
 /// The beat grid <see cref="MidiTempoMap.BuildBeatGrid" /> laid, with each
-/// marker's MIDI tick, so a tick lands on it as an exact rational.
+/// marker's exact elapsed time, so tempo changes within a beat survive chart interpolation.
 /// </summary>
 public sealed class MidiBeatGrid
 {
-    private readonly List<long> _beatTicks;
+    private readonly List<decimal> _beatTimes;
+    private readonly MidiTempoMap _tempoMap;
 
-    internal MidiBeatGrid(List<BeatMarker> beats, List<long> beatTicks)
+    internal MidiBeatGrid(List<BeatMarker> beats, List<decimal> beatTimes, MidiTempoMap tempoMap)
     {
         Beats = beats;
-        _beatTicks = beatTicks;
+        _beatTimes = beatTimes;
+        _tempoMap = tempoMap;
     }
 
     public List<BeatMarker> Beats { get; }
 
     /// <summary>
     /// <paramref name="ticks" /> as a position on <see cref="Beats" />: the beat
-    /// it falls in plus the exact fraction of that beat's ticks. Past the last
-    /// marker it extrapolates with the last beat's length; a negative tick is
-    /// position zero.
+    /// it falls in plus the fraction of that beat's elapsed time. At constant
+    /// tempo this is exactly the tick fraction. Past the last marker it
+    /// extrapolates with the last beat's length; a negative tick is position zero.
     /// </summary>
-    public FractionalPosition PositionFromTicks(long ticks)
-    {
-        if (ticks <= 0 || _beatTicks.Count < 2) return FractionalPosition.Zero;
+    public FractionalPosition PositionFromTicks(long ticks) => PositionFromTickTime(_tempoMap.TickTime(ticks));
 
-        var index = _beatTicks.BinarySearch(ticks);
+    internal (FractionalPosition Position, FractionalPosition Sustain) SpanFromTickTimes(decimal startTime, decimal endTime)
+    {
+        var start = PositionFromTickTime(startTime);
+        var end = PositionFromTickTime(endTime);
+        if (TryDuration(start, end, out var sustain)) return (start, sustain);
+
+        // One bounded denominator also keeps the intermediate fractional sum
+        // representable when a caller reconstructs the end from onset + sustain.
+        start = Bounded(start);
+        end = Bounded(end);
+        return (start, new FractionalPosition(end.BeatId - start.BeatId, end.Fraction - start.Fraction));
+    }
+
+    private static bool TryDuration(FractionalPosition start, FractionalPosition end, out FractionalPosition sustain)
+    {
+        var a = start.Fraction;
+        var b = end.Fraction;
+        if (!Fraction.TryCreate((long)b.Numerator * a.Denominator - (long)a.Numerator * b.Denominator,
+                (long)a.Denominator * b.Denominator, out var difference))
+        {
+            sustain = FractionalPosition.Zero;
+            return false;
+        }
+
+        // Construct the checked difference directly: negating a position first
+        // normalizes it and can create an overflowing intermediate numerator.
+        sustain = new FractionalPosition(end.BeatId - start.BeatId, difference);
+        var fraction = sustain.Fraction;
+        return Fraction.TryCreate((long)a.Numerator * fraction.Denominator + (long)fraction.Numerator * a.Denominator,
+            (long)a.Denominator * fraction.Denominator, out _);
+    }
+
+    private static FractionalPosition Bounded(FractionalPosition position) => new(position.BeatId,
+        new Fraction((long)decimal.Round((decimal)position.Fraction.Numerator / position.Fraction.Denominator * 1_000_000_000), 1_000_000_000));
+
+    internal FractionalPosition PositionFromTickTime(decimal time)
+    {
+        if (time <= 0 || _beatTimes.Count < 2) return FractionalPosition.Zero;
+
+        var index = _beatTimes.BinarySearch(time);
         if (index < 0) index = ~index - 1;
 
-        long beatId;
-        long remainder;
-        long span;
-        if (index < _beatTicks.Count - 1)
+        var beatId = (decimal)index;
+        decimal remainder;
+        decimal span;
+        if (index < _beatTimes.Count - 1)
         {
-            beatId = index;
-            remainder = ticks - _beatTicks[index];
-            span = _beatTicks[index + 1] - _beatTicks[index];
+            remainder = time - _beatTimes[index];
+            span = _beatTimes[index + 1] - _beatTimes[index];
         }
         else
         {
-            span = _beatTicks[^1] - _beatTicks[^2];
-            var past = ticks - _beatTicks[^1];
-            beatId = _beatTicks.Count - 1 + past / span;
+            span = _beatTimes[^1] - _beatTimes[^2];
+            var past = time - _beatTimes[^1];
+            beatId = _beatTimes.Count - 1 + decimal.Floor(past / span);
             remainder = past % span;
         }
 
-        return beatId > int.MaxValue
-            ? new FractionalPosition(int.MaxValue)
-            : new FractionalPosition((int)beatId, new Fraction(remainder, span));
+        if (beatId >= int.MaxValue) return new FractionalPosition(int.MaxValue);
+        // Normal MIDI beat spans fit a long. An exotic weighted ratio can
+        // exceed Fraction's int range even after reduction; keep sub-nanobeat
+        // precision in that case rather than rejecting an otherwise valid file.
+        var fraction = remainder <= long.MaxValue && span <= long.MaxValue &&
+                       Fraction.TryCreate((long)remainder, (long)span, out var exact)
+            ? exact
+            : new Fraction((long)decimal.Round(remainder / span * 1_000_000_000), 1_000_000_000);
+        return new FractionalPosition((int)beatId, fraction);
     }
 }

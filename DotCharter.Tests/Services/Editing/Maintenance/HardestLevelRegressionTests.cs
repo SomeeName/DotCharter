@@ -106,7 +106,7 @@ public sealed class HardestLevelRegressionTests
         var foreign = new ChartLevel();
         var vm = new SoundQueueViewModel(
             () => arrangement, () => foreign, () => [], () => [], new SelectionService(), _ => { },
-            FakeLocalization.English());
+            FakeLocalization.English(), _ => (ChordNamingOptions.Default, DoubleStopNameOptions.Default));
 
         Assert.Equal(4, vm.Matches(SoundQueueFilter.AnySound).Count);
     }

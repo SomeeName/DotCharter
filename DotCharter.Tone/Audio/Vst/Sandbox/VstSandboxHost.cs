@@ -12,7 +12,7 @@ namespace DotCharter.Tone.Audio.Vst.Sandbox;
 /// chain replay live in the caller — a host instance is single-use; after
 /// <see cref="Exited"/> fires, create a fresh one.
 /// </summary>
-public sealed class VstSandboxHost : IDisposable, IVstSandboxChannel
+public sealed class VstSandboxHost : IVstSandboxHost
 {
     public const string ExecutableName = "juce_vst_host.exe";
 

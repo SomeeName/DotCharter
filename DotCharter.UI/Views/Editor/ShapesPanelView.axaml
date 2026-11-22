@@ -2,333 +2,389 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:contracts="using:DotCharter.Presentation.Contracts.Editor"
              xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:conv="using:DotCharter.UI.Converters"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              x:Class="DotCharter.UI.Views.Editor.ShapesPanelView"
              x:DataType="contracts:IShapePanelScreen"
              x:CompileBindings="True">
 
     <!--
-        The Shapes panel: one card per chord shape. A card shows the diagram, the
-        name (typed in place) and the use count, plus a small dot when the shape
-        needs attention. Everything else — the problem and its one fix, the
-        actions, No name — sits in two RESERVED strips (a MinHeight, so a card
-        never changes height when the pointer enters it) that show on the hovered,
-        focused or current card only, or on a card that can take the merge being
-        chosen, or a card that is ticked for a bulk edit (its tick shows with it). Nothing on a card is truncated: names and sentences wrap. A merge
-        (Merge… then Merge here, or a problem's Merge fix) and a delete of a used
-        shape wait in ONE confirmation bar over the list; nothing changes before
-        its yes. A card dragged onto another (ShapeCardDrag) picks the same merge.
+        The Chord shapes tab, laid out as inspector design D: a ColumnFlowPanel of four cards.
+        * The LIST card (pinned head and foot, the list between them scrolls): search, the shape
+          count and the "Needs attention" chip, the merge-target hint, one LINE per shape (its
+          bulk-edit tick, frets, name and attention dot; Merge here while a target is wanted),
+          then Repeat previous chord and Clean up. A line pressed or focused becomes the screen's
+          CurrentRow; a line dragged onto another picks the merge (ShapeCardDrag). Only the lines
+          in view exist (ShapeRowsList).
+        * SHAPE: the current shape — diagram (Place), name typed in place, frets and uses, its
+          problem and fix, and every card verb.
+        * CHECKED: the ticked shapes' bulk verbs and the ONE confirmation bar: a merge or a used
+          shape's delete waits there, saying what moves where, before anything changes; a verb
+          that asks brings this page on screen.
+        * USES: the current shape's chords and hand shapes on this level; a tick is the editor's
+          selection, Split uses gives the ticked ones their own copy.
+        At Small the list keeps the left column and the other three share a pager beside it; at
+        Tiny every card is paged; wider panes give them columns (ColumnFlowPages).
     -->
     <UserControl.Styles>
-        <Style Selector=":is(Panel).ShapeReveal">
-            <Setter Property="IsVisible" Value="False" />
-        </Style>
-        <Style Selector="Border.ShapeCard:pointerover :is(Panel).ShapeReveal">
-            <Setter Property="IsVisible" Value="True" />
-        </Style>
-        <Style Selector="Border.ShapeCard:focus-within :is(Panel).ShapeReveal">
-            <Setter Property="IsVisible" Value="True" />
-        </Style>
-        <Style Selector="Border.ShapeCard.current :is(Panel).ShapeReveal">
-            <Setter Property="IsVisible" Value="True" />
-        </Style>
-        <Style Selector="Border.ShapeCard.candidate :is(Panel).ShapeReveal">
-            <Setter Property="IsVisible" Value="True" />
-        </Style>
-        <Style Selector="Border.ShapeCard.Record :is(Panel).ShapeReveal">
-            <Setter Property="IsVisible" Value="True" />
-        </Style>
-        <!-- Split off selection beside Merge, and Merge here, are offered by the selection and the merge being chosen, never by
-             hover: a card holding them reserves a second row for the pair, so revealing the strip still changes no height. -->
-        <Style Selector="Border.ShapeActions">
-            <Setter Property="MinHeight" Value="32" />
-        </Style>
-        <Style Selector="Border.ShapeActions.WithSplit.WithMerge">
-            <Setter Property="MinHeight" Value="60" />
-        </Style>
-        <Style Selector="Border.ShapeActions.WithMergeHere">
-            <Setter Property="MinHeight" Value="60" />
-        </Style>
         <Style Selector="Border.ShapeCard.current">
             <Setter Property="Background" Value="{DynamicResource FireRowSelectedFill}" />
         </Style>
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,Auto,*" Background="{DynamicResource FireSurfaceChrome}">
-
-        <Border Grid.Row="0" x:Name="ShapesHeader" Padding="{StaticResource FirePadListRowDense}"
-                Background="{DynamicResource FireSurfaceBar}"
-                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1">
-            <StackPanel Spacing="{StaticResource FireSpaceSm}">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
-                    <TextBlock Grid.Column="0" x:Name="ShapesSummary" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
-                               VerticalAlignment="Center" Text="{Binding Summary}" TextWrapping="Wrap" />
-                    <ToggleButton Grid.Column="1" x:Name="ShapesAttentionOnly" Theme="{StaticResource ChipToggle}" Classes="Chip Mini"
-                              VerticalAlignment="Center" Margin="0" MinHeight="22" Padding="8,1"
-                              IsVisible="{Binding HasAttentionFilter}"
-                              IsChecked="{Binding ShowAttentionOnly, Mode=TwoWay}"
-                              Content="{Binding AttentionFilterLabel}"
-                              AutomationProperties.Name="{Binding AttentionFilterLabel}"
-                              ToolTip.Tip="{localization:Loc Shapes_Filter_Attention_Tip}" />
+    <UserControl.Resources>
+        <DataTemplate x:Key="ShapesCardTemplate" x:DataType="contracts:IShapePanelRow">
+            <Border x:Name="ShapeCard" Theme="{StaticResource FireListRowBorder}" Classes="FireListRow ShapeCard"
+                    Focusable="True" MinHeight="30" Padding="{StaticResource FireGapHSm}"
+                    AutomationProperties.Name="{Binding FretsText}"
+                    ctl:ShapeCardDrag.Begin="{Binding BeginDragCommand}"
+                    ctl:ShapeCardDrag.Over="{Binding DragOverCommand}"
+                    ctl:ShapeCardDrag.Drop="{Binding DropCommand}"
+                    ctl:ShapeCardDrag.End="{Binding EndDragCommand}"
+                    Classes.current="{Binding IsCurrent}"
+                    Classes.selected="{Binding IsMergeTarget}"
+                    Classes.Record="{Binding IsSelected}"
+                    Classes.Unavailable="{Binding IsMergeSource}"
+                    Classes.candidate="{Binding CanMergeHere}">
+                <Border.KeyBindings>
+                    <KeyBinding Gesture="Delete" Command="{Binding DeleteCommand}" />
+                </Border.KeyBindings>
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                    <CheckBox Grid.Column="0" x:Name="ShapeTick" MinWidth="0" MinHeight="24" Padding="0"
+                              VerticalAlignment="Center" IsVisible="{Binding CanTick}"
+                              IsChecked="{Binding IsSelected}"
+                              AutomationProperties.Name="{localization:Loc Shapes_Select}"
+                              ToolTip.Tip="{localization:Loc Shapes_Select}" />
+                    <!-- Beside a name, a seven- or eight-string pattern trims before it squeezes the name: at most
+                         45 % of the line (the whole pattern is in its tip and on the Shape page). -->
+                    <TextBlock Grid.Column="1" x:Name="ShapeFrets" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp"
+                               Classes.selected="{Binding IsCurrent}" Text="{Binding FretsText}"
+                               Classes.named="{Binding NameText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FretsText}">
+                        <TextBlock.Styles>
+                            <Style Selector="TextBlock.named">
+                                <Setter Property="MaxWidth" Value="{Binding $parent[Grid].Bounds,
+                                    Converter={x:Static conv:ViewportFractionConverter.Instance},
+                                    ConverterParameter=Width:0.45}" />
+                            </Style>
+                        </TextBlock.Styles>
+                    </TextBlock>
+                    <TextBlock Grid.Column="2" x:Name="ShapeTitle" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody"
+                               Text="{Binding NameText}" ToolTip.Tip="{Binding UsesText}" />
+                    <Ellipse Grid.Column="3" x:Name="ShapeDot" Width="8" Height="8" VerticalAlignment="Center"
+                             Fill="{DynamicResource FireWarning}" IsVisible="{Binding HasIssue}"
+                             ToolTip.Tip="{Binding IssueText}"
+                             AutomationProperties.Name="{Binding IssueText}" />
+                    <Button Grid.Column="4" x:Name="ShapeMergeHere" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary"
+                            IsVisible="{Binding CanMergeHere}"
+                            Content="{localization:Loc Shapes_MergeHere}"
+                            AutomationProperties.Name="{localization:Loc Shapes_MergeHere}"
+                            Command="{Binding MergeHereCommand}" />
                 </Grid>
-                <WrapPanel Orientation="Horizontal" ItemSpacing="{StaticResource FireSpaceXs}" LineSpacing="{StaticResource FireSpaceXs}">
-                    <Button x:Name="ShapesRepeatPrevious" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                            Content="{localization:Loc Keybind_RepeatPreviousChord}"
-                            AutomationProperties.Name="{localization:Loc Keybind_RepeatPreviousChord}"
-                            ToolTip.Tip="{localization:Loc ChordShapes_RepeatPrevious_Tip}"
-                            Command="{Binding RepeatPreviousChordCommand}" />
-                    <Button x:Name="ShapesCleanUp" Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
-                            IsVisible="{Binding HasCleanUp}"
-                            Content="{Binding CleanUpLabel}"
-                            AutomationProperties.Name="{Binding CleanUpLabel}"
-                            ToolTip.Tip="{localization:Loc Shapes_CleanUp_Tip}"
-                            Command="{Binding CleanUpCommand}" />
-                </WrapPanel>
-                <TextBox x:Name="ShapesSearch" Text="{Binding SearchText}"
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ctl:ColumnFlowPanel x:Name="ShapesCards" Margin="8,6">
+        <!-- ── the list: pinned head and foot, the lines scroll between them ── -->
+        <Border x:Name="ShapesListCard" Theme="{StaticResource ColumnFlowFrame}" Classes="ColumnFlowFrame"
+                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Tab_ChordShapes}">
+            <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="{StaticResource FireSpaceXs}">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                    <TextBlock Grid.Column="0" x:Name="ShapesHeader" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                               Text="{localization:Loc Inspector_Tab_ChordShapes}" ToolTip.Tip="{Binding Summary}" />
+                    <ToggleButton Grid.Column="1" x:Name="ShapesAttentionOnly" Theme="{StaticResource ChipToggle}" Classes="Chip Mini"
+                                  VerticalAlignment="Top" Margin="0" MinHeight="22" Padding="8,1"
+                                  IsVisible="{Binding HasAttentionFilter}"
+                                  IsChecked="{Binding ShowAttentionOnly, Mode=TwoWay}"
+                                  Content="{Binding AttentionFilterLabel}"
+                                  AutomationProperties.Name="{Binding AttentionFilterLabel}"
+                                  ToolTip.Tip="{localization:Loc Shapes_Filter_Attention_Tip}" />
+                </Grid>
+                <TextBox Grid.Row="1" x:Name="ShapesSearch" Classes="ColumnFlowField" Text="{Binding SearchText}"
                          PlaceholderText="{localization:Loc Shapes_Search}"
                          AutomationProperties.Name="{localization:Loc Shapes_Search}" />
-            </StackPanel>
-        </Border>
-
-        <!-- The bulk bar while cards are ticked, the one confirmation bar, and the
-             merge-target hint: what moves where, before it moves. -->
-        <StackPanel Grid.Row="1">
-            <Border x:Name="ShapesSelectionBar" IsVisible="{Binding HasSelection}"
-                    Padding="{StaticResource FirePadListRowDense}" Background="{DynamicResource FireSurfaceBar}"
-                    BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1">
-                <StackPanel Spacing="{StaticResource FireSpaceSm}">
-                    <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
-                               Text="{Binding SelectionText}" TextWrapping="Wrap" />
-                    <WrapPanel Orientation="Horizontal" ItemSpacing="{StaticResource FireSpaceXs}" LineSpacing="{StaticResource FireSpaceXs}">
-                        <Button x:Name="ShapesEditSelected" Theme="{StaticResource PrimaryButton}" Classes="Primary Compact"
-                                Content="{localization:Loc Shapes_EditSelected}"
-                                AutomationProperties.Name="{localization:Loc Shapes_EditSelected}"
-                                ToolTip.Tip="{localization:Loc Shapes_EditSelected_Tip}"
-                                Command="{Binding EditSelectedCommand}" />
-                        <Button x:Name="ShapesMergeSelected" Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
-                                Content="{localization:Loc Shapes_MergeSelected}"
-                                AutomationProperties.Name="{localization:Loc Shapes_MergeSelected}"
-                                Command="{Binding MergeSelectedCommand}" />
-                        <Button x:Name="ShapesDeleteSelected" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                                Content="{localization:Loc ChordShapes_Delete}"
-                                AutomationProperties.Name="{localization:Loc ChordShapes_Delete}"
-                                Command="{Binding DeleteSelectedCommand}" />
-                        <Button x:Name="ShapesClearSelection" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                                Content="{localization:Loc Shapes_ClearSelection}"
-                                AutomationProperties.Name="{localization:Loc Shapes_ClearSelection}"
-                                Command="{Binding ClearSelectionCommand}" />
-                    </WrapPanel>
-                </StackPanel>
-            </Border>
-            <Border x:Name="ShapesPendingBar" IsVisible="{Binding HasPending}"
-                    Padding="{StaticResource FirePadListRowDense}" Background="{DynamicResource FireRowSelectedFill}"
-                    BorderBrush="{DynamicResource FireAccent}" BorderThickness="0,0,0,1">
-                <StackPanel Spacing="{StaticResource FireSpaceSm}">
-                    <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" Text="{Binding PendingText}"
-                               TextWrapping="Wrap" />
-                    <WrapPanel Orientation="Horizontal" ItemSpacing="{StaticResource FireSpaceXs}" LineSpacing="{StaticResource FireSpaceXs}"
-                               HorizontalAlignment="Right">
-                        <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                                Content="{localization:Loc Action_Cancel}"
-                                AutomationProperties.Name="{localization:Loc Action_Cancel}"
-                                Command="{Binding CancelPendingCommand}" />
-                        <Button x:Name="ShapesConfirm" Theme="{StaticResource PrimaryButton}" Classes="Primary Compact"
-                                IsVisible="{Binding !IsPendingDestructive}"
-                                Content="{Binding PendingConfirmLabel}"
-                                AutomationProperties.Name="{Binding PendingConfirmLabel}"
-                                Command="{Binding ConfirmPendingCommand}" />
-                        <Button x:Name="ShapesConfirmDanger" Theme="{StaticResource DangerButton}" Classes="Danger"
-                                IsVisible="{Binding IsPendingDestructive}"
-                                Content="{Binding PendingConfirmLabel}"
-                                AutomationProperties.Name="{Binding PendingConfirmLabel}"
-                                Command="{Binding ConfirmPendingCommand}" />
-                    </WrapPanel>
-                </StackPanel>
-            </Border>
-            <Border x:Name="ShapesMergeHint" IsVisible="{Binding IsChoosingMergeTarget}"
-                    Padding="{StaticResource FirePadListRowDense}" Background="{DynamicResource FireSurfaceBar}"
-                    BorderBrush="{DynamicResource FireAccent}" BorderThickness="0,0,0,1">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
-                    <TextBlock Grid.Column="0" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
-                               VerticalAlignment="Center" Text="{Binding MergeHintText}" TextWrapping="Wrap" />
-                    <Button Grid.Column="1" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                <TextBlock Grid.Row="2" x:Name="ShapesSummary" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                           Text="{Binding Summary}" TextWrapping="Wrap" />
+                <!-- A merge source is picked (Merge… or a drag): the lines that can take it offer Merge here. -->
+                <Grid Grid.Row="3" x:Name="ShapesMergeHint" IsVisible="{Binding IsChoosingMergeTarget}"
+                      ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                               Text="{Binding MergeHintText}" TextWrapping="Wrap" />
+                    <Button Grid.Column="1" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
                             Content="{localization:Loc Action_Cancel}"
                             AutomationProperties.Name="{localization:Loc Action_Cancel}"
                             Command="{Binding CancelPendingCommand}" />
                 </Grid>
-            </Border>
-        </StackPanel>
+                <TextBlock Grid.Row="4" x:Name="ShapesEmpty" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                           VerticalAlignment="Top" TextWrapping="Wrap"
+                           IsVisible="{Binding !HasRows}" Text="{Binding EmptyText}" />
+                <!-- A plain items control in its own scroll viewer: only the lines in view exist
+                     (ShapeRowsList), and a strip is no item: no selection, no chrome, no key. -->
+                <ScrollViewer Grid.Row="4" x:Name="ShapesScroll" IsVisible="{Binding HasRows}"
+                              HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                              AllowAutoHide="False">
+                    <ctl:ShapeRowsList x:Name="ShapesRows" SourceRows="{Binding Rows}"
+                                       CardTemplate="{StaticResource ShapesCardTemplate}"
+                                       KeyboardNavigation.TabNavigation="Local"
+                                       AutomationProperties.Name="{localization:Loc Inspector_Tab_ChordShapes}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel CacheLength="0" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ctl:ShapeRowsList>
+                </ScrollViewer>
+                <Grid Grid.Row="5" ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceXs}">
+                    <Button Grid.Column="0" x:Name="ShapesRepeatPrevious" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                            HorizontalAlignment="Stretch"
+                            AutomationProperties.Name="{localization:Loc Keybind_RepeatPreviousChord}"
+                            ToolTip.Tip="{localization:Loc ChordShapes_RepeatPrevious_Tip}"
+                            Command="{Binding RepeatPreviousChordCommand}">
+                        <!-- Wraps rather than trims: the German "Vorherigen Akkord wiederholen" needs two lines at 480. -->
+                        <TextBlock Text="{localization:Loc Keybind_RepeatPreviousChord}" TextWrapping="Wrap" TextAlignment="Center" />
+                    </Button>
+                    <Button Grid.Column="1" x:Name="ShapesCleanUp" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                            HorizontalAlignment="Stretch" IsEnabled="{Binding HasCleanUp}"
+                            AutomationProperties.Name="{localization:Loc Shapes_CleanUpNone}"
+                            ToolTip.Tip="{localization:Loc Shapes_CleanUp_Tip}"
+                            Command="{Binding CleanUpCommand}">
+                        <Panel>
+                            <TextBlock Text="{Binding CleanUpLabel}" IsVisible="{Binding HasCleanUp}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{localization:Loc Shapes_CleanUpNone}" IsVisible="{Binding !HasCleanUp}" />
+                        </Panel>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
 
-        <TextBlock Grid.Row="2" x:Name="ShapesEmpty" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
-                   Margin="{StaticResource FirePadListRowDense}" TextWrapping="Wrap"
-                   IsVisible="{Binding !HasRows}" Text="{Binding EmptyText}" />
+        <!-- ── Shape: the current shape and every card verb ── -->
+        <ctl:ColumnFlowCard x:Name="ShapesShapeCard" ctl:ColumnFlowPanel.Title="{localization:Loc Shapes_Page_Shape}">
+            <Panel>
+                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                           IsVisible="{Binding !HasCurrentRow}" Text="{Binding EmptyText}" />
+                <Border IsVisible="{Binding HasCurrentRow}">
+                    <Panel DataContext="{Binding CurrentRow}">
+                    <StackPanel x:Name="ShapeDetail" x:DataType="contracts:IShapePanelRow"
+                                Spacing="{StaticResource FireSpaceXs}">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSm}">
+                            <Button Grid.Column="0" x:Name="ShapePlace" Theme="{StaticResource FirePresetCardButton}" Classes="FirePresetCard"
+                                    Padding="{StaticResource FirePadTag}" VerticalAlignment="Top"
+                                    Command="{Binding PlaceCommand}"
+                                    AutomationProperties.Name="{Binding FretsText}"
+                                    ToolTip.Tip="{localization:Loc ChordShapes_Place_Tip}">
+                                <ctl:ChordDiagramControl Width="60" Height="58" Chord="{Binding DiagramChord}"
+                                                         Template="{Binding Diagram}" StringCount="{Binding StringCount}" />
+                            </Button>
+                            <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceXs}">
+                                <!-- The name, typed in place and applied on Enter or when the box loses focus. -->
+                                <TextBox x:Name="ShapeName" Classes="ColumnFlowField" Text="{Binding NameText}"
+                                         PlaceholderText="{Binding NamePlaceholder}" AcceptsReturn="False"
+                                         IsEnabled="{Binding !IsNoName}"
+                                         AutomationProperties.Name="{localization:Loc ChordShapes_NameBox}">
+                                    <TextBox.KeyBindings>
+                                        <KeyBinding Gesture="Enter" Command="{Binding CommitNameCommand}" />
+                                    </TextBox.KeyBindings>
+                                </TextBox>
+                                <!-- The whole pattern: a seven- or eight-string one wraps at its spaces in a narrow card. -->
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                    <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                               Text="{localization:Loc Shapes_FretsLabel}" />
+                                    <TextBlock Grid.Column="1" x:Name="ShapeFretsValue" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowValue"
+                                               Text="{Binding FretsText}" TextAlignment="Right" TextWrapping="Wrap" />
+                                </Grid>
+                                <TextBlock x:Name="ShapeUses" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                           Text="{Binding UsesText}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Grid>
+                        <!-- The problem and its one fix. -->
+                        <Grid IsVisible="{Binding HasIssue}" ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                            <TextBlock Grid.Column="0" x:Name="ShapeIssue" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                       Foreground="{DynamicResource FireWarning}" Text="{Binding IssueText}" TextWrapping="Wrap" />
+                            <Button Grid.Column="1" x:Name="ShapeFix" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    Content="{Binding FixLabel}"
+                                    AutomationProperties.Name="{Binding FixLabel}"
+                                    Command="{Binding FixCommand}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto"
+                              ColumnSpacing="{StaticResource FireSpaceXs}" RowSpacing="{StaticResource FireSpaceXs}">
+                            <Button Grid.Row="0" Grid.Column="0" x:Name="ShapePlaceAction" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    HorizontalAlignment="Stretch"
+                                    Content="{localization:Loc ChordShapes_Place}"
+                                    AutomationProperties.Name="{localization:Loc ChordShapes_Place}"
+                                    ToolTip.Tip="{localization:Loc ChordShapes_Place_Tip}"
+                                    Command="{Binding PlaceCommand}" />
+                            <!-- A nameless shape offers the chord namer's suggestion in one click. -->
+                            <Button Grid.Row="0" Grid.Column="1" x:Name="ShapeUseSuggestion" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    HorizontalAlignment="Stretch" IsEnabled="{Binding HasSuggestion}"
+                                    AutomationProperties.Name="{localization:Loc Shapes_UseSuggestion}"
+                                    Command="{Binding UseSuggestionCommand}">
+                                <Panel>
+                                    <TextBlock Text="{Binding SuggestionLabel}" IsVisible="{Binding HasSuggestion}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{localization:Loc Shapes_NoSuggestion}" IsVisible="{Binding !HasSuggestion}" TextTrimming="CharacterEllipsis" />
+                                </Panel>
+                            </Button>
+                            <ToggleButton Grid.Row="1" Grid.Column="0" x:Name="ShapeNoName" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                                          HorizontalAlignment="Stretch" IsChecked="{Binding IsNoName}"
+                                          Content="{localization:Loc ShapeEdit_NoName}"
+                                          AutomationProperties.Name="{localization:Loc ShapeEdit_NoName}"
+                                          ToolTip.Tip="{localization:Loc ShapeEdit_NoNameDesc}" />
+                            <Button Grid.Row="1" Grid.Column="1" x:Name="ShapeEdit" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary"
+                                    HorizontalAlignment="Stretch" IsEnabled="{Binding CanEdit}"
+                                    Content="{localization:Loc Shapes_Edit}"
+                                    AutomationProperties.Name="{localization:Loc Shapes_Edit}"
+                                    ToolTip.Tip="{localization:Loc Shapes_Edit_Tip}"
+                                    Command="{Binding EditCommand}" />
+                            <Button Grid.Row="2" Grid.Column="0" x:Name="ShapeSelectUses" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    HorizontalAlignment="Stretch" IsEnabled="{Binding !IsUnused}"
+                                    Content="{localization:Loc ChordShapes_SelectUses}"
+                                    AutomationProperties.Name="{localization:Loc ChordShapes_SelectUses}"
+                                    ToolTip.Tip="{localization:Loc ChordShapes_SelectUses_Tip}"
+                                    Command="{Binding SelectUsesCommand}" />
+                            <Button Grid.Row="2" Grid.Column="1" x:Name="ShapeNextUse" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    HorizontalAlignment="Stretch" IsEnabled="{Binding !IsUnused}"
+                                    Content="{localization:Loc ChordShapes_NextUse}"
+                                    AutomationProperties.Name="{localization:Loc ChordShapes_NextUse}"
+                                    ToolTip.Tip="{localization:Loc ChordShapes_NextUse_Tip}"
+                                    Command="{Binding NextUseCommand}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto"
+                              ColumnSpacing="{StaticResource FireSpaceXs}" RowSpacing="{StaticResource FireSpaceXs}">
+                            <Button Grid.Row="0" Grid.Column="0" x:Name="ShapeSplit" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    HorizontalAlignment="Stretch" IsEnabled="{Binding CanSplitSelection}"
+                                    AutomationProperties.Name="{localization:Loc ChordShapes_Split}"
+                                    ToolTip.Tip="{localization:Loc ChordShapes_Split_Tip}"
+                                    Command="{Binding SplitSelectionCommand}">
+                                <TextBlock Text="{localization:Loc ChordShapes_Split}" TextWrapping="Wrap" TextAlignment="Center" />
+                            </Button>
+                            <Button Grid.Row="0" Grid.Column="1" x:Name="ShapeMerge" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    HorizontalAlignment="Stretch" IsEnabled="{Binding CanMerge}"
+                                    Content="{localization:Loc Shapes_Merge}"
+                                    AutomationProperties.Name="{localization:Loc Shapes_Merge}"
+                                    ToolTip.Tip="{localization:Loc Shapes_Merge_Tip}"
+                                    Command="{Binding BeginMergeCommand}" />
+                            <!-- An unused shape's Delete is the card's next step, so it stands out. -->
+                            <Button Grid.Row="1" Grid.Column="0" x:Name="ShapeDelete" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    Classes.ColumnFlowPrimary="{Binding IsUnused}" HorizontalAlignment="Stretch"
+                                    Content="{localization:Loc ChordShapes_Delete}"
+                                    AutomationProperties.Name="{localization:Loc ChordShapes_Delete}"
+                                    ToolTip.Tip="{localization:Loc ChordShapes_Delete_Tip}"
+                                    Command="{Binding DeleteCommand}" />
+                        </Grid>
+                    </StackPanel>
+                    </Panel>
+                </Border>
+            </Panel>
+        </ctl:ColumnFlowCard>
 
-        <ScrollViewer Grid.Row="2" x:Name="ShapesScroll" IsVisible="{Binding HasRows}"
-                      HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
-                      AllowAutoHide="False">
-            <ItemsControl x:Name="ShapesRows" ItemsSource="{Binding Rows}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <ctl:AdaptiveColumnsPanel MinColumnWidth="340" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="contracts:IShapePanelRow">
-                        <Border x:Name="ShapeCard" Theme="{StaticResource FireListRowBorder}" Classes="FireListRow ShapeCard"
-                                Focusable="True"
-                                Padding="{StaticResource FirePadListRowDense}"
-                                ctl:ShapeCardDrag.Begin="{Binding BeginDragCommand}"
-                                ctl:ShapeCardDrag.Over="{Binding DragOverCommand}"
-                                ctl:ShapeCardDrag.Drop="{Binding DropCommand}"
-                                ctl:ShapeCardDrag.End="{Binding EndDragCommand}"
-                                Classes.selected="{Binding IsMergeTarget}"
-                                Classes.Record="{Binding IsSelected}"
-                                Classes.Unavailable="{Binding IsMergeSource}"
-                                Classes.candidate="{Binding CanMergeHere}">
-                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSm}">
-                                <Button Grid.Column="0" x:Name="ShapePlace" Theme="{StaticResource FirePresetCardButton}" Classes="FirePresetCard"
-                                        Padding="{StaticResource FirePadTag}" VerticalAlignment="Top"
-                                        Command="{Binding PlaceCommand}"
-                                        AutomationProperties.Name="{Binding FretsText}"
-                                        ToolTip.Tip="{localization:Loc ChordShapes_Place_Tip}">
-                                    <Button.KeyBindings>
-                                        <KeyBinding Gesture="Delete" Command="{Binding DeleteCommand}" />
-                                    </Button.KeyBindings>
-                                    <ctl:ChordDiagramControl Width="72" Height="70" Chord="{Binding DiagramChord}"
-                                                             Template="{Binding Diagram}" StringCount="{Binding StringCount}" />
+        <!-- ── Checked: the bulk verbs and the one confirmation bar ── -->
+        <ctl:ColumnFlowCard x:Name="ShapesCheckedCard" ctl:ColumnFlowPanel.Title="{localization:Loc Shapes_Page_Checked}">
+            <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" Text="{localization:Loc Shapes_Checked_Title}" />
+                <StackPanel x:Name="ShapesSelectionBar" Spacing="{StaticResource FireSpaceXs}">
+                    <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowValue" TextWrapping="Wrap"
+                               IsVisible="{Binding HasSelection}" Text="{Binding SelectionText}" />
+                    <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                               IsVisible="{Binding !HasSelection}" Text="{localization:Loc Shapes_Checked_None}" />
+                    <!-- Captions wrap rather than cut: half a 480 px card is too narrow for "Auswahl aufheben". -->
+                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto"
+                          ColumnSpacing="{StaticResource FireSpaceXs}" RowSpacing="{StaticResource FireSpaceXs}">
+                        <Button Grid.Row="0" Grid.Column="0" x:Name="ShapesEditSelected" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                HorizontalAlignment="Stretch" IsEnabled="{Binding HasSelection}"
+                                AutomationProperties.Name="{localization:Loc Shapes_EditSelected}"
+                                ToolTip.Tip="{localization:Loc Shapes_EditSelected_Tip}"
+                                Command="{Binding EditSelectedCommand}">
+                            <TextBlock Text="{localization:Loc Shapes_EditSelected}" TextWrapping="Wrap" TextAlignment="Center" />
+                        </Button>
+                        <Button Grid.Row="0" Grid.Column="1" x:Name="ShapesMergeSelected" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                HorizontalAlignment="Stretch" IsEnabled="{Binding HasSelection}"
+                                AutomationProperties.Name="{localization:Loc Shapes_MergeSelected}"
+                                Command="{Binding MergeSelectedCommand}">
+                            <TextBlock Text="{localization:Loc Shapes_MergeSelected}" TextWrapping="Wrap" TextAlignment="Center" />
+                        </Button>
+                        <Button Grid.Row="1" Grid.Column="0" x:Name="ShapesDeleteSelected" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                HorizontalAlignment="Stretch" IsEnabled="{Binding HasSelection}"
+                                AutomationProperties.Name="{localization:Loc ChordShapes_Delete}"
+                                Command="{Binding DeleteSelectedCommand}">
+                            <TextBlock Text="{localization:Loc ChordShapes_Delete}" TextWrapping="Wrap" TextAlignment="Center" />
+                        </Button>
+                        <Button Grid.Row="1" Grid.Column="1" x:Name="ShapesClearSelection" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                HorizontalAlignment="Stretch" IsEnabled="{Binding HasSelection}"
+                                AutomationProperties.Name="{localization:Loc Shapes_ClearSelection}"
+                                Command="{Binding ClearSelectionCommand}">
+                            <TextBlock Text="{localization:Loc Shapes_ClearSelection}" TextWrapping="Wrap" TextAlignment="Center" />
+                        </Button>
+                    </Grid>
+                </StackPanel>
+                <StackPanel x:Name="ShapesPendingBar" IsVisible="{Binding HasPending}" Spacing="{StaticResource FireSpaceXs}">
+                    <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody" Text="{Binding PendingText}"
+                               TextWrapping="Wrap" TextTrimming="None" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+                        <Button Grid.Column="0" x:Name="ShapesConfirm" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary"
+                                HorizontalAlignment="Stretch" IsVisible="{Binding !IsPendingDestructive}"
+                                AutomationProperties.Name="{Binding PendingConfirmLabel}"
+                                Command="{Binding ConfirmPendingCommand}">
+                            <TextBlock Text="{Binding PendingConfirmLabel}" TextTrimming="CharacterEllipsis" />
+                        </Button>
+                        <Button Grid.Column="0" x:Name="ShapesConfirmDanger" Theme="{StaticResource DangerButton}" Classes="Danger"
+                                HorizontalAlignment="Stretch" MinHeight="28" IsVisible="{Binding IsPendingDestructive}"
+                                AutomationProperties.Name="{Binding PendingConfirmLabel}"
+                                Command="{Binding ConfirmPendingCommand}">
+                            <TextBlock Text="{Binding PendingConfirmLabel}" TextTrimming="CharacterEllipsis" />
+                        </Button>
+                        <Button Grid.Column="1" x:Name="ShapesCancelPending" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                HorizontalAlignment="Stretch"
+                                Content="{localization:Loc Action_Cancel}"
+                                AutomationProperties.Name="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelPendingCommand}" />
+                    </Grid>
+                </StackPanel>
+            </StackPanel>
+        </ctl:ColumnFlowCard>
+
+        <!-- ── Uses: the current shape's chords and hand shapes on this level ── -->
+        <ctl:ColumnFlowCard x:Name="ShapesUsesCard" ctl:ColumnFlowPanel.Title="{localization:Loc Shapes_Page_Uses}">
+            <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading" Text="{localization:Loc Shapes_Uses_Title}" />
+                <TextBlock x:Name="ShapesUsesSummary" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                           IsVisible="{Binding HasUses}" Text="{Binding UsesSummary}" />
+                <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                           IsVisible="{Binding !HasUses}" Text="{localization:Loc ChordShapes_Status_NoUseOnLevel}" />
+                <ItemsControl x:Name="ShapesUsesList" ItemsSource="{Binding Uses}"
+                              AutomationProperties.Name="{localization:Loc Shapes_Uses_Title}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="contracts:IShapeUseRow">
+                            <Grid ColumnDefinitions="28,*" ColumnSpacing="{StaticResource FireSpaceXs}" Margin="0,0,0,2">
+                                <CheckBox Grid.Column="0" MinWidth="0" MinHeight="24" Padding="0" VerticalAlignment="Center"
+                                          IsChecked="{Binding IsChecked}"
+                                          AutomationProperties.Name="{Binding Label}" />
+                                <Button Grid.Column="1" Theme="{StaticResource ColumnFlowRow}" Classes="ColumnFlowRow"
+                                        Classes.selected="{Binding IsChecked}"
+                                        AutomationProperties.Name="{Binding Label}"
+                                        Command="{Binding JumpCommand}">
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                        <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp"
+                                                   Classes.selected="{Binding IsChecked}" Text="{Binding TimeText}" />
+                                        <TextBlock Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody"
+                                                   Text="{Binding Label}" />
+                                    </Grid>
                                 </Button>
-
-                                <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceXs}">
-                                    <!-- The name, typed in place and applied on Enter or when the
-                                         box loses focus; the dot says the shape needs attention. -->
-                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
-                                        <TextBox Grid.Column="0" x:Name="ShapeName" Text="{Binding NameText}"
-                                                 PlaceholderText="{Binding NamePlaceholder}"
-                                                 TextWrapping="Wrap" AcceptsReturn="False"
-                                                 IsEnabled="{Binding !IsNoName}"
-                                                 AutomationProperties.Name="{localization:Loc ChordShapes_NameBox}">
-                                            <TextBox.KeyBindings>
-                                                <KeyBinding Gesture="Enter" Command="{Binding CommitNameCommand}" />
-                                            </TextBox.KeyBindings>
-                                        </TextBox>
-                                        <!-- The bulk-edit tick: its own fixed column, so showing it never changes the
-                                             name box's width or the card's height. -->
-                                        <Panel Grid.Column="1" Width="24" Height="24" VerticalAlignment="Top" IsVisible="{Binding CanTick}">
-                                            <Panel Classes="ShapeReveal">
-                                                <CheckBox x:Name="ShapeTick" MinWidth="0" MinHeight="0" VerticalAlignment="Center"
-                                                          IsChecked="{Binding IsSelected}"
-                                                          AutomationProperties.Name="{localization:Loc Shapes_Select}"
-                                                          ToolTip.Tip="{localization:Loc Shapes_Select}" />
-                                            </Panel>
-                                        </Panel>
-                                        <Ellipse Grid.Column="2" x:Name="ShapeDot" Width="8" Height="8" VerticalAlignment="Top" Margin="0,10,0,0"
-                                                 Fill="{DynamicResource FireWarning}" IsVisible="{Binding HasIssue}"
-                                                 ToolTip.Tip="{Binding IssueText}"
-                                                 AutomationProperties.Name="{Binding IssueText}" />
-                                    </Grid>
-                                    <!-- No name sits beside the use count, not in the action strip: German labels fill that
-                                         strip's single row, and a fixed-height slot keeps this row's height when it shows. -->
-                                    <Grid MinHeight="16" ClipToBounds="False" ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
-                                        <TextBlock x:Name="ShapeUses" Text="{Binding UsesText}" TextWrapping="Wrap" VerticalAlignment="Center"
-                                                   FontSize="{StaticResource FireSizeMeta}" Foreground="{DynamicResource FireTextMuted}" />
-                                        <Panel Grid.Column="1" Classes="ShapeReveal" Height="16" ClipToBounds="False" VerticalAlignment="Center">
-                                            <CheckBox x:Name="ShapeNoName" MinWidth="0" Height="32" FontSize="{StaticResource FireSizeMeta}" VerticalAlignment="Center" IsChecked="{Binding IsNoName}"
-                                                      Content="{localization:Loc ShapeEdit_NoName}"
-                                                      AutomationProperties.Name="{localization:Loc ShapeEdit_NoName}"
-                                                      ToolTip.Tip="{localization:Loc ShapeEdit_NoNameDesc}" />
-                                        </Panel>
-                                    </Grid>
-
-                                    <!-- The problem and its one fix: reserved, shown on the hovered or current card. -->
-                                    <Border MinHeight="26" IsVisible="{Binding HasIssue}">
-                                        <Grid Classes="ShapeReveal" ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
-                                            <Border Grid.Column="0" Theme="{StaticResource FireTagBorder}" Classes="FireTag Warn"
-                                                    HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock x:Name="ShapeIssue" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
-                                                           Text="{Binding IssueText}" TextWrapping="Wrap" />
-                                            </Border>
-                                            <Button Grid.Column="1" x:Name="ShapeFix" Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
-                                                    Padding="{StaticResource FirePadTag}" MinHeight="24" VerticalAlignment="Center"
-                                                    Content="{Binding FixLabel}"
-                                                    AutomationProperties.Name="{Binding FixLabel}"
-                                                    Command="{Binding FixCommand}" />
-                                        </Grid>
-                                    </Border>
-
-                                    <!-- The actions: reserved, shown on the hovered or current card. -->
-                                    <Border Classes="ShapeActions"
-                                            Classes.WithSplit="{Binding CanSplitSelection}" Classes.WithMerge="{Binding CanMerge}"
-                                            Classes.WithMergeHere="{Binding CanMergeHere}">
-                                        <WrapPanel Classes="ShapeReveal" Orientation="Horizontal"
-                                                   ItemSpacing="{StaticResource FireSpaceXs}" LineSpacing="{StaticResource FireSpaceXs}">
-                                            <Button x:Name="ShapePlaceAction" Theme="{StaticResource PrimaryButton}" Classes="Primary Compact"
-                                                    Padding="{StaticResource FirePadTag}" MinHeight="24"
-                                                    Content="{localization:Loc ChordShapes_Place}"
-                                                    AutomationProperties.Name="{localization:Loc ChordShapes_Place}"
-                                                    ToolTip.Tip="{localization:Loc ChordShapes_Place_Tip}"
-                                                    Command="{Binding PlaceCommand}" />
-                                            <Button x:Name="ShapeMergeHere" Theme="{StaticResource PrimaryButton}" Classes="Primary Compact"
-                                                    Padding="{StaticResource FirePadTag}" MinHeight="24"
-                                                    IsVisible="{Binding CanMergeHere}"
-                                                    Content="{localization:Loc Shapes_MergeHere}"
-                                                    AutomationProperties.Name="{localization:Loc Shapes_MergeHere}"
-                                                    Command="{Binding MergeHereCommand}" />
-                                            <Button x:Name="ShapeEdit" Theme="{StaticResource PrimaryButton}" Classes="Primary Compact"
-                                                    Padding="{StaticResource FirePadTag}" MinHeight="24"
-                                                    IsVisible="{Binding CanEdit}"
-                                                    Content="{localization:Loc Shapes_Edit}"
-                                                    AutomationProperties.Name="{localization:Loc Shapes_Edit}"
-                                                    ToolTip.Tip="{localization:Loc Shapes_Edit_Tip}"
-                                                    Command="{Binding EditCommand}" />
-                                            <Button x:Name="ShapeSelectUses" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                                                    Padding="{StaticResource FirePadTag}" MinHeight="24"
-                                                    Content="{localization:Loc ChordShapes_SelectUses}"
-                                                    AutomationProperties.Name="{localization:Loc ChordShapes_SelectUses}"
-                                                    ToolTip.Tip="{localization:Loc ChordShapes_SelectUses_Tip}"
-                                                    Command="{Binding SelectUsesCommand}" />
-                                            <Button x:Name="ShapeNextUse" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                                                    Padding="{StaticResource FirePadTag}" MinHeight="24"
-                                                    IsVisible="{Binding !IsUnused}"
-                                                    Content="{localization:Loc ChordShapes_NextUse}"
-                                                    AutomationProperties.Name="{localization:Loc ChordShapes_NextUse}"
-                                                    ToolTip.Tip="{localization:Loc ChordShapes_NextUse_Tip}"
-                                                    Command="{Binding NextUseCommand}" />
-                                            <Button x:Name="ShapeSplit" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                                                    Padding="{StaticResource FirePadTag}" MinHeight="24"
-                                                    IsVisible="{Binding CanSplitSelection}"
-                                                    Content="{localization:Loc ChordShapes_Split}"
-                                                    AutomationProperties.Name="{localization:Loc ChordShapes_Split}"
-                                                    ToolTip.Tip="{localization:Loc ChordShapes_Split_Tip}"
-                                                    Command="{Binding SplitSelectionCommand}" />
-                                            <Button x:Name="ShapeMerge" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                                                    Padding="{StaticResource FirePadTag}" MinHeight="24"
-                                                    IsVisible="{Binding CanMerge}"
-                                                    Content="{localization:Loc Shapes_Merge}"
-                                                    AutomationProperties.Name="{localization:Loc Shapes_Merge}"
-                                                    ToolTip.Tip="{localization:Loc Shapes_Merge_Tip}"
-                                                    Command="{Binding BeginMergeCommand}" />
-                                            <!-- An unused shape's Delete is the card's next step, so it stands out. -->
-                                            <Button x:Name="ShapeDeleteUnused" Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
-                                                    Padding="{StaticResource FirePadTag}" MinHeight="24"
-                                                    IsVisible="{Binding IsUnused}"
-                                                    Content="{localization:Loc ChordShapes_Delete}"
-                                                    AutomationProperties.Name="{localization:Loc ChordShapes_Delete}"
-                                                    ToolTip.Tip="{localization:Loc ChordShapes_Delete_Tip}"
-                                                    Command="{Binding DeleteCommand}" />
-                                            <Button x:Name="ShapeDelete" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                                                    Padding="{StaticResource FirePadTag}" MinHeight="24"
-                                                    IsVisible="{Binding !IsUnused}"
-                                                    Content="{localization:Loc ChordShapes_Delete}"
-                                                    AutomationProperties.Name="{localization:Loc ChordShapes_Delete}"
-                                                    Command="{Binding DeleteCommand}" />
-                                        </WrapPanel>
-                                    </Border>
-                                </StackPanel>
                             </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
-    </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button x:Name="ShapesSplitUses" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                        HorizontalAlignment="Left" IsEnabled="{Binding CanSplitUses}"
+                        Content="{localization:Loc Shapes_SplitUses}"
+                        AutomationProperties.Name="{localization:Loc Shapes_SplitUses}"
+                        ToolTip.Tip="{localization:Loc ChordShapes_Split_Tip}"
+                        Command="{Binding SplitUsesCommand}" />
+            </StackPanel>
+        </ctl:ColumnFlowCard>
+    </ctl:ColumnFlowPanel>
 </UserControl>

@@ -80,6 +80,43 @@ public sealed class RigEstimatorModelInstallerTests : IDisposable
     private static Task<Stream> Fetch(MemoryStream archive) => Task.FromResult<Stream>(archive);
 
     [Fact]
+    public async Task AnInstallNeverDeletesAnotherAttemptsStagingDirectory()
+    {
+        var staging = Directory.CreateDirectory(Path.Combine(_root, Model.Id + ".incoming")).FullName;
+        var marker = Path.Combine(staging, "other-attempt");
+        File.WriteAllText(marker, "keep");
+
+        var result = await Installer((_, _) => Fetch(Archive()))
+            .EnsureInstalledAsync(Model, ct: TestContext.Current.CancellationToken);
+
+        Assert.True(result.Installed, result.Reason);
+        Assert.Equal("keep", File.ReadAllText(marker));
+        Assert.Empty(Directory.GetDirectories(_root, Model.Id + ".incoming-*"));
+    }
+
+    [Fact]
+    public async Task ConcurrentInstallerInstancesBothObserveACompletePublishedModel()
+    {
+        var bothFetching = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fetches = 0;
+        async Task<Stream> FetchTogether(string _, CancellationToken ct)
+        {
+            if (Interlocked.Increment(ref fetches) == 2) bothFetching.SetResult();
+            await bothFetching.Task.WaitAsync(TimeSpan.FromSeconds(60), ct);
+            return Archive();
+        }
+
+        var results = await Task.WhenAll(
+            Installer(FetchTogether).EnsureInstalledAsync(Model, ct: TestContext.Current.CancellationToken),
+            Installer(FetchTogether).EnsureInstalledAsync(Model, ct: TestContext.Current.CancellationToken));
+
+        Assert.All(results, result => Assert.True(result.Installed, result.Reason));
+        Assert.Equal("onnx", File.ReadAllText(Path.Combine(_root, Model.Id, "model.onnx")));
+        Assert.Equal("{}", File.ReadAllText(Path.Combine(_root, Model.Id, "model.sidecar.json")));
+        Assert.Empty(Directory.GetDirectories(_root, Model.Id + ".incoming-*"));
+    }
+
+    [Fact]
     public async Task AMissingModelIsDownloadedAndBecomesInstalled()
     {
         var installer = Installer((_, _) => Fetch(Archive()));

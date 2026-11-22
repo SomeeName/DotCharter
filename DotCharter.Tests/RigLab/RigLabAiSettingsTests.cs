@@ -214,6 +214,148 @@ public sealed class RigLabAiSettingsTests : IDisposable
     }
 
     [Fact]
+    public void AnUnreadableBlob_KeepsTheTypedKeyAndFailureUntilSaveRetries()
+    {
+        if (!OperatingSystem.IsWindows()) Assert.Skip("DPAPI is Windows-only.");
+        var path = Path.Combine(_dir, DpapiAiSecretStore.FileName);
+        var store = new DpapiAiSecretStore(filePath: path);
+        store.Write(AiProviderKind.Claude, "previous-key");
+        store.Write(AiProviderKind.OpenAiCompatible, "other-provider-key");
+        var before = File.ReadAllBytes(path);
+        using var vm = new AiSettingsViewModel(_config, store,
+            new FakeFactory([AiProviderKind.Claude]), _design, _auth,
+            new GatedInlineDispatcher(), FakeLocalization.English());
+        vm.SelectedProvider = Row(vm, AiProviderKind.Claude);
+        vm.ApiKeyEntry = "  entered-key  ";
+        var notified = _design.Notified;
+
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Write | FileShare.Delete))
+            vm.SaveKeyCommand.Execute(null);
+
+        Assert.Equal("  entered-key  ", vm.ApiKeyEntry);
+        Assert.True(vm.SaveKeyCommand.CanExecute(null));
+        Assert.True(vm.IsStatusError);
+        Assert.Equal(FakeLocalization.English()["Ai_KeySaveFailed"], vm.StatusText);
+        Assert.NotEqual(FakeLocalization.English()["Ai_KeySaved"], vm.StatusText);
+        Assert.Equal(notified, _design.Notified);
+        Assert.Equal(before, File.ReadAllBytes(path));
+
+        vm.SaveKeyCommand.Execute(null);
+
+        Assert.Empty(vm.ApiKeyEntry);
+        Assert.False(vm.SaveKeyCommand.CanExecute(null));
+        Assert.False(vm.IsStatusError);
+        Assert.Equal(FakeLocalization.English()["Ai_KeySaved"], vm.StatusText);
+        Assert.Equal(notified + 1, _design.Notified);
+        Assert.Equal("entered-key", new DpapiAiSecretStore(filePath: path).Read(AiProviderKind.Claude));
+        Assert.Equal("other-provider-key", store.Read(AiProviderKind.OpenAiCompatible));
+    }
+
+    [Fact]
+    public async Task TestConnection_PreservesAnUnreadableStoreFailureAndDoesNotProbe()
+    {
+        if (!OperatingSystem.IsWindows()) Assert.Skip("DPAPI is Windows-only.");
+        var path = Path.Combine(_dir, DpapiAiSecretStore.FileName);
+        var store = new DpapiAiSecretStore(filePath: path);
+        store.Write(AiProviderKind.Claude, "stored-key");
+        using var vm = new AiSettingsViewModel(_config, store,
+            new FakeFactory([AiProviderKind.Claude]), _design, _auth,
+            new GatedInlineDispatcher(), FakeLocalization.English());
+        vm.SelectedProvider = Row(vm, AiProviderKind.Claude);
+        vm.ApiKeyEntry = "pending-key";
+        var notified = _design.Notified;
+
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Write | FileShare.Delete))
+            await vm.TestConnectionCommand.ExecuteAsync(null);
+
+        Assert.Equal("pending-key", vm.ApiKeyEntry);
+        Assert.False(vm.IsBusy);
+        Assert.True(vm.IsStatusError);
+        Assert.Equal(FakeLocalization.English()["Ai_KeySaveFailed"], vm.StatusText);
+        Assert.Equal(notified, _design.Notified);
+        Assert.Equal("stored-key", store.Read(AiProviderKind.Claude));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ALateProbe_CannotHideAFailedKeySave(bool throws)
+    {
+        if (!OperatingSystem.IsWindows()) Assert.Skip("DPAPI is Windows-only.");
+        var path = Path.Combine(_dir, DpapiAiSecretStore.FileName);
+        var store = new DpapiAiSecretStore(filePath: path);
+        store.Write(AiProviderKind.Claude, "stored-key");
+        var pending = new TaskCompletionSource<AiProbeResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var vm = new AiSettingsViewModel(_config, store,
+            new FakeFactory([AiProviderKind.Claude], new ProbeModel(pending.Task)), _design, _auth,
+            new GatedInlineDispatcher(), FakeLocalization.English());
+        vm.SelectedProvider = Row(vm, AiProviderKind.Claude);
+        var probe = vm.TestConnectionCommand.ExecuteAsync(null);
+        Assert.False(probe.IsCompleted);
+        vm.ApiKeyEntry = "pending-key";
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Write | FileShare.Delete))
+            vm.SaveKeyCommand.Execute(null);
+
+        if (throws) pending.SetException(new InvalidOperationException("probe failed"));
+        else pending.SetResult(new AiProbeResult(true, "ok", "model"));
+        await probe;
+
+        Assert.Equal("pending-key", vm.ApiKeyEntry);
+        Assert.True(vm.IsStatusError);
+        Assert.Equal(FakeLocalization.English()["Ai_KeySaveFailed"], vm.StatusText);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ALateProbe_CannotPublishAfterLoadOrDispose(bool dispose)
+    {
+        var pending = new TaskCompletionSource<AiProbeResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var vm = new AiSettingsViewModel(_config, _secrets,
+            new FakeFactory([AiProviderKind.Claude], new ProbeModel(pending.Task)), _design, _auth,
+            new GatedInlineDispatcher(), FakeLocalization.English());
+        vm.SelectedProvider = Row(vm, AiProviderKind.Claude);
+        var probe = vm.TestConnectionCommand.ExecuteAsync(null);
+        Assert.False(probe.IsCompleted);
+        if (dispose) vm.Dispose();
+        else vm.Load();
+        var status = vm.StatusText;
+        pending.SetResult(new AiProbeResult(true, "ok", "model"));
+        await probe;
+        Assert.Equal(status, vm.StatusText);
+        if (!dispose) vm.Dispose();
+    }
+
+    [Fact]
+    public void AFailedDelete_KeepsTheTypedKeyAndErrorUntilClearRetries()
+    {
+        if (!OperatingSystem.IsWindows()) Assert.Skip("DPAPI is Windows-only.");
+        var path = Path.Combine(_dir, DpapiAiSecretStore.FileName);
+        var store = new DpapiAiSecretStore(filePath: path);
+        store.Write(AiProviderKind.Claude, "stored-key");
+        using var vm = new AiSettingsViewModel(_config, store,
+            new FakeFactory([AiProviderKind.Claude]), _design, _auth,
+            new GatedInlineDispatcher(), FakeLocalization.English());
+        vm.SelectedProvider = Row(vm, AiProviderKind.Claude);
+        vm.ApiKeyEntry = "pending-key";
+
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            vm.ClearKeyCommand.Execute(null);
+
+        Assert.Equal("pending-key", vm.ApiKeyEntry);
+        Assert.Equal("stored-key", store.Read(AiProviderKind.Claude));
+        Assert.True(vm.IsStatusError);
+        Assert.Equal(FakeLocalization.English()["Ai_KeyClearFailed"], vm.StatusText);
+
+        vm.ClearKeyCommand.Execute(null);
+
+        Assert.Empty(vm.ApiKeyEntry);
+        Assert.Null(store.Read(AiProviderKind.Claude));
+        Assert.False(vm.IsStatusError);
+        Assert.Equal(FakeLocalization.English()["Ai_KeyCleared"], vm.StatusText);
+    }
+
+    [Fact]
     public void TheTone3000Half_SaysWhetherADesignCanFetchACapture()
     {
         var vm = Tab();
@@ -330,10 +472,18 @@ public sealed class RigLabAiSettingsTests : IDisposable
         public bool Supports(AiProviderKind kind) => true;
     }
 
-    private sealed class FakeFactory(AiProviderKind[] supported) : IToneDesignModelFactory
+    private sealed class ProbeModel(Task<AiProbeResult> probe) : IToneDesignModel
+    {
+        public AiProviderKind Kind => AiProviderKind.Claude;
+        public Task<AiProbeResult> ProbeAsync(CancellationToken ct) => probe;
+        public Task<ToneDesignModelReply> CompleteAsync(ToneDesignPrompt prompt, CancellationToken ct) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class FakeFactory(AiProviderKind[] supported, IToneDesignModel? model = null) : IToneDesignModelFactory
     {
         public IToneDesignModel Create(AiProviderSettings settings) =>
-            throw new ToneDesignException(ToneDesignFault.NotConfigured, "not in this test");
+            model ?? throw new ToneDesignException(ToneDesignFault.NotConfigured, "not in this test");
 
         public bool Supports(AiProviderKind kind) => supported.Contains(kind);
     }

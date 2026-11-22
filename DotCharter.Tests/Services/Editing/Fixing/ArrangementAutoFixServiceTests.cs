@@ -169,6 +169,45 @@ public sealed class ArrangementAutoFixServiceTests
     }
 
     [Fact]
+    public void JoiningLinkedNotesNeverDropsADifferentContinuationField()
+    {
+        var absorbed = new FieldExclusion[]
+        {
+            new(typeof(GuitarNote), nameof(GuitarNote.Position), "The continuation starts at the source end."),
+            new(typeof(GuitarNote), nameof(GuitarNote.Sustain), "The joined sustain reaches the continuation end."),
+            new(typeof(GuitarNote), nameof(GuitarNote.LinkNext), "The continuation supplies the joined link flag."),
+            new(typeof(GuitarNote), nameof(GuitarNote.SlideTo), "The continuation supplies the joined slide target."),
+            new(typeof(GuitarNote), nameof(GuitarNote.UnpitchedSlide), "The continuation supplies the joined slide kind."),
+            new(typeof(GuitarNote), nameof(GuitarNote.BendValues), "Continuation bend points are appended.")
+        };
+        var properties = DomainFieldProbe.SettableProperties(typeof(GuitarNote));
+        foreach (var exclusion in absorbed)
+            Assert.Contains(DomainFieldProbe.SettableProperties(exclusion.Owner), p => p.Name == exclusion.Property);
+        var excluded = absorbed.Select(e => e.Property).ToHashSet(StringComparer.Ordinal);
+        foreach (var property in properties.Where(p => !excluded.Contains(p.Name)))
+        {
+            var first = Note(1, 5, sustainBeats: 1);
+            first.LinkNext = true;
+            var next = Note(2, 5, sustainBeats: 1);
+            var value = DomainFieldProbe.Distinctive(property.PropertyType, property);
+            property.SetValue(next, value);
+
+            var (arr, result) = Run(a =>
+            {
+                a.Levels[0].Notes.Add(first);
+                a.Levels[0].Notes.Add(next);
+            });
+
+            Assert.True(arr.Levels[0].Notes.Contains(next), $"Joining discarded continuation field {property.Name}.");
+            Assert.Equal(value, property.GetValue(next));
+            Assert.False(result.Changes.ContainsKey("linkedNotesJoined"));
+            var second = new ArrangementFixResult();
+            new ArrangementAutoFixService().Fix(arr, second);
+            Assert.Equal(0, second.TotalChanges);
+        }
+    }
+
+    [Fact]
     public void OverlappingSustain_IsClampedToNextNote()
     {
         var (arr, result) = Run(a =>

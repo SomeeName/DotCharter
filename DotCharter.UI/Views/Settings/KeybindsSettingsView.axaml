@@ -23,6 +23,14 @@
     -->
 
     <UserControl.Resources>
+        <!-- The tab's own header leads its groups: the group title one size up. A theme
+             its ONE wearer wears — the descendant rule `Border.Intro TextBlock.GroupTitle`
+             attached to every TextBlock on the tab (#428). -->
+        <ControlTheme x:Key="KeybindsIntroTitleText" TargetType="TextBlock" BasedOn="{StaticResource GroupTitleText}">
+            <Style Selector="^.IntroTitle">
+                <Setter Property="FontSize" Value="{StaticResource FireSizePanelTitle}" />
+            </Style>
+        </ControlTheme>
         <converters:ResourceKeyConverter x:Key="ResourceKey" />
     </UserControl.Resources>
 
@@ -61,10 +69,6 @@
         </Style>
         <Style Selector="ItemsControl.KeybindRows appControls|KeybindCaptureBox:pointerover /template/ TextBlock#DisplayLabel">
             <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
-        </Style>
-        <!-- The tab's own header leads its groups. -->
-        <Style Selector="Border.Intro TextBlock.GroupTitle">
-            <Setter Property="FontSize" Value="{StaticResource FireSizePanelTitle}" />
         </Style>
         <!-- Resetting 140 bindings is destructive, but the page's loudest thing
              it should not be: a quiet outline with danger-coloured text. -->
@@ -138,7 +142,7 @@
                         </Border>
                         <StackPanel Grid.Column="1">
                             <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Shortcuts}" />
-                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_KeybindsTab}" />
+                            <TextBlock Theme="{StaticResource KeybindsIntroTitleText}" Classes="GroupTitle IntroTitle" Text="{localization:Loc Settings_KeybindsTab}" />
                             <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle"
                                        Text="{localization:Loc Settings_ClickKeybindField}" />
                         </StackPanel>

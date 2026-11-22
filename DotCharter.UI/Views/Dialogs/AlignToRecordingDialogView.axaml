@@ -2,15 +2,19 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
              x:Class="DotCharter.UI.Views.Dialogs.AlignToRecordingDialogView"
              x:DataType="contracts:IAlignToRecordingScreen"
              x:CompileBindings="True">
 
-    <!-- Tempo map ▸ Align to recording (#784). Grammar: Views/Dialogs/DialogStyles.axaml.
+    <!-- Tempo map ▸ Fit the tab's tempo to the recording (#784, #499). Grammar: Views/Dialogs/DialogStyles.axaml.
          Range and anchors first, then Analyze; the per-section result takes the STAR row
          so a long song scrolls inside it and the footer stays put at 1280x720 (#725).
          A low-confidence row is offered unticked and prints its score in the warning colour.
-         No view-scoped styles: the row's look is set on the row (#428). -->
+         A section without notes has no tick box, meter or score: it prints its reason instead;
+         the tick column is a shared size group and the row keeps a field row's height (RowHeightField), so it lines up with the others.
+         When no section matched, the problem line is the result and the rows wait behind the
+         SectionsToggle link. No view-scoped styles: the row's look is set on the row (#428). -->
     <Grid x:Name="DialogGrid" Classes="DialogFrame">
         <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
             <Grid RowDefinitions="Auto,Auto,*,Auto">
@@ -50,7 +54,7 @@
                                     <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
                                                Text="{localization:Loc Dialog_AlignToRecording_Range_FromBar}" />
                                 </RadioButton>
-                                <NumericUpDown x:Name="FromBarInput" Grid.Column="1" Value="{Binding FromBar}"
+                                <NumericUpDown x:Name="FromBarInput" Grid.Column="1" dlgv:FocusOnOpen.IsTarget="True" Value="{Binding FromBar}"
                                                Minimum="1" Maximum="{Binding BarCount}" Increment="1" FormatString="0"
                                                AutomationProperties.Name="{localization:Loc Dialog_AlignToRecording_Range_FromBar}" />
                             </Grid>
@@ -78,7 +82,7 @@
                     </Grid>
                 </StackPanel>
 
-                <Grid Grid.Row="2" Margin="{DynamicResource GapTopLg}" RowDefinitions="Auto,*,Auto">
+                <Grid Grid.Row="2" Margin="{DynamicResource GapTopLg}" RowDefinitions="Auto,Auto,*,Auto">
                     <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
                         <TextBlock x:Name="StatusNote" Grid.Column="0" Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
                                    VerticalAlignment="Center" TextWrapping="Wrap" IsVisible="{Binding !StatusIsProblem}"
@@ -93,26 +97,41 @@
                                 Content="{localization:Loc Action_Cancel}"
                                 Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}" />
                     </Grid>
-                    <ProgressBar Grid.Row="1" IsIndeterminate="True" IsVisible="{Binding IsBusy}" VerticalAlignment="Top"
+                    <ToggleButton x:Name="SectionsToggle" Grid.Row="1" Classes="DlgLink" HorizontalAlignment="Left"
+                                  Margin="{DynamicResource GapTopMd}" IsVisible="{Binding IsWeakMatch}"
+                                  IsChecked="{Binding ShowSections, Mode=TwoWay}" Content="{Binding SectionsToggleText}"
+                                  AutomationProperties.Name="{Binding SectionsToggleText}" />
+                    <ProgressBar Grid.Row="2" IsIndeterminate="True" IsVisible="{Binding IsBusy}" VerticalAlignment="Top"
                                  Margin="{DynamicResource GapTopMd}" />
 
-                    <Border x:Name="SectionList" Theme="{DynamicResource DlgListFrameBorder}" Grid.Row="1" Classes="DlgListFrame"
-                            Margin="{DynamicResource GapTopMd}" IsVisible="{Binding HasResult}">
+                    <Border x:Name="SectionList" Theme="{DynamicResource DlgListFrameBorder}" Grid.Row="2" Classes="DlgListFrame"
+                            Margin="{DynamicResource GapTopMd}" IsVisible="{Binding ShowSections}">
                         <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
-                            <ItemsControl ItemsSource="{Binding Sections}">
+                            <ItemsControl ItemsSource="{Binding Sections}" Grid.IsSharedSizeScope="True">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="contracts:IAlignSectionRow">
                                         <Border BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1"
                                                 Padding="{DynamicResource PaddingRow}">
-                                            <Grid ColumnDefinitions="Auto,*,120,Auto,Auto" ColumnSpacing="12">
+                                            <Grid ColumnSpacing="12" MinHeight="{DynamicResource RowHeightField}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AlignSectionTick" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="120" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
                                                 <CheckBox Grid.Column="0" VerticalAlignment="Center" IsChecked="{Binding IsApplied}"
-                                                          IsEnabled="{Binding CanApply}"
+                                                          IsVisible="{Binding CanApply}"
                                                           AutomationProperties.Name="{Binding Title}" />
                                                 <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{Binding Title}"
                                                            Foreground="{DynamicResource TextPrimary}" FontSize="{DynamicResource FontSizeMd}"
                                                            TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
                                                 <ProgressBar Grid.Column="2" VerticalAlignment="Center" Minimum="0" Maximum="1"
-                                                             Value="{Binding Confidence}" />
+                                                             Value="{Binding Confidence}" IsVisible="{Binding CanApply}" />
+                                                <TextBlock Grid.Column="2" Grid.ColumnSpan="3" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                                           Foreground="{DynamicResource TextDim}" FontSize="{DynamicResource FontSizeSm}"
+                                                           TextTrimming="CharacterEllipsis" IsVisible="{Binding !CanApply}"
+                                                           Text="{Binding SkipReason}" ToolTip.Tip="{Binding SkipReason}" />
                                                 <TextBlock Grid.Column="3" VerticalAlignment="Center" MinWidth="44" TextAlignment="Right"
                                                            Foreground="{DynamicResource TextPrimary}" FontSize="{DynamicResource FontSizeSm}"
                                                            IsVisible="{Binding !IsLow}" Text="{Binding ConfidenceText}" />
@@ -130,8 +149,8 @@
                         </ScrollViewer>
                     </Border>
 
-                    <TextBlock x:Name="SummaryNote" Grid.Row="2" Theme="{DynamicResource DlgHintText}" Classes="DlgHint" TextWrapping="Wrap"
-                               Text="{Binding SummaryText}" IsVisible="{Binding HasResult}" />
+                    <TextBlock x:Name="SummaryNote" Grid.Row="3" Theme="{DynamicResource DlgHintText}" Classes="DlgHint" TextWrapping="Wrap"
+                               Text="{Binding SummaryText}" IsVisible="{Binding ShowSections}" />
                 </Grid>
 
                 <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="3" Classes="DialogFooter">

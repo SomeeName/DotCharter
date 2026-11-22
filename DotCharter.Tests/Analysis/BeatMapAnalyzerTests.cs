@@ -6,6 +6,22 @@ public sealed class BeatMapAnalyzerTests
 {
     private const int Rate = AnalysisTestSignals.SampleRate;
 
+    [Fact]
+    public void CancellationDuringInputStopsBeforeReadingAnotherChunk()
+    {
+        using var cancelled = new CancellationTokenSource();
+        IEnumerable<ReadOnlyMemory<float>> Chunks()
+        {
+            yield return new float[8192];
+            cancelled.Cancel();
+            yield return new float[8192];
+            Assert.Fail("Cancelled analysis read another chunk.");
+        }
+
+        Assert.Throws<OperationCanceledException>(() => new BeatMapAnalyzer()
+            .Analyze(Chunks(), Rate, cancellationToken: cancelled.Token));
+    }
+
     /// <summary>Constant 120 BPM click track, clicks from 0.5 s, every 4th
     /// click (the downbeat) accented.</summary>
     private static float[] ConstantClickTrack(double seconds = 30.0, double bpm = 120.0)
@@ -45,10 +61,55 @@ public sealed class BeatMapAnalyzerTests
         return best;
     }
 
+    private static float[] ConstantPluckTrack(double seconds, double bpm)
+    {
+        var buffer = new float[(int)(seconds * Rate)];
+        var interval = 60.0 / bpm;
+        for (var t = 0.5; t < seconds - interval; t += interval)
+            AnalysisTestSignals.AddPluck(buffer, t, 220.0, Math.Min(0.45, interval * 0.9));
+        return buffer;
+    }
+
+    /// <summary>The octave errors above ~140 BPM (160 read as 80, 200 as 66.7)
+    /// came from integer-lag quantisation; every constant tempo from 60 to 210
+    /// must now come back within a BPM.</summary>
+    [Theory]
+    [InlineData(60.0)]
+    [InlineData(75.0)]
+    [InlineData(90.0)]
+    [InlineData(100.0)]
+    [InlineData(120.0)]
+    [InlineData(140.0)]
+    [InlineData(150.0)]
+    [InlineData(160.0)]
+    [InlineData(172.0)]
+    [InlineData(180.0)]
+    [InlineData(190.0)]
+    [InlineData(200.0)]
+    [InlineData(210.0)]
+    public void Analyze_ConstantClickTrack_ReturnsTheRightOctaveAtEveryTempo(double bpm)
+    {
+        var result = new BeatMapAnalyzer().Analyze(ConstantClickTrack(30.0, bpm), Rate, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.InRange(result.AverageBpm, bpm - 1.0, bpm + 1.0);
+    }
+
+    [Theory]
+    [InlineData(80.0)]
+    [InlineData(120.0)]
+    [InlineData(160.0)]
+    [InlineData(200.0)]
+    public void Analyze_ConstantPluckTrack_ReturnsTheRightOctave(double bpm)
+    {
+        var result = new BeatMapAnalyzer().Analyze(ConstantPluckTrack(30.0, bpm), Rate, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.InRange(result.AverageBpm, bpm - 1.5, bpm + 1.5);
+    }
+
     [Fact]
     public void Analyze_ConstantClickTrack_FindsTempoBeatsAndDownbeats()
     {
-        var result = new BeatMapAnalyzer().Analyze(ConstantClickTrack(), Rate);
+        var result = new BeatMapAnalyzer().Analyze(ConstantClickTrack(), Rate, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.InRange(result.AverageBpm, 118.0, 122.0);
         Assert.InRange(result.Beats.Count, 55, 62);
@@ -81,11 +142,33 @@ public sealed class BeatMapAnalyzerTests
         }
     }
 
+    [Theory]
+    [InlineData(2.0)]
+    [InlineData(3.2)]
+    [InlineData(10.0)]
+    public void Analyze_AfterASilentIntro_FindsTheFirstClickAndTracksTheRest(double firstClick)
+    {
+        var samples = new float[Rate * 30];
+        var clicks = new List<double>();
+        for (var t = firstClick; t < 29.5; t += 0.5)
+        {
+            clicks.Add(t);
+            AnalysisTestSignals.AddClick(samples, t, clicks.Count % 4 == 1 ? 0.9f : 0.45f);
+        }
+
+        var result = new BeatMapAnalyzer().Analyze(samples, Rate, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.InRange(result.AverageBpm, 119.0, 121.0);
+        Assert.InRange(result.Beats.Count, clicks.Count - 1, clicks.Count + 1);
+        Assert.InRange(result.Beats[0].TimeSeconds, firstClick - 0.035, firstClick + 0.035);
+        Assert.All(result.Beats, beat => Assert.True(DistanceToNearestClick(beat.TimeSeconds, clicks) < 0.035));
+    }
+
     [Fact]
     public void Analyze_GradualTempoRamp_TracksDrift()
     {
         var (samples, clicks) = RampClickTrack(60.0, 100.0, 140.0);
-        var result = new BeatMapAnalyzer().Analyze(samples, Rate);
+        var result = new BeatMapAnalyzer().Analyze(samples, Rate, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.InRange(result.AverageBpm, 105.0, 135.0);
         Assert.True(result.Beats.Count > 80, $"only {result.Beats.Count} beats tracked");
@@ -109,8 +192,8 @@ public sealed class BeatMapAnalyzerTests
         var (samples, _) = RampClickTrack(45.0, 100.0, 140.0);
         var analyzer = new BeatMapAnalyzer();
 
-        var first = analyzer.Analyze(samples, Rate);
-        var second = analyzer.Analyze(samples, Rate);
+        var first = analyzer.Analyze(samples, Rate, cancellationToken: TestContext.Current.CancellationToken);
+        var second = analyzer.Analyze(samples, Rate, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(first.AverageBpm, second.AverageBpm);
         Assert.Equal(first.Beats.Count, second.Beats.Count);
@@ -143,7 +226,7 @@ public sealed class BeatMapAnalyzerTests
     public void EveryDetectedTempo_StaysInsideTheRequestedBpmRange(double minBpm, double maxBpm, double sourceBpm)
     {
         var options = new BeatMapAnalyzerOptions { MinBpm = minBpm, MaxBpm = maxBpm };
-        var result = new BeatMapAnalyzer().Analyze(ConstantClickTrack(25.0, sourceBpm), Rate, options);
+        var result = new BeatMapAnalyzer().Analyze(ConstantClickTrack(25.0, sourceBpm), Rate, options, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(result.Beats);
         Assert.InRange(result.AverageBpm, minBpm, maxBpm);
@@ -155,8 +238,8 @@ public sealed class BeatMapAnalyzerTests
     public void Analyze_SilenceOrTooShort_ReturnsEmpty()
     {
         var analyzer = new BeatMapAnalyzer();
-        Assert.Empty(analyzer.Analyze(new float[Rate * 10], Rate).Beats);
-        Assert.Empty(analyzer.Analyze(new float[Rate / 2], Rate).Beats);
+        Assert.Empty(analyzer.Analyze(new float[Rate * 10], Rate, cancellationToken: TestContext.Current.CancellationToken).Beats);
+        Assert.Empty(analyzer.Analyze(new float[Rate / 2], Rate, cancellationToken: TestContext.Current.CancellationToken).Beats);
     }
 
     /// <summary>
@@ -181,7 +264,7 @@ public sealed class BeatMapAnalyzerTests
         var samples = ConstantClickTrack();
         samples[Rate * 10] = poison;
 
-        var result = new BeatMapAnalyzer().Analyze(samples, Rate);
+        var result = new BeatMapAnalyzer().Analyze(samples, Rate, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.InRange(result.AverageBpm, 118.0, 122.0);
         Assert.InRange(result.Beats.Count, 55, 62);

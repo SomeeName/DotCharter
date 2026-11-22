@@ -121,6 +121,8 @@
              The two tables overlap in value on purpose — so do `FireSize*` and
              `FontSize*`.
  -->
+        <x:Double x:Key="FireLineHeightFooterCount">11</x:Double> <!-- FireSizeNano 10 · the sound footer button's second line (count / destination) -->
+        <x:Double x:Key="FireLineHeightFooterCaption">13</x:Double> <!-- the sound footer button's caption line, two lines in 28 px -->
         <x:Double x:Key="FireLineHeightXsTight">14</x:Double>     <!-- FireSizeMeta 11.5 · the settings rail's two-line tab description -->
         <x:Double x:Key="FireLineHeightXsSnug">15</x:Double>      <!-- FireSizeXs 11 · TextBlock.FireConsequence -->
         <x:Double x:Key="FireLineHeightXs">16</x:Double>          <!-- FireSizeXs 11 / FireSizeMeta 11.5 · the default for both; 8 sites -->
@@ -270,6 +272,11 @@
              off the action beside it, since a star and an Auto column of one
              grid meet edge to edge. -->
         <Thickness x:Key="FireGapLeftSm">6,0,0,0</Thickness>
+        <!-- Both sides at once: a rule between two controls that wears the same gap on each
+             side. Xs (2) sits in a row that already spaces its children by 4, so the line
+             ends up 6 from each neighbour; Sm (6) is the same 6 where nothing spaces them. -->
+        <Thickness x:Key="FireGapHXs">2,0</Thickness>
+        <Thickness x:Key="FireGapHSm">6,0</Thickness>
         <Thickness x:Key="FireGapLeftMd">12,0,0,0</Thickness>
         <!-- The gap the editor's top bar puts between the last menu item and
              the CHART / LIBRARY / SETTINGS switcher — a whole ladder step wider

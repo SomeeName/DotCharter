@@ -33,6 +33,10 @@ app's door, driven by File ▸ Export ▸ DotCharter song (#707,
 UI thread whether ffmpeg is there (the dialog greys Export with that reason before
 anything is chosen), the audio's size and the project's separated stems that exist on
 disk (resolved with `StemFolderProbe.ResolveStemPath`, named by `DcSongStemNames`);
+audio resolution uses `ProjectAudioLocator` on that worker. The probe returns
+the resolved local `AudioPath` for the dialog's write request; missing or refused
+audio returns null. References and resolved locations are checked before probes,
+including relative names against a remote project directory.
 `WriteAsync` is a fresh `DcSongWriter` per write, so an ffmpeg installed while the app
 runs is found. `DcSongSizeEstimate` is the dialog's "about N MB" (Opus at its bit rate,
 FLAC guessed from the source, images not counted). File ▸ Open (and a
@@ -115,8 +119,8 @@ A zip (no zip64, one volume). Member names are fixed by role:
 - **Default: Ogg Opus, 192 kb/s, stereo, 48 kHz** (`DcSongFormat.OpusBitrateKbps`),
   encoded by the stem cache's `FfmpegStemEncoder` from the editor's own decode
   (`PcmAudioLoader`), so the package plays against the chart exactly as the
-  editor did. **Opus is playback-only** — chart-from-audio and stem separation
-  need a lossless package, the same rule as the `.dcstems` cache.
+  editor did. **Opus is playback-only** — stem separation
+  needs a lossless package, the same rule as the `.dcstems` cache.
 - **Lossless: FLAC.** A WAV/FLAC/AIFF source is copied into FLAC as it is —
   its own rate and depth — so the samples are bit-exact to the source. A lossy
   source, or a lossless one ffmpeg will not take as it is, stores the editor's
@@ -144,6 +148,14 @@ each `Stem.Path` its stem member (mixer state kept), and `ArrangementFiles` is
 empty. `DcSongWriteRequest.ArrangementIndexes` (null = all) keeps only the ticked
 arrangements, in project order; vocal tracks always travel. A project names files on its author's machine; none travel, and an
 absolute cover path would leak the author's folder layout.
+
+The probe carries the original project stem alongside its normalized, unique
+package name through `DcSongStemCandidate`, `DcSongStemSource` and the dialog's
+write request. `DcSongChart` selects that stem's clone by identity before renaming
+it, so spaces, case changes and name collisions preserve volume, offset, mute and
+solo. Matching the normalized name back to the project is only the fallback for
+write requests without an original stem. `DcSongExporterTests` covers export and
+reopen with colliding names.
 
 **A chart that asks to recover arrangements from sibling files is refused**
 (`ChartInvalid`): the project reader would resolve those names — rooted ones
@@ -186,6 +198,12 @@ renamed over it with `AtomicFile.ReplaceWithRetry` (the swap
 package untouched and no `.writing` file. The project is cloned on the calling
 thread before the first await, so the caller may go on editing.
 
+Before publishing, the writer enforces `DcSongFormat.MaxChartBytes` on the serialized
+chart and `MaxManifestBytes` on the UTF-8 manifest, matching the reader. Oversize
+requests fail with `PackageTooLarge`. Final member hashing and ZIP copying honour
+the cancellation token, which is checked again after flushing and before replacement.
+`DcSongWriterPublicationTests` covers refusal, final-stage cancellation and readable output.
+
 An explicit cover or banner that is not a PNG/JPEG fails the write
 (`ImageUnsupported`); the project's own cover art that is unusable is skipped
 with `CoverSkipped`, because the user did not just choose it.
@@ -221,7 +239,7 @@ routes it the same way (`DroppedFileRouter`: `.dcsong` → `Project`). Both end 
      `stems/<name>.wav`, declared in the project with the mixer state the package
      carried (volume, offset, mute, solo), path project-relative. That is the shape a
      project's stems already have after a stem-cache hit (Opus archive → WAV beside
-     the project), so the mixer plays them at once and Tools ▸ Separate stems sees
+     the project), so the mixer plays them at once and File ▸ Audio ▸ Separate stems sees
      existing stems and asks before replacing them — the package's stems are never
      silently regenerated. The `.dcstems` cache is NOT seeded: its key is the audio's
      content signature, and a cache entry built from these stems would re-encode an
@@ -238,8 +256,8 @@ routes it the same way (`DroppedFileRouter`: `.dcsong` → `Project`). Both end 
      refused at its read (`ChecksumMismatch`) and leaves nothing behind.
 4. The written `project.dcproj` opens through the ordinary load (spacing pass, audio,
    MRU, `LastProjectPath`), and the status line says `Status_DcSong_Opened`, or
-   `Status_DcSong_OpenedLossy` (Warning) for an Opus package: **chart-from-audio and
-   stem separation work best from lossless**, so ask for a FLAC package to use them.
+   `Status_DcSong_OpenedLossy` (Warning) for an Opus package: **stem
+   separation works best from lossless**, so ask for a FLAC package to use it.
    A load that failed keeps its own message.
 
 ## Library and Play Mode (#708)

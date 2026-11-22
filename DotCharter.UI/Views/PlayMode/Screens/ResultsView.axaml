@@ -322,16 +322,22 @@
                             <TextBlock Theme="{StaticResource ScreenSubtitleText}" Text="{localization:Loc PlayMode_Results_Sections_Empty}"
                                        Classes="ScreenSubtitle" TextWrapping="Wrap"
                                        IsVisible="{Binding !RunResults.ResultSections.Count}" />
-                            <ItemsControl x:Name="ResultsSectionList" ItemsSource="{Binding RunResults.ResultSections}">
+                            <ItemsControl x:Name="ResultsSectionList" ItemsSource="{Binding RunResults.ResultSections}"
+                                          Grid.IsSharedSizeScope="True">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:SectionRow">
-                                        <!-- Fixed columns, not a StackPanel: the
-                                             bar has to start at the same x on
-                                             every row or the chart is not a
-                                             chart, and German section names run
-                                             long. -->
-                                        <Grid ColumnDefinitions="44,12,96,*,12,52,12,84,Auto"
-                                              Margin="0,4">
+                                        <Grid Margin="0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" SharedSizeGroup="ResultsSectionTime" />
+                                                <ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="96" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="52" />
+                                                <ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="84" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
                                             <TextBlock Grid.Column="0" Text="{Binding TimeLabel}" Theme="{StaticResource MonoText}" Classes="Mono"
                                                        Foreground="{DynamicResource TextDim}"
                                                        VerticalAlignment="Center" />

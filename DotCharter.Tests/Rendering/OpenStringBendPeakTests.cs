@@ -8,7 +8,7 @@ using DotCharter.Core.Graphics;
 namespace DotCharter.Tests.Rendering;
 
 /// <summary>
-///     A bend's PEAK — the white shine marker plus the "v Full" / "v 1/2" step
+///     A bend's PEAK — the white shine marker plus the "↗Full" / "↗1/2" step
 ///     label — is drawn from <c>SustainRenderer</c>, and only the FRETTED tail
 ///     path ever called it. `RenderOpenTailSegment` returns without it.
 ///     <para>
@@ -44,7 +44,7 @@ public sealed class OpenStringBendPeakTests
         SustainRenderer.Render(context);
 
         Assert.Equal(1, context.Deferred3DLabelCount);
-        Assert.Equal("v Full", context.Deferred3DLabels[0].Text);
+        Assert.Equal("↗Full", context.Deferred3DLabels[0].Text);
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public sealed class OpenStringBendPeakTests
         SustainRenderer.Render(context);
 
         Assert.Equal(1, context.Deferred3DLabelCount);
-        Assert.Equal("v Full", context.Deferred3DLabels[0].Text);
+        Assert.Equal("↗Full", context.Deferred3DLabels[0].Text);
     }
 
     [Fact]

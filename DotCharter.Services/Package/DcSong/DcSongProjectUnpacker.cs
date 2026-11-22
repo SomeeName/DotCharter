@@ -8,7 +8,7 @@ namespace DotCharter.Services.Package.DcSong;
 /// <param name="ProjectDirectory">The NEW folder it sits in.</param>
 /// <param name="Title">The song title, for the status line.</param>
 /// <param name="AudioLossy">True for an Opus package: the project's WAV is a decode of
-/// lossy audio, so chart-from-audio and stem separation work best from a FLAC package.</param>
+/// lossy audio, so stem separation works best from a FLAC package.</param>
 /// <param name="Stems">The packaged stems written into the project, by name.</param>
 /// <param name="StemsSkipped">Packaged stems left out because ffmpeg was not there to
 /// decode them (a FLAC package opens without ffmpeg; its Opus stems cannot).</param>
@@ -128,9 +128,7 @@ public sealed class DcSongProjectUnpacker
     /// the rule the other create-project flows use.</summary>
     internal static string FolderName(string artist, string title)
     {
-        var name = $"{artist.Trim()} - {title.Trim()}";
-        foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
-        name = name.Trim().TrimEnd('.');
+        var name = SafeFileName.Make($"{artist.Trim()} - {title.Trim()}").TrimEnd('.');
         return name.Length == 0 ? "DotCharter Song" : name;
     }
 
@@ -261,7 +259,7 @@ public sealed class DcSongProjectUnpacker
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                _logger.Warning(AppLogCategory.Project, $".dcsong open: could not remove '{dir}' after a failure: {ex.Message}");
+                _logger.Warning(AppLogCategory.Project, $".dcsong open: could not remove '{dir}' after a failure", ex);
             }
         }
     }

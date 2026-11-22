@@ -54,7 +54,7 @@ public sealed class PhraseCatalogDeleteConfirmTests
         catalog.Store.Add(Entry("chorus-stab", "Chorus stab"));
         // Synchronous search post; the other services are only reached by the
         // capture/paste verbs, which these tests never run.
-        var vm = new PhraseCatalogViewModel(catalog, null!, null!, null!, null!, FakeLocalization.English(), action => action());
+        var vm = new PhraseCatalogViewModel(catalog, null!, null!, null!, new ProjectState(), FakeLocalization.English(), action => action());
         vm.EnsureLoaded();
         return (vm, catalog);
     }

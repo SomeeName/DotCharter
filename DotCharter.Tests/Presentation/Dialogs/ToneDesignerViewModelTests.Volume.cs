@@ -61,7 +61,7 @@ public sealed partial class ToneDesignerViewModelTests
     }
 
     [Fact]
-    public void ManyAttenuationEdits_FlushAsOneHistoryAction_WithTheNegativeVolumeInTheBody()
+    public void ManyAttenuationEdits_RecordAsOneHistoryAction_WithTheNegativeVolumeInTheBody()
     {
         var project = CreateProject();
         var harness = new Harness(project);
@@ -69,7 +69,7 @@ public sealed partial class ToneDesignerViewModelTests
         var before = harness.History.GetUndoSteps().Count;
 
         foreach (var typed in new[] { 3.0, 4.5, 8.0, 14.2 }) vm.Editor.VolumeAttenuation = typed;
-        Assert.Equal(before, harness.History.GetUndoSteps().Count);
+        Assert.Equal(before + 1, harness.History.GetUndoSteps().Count);   // recorded as made, one gesture
         vm.CloseCommand.Execute(null);
 
         Assert.Equal(before + 1, harness.History.GetUndoSteps().Count);

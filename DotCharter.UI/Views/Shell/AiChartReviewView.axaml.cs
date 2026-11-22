@@ -13,8 +13,8 @@ namespace DotCharter.UI.Views.Shell;
 ///     gated surface (<see cref="IPrewarmableSurfaces" />).
 ///     <para>
 /// The keyboard, while focus is anywhere on the card: ↑ / ↓ move the current
-///         row and go to it, A accepts it, R rejects it, Enter on a row applies. The keys are
-///         claimed in the TUNNEL so a focused row button does not take Enter as its own click
+///         row and go to it, A accepts it, R rejects it, P auditions a tone row's proposal,
+///         Enter on a row applies. The keys are claimed in the TUNNEL so a focused row button does not take Enter as its own click
 ///         and the editor's keybinds (the window's bubble fallback) never see them.
 ///     </para>
 /// </summary>
@@ -52,6 +52,8 @@ public partial class AiChartReviewView : UserControl, IPrewarmableSurfaces
             case Key.R:
                 vm.RejectCurrent();
                 return true;
+            case Key.P:
+                return vm.AuditionCurrent();
             case Key.Enter when IsInRows(source):
                 if (vm.ApplyCommand.CanExecute(null)) vm.ApplyCommand.Execute(null);
                 return true;

@@ -52,4 +52,50 @@ public sealed class SafeFileNameTests
         Assert.Equal(701, made.Length);
         Assert.EndsWith("_", made, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void ReplaceInvalid_replaces_and_keeps_the_exact_spelling_otherwise()
+    {
+        Assert.Equal(" AC_DC - Live ", SafeFileName.ReplaceInvalid(" AC/DC - Live "));
+        Assert.Equal("   ", SafeFileName.ReplaceInvalid("   "));
+        Assert.Equal(string.Empty, SafeFileName.ReplaceInvalid(string.Empty));
+    }
+
+    /// <summary>
+    ///     #596: package, stem-cache, lyric, new-project, EOF-import and newer-writer
+    ///     backup names each carried their own replace loop beside this type. A product
+    ///     file may still READ the invalid set to validate a name (IndexOfAny), but only
+    ///     <see cref="SafeFileName" /> replaces with it.
+    /// </summary>
+    [Fact]
+    public void Only_SafeFileName_replaces_invalid_file_name_characters()
+    {
+        var root = TestPaths.RepoRoot();
+        var offenders = new List<string>();
+        foreach (var project in Directory.EnumerateDirectories(root, "DotCharter.*"))
+        {
+            if (Path.GetFileName(project) == "DotCharter.Tests") continue;
+            foreach (var file in Directory.EnumerateFiles(project, "*.cs", SearchOption.AllDirectories))
+            {
+                if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                    || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                    || Path.GetFileName(file) == "SafeFileName.cs")
+                {
+                    continue;
+                }
+
+                var lines = File.ReadAllLines(file);
+                for (var i = 0; i < lines.Length; i++)
+                {
+                    var line = lines[i];
+                    if (!line.Contains("GetInvalidFileNameChars()", StringComparison.Ordinal)) continue;
+                    if (line.Contains("IndexOfAny(", StringComparison.Ordinal)) continue;
+                    offenders.Add($"{Path.GetRelativePath(root, file)}:{i + 1}: {line.Trim()}");
+                }
+            }
+        }
+
+        Assert.True(offenders.Count == 0, LintReport.Of("invalid file-name characters are replaced only by SafeFileName",
+            offenders, "call SafeFileName.Make (trimmed) or SafeFileName.ReplaceInvalid (exact spelling)"));
+    }
 }

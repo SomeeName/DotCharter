@@ -146,11 +146,17 @@ public sealed class EventViewModel : DialogViewModel<bool>, IEventScreen, IDialo
                            ?? EventMarkerEdit.NearestTone(tones, _eventTimeMs, beats);
 
         var isNew = existingEvent == null;
-        BuildSectionOptions(existingEvent?.Section ?? (isNew ? _events.LastSection : ""));
+        BuildSectionOptions(request.SectionName ?? existingEvent?.Section ?? (isNew ? _events.LastSection : ""));
         _toneOptions = [.. ChartToneNames.Offerable(_edit.State.ActiveProject, lookup)];
         OnPropertyChanged(nameof(ToneOptions));
         BuildEventToggles(existingEvent?.Events ?? (isNew ? _events.LastEvents : null));
         PhraseName = existingEvent?.Phrase ?? (isNew ? _events.LastPhrase : "");
+        // A section typed in the quick-add popover on a marker with no phrase of its own names the phrase too.
+        if (!string.IsNullOrWhiteSpace(request.SectionName) &&
+            (string.IsNullOrWhiteSpace(PhraseName) || (isNew && PhraseName == _events.LastPhrase)))
+        {
+            PhraseName = request.SectionName.Trim();
+        }
         // A phrase that already matches its section was following it, so it keeps following.
         _phraseIsAutoFilled = !string.IsNullOrWhiteSpace(SectionName) && PhraseFollowsSection();
         ToneName = existingTone?.ToneName ?? "";
@@ -182,7 +188,7 @@ public sealed class EventViewModel : DialogViewModel<bool>, IEventScreen, IDialo
     private void BuildSectionOptions(string stored)
     {
         var options = new List<SectionOption> { new("", _edit.Localization["Dialog_Section_None"]) };
-        options.AddRange(RsSectionCatalog.Names.Select(n => new SectionOption(n, RsSectionCatalog.DisplayName(n))));
+        options.AddRange(RsSectionCatalog.Names.Select(n => new SectionOption(n, Translated("Dialog_SectionName_" + n, RsSectionCatalog.DisplayName(n)))));
 
         // An off-list name an import put here is shown, never rewritten on open.
         var trimmed = stored.Trim();
@@ -195,10 +201,17 @@ public sealed class EventViewModel : DialogViewModel<bool>, IEventScreen, IDialo
                           ?? options[0];
     }
 
+    /// <summary>A catalogue label in the UI language; EOF's English label where the language has no word of its own.</summary>
+    private string Translated(string key, string english)
+    {
+        var text = _edit.Localization[key];
+        return text.Length == 0 || text == key ? english : text;
+    }
+
     private void BuildEventToggles(string? stored)
     {
         var present = RsEventCatalog.Parse(stored);
-        _eventToggles = [.. RsEventCatalog.Events.Select(e => new EventCodeToggle(e.Code, e.DisplayName)
+        _eventToggles = [.. RsEventCatalog.Events.Select(e => new EventCodeToggle(e.Code, Translated("Dialog_EventName_" + e.Code, e.DisplayName))
         {
             IsSelected = present.Contains(e.Code, StringComparer.Ordinal)
         })];

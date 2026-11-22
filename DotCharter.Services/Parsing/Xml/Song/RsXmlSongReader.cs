@@ -157,12 +157,13 @@ internal sealed class RsXmlSongReader
 
         // ── Levels ──────────────────────────────────────────────────────
         ReadLevels(song, arr, beats);
-        RsXmlSongStringOrder.ToChart(arr);
+        NarrowStockBass(song, arr);
+        if (song.Element(E.Tuning)?.Attribute(E.ExtendedRange) is null)
+            RsXmlSongStringOrder.ToChart(arr, RsXmlSongStringOrder.IsPackageOrderBass(song, arr));
 
         if (MergeSimultaneousNotes) RsXmlSplitChordMerge.Apply(project);
 
-        // A hand-shape template fret nothing under the shape plays is a GHOST gem —
-        // RS XML has no other spelling for one, and EOF writes exactly this.
+        // RS XML spells opening ghosts through the grip and the started sounds.
         GhostGems.MarkUnplayedHandShapeFrets(arr);
 
         return project;
@@ -184,6 +185,12 @@ internal sealed class RsXmlSongReader
     {
         var tuningEl = song.Element(E.Tuning);
         if (tuningEl == null) return;
+
+        if (RsXmlSongStringOrder.RsxrStringCount(tuningEl, arr) is { } rsxrStrings)
+        {
+            ReadRsxrTuning(tuningEl, arr, rsxrStrings);
+            return;
+        }
 
         // Detect string count: explicit `strings` attr (rscharter / DotCharter legacy)
         // or fallback to counting present stringN attributes (EOF style).
@@ -207,7 +214,7 @@ internal sealed class RsXmlSongReader
         for (var i = 0; i < fileOffsets.Length; i++)
             fileOffsets[i] = Fmt.AttrInt(tuningEl, $"string{i}");
         // A 7-/8-string guitar's file lists the extra strings after the stock six.
-        foreach (var offset in RsXmlSongStringOrder.TuningToChart(arr, fileOffsets))
+        foreach (var offset in RsXmlSongStringOrder.TuningToChart(arr, fileOffsets, RsXmlSongStringOrder.IsPackageOrderBass(song, arr)))
             arr.TuningPitches.Add(new TuningOffset(offset));
 
         // A chart states its tuning TWICE — offsets AND note letters (see
@@ -221,6 +228,35 @@ internal sealed class RsXmlSongReader
         // stale six-entry default also named two strings that do not exist.
         arr.Tuning = TuningUtilities.GetTuningNames(arr.StringCount,
             arr.TuningPitches.Select(t => t.Step).ToArray());
+    }
+
+    private static void ReadRsxrTuning(XElement tuning, Arrangement arr, int count)
+    {
+        arr.StringCount = count;
+        var offsets = Enumerable.Range(0, count).Select(i => Fmt.AttrInt(tuning, $"string{i}")).ToArray();
+        arr.TuningPitches = [.. RsXmlSongStringOrder.RsxrTuningToChart(arr, offsets).Select(offset => new TuningOffset(offset))];
+        arr.Tuning = TuningUtilities.GetTuningNames(count, arr.TuningPitches.Select(t => t.Step).ToArray());
+    }
+
+    /// <summary>A stock bass file lists string0..string5 whatever it has (EOF always writes six) and
+    /// no <c>strings</c> attribute, so reading the tuning alone made it a six-string bass: the export
+    /// then split its low-E notes as the extended bass's low B. Without the attribute, and with
+    /// nothing on string 4 or 5, it is the four-string bass it is.</summary>
+    private static void NarrowStockBass(XElement song, Arrangement arr)
+    {
+        if (arr.ArrangementType is not ArrangementType.Bass || arr.StringCount <= 4) return;
+        if (song.Element(E.Tuning) is not { } tuning || Fmt.AttrIntNullable(tuning, E.Strings).HasValue) return;
+        static bool Beyond(Dictionary<int, int> byString) => byString.Keys.Any(k => k >= 4);
+        if (arr.ChordTemplates.Concat(arr.FretHandMuteTemplates).Any(t => Beyond(t.Frets) || Beyond(t.Fingers))) return;
+        foreach (var level in arr.Levels)
+        {
+            if (level.Notes.Any(n => n.StringIndex >= 4)) return;
+            if (level.Chords.Any(c => c.ChordNotes.Any(cn => cn.StringIndex >= 4))) return;
+        }
+
+        arr.StringCount = 4;
+        arr.TuningPitches = [.. arr.TuningPitches.Take(4)];
+        arr.Tuning = TuningUtilities.GetTuningNames(4, arr.TuningPitches.Select(t => t.Step).ToArray());
     }
 
     private static void ReadArrangementProperties(XElement el, ArrangementProperties p)
@@ -269,7 +305,7 @@ internal sealed class RsXmlSongReader
             var eb = ebeatEls[i];
             var timeMs = Fmt.ParseTime(eb.Attribute(E.Time)?.Value);
             var measureAttr = eb.Attribute(E.Measure)?.Value;
-            var isMeasure = !string.IsNullOrEmpty(measureAttr);
+            var isMeasure = int.TryParse(measureAttr, CultureInfo.InvariantCulture, out var measure) && measure >= 0;
 
             var bpm = 120.0;
             if (i + 1 < ebeatEls.Count)
@@ -687,7 +723,11 @@ internal sealed class RsXmlSongReader
 
         var chordPalmMute = Fmt.AttrInt(el, E.PalmMute) != 0;
         var chordFretHandMute = Fmt.AttrInt(el, E.FretHandMuteAttr) != 0;
-        var chordLinkNext = Fmt.AttrInt(el, E.LinkNext) != 0;
+        // The chord-level flag is DERIVED (set when any chord note links), so it speaks for the
+        // chord notes only when none of them says anything itself: copying it onto a chord whose
+        // string 3 links and string 4 does not linked string 4 to a note that is not there.
+        var chordLinkNext = Fmt.AttrInt(el, E.LinkNext) != 0
+                            && !el.Elements("chordNote").Any(n => Fmt.AttrInt(n, E.LinkNext) != 0);
 
         // Read chord notes
         foreach (var cnEl in el.Elements("chordNote"))

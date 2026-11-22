@@ -103,6 +103,29 @@ public static class LyricScriptDetector
         && features.RareLetterShare >= MinRareLetterShare
         && features.FunctionWordCount >= MinFunctionWords;
 
+    /// <summary>
+    ///     True for Hepburn romaji: nearly every syllable ends in a vowel, syllables are short and
+    ///     almost no <c>l</c>, <c>q</c>, <c>v</c> or <c>x</c> (up to a few loanwords).
+    ///     Spanish and Italian end in vowels too but use <c>l</c> and <c>v</c>.
+    /// </summary>
+    public static bool IsLikelyRomaji(LyricSheet sheet) => IsLikelyRomaji(Measure(sheet));
+
+    /// <inheritdoc cref="IsLikelyRomaji(LyricSheet)" />
+    public static bool IsLikelyRomaji(ScriptFeatures features) =>
+        features.SyllableCount >= 12
+        && features.VowelFinalShare >= MinRomajiVowelFinalShare
+        && features.MeanSyllableLength < MinMeanSyllableLength
+        && features.RareLetterShare <= MaxRomajiRareLetterShare;
+
+    private const double MinRomajiVowelFinalShare = 0.9;
+
+    /// <summary>
+    ///     Romaji sheets carry the odd English loanword ("love", "forever", "baby"), so a few
+    ///     syllables may hold l/v. Well under the 6.6% English minimum, and the 90% vowel-final
+    ///     rule already keeps English out.
+    /// </summary>
+    private const double MaxRomajiRareLetterShare = 0.04;
+
     /// <summary>Computes the features without deciding, for probes and tests.</summary>
     public static ScriptFeatures Measure(LyricSheet sheet)
     {

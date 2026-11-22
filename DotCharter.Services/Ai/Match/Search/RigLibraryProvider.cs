@@ -318,7 +318,7 @@ public sealed class RigLibraryProvider : IRigLibraryProvider, IDisposable
             // The next GetAsync starts it again; a renderer that is broken for good
             // fails the match itself, which is where that gets reported.
             _logger?.Warning(AppLogCategory.Audio,
-                $"Tone library: background growth failed at {builder.Rows} rows: {ex.GetType().Name}: {ex.Message}");
+                $"Tone library: background growth failed at {builder.Rows} rows", ex);
         }
     }
 

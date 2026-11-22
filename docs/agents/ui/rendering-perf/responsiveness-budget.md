@@ -15,6 +15,12 @@ be under 20 ms.** The owner reports anything slower as lag, and it is felt
 immediately because it lands on the UI thread between a click and the first
 frame of the new surface.
 
+Arrangement changes share the `SurfaceShowTiming` log sink. The app starts the
+measurement from `ProjectState.PropertyChanging`, before any arrangement subscriber;
+metadata republishing and identity-equal assignments are not switches. Named deferred
+UI work uses `DetailSink` (debug detail for passes of at least 3 ms). See
+[arrangement-switch.md](../../services/state-diagnostics/arrangement-switch.md) for the boundary.
+
 The cost is almost never construction — it is the FIRST layout of a hidden
 subtree. `IsVisible=false` skips `MeasureCore`, so styles, `ApplyTemplate`,
 resource lookups and text layout are all deferred to the first switch, once per

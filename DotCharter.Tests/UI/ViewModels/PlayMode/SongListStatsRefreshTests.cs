@@ -31,6 +31,35 @@ public sealed class SongListStatsRefreshTests : IDisposable
 
     public SongListStatsRefreshTests() => Directory.CreateDirectory(_dir);
 
+    [Fact]
+    public void OwnChartDiscovery_IncludesPlayedProjectsOutsideBothTopTenLists()
+    {
+        var profiles = new PlayerProfileService(FakeLocalization.English(), logger: null,
+            filePath: Path.Combine(_dir, "player-profiles.json"), defaultProfileName: "Ann");
+        var store = new PracticeProfileService(profiles, logger: null,
+            legacyFilePath: Path.Combine(_dir, "legacy.json"));
+        var paths = Enumerable.Range(0, 25).Select(i => Path.Combine(_dir, $"song-{i:00}.dcproj")).ToArray();
+        foreach (var path in paths)
+        {
+            File.WriteAllText(path, "");
+            store.Record(path, "Lead:Lead", Run());
+        }
+        var stats = new GameplayStatsService(store);
+        var vm = TestRigBuilders.PlayMode(profiles, stats,
+            new LeaderboardService(profiles), new ProjectState(), localization: FakeLocalization.English());
+        var summary = stats.GetStatistics();
+        Assert.Equal(paths.Length, summary.KnownSongKeys.Count);
+        var omitted = paths.Except(summary.MostPlayed.Concat(summary.RecentlyPlayed).Select(s => s.SongKey)).ToArray();
+        Assert.NotEmpty(omitted);
+
+        var collect = typeof(SongSelectViewModel).GetMethod("CollectOwnChartPaths",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(collect);
+        var discovered = Assert.IsType<List<string>>(collect.Invoke(vm.SongSelect, null));
+
+        Assert.Equal(paths.OrderBy(Path.GetFileNameWithoutExtension), discovered);
+    }
+
     /// <summary>The profile switch. Ann has played one of the two songs; Bo has
     /// played neither, so with "Played" ticked Bo's list must be empty.</summary>
     [Fact]

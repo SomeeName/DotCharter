@@ -43,6 +43,14 @@ public class SnapshotUpdateContext
     /// </summary>
     public long TemplatesVersion = -1;
 
+    /// <summary>
+    ///     Revision covering in-place beat edits, including IsMeasure and time
+    ///     signatures, undo and redo. A nonnegative unchanged value permits the
+    ///     measure-prefix cache to skip recounting. Default -1 recounts every
+    ///     update; identity and count alone cannot detect in-place edits.
+    /// </summary>
+    public long BeatsVersion = -1;
+
     public int AnchorEnd;
     public int AnchorStart;
     public int BeatEnd;
@@ -75,6 +83,8 @@ public class SnapshotUpdateContext
     /// <summary>The localized words for the editor's show-light chip. Null ⇒
     /// no chip: Play Mode leaves it null.</summary>
     public ShowlightChipLabels? ShowlightChipLabels;
+    /// <summary>True while the Showlights editor is open: the chip then shows even with nothing active.</summary>
+    public bool ShowlightEditorOpen;
     public IList<EventPoint> EventPoints = Array.Empty<EventPoint>();
     public int HandShapeEnd;
     public int HandShapeStart;

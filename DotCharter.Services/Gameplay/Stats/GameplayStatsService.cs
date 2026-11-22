@@ -95,6 +95,8 @@ public sealed class ProfileStatistics
 
     public IReadOnlyList<SongPlayStats> MostPlayed { get; init; } = [];
     public IReadOnlyList<SongPlayStats> RecentlyPlayed { get; init; } = [];
+    /// <summary>All played song identities, without the display lists' top-ten cap.</summary>
+    public IReadOnlyList<string> KnownSongKeys { get; init; } = [];
     public double AverageMasteryPercent { get; init; }
 }
 
@@ -191,6 +193,7 @@ public sealed class GameplayStatsService : IGameplayStatsService
 
         return new ProfileStatistics
         {
+            KnownSongKeys = perSong.Select(p => p.SongKey).Distinct(StringComparer.Ordinal).ToArray(),
             // SONGS, not store rows. A store key is `songKey|arrangementName`
             // (PracticeProfileService.Key), so perSong holds one row per
             // ARRANGEMENT — one song practised on Lead, Rhythm and Bass is

@@ -42,9 +42,14 @@ public sealed class ShapeWorkflowConstructionUiPerfSmokeTests
                 Assert.True(Named(view, "ShapesSearch").Bounds.Height > 1, $"{variant}: the search box did not lay out");
                 if (screen.HasRows)
                 {
-                    var rows = view.FindControl<ItemsControl>("ShapesRows")!;
-                    var realized = rows.GetRealizedContainers().Count(c => c.Bounds.Height > 1);
-                    Assert.True(realized >= Math.Min(3, screen.Rows.Count), $"{variant}: only {realized} rows measured");
+                    Assert.NotEmpty(ShapesPanelCards.Realized(view));
+                    var measured = 0;
+                    ShapesPanelCards.ForEach(view, card =>
+                    {
+                        Assert.True(card.Bounds is { Width: > 1, Height: > 1 });
+                        measured++;
+                    });
+                    Assert.Equal(screen.Rows.Count, measured);
                 }
                 else
                 {

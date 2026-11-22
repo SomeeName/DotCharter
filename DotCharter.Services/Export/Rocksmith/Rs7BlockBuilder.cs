@@ -5,7 +5,7 @@ using DotCharter.Services.Export.Sng.Model;
 namespace DotCharter.Services.Export.Rocksmith;
 
 /// <summary>
-/// Collects the RS7X block (<see cref="RsExtensionBlock" />) while
+/// Collects the internal extra-column model (<see cref="RsExtensionBlock" />) while
 ///     <c>SngFromDomainMapper</c> writes a 7-string guitar: one <c>CHDT</c> row per chord
 ///     template it emits and one <c>CHNT</c> row per ChordNotes record it ADDS, so both
 ///     counts equal the stock sections' by construction. The mapper keeps writing the
@@ -27,15 +27,19 @@ internal sealed class Rs7BlockBuilder
 {
     private readonly RsExtensionBlock _block;
 
-    private Rs7BlockBuilder(int stringCount) => _block = RsExtensionBlock.ForStrings(stringCount);
+    private Rs7BlockBuilder(RsExtensionBlock block) => _block = block;
 
-    /// <summary>A builder for a 7-/8-string guitar; null for everything that stays stock.</summary>
+    /// <summary>A builder for a 7-/8-string guitar (all three sections) or a 5-/6-string bass
+    /// (<c>STRS</c> only: its extra strings use the stock slots); null for everything that
+    /// stays stock.</summary>
     public static Rs7BlockBuilder? For(Arrangement arrangement) =>
-        Rs7StringLayout.IsExtendedGuitar(arrangement) ? new Rs7BlockBuilder(arrangement.StringCount) : null;
+        Rs7StringLayout.IsExtendedGuitar(arrangement) ? new Rs7BlockBuilder(RsExtensionBlock.ForStrings(arrangement.StringCount))
+        : Rs7StringLayout.IsExtendedBass(arrangement) ? new Rs7BlockBuilder(RsExtensionBlock.ForBass(arrangement.StringCount))
+        : null;
 
     /// <summary>The <c>CHDT</c> row of the next emitted template (package string order).</summary>
     public void AddTemplate(ChordTemplate template) =>
-        _block.Templates!.Add([.. _block.Strings.Select(s => Column(template, s))]);
+        _block.Templates?.Add([.. _block.Strings.Select(s => Column(template, s))]);
 
     private static RsExtColumn Column(ChordTemplate template, int sngIndex)
     {
@@ -50,7 +54,7 @@ internal sealed class Rs7BlockBuilder
     /// low B + two stock strings is not (as <c>rs7chart</c> writes it).</summary>
     public uint WithDoubleStop(uint mask, RsChordTemplate? template, int chordId)
     {
-        if (template == null || chordId < 0 || chordId >= _block.Templates!.Count) return mask;
+        if (template == null || _block.Templates == null || chordId < 0 || chordId >= _block.Templates.Count) return mask;
         var strings = template.Frets.Count(f => f != -1) + _block.Templates[chordId].Count(c => c.Fret >= 0);
         return strings == 2 ? mask | RsNoteMask.DoubleStop : mask & ~RsNoteMask.DoubleStop;
     }
@@ -90,7 +94,7 @@ internal sealed class Rs7BlockBuilder
     }
 
     /// <summary>The <c>CHNT</c> row of the ChordNotes record just added.</summary>
-    public void AddChordNotes(RsExtTech[]? row) => _block.ChordNotes!.Add(row ?? NewChordNotesRow());
+    public void AddChordNotes(RsExtTech[]? row) => _block.ChordNotes?.Add(row ?? NewChordNotesRow());
 
     public RsExtensionBlock Build() => _block;
 }

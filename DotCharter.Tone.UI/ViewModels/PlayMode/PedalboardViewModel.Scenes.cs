@@ -56,21 +56,21 @@ public sealed partial class PedalboardViewModel
         // and lands on IT (OnPresetApplied → ApplyDeferredScene).
         if (Browser.IsApplying)
         {
-            _sceneAfterApply = index;
+            _sceneAfterApply = (Browser.ApplyGeneration, index);
             return;
         }
 
         SwitchScene(index);
     }
 
-    private int? _sceneAfterApply;
+    private (long Generation, int Scene)? _sceneAfterApply;
 
     /// <summary>The scene a switch asked for while a tone was arriving, now that it has.</summary>
     private void ApplyDeferredScene()
     {
-        if (_sceneAfterApply is not { } scene) return;
+        if (_sceneAfterApply is not { } request) return;
         _sceneAfterApply = null;
-        SwitchScene(scene);
+        if (request.Generation == Browser.ApplyGeneration) SwitchScene(request.Scene);
     }
 
     private void SwitchScene(int index)

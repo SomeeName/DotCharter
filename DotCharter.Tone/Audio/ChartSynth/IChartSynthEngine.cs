@@ -67,6 +67,29 @@ public interface IChartSynthEngine
     /// </summary>
     bool RouteInstrumentToRig { get; set; }
 
+    /// <summary>
+    ///     A guitar / bass seat choice can be honoured: the engine runs two
+    ///     live instrument seats (Settings ▸ Audio, two separate instruments). False
+    ///     with one input: <see cref="ChartSeatRoute" /> then plays into the guitar
+    ///     seat whatever it says, and the Mixer shows the choice disabled.
+    /// </summary>
+    bool CanRouteChartToSeats { get; }
+
+    /// <summary>
+    ///     Which live seats' rigs the chart sound enters (ABI v51): the chart
+    ///     synth and, while <see cref="RouteInstrumentToRig" />, the VST instrument.
+    ///     Kept as a request and replayed onto a rebuilt engine.
+    /// </summary>
+    ChartSoundSeatRoute ChartSeatRoute { get; set; }
+
+    /// <summary>
+    ///     The built-in voice plays through the chart's own tones ("Song tones", the
+    ///     default), which live on the guitar seat's rig: the chart source then enters
+    ///     the guitar seat only, whatever <see cref="ChartSeatRoute" /> says (the routed
+    ///     VST instrument still follows it). Kept as a request and replayed.
+    /// </summary>
+    bool ChartSynthPlaysSongTones { get; set; }
+
     /// <summary>A snapshot of the generator, for diagnostics and tests.</summary>
     bool TryGetChartSynthStatus(out ChartSynthStatus status);
 

@@ -130,7 +130,7 @@ StatusBar_buildsAttachesAndLaysOutItsMetricCluster}`.
 
 `Views/Editor/InspectorStyles.axaml`, included by `InspectorView` (which hosts
 all eight tabs, so the classes cascade regardless of each tab's own DataContext)
-plus `MixerInspectorView`, `PhraseCatalogView` and `StemMixerView`. There is no
+plus `MixerInspectorView` and `PhraseCatalogView`. There is no
 mockup for the inspector — the layer itself was the reference. Five things it
 settled:
 
@@ -149,8 +149,8 @@ settled:
    through the same `TextConverters.ToUpper` the status rail uses.
 3. **A converted grammar may legitimately RESTATE app classes.**
    `Button.Subtle`, `ToggleButton.Seg`/`Chip`, `TextBlock.Label`/`Caption`/
-   `HelpText`, `PathIcon.SectionIcon` and `Border.PaneHeader` carry ~150
-   controls in these tabs; converting without them leaves the surface half on
+   `HelpText` and `Border.PaneHeader` carry ~150 controls in these tabs
+   (`PathIcon.SectionIcon` was dropped with #751, nothing wore it); converting without them leaves the surface half on
    each grammar. A `UserControl.Styles` include is applied after the
    application's, so the restatement wins for the four includers and every other
    consumer keeps its old look — the call `SettingsStyles` already made for
@@ -161,8 +161,8 @@ settled:
    cost 42 `Button.Subtle` actions their hand cursor.
    `FireStyleClassTests.TheInspectorGrammar_CarriesNoTransitionsSetter_ButMayCarryACursor`
    asserts both halves so the difference cannot decay into an omission.
-5. **Two app keys are NOT ladder steps and stay.** `RowHeightField` (32) and
-   `FieldLabelRail` (84) are the pane's geometry; the ladder's nearest row
+5. **One app key is NOT a ladder step and stays.** `RowHeightField` (32) is
+   the pane's geometry (`FieldLabelRail` went with #751); the ladder's nearest row
    height is `FireFieldHeight` = 36, which is a full-width settings row, and
    four pixels a row costs a whole field over a card in a dock pane.
 

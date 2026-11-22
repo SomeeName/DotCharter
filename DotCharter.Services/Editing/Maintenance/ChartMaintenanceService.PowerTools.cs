@@ -8,14 +8,10 @@ namespace DotCharter.Services.Editing.Maintenance;
 // The "charting power tools": auto difficulty-level generation, phrase-iteration
 // propagation, the MIDI draft apply, and the refret engine.
 //
-// All of them mutate the chart, so all of them go through IHistoryService — a
-// power tool that cannot be undone is a trap. Level generation, the MIDI apply
-// and the refret rewrite whole-project state (levels / arrangements / chord
-// templates / anchors), so they use the same ProjectSnapshotAction +
-// ChartProjectCloner snapshot the squash and improve pipelines use. Phrase
-// propagation is already undoable inside PhraseIterationPropagationService (one
-// CompositeAction across every target), so this layer only resolves the source
-// iteration and refreshes the view.
+// All tools record edits through IHistoryService. Level generation snapshots one
+// arrangement; MIDI apply and refret snapshot the project. Phrase propagation
+// records its own CompositeAction, so this layer only resolves the source and
+// refreshes the view.
 /// <summary>
 ///     Level generation's position: levels BUILT so far, out of the request.
 /// </summary>
@@ -50,9 +46,9 @@ public sealed partial class ChartMaintenanceService
     ///     <para>
     ///         <b>What is safe to move off the UI thread, and what is not.</b>
     ///         Level generation does NOT mutate the live project while it works:
-    ///         it takes two <c>ChartProjectCloner.Clone</c> snapshots, runs the
+    ///         it takes two <c>ChartProjectCloner.CloneArrangement</c> snapshots, runs the
     ///         generator over the <c>after</c> CLONE, and publishes the result
-    ///         through one <see cref="ProjectSnapshotAction" />, which reconciles
+    ///         through one <see cref="ArrangementSnapshotAction" />, which reconciles
     ///         it into the live graph (<c>ChartProjectRestorer</c>).
     ///     </para>
     ///     <para>
@@ -101,8 +97,9 @@ public sealed partial class ChartMaintenanceService
 
             // One arrangement changes, so the step snapshots one. The beats are copied:
             // the generator may run off the UI thread while the charter keeps editing.
-            var before = ChartProjectCloner.CloneArrangement(live);
-            var target = ChartProjectCloner.CloneArrangement(live);
+            var before = ChartProjectCloner.CloneArrangement(live, retainIdentities: true);
+            var target = ChartProjectCloner.CloneArrangement(live, retainIdentities: true);
+            var map = new GeneratedLevelOwners(target);
             var templates = LevelTemplateOrphans.Capture(target);
             var beats = project.Beats.Select(b => b.Clone()).ToList();
 
@@ -125,6 +122,15 @@ public sealed partial class ChartMaintenanceService
                 return false;
             }
 
+            if (!ReferenceEquals(project, _projectState.ActiveProject) ||
+                !ReferenceEquals(arrangement, _projectState.ActiveArrangement) ||
+                !ReferenceEquals(live, LiveArrangementAt(project, arrangementIndex)))
+            {
+                return false;
+            }
+
+            map.Apply(target);
+
             var previousLevelCount = arrangement.Levels.Count;
 
             // Land on the TOP level (index N-1) — that one is a verbatim clone of
@@ -133,6 +139,11 @@ public sealed partial class ChartMaintenanceService
             var levels = LevelOperationAction(live, arrangementIndex, before, target, templates,
                 levelCount - 1, vocalTrackIndex);
             _historyService.Do(new CompositeAction([levels]) { LinkPolicyOverride = LinkPolicy.ShareFirstChanged });
+
+            // Reconciliation keeps the old level instance alive as a reduction. Select the
+            // full chart for this command only; undo/redo still preserve surviving view state.
+            if (ReferenceEquals(_projectState.ActiveArrangement, live))
+                _projectState.ActiveLevel = ChartLevels.Hardest(live);
 
             _chartEditor.RequestRedraw();
             _projectState.SetMessage(L("Status_GenerateLevelsApplied", levelCount, target.Name), StatusSeverity.Success);
@@ -170,7 +181,8 @@ public sealed partial class ChartMaintenanceService
             return 0;
         }
 
-        if (arrangement.PhraseIterations.Count == 0)
+        var ordered = PhraseMarkers.Iterations(arrangement).Iterations.OrderBy(pi => pi.Position).ToList();
+        if (ordered.Count == 0)
         {
             _projectState.MainDisplayMessage = L("Status_PropagatePhraseNoIterations");
             return 0;
@@ -180,7 +192,6 @@ public sealed partial class ChartMaintenanceService
         // the one that OWNS the playhead is the last iteration at or before it.
         // Before the first iteration, fall back to the first one.
         var playhead = TimelineMath.PositionFromMs(_projectState.CurrentTimeMs, _chartEditor.Beats);
-        var ordered = arrangement.PhraseIterations.OrderBy(pi => pi.Position).ToList();
         var source = ordered.LastOrDefault(pi => pi.Position <= playhead) ?? ordered[0];
 
         try
@@ -339,8 +350,8 @@ public sealed partial class ChartMaintenanceService
             }
 
             // One arrangement changes, so the step snapshots one.
-            var before = ChartProjectCloner.CloneArrangement(live);
-            var target = ChartProjectCloner.CloneArrangement(live);
+            var before = ChartProjectCloner.CloneArrangement(live, retainIdentities: true);
+            var target = ChartProjectCloner.CloneArrangement(live, retainIdentities: true);
 
             var result = range != null && levelIndex >= 0 && levelIndex < target.Levels.Count
                 ? _refretService.RefretRange(target, target.Levels[levelIndex], project.Beats,

@@ -13,8 +13,7 @@ namespace DotCharter.Tests.UI.ViewModels.PlayMode;
 
 /// <summary>
 ///     A RUN CHAIN — Retry from the results screen, Restart from the pause menu,
-///     retry-from-section after a fail-out, or simply starting again after a
-///     REFUSED run — reaches <c>BeginGameplay</c> a second time WITHOUT ever
+///     or retry-from-section — reaches <c>BeginGameplay</c> again WITHOUT
 ///     passing through <c>EndRunSideEffects</c>.
 ///     <para>
 ///         The bug: <c>BeginGameplay</c> re-captured <c>_preRunSpeed</c>,
@@ -35,7 +34,26 @@ namespace DotCharter.Tests.UI.ViewModels.PlayMode;
 /// </summary>
 public sealed class PlayModeRunChainStateTests : IDisposable
 {
+    private readonly List<(PlayModeViewModel Vm, LivePlayViewModel Live)> _runs = [];
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "DotCharterTests", Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public void StartingARun_SelectsTheGreatestDifficultyInAnUnsortedArrangement()
+    {
+        var vm = NewVm(out var state, out _, out _);
+        var arrangement = new Arrangement();
+        var hardest = new ChartLevel { DifficultyIndex = 10 };
+        var reduced = new ChartLevel { DifficultyIndex = 0 };
+        arrangement.Levels.Add(hardest);
+        arrangement.Levels.Add(reduced);
+        state.ActiveArrangement = arrangement;
+        state.ActiveLevel = reduced;
+
+        BeginGameplay(vm);
+
+        Assert.Same(hardest, state.ActiveLevel);
+        vm.BackToSongSelectCommand.Execute(null);
+    }
 
     [Fact]
     public void ASecondRunInTheSameChain_DoesNotMakeTheRunsSpeedTheNewBaseline()
@@ -121,8 +139,9 @@ public sealed class PlayModeRunChainStateTests : IDisposable
         vm.PracticeSpeedPercent = 50;
         vm.RunScrollSpeed = 2.5;
 
-        BeginGameplay(vm);           // Live Play refuses: no session, effects applied
+        BeginGameplay(vm);
         vm.CurrentScreen = PlayModeScreen.Paused;
+        _runs[^1].Live.IsActive = false;
         vm.EndRunFromPauseCommand.Execute(null);
 
         Assert.Equal(PlayModeScreen.SongSelect, vm.CurrentScreen);
@@ -145,6 +164,7 @@ public sealed class PlayModeRunChainStateTests : IDisposable
 
         BeginGameplay(vm);
         vm.CurrentScreen = PlayModeScreen.Paused;
+        _runs[^1].Live.IsActive = false;
         var property = typeof(PlayModeViewModel).GetProperty(command);
         Assert.True(property != null, $"PlayModeViewModel has no {command} — this test was renamed out of its job");
         ((System.Windows.Input.ICommand)property!.GetValue(vm)!).Execute(null);
@@ -202,10 +222,8 @@ public sealed class PlayModeRunChainStateTests : IDisposable
     // ---- fixture -------------------------------------------------------------
 
     /// <summary>A Play Mode view model over a real transport and a real Live
-    /// Play view model with fake audio. There is no chart loaded, so Live Play
-    /// REFUSES the run — which is itself one of the four ways into a run chain,
-    /// and leaves every transport/highway side effect this test is about
-    /// already applied.</summary>
+    /// Play view model with fake audio and a valid chart. Accepted runs keep
+    /// their side effects through the retry chain; leaving preparation unwinds a refused start.</summary>
     private PlayModeViewModel NewVm(out ProjectState state, out TransportViewModel transport,
         out FakeConfigurationService config)
     {
@@ -214,14 +232,25 @@ public sealed class PlayModeRunChainStateTests : IDisposable
         var store = new PracticeProfileService(profiles, logger: null,
             legacyFilePath: Path.Combine(_dir, "legacy.json"));
         config = new FakeConfigurationService();
+        config.AppConfig.LivePlayUseCqtVerifier = false;
         var audio = new FakeAudioPlaybackService { InputSampleRate = 48_000 };
         state = new ProjectState();
+        var project = new ChartProject();
+        project.Beats.Add(new BeatMarker { Time = 0, Bpm = 120 });
+        project.Beats.Add(new BeatMarker { Time = 500, Bpm = 120 });
+        var arrangement = new Arrangement { Name = "Lead" };
+        arrangement.Levels.Add(new ChartLevel());
+        project.Arrangements.Add(arrangement);
+        state.ActiveProject = project;
+        state.ActiveArrangement = arrangement;
         transport = new TransportViewModel(audio, state, config, FakeLocalization.KeysOnly());
         var livePlay = LivePlayTestFactory.Create(audio, state, new FakeAppLogger(), config, store);
 
-        return TestRigBuilders.PlayMode(profiles, new GameplayStatsService(store),
+        var vm = TestRigBuilders.PlayMode(profiles, new GameplayStatsService(store),
             new LeaderboardService(profiles), state, FakeLocalization.English(), config,
             livePlay: livePlay, transport: transport);
+        _runs.Add((vm, livePlay));
+        return vm;
     }
 
     /// <summary>Drives the private run start. It is private because nothing but
@@ -235,5 +264,14 @@ public sealed class PlayModeRunChainStateTests : IDisposable
         method!.Invoke(vm, null);
     }
 
-    public void Dispose() => BestEffortDelete.Directory(_dir);
+    public void Dispose()
+    {
+        foreach (var (vm, live) in _runs)
+        {
+            vm.BackToSongSelectCommand.Execute(null);
+            live.IsActive = false;
+        }
+
+        BestEffortDelete.Directory(_dir);
+    }
 }

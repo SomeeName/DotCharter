@@ -140,6 +140,27 @@ public sealed class ShapeBulkEditsTests
     }
 
     [Fact]
+    public void DeleteMany_AcceptsAValueEqualSurvivorByInstance_AndUndoRestoresBoth()
+    {
+        var survivor = AddThirdCopy();
+        Assert.Equal(_f.Am, survivor);
+        var chord = _f.Level0.Chords[0];
+
+        var plan = ShapeBulkEdits.PlanDeleteMany(_f.Arrangement, [_f.Am, _f.AmAlt], _editor);
+
+        Assert.False(plan.IsRefused);
+        Assert.True(_history.Do(plan.Action!));
+        Assert.Same(survivor, Of(chord));
+        Assert.Contains(_f.Arrangement.ChordTemplates, t => ReferenceEquals(t, survivor));
+        Assert.DoesNotContain(_f.Arrangement.ChordTemplates, t => ReferenceEquals(t, _f.Am));
+        _history.Undo();
+        Assert.Same(_f.Am, Of(chord));
+        Assert.Contains(_f.Arrangement.ChordTemplates, t => ReferenceEquals(t, survivor));
+        Assert.Equal(7, _f.Arrangement.ChordTemplates.Count);
+        Assert.False(_history.CanUndo);
+    }
+
+    [Fact]
     public void DeleteMany_RefusesWhileAUsedShapeHasNowhereToSendItsUses()
     {
         // Both copies ticked: neither may take the other's uses. C has no copy at all.

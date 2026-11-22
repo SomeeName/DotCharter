@@ -62,12 +62,12 @@ public class HandShapeInteractionTool : IEditorTool
                     var left = new HandShape
                     {
                         Position = hs.Position, EndPosition = splitPos,
-                        Name = hs.Name, TemplateId = hs.TemplateId
+                        Name = hs.Name, TemplateId = hs.TemplateId, GhostMask = hs.GhostMask
                     };
                     var right = new HandShape
                     {
                         Position = splitPos, EndPosition = hs.EndPosition,
-                        Name = hs.Name, TemplateId = hs.TemplateId
+                        Name = hs.Name, TemplateId = hs.TemplateId, GhostMask = hs.GhostMask
                     };
                     _logger.Info(AppLogCategory.Editing,
                         $"Ctrl+Right-click split handshape at {FormatPosition(splitPos, track)}; original=[{FormatPosition(hs.Position, track)}-{FormatPosition(hs.EndPosition, track)}].");
@@ -81,6 +81,16 @@ public class HandShapeInteractionTool : IEditorTool
                 }
                 _logger.Info(AppLogCategory.Editing,
                     $"Ctrl+Right-click split ignored; cursor outside handshape bounds. cursor={FormatPosition(splitPos, track)}, hs=[{FormatPosition(hs.Position, track)}-{FormatPosition(hs.EndPosition, track)}].");
+            }
+            else if (hs != null && context.Modifiers.HasFlag(KeyModifiers.Shift))
+            {
+                if (!selection.SelectedHandShapes.Contains(hs))
+                    SelectionBulkOps.ReplaceWith(selection.SelectedHandShapes, [hs]);
+
+                context.Viewport.ShowContextMenu(TimelineContextMenuBuilder.ForHandShape(
+                    () => vm.GripsFromHeldNotesCommand.Execute(null),
+                    () => vm.HandShapesFromLetRingCommand.Execute(null),
+                    vm.EditingAvailability.ReasonFor(vm.HandShapesFromLetRingCommand)));
             }
             else if (hs != null)
             {
@@ -316,6 +326,8 @@ public class HandShapeInteractionTool : IEditorTool
     {
         if (!_dragState.IsDragging && !_draw.IsArmed) ResetState(context);
     }
+
+    public void Cancel(ToolContext context) => ResetState(context);
 
     private void ResetState(ToolContext context)
     {

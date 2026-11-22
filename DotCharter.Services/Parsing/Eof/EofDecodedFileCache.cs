@@ -34,6 +34,10 @@ public sealed class EofDecodedFileCache
     /// slack for a user comparing two charts. Deliberately tiny.</summary>
     internal const int Capacity = 4;
 
+    // Uncompressed payload plus the optional Allegro magic. Bound the source
+    // before allocating it, independently of the decoder's expansion budget.
+    internal const int MaxRawBytes = AllegroLzssDecoder.MaxDecodedBytes + 4;
+
     public static EofDecodedFileCache Shared { get; } = new();
 
     private readonly Lock _gate = new();
@@ -69,7 +73,14 @@ public sealed class EofDecodedFileCache
 
         // Decode OUTSIDE the lock: it is the expensive half, and two threads
         // racing on the same file cost one redundant decode, not a stall.
-        var data = decode(File.ReadAllBytes(filePath));
+        using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        if (stream.Length > MaxRawBytes)
+            throw new InvalidDataException($"EOF input exceeds {MaxRawBytes} bytes.");
+        var raw = new byte[(int)stream.Length];
+        stream.ReadExactly(raw);
+        if (stream.ReadByte() != -1)
+            throw new InvalidDataException("EOF input grew while it was being read.");
+        var data = decode(raw);
 
         lock (_gate)
         {

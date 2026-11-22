@@ -21,7 +21,13 @@ public enum ExportFixKind
     /// <summary>Not a chart edit: opens the Tone designer on the finding's arrangement. An undefined
     /// key the project can only mean one way is renamed in place instead (<c>RocksmithFixes</c> asks
     /// <see cref="Editing.Tones.ToneKeyRepair" />): that answer depends on the project, not the key.</summary>
-    OpenToneDesigner
+    OpenToneDesigner,
+
+    /// <summary>Stores the default show-light set the package would generate into the project: ONE undo step.</summary>
+    GenerateShowlights,
+
+    /// <summary>Adds a default definition for every tone name the arrangement uses and the project does not define: ONE undo step.</summary>
+    CreateToneDefinitions
 }
 
 /// <summary>
@@ -40,7 +46,8 @@ public static class ExportFindingFixes
         [ChartExportValidator.KeyToneWithoutSlot] = ExportFixKind.OpenToneDesigner,
         [ChartExportValidator.KeyMissingBaseTone] = ExportFixKind.OpenToneDesigner,
         [ChartExportValidator.KeyTooManyTones] = ExportFixKind.OpenToneDesigner,
-        [ChartExportValidator.KeyToneNotDefined] = ExportFixKind.OpenToneDesigner
+        [ChartExportValidator.KeyToneNotDefined] = ExportFixKind.CreateToneDefinitions,
+        [ChartExportValidator.KeyNoShowlights] = ExportFixKind.GenerateShowlights
     };
 
     /// <summary>Keys with no automatic fix, each with the reason a machine should not decide it.</summary>
@@ -53,11 +60,16 @@ public static class ExportFindingFixes
         [ChartExportValidator.KeyTooManyPhrases] = "Which phrases to merge is a judgement about the song's form.",
         [ChartExportValidator.KeyFretOutOfRange] = "Refretting the whole arrangement to move one note would rewrite the charter's fingering.",
         [ChartExportValidator.KeyStringOutOfRange] = "A string the arrangement does not have cannot be folded onto one it has without changing what is played.",
-        [ChartExportValidator.KeyExtendedRangeGuitar] = "A notice, not a fault: a 7-string guitar ships for the rs7string mod, and only the charter decides to drop strings.",
-        [ChartExportValidator.KeyEightStringMod] = "Only a later rs7string build will play an eighth string; dropping or refretting it would change the chart, so the charter decides.",
+        [ChartExportValidator.KeyExtendedRangeGuitar] = "A notice, not a fault: a 7-/8-string guitar ships for the RS Extended Range mod, and only the charter decides to drop strings.",
+        [ChartExportValidator.KeyExtendedRangeBass] = "A notice, not a fault: a 5-/6-string bass ships for the RS Extended Range mod, and only the charter decides to drop strings.",
+        [ChartExportValidator.KeySixStringDrop] = "A notice with the choice named in it: keep the extended-range package, or turn the six-string projection off; only the charter accepts dropping strings.",
+        [ChartExportValidator.KeyExtendedRangeTuning] = "Retuning changes sounding pitches; the charter chooses the tuning within RS Extended Range limits.",
+        [ChartExportValidator.KeyAudioShorterThanChart] = "Only the charter can supply longer audio or trim the chart; stretching either changes the song.",
         [ChartExportValidator.KeyFirstNoteTooEarly] = "Moving the first note means padding the audio too: a deliberate tempo-map operation.",
         [ChartExportValidator.KeyFirstPhraseNotAtStart] = "Where the first phrase starts decides which phrase the early notes belong to.",
         [ChartExportValidator.KeyLyricTooLong] = "Only the charter can split a lyric syllable.",
+        [ChartExportValidator.KeyLyricsOutOfOrder] = "Whether a syllable moves in time or to another line is the charter's call.",
+        [ChartExportValidator.KeyLyricMarkerText] = "Whether the trailing mark is a word join, a line end or a different character is the charter's call.",
         [ChartExportValidator.KeyTooManyLevels] = "Which difficulty levels to drop changes what the player is offered; the charter picks them.",
         [ChartExportValidator.KeyTooManyNotes] = "Thinning a level this dense is a musical decision, and a split into arrangements is the charter's.",
         [ChartExportValidator.KeyFingerOutOfRange] = "A finger past the little finger is a typo in the chord box; only the charter knows which finger was meant.",

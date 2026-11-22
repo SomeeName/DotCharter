@@ -21,3 +21,8 @@ and size the cap from the LONGEST shipped language. The containment test is
 `Perf/EditorLaunchCardContainmentUiPerfSmokeTests` (three screen sizes × en-US /
 de-DE / ja-JP, every button's arranged bounds asserted inside the card); full
 account in [layout-traps.md](layout-traps.md) § Columns.
+
+## Dialogs added or merged by #494
+
+- `TempoMapOperationDialogView`: Tempo map ▸ Start & end… — a choice (`OperationInput`) over the five operations; picking one re-fills the subtitle, label, range and value. Opened with a `TempoMapOperationRequest`, so each palette id lands on its own choice.
+- `BookmarksDialogView` (`IBookmarksScreen`): Edit ▸ Bookmarks… — hosted (`ScreenCatalog`, `DialogsModule`), focus on Close, constructed and prewarmed like every hosted dialog (`Perf/DialogConstructionUiPerfSmokeTests`, `rendering-perf-detail.md`).

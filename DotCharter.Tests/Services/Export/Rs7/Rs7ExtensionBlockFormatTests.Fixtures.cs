@@ -20,13 +20,16 @@ public sealed partial class Rs7ExtensionBlockFormatTests
         "43484454 0100 0100 08000000 02000000 0201 ffff" +
         "43484e54 0100 0000 0d000000 01000000 00200000 ff ff 0000 00";
 
-    /// <summary>§7, 8 strings: one template (F#5: string 6 fret 2 finger 2, string 7
-    /// open), no ChordNotes records.</summary>
+    /// <summary>§7 (corrected 2026-11-01), 8 strings: one template (F#5: string 6 fret 2 finger 2,
+    /// string 7 open) and one ChordNotes record, because the open string 7 needs its OPEN bit
+    /// (CHNT payload 22 bytes, block 88 = 0x58).</summary>
     private const string EightStringExample =
-        "52533758 0100 1000 46000000 03000000" +
+        "52533758 0100 1000 58000000 03000000" +
         "53545253 0100 0100 06000000 00 08 02 00 06 07" +
         "43484454 0100 0100 08000000 01000000 0202 00ff" +
-        "43484e54 0100 0000 04000000 00000000";
+        "43484e54 0100 0000 16000000 01000000" +
+        "00000000 ff ff 0000 00" +
+        "04000000 ff ff 0000 00";
 
     public static TheoryData<string, string> BrokenBlocks => new()
     {
@@ -69,6 +72,7 @@ public sealed partial class Rs7ExtensionBlockFormatTests
     {
         var block = RsExtensionBlock.ForStrings(8);
         block.Templates!.Add([new RsExtColumn(2, 2), new RsExtColumn(0, -1)]);
+        block.ChordNotes!.Add([RsExtTech.Empty, RsExtTech.Empty with { Mask = RsNoteMask.Open }]);
         return block;
     }
 

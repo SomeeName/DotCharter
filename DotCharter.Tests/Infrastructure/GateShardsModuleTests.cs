@@ -230,6 +230,40 @@ public sealed class GateShardsModuleTests : IDisposable
         Assert.Equal("sequential: 8 GB free, 12 GB needed", root.GetProperty("Reason").GetString());
     }
 
+    /// <summary>#325: one budget of testhosts, split between the lanes run together. Every
+    /// lane gets one; each further one goes to the lane whose shards would run longest
+    /// (its testhost-seconds over its shards, never under its longest class), and only
+    /// while it still shortens that lane. Missing weights split evenly.</summary>
+    [Fact]
+    public void TheLanesShareOneBudget_DealtToTheLongestLane_NeverPastItsLongestClass()
+    {
+        var json = RunModule("""
+            $lanes = @(
+                [pscustomobject]@{ Name = 'gate'; Seconds = 700; Longest = 60 },
+                [pscustomobject]@{ Name = 'headless'; Seconds = 1400; Longest = 140 },
+                [pscustomobject]@{ Name = 'release'; Seconds = 700; Longest = 400 })
+            $twelve = Get-LaneShardCounts $lanes 12
+            $three = Get-LaneShardCounts $lanes 3
+            $even = Get-LaneShardCounts (Read-LaneWeights 'no-such-file.json' @('gate', 'headless', 'release')) 12
+            $path = Join-Path (Get-Location) 'lanes.json'
+            Write-LaneWeights $lanes $path
+            $back = Read-LaneWeights $path @('release', 'gate')
+            [pscustomobject]@{
+                Twelve = (($twelve.Keys | ForEach-Object { "$_=$($twelve[$_])" }) -join ' ')
+                Three = (($three.Keys | ForEach-Object { "$_=$($three[$_])" }) -join ' ')
+                Even = (($even.Keys | ForEach-Object { "$_=$($even[$_])" }) -join ' ')
+                Back = (($back | ForEach-Object { "$($_.Name)=$($_.Seconds)/$($_.Longest)" }) -join ' ')
+            } | ConvertTo-Json -Compress
+            """);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        // The release lane stops at 2: a third shard leaves it at its 400 s class.
+        Assert.Equal("gate=4 headless=6 release=2", root.GetProperty("Twelve").GetString());
+        Assert.Equal("gate=1 headless=1 release=1", root.GetProperty("Three").GetString());
+        Assert.Equal("gate=4 headless=4 release=4", root.GetProperty("Even").GetString());
+        Assert.Equal("release=700/400 gate=700/60", root.GetProperty("Back").GetString());
+    }
+
     /// <summary>The callers really go through the module.</summary>
     [Fact]
     public void TheGateAndItsCallers_ShardThroughTheModule()
@@ -239,15 +273,18 @@ public sealed class GateShardsModuleTests : IDisposable
         var train = Read("tools", "agent", "Merge-Train.ps1");
 
         Assert.Contains("GateShards.psm1", gate);
-        Assert.Contains("New-GateShardPlan $weights.Classes $weights.OtherSeconds $Shards (Get-GateExclusions)", gate);
+        Assert.Contains("New-GateShardPlan $weights.Classes $weights.OtherSeconds $Count (Get-GateExclusions)", gate);
+        // All the lanes at once share one budget, split by the measured lane weights (#325).
+        Assert.Contains("Get-LaneShardCounts (Read-LaneWeights $laneWeightsPath $lanes) ($Shards * $lanes.Count)", gate);
         Assert.Contains("Start-TestShards ", gate);
         Assert.Contains("Wait-TestShards ", gate);
         Assert.Contains("Merge-HeadlessTrx ", gate);
-        Assert.Contains("if ($Gate) { $exit = Invoke-GateRun ", gate);
+        Assert.Contains("if ($lanes -contains 'gate') { $exit = Invoke-GateRun ", gate);
         // The gate's exclusion is the entry point's, character for character.
         Assert.Contains($"$GateExclusion = '{DefaultRunFilter.ExcludedClasses}'", gate);
-        // The train runs both suites in ONE Invoke-Gate call, so they can overlap.
-        Assert.Matches(@"& powershell -NoProfile -File \$gate @cpuSwitch -Gate -Headless [^\n]*-Shards \$Shards", train);
+        // The train runs every lane in ONE Release-build Invoke-Gate call, so they can overlap.
+        Assert.Contains("$laneArgs = @('-Gate', '-ReleaseLane') + @(if ($wantHeadless) { '-Headless' })", train);
+        Assert.Matches(@"& powershell -NoProfile -File \$gate @cpuSwitch -Configuration Release @laneArgs -Shards \$Shards", train);
         Assert.True(File.Exists(Path.Combine(TestPaths.RepoRoot(), "tools", "ci", "gate-shard-weights.json")));
     }
 

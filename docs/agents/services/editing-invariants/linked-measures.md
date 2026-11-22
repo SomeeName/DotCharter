@@ -42,7 +42,9 @@ whole measures equal across their **placements** — in one arrangement or sever
   beats; templates resolved by GRIP in the target, minted there, never mutated;
   held sustains and shapes lengthened to the target's own bound; a link-next
   whose continuation is outside the run keeps the flag only where the target has
-  the continuation) followed by the editor's spacing post-pass over the target
+  the continuation; the target's own fret-hand position is pinned at the run's
+  END when the copied anchors would change it for the sounds after the run, #585)
+  followed by the editor's spacing post-pass over the target
   level, its collateral recorded (`LinkCopyStep`).
 - A fault in the link layer never costs the edit: the reconciler reverts its own
   copies, restores the groups and logs.
@@ -53,8 +55,8 @@ whole measures equal across their **placements** — in one arrangement or sever
 
 | Policy | Means | Who |
 |---|---|---|
-| `Propagate` | the changed copies agree: copy to the others in the same step; they disagree: split by content (the untouched copies keep the group) | editing gestures (collection actions, template edits, hand-shape resizes) |
-| `ShareFirstChanged` | a generator's result is kept once per group: the first placement (group order) the action changed is copied to every other placement in the same step, so every link survives; content outside placements keeps the generator's own output | composites wrapped with `CompositeAction.LinkPolicyOverride`: Generate FHP (arrangement and selection), Generate hand shapes, the AI chart pass, Generate fingerings (chord panel), Generate levels |
+| `Propagate` | the changed copies agree: copy to the others in the same step; they disagree: split by content (the untouched copies keep the group) | editing gestures (collection actions, template edits, hand-shape resizes, the Shape page's grip Save and its "Also apply to N identical hand shapes") |
+| `ShareFirstChanged` | a generator's result is kept once per group: the first placement (group order) the action changed is copied to every other placement in the same step, so every link survives; content outside placements keeps the generator's own output | composites wrapped with `CompositeAction.LinkPolicyOverride`: Generate FHP (arrangement and selection), Generate hand shapes, the AI chart pass, Generate fingerings (chord panel), the Shape page's fill of missing fingers, Generate levels |
 | `UnlinkOnDivergence` | never propagated; a placement that comes out different is unlinked | tools that apply outside truth: `ProjectSnapshotAction` / `ArrangementSnapshotAction` (import, sync, refret, squash levels, tempo-map tools, `RunAsSingleUndoStep`), `BeatScaleAction` |
 | `Retain` | cannot change linked content in beats; nothing propagated or unlinked by content | tempo (`MutateBeatsAction`), metadata, tones, lyrics, vocals, arrangement settings, the link actions themselves |
 
@@ -86,6 +88,31 @@ earlier copy.
 - `.rscp`: root node `dcLinkGroups` (`Parsing/Rscp/RscpLinkGroups`), checked on
   load by `Core/Linking/LinkGroupVerifier`; see `docs/DCPROJ-FORMAT-GUARANTEES.md`
   § Linked measures. `.dcsong` carries it inside its chart member (`chart.dcproj`).
+- `LinkSuggestionFinder.Detect(project, arrangement, scope, rule)` is the pure
+  single-arrangement entry point. Guitar Pro import and Tools ▸ Linked measures
+  use its multi-arrangement counterpart, `Find`. Both normally rank the longest
+  clean windows first, then prefer section and phrase edges, more copies, and
+  support from the score. Before claiming a pair, the detector checks for a
+  shorter section of at least four bars that competes for both placements
+  and covers more measures with three copies alone. The final pass offers
+  verified one-bar repeats in free space.
+  All-bars scope also inspects already linked measures.
+  `LinkDetectionWork` bounds the search and checks cancellation. Detection logs
+  oversized compatibility classes and returns the proposals it has verified if
+  it reaches the search limit. The manager opens before searching a chart
+  snapshot on a worker. Closing the manager, canceling, or editing the chart
+  stops that search.
+- `AutoLinkEdges` excludes a barline crossed by a hand shape, sustain or
+  link-next landing. `RankedLinkSuggestions` can find a longer window including
+  a pickup or tail or a shorter window with a safe edge. Candidate equality
+  omits anchors and shapes. Written-bar matches need different played
+  positions. Exact bar keys partition the windows before whole-run
+  verification checks the saved link rule
+  and exact notation, sounding durations, ties and hand data. Whole-run keys
+  are reused across candidate sources, and reviewed placements are excluded
+  from shorter review proposals. Differences are
+  shown for review. Link All rechecks the current chart and creates groups
+  without normalising edges or writing chart content.
 
 ## Group edits, Only here, Link identical measures
 
@@ -94,7 +121,14 @@ earlier copy.
   `Propagate` runs produce reports.
 - `IHistoryService.OnlyHere(report)` keeps the edit in the source placement,
   restores every target and unlinks the source — ONE new undo step; false when the
-  report's step is not the current one.
+  report's step is not the current one. The report is matched by INSTANCE, so the
+  toast of an undone step never takes back an earlier step of the same group (#585).
+- Every history step that restores link groups captures them with
+  `retainIdentities: true`, so undoing a later step hands back the SAME group instances
+  and `LinkGroupCreator`'s create step can remove its group by reference
+  (`LinkedMeasuresHistoryTests`, #585).
+- Links hold the HARDEST level: on any other level the Inspector banner says so
+  (`LinkBanner_OtherLevel`) and "Only this one" is unavailable (#585).
 - `Editing/Linking/LinkGroupEdits` — `Unlink`, `NewGroupFrom`,
   `SplitByArrangement`, `Rename`, `Delete`: each returns one undo step
   (`LinkPolicy.Retain`) that swaps the project's whole group list, so a group
@@ -144,8 +178,12 @@ All under `DotCharter.UI`; nothing changes in 3D or Play Mode.
   `PrewarmableFlyout`, bound to `ChartEditor.LinkedMeasures`); `LinkBannerView`
   sits in `SoundInspectorView` above the apply bar, bound to
   `InspectorViewModel.LinkedMeasures`, and the host owns its `IsVisible`
-  (`IsBannerVisible`). Neither view reads `App.Services`.
-- **Link identical measures**: Tools ▸ Structure & levels (the Edit menu is at
+  (`IsBannerVisible`). Neither view reads `App.Services`. The Canvas-hosted
+  toast is capped to the timeline width; its wrapping text occupies a star
+  column beside Auto action columns, so long arrangement names cannot push
+  Only here / Close outside the timeline (#531, the long-name cases in
+  `Perf/LinkedMeasuresConstructionUiPerfSmokeTests`).
+- **Link identical measures**: Tools ▸ Repeats (the Edit menu is at
   its 14-entry cap), the palette's `edit.linkIdentical`, and the note context menu.
   A refusal shows `LinkCreate_<LinkCreateRefusal>` in the toast.
 - Tests: `UI/Linking/*` (model, lane rules, layer, song-map marks, view models),

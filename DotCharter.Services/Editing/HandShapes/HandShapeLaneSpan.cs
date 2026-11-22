@@ -201,7 +201,7 @@ public static class HandShapeLaneSpan
     private static Dictionary<int, int> GripOf(Arrangement arrangement, Chord chord)
     {
         if (chord.ChordNotes.Count > 0) return ChordTemplateResolver.FretsOf(chord);
-        var template = ChordTemplateResolver.FindById(arrangement, chord.TemplateId);
+        var template = arrangement.FindChordTemplate(chord.TemplateId);
         return template == null ? [] : new Dictionary<int, int>(template.Frets);
     }
 

@@ -270,7 +270,7 @@ public sealed partial class ToneDesignerViewModelTests : IDisposable
     // ------------------------------------------------------------ editor commit
 
     [Fact]
-    public void A_knob_edit_commits_as_one_undoable_action_on_close()
+    public void A_knob_edit_is_one_undoable_action_that_close_keeps()
     {
         var project = CreateProject();
         project.ToneDefinitions.Add(AuthoredTone("clean", "Clean"));
@@ -280,7 +280,7 @@ public sealed partial class ToneDesignerViewModelTests : IDisposable
 
         var knob = vm.Editor.GearSlots[0].Knobs.First(k => Math.Abs(k.Knob.DefaultValue - k.Maximum) > 0.01);
         knob.Value = knob.Maximum;
-        Assert.Equal(originalJson, project.ToneDefinitions[0].Json);   // buffered
+        Assert.NotEqual(originalJson, project.ToneDefinitions[0].Json);   // recorded as made (#450)
 
         vm.CloseCommand.Execute(null);
         Assert.True(RsToneJsonParser.TryParse(project.ToneDefinitions[0].Json, out var edited));
@@ -378,9 +378,9 @@ public sealed partial class ToneDesignerViewModelTests : IDisposable
         Assert.Empty(DeepCompare.Diff("project", before, project, new HashSet<string>()));
     }
 
-    /// <summary>A deleted tone leaves no slot, declared name or tone change naming a body that is gone.</summary>
+    /// <summary>#447, like DLC Builder: Delete removes ONLY the definition; slots and tone changes keep the key. One undo step.</summary>
     [Fact]
-    public void Deleting_a_tone_clears_its_slots_and_changes_too()
+    public void Deleting_a_tone_removes_only_the_definition_and_undo_restores_it()
     {
         var project = CreateProject();
         project.ToneDefinitions.Add(AuthoredTone("clean", "Clean"));
@@ -388,17 +388,18 @@ public sealed partial class ToneDesignerViewModelTests : IDisposable
         lead.ToneChanges.Add(new ToneChange { Position = TimelineMath.PositionFromMs(1000, project.Beats), ToneName = "clean" });
         var harness = new Harness(project);
         var vm = harness.Open();
+        var slots = new[] { lead.ToneBase, lead.ToneA, lead.ToneB, lead.ToneC, lead.ToneD, lead.StartingTone };
 
         vm.DeleteToneCommand.Execute(null);
         vm.CloseCommand.Execute(null);
 
         Assert.Empty(project.ToneDefinitions);
-        Assert.Empty(lead.ToneChanges);
-        Assert.Equal(["", ""], [lead.ToneBase, lead.ToneA]);
-        Assert.Equal("dist", lead.ToneB);
+        Assert.Equal("clean", Assert.Single(lead.ToneChanges).ToneName);
+        Assert.Equal(slots, new[] { lead.ToneBase, lead.ToneA, lead.ToneB, lead.ToneC, lead.ToneD, lead.StartingTone });
+        Assert.Contains("clean", slots);
         harness.History.Undo();
-        Assert.Equal("clean", lead.ToneBase);
-        Assert.Single(lead.ToneChanges);
+        Assert.Equal("clean", Assert.Single(project.ToneDefinitions).Key);
+        Assert.False(harness.History.CanUndo, "the delete must be ONE undo step");
     }
 
     /// <summary>
@@ -617,6 +618,29 @@ public sealed partial class ToneDesignerViewModelTests : IDisposable
         Assert.Empty(project.ToneDefinitions);
     }
 
+    /// <summary>#832: the tone-file and package-tone pickers each open in their own remembered folder and move it.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_tone_pickers_open_in_their_own_remembered_folder_and_move_it(bool package)
+    {
+        var first = Directory.CreateDirectory(Path.Combine(_tempDir, "first")).FullName;
+        var second = Directory.CreateDirectory(Path.Combine(_tempDir, "second")).FullName;
+        using var importer = PackageTones.UseForTesting(new FakeToneImporter(_ => []));
+        var harness = new Harness(CreateProjectWithChart());
+        if (package) harness.Config.AppConfig.LastPsarcToneDir = first;
+        else harness.Config.AppConfig.LastToneFileDir = first;
+        var vm = harness.Open();
+        harness.Storage.NextOpenFile = Path.Combine(second, package ? "t.psarc" : "t.json");
+
+        var command = package ? vm.ImportTonesFromPsarcCommand : vm.ImportToneFileCommand;
+        await ((CommunityToolkit.Mvvm.Input.IAsyncRelayCommand)command).ExecuteAsync(null);
+
+        Assert.Equal(first, harness.Storage.RequestedStartDirectories.Single());
+        Assert.Equal(second, package ? harness.Config.AppConfig.LastPsarcToneDir : harness.Config.AppConfig.LastToneFileDir);
+        Assert.Equal(string.Empty, package ? harness.Config.AppConfig.LastToneFileDir : harness.Config.AppConfig.LastPsarcToneDir);
+    }
+
     /// <summary>The imported list belongs to the project it was imported for: a reopen keeps it, another project clears it.</summary>
     [Fact]
     public void Reopening_the_same_project_keeps_the_imported_tones_but_a_different_one_clears_them()
@@ -686,7 +710,7 @@ public sealed partial class ToneDesignerViewModelTests : IDisposable
         var (key, json) = Assert.Single(harness.LiveEdit.Edits);
         Assert.Equal("clean", key);
         Assert.Contains("-9.5", json, StringComparison.Ordinal);
-        Assert.NotEqual(json, project.ToneDefinitions[0].Json);   // not committed yet
+        Assert.Equal(json, project.ToneDefinitions[0].Json);   // recorded as made (#450)
 
         Assert.True(vm.TryCancel());
         await vm.Result.WaitAsync(TestContext.Current.CancellationToken);

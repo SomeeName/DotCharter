@@ -1,4 +1,5 @@
 using DotCharter.Localization;
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -120,7 +121,7 @@ public sealed record RigEstimatorModelInfo(
 ///         Extraction goes through <see cref="BoundedZipExtractor" /> (byte
 ///         budget counted on what the inflater really produces, entry cap read
 ///         from the end-of-central-directory record, zip-slip refused), into a
-///         sibling <c>.incoming</c> folder that is MOVED into place only once it
+///         unique sibling <c>.incoming-*</c> folder that is MOVED into place only once it
 ///         is complete — so an interrupted download cannot leave a half-model
 ///         that the presence check would then accept for ever.
 ///     </para>
@@ -138,6 +139,8 @@ public sealed class RigEstimatorModelInstaller(
     IAppLogger? logger = null,
     string? modelRoot = null)
 {
+    private static readonly ConcurrentDictionary<string, object> PublicationLocks = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The ONNX graph.</summary>
     public const string ModelFileName = "model.onnx";
 
@@ -240,7 +243,7 @@ public sealed class RigEstimatorModelInstaller(
         }
 
         var target = TargetDirectory(model.Id);
-        var staging = target + ".incoming";
+        var staging = target + $".incoming-{Guid.NewGuid():N}";
 
         try
         {
@@ -258,7 +261,6 @@ public sealed class RigEstimatorModelInstaller(
             }
 
             Directory.CreateDirectory(Root);
-            if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true);
 
             var archive = Path.Combine(Path.GetTempPath(), $"dc-rig-model-{Guid.NewGuid():N}.zip");
             try
@@ -307,8 +309,20 @@ public sealed class RigEstimatorModelInstaller(
 
             // Publish atomically. Another process may have installed it while
             // this one downloaded, and that copy wins — never overwrite.
-            if (IsInstalled(model.Id, files)) return RigEstimatorModelInstallResult.Ok;
-            Directory.Move(payload, target);
+            ct.ThrowIfCancellationRequested();
+            lock (PublicationLocks.GetOrAdd(Path.GetFullPath(target), static _ => new object()))
+            {
+                if (IsInstalled(model.Id, files)) return RigEstimatorModelInstallResult.Ok;
+                try
+                {
+                    Directory.Move(payload, target);
+                }
+                catch (IOException) when (IsInstalled(model.Id, files))
+                {
+                    // A different process published a complete model first.
+                    return RigEstimatorModelInstallResult.Ok;
+                }
+            }
 
             logger?.Info(AppLogCategory.Audio,
                 $"Rig estimator model '{model.Id}' installed at '{target}'.");

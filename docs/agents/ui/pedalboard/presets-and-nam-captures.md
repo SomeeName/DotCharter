@@ -190,7 +190,7 @@ Part of the Amp & FX rig reference. Router: [../pedalboard.md](../pedalboard.md)
 ## Tone FILES: export the live rig, import somebody else's
 
 `PresetBrowserViewModel.ExportActiveCommand` / `ImportCommand`, over the pure
-`DotCharter.Services/Audio/Dsp/Presets/TonePresetJsonFile` (`Serialize` /
+`DotCharter.Tone/Audio/Dsp/Presets/TonePresetJsonFile` (`Serialize` /
 `Parse`). The rig screen surfaces the same two commands on its header
 (`AmpFxRigViewModel.ExportToneCommand` / `ImportToneCommand` /
 `ToneFileStatus`), because the tone pill they sit beside is in the header's own
@@ -231,6 +231,11 @@ scope, not the browser drawer's.
   previous one's values, and an invalid control map is DROPPED rather than
   costing the whole tone. Faults travel as `TonePresetImportFault` and the WORDS
   are chosen in the view model (`ImportStatus`).
+  File-valued `modelPath` and `irPath` params must pass the shared
+  `FileReferencePolicy`: a local absolute path or a confined library-relative
+  reference. UNC, device, drive-relative, stream and parent-traversing references
+  refuse the import as malformed before it can be applied. Empty file params and
+  free text such as `phrases` retain their meaning.
 - **It lands through the `ConfirmSave` path, which mints a FRESH id**: an
   imported file may never overwrite a preset the player made, whatever id it
   carries. It is then applied, because an import you cannot hear is a file

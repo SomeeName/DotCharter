@@ -32,6 +32,9 @@ public sealed partial class NamCaptureBrowserViewModel : ObservableObject
     private readonly ITone3000AuthService _auth;
     private readonly INamCaptureLibrary _library;
 
+    /// <summary>The local capture / IR library folder; tone export writes file params relative to it.</summary>
+    internal string LibraryDirectory => _library.RootDirectory;
+
     /// <summary>
     ///     The chain "Load into rig" writes to, resolved PER CALL.
     ///     <para>
@@ -341,6 +344,7 @@ public sealed partial class NamCaptureBrowserViewModel : ObservableObject
         }
 
         IsSearching = true;
+        var generation = _auth.SessionGeneration;
         StatusMessage = string.Empty;
         try
         {
@@ -348,6 +352,7 @@ public sealed partial class NamCaptureBrowserViewModel : ObservableObject
             var architecture = SelectedArchitecture?.Value ?? Tone3000Architecture.Default;
             var result = await _service.SearchAsync(
                 new Tone3000SearchQuery(SearchText, gear, Architecture: architecture));
+            if (DiscardObsoleteResponse(generation)) return;
 
             Results.Clear();
             _hasSearched = true;
@@ -384,7 +389,11 @@ public sealed partial class NamCaptureBrowserViewModel : ObservableObject
                 // also cleared the results and left the status blank, the user
                 // got the never-searched-yet invitation back. The caller that
                 // SAW the 401 is the only one that knows.
-                _auth.InvalidateSession("a request came back unauthorized");
+                if (!_auth.InvalidateSession("a request came back unauthorized", generation))
+                {
+                    DiscardObsoleteResponse(generation);
+                    return;
+                }
                 _searchPendingSignIn = true;
                 _hasSearched = false;
                 StatusMessage = _loc["Nam_SessionExpired"];
@@ -407,6 +416,21 @@ public sealed partial class NamCaptureBrowserViewModel : ObservableObject
         }
     }
 
+    private bool DiscardObsoleteResponse(long generation)
+    {
+        if (_auth.SessionGeneration == generation) return false;
+        if (!IsSignedIn)
+        {
+            Results.Clear();
+            _searchPendingSignIn = true;
+            _hasSearched = false;
+            StatusMessage = _loc["Nam_SessionExpired"];
+            OnPropertyChanged(nameof(HasResults));
+        }
+        RefreshAuthState();
+        return true;
+    }
+
     // ---- download -----------------------------------------------------------------
 
     [RelayCommand]
@@ -421,16 +445,22 @@ public sealed partial class NamCaptureBrowserViewModel : ObservableObject
         }
 
         row.IsDownloading = true;
+        var generation = _auth.SessionGeneration;
         row.Progress = 0;
         StatusMessage = string.Empty;
         try
         {
             var models = await _service.GetModelsAsync(row.Tone.Id);
+            if (DiscardObsoleteResponse(generation)) return;
             if (models.Error == OnlineError.NotSignedIn)
             {
                 // Same fault as the search path: a 401 here left the header
                 // claiming a live session while nothing would download.
-                _auth.InvalidateSession("a download request came back unauthorized");
+                if (!_auth.InvalidateSession("a download request came back unauthorized", generation))
+                {
+                    DiscardObsoleteResponse(generation);
+                    return;
+                }
                 RefreshAuthState();
                 StatusMessage = _loc["Nam_SessionExpired"];
                 return;
@@ -447,6 +477,7 @@ public sealed partial class NamCaptureBrowserViewModel : ObservableObject
             var model = PickModel(models.Value, SelectedArchitecture?.Value ?? Tone3000Architecture.Default);
             var progress = new Progress<double>(f => row.Progress = f);
             var result = await _library.DownloadAsync(row.Tone, model, progress);
+            if (DiscardObsoleteResponse(generation)) return;
             if (result.Ok)
             {
                 row.IsDownloaded = true;
@@ -567,7 +598,7 @@ public sealed partial class NamCaptureBrowserViewModel : ObservableObject
         }
         else
         {
-            var node = Dsp.AddNode(NamampModuleTypeId);
+            var node = RigSceneChainEdits.Add(Dsp, NamampModuleTypeId);
             if (node == null)
             {
                 StatusMessage = _loc["Nam_LoadFailed"];
@@ -584,7 +615,7 @@ public sealed partial class NamCaptureBrowserViewModel : ObservableObject
         if (!Dsp.SetNodeString(nodeId, ModelPathParam, filePath))
         {
             StatusMessage = _loc["Nam_LoadFailed"];
-            if (added) Dsp.RemoveNode(nodeId); // don't leave a modelless amp behind
+            if (added) RigSceneChainEdits.Remove(Dsp, nodeId); // don't leave a modelless amp behind
             return;
         }
 
@@ -608,16 +639,15 @@ public sealed partial class NamCaptureBrowserViewModel : ObservableObject
         if (idx + 1 < nodes.Count && nodes[idx + 1].ModuleTypeId == EqModuleTypeId)
             return; // already has an eq immediately after — don't add a second
 
-        var eq = Dsp.AddNode(EqModuleTypeId); // appended at the chain tail
+        var eq = RigSceneChainEdits.Add(Dsp, EqModuleTypeId, initiallyBypassed: true); // appended at the chain tail
         if (eq == null) return;
-        Dsp.SetBypass(eq.NodeId, true); // catalogue defaults, bypassed
 
         // Move it to sit directly after the namamp (a no-op when namamp was at
         // the tail, i.e. the eq is already right behind it).
         var after = Dsp.GetNodes();
         var namIdx = IndexOfNode(after, namampNodeId);
         if (namIdx >= 0 && (namIdx + 1 >= after.Count || after[namIdx + 1].NodeId != eq.NodeId))
-            Dsp.MoveNode(eq.NodeId, namIdx + 1);
+            RigSceneChainEdits.Move(Dsp, eq.NodeId, namIdx + 1);
     }
 
     private static int IndexOfNode(IReadOnlyList<DspNode> nodes, int nodeId)

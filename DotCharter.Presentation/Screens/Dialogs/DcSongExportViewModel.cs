@@ -49,7 +49,7 @@ public sealed partial class DcSongExportViewModel : DialogViewModel<bool>, IDcSo
     private readonly ChartEditDialogServices _edit;
     private readonly DcSongExportServices _io;
     private readonly ChartProject? _project;
-    private readonly string _audioPath = "";
+    private string _audioPath = "";
     private readonly string _projectDirectory = "";
     private readonly string _libraryFolder = "";
     private readonly CancellationTokenSource _probeCts = new();
@@ -104,7 +104,7 @@ public sealed partial class DcSongExportViewModel : DialogViewModel<bool>, IDcSo
 
         var projectPath = edit.State.CurrentProjectPath;
         _projectDirectory = string.IsNullOrWhiteSpace(projectPath) ? "" : Path.GetDirectoryName(Path.GetFullPath(projectPath)) ?? "";
-        _audioPath = ResolveAudio(edit.State.CurrentAudioFileName, _projectDirectory);
+        _audioPath = edit.State.CurrentAudioFileName;
         var config = edit.Config.LoadAppConfig();
         _libraryFolder = !string.IsNullOrWhiteSpace(config.PsarcLibraryPath) && io.Files.DirectoryExists(config.PsarcLibraryPath)
             ? config.PsarcLibraryPath
@@ -244,6 +244,7 @@ public sealed partial class DcSongExportViewModel : DialogViewModel<bool>, IDcSo
         {
             _probe = await _io.Exporter.ProbeAsync(new DcSongProbeRequest(_audioPath, _projectDirectory, project.Stems.ToList()),
                 _probeCts.Token);
+            _audioPath = _probe.AudioPath ?? "";
         }
         catch (OperationCanceledException)
         {
@@ -282,21 +283,12 @@ public sealed partial class DcSongExportViewModel : DialogViewModel<bool>, IDcSo
     private string Megabytes(long bytes) =>
         (bytes / (1024.0 * 1024.0)).ToString("0.0", CultureInfo.CurrentCulture);
 
-    private static string ResolveAudio(string audioFileName, string projectDirectory)
-    {
-        if (string.IsNullOrWhiteSpace(audioFileName)) return "";
-        return Path.IsPathRooted(audioFileName) || projectDirectory.Length == 0
-            ? audioFileName
-            : Path.Combine(projectDirectory, audioFileName);
-    }
-
     /// <summary>"Artist - Title.dcsong", with every character a file name cannot hold replaced.</summary>
     internal static string DefaultFileName(string artist, string title)
     {
         var parts = new[] { artist, title }.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).ToList();
         var name = parts.Count == 0 ? "song" : string.Join(" - ", parts);
-        var invalid = Path.GetInvalidFileNameChars();
-        name = new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray()).Trim().TrimEnd('.');
+        name = SafeFileName.Make(name).TrimEnd('.');
         return (name.Length == 0 ? "song" : name) + DcSongFormat.Extension;
     }
 

@@ -133,6 +133,8 @@ public static class StemArchive
 
     /// <summary>
     /// Opens an archive for reading with a 64 KB sequential-scan stream.
+    /// Bounds the declared entry count on that same stream before ZIP entries
+    /// can be materialized. A refusal keeps the archive intact.
     /// <para><see cref="ZipFile.OpenRead(string)" /> gives no control over either,
     /// so it reads a tens-of-MB <c>.dcstems</c> through the BCL's 4 KB default
     /// with no access hint — the same mistake <c>WaveformDiskCache</c> and
@@ -149,13 +151,29 @@ public static class StemArchive
     /// <see cref="ZipFile.OpenRead(string)" /> does this same dance internally;
     /// replacing it means taking the dance with it.</para>
     /// </summary>
-    private static ZipArchive OpenForRead(string archivePath)
+    private static ZipArchive OpenForRead(string archivePath, int maxEntries = MaxEntries)
     {
         var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read,
             1 << 16, FileOptions.SequentialScan);
         try
         {
+            // No ZIP (including ZIP64) can be shorter than its 22-byte end record.
+            if (stream.Length < 22) throw new InvalidDataException("Stem archive is truncated before its end record.");
+            var check = ZipDirectoryBudget.Check(stream, maxEntries);
+            if (check == ZipExtractionRefusal.TooManyEntries)
+            {
+                throw new StemArchiveRefusedException(
+                    $"Stem archive '{Path.GetFileName(archivePath)}' contains more than {maxEntries} entries; refusing to read it.");
+            }
+            if (check != ZipExtractionRefusal.None) throw new StemArchiveRefusedException("Stem archive directory could not be bounded; keeping the archive.");
+
+            stream.Position = 0;
             return new ZipArchive(stream, ZipArchiveMode.Read);
+        }
+        catch (IOException ex)
+        {
+            stream.Dispose();
+            throw new StemArchiveRefusedException($"Stem archive could not be read safely: {ex.Message}");
         }
         catch
         {
@@ -164,7 +182,9 @@ public static class StemArchive
         }
     }
 
-    /// <summary>Reads just the manifest from an archive; null if missing/corrupt.</summary>
+    /// <summary>Reads just the manifest from an archive; null if missing/corrupt.
+    /// Throws <see cref="StemArchiveRefusedException"/> for an entry-count or
+    /// manifest-byte limit, so the coordinator keeps the archive.</summary>
     public static StemCacheManifest? ReadManifest(string archivePath)
     {
         try
@@ -172,8 +192,11 @@ public static class StemArchive
             using var zip = OpenForRead(archivePath);
             var entry = zip.GetEntry(ManifestEntryName);
             if (entry == null) return null;
-            using var reader = new StreamReader(entry.Open());
-            return StemCacheManifest.FromJson(reader.ReadToEnd());
+            var text = BoundedZipExtractor.ReadEntryText(entry, MaxManifestBytes)
+                ?? throw new StemArchiveRefusedException(
+                    $"Stem archive '{Path.GetFileName(archivePath)}' manifest exceeds {MaxManifestBytes} inflated bytes.");
+
+            return StemCacheManifest.FromJson(text);
         }
         catch (InvalidDataException) { return null; }
         catch (IOException) { return null; }
@@ -182,7 +205,7 @@ public static class StemArchive
     /// <summary>
     /// Reads one stem entry's bytes straight out of the archive, writing nothing to
     /// disk; <c>null</c> when the archive has no such entry. For a reader that only
-    /// needs one stem in memory (chart-from-audio), where <see cref="ExtractStems"/>
+    /// needs one stem in memory, where <see cref="ExtractStems(string, string)"/>
     /// would unpack the whole set into a directory.
     /// </summary>
     public static byte[]? ReadEntryBytes(string archivePath, string entryName)
@@ -196,25 +219,62 @@ public static class StemArchive
         return buffer.ToArray();
     }
 
+    /// <summary>Members a stem archive may hold: the manifest plus a handful of stems.</summary>
+    internal const int MaxEntries = 64;
+
+    /// <summary>Actual inflated manifest bytes accepted before parsing JSON.</summary>
+    internal const int MaxManifestBytes = 1024 * 1024;
+
+    /// <summary>Inflated-byte ceiling for one archive. Far above any real stem set
+    /// (hours of lossless audio) and far below "fill the disk".</summary>
+    internal const long MaxInflatedBytes = 16L * 1024 * 1024 * 1024;
+
     /// <summary>
     /// Extracts every stem file (not the manifest) into <paramref name="destDir"/>,
-    /// preserving the archive entry names, and returns the extracted absolute paths.
+    /// keyed by the entry's file name, and returns the extracted absolute paths.
+    /// Goes through <see cref="BoundedZipExtractor"/>: a member whose name carries a
+    /// path separator, drive colon or a bare <c>..</c>/<c>.</c> name, too many members, or more inflated
+    /// bytes than the budget makes it throw <see cref="StemArchiveRefusedException"/>.
+    /// That is NOT corruption: the coordinator keeps the archive (stems are never
+    /// regenerated) and reports a miss.
     /// </summary>
     public static IReadOnlyList<string> ExtractStems(string archivePath, string destDir)
+        => ExtractStems(archivePath, destDir, MaxEntries, MaxInflatedBytes);
+
+    internal static IReadOnlyList<string> ExtractStems(
+        string archivePath, string destDir, int maxEntries, long maxInflatedBytes)
     {
         Directory.CreateDirectory(destDir);
+        var count = BoundedZipExtractor.CheckDeclaredEntryCount(archivePath, maxEntries);
+        if (count == ZipExtractionRefusal.TooManyEntries)
+        {
+            throw new StemArchiveRefusedException(
+                $"Stem archive '{Path.GetFileName(archivePath)}' declares more than {maxEntries} entries; refusing to expand it.");
+        }
+
         var extracted = new List<string>();
-        using var zip = OpenForRead(archivePath);
-        foreach (var entry in zip.Entries)
+        using var zip = OpenForRead(archivePath, maxEntries);
+        var result = BoundedZipExtractor.ExtractBounded(zip, destDir, maxInflatedBytes, maxEntries, entry =>
         {
             if (string.Equals(entry.FullName, ManifestEntryName, StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (string.IsNullOrEmpty(entry.Name)) continue; // directory entry
+                return null;
+            if (string.IsNullOrEmpty(entry.Name)) return null; // directory entry
+            var name = entry.FullName;
+            if (name.Contains('\\') || name.Contains('/') || name.Contains(':') || name == ".." || name == ".")
+            {
+                throw new StemArchiveRefusedException(
+                    $"Stem archive '{Path.GetFileName(archivePath)}' has an entry name that leaves the destination ('{name}'); refusing to expand it.");
+            }
 
-            var dest = Path.Combine(destDir, entry.Name);
-            entry.ExtractToFile(dest, overwrite: true);
-            extracted.Add(dest);
+            extracted.Add(Path.Combine(destDir, name));
+            return name;
+        });
+        if (!result.Succeeded)
+        {
+            throw new StemArchiveRefusedException(
+                $"Stem archive '{Path.GetFileName(archivePath)}' refused: {result.Refusal}.");
         }
+
         return extracted;
     }
 }

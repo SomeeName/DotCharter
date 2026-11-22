@@ -45,11 +45,9 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
 
         _projectState.PropertyChanged += (_, e) =>
         {
-            // The flip toggle has to reach the surfaces OUTSIDE a viewport — the
-            // inspector's chord box and its per-string rows — or it inverts the
-            // highway and leaves them pointing the other way.
-            if (e.PropertyName is nameof(ProjectState.FlipStrings) or nameof(ProjectState.LeftyFlip)
-                or nameof(ProjectState.InvertStrings))
+            // Chord boxes and their per-string rows share the timeline's
+            // string order. Profile handedness changes only the 3D fret axis.
+            if (e.PropertyName is nameof(ProjectState.FlipStrings))
             {
                 OnPropertyChanged(nameof(FlipStrings));
             }
@@ -83,7 +81,7 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
                     OnPropertyChanged(nameof(VocalTracks));
                 }
 
-                ChartDataChanged?.Invoke();
+                RequestRedraw();
             }
         };
 
@@ -109,10 +107,9 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
     }
 
     /// <summary>
-    ///     The one string-orientation answer, forwarded from
-    ///     <c>ProjectState.FlipStrings</c> so surfaces outside a viewport — the
-    ///     inspector's chord box and its per-string rows — follow the same flip
-    ///     toggle the highway does.
+    ///     Shared 2D string order from <c>ProjectState.FlipStrings</c>. Chord boxes,
+    ///     per-string editor rows and timeline lanes follow <c>InvertStrings</c>
+    ///     alone, independently of profile handedness.
     /// </summary>
     public bool FlipStrings => _projectState.FlipStrings;
 
@@ -160,6 +157,32 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
 
     public void SetActiveArrangement(Arrangement? arrangement) => ActiveArrangement = arrangement;
 
+    private readonly List<Action> _pendingEditCommits = [];
+
+    /// <summary>Registers an editor's draft commit for <see cref="CommitPendingEdits" />.</summary>
+    public void AddPendingEditCommit(Action commit) => _pendingEditCommits.Add(commit);
+
+    public void CommitPendingEdits()
+    {
+        foreach (var commit in _pendingEditCommits) commit();
+    }
+
+    private readonly List<(Func<bool> Holds, Action Apply)> _pendingDrafts = [];
+
+    /// <summary>Registers an editor's "holds a draft only its own Apply writes" for <see cref="HasPendingDrafts" />, and
+    /// that Apply (one undo step) for <see cref="ApplyPendingDrafts" />.</summary>
+    public void AddPendingDraft(Func<bool> holdsDraft, Action applyDraft) => _pendingDrafts.Add((holdsDraft, applyDraft));
+
+    public bool HasPendingDrafts => _pendingDrafts.Any(draft => draft.Holds());
+
+    public void ApplyPendingDrafts()
+    {
+        foreach (var (holds, apply) in _pendingDrafts)
+        {
+            if (holds()) apply();
+        }
+    }
+
     /// <summary>
     ///     Re-publishes the chart so everything bound to it re-reads, then announces the
     ///     active arrangement: its NAME and TUNING are not on <c>ChartData</c>, so the
@@ -189,6 +212,9 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
     public ChartProject? ActiveProject => _projectState.ActiveProject;
 
     public UserSettingsState UserSettings => _projectState.UserSettings;
+
+    /// <summary>True while the Showlights editor is open (the 3D preview's show-light chip follows it).</summary>
+    public bool IsShowlightsEditorOpen => _projectState.EditorUi.IsShowlightsEditorOpen;
 
     public ObservableCollection<VocalTrack> VocalTracks =>
         _projectState.ActiveProject?.VocalTracks ?? [];
@@ -304,7 +330,6 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
 
     private ChordUseHighlight _panelHighlight = ChordUseHighlight.None;
     private ChordUseHighlight _reviewHighlight = ChordUseHighlight.None;
-    private ChordUseHighlight _draftMergeHighlight = ChordUseHighlight.None;
 
     /// <summary>Raised when <see cref="UseHighlight" /> changes; the song map repaints.</summary>
     public event EventHandler? UseHighlightChanged;
@@ -327,19 +352,9 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
         ShowHighlight();
     }
 
-    /// <summary>The chart-from-audio merge card's phrase marks: shown under an open AI
-    /// review, over the chord panel's preview.</summary>
-    public void PublishDraftMergeHighlight(ChordUseHighlight highlight)
-    {
-        ArgumentNullException.ThrowIfNull(highlight);
-        _draftMergeHighlight = highlight;
-        ShowHighlight();
-    }
-
     private void ShowHighlight()
     {
         var shown = !_reviewHighlight.IsEmpty ? _reviewHighlight
-            : !_draftMergeHighlight.IsEmpty ? _draftMergeHighlight
             : _panelHighlight;
         if (shown.SameAs(UseHighlight)) return;
         UseHighlight = shown;
@@ -483,16 +498,22 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
     /// <see cref="SoundMagnetSnap"/> — the keyboard pen snaps through the same
     /// one, so keyboard and pointer place at the same position.
     /// </summary>
-    public FractionalPosition SnapToGrid(double timeMs)
+    public FractionalPosition SnapToGrid(double timeMs) => SnapToGrid(timeMs, null);
+
+    /// <summary>The beat-grid snap a paste at the playhead uses (the transport's grid, no sound magnet).</summary>
+    public FractionalPosition SnapToBeatGrid(double timeMs) => Tempo.SnapToGrid(timeMs, Beats, _transport.GridDivisor);
+
+    /// <summary>The grid and sound magnet for the row receiving the pointer.</summary>
+    public FractionalPosition SnapToGrid(double timeMs, TrackEditorContext? track)
     {
-        var beats = Beats;
+        var beats = track?.Beats ?? Beats;
         var gridSnap = Tempo.SnapToGrid(timeMs, beats, _transport.GridDivisor);
-        return SoundMagnetSnap.Apply(timeMs, gridSnap, beats, PlacedNotes, PlacedChords);
+        return SoundMagnetSnap.Apply(timeMs, gridSnap, beats, track?.Notes ?? PlacedNotes, track?.Chords ?? PlacedChords);
     }
 
     /// <summary>
     /// Snaps a lyric start time to the grid (and nearby notes, via
-    /// <see cref="SnapToGrid"/>) but lets a waveform onset win when one sits at
+    /// <see cref="SnapToGrid(double)"/>) but lets a waveform onset win when one sits at
     /// least as close to the cursor as the grid line. Gives the vocal editor
     /// "snap to the sung attack" without changing note-highway snapping. Falls
     /// back to the plain grid snap when no waveform is loaded.
@@ -524,7 +545,11 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
         return beatMs / divisor;
     }
 
-    public void RequestRedraw() => ChartDataChanged?.Invoke();
+    public void RequestRedraw()
+    {
+        if (ChartDataChanged is { } changed)
+            DotCharter.Services.Diagnostics.UiWorkTiming.Measure("Chart data propagation", changed);
+    }
 
     public void ExecuteSeek(double timeMs)
     {
@@ -550,7 +575,7 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
     /// of MILLISECONDS, so on a 6/8 bar or after a tempo change they never line
     /// up with the grid the notes snap to; this is what makes "seek, press a
     /// string key" land on a beat. Deliberately over <see cref="ITempoService"/>'s
-    /// plain nearest-grid snap, NOT <see cref="SnapToGrid"/> — magnet-snapping
+    /// plain nearest-grid snap, NOT <see cref="SnapToGrid(double)"/> — magnet-snapping
     /// onto sounds is PgUp/PgDn's job.
     /// </summary>
     public void SeekToGridLine(int direction)
@@ -705,23 +730,6 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
         }
     }
 
-    public void SeekToPrevElement(bool isShiftPressed)
-    {
-        if (isShiftPressed)
-        {
-            var cursor = SeekCursorMs(-1);
-            SelectSeekTarget(
-                TimelineMath.LastBefore(PlacedNotes, cursor, Beats),
-                TimelineMath.LastBefore(PlacedChords, cursor, Beats),
-                false);
-        }
-        else
-        {
-            var prevBeat = LastBeatBefore(Beats, SeekCursorMs(-1));
-            if (prevBeat != null) ExecuteSeek(prevBeat.Time);
-        }
-    }
-
     private void SelectSeekTarget(GuitarNote? note, Chord? chord, bool preferEarlier)
     {
         if (note == null && chord == null) return;
@@ -813,15 +821,6 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
         if (!Selection.SelectedChords.Contains(chord)) Selection.SelectedChords.Add(chord);
     }
 
-    public void SeekToBookmark(int index)
-    {
-        var project = _projectState.ActiveProject;
-        if (project == null) return;
-        var bm = project.Bookmarks.FirstOrDefault(b => b.Index == index);
-        if (bm == null) return;
-        ExecuteSeek(bm.Time);
-    }
-
     public void ToggleBookmarkAtPlayhead(int index)
     {
         var project = _projectState.ActiveProject;
@@ -844,16 +843,6 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
             // Already at the bookmark — remove it.
             project.Bookmarks.Remove(existing);
         }
-    }
-
-    public void SetBookmarkAtPlayhead(int index)
-    {
-        var project = _projectState.ActiveProject;
-        if (project == null) return;
-        var time = _projectState.CurrentTimeMs;
-        var existing = project.Bookmarks.FirstOrDefault(b => b.Index == index);
-        if (existing != null) existing.Time = time;
-        else project.Bookmarks.Add(new Bookmark { Index = index, Time = time });
     }
 
     public void ActivateNextArrangement() => ShiftActiveArrangement(1);

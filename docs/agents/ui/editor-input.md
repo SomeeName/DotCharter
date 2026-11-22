@@ -5,7 +5,14 @@ One file per subject under `editor-input/`. Read the one you need:
 - [string-edit-and-chord-verbs.md](editor-input/string-edit-and-chord-verbs.md) — the string-edit mask; splitting a hand shape; the chord-template trap
 - [chord-verbs.md](editor-input/chord-verbs.md) — what a keyboard verb means on a CHORD, and how far it reaches: a technique key follows the Inspector's pinned "Apply to" ladder while it is on screen (#604); the chord-template panel's ladder
 - [pointer-wheel-and-clicks.md](editor-input/pointer-wheel-and-clicks.md) — the pointer wheel; right-click; double-click, pan aliases and the cursor; the time ruler
-- [tools-and-pointer-drag.md](editor-input/tools-and-pointer-drag.md) — the editor tools are transient; what a pointer drag owes the chart; where the detail lives
+- [tools-and-pointer-drag.md](editor-input/tools-and-pointer-drag.md) — the editor tools are transient; what a pointer drag owes the chart; dragging a tone change on the Tone row and Esc cancelling a drag (#881); where the detail lives
+
+## Pick slide
+
+`PickSlide` (`Ctrl+Shift+L`) converts resolved sounds toward the nut, flips an all-scrape
+selection, or places one split chord on the two lowest strings at the keyboard pen.
+It honours the string mask when choosing sounds, converts a chord as a whole and stays
+off the Inspector's "Apply to" ladder. Selection and hand-shape cuts around scrapes share its undo node.
 
 ## MIDI controller binds (#310)
 

@@ -47,6 +47,25 @@ public sealed class ShapeEditViewModelTests
         return template;
     }
 
+    [Theory]
+    [InlineData(ChordNamingStyle.Eof, 0, "Abmin")]
+    [InlineData(ChordNamingStyle.Musical, -4, "Abm")]
+    public void UseSuggestedName_FollowsEditorNaming(ChordNamingStyle style, int key, string expected)
+    {
+        var arrangement = _h.Editor.ActiveArrangement!;
+        arrangement.Tuning = ["Eb", "Ab", "Db", "Gb", "Bb", "Eb"];
+        arrangement.Levels[0].Chords.Clear();
+        arrangement.ChordTemplates.Remove(_other);
+        _h.Services.Config.LoadAppConfig().ChordNamingStyle = style;
+        _h.Project.Chart.KeyAccidentals = key;
+        using var vm = Open(null);
+
+        Assert.Equal(expected, vm.SuggestedName);
+        vm.UseSuggestedNameCommand.Execute(null);
+        Assert.Equal(expected, vm.NameDraft);
+        Assert.Equal("Am", _am.Name);
+    }
+
     [Fact]
     public void TheScopesStateTheirReach_AndEveryUseIsTheDefault()
     {
@@ -69,7 +88,7 @@ public sealed class ShapeEditViewModelTests
         vm.Strings[2].Fret = "0";
 
         Assert.Equal([true, true, true, true], vm.UseBars.Select(b => b.IsReached));
-        Assert.Equal("“Am” itself changes, so every use plays the new grip.", vm.ResultText);
+        Assert.Equal("You are editing “Am” itself, so every chord that uses it changes.", vm.ResultText);
         Assert.Equal("Apply to every use (4)", vm.ApplyLabel);
         Assert.Equal(4, _marks.Chords.Count);
 
@@ -168,7 +187,7 @@ public sealed class ShapeEditViewModelTests
 
         Assert.Equal("1 hand shape over these chords follows the new grip.", vm.HandShapeSyncText);
         vm.KeepHandShapesInSync = false;
-        Assert.Equal("1 hand shape keeps the old grip and will no longer match its chord.", vm.HandShapeSyncText);
+        Assert.Equal("1 hand shape keeps the old frets, so it will no longer match its chord.", vm.HandShapeSyncText);
     }
 
     private sealed class RecordingMarks : IChordUseMarks

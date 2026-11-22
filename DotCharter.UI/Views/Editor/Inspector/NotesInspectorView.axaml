@@ -1,43 +1,28 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspectorVm="using:DotCharter.UI.ViewModels.Editor.Inspector"
              xmlns:events="clr-namespace:DotCharter.Core.Domain.Events;assembly=DotCharter.Core"
+             xmlns:ctl="using:DotCharter.UI.Controls"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              x:Class="DotCharter.UI.Views.Editor.Inspector.NotesInspectorView"
-             x:DataType="viewModels:InspectorViewModel">
-    <!-- 0.42.2: this tab used NONE of the shared inspector chrome. No header —
-         the only tab without one, so switching to it lost the title bar the
-         other six keep — a bare composer row, and an empty state whose setters
-         were a hand-copy of StackPanel.InspectorEmpty.
-         No StyleInclude here on purpose: InspectorView includes InspectorStyles
-         once and these tabs are its descendants, which is how Sound, Song,
-         Lyrics, Issues and Phrases already get the vocabulary. Same rule the
-         dialog grammar follows — one instantiation by the container, not thirty
-         by the leaves. -->
-    <!-- #233: the list is what this tab is FOR, and the bottom dock leaves the
-         whole tab ~220 px at 1280x720 (~490 at 1920x1080). It used to spend
-         ~100 of them on the composer (a two-line scope sentence in German over a
-         row whose kind picker and worded "Add at playhead" button squeezed the
-         note box to 60-105 px) and ~50 on every one-line row, so the list showed
-         ONE annotation at 1280x720 (half of one in German). Now: the scope
-         sentence shows only while the list is empty (it is also the tab's and
-         the header's tooltip), the add verb is a named icon button (Enter in the
-         box does the same), and a row is one line, ellipsised, that wraps in
-         full when selected. The row's check box lays out as its 20 px glyph
-         (Margin 0,-6 around Fluent's fixed 32 px template; the hit box still
-         overhangs into the row's inset), so a row is ~30 px. Pinned by
-         `Perf/EditorShortWindowUiPerfSmokeTests` (rows and box width in en-US,
-         de-DE and ja-JP). -->
+             x:DataType="viewModels:InspectorViewModel"
+             x:CompileBindings="True">
+    <!--
+        The Annotations tab, laid out as inspector design D: a ColumnFlowPanel of two cards over a pinned footer.
+        * The LIST card (pinned head and foot, the rows scroll between them): the filter (open and resolved /
+          open / resolved), one row per annotation (its resolved tick, time and text; ✕ removes it, one undo
+          step; a double-click jumps there; Delete removes the selected one), and Edit selected.
+        * DETAILS: the selected annotation (type, text committed on Enter or when the box loses focus,
+          Resolve / Reopen, Jump, Delete) or, after "Add at playhead", the DRAFT (type, text, Add annotation,
+          Cancel; Enter adds). Annotations are charting memos: they never reach the exported song (the scope
+          sentence introduces an empty tab).
+        At Small the list keeps the left column and the details sit beside it; at Tiny both are pages.
+    -->
     <UserControl.Styles>
         <Style Selector="ListBox#NotesList ListBoxItem">
-            <Setter Property="Padding" Value="6,2" />
-        </Style>
-        <Style Selector="TextBlock.AnnotationText">
-            <Setter Property="TextWrapping" Value="NoWrap" />
-            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-        </Style>
-        <Style Selector="ListBoxItem:selected TextBlock.AnnotationText">
-            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Padding" Value="4,1" />
+            <Setter Property="MinHeight" Value="28" />
         </Style>
         <Style Selector="TextBlock.AnnotationText.Resolved">
             <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
@@ -45,101 +30,238 @@
         </Style>
     </UserControl.Styles>
 
-    <!-- #601: no header repeating the tab's name (the tab strip says it); the composer is the
-         ONE pinned row, on the same hairline as every other tab's. -->
-    <Grid RowDefinitions="Auto,*">
-
-        <!-- Composer: text + kind + add-at-playhead, ONE row at every width. The
-             note box takes every pixel the picker and the icon button leave
-             (~195 px at the ~400 px a 1280 px window gives the pane). The scope
-             sentence — annotations are charting memos, they never reach the
-             exported song — introduces an EMPTY tab; once there are rows it
-             would cost one of them. -->
-        <Border Grid.Row="0" x:Name="NotesComposer" Padding="{StaticResource FirePadTag}"
-                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1"
-                ToolTip.Tip="{localization:Loc Inspector_Tab_Notes_Tip}">
-            <StackPanel Spacing="{StaticResource SpaceSm}">
-                <Border Classes="ScopeBar"
-                        IsVisible="{Binding !ProjectState.ActiveProject.Annotations.Count, FallbackValue=True}">
-                    <TextBlock Text="{localization:Loc Inspector_Tab_Notes_Tip}" TextWrapping="Wrap" />
-                </Border>
-                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
-                    <TextBox Grid.Column="0" x:Name="NotesComposerText"
-                             AutomationProperties.Name="{localization:Loc Notes_Placeholder}"
-                             Text="{Binding Annotations.NewAnnotationText, Mode=TwoWay}"
-                             PlaceholderText="{localization:Loc Notes_Placeholder}">
-                        <TextBox.KeyBindings>
-                            <KeyBinding Gesture="Enter" Command="{Binding Annotations.AddAnnotationAtPlayheadCommand}" />
-                        </TextBox.KeyBindings>
-                    </TextBox>
-                    <ComboBox Grid.Column="1"
-                              AutomationProperties.Name="{localization:Loc Notes_KindPicker}"
-                              ToolTip.Tip="{localization:Loc Notes_KindPicker}"
-                              SelectedIndex="{Binding Annotations.NewAnnotationKindIndex, Mode=TwoWay}">
-                        <ComboBoxItem Content="{localization:Loc Notes_Kind_Note}" />
-                        <ComboBoxItem Content="{localization:Loc Notes_Kind_Reminder}" />
-                        <ComboBoxItem Content="{localization:Loc Notes_Kind_Mark}" />
-                    </ComboBox>
-                    <Button Grid.Column="2" Theme="{StaticResource PrimaryButton}" Classes="Primary" x:Name="NotesAddButton"
-                            VerticalAlignment="Stretch"
-                            AutomationProperties.Name="{localization:Loc Notes_AddAtPlayhead}"
-                            ToolTip.Tip="{localization:Loc Notes_AddAtPlayhead}"
-                            Command="{Binding Annotations.AddAnnotationAtPlayheadCommand}">
-                        <PathIcon Data="{DynamicResource IconPlus}" Width="14" Height="14" />
-                    </Button>
-                </Grid>
-            </StackPanel>
-        </Border>
-
-        <!-- Time-ordered annotation list; double-click seeks the playhead. -->
-        <ListBox Grid.Row="1" Name="NotesList" Margin="{StaticResource GapChip}"
-                 AutomationProperties.Name="{localization:Loc Inspector_Tab_Notes}"
-                 ItemsSource="{Binding ProjectState.ActiveProject.Annotations}"
-                 Background="Transparent" BorderThickness="0"
-                 DoubleTapped="NotesList_DoubleTapped">
-            <ListBox.Styles>
-                <!-- A row is announced by its own words, not its CLR type name (#311). -->
-                <Style Selector="ListBoxItem" x:DataType="events:ChartAnnotation">
-                    <Setter Property="AutomationProperties.Name" Value="{Binding Text}" />
-                </Style>
-            </ListBox.Styles>
-            <ListBox.ItemTemplate>
-                <DataTemplate x:DataType="events:ChartAnnotation">
-                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="10">
-                        <CheckBox Grid.Column="0" Margin="0,-6" VerticalAlignment="Center"
-                                  AutomationProperties.Name="{localization:Loc Notes_Resolved}"
-                                  IsChecked="{Binding Resolved, Mode=TwoWay}"
-                                  ToolTip.Tip="{localization:Loc Notes_Resolved}" />
-                        <TextBlock Grid.Column="1" Theme="{StaticResource MonoText}" Classes="Mono"
-                                   Text="{Binding TimeLabel}"
-                                   VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="2" Classes="AnnotationText"
-                                   Text="{Binding Text}"
-                                   ToolTip.Tip="{Binding Text}"
-                                   VerticalAlignment="Center"
-                                   Classes.Resolved="{Binding Resolved}" />
-                        <Button Grid.Column="3" Background="Transparent" BorderThickness="0"
-                                Padding="4,2" VerticalAlignment="Center"
-                                Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).Annotations.RemoveAnnotationCommand}"
-                                CommandParameter="{Binding}"
-                                AutomationProperties.Name="{localization:Loc Action_Delete}"
-                                ToolTip.Tip="{localization:Loc Action_Delete}">
-                            <PathIcon Data="{DynamicResource IconClose}" Width="9" Height="9"
-                                      Foreground="{DynamicResource TextMuted}" />
+    <Grid RowDefinitions="*,Auto" DataContext="{Binding Annotations}" x:DataType="inspectorVm:AnnotationsInspectorViewModel">
+        <ctl:ColumnFlowPanel x:Name="NotesCards" Grid.Row="0" Margin="8,6">
+            <!-- ── the list ── -->
+            <Border x:Name="NotesListCard" Theme="{StaticResource ColumnFlowFrame}" Classes="ColumnFlowFrame"
+                    ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Tab_Notes}">
+                <Grid RowDefinitions="Auto,Auto,*" RowSpacing="{StaticResource FireSpaceXs}">
+                    <!-- ONE head row (heading, filter, edit): a 720 px window leaves the tab ~225 px, and every
+                         row spent above the list is a row of annotations it cannot show. -->
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceXs}">
+                        <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                   Text="{localization:Loc Inspector_Tab_Notes}" ToolTip.Tip="{localization:Loc Inspector_Tab_Notes_Tip}" />
+                        <ComboBox Grid.Column="1" x:Name="NotesFilter" Classes="ColumnFlowField" MinWidth="96"
+                                  AutomationProperties.Name="{localization:Loc Notes_Filter}"
+                                  ToolTip.Tip="{localization:Loc Notes_Filter}"
+                                  SelectedIndex="{Binding FilterIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="{localization:Loc Notes_Filter_All}" />
+                            <ComboBoxItem Content="{localization:Loc Notes_Filter_Open}" />
+                            <ComboBoxItem Content="{localization:Loc Notes_Filter_Resolved}" />
+                        </ComboBox>
+                        <!-- Brings the details card into view (it is paged away in a narrow pane). -->
+                        <Button Grid.Column="2" x:Name="NotesEditSelected" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                IsEnabled="{Binding HasSelection}"
+                                AutomationProperties.Name="{localization:Loc Notes_EditSelected}"
+                                ToolTip.Tip="{localization:Loc Notes_EditSelected}"
+                                Click="EditSelected_Click">
+                            <PathIcon Data="{DynamicResource IconPencil}" Width="12" Height="12" />
                         </Button>
                     </Grid>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
+                    <!-- The scope sentence introduces an EMPTY tab; once there are rows it would cost one of them. -->
+                    <TextBlock Grid.Row="1" x:Name="NotesScope" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                               TextWrapping="Wrap" IsVisible="{Binding !HasAnnotations}"
+                               Text="{localization:Loc Inspector_Tab_Notes_Tip}" />
+                    <TextBlock Grid.Row="2" x:Name="NotesEmpty" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                               VerticalAlignment="Top" TextWrapping="Wrap" IsVisible="{Binding !HasAnnotations}"
+                               Text="{localization:Loc Notes_Empty_Hint}" />
+                    <TextBlock Grid.Row="2" x:Name="NotesNoMatch" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                               VerticalAlignment="Top" TextWrapping="Wrap" IsVisible="{Binding FilterHidesAll}"
+                               Text="{localization:Loc Notes_NoMatch}" />
+                    <!-- Time-ordered rows; double-click seeks the playhead, Delete removes the selected one. -->
+                    <ListBox Grid.Row="2" x:Name="NotesList"
+                             AutomationProperties.Name="{localization:Loc Inspector_Tab_Notes}"
+                             ItemsSource="{Binding VisibleAnnotations}"
+                             SelectedItem="{Binding SelectedAnnotation, Mode=TwoWay}"
+                             Background="Transparent" BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             DoubleTapped="NotesList_DoubleTapped">
+                        <ListBox.KeyBindings>
+                            <KeyBinding Gesture="Delete" Command="{Binding DeleteSelectedCommand}" />
+                            <KeyBinding Gesture="Enter" Command="{Binding JumpToSelectedCommand}" />
+                        </ListBox.KeyBindings>
+                        <ListBox.Styles>
+                            <!-- A row is announced by its own words, not its CLR type name (#311). -->
+                            <Style Selector="ListBoxItem" x:DataType="events:ChartAnnotation">
+                                <Setter Property="AutomationProperties.Name" Value="{Binding Text}" />
+                            </Style>
+                        </ListBox.Styles>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="events:ChartAnnotation">
+                                <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceXs}">
+                                    <CheckBox Grid.Column="0" Margin="0,-6" MinWidth="0" VerticalAlignment="Center"
+                                              AutomationProperties.Name="{localization:Loc Notes_Resolved}"
+                                              IsChecked="{Binding Resolved, Mode=OneWay}"
+                                              Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).Annotations.ToggleAnnotationResolvedCommand}"
+                                              CommandParameter="{Binding}"
+                                              ToolTip.Tip="{localization:Loc Notes_Resolved}" />
+                                    <TextBlock Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp"
+                                               Text="{Binding TimeLabel}" />
+                                    <TextBlock Grid.Column="2" Classes="AnnotationText" VerticalAlignment="Center"
+                                               FontSize="{StaticResource FireSizeXs}" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding Text}" ToolTip.Tip="{Binding Text}"
+                                               Classes.Resolved="{Binding Resolved}" />
+                                    <Button Grid.Column="3" Background="Transparent" BorderThickness="0"
+                                            Padding="4,2" VerticalAlignment="Center"
+                                            Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).Annotations.RemoveAnnotationCommand}"
+                                            CommandParameter="{Binding}"
+                                            AutomationProperties.Name="{localization:Loc Action_Delete}"
+                                            ToolTip.Tip="{localization:Loc Action_Delete}">
+                                        <PathIcon Data="{DynamicResource IconClose}" Width="9" Height="9"
+                                                  Foreground="{DynamicResource TextMuted}" />
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
 
-        <!-- Empty state. The shared class now, not a hand-copy of its setters:
-             the inline version repeated alignment, spacing, opacity, muted
-             foreground and centred wrapping verbatim, so a theme change to the
-             real one would have left this tab behind. -->
-        <StackPanel Grid.Row="1" Classes="InspectorEmpty"
-                    IsVisible="{Binding !ProjectState.ActiveProject.Annotations.Count, FallbackValue=True}">
-            <PathIcon Data="{DynamicResource IconPencil}" />
-            <TextBlock Text="{localization:Loc Notes_Empty_Hint}" />
-        </StackPanel>
+            <!-- ── the details: the selected annotation, or the draft ── -->
+            <ctl:ColumnFlowCard x:Name="NotesDetailsCard" ctl:ColumnFlowPanel.Title="{localization:Loc Notes_Details}">
+                <Panel>
+                    <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                               VerticalAlignment="Top" IsVisible="{Binding ShowsNoSelection}"
+                               Text="{localization:Loc Notes_NoSelection}" />
+
+                    <StackPanel x:Name="NotesSelectedDetails" Spacing="{StaticResource FireSpaceXs}" IsVisible="{Binding ShowsSelection}">
+                        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                                   Text="{Binding SelectedHeading}" />
+                        <ComboBox x:Name="NotesSelectedKind" Classes="ColumnFlowField"
+                                  AutomationProperties.Name="{localization:Loc Notes_KindPicker}"
+                                  ToolTip.Tip="{localization:Loc Notes_KindPicker}"
+                                  SelectedIndex="{Binding SelectedKindIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="{localization:Loc Notes_Kind_Note}" />
+                            <ComboBoxItem Content="{localization:Loc Notes_Kind_Reminder}" />
+                            <ComboBoxItem Content="{localization:Loc Notes_Kind_Mark}" />
+                        </ComboBox>
+                        <TextBox x:Name="NotesSelectedText" Classes="ColumnFlowField" MinHeight="58"
+                                 TextWrapping="Wrap" VerticalContentAlignment="Top"
+                                 AutomationProperties.Name="{localization:Loc Notes_Text}"
+                                 Text="{Binding SelectedText}">
+                            <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Enter" Command="{Binding CommitSelectedTextCommand}" />
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+                            <Panel Grid.Column="0">
+                                <Button x:Name="NotesResolve" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                        HorizontalAlignment="Stretch" IsVisible="{Binding !SelectedIsResolved}"
+                                        AutomationProperties.Name="{localization:Loc Notes_Resolve}"
+                                        Command="{Binding ToggleSelectedResolvedCommand}">
+                                    <TextBlock Text="{localization:Loc Notes_Resolve}" TextTrimming="CharacterEllipsis" />
+                                </Button>
+                                <Button x:Name="NotesReopen" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                        HorizontalAlignment="Stretch" IsVisible="{Binding SelectedIsResolved}"
+                                        AutomationProperties.Name="{localization:Loc Notes_Reopen}"
+                                        Command="{Binding ToggleSelectedResolvedCommand}">
+                                    <TextBlock Text="{localization:Loc Notes_Reopen}" TextTrimming="CharacterEllipsis" />
+                                </Button>
+                            </Panel>
+                            <Button Grid.Column="1" x:Name="NotesJump" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    HorizontalAlignment="Stretch"
+                                    AutomationProperties.Name="{localization:Loc Notes_Jump}"
+                                    Command="{Binding JumpToSelectedCommand}">
+                                <TextBlock Text="{localization:Loc Notes_Jump}" TextTrimming="CharacterEllipsis" />
+                            </Button>
+                            <Button Grid.Column="2" x:Name="NotesDelete" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    HorizontalAlignment="Stretch"
+                                    AutomationProperties.Name="{localization:Loc Action_Delete}"
+                                    Command="{Binding DeleteSelectedCommand}">
+                                <TextBlock Text="{localization:Loc Action_Delete}" TextTrimming="CharacterEllipsis" />
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- The draft "Add at playhead" opened: the composer's type and text. -->
+                    <StackPanel x:Name="NotesDraft" Spacing="{StaticResource FireSpaceXs}" IsVisible="{Binding IsDrafting}">
+                        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                                   Text="{Binding DraftHeading}" />
+                        <ComboBox x:Name="NotesDraftKind" Classes="ColumnFlowField"
+                                  AutomationProperties.Name="{localization:Loc Notes_KindPicker}"
+                                  ToolTip.Tip="{localization:Loc Notes_KindPicker}"
+                                  SelectedIndex="{Binding NewAnnotationKindIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="{localization:Loc Notes_Kind_Note}" />
+                            <ComboBoxItem Content="{localization:Loc Notes_Kind_Reminder}" />
+                            <ComboBoxItem Content="{localization:Loc Notes_Kind_Mark}" />
+                        </ComboBox>
+                        <TextBox x:Name="NotesComposerText" Classes="ColumnFlowField" MinHeight="58"
+                                 TextWrapping="Wrap" VerticalContentAlignment="Top"
+                                 AutomationProperties.Name="{localization:Loc Notes_Placeholder}"
+                                 PlaceholderText="{localization:Loc Notes_Placeholder}"
+                                 Text="{Binding NewAnnotationText, Mode=TwoWay}">
+                            <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Enter" Command="{Binding AddAnnotationAtPlayheadCommand}" />
+                                <KeyBinding Gesture="Escape" Command="{Binding CancelDraftCommand}" />
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+                            <Button Grid.Column="0" x:Name="NotesAddButton" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary"
+                                    HorizontalAlignment="Stretch"
+                                    AutomationProperties.Name="{localization:Loc Notes_AddAnnotation}"
+                                    Command="{Binding AddAnnotationAtPlayheadCommand}">
+                                <TextBlock Text="{localization:Loc Notes_AddAnnotation}" TextTrimming="CharacterEllipsis" />
+                            </Button>
+                            <Button Grid.Column="1" x:Name="NotesDraftCancel" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                    HorizontalAlignment="Stretch"
+                                    AutomationProperties.Name="{localization:Loc Action_Cancel}"
+                                    Command="{Binding CancelDraftCommand}">
+                                <TextBlock Text="{localization:Loc Action_Cancel}" TextTrimming="CharacterEllipsis" />
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Panel>
+            </ctl:ColumnFlowCard>
+
+            <!-- ── the resolved annotations: a second list, whatever the filter shows; each row reopens or jumps ── -->
+            <ctl:ColumnFlowCard x:Name="NotesResolvedCard" ctl:ColumnFlowPanel.Title="{localization:Loc Notes_ResolvedCard}">
+                <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                    <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                               Text="{localization:Loc Notes_ResolvedCard}" />
+                    <TextBlock x:Name="NotesResolvedEmpty" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                               TextWrapping="Wrap" IsVisible="{Binding !HasResolved}"
+                               Text="{localization:Loc Notes_ResolvedNone}" />
+                    <ItemsControl x:Name="NotesResolvedList" ItemsSource="{Binding ResolvedAnnotations}" IsVisible="{Binding HasResolved}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="events:ChartAnnotation">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceXs}" MinHeight="28">
+                                    <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowStamp"
+                                               VerticalAlignment="Center" Text="{Binding TimeLabel}" />
+                                    <TextBlock Grid.Column="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody"
+                                               VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding Text}" />
+                                    <Button Grid.Column="2" x:Name="NotesResolvedReopen" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                            AutomationProperties.Name="{localization:Loc Notes_Reopen}"
+                                            Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).Annotations.ToggleAnnotationResolvedCommand}"
+                                            CommandParameter="{Binding}">
+                                        <TextBlock Text="{localization:Loc Notes_Reopen}" />
+                                    </Button>
+                                    <Button Grid.Column="3" x:Name="NotesResolvedJump" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                            AutomationProperties.Name="{localization:Loc Notes_Jump}"
+                                            Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).Annotations.JumpToAnnotationCommand}"
+                                            CommandParameter="{Binding}">
+                                        <TextBlock Text="{localization:Loc Notes_Jump}" />
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ctl:ColumnFlowCard>
+        </ctl:ColumnFlowPanel>
+
+        <!-- ── the pinned footer: Add at playhead opens the draft ── -->
+        <Border Grid.Row="1" x:Name="NotesFooter"
+                Background="{DynamicResource FireSurfaceFooter}"
+                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,1,0,0"
+                Padding="{StaticResource FirePadTag}">
+            <Button x:Name="NotesAddAtPlayhead" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary"
+                    HorizontalAlignment="Right"
+                    AutomationProperties.Name="{localization:Loc Notes_AddAtPlayhead}"
+                    ToolTip.Tip="{localization:Loc Inspector_Tab_Notes_Tip}"
+                    Command="{Binding StartDraftCommand}" Click="ShowDetails_Click">
+                <TextBlock Text="{localization:Loc Notes_AddAtPlayhead}" />
+            </Button>
+        </Border>
     </Grid>
 </UserControl>

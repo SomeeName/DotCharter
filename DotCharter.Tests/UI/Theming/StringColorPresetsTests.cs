@@ -35,6 +35,20 @@ public sealed class StringColorPresetsTests
             Assert.True(overrides.ContainsKey(token), $"missing override for {token}");
     }
 
+    /// <summary>#595: a palette's caption follows the UI language; its persisted id does not.</summary>
+    [Fact]
+    public void Captions_FollowTheUiLanguage_AndTheIdsStayStable()
+    {
+        var english = StringColorPresets.Localized(FakeLocalization.English());
+        var german = StringColorPresets.Localized(FakeLocalization.For("de-DE"));
+
+        Assert.Equal(StringColorPresets.All.Select(p => p.Id), german.Select(p => p.Id));
+        Assert.Equal("Default (theme)", english[0].DisplayName);
+        Assert.Equal("Standard (Design)", german[0].DisplayName);
+        Assert.Equal("Okabe–Ito (farbenblind-sicher)", german[1].DisplayName);
+        Assert.All(german, p => Assert.NotEqual(p.NameKey, p.DisplayName));
+    }
+
     [Fact]
     public void IsStringToken_TrueOnlyForStringTokens()
     {

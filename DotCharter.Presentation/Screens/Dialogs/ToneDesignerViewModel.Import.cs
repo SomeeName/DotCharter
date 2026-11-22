@@ -87,8 +87,9 @@ public sealed partial class ToneDesignerViewModel
         var loc = _edit.Localization;
         var path = await _storage.OpenFilePickerAsync(loc["Picker_SelectPsarcTones"],
             [new FilePickerFilter("Rocksmith Package", ["*.psarc"]), FilePickerFilters.AllFiles],
-            _edit.Config.LoadAppConfig().LastExportDir);
+            _edit.Config.StartFolder(c => c.LastPsarcToneDir));
         if (string.IsNullOrEmpty(path)) return;
+        _edit.Config.RememberFileFolder(path, (c, d) => c.LastPsarcToneDir = d);
 
         try
         {
@@ -108,7 +109,7 @@ public sealed partial class ToneDesignerViewModel
         }
         catch (Exception ex)
         {
-            _edit.Logger.Warning(AppLogCategory.Project, $"Tone import failed. Path='{path}', message='{ex.Message}'.");
+            _edit.Logger.Warning(AppLogCategory.Project, $"Tone import failed. Path='{path}'.", ex);
             ImportStatus = loc.Format("Dialog_Tones_ImportFailed", ex.Message);
         }
     }
@@ -124,8 +125,9 @@ public sealed partial class ToneDesignerViewModel
         var loc = _edit.Localization;
         var path = await _storage.OpenFilePickerAsync(loc["Picker_SelectToneFile"],
             [new FilePickerFilter(loc["Picker_ToneFiles"], ["*.json", "*.xml", "*.rs2dlc"]), FilePickerFilters.AllFiles],
-            _edit.Config.LoadAppConfig().LastExportDir);
+            _edit.Config.StartFolder(c => c.LastToneFileDir));
         if (string.IsNullOrEmpty(path)) return;
+        _edit.Config.RememberFileFolder(path, (c, d) => c.LastToneFileDir = d);
 
         IReadOnlyList<RsToneFileTone> tones;
         try
@@ -134,7 +136,7 @@ public sealed partial class ToneDesignerViewModel
         }
         catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException)
         {
-            _edit.Logger.Warning(AppLogCategory.Project, $"Tone file import failed. Path='{path}', message='{ex.Message}'.");
+            _edit.Logger.Warning(AppLogCategory.Project, $"Tone file import failed. Path='{path}'.", ex);
             ImportStatus = loc.Format("Dialog_Tones_ImportFailed", ex.Message);
             return;
         }
@@ -152,7 +154,7 @@ public sealed partial class ToneDesignerViewModel
         if (added.Count > 0)
         {
             var actions = added.Select(d => (IChartAction)new UpsertToneDefinitionAction(_project, null, d)).ToList();
-            _edit.History.Do(actions.Count == 1 ? actions[0] : new CompositeAction(actions) { LabelKey = "History_ImportToneFile" });
+            Record(actions.Count == 1 ? actions[0] : new CompositeAction(actions) { LabelKey = "History_ImportToneFile" });
             foreach (var d in added) ProjectTones.Add(new ProjectToneItem(d.Key, d.Name, d.Json));
             OnTonesChanged();
             SelectedTone = ProjectTones[^1];

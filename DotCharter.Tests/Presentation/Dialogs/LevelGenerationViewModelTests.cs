@@ -196,7 +196,8 @@ public sealed class LevelGenerationViewModelTests
 
         // Nothing else on the coordinator is reachable from this dialog.
         public bool GenerateLevels(int levelCount) => throw new NotSupportedException();
-        public void ImproveChart() => throw new NotSupportedException();
+        public void FixChart(DotCharter.Services.Editing.Maintenance.FixChartGroups groups) => throw new NotSupportedException();
+        public Task<DotCharter.Services.Editing.Maintenance.FixChartPreview> PreviewFixChartAsync(DotCharter.Services.Editing.Maintenance.FixChartGroups groups) => throw new NotSupportedException();
         public void RemoveDoubleStopChordNames() => throw new NotSupportedException();
         public bool RunAsSingleUndoStep(Action mutate) => throw new NotSupportedException();
         public void DeleteActiveArrangement() => throw new NotSupportedException();
@@ -206,6 +207,8 @@ public sealed class LevelGenerationViewModelTests
         public int ApplyDlcBuilderFixes(IReadOnlyList<Arrangement>? arrangements = null) => throw new NotSupportedException();
         public int FixExportFinding(DotCharter.Services.Export.Validation.ExportFixKind kind, Arrangement arrangement) =>
             throw new NotSupportedException();
+        public int GenerateShowlights() => throw new NotSupportedException();
+        public int CreateMissingToneDefinitions(Arrangement arrangement) => throw new NotSupportedException();
         public DotCharter.Services.Editing.Tones.ToneKeyRepairProposal? RepairUndefinedToneKey(string undefinedKey) =>
             throw new NotSupportedException();
         public int PropagatePhraseAtPlayhead() => throw new NotSupportedException();
@@ -225,6 +228,10 @@ public sealed class LevelGenerationViewModelTests
             throw new NotSupportedException();
         public void AddMeasuresAtEnd(int measureCount) => throw new NotSupportedException();
         public void InsertBeatAtPlayhead() => throw new NotSupportedException();
+        public void InsertMeasuresAtPlayhead(int measureCount, MeasureInsertTempo? tempo = null) =>
+            throw new NotSupportedException();
+
+        public MeasureInsertTempo? PlayheadBarTempo() => throw new NotSupportedException();
         public void RemoveBeatAtPlayhead() => throw new NotSupportedException();
         public bool AlignBeatGridToNotes(double offsetMs) => throw new NotSupportedException();
         public bool ToggleBeatMapLock() => throw new NotSupportedException();

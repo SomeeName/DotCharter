@@ -35,6 +35,59 @@ namespace DotCharter.Tests.UI;
 /// </summary>
 public sealed class StemWaveformFileLatchTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_stem_decode_from_an_old_audio_generation_cannot_publish_or_replace_the_baseline(bool fail)
+    {
+        var (coordinator, state, audio) = Rig(Wave(0.1f), Wave(0.9f));
+        state.ActiveProject = new ChartProject();
+        state.CurrentAudioFileName = "a.wav";
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        audio.WaveformPass = async () =>
+        {
+            started.SetResult();
+            await release.Task;
+            if (fail) throw new IOException("Old song's decode failed");
+        };
+        var oldPass = coordinator.ApplyAsync(true, Channels(masterMuted: true));
+        await started.Task.WaitAsync(TestContext.Current.CancellationToken);
+        var nextFile = Wave(0.4f);
+        state.ActiveProject = new ChartProject();
+        state.CurrentAudioFileName = "b.wav";
+        state.WaveformData = nextFile;
+        coordinator.Reset();
+        release.SetResult();
+        await oldPass;
+
+        Assert.Same(nextFile, state.WaveformData);
+        await coordinator.ApplyAsync(false, Channels(masterMuted: true));
+        Assert.Same(nextFile, state.WaveformData);
+        audio.WaveformPass = null;
+        audio.WaveformResult = Wave(0.6f);
+        await coordinator.ApplyAsync(true, Channels(masterMuted: true));
+        Assert.All(state.WaveformData!.Mipmaps[0], peak => Assert.Equal(0.6f, peak));
+        Assert.Equal(2, audio.WaveformRequests.Count);
+    }
+
+    [Fact]
+    public async Task A_new_waveform_for_the_same_project_invalidates_a_pending_mix()
+    {
+        var (coordinator, state, audio) = Rig(Wave(0.1f), Wave(0.9f));
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        audio.WaveformPass = () => release.Task;
+        var oldPass = coordinator.ApplyAsync(true, Channels(masterMuted: true));
+        var replacement = Wave(0.4f);
+        state.WaveformData = replacement;
+        release.SetResult();
+        await oldPass;
+
+        Assert.Same(replacement, state.WaveformData);
+        await coordinator.ApplyAsync(false, Channels(masterMuted: true));
+        Assert.Same(replacement, state.WaveformData);
+    }
+
     /// <summary>A recognisable pyramid — the tests compare level-0 content, not
     /// references, because the mix path rebuilds through FromBasePeaks.</summary>
     private static WaveformSamples Wave(params float[] peaks) =>

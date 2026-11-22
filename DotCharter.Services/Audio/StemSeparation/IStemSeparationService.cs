@@ -10,16 +10,47 @@ public sealed class StemTrack
 }
 
 /// <summary>
+/// Why a stem-separation run failed, as a code the UI maps to a localized
+/// message. <see cref="Other"/> carries a raw exception message (log-grade text).
+/// </summary>
+public enum StemFailureKind
+{
+    Other,
+    NoBackend,
+    NativeNotCompiled,
+    InputMissing,
+    ModelMissing,
+    NoStemsFound,
+    OnnxNotEngaged,
+    OnnxCannotDecode,
+    OnnxNeedsStereo
+}
+
+/// <summary>
 /// Outcome of a stem-separation run.
 /// </summary>
 public sealed class StemSeparationResult
 {
     public bool Success { get; init; }
+
+    /// <summary>English diagnostic text for the log; the UI shows <see cref="FailureKind"/> localized instead.</summary>
     public string? ErrorMessage { get; init; }
+
+    public StemFailureKind FailureKind { get; init; }
+
+    /// <summary>Format arguments for the localized message of <see cref="FailureKind"/>.</summary>
+    public IReadOnlyList<string> FailureArgs { get; init; } = Array.Empty<string>();
+
+    /// <summary>True when the GPU failed during the run and the CPU produced these stems; the caller tells the user.</summary>
+    public bool GpuRunFellBackToCpu { get; init; }
+
     public string OutputDirectory { get; init; } = string.Empty;
     public IReadOnlyList<StemTrack> Stems { get; init; } = Array.Empty<StemTrack>();
 
     public static StemSeparationResult Failure(string message) => new() { Success = false, ErrorMessage = message };
+
+    public static StemSeparationResult Failure(string message, StemFailureKind kind, params string[] args) =>
+        new() { Success = false, ErrorMessage = message, FailureKind = kind, FailureArgs = args };
 }
 
 /// <summary>

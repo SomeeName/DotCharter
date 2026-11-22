@@ -66,6 +66,12 @@ public interface IKeybindRegistry
     void RegisterDynamic(Func<IEnumerable<KeybindRegistration>> source);
 
     /// <summary>
+    ///     Asked with a verb's label before its action runs; true = blocked (and already reported
+    ///     to the user), so the action is skipped. Null = nothing is vetoed.
+    /// </summary>
+    Func<string, bool>? Gate { get; set; }
+
+    /// <summary>
     ///     Processes a keypress and executes the registered action if one exists.
     /// </summary>
     bool HandleKeyPress(Key key, bool ctrl, bool shift, bool alt);

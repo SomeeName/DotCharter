@@ -14,8 +14,12 @@ public sealed record RecordingAlignmentSectionResult(
     double MeanShiftMs,
     int FreeBeats)
 {
+    /// <summary>False for a section the tab is silent in: there is nothing to match, so it has no confidence
+    ///     and <see cref="IRecordingAlignmentService.Apply" /> never takes its alignment.</summary>
+    public bool HasNotes => NoteCount > 0;
+
     /// <summary>Applied by default: it has notes, scored at or above <see cref="RecordingAligner.LowConfidence" />, and has beats to move.</summary>
-    public bool SuggestApply => FreeBeats > 0 && Confidence >= RecordingAligner.LowConfidence;
+    public bool SuggestApply => HasNotes && FreeBeats > 0 && Confidence >= RecordingAligner.LowConfidence;
 }
 
 /// <summary>An analysis held for the charter's decision: nothing in the project has changed yet.</summary>
@@ -32,7 +36,11 @@ public enum RecordingAlignmentFailure
     DecodeFailed,
     TooFewBeats,
     Locked,
-    NothingToAlign
+    NothingToAlign,
+
+    /// <summary>The chart, or the chosen range, has no notes: the tool matches a tab's notes against the
+    ///     recording, so there is nothing to listen for.</summary>
+    NoNotes
 }
 
 public sealed record RecordingAlignmentAnalysis(RecordingAlignmentProposal? Proposal, RecordingAlignmentFailure Failure)
@@ -51,15 +59,18 @@ public enum RecordingAlignmentApplyStatus
 }
 
 /// <summary>
-/// Tempo map ▸ Align to recording: warps the open chart's beat grid onto its recording.
-///     <see cref="AnalyzeAsync" /> reads the chart on the calling thread, then decodes and aligns
-///     on a worker — cancellable, and it never writes to the project. <see cref="Apply" /> writes
-///     the sections the charter accepted as ONE undo node.
+/// Tempo map ▸ Fit the tab's tempo to the recording: warps the open chart's beat grid onto its
+///     recording by matching the chart's notes against the audio. <see cref="AnalyzeAsync" /> reads
+///     the chart on the calling thread and refuses a chart, or a range, without notes there
+///     (<see cref="RecordingAlignmentFailure.NoNotes" />), before any audio is opened; then it decodes
+///     and aligns on a worker — cancellable, and it never writes to the project. <see cref="Apply" />
+///     writes the sections the charter accepted as ONE undo node; a section without notes is never
+///     one of them, whatever was passed in: it follows its neighbours like any section left out.
 /// </summary>
 public interface IRecordingAlignmentService
 {
     Task<RecordingAlignmentAnalysis> AnalyzeAsync(ChartProject project, RecordingAlignmentRange range, bool keepAnchors,
-        string? audioPath, CancellationToken cancellationToken);
+        string? audioPath, CancellationToken cancellationToken, string? projectPath = null);
 
     RecordingAlignmentApplyStatus Apply(ChartProject project, RecordingAlignmentProposal proposal, IReadOnlySet<int> acceptedSections);
 }
@@ -74,7 +85,7 @@ public sealed class RecordingAlignmentService(
     IAppLogger logger) : IRecordingAlignmentService
 {
     public async Task<RecordingAlignmentAnalysis> AnalyzeAsync(ChartProject project, RecordingAlignmentRange range, bool keepAnchors,
-        string? audioPath, CancellationToken cancellationToken)
+        string? audioPath, CancellationToken cancellationToken, string? projectPath = null)
     {
         if (project.IsBeatMapLocked) return RecordingAlignmentAnalysis.Failed(RecordingAlignmentFailure.Locked);
         if (project.Beats.Count < 2) return RecordingAlignmentAnalysis.Failed(RecordingAlignmentFailure.TooFewBeats);
@@ -83,11 +94,24 @@ public sealed class RecordingAlignmentService(
 
         var plan = RecordingAlignmentPlan.Build(project, range, keepAnchors);
         if (plan.FreeBeats == 0) return RecordingAlignmentAnalysis.Failed(RecordingAlignmentFailure.NothingToAlign);
+        if (plan.NotesInRange == 0)
+        {
+            logger.Info(AppLogCategory.Audio,
+                $"Align to recording not run: no notes to match. range={range.Kind}, beats={plan.Beats.Length}, free={plan.FreeBeats}, notes={plan.Events.Count}.");
+            return RecordingAlignmentAnalysis.Failed(RecordingAlignmentFailure.NoNotes);
+        }
 
-        return await Task.Run(() => AnalyzeCore(plan, audioPath, cancellationToken), cancellationToken);
+        var stems = project.Stems.Select(s => new Stem { Name = s.Name, Path = s.Path, Offset = s.Offset }).ToArray();
+        var audioFileName = project.AudioFileName;
+        return await Task.Run(() =>
+        {
+            var paths = RecordingAlignmentAudio.LocateInstrumentStems(audioPath, stems, projectPath, audioFileName, logger);
+            return AnalyzeCore(plan, audioPath, paths, cancellationToken);
+        }, cancellationToken);
     }
 
-    private RecordingAlignmentAnalysis AnalyzeCore(RecordingAlignmentPlan plan, string audioPath, CancellationToken ct)
+    private RecordingAlignmentAnalysis AnalyzeCore(RecordingAlignmentPlan plan, string audioPath,
+        IReadOnlyList<string> stems, CancellationToken ct)
     {
         var started = Stopwatch.GetTimestamp();
         float[] mono;
@@ -95,11 +119,11 @@ public sealed class RecordingAlignmentService(
         RecordingAlignmentSource source;
         try
         {
-            (mono, rate, source) = RecordingAlignmentAudio.Load(audioPath, ct);
+            (mono, rate, source) = RecordingAlignmentAudio.Load(audioPath, ct, stems, logger);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.Warning(AppLogCategory.Audio, $"Align to recording: decode failed: {ex.Message}");
+            logger.Warning(AppLogCategory.Audio, "Align to recording: decode failed", ex);
             return RecordingAlignmentAnalysis.Failed(RecordingAlignmentFailure.DecodeFailed);
         }
 
@@ -126,14 +150,15 @@ public sealed class RecordingAlignmentService(
     public RecordingAlignmentApplyStatus Apply(ChartProject project, RecordingAlignmentProposal proposal, IReadOnlySet<int> acceptedSections)
     {
         if (project.IsBeatMapLocked) return RecordingAlignmentApplyStatus.Locked;
-        if (acceptedSections.Count == 0) return RecordingAlignmentApplyStatus.NothingSelected;
+        var accepted = proposal.Sections.Where(s => s.HasNotes && acceptedSections.Contains(s.Index)).Select(s => s.Index).ToHashSet();
+        if (accepted.Count == 0) return RecordingAlignmentApplyStatus.NothingSelected;
 
         // The grid the analysis read must still be the grid: an edit since then makes the proposal stale.
         var old = proposal.Plan.OldTimes;
         if (project.Beats.Count != old.Length || project.Beats.Where((b, i) => b.Time != old[i]).Any())
             return RecordingAlignmentApplyStatus.Stale;
 
-        var composed = RecordingAlignmentComposer.Compose(project.Beats, proposal.Plan, proposal.AlignedTimes, acceptedSections);
+        var composed = RecordingAlignmentComposer.Compose(project.Beats, proposal.Plan, proposal.AlignedTimes, accepted);
         if (composed == null) return RecordingAlignmentApplyStatus.Invalid;
 
         var result = beatResync.BuildResyncAction(project, composed, () =>
@@ -149,7 +174,7 @@ public sealed class RecordingAlignmentService(
 
         history.Do(result.Action);
         logger.Info(AppLogCategory.Events,
-            $"Align to recording applied. sections={acceptedSections.Count}/{proposal.Sections.Count}, beats={composed.Count}, source={proposal.Source}.");
+            $"Align to recording applied. sections={accepted.Count}/{proposal.Sections.Count}, beats={composed.Count}, source={proposal.Source}.");
         return RecordingAlignmentApplyStatus.Applied;
     }
 }

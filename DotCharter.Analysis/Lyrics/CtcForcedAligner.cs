@@ -115,6 +115,7 @@ public static class CtcForcedAligner
     ///         <c>LocalOnly_LyricAlignmentProbe</c>.
     ///     </para>
     /// </param>
+    /// <param name="cancellationToken">Stops preparation, the trellis and span recovery.</param>
     public static CtcAlignment Align(
         ReadOnlySpan<float> logProbs,
         int frameCount,
@@ -122,9 +123,11 @@ public static class CtcForcedAligner
         IReadOnlyList<int> tokens,
         int blankId,
         int starId = -1,
-        double starLogProb = 0.0)
+        double starLogProb = 0.0,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tokens);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var n = tokens.Count;
         if (n == 0) return new CtcAlignment([], 0.0, null);
@@ -138,7 +141,11 @@ public static class CtcForcedAligner
         // adjacent tokens additionally need a blank between them.
         var minimumFrames = n;
         for (var i = 1; i < n; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             if (tokens[i] == tokens[i - 1]) minimumFrames++;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
         if (frameCount < minimumFrames)
         {
             return CtcAlignment.Failed(
@@ -157,6 +164,7 @@ public static class CtcForcedAligner
         var ext = new int[stateCount];
         for (var i = 0; i < n; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ext[2 * i] = blankId;
             ext[2 * i + 1] = tokens[i];
         }
@@ -177,6 +185,7 @@ public static class CtcForcedAligner
 
         for (var t = 1; t < frameCount; t++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             // Outside this band no path can both reach the state from the start
             // and still finish by the last frame, so those cells are dead.
             var remaining = frameCount - 1 - t;
@@ -187,6 +196,7 @@ public static class CtcForcedAligner
 
             for (var s = sMin; s <= sMax; s++)
             {
+                if (s % 1024 == 0) cancellationToken.ThrowIfCancellationRequested();
                 var best = previous[s];
                 var choice = 0;
 
@@ -211,6 +221,7 @@ public static class CtcForcedAligner
             (previous, current) = (current, previous);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         // A valid path ends on the final blank or on the final label.
         var last = stateCount - 1;
         var terminal = stateCount > 1 && previous[stateCount - 2] > previous[last] ? stateCount - 2 : last;
@@ -224,6 +235,7 @@ public static class CtcForcedAligner
         var state = terminal;
         for (var t = frameCount - 1; t >= 0; t--)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             path[t] = state;
             if (t > 0) state -= GetChoice(back, (long)t * stateCount + state);
         }
@@ -232,13 +244,19 @@ public static class CtcForcedAligner
         var index = 0;
         for (var i = 0; i < n; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var target = 2 * i + 1;
-            while (index < frameCount && path[index] != target) index++;
+            while (index < frameCount && path[index] != target)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                index++;
+            }
 
             var start = index;
             var sum = 0.0;
             while (index < frameCount && path[index] == target)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 sum += Emission(logProbs, width, starId, starLogProb, index, ext[target]);
                 index++;
             }
@@ -248,6 +266,7 @@ public static class CtcForcedAligner
             spans[i] = new TokenSpan(start, end, length > 0 ? sum / length : double.NegativeInfinity);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return new CtcAlignment(spans, totalLogProb, null);
     }
 

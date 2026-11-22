@@ -72,6 +72,18 @@ public static class UpdaterScriptBuilder
     /// nothing was deleted.</summary>
     public const int ExitWaitTimedOut = 2;
 
+    /// <summary>Script exit code: the copy failed AND the files it had replaced
+    /// could not all be put back. The install is a mix of old and new files; the
+    /// backup, staging and pending state were kept.</summary>
+    public const int ExitRestoreFailed = 3;
+
+    /// <summary>Where the files a payload will overwrite are saved before the
+    /// copy, inside the install dir. Removed on success and after a restore.</summary>
+    public const string BackupDirName = "update-backup";
+
+    /// <summary>UTF-8, no BOM; see <see cref="CreateScriptFile" />.</summary>
+    public static readonly Encoding ScriptEncoding = new UTF8Encoding(false);
+
     /// <summary>Where older versions wrote the script; only ever deleted now.</summary>
     public static string LegacyScriptPathFor(string installDir) => Path.Combine(TrimDir(installDir), ScriptFileName);
 
@@ -83,14 +95,17 @@ public static class UpdaterScriptBuilder
     ///     Writes <paramref name="script" /> to a NEW file with an unpredictable
     ///     name in <paramref name="scriptDir" /> and returns its path. CreateNew, so
     ///     a file somebody planted under that name is never reused or overwritten.
-    ///     Plain ASCII content — safe with cmd.exe's default codepage.
+    ///     UTF-8 without a byte-order mark: the script's second line is
+    ///     <c>chcp 65001</c>, so cmd.exe reads every later line (the install, staging
+    ///     and log paths) as UTF-8 and a non-ASCII folder name survives. A BOM would
+    ///     put three bytes in front of <c>@echo off</c>, so none is written.
     /// </summary>
     public static string CreateScriptFile(string scriptDir, string script)
     {
         Directory.CreateDirectory(scriptDir);
         var path = Path.Combine(scriptDir, ScriptFilePrefix + RandomNumberGenerator.GetHexString(32, lowercase: true) + ".cmd");
         using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-        stream.Write(Encoding.ASCII.GetBytes(script));
+        stream.Write(ScriptEncoding.GetBytes(script));
         return path;
     }
 
@@ -145,10 +160,18 @@ public static class UpdaterScriptBuilder
         var payload = TrimDir(payloadDir);
         var staging = TrimDir(stagingRoot);
         var install = TrimDir(installDir);
-        var exePath = install + "\\" + exeName;
-        var logPath = LogPathFor(install);
-        var probePath = Path.Combine(install, WaitProbeFileName);
-        var statePath = PendingStatePathFor(install);
+        var backupLength = payload.Length + 1;
+        var exePath = Esc(install + "\\" + exeName);
+        var logPath = Esc(LogPathFor(install));
+        var probePath = Esc(Path.Combine(install, WaitProbeFileName));
+        var statePath = Esc(PendingStatePathFor(install));
+        var backupDir = Esc(Path.Combine(install, BackupDirName));
+        var listPath = Esc(Path.Combine(install, "dotcharter-update-files.tmp"));
+        var newPath = Esc(Path.Combine(install, "dotcharter-update-new.tmp"));
+        payload = Esc(payload);
+        staging = Esc(staging);
+        install = Esc(install);
+        zipPath = Esc(zipPath);
 
         // Re-validated here rather than trusted: this is the last place before
         // the paths become `del` arguments, and Parse is what keeps the script
@@ -179,6 +202,9 @@ public static class UpdaterScriptBuilder
         //    so a loop written with parentheses would compare the value the
         //    counter had on entry, forever.
         //  - robocopy exit codes 0..7 mean success (8+ = failures).
+        //  - /IS /IT /IM include same, tweaked and modified files (different NTFS
+        //    change times). Size and last-write time do not prove equal content,
+        //    for either the payload or the restore; all three classes must copy.
         //  - On copy failure the old exe is restarted anyway (best effort) and
         //    staging is left behind for diagnosis.
         //  - Redirection is written BEFORE the command (`>>"%DCLOG%" echo …`) so
@@ -191,7 +217,8 @@ public static class UpdaterScriptBuilder
             : string.Empty;
 
         return "@echo off\r\n"
-               + "setlocal\r\n"
+               + "chcp 65001 >nul\r\n"
+               + "setlocal EnableExtensions DisableDelayedExpansion\r\n"
                + "rem DotCharter self-updater (generated). Waits for the app to exit,\r\n"
                + "rem copies the staged update over the install dir and restarts.\r\n"
                + "rem Every step is recorded in the log file below.\r\n"
@@ -199,8 +226,8 @@ public static class UpdaterScriptBuilder
                + $"set \"DCPROBE={probePath}\"\r\n"
                + ">\"%DCLOG%\" echo [%DATE% %TIME%] DotCharter updater started.\r\n"
                + $">>\"%DCLOG%\" echo   waiting for pid {processId}, giving up after {waitTimeoutSeconds} seconds\r\n"
-               + $">>\"%DCLOG%\" echo   payload  {payload}\r\n"
-               + $">>\"%DCLOG%\" echo   install  {install}\r\n"
+               + $">>\"%DCLOG%\" echo   payload  \"{payload}\"\r\n"
+               + $">>\"%DCLOG%\" echo   install  \"{install}\"\r\n"
                + "set DCWAIT=0\r\n"
                + ":wait_for_exit\r\n"
                + $"tasklist /FI \"PID eq {processId}\" /NH >\"%DCPROBE%\" 2>nul\r\n"
@@ -219,24 +246,88 @@ public static class UpdaterScriptBuilder
                + ":app_exited\r\n"
                + ">>\"%DCLOG%\" echo [%TIME%] app exited after %DCWAIT% seconds; copying the payload.\r\n"
                + "del /F /Q \"%DCPROBE%\" >nul 2>&1\r\n"
-               + $"robocopy \"{payload}\" \"{install}\" /E /R:5 /W:2 /NFL /NDL /NP >>\"%DCLOG%\" 2>&1\r\n"
+               + $"set \"DCBACKUP={backupDir}\"\r\n"
+               + $"set \"DCLIST={listPath}\"\r\n"
+               + $"set \"DCNEW={newPath}\"\r\n"
+               + "rd /S /Q \"%DCBACKUP%\" >nul 2>&1\r\n"
+               + "type nul >\"%DCNEW%\"\r\n"
+               + "set DCBKFAIL=0\r\n"
+               + $"dir /S /B /A-D \"{payload}\" >\"%DCLIST%\" 2>nul\r\n"
+               + "for /F \"usebackq delims=\" %%F in (\"%DCLIST%\") do (\r\n"
+               + "set \"DCABS=%%F\"\r\n"
+               + "call :backup_one\r\n"
+               + ")\r\n"
+               + "del /F /Q \"%DCLIST%\" >nul 2>&1\r\n"
+               + "if %DCBKFAIL% EQU 1 goto backup_failed\r\n"
+               + ">>\"%DCLOG%\" echo [%TIME%] backed up the files the payload replaces.\r\n"
+               + $"robocopy \"{payload}\" \"{install}\" /E /IS /IT /IM /R:5 /W:2 /NFL /NDL /NP >>\"%DCLOG%\" 2>&1\r\n"
                + "set DCRC=%ERRORLEVEL%\r\n"
                + ">>\"%DCLOG%\" echo [%TIME%] robocopy exit code %DCRC% - 0 to 7 mean success, 8 and above mean failure.\r\n"
                + "if %DCRC% GEQ 8 goto copy_failed\r\n"
                + removals
                + removalNote
+               + "rd /S /Q \"%DCBACKUP%\" >nul 2>&1\r\n"
+               + "del /F /Q \"%DCNEW%\" >nul 2>&1\r\n"
                + $"rd /S /Q \"{staging}\" >nul 2>&1\r\n"
                + $"del /F /Q \"{zipPath}\" >nul 2>&1\r\n"
                + $"del /F /Q \"{statePath}\" >nul 2>&1\r\n"
-               + $">>\"%DCLOG%\" echo [%TIME%] update applied; restarting {exeName}.\r\n"
+               + $">>\"%DCLOG%\" echo [%TIME%] update applied; restarting \"{Esc(exeName)}\".\r\n"
                + $"start \"\" \"{exePath}\"\r\n"
                + "(goto) 2>nul & del \"%~f0\"\r\n"
-               + ":copy_failed\r\n"
-               + ">>\"%DCLOG%\" echo [%TIME%] COPY FAILED - the install was left on the old version.\r\n"
-               + ">>\"%DCLOG%\" echo   Staging and this script were kept for diagnosis; restarting the old build.\r\n"
-               + $"start \"\" \"{exePath}\"\r\n"
-               + $"exit /B {ExitCopyFailed}\r\n";
+               + FailureLabels(install, exePath, backupLength);
     }
 
+    /// <summary>The failure labels and the per-file backup subroutine: restore on a failed copy, keep everything on a failed restore or backup.</summary>
+    private static string FailureLabels(string install, string exePath, int backupLength)
+        => ":copy_failed\r\n"
+            + ">>\"%DCLOG%\" echo [%TIME%] COPY FAILED - robocopy exit code %DCRC%. Some files may already be new; restoring the backup.\r\n"
+            + $"robocopy \"%DCBACKUP%\" \"{install}\" /E /IS /IT /IM /R:3 /W:1 /NFL /NDL /NP >>\"%DCLOG%\" 2>&1\r\n"
+            + "set DCRRC=%ERRORLEVEL%\r\n"
+            + ">>\"%DCLOG%\" echo [%TIME%] restore robocopy exit code %DCRRC%.\r\n"
+            + "if %DCRRC% GEQ 8 goto restore_failed\r\n"
+            + $"for /F \"usebackq delims=\" %%N in (\"%DCNEW%\") do del /F /Q \"{install}\\%%~N\" >nul 2>&1\r\n"
+            + "rd /S /Q \"%DCBACKUP%\" >nul 2>&1\r\n"
+            + "del /F /Q \"%DCNEW%\" >nul 2>&1\r\n"
+            + ">>\"%DCLOG%\" echo [%TIME%] RESTORED - every replaced file is back and files the update added were removed; the install is on the old version.\r\n"
+            + ">>\"%DCLOG%\" echo   Staging, the pending state and this script were kept; restarting the old build.\r\n"
+            + $"start \"\" \"{exePath}\"\r\n"
+            + $"exit /B {ExitCopyFailed}\r\n"
+            + ":restore_failed\r\n"
+            + ">>\"%DCLOG%\" echo [%TIME%] RESTORE FAILED - the install is a MIX of old and new files.\r\n"
+            + ">>\"%DCLOG%\" echo   The backup was kept in \"%DCBACKUP%\"; staging and the pending state were kept so the update can be finished.\r\n"
+            + $"start \"\" \"{exePath}\"\r\n"
+            + $"exit /B {ExitRestoreFailed}\r\n"
+            + ":backup_failed\r\n"
+            + ">>\"%DCLOG%\" echo [%TIME%] BACKUP FAILED - nothing was copied; the install is untouched on the old version.\r\n"
+            + ">>\"%DCLOG%\" echo   Staging, the pending state and this script were kept; restarting the old build.\r\n"
+            + "rd /S /Q \"%DCBACKUP%\" >nul 2>&1\r\n"
+            + $"start \"\" \"{exePath}\"\r\n"
+            + $"exit /B {ExitCopyFailed}\r\n"
+            // Subroutine: copies ONE file the payload is about to replace into the
+            // backup, or records it as new. No arguments: `call` would expand a
+            // percent sign in a path a second time, so the path travels in DCABS.
+            + ":backup_one\r\n"
+            + $"set \"DCREL=%DCABS:~{backupLength}%\"\r\n"
+            + $"if exist \"{install}\\%DCREL%\" goto backup_copy\r\n"
+            + ">>\"%DCNEW%\" echo \"%DCREL%\"\r\n"
+            + "exit /B 0\r\n"
+            + ":backup_copy\r\n"
+            + "for %%D in (\"%DCBACKUP%\\%DCREL%\") do if not exist \"%%~dpD.\" mkdir \"%%~dpD\" >nul 2>&1\r\n"
+            + $"copy /Y \"{install}\\%DCREL%\" \"%DCBACKUP%\\%DCREL%\" >nul 2>&1\r\n"
+            + "if errorlevel 1 set DCBKFAIL=1\r\n"
+            + "exit /B 0\r\n";
+
     private static string TrimDir(string path) => path.TrimEnd('\\', '/');
+
+    /// <summary>Makes a path safe to embed in the script: cmd expands <c>%NAME%</c>
+    /// in a batch file, so a literal percent sign is written <c>%%</c>. The
+    /// result MUST stay inside double quotes, with delayed expansion disabled.
+    /// Quotes and line breaks cannot occur in Windows paths and would escape
+    /// that boundary, so refuse them rather than generating executable text.</summary>
+    private static string Esc(string text)
+    {
+        if (text.IndexOfAny(['"', '\r', '\n', '\0']) >= 0)
+            throw new ArgumentException("A batch path cannot contain quotes, line breaks or null characters.", nameof(text));
+        return text.Replace("%", "%%", StringComparison.Ordinal);
+    }
 }

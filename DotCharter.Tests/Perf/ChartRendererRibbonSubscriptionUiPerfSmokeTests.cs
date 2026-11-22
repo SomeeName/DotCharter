@@ -31,7 +31,7 @@ public sealed class ChartRendererRibbonSubscriptionUiPerfSmokeTests
         await HeadlessSessionFixture.Dispatch(() =>
         {
             var editor = CreateEditor(out var arrangement);
-            var renderer = new ChartRenderer { Editor = editor };
+            var renderer = new ChartRenderer { Editor = editor, Width = 640, Height = 320 };
             var ribbon = editor.TrackContexts.GetOrCreate(arrangement).Ribbon;
 
             var host = new Panel { Children = { renderer } };
@@ -40,6 +40,8 @@ public sealed class ChartRendererRibbonSubscriptionUiPerfSmokeTests
             try
             {
                 window.UpdateLayout();
+                Assert.True(renderer.DesiredSize is { Width: > 0, Height: > 0 });
+                Assert.True(renderer.Bounds is { Width: > 0, Height: > 0 });
 
                 var before = renderer.RibbonChangeNotifications;
                 ribbon.ShowPhrases = !ribbon.ShowPhrases;

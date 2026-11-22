@@ -95,10 +95,13 @@ public sealed class StemMixerGuitarRolesTests : IDisposable
         var (vm, audio, ui) = Mixer(project, path, roles);
         await StemMixerSettle.Async(() => audio.StemLoadCalls.Count >= 1 && ui.Read(() => vm.GuitarRoles!.IsWorking));
 
+        // #607: the check's WHOLE continuation (the assessment and its dispatch) is
+        // awaited, not the fake's counter plus a few milliseconds.
+        var check = ui.Read(() => vm.GuitarRoles!.Background);
         vm.Dispose();
         roles.AssessGate.SetResult();
-        await StemMixerSettle.Async(() => Volatile.Read(ref roles.Assessed) == 1);
-        for (var i = 0; i < 20; i++) await Task.Delay(1, TestContext.Current.CancellationToken);
+        await BoundedWait.ForAsync(check, "the guitar-role check's continuation", TestContext.Current.CancellationToken);
+        Assert.Equal(1, Volatile.Read(ref roles.Assessed));
 
         Assert.True(ui.Read(() => vm.GuitarRoles!.IsWorking), "the check's result was dispatched after Dispose");
         Assert.False(ui.Read(() => vm.GuitarRoles!.CanToggle));

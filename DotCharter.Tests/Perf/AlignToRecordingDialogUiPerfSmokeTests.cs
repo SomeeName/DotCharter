@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Dialogs;
 using DotCharter.Presentation.Fakes;
+using DotCharter.Presentation.Fakes.Dialogs;
 using DotCharter.Presentation.Screens.Dialogs;
 using DotCharter.Tone.Audio.Abstractions;
 using DotCharter.Tests.Analysis;
@@ -16,11 +17,13 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DotCharter.Tests.Perf;
 
 /// <summary>
-///     Tempo map ▸ Align to recording (#784), built the way the app builds it: a real
+///     Tempo map ▸ Fit the tab's tempo to the recording (#784, #499), built the way the app builds it: a real
 ///     <see cref="DialogHost" /> inside the real <see cref="DialogContainerView" />, in a shown window,
 ///     laid out. Every part must MEASURE, the card must fit 1280x720 with a 30-section song, and on the
 ///     REAL view model — analysed against a synthetic recording — every section row is laid out and
-///     unticking one flows back to the view model through the binding.
+///     unticking one flows back to the view model through the binding. On a chart without notes the
+///     problem line says what the tool needs; a section without notes has no tick box and prints its
+///     reason; a result in which nothing matched is one line and a link that opens the rows.
 /// </summary>
 [Collection("HeadlessUI")]
 public sealed class AlignToRecordingDialogUiPerfSmokeTests : IDisposable
@@ -69,6 +72,87 @@ public sealed class AlignToRecordingDialogUiPerfSmokeTests : IDisposable
                 boxes[0].IsChecked = false;
                 Dispatcher.UIThread.RunJobs();
                 Assert.False(vm.Sections[0].IsApplied);
+            });
+        }, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task OnAChartWithoutNotes_TheRealDialogSaysWhatTheToolNeeds_AndListsNothing()
+    {
+        var (h, service, audio) = RecordingAlignmentProject.Build(new RecordingAlignmentFixture(), _dir);
+        h.Project.Arrangements[0].Levels[0].Notes.Clear();
+        var vm = new AlignToRecordingViewModel(h.State, service, new Playback(audio),
+            new DialogBasics(FakeLocalization.English(), new FakeAppLogger()));
+        await ((IAsyncRelayCommand)vm.AnalyzeCommand).ExecuteAsync(null);
+
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            WithOpenDialog(() => vm, view =>
+            {
+                AssertLaidOut("no notes", view);
+                var problem = view.FindControl<TextBlock>("ProblemNote")!;
+                Assert.True(problem.IsVisible);
+                Assert.Equal(FakeLocalization.English()["Dialog_AlignToRecording_NeedsNotes"], problem.Text);
+                Assert.True(problem.Bounds is { Width: > 1, Height: > 1 }, $"the problem line laid out {problem.Bounds}");
+                Assert.False(view.FindControl<Border>("SectionList")!.IsVisible);
+                Assert.False(view.FindControl<Control>("SectionsToggle")!.IsVisible);
+                Assert.False(view.FindControl<Button>("ApplyButton")!.IsEffectivelyEnabled);
+            });
+        }, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ASectionWithoutNotes_HasNoTickBox_PrintsItsReason_AndItsTitleLinesUpWithTheOthers()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var screen = FakeAlignToRecordingScreen.Default();
+            var silent = Assert.Single(screen.Sections, s => !s.CanApply);
+            WithOpenDialog(() => screen, view =>
+            {
+                var list = view.FindControl<Border>("SectionList")!;
+                var boxes = list.GetVisualDescendants().OfType<CheckBox>().Where(b => b.IsVisible).ToList();
+                Assert.Equal(screen.Sections.Count(s => s.CanApply), boxes.Count);
+                Assert.DoesNotContain(boxes, b => ReferenceEquals(b.DataContext, silent));
+
+                var texts = list.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).ToList();
+                var reason = Assert.Single(texts, t => t.Text == silent.SkipReason);
+                Assert.True(reason.Bounds is { Width: > 1, Height: > 1 }, $"the reason laid out {reason.Bounds}");
+
+                var titles = texts.Where(t => screen.Sections.Any(s => s.Title == t.Text)).ToList();
+                Assert.Equal(screen.Sections.Count, titles.Count);
+                var lefts = titles.Select(t => Math.Round(t.TranslatePoint(default, list)!.Value.X)).Distinct().ToList();
+                Assert.True(lefts.Count == 1, "the titles start at " + string.Join(", ", lefts));
+                var heights = titles.Select(t => Math.Round(t.FindAncestorOfType<Grid>()!.Bounds.Height)).Distinct().ToList();
+                Assert.True(heights.Count == 1, "the rows are " + string.Join(", ", heights) + " tall");
+            });
+        }, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task AWeakMatch_IsOneLineAndALink_AndTheLinkOpensTheRows()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var screen = FakeAlignToRecordingScreen.WeakMatch();
+            WithOpenDialog(() => screen, view =>
+            {
+                var list = view.FindControl<Border>("SectionList")!;
+                var toggle = view.FindControl<Avalonia.Controls.Primitives.ToggleButton>("SectionsToggle")!;
+                var problem = view.FindControl<TextBlock>("ProblemNote")!;
+                Assert.True(problem.IsVisible && problem.Bounds is { Width: > 1, Height: > 1 }, $"the result line laid out {problem.Bounds}");
+                Assert.True(toggle.IsVisible && toggle.Bounds is { Width: > 1, Height: > 1 }, $"the link laid out {toggle.Bounds}");
+                Assert.False(list.IsVisible);
+                Assert.False(view.FindControl<TextBlock>("SummaryNote")!.IsVisible);
+
+                toggle.IsChecked = true;
+                Dispatcher.UIThread.RunJobs();
+                TopLevel.GetTopLevel(view)!.UpdateLayout();
+
+                Assert.True(screen.ShowSections);
+                Assert.True(list.IsVisible && list.Bounds is { Width: > 1, Height: > 1 }, $"the opened list laid out {list.Bounds}");
+                Assert.Contains(list.GetVisualDescendants().OfType<CheckBox>(), b => b.Bounds is { Width: > 1, Height: > 1 });
+                AssertLaidOut("weak match, rows open", view);
             });
         }, TestContext.Current.CancellationToken);
     }

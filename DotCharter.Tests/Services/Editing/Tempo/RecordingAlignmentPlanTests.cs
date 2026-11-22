@@ -8,6 +8,29 @@ namespace DotCharter.Tests.Services.Editing.Tempo;
 public sealed class RecordingAlignmentPlanTests
 {
     [Fact]
+    public void UnsortedLevels_UseTheGreatestDifficultyForAvailabilityAndEvents()
+    {
+        var project = Project(8);
+        var arrangement = project.Arrangements[0];
+        var hardest = arrangement.Levels[0];
+        hardest.DifficultyIndex = 10;
+        hardest.Notes.Add(Note(1, 0, 5));
+        arrangement.Levels.Add(new ChartLevel { DifficultyIndex = 0 });
+
+        Assert.True(RecordingAlignmentPlan.HasNotes(project));
+        var plan = RecordingAlignmentPlan.Build(project, RecordingAlignmentRange.WholeSong, true);
+        Assert.Equal(1, plan.NotesInRange);
+        var sound = Assert.Single(plan.Events);
+        Assert.Equal(1.0, sound.BeatPosition);
+        Assert.Equal([45], sound.Midi);
+
+        hardest.Notes.Clear();
+        arrangement.Levels[1].Notes.Add(Note(2, 0, 7));
+        Assert.False(RecordingAlignmentPlan.HasNotes(project));
+        Assert.Empty(RecordingAlignmentPlan.ExpectedEvents(project));
+    }
+
+    [Fact]
     public void TheRange_FixesEveryBeatOutsideIt_AndKeptAnchorsInside()
     {
         var project = Project(32);
@@ -50,6 +73,46 @@ public sealed class RecordingAlignmentPlanTests
         Assert.Equal([28, 45], events[0].Midi);
         Assert.Equal(2.5, events[1].BeatPosition);
         Assert.Empty(events[1].Midi);
+    }
+
+    [Fact]
+    public void HasNotes_IsWhatTheAlignerCanMatch_ANoteOrChordOfAnInstrumentalArrangement()
+    {
+        var project = Project(8);
+        Assert.False(RecordingAlignmentPlan.HasNotes(project));
+
+        var vocals = new Arrangement { Name = "Vocals", ArrangementType = ArrangementType.Vocal };
+        vocals.Levels.Add(new ChartLevel());
+        vocals.Levels[0].Notes.Add(Note(3, 0, 5));
+        project.Arrangements.Add(vocals);
+        project.Arrangements.Add(new Arrangement { Name = "No levels" });
+        Assert.False(RecordingAlignmentPlan.HasNotes(project));
+
+        var bass = new Arrangement { Name = "Bass", ArrangementType = ArrangementType.Bass };
+        bass.Levels.Add(new ChartLevel());
+        bass.Levels[0].Chords.Add(new Chord { Position = new FractionalPosition(2) });
+        project.Arrangements.Add(bass);
+        Assert.True(RecordingAlignmentPlan.HasNotes(project));
+
+        bass.Levels[0].Chords.Clear();
+        project.Arrangements[0].Levels[0].Notes.Add(Note(1, 0, 5));
+        Assert.True(RecordingAlignmentPlan.HasNotes(project));
+    }
+
+    [Fact]
+    public void NotesInRange_CountsOnlyTheSoundsOnBeatsInsideTheRange()
+    {
+        var project = Project(32);
+        var notes = project.Arrangements[0].Levels[0].Notes;
+        notes.Add(Note(1, 0, 5));
+        notes.Add(Note(9, 0, 5));
+        notes.Add(new GuitarNote { Position = new FractionalPosition(9, new Fraction(1, 2)), StringIndex = 0, Fret = 7 });
+        project.Beats[9].IsAnchor = true;
+
+        Assert.Equal(3, RecordingAlignmentPlan.Build(project, RecordingAlignmentRange.WholeSong, true).NotesInRange);
+        Assert.Equal(2, RecordingAlignmentPlan.Build(project, RecordingAlignmentRange.FromBarNumber(3), true).NotesInRange);
+        Assert.Equal(1, RecordingAlignmentPlan.Build(project, RecordingAlignmentRange.Span(0, 2000), true).NotesInRange);
+        Assert.Equal(0, RecordingAlignmentPlan.Build(project, RecordingAlignmentRange.FromBarNumber(4), true).NotesInRange);
     }
 
     [Fact]

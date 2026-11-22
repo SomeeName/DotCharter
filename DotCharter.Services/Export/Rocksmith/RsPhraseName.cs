@@ -89,8 +89,8 @@ public static class RsPhraseName
 
     /// <summary>
     ///     Sanitizes a whole phrase list, index for index, so that every result is
-    ///     legal and no REWRITTEN name equals any other result (ignoring case, as
-    ///     phrase ids are resolved). Legal names keep their spelling untouched —
+    ///     legal and no REWRITTEN or truncated name equals any other result (ignoring case, as
+    ///     phrase ids are resolved). Legal names within the limit keep their spelling untouched —
     ///     even a duplicate one, so an imported chart still round-trips — and claim
     ///     their spelling first; a rewritten name that collides gets a numeric
     ///     suffix. <paramref name="maxLength" /> is the target format's limit
@@ -104,8 +104,8 @@ public static class RsPhraseName
 
         for (var i = 0; i < names.Count; i++)
         {
-            if (!IsLegal(names[i])) continue;
-            result[i] = Cut(names[i], maxLength);
+            if (!IsLegal(names[i]) || names[i].Length > maxLength) continue;
+            result[i] = names[i];
             taken.Add(result[i]!);
         }
 

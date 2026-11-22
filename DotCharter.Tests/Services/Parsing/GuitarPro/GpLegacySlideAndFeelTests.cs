@@ -25,6 +25,67 @@ namespace DotCharter.Tests.Services.Parsing.GuitarPro;
 /// </summary>
 public sealed class GpLegacySlideAndFeelTests
 {
+    [Fact]
+    public void LegacySwing_OddMeterDownbeatsStayAtTheirMeasureStarts()
+    {
+        var bars = new[]
+        {
+            new FxMeasure { Num = 3, Den = 8, TripletFeel = 1 }.AddVoice(FxBeat.Note(0, 0, 5, dotted: true)),
+            new FxMeasure { Num = 3, Den = 8, TripletFeel = 1 }.AddVoice(FxBeat.Note(0, 0, 7, dotted: true))
+        };
+
+        var result = Import(LegacyGpFixtureBuilder.WriteFile("5.10", bars));
+        var notes = Assert.Single(Assert.Single(result.Arrangements).Levels).Notes;
+
+        // The importer maps quarter-note position 1.5 to beat 3 on the eighth-note grid.
+        Assert.Equal([FractionalPosition.Zero, new FractionalPosition(3)], notes.Select(n => n.Position));
+        Assert.All(notes, note => Assert.Equal(new Fraction(3, 2), note.NotationDuration));
+    }
+
+    [Theory]
+    [InlineData("3.00", 1, 1, 2, 3)]
+    [InlineData("4.06", 1, 1, 2, 3)]
+    [InlineData("5.00", 1, 1, 2, 3)]
+    [InlineData("5.10", 2, 2, 1, 3)]
+    public void LegacySwing_MovesOffbeatsButKeepsAuthoredRhythm(
+        string version, int feel, int duration, int numerator, int denominator)
+    {
+        var bar = new FxMeasure { TripletFeel = feel }.AddVoice(
+            FxBeat.Note(duration, 0, 5), FxBeat.Note(duration, 0, 7));
+        var result = Import(LegacyGpFixtureBuilder.WriteFile(version, [bar], globalShuffle: true));
+        var notes = Assert.Single(result.Arrangements).Levels[0].Notes;
+
+        var offbeat = Assert.Single(notes, n => n.Fret == 7);
+        Assert.Equal(new FractionalPosition(0, new Fraction(numerator, denominator)), offbeat.Position);
+        Assert.Equal(new Fraction(1, duration == 1 ? 2 : 4), offbeat.NotationDuration);
+    }
+
+    [Fact]
+    public void LegacySwing_ExplicitTupletsDoNotSwing()
+    {
+        var bar = new FxMeasure { TripletFeel = 1 }.AddVoice(
+            FxBeat.RestBeat(1), FxBeat.Note(2, 0, 7, tuplet: 3));
+        var result = Import(LegacyGpFixtureBuilder.WriteFile("5.10", [bar]));
+
+        var note = Assert.Single(Assert.Single(result.Arrangements).Levels[0].Notes);
+        Assert.Equal(new FractionalPosition(0, new Fraction(1, 2)), note.Position);
+    }
+
+    [Fact]
+    public void LegacySwing_SlideSustainReachesTheSwungTarget()
+    {
+        var bar = new FxMeasure { TripletFeel = 1 }.AddVoice(
+            FxBeat.Chord(1, new FxNote(0, 5, Slide: 1)), FxBeat.Note(1, 0, 7));
+        var result = Import(LegacyGpFixtureBuilder.WriteFile("5.10", [bar]));
+        var notes = Assert.Single(result.Arrangements).Levels[0].Notes;
+        var origin = Assert.Single(notes, n => n.Fret == 5);
+        var target = Assert.Single(notes, n => n.Fret == 7);
+
+        Assert.Equal(new FractionalPosition(0, new Fraction(2, 3)), origin.Sustain);
+        Assert.Equal(target.Position, origin.Position + origin.Sustain);
+        Assert.Equal(new Fraction(1, 2), origin.NotationDuration);
+    }
+
     private static GpImportResult Import(string path)
     {
         try

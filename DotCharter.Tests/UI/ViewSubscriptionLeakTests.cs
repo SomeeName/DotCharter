@@ -123,9 +123,9 @@ public sealed class ViewSubscriptionLeakGuardTests
     ///     same attach-time subscription WITHOUT overriding anything — wiring
     ///     <c>AttachedToVisualTree += …</c> from its constructor instead — and
     ///     the reflection sweep looks only at method overrides, so those files
-    ///     were never inspected by anything. Five controls use that form today
-    ///     (BendEditorControl, AmpFxRigView, VstRackView, MixPopoverView,
-    ///     ToolsPopoverView); all five happen to pair, and nothing was making
+    ///     were never inspected by anything. Four controls use that form today
+    ///     (AmpFxRigView, VstRackView, MixPopoverView, ToolsPopoverView; the old
+    ///     bend graph went with #751); all four happen to pair, and nothing was making
     ///     them. A pane view re-created on every float/redock that only ever
     ///     subscribes leaks one handler per cycle, silently and forever.
     /// </summary>

@@ -1,10 +1,12 @@
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using DotCharter.UI.Gallery;
 using DotCharter.UI.Gallery.Pages;
+using SkiaSharp;
 
 namespace DotCharter.Tests.Perf;
 
@@ -36,9 +38,6 @@ namespace DotCharter.Tests.Perf;
 [Collection("HeadlessUI")]
 public sealed class GalleryPagesUiPerfSmokeTests
 {
-    private const int WindowWidth = 1600;
-    private const int WindowHeight = 900;
-
     public static IEnumerable<object[]> PagesAndVariants() =>
         from page in GalleryCatalog.All
         from variant in page.Variants
@@ -55,7 +54,7 @@ public sealed class GalleryPagesUiPerfSmokeTests
         await HeadlessSessionFixture.Dispatch(() =>
         {
             var control = variant.Create();
-            var window = new Window { Width = WindowWidth, Height = WindowHeight, Content = control };
+            var window = GalleryCapture.CreateWindow(control);
             window.Show();
             try
             {
@@ -76,20 +75,38 @@ public sealed class GalleryPagesUiPerfSmokeTests
                     $"{section}/{pageName}/{variantName}: only {measured} visual descendants measured " +
                     "non-zero — the page's content collapsed inside a root the host still stretched");
 
-                var dir = Environment.GetEnvironmentVariable("DOTCHARTER_RIG_CAPTURE_DIR");
-                if (!UiSweepRunner.CaptureEnabled || string.IsNullOrWhiteSpace(dir)) return;
+                if (!UiSweepRunner.CaptureEnabled) return;
 
-                Directory.CreateDirectory(dir);
+                var checkGround = section == "Settings" && pageName == "General" && variantName == "AdvancedOpen";
+                var dir = Environment.GetEnvironmentVariable("DOTCHARTER_RIG_CAPTURE_DIR");
+                if (!checkGround && string.IsNullOrWhiteSpace(dir)) return;
+
                 using var frame = window.CaptureRenderedFrame();
                 Assert.NotNull(frame);
-                frame.Save(Path.Combine(dir, GalleryCapture.FileName(page, variant)),
-                    new PngBitmapEncoderOptions());
+                if (!string.IsNullOrWhiteSpace(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                    frame.Save(Path.Combine(dir, GalleryCapture.FileName(page, variant)), new PngBitmapEncoderOptions());
+                }
+
+                if (checkGround) AssertGroundPixel(window, frame);
             }
             finally
             {
                 window.Close();
             }
         }, TestContext.Current.CancellationToken);
+    }
+
+    private static void AssertGroundPixel(Window window, Bitmap frame)
+    {
+        Assert.True(window.TryFindResource("AppBackground", out var resource));
+        var ground = Assert.IsAssignableFrom<ISolidColorBrush>(resource).Color;
+        using var png = new MemoryStream();
+        frame.Save(png, new PngBitmapEncoderOptions());
+        using var pixels = SKBitmap.Decode(png.ToArray());
+        Assert.NotNull(pixels);
+        Assert.Equal(new SKColor(ground.R, ground.G, ground.B, ground.A), pixels.GetPixel(0, 0));
     }
 
     /// <summary>

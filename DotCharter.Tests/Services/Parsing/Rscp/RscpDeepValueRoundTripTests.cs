@@ -97,6 +97,16 @@ internal static class RichProjectFactory
         project.Chart.ArrangementId = 3;
         project.Chart.Artist = "The Artist";
         project.Chart.ArtistSort = "Artist, The";
+        project.Chart.AudioVolume = -6.4;
+        project.Chart.PreviewVolume = -5.1;
+        project.Chart.AudioVolumeSignature = "123:abcdef0123456789";
+        project.Chart.PreviewVolumeSignature = "123:abcdef0123456789@4000";
+        project.Chart.AudioVolumeManual = true;
+        project.Chart.PreviewVolumeManual = true;
+        project.Chart.PreviewStartMs = 91_500.5;
+        project.Chart.TitleSort = "Title, The";
+        project.Chart.AlbumSort = "Album, The";
+        project.Chart.DlcKey = "DeepRoundTrip";
         project.Chart.BeatsPerMinute = 137.5;
         project.Chart.ChartFormatVersion = 3;
         // NOT "GUITAR" — that is the class default, and a fixture value equal to
@@ -119,6 +129,7 @@ internal static class RichProjectFactory
         project.Chart.Time = 4321.25;
         project.Chart.KeyAccidentals = -3;
         project.Chart.KeyIsMinor = true;
+        project.Chart.KeyLocked = true;
 
         // A beat's Bpm is DERIVED on load from the gap to the next beat folded
         // with its own NoteDenominator, so the grid has to be internally
@@ -136,6 +147,12 @@ internal static class RichProjectFactory
                 NoteDenominator = i < 16 ? 4 : 8
             });
         }
+
+        project.GpSourceBars.Add(new GpSourceBar
+        {
+            StartBeat = 4, BeatCount = 4, BeatsInMeasure = 4, NoteDenominator = 4,
+            WrittenBar = 3, Pass = 2, EndingMask = 3, StartsBlock = true, EndsBlock = true, Marker = "Verse"
+        });
 
         project.Stems.Add(new Stem
         {
@@ -208,6 +225,9 @@ internal static class RichProjectFactory
             EndPosition = new FractionalPosition(4, new Fraction(1, 2)),
             Text = "hel",
             IsWordPart = true,
+            AlignmentConfidence = 0.03125,
+            IsSustainShortened = true,
+            ReviewReasons = LyricReviewReason.LowScore | LyricReviewReason.Gap,
             Note = 62
         });
         phrase.Lyrics.Add(new LyricEvent
@@ -397,6 +417,7 @@ internal static class RichProjectFactory
             Position = new FractionalPosition(3, new Fraction(1, 6)),
             EndPosition = new FractionalPosition(4),
             TemplateId = 1,
+            GhostMask = 1 << 5,
             Name = "Gadd9"
         });
         level.FretHandMutes.Add(new FretHandMute(new FractionalPosition(6, new Fraction(1, 2))));

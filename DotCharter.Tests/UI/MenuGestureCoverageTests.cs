@@ -47,8 +47,6 @@ public sealed class MenuGestureCoverageTests
     /// </summary>
     private static readonly Dictionary<string, (string[] Paths, string Reason)> Equivalents = new(StringComparer.Ordinal)
     {
-        ["PlayPause"] = (["Transport.PlayCommand", "Transport.PauseCommand"],
-            "one chord toggles; the toolbar shows the two halves as two buttons"),
         ["Undo"] = (["ChartEditor.UndoCommand"], "one HistoryManager: the menu steps it directly, the key through IGlobalEditingCoordinator.Undo"),
         ["Redo"] = (["ChartEditor.RedoCommand"], "one HistoryManager: the menu steps it directly, the key through IGlobalEditingCoordinator.Redo"),
         ["Cut"] = (["CutCommand"], "the shell's Cut is the same copy + delete the registrar writes as a block body"),
@@ -349,7 +347,7 @@ public sealed class MenuGestureCoverageTests
                 // The registrar writing out the very expression a shell command runs is the
                 // same verb by a second door (snap, zoom and bookmarks call the coordinator
                 // directly) — the menu row bound to that command still owes the chord.
-                var loopLocal = Regex.Match(key, @"Key\.D\d\s*\+\s*(\w+)\)");
+                var loopLocal = Regex.Match(key, @"\.WithDigit\(\s*(\w+)");
                 var local = loopLocal.Success ? loopLocal.Groups[1].Value : null;
                 if (bodies.TryGetValue(NormalizeBody(action, local), out var same)) paths.Add(same);
                 foreach (var p in paths.ToList())
@@ -362,7 +360,7 @@ public sealed class MenuGestureCoverageTests
                     map.Registered.Add(chord.Groups[1].Value);
                     if (paths.Count > 0) map.ChordToTargets[chord.Groups[1].Value] = paths;
                 }
-                else if (Regex.Match(key, @"_projectState\.Keybinds\.(\w+)\.Modifiers") is { Success: true } family)
+                else if (Regex.Match(key, @"_projectState\.Keybinds\.(\w+)\.WithDigit\(") is { Success: true } family)
                 {
                     map.Registered.Add(family.Groups[1].Value);
                     foreach (var p in paths) map.Families[p] = family.Groups[1].Value;

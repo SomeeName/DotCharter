@@ -54,15 +54,23 @@ public sealed class PlayerDspChains : IPlayerDspChains
     ///         catches that and falls back to <see cref="NullDspChainService" />
     ///         for every seat, exactly as the single-chain path always did.
     ///     </para>
+    ///     <para>
+    ///         <paramref name="prefetchedCatalogue" /> is the same catalogue already read
+    ///         on the startup worker (<see cref="NativeEnginePrefetch" />); seat 0
+    ///         adopts it instead of reading it again on the calling thread.
+    ///     </para>
     /// </summary>
-    public static PlayerDspChains CreateNative(int seats, IAppLogger? logger = null)
+    public static PlayerDspChains CreateNative(int seats, IAppLogger? logger = null,
+        JuceDspChainService? prefetchedCatalogue = null)
     {
         var count = Math.Max(1, seats);
         var list = new List<IDspChainService>(count);
         for (var p = 0; p < count; p++)
         {
             var svc = new JuceDspChainService(logger, p);
-            if (p == 0) svc.LoadCatalog(); // static native data — one load serves every seat
+            // Static native data: one load serves every seat.
+            if (p == 0 && prefetchedCatalogue is not null) svc.AdoptPrefetchedCatalog(prefetchedCatalogue);
+            else if (p == 0) svc.LoadCatalog();
             list.Add(svc);
         }
 

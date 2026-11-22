@@ -39,6 +39,27 @@ public sealed class ChartDiffViewModelTests
         ((CommunityToolkit.Mvvm.Input.IAsyncRelayCommand)vm.BrowseFileCommand).ExecuteAsync(null);
 
     [Fact]
+    public async Task Difference_positions_preserve_elapsed_hours()
+    {
+        var mine = Arrangement("Lead", 5);
+        var other = new ChartProject();
+        other.Arrangements.Add(Arrangement("Lead", 7));
+        var project = new ChartProject();
+        project.Beats.Add(new BeatMarker { Time = 3_723_456, Bpm = 120 });
+        project.Beats.Add(new BeatMarker { Time = 3_723_956, Bpm = 120 });
+        project.Arrangements.Add(mine);
+        var state = new ProjectState { ActiveProject = project, ActiveArrangement = mine };
+        var storage = new FakeFileStorageService { NextOpenFile = @"C:\songs\other.rscp" };
+        var vm = new ChartDiffViewModel(storage, new OneShotDocuments(other), state, new FakeConfigurationService(),
+            FakeLocalization.English(), new FakeAppLogger());
+
+        await CompareAsync(vm);
+
+        Assert.NotEmpty(vm.Rows);
+        Assert.All(vm.Rows, row => Assert.Contains("1:02:03.456", row.Position, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Comparing_picks_the_same_named_arrangement_and_lists_the_difference()
     {
         var (vm, _, _) = Build();
@@ -65,6 +86,31 @@ public sealed class ChartDiffViewModelTests
 
         Assert.True(ChartEditHarness.Answer(vm.Result));
         AssertReleased(vm);
+    }
+
+    [Fact]
+    public async Task Phrase_metadata_names_the_phrase_and_localized_fields_without_a_timestamp()
+    {
+        var mine = Arrangement("Lead", 5);
+        mine.Phrases.Add("chorus");
+        mine.PhraseInfos.Add("chorus", new PhraseInfo(3, true));
+        var theirs = Arrangement("Lead", 5);
+        theirs.Phrases.Add("chorus");
+        var other = new ChartProject();
+        other.Arrangements.Add(theirs);
+        var localization = FakeLocalization.English();
+        var vm = new ChartDiffViewModel(new FakeFileStorageService { NextOpenFile = @"C:\songs\other.rscp" },
+            new OneShotDocuments(other), new ProjectState { ActiveArrangement = mine },
+            new FakeConfigurationService(), localization, new FakeAppLogger());
+
+        await CompareAsync(vm);
+
+        var row = Assert.Single(vm.Rows);
+        Assert.True(row.IsChanged);
+        Assert.Equal(localization["ChartDiff_PositionNone"], row.Position);
+        Assert.Equal(localization["ChartDiff_PhraseInfo"], row.Sound);
+        Assert.Equal(localization.Format("ChartDiff_PhraseInfoDetail", "chorus",
+            string.Join(", ", localization["ChartDiff_Field_Solo"], localization["ChartDiff_Field_MaxDifficulty"])), row.Detail);
     }
 
     [Fact]

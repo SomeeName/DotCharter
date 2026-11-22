@@ -18,6 +18,56 @@ public class EofFormatTrapTests
         return project;
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EqualCountDifferentChordBendCurves_ReportTheLoss(bool differentPosition)
+    {
+        var project = MinimalProject();
+        var arrangement = new Arrangement { Name = "Lead" };
+        var level = new ChartLevel();
+        var chord = new Chord { Position = new FractionalPosition(1) };
+        var first = new ChordNote { StringIndex = 0, Fret = 3, Sustain = new FractionalPosition(2) };
+        var second = new ChordNote { StringIndex = 1, Fret = 5, Sustain = new FractionalPosition(2) };
+        first.BendValues.Add(new BendValue(new FractionalPosition(2), 1));
+        second.BendValues.Add(new BendValue(new FractionalPosition(differentPosition ? 3 : 2), differentPosition ? 1 : 2));
+        chord.ChordNotes.Add(first);
+        chord.ChordNotes.Add(second);
+        level.Chords.Add(chord);
+        arrangement.Levels.Add(level);
+        project.Arrangements.Add(arrangement);
+
+        var result = EofExporter.Export(project);
+
+        var loss = Assert.Single(result.Report.Notes, n => n.Loss == EofLoss.ChordMixedBend);
+        Assert.Equal(EofConversionKind.Approximated, loss.Kind);
+        Assert.Equal("Lead", loss.Subject);
+        Assert.Equal(500, loss.TimeMs);
+    }
+
+    [Fact]
+    public void IdenticalChordBendCurves_DoNotReportMixedBends()
+    {
+        var project = MinimalProject();
+        var arrangement = new Arrangement { Name = "Lead" };
+        var level = new ChartLevel();
+        var chord = new Chord { Position = new FractionalPosition(1) };
+        foreach (var stringIndex in new[] { 0, 1 })
+        {
+            var note = new ChordNote { StringIndex = stringIndex, Fret = 3 + stringIndex, Sustain = new FractionalPosition(2) };
+            note.BendValues.Add(new BendValue(new FractionalPosition(2), 1));
+            chord.ChordNotes.Add(note);
+        }
+
+        level.Chords.Add(chord);
+        arrangement.Levels.Add(level);
+        project.Arrangements.Add(arrangement);
+
+        var result = EofExporter.Export(project);
+
+        Assert.DoesNotContain(result.Report.Notes, n => n.Loss == EofLoss.ChordMixedBend);
+    }
+
     // ------------------------------------------------------------------
     // Trap 1: the ID-2 global custom block's size EXCLUDES the 4-byte block
     // ID, unlike every other custom data block (eof_save_song writes the raw

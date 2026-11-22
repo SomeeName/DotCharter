@@ -24,7 +24,8 @@ internal interface IVstSandboxChannel
 /// the service must not <c>.GetAwaiter().GetResult()</c> each one, which parks a
 /// pool thread for up to 180 s per plugin load.
 /// <para>
-/// <see cref="StopForDispose"/> is the ONE synchronous wait, and it is bounded.
+/// <see cref="StopForDispose"/> bounds a single-child stop;
+/// <see cref="WaitForDispose"/> bounds the complete child group's synchronous wait.
 /// <c>SandboxBlockingWaitLintTests</c> forbids any other.
 /// </para>
 /// </summary>
@@ -112,8 +113,15 @@ internal static class VstSandboxCalls
         return finished;
     }
 
+    /// <summary>One synchronous wait over the complete child group.</summary>
+    public static bool WaitForDispose(Task stops, TimeSpan bound)
+    {
+        try { return stops.Wait(bound); }
+        catch (AggregateException) { return true; }
+    }
+
     /// <summary>A send/stop we stopped waiting for may still fault later; observe it.</summary>
-    private static void ObserveLate(Task? task)
+    internal static void ObserveLate(Task? task)
     {
         if (task is null || task.IsCompleted && !task.IsFaulted) return;
         _ = task.ContinueWith(static t => _ = t.Exception, CancellationToken.None,

@@ -16,7 +16,7 @@ namespace DotCharter.Services.Export.DlcBuilder;
 /// </remarks>
 public static class DlcBuilderBundle
 {
-    /// <summary>The bundle folder, a sibling of the project file.</summary>
+    /// <summary>The bundle folder, inside the project's export folder.</summary>
     public const string DirectoryName = "DTRS XML";
 
     /// <summary>The single showlights file, written only when the project has any.</summary>
@@ -28,7 +28,7 @@ public static class DlcBuilderBundle
         var projectDirectory = Path.GetDirectoryName(Path.GetFullPath(projectPath));
         if (string.IsNullOrWhiteSpace(projectDirectory))
             projectDirectory = Directory.GetCurrentDirectory();
-        return Path.Combine(projectDirectory, DirectoryName);
+        return Path.Combine(projectDirectory, ProjectFolderLayout.ExportFolderName, DirectoryName);
     }
 
     /// <summary><c>1_Lead_Main_RS2.xml</c>. <paramref name="id" /> is 1-based.</summary>

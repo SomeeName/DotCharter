@@ -221,12 +221,9 @@ public partial class MainWindowViewModel
     public bool IsPracticeStripVisible =>
         LivePlay.IsActive && (!IsGameplayPresentation || ShowPracticeToolsInGameplay);
 
-    private bool _preGameInspectorVisible;
-    private bool _preGamePreviewVisible;
-    private bool _preGameStemMixerVisible;
-    private bool _preGameSheetMusicVisible;
-    private bool _preGamePhraseCatalogVisible;
-    private bool _preGameAiChatVisible;
+    private GameplayPanelSnapshot _preGamePanels;
+
+    internal void ResetGameplayPanelMemory() => _preGamePanels = _preGamePanels.Reset();
 
     partial void OnIsGameplayPresentationChanged(bool value)
     {
@@ -237,12 +234,8 @@ public partial class MainWindowViewModel
 
         if (value)
         {
-            _preGameInspectorVisible = IsInspectorVisible;
-            _preGamePreviewVisible = IsPreviewVisible;
-            _preGameStemMixerVisible = IsStemMixerVisible;
-            _preGameSheetMusicVisible = IsSheetMusicVisible;
-            _preGamePhraseCatalogVisible = IsPhraseCatalogVisible;
-            _preGameAiChatVisible = IsAiChatVisible;
+            _preGamePanels = new GameplayPanelSnapshot(IsInspectorVisible, IsPreviewVisible, IsStemMixerVisible,
+                IsSheetMusicVisible, IsPhraseCatalogVisible, IsAiChatVisible);
             IsInspectorVisible = false;
             IsAiChatVisible = false;
             IsStemMixerVisible = false;
@@ -252,12 +245,12 @@ public partial class MainWindowViewModel
         }
         else
         {
-            IsInspectorVisible = _preGameInspectorVisible;
-            IsPreviewVisible = _preGamePreviewVisible;
-            IsStemMixerVisible = _preGameStemMixerVisible;
-            IsSheetMusicVisible = _preGameSheetMusicVisible;
-            IsPhraseCatalogVisible = _preGamePhraseCatalogVisible;
-            IsAiChatVisible = _preGameAiChatVisible;
+            IsInspectorVisible = _preGamePanels.InspectorVisible;
+            IsPreviewVisible = _preGamePanels.PreviewVisible;
+            IsStemMixerVisible = _preGamePanels.StemMixerVisible;
+            IsSheetMusicVisible = _preGamePanels.SheetMusicVisible;
+            IsPhraseCatalogVisible = _preGamePanels.PhraseCatalogVisible;
+            IsAiChatVisible = _preGamePanels.AiChatVisible;
         }
     }
 
@@ -413,7 +406,7 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private Task ResetLayout() => ResetLayoutAsync(ConfirmLayoutResetAsync, ApplyLayoutReset);
 
-    private void ApplyLayoutReset()
+    internal void ApplyLayoutReset()
     {
         IsInspectorVisible = true;
         IsPreviewVisible = true;
@@ -549,4 +542,8 @@ public partial class MainWindowViewModel
 
     [RelayCommand]
     private void ToggleAiChat() => IsAiChatVisible = !IsAiChatVisible;
+
+    /// <summary>Tools ▸ AI chat: shows the panel and leaves it showing (the View menu row and its key toggle it).</summary>
+    [RelayCommand]
+    private void ShowAiChat() => IsAiChatVisible = true;
 }

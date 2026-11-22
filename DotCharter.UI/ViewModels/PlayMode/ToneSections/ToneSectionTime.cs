@@ -72,7 +72,7 @@ internal static class ToneSectionTime
             // and ninety seconds here; both agree, and the colon form is how the
             // hint asks for it.
             if (!double.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out var bare) ||
-                double.IsNaN(bare) || bare < 0)
+                !double.IsFinite(bare) || bare < 0 || bare >= TimeSpan.MaxValue.TotalSeconds)
             {
                 return false;
             }
@@ -91,7 +91,7 @@ internal static class ToneSectionTime
         }
 
         if (!double.TryParse(secondsText, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) ||
-            double.IsNaN(seconds) || seconds < 0)
+            !double.IsFinite(seconds) || seconds < 0)
         {
             return false;
         }
@@ -101,7 +101,10 @@ internal static class ToneSectionTime
         // typed.
         if (seconds >= 60) return false;
 
-        value = TimeSpan.FromMinutes(minutes) + TimeSpan.FromSeconds(seconds);
+        var totalSeconds = minutes * 60.0 + seconds;
+        if (totalSeconds >= TimeSpan.MaxValue.TotalSeconds) return false;
+
+        value = TimeSpan.FromSeconds(totalSeconds);
         return true;
     }
 }

@@ -1,17 +1,18 @@
 // FrameSnapshot.Events: events, lyrics, tones, templates, anchors, beats and hand shapes - the windowed projections and the HUD's active tone.
 using DotCharter.Rendering.Data.Render;
 using DotCharter.Core.Graphics;
+using DotCharter.Core.Domain.Vocals;
 
 namespace DotCharter.Rendering.Data;
 
 public partial class FrameSnapshot
 {
-    // Cached measure-start count before the visible window (see the beat loop
-    // below). Per snapshot instance — the 2D and 3D renderers each own one.
+    // Per-snapshot measure prefix; revisions cover in-place edits.
     private object? _measurePrefixBeatsRef;
     private int _measurePrefixBeatCount = -1;
     private int _measurePrefixBeatStart = -1;
     private int _measurePrefixCount;
+    private long _measurePrefixVersion = -1;
 
     // Sticky-prefix cache for event points. Pinned badges (EventLayer.
     // DrawPinnedLabels) and the 3D HUD walk the projected events BACKWARDS
@@ -159,6 +160,7 @@ public partial class FrameSnapshot
                     Time = GetCachedPositionMs(lp.Lyrics[j].Position, beats),
                     EndTime = GetCachedPositionMs(lp.Lyrics[j].EndPosition, beats),
                     IsWordPart = lp.Lyrics[j].IsWordPart,
+                    NeedsReview = lp.Lyrics[j].ReviewReasons != LyricReviewReason.None,
                     IsHovered = ReferenceEquals(ctx.HoveredLyric, lp.Lyrics[j]),
                     IsSelected = ReferenceEquals(ctx.SelectedLyric, lp.Lyrics[j])
                 };
@@ -326,8 +328,8 @@ public partial class FrameSnapshot
     internal Func<long>? TemplateLatchClock;
 
     // Deliberately NOT windowed: templates are a lookup table, not timeline
-    // content — HighwayRenderComponent/ChordRenderer index Templates[TemplateId]
-    // directly, so array position must stay the template id. Count scales with
+    // content — renderers resolve a template through
+    // FindTemplateIndex (by Id), so the table keeps every template. Count scales with
     // unique chord shapes (bounded, ~100s), not with song length.
     private unsafe void UpdateTemplates(SnapshotUpdateContext ctx)
     {
@@ -400,9 +402,8 @@ public partial class FrameSnapshot
             var nextA = ctx.AnchorStart + i + 1 < ctx.ActiveAnchors.Count
                 ? ctx.ActiveAnchors[ctx.AnchorStart + i + 1]
                 : null;
-            var endMs = nextA != null
-                ? GetCachedPositionMs(nextA.Position, ctx.ActiveBeats)
-                : Math.Max(ctx.CurrentTimeMs + HighwaySpeedPolicy.MaxHorizonMs, timeMs + RenderingConstants.AnchorTailMaxMs);
+            var endMs = AnchorSpan.EndTimeMs(timeMs,
+                nextA != null ? GetCachedPositionMs(nextA.Position, ctx.ActiveBeats) : null, ctx.CurrentTimeMs);
 
             Anchors[i] = new RenderAnchor
             {
@@ -421,14 +422,12 @@ public partial class FrameSnapshot
         BeatCount = ctx.BeatEnd >= ctx.BeatStart && ctx.BeatEnd >= 0 ? ctx.BeatEnd - ctx.BeatStart + 1 : 0;
         EnsureCapacity(ref Beats, BeatCount);
 
-        // Measure numbers need the count of measure-starts BEFORE the window.
-        // Walking 0..BeatEnd every frame was O(all beats before the viewport)
-        // per frame — at the end of a long song, the whole grid, every frame.
-        // The prefix only changes when the window start moves or the beats
-        // collection changes (edits/undo swap the instance or its count), so
-        // recount only then; ordinary frames reuse the cached prefix.
+        // Count measure starts before the window. Cache by content revision
+        // during playback; unversioned callers recount to catch in-place edits
+        // and undo without an O(all preceding beats) walk in versioned frames.
         var beatsList = ctx.ActiveBeats;
-        if (!ReferenceEquals(beatsList, _measurePrefixBeatsRef) ||
+        if (ctx.BeatsVersion < 0 || ctx.BeatsVersion != _measurePrefixVersion ||
+            !ReferenceEquals(beatsList, _measurePrefixBeatsRef) ||
             beatsList.Count != _measurePrefixBeatCount ||
             ctx.BeatStart != _measurePrefixBeatStart)
         {
@@ -443,6 +442,7 @@ public partial class FrameSnapshot
             _measurePrefixBeatCount = beatsList.Count;
             _measurePrefixBeatStart = ctx.BeatStart;
             _measurePrefixCount = prefix;
+            _measurePrefixVersion = ctx.BeatsVersion;
         }
 
         var measureCounter = _measurePrefixCount;
@@ -481,7 +481,8 @@ public partial class FrameSnapshot
                 HasFinding = ctx.HandShapeFindings.Contains(hs),
                 IsEditTarget = ctx.EditTargetHandShapes.Contains(hs)
             };
-            if (template is { GhostMask: not 0 }) FillGhostGems(ref HandShapes[i], template, hs.Position, ctx);
+            if (template != null && hs.GetGhostMask(template) != 0)
+                FillGhostGems(ref HandShapes[i], template, hs, ctx);
         }
     }
 
@@ -490,16 +491,17 @@ public partial class FrameSnapshot
     ///     gem also sits on at the bar's start (binary search over the start-sorted sounds — a
     ///     ghost bar is rare, a level is not small).
     /// </summary>
-    private static void FillGhostGems(ref RenderHandShape bar, ChordTemplate template, FractionalPosition start,
+    private static void FillGhostGems(ref RenderHandShape bar, ChordTemplate template, HandShape shape,
         SnapshotUpdateContext ctx)
     {
         for (var s = 0; s < RenderHandShape.MaxGhostStrings; s++)
         {
-            if (!template.IsGhost(s)) continue;
+            if (!shape.IsGhost(template, s)) continue;
             bar.GhostMask |= 1 << s;
             bar.GhostFrets |= (ulong)(byte)Math.Clamp(template.Frets[s], 0, 255) << (s * 8);
         }
 
+        var start = shape.Position;
         var notes = ctx.ActiveNotes;
         for (var i = FirstAtOrAfter(notes, start); i < notes.Count && notes[i].Position == start; i++)
         {
@@ -740,36 +742,23 @@ public partial class FrameSnapshot
         if (c >= 0) ProjectShowlight(src, c, beats);
         for (var i = slStart; i <= slEnd; i++) ProjectShowlight(src, i, beats);
 
-        UpdateShowlightChip(ctx.ShowlightChipLabels);
+        UpdateShowlightChip(ctx.ShowlightChipLabels, ctx.ShowlightEditorOpen);
     }
 
-    // The editor chip's text is rebuilt only when the state at the playhead or
-    // the labels change, so an ordinary frame allocates nothing.
-    private ShowlightChipLabels? _chipLabels;
-    private int _chipFog = int.MinValue, _chipBeam = int.MinValue, _chipLaser = int.MinValue;
+    private readonly ShowlightChipState _chip = new();
 
-    private void UpdateShowlightChip(ShowlightChipLabels? labels)
+    private void UpdateShowlightChip(ShowlightChipLabels? labels, bool editorOpen)
     {
         if (labels is null)
         {
-            ShowlightChipText = string.Empty;
-            _chipLabels = null;
+            ShowlightChipText = _chip.Clear();
             return;
         }
 
         var fog = StageLights.ResolveLane(Showlights, ShowlightCount, RenderShowlightLane.Fog, CurrentTimeMs).Current;
         var beam = StageLights.ResolveLane(Showlights, ShowlightCount, RenderShowlightLane.Beams, CurrentTimeMs).Current;
         var laser = StageLights.ResolveLane(Showlights, ShowlightCount, RenderShowlightLane.Lasers, CurrentTimeMs).Current;
-        var f = fog?.Note ?? -1;
-        var b = beam?.Note ?? -1;
-        var l = laser?.Note ?? -1;
-        if (ReferenceEquals(labels, _chipLabels) && f == _chipFog && b == _chipBeam && l == _chipLaser) return;
-
-        _chipLabels = labels;
-        _chipFog = f;
-        _chipBeam = b;
-        _chipLaser = l;
-        ShowlightChipText = labels.Compose(fog?.Note, beam?.Note, laser?.Note);
+        ShowlightChipText = _chip.Update(labels, editorOpen, fog?.Note, beam?.Note, laser?.Note);
     }
 
     private void ProjectShowlight(IList<Showlight> src, int i, IList<BeatMarker> beats)

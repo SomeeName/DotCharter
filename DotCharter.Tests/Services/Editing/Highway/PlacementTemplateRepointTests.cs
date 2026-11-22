@@ -97,6 +97,66 @@ public sealed class PlacementTemplateRepointTests
         Assert.Equal(2, chord.ChordNotes.Count);
     }
 
+    [Fact]
+    public void MovingAStringAtConstantPitchRefretsItsPitchedSlideAndHistory()
+    {
+        var h = new Harness();
+        var note = new GuitarNote
+        {
+            Position = new FractionalPosition(2), StringIndex = 0, Fret = 7, SlideTo = 9,
+            Sustain = new FractionalPosition(1)
+        };
+        h.State.PlacedNotes.Add(note);
+        h.Selection.SelectedNotes.Add(note);
+
+        h.Service.MoveSelectedStringPreservingPitch(1, 6);
+
+        Assert.Equal(1, note.StringIndex);
+        Assert.Equal(2, note.Fret);
+        Assert.Equal(4, note.SlideTo);
+        h.History.Undo();
+        Assert.Equal(0, note.StringIndex);
+        Assert.Equal(7, note.Fret);
+        Assert.Equal(9, note.SlideTo);
+        h.History.Redo();
+        Assert.Equal(4, note.SlideTo);
+    }
+
+    [Fact]
+    public void MovingAChordAtConstantPitchRefretsEveryPitchedSlide()
+    {
+        var h = new Harness();
+        h.AddTemplate(0, (0, 7), (1, 9));
+        var chord = h.AddChord(2, 0, (0, 7), (1, 9));
+        chord.ChordNotes[0].SlideTo = 9;
+        chord.ChordNotes[1].SlideTo = 11;
+        h.Selection.SelectedChords.Add(chord);
+
+        h.Service.MoveSelectedStringPreservingPitch(1, 6);
+
+        Assert.Equal(new[] { 1, 2 }, chord.ChordNotes.Select(n => n.StringIndex));
+        Assert.Equal(new[] { 2, 4 }, chord.ChordNotes.Select(n => n.Fret));
+        Assert.Equal(new int?[] { 4, 6 }, chord.ChordNotes.Select(n => n.SlideTo));
+        h.History.Undo();
+        Assert.Equal(new int?[] { 9, 11 }, chord.ChordNotes.Select(n => n.SlideTo));
+    }
+
+    [Fact]
+    public void AnUnreachableSlideTargetRefusesTheWholeChordMove()
+    {
+        var h = new Harness();
+        var chord = h.AddChord(2, -1, (0, 7), (1, 9));
+        chord.ChordNotes[1].SlideTo = 3;
+        h.Selection.SelectedChords.Add(chord);
+
+        h.Service.MoveSelectedStringPreservingPitch(1, 6);
+
+        Assert.Equal(new[] { 0, 1 }, chord.ChordNotes.Select(n => n.StringIndex));
+        Assert.Equal(new[] { 7, 9 }, chord.ChordNotes.Select(n => n.Fret));
+        Assert.Equal(3, chord.ChordNotes[1].SlideTo);
+        Assert.False(h.History.CanUndo);
+    }
+
     /// <summary>Internal so the chord-collapse tests can reuse the same wiring.</summary>
     internal sealed class Harness
     {

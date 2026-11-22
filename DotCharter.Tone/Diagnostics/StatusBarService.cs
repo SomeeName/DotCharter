@@ -260,7 +260,11 @@ public sealed class StatusBarService : IStatusBarService, IDisposable
             // twice" idempotent — two producers racing here must not both Insert.
             if (!_tasksById.TryAdd(id, fresh)) continue;
 
-            Post(() => ActiveTasks.Insert(0, fresh));
+            // A completion that ran before this posted insert retired the task: it must not appear.
+            Post(() =>
+            {
+                if (_tasksById.TryGetValue(id, out var current) && ReferenceEquals(current, fresh)) ActiveTasks.Insert(0, fresh);
+            });
             return fresh;
         }
     }
@@ -278,18 +282,11 @@ public sealed class StatusBarService : IStatusBarService, IDisposable
 
     public void CompleteTask(string id)
     {
-        // Drop the id first so a BeginTask with the same id right after this is a
-        // fresh task; the posted removal below still runs before that task's Insert.
-        _tasksById.TryRemove(id, out _);
-
-        Post(() =>
-        {
-            for (var i = ActiveTasks.Count - 1; i >= 0; i--)
-            {
-                if (string.Equals(ActiveTasks[i].Id, id, StringComparison.Ordinal))
-                    ActiveTasks.RemoveAt(i);
-            }
-        });
+        // Drop the id first so a BeginTask with the same id right after this is a fresh
+        // task, then remove THIS instance: a replacement may be inserted (inline, from the
+        // UI thread) before the posted removal runs, and it must survive it.
+        if (!_tasksById.TryRemove(id, out var task)) return;
+        Post(() => ActiveTasks.Remove(task));
     }
 
     public void ClearMessages() => Post(() => RecentMessages.Clear());

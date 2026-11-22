@@ -10,6 +10,7 @@ namespace DotCharter.Tests.Presentation.Dialogs;
 internal sealed class ScriptedPrompt(bool answer = true) : IMessagePrompt
 {
     public bool Answer { get; set; } = answer;
+    public Func<Task<bool>>? Response { get; set; }
 
     public List<(string Title, string Message, MessageDialogKind Kind, bool Confirmation)> Shown { get; } = [];
 
@@ -17,7 +18,7 @@ internal sealed class ScriptedPrompt(bool answer = true) : IMessagePrompt
         string? details = null, bool confirmation = false)
     {
         Shown.Add((title, message, kind, confirmation));
-        return Task.FromResult(!confirmation || Answer);
+        return confirmation && Response != null ? Response() : Task.FromResult(!confirmation || Answer);
     }
 }
 

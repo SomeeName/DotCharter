@@ -29,6 +29,7 @@ public sealed class RocksmithFixes(
 {
     /// <summary>A verb exists for the finding and its arrangement can be named unambiguously.</summary>
     public bool CanFix(ExportValidationFinding finding) =>
+        (finding.Fix == ExportFixKind.GenerateShowlights && state.ActiveProject != null) ||
         RepairFor(finding) != null ||
         (finding.Fix != ExportFixKind.None && ArrangementNamed(state.ActiveProject, finding.ArrangementName) != null);
 
@@ -38,6 +39,8 @@ public sealed class RocksmithFixes(
         if (RepairFor(finding) is { } repair) return localization.Format("Export_FixTip_RenameTone", repair.From, repair.To);
         return finding.Fix switch
         {
+            ExportFixKind.GenerateShowlights => localization["Export_FixTip_Showlights"],
+            ExportFixKind.CreateToneDefinitions => localization.Format("Export_FixTip_DefineTones", finding.ArrangementName),
             ExportFixKind.AutoFix => localization.Format("Export_FixTip_AutoFix", finding.ArrangementName),
             ExportFixKind.FillFhp => localization.Format("Export_FixTip_FillFhp", finding.ArrangementName),
             ExportFixKind.GenerateStructure => localization.Format("Export_FixTip_Structure", finding.ArrangementName),
@@ -55,8 +58,20 @@ public sealed class RocksmithFixes(
             return;
         }
 
+        if (finding.Fix == ExportFixKind.GenerateShowlights)
+        {
+            maintenance.GenerateShowlights();
+            return;
+        }
+
         var owner = ArrangementNamed(state.ActiveProject, finding.ArrangementName);
         if (owner == null || finding.Fix == ExportFixKind.None) return;
+        if (finding.Fix == ExportFixKind.CreateToneDefinitions)
+        {
+            maintenance.CreateMissingToneDefinitions(owner);
+            return;
+        }
+
         if (finding.Fix != ExportFixKind.OpenToneDesigner)
         {
             maintenance.FixExportFinding(finding.Fix, owner);

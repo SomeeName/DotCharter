@@ -12,7 +12,7 @@ namespace DotCharter.Services.Editing.Validation.Rules;
 ///         <see cref="ArrangementValidationContext.HandShapeTemplate" />, and so
 ///         does <see cref="HandShapeContentRule" />'s.</b> This rule used the
 ///         raw id index with no negative guard while that one used
-///         <c>ChordTemplateResolver.FindById</c> — so an untemplated shape
+///         <c>Arrangement.FindChordTemplate</c> — so an untemplated shape
 ///         (<c>TemplateId == -1</c>, the field's own default) was judged here
 ///         against whichever UNNUMBERED template sat first in the collection and
 ///         skipped silently there: a false positive and a false negative on the
@@ -46,12 +46,12 @@ public sealed class HandShapeRule : IArrangementRule
                 // The rest of the rule is about the ANCHOR under the shape.
                 if (MissingBarreAnchor(context, level, i) is not { } activeAnchor) continue;
 
-                issues.Add(new ArrangementIssue(
-                    ArrangementIssueType.FingeringAnchorMismatch,
-                    Describe(template, activeAnchor, arr.Capo),
+                var (key, args) = Describe(template, activeAnchor, arr.Capo);
+                issues.Add(ArrangementIssues.Make(
+                    ArrangementIssueType.FingeringAnchorMismatch, key,
                     hs.Position.GetPositionMs(beats),
-                    HandShape: hs,
-                    Anchor: activeAnchor));
+                    handShape: hs,
+                    anchor: activeAnchor, args: args));
             }
         }
 
@@ -60,12 +60,10 @@ public sealed class HandShapeRule : IArrangementRule
         // (ArrangementIssue.HandShapes) so the timeline can mark each bar.
         if (gripless != null)
         {
-            var counted = gripless.Count == 1 ? "1 hand shape names" : $"{gripless.Count} hand shapes name";
-            issues.Add(new ArrangementIssue(
+            issues.Add(ArrangementIssues.Make(
                 ArrangementIssueType.HandShapeWithoutTemplate,
-                $"{counted} no chord template, so nothing states the grip they cover — they export with " +
-                "chordId -1 and the hand-shape checks (I46, E05) cannot judge them.",
-                HandShapes: gripless));
+                gripless.Count == 1 ? "Validation_HandShapeWithoutTemplate_One" : "Validation_HandShapeWithoutTemplate_Many",
+                handShapes: gripless, args: [gripless.Count]));
         }
     }
 
@@ -113,14 +111,16 @@ public sealed class HandShapeRule : IArrangementRule
     /// finding is also the E04 one for every chord under the shape:
     ///     re-finger with the index on the anchor fret, or move the anchor.
     /// </summary>
-    internal static string Describe(ChordTemplate template, FretAnchor anchor, int capo)
+    internal static (string Key, object[]? Args) Describe(ChordTemplate template, FretAnchor anchor, int capo)
     {
-        const string head = "Hand shape fingering doesn't cover the anchor fret — likely a missing 1st-finger barre.";
-        if (IndexFingerPosition.Find(template, capo) is not { } index || index.Allows(anchor.Fret)) return head;
-        return $"{head} Its finger {index.FromFinger} on fret {index.FromFret} puts the index finger on " +
-               $"{index.Frets}{(index.Inferred ? " (inferred)" : "")}, but the fret-hand position is on fret " +
-               $"{anchor.Fret}: re-finger it with the index on fret {anchor.Fret}, or move the anchor to fret " +
-               $"{index.Nearest(anchor.Fret)}.";
+        const string head = "Validation_FingeringAnchorMismatch";
+        if (IndexFingerPosition.Find(template, capo) is not { } index || index.Allows(anchor.Fret)) return (head, null);
+        return ("Validation_FingeringAnchorMismatch_Detail",
+            [
+                new IssueTextRef(head), index.FromFinger, index.FromFret, IndexFretText.Of(index),
+                index.Inferred ? new IssueTextRef("Validation_Inferred") : string.Empty,
+                anchor.Fret, index.Nearest(anchor.Fret)
+            ]);
     }
 
     private static bool NeighbourCoversWithFirstFinger(

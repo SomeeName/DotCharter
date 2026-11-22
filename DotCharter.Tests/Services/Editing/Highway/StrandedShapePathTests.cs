@@ -18,6 +18,32 @@ namespace DotCharter.Tests.Services.Editing.Highway;
 /// </summary>
 public sealed class StrandedShapePathTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SnapTranslatesEveryBendByItsOwnersDelta(bool all)
+    {
+        var h = new Harness();
+        var note = h.AddNote(4, 0, 5);
+        note.Position += new FractionalPosition(0, new Fraction(1, 8));
+        note.Sustain = new FractionalPosition(2);
+        note.BendValues.Add(new BendValue { Position = note.Position + new FractionalPosition(1), Step = 2 });
+        var chord = h.AddChord(8, 0, (1, 7));
+        chord.Position += new FractionalPosition(0, new Fraction(1, 8));
+        chord.ChordNotes[0].Sustain = new FractionalPosition(2);
+        chord.ChordNotes[0].BendValues.Add(new BendValue { Position = chord.Position + new FractionalPosition(1), Step = 1 });
+        h.Selection.SelectedNotes.Add(note);
+        h.Selection.SelectedChords.Add(chord);
+        if (all) h.Coordinator.SnapAllNotes(1);
+        else h.Coordinator.SnapSelectedNotes(1);
+        Assert.Equal(new FractionalPosition(5), Assert.Single(note.BendValues).Position);
+        Assert.Equal(new FractionalPosition(9), Assert.Single(chord.ChordNotes[0].BendValues).Position);
+        h.History.Undo();
+        Assert.Equal(new FractionalPosition(5, new Fraction(1, 8)), Assert.Single(note.BendValues).Position);
+        h.History.Redo();
+        Assert.Equal(new FractionalPosition(5), Assert.Single(note.BendValues).Position);
+    }
+
     [Fact]
     public void ATimelineFretVerb_TakesTheShapeTheChordLeftOutWithIt()
     {

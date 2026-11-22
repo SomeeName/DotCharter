@@ -90,8 +90,8 @@ internal sealed class ProjectSilencePadder(
             return;
         }
 
-        var before = ChartProjectCloner.Clone(project);
-        var after = ChartProjectCloner.Clone(project);
+        var before = ChartProjectCloner.Clone(project, retainIdentities: true);
+        var after = ChartProjectCloner.Clone(project, retainIdentities: true);
         after.AudioFileName = Path.GetRelativePath(projectDir, result.AudioPath!);
         for (var i = 0; i < stems.Count; i++)
             after.Stems[stems[i].Index].Path = Path.GetRelativePath(projectDir, result.Stems[i].Path);
@@ -150,7 +150,7 @@ internal sealed class ProjectSilencePadder(
     {
         var project = projectState.ActiveProject;
         if (project == null) return;
-        projectState.CurrentAudioFileName = project.AudioFileName;
+        projectState.CommitSongAudio(project, project.AudioFileName);
         var path = ResolveCurrentAudioPath();
         if (path == null)
         {

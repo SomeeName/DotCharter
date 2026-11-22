@@ -27,6 +27,7 @@ namespace DotCharter.Services.Editing;
 /// </summary>
 public class GlobalEditingCoordinator : IGlobalEditingCoordinator
 {
+    private readonly IConfigurationService _configService;
     private readonly IHighwayEditingService _highwayEditingService;
     private readonly IHistoryService _historyManager;
     private readonly IAppLogger _logger;
@@ -60,6 +61,7 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
         IAppLogger logger,
         ILocalizationService localization)
     {
+        _configService = configService;
         _phraseCatalog = phraseCatalog;
         _projectState = projectState;
         _selectionManager = selectionManager;
@@ -236,10 +238,10 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
     ///         at the old shape.
     ///     </para>
     /// </summary>
-    public void SelectLikePattern()
+    public SelectionAddition SelectLikePattern()
     {
         var track = FocusedOrActive();
-        if (track == null) return;
+        if (track == null) return SelectionAddition.None(SelectionAddOutcome.NoTrack);
 
         var seedNotes = _selectionManager.SelectedNotes.ToList();
         var addedNotes = 0;
@@ -275,13 +277,19 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
         {
             _logger.Info(AppLogCategory.Input,
                 "Select-like skipped: no notes, chords, hand shapes or anchors selected as template.");
-            return;
+            return SelectionAddition.None(SelectionAddOutcome.NothingSelected);
         }
 
         _logger.Info(AppLogCategory.Input,
             $"Select-like added {addedNotes} note(s), {addedChords} chord(s), {addedHandShapes} hand shape(s) " +
             $"and {addedAnchors} anchor(s) to selection.");
+        return Addition(addedNotes, addedChords, addedHandShapes, addedAnchors);
     }
+
+    private SelectionAddition Addition(int notes, int chords, int handShapes, int anchors) =>
+        new(SelectionAddOutcome.Searched, notes, chords, handShapes, anchors,
+            _selectionManager.SelectedNotes.Count + _selectionManager.SelectedChords.Count
+            + _selectionManager.SelectedHandShapes.Count + _selectionManager.SelectedAnchors.Count);
 
     // === User-authored match patterns (v0.39) ================================
     // SelectLikePattern above is the shipped, hard-coded answer to "what is
@@ -291,14 +299,14 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
     // strict-then-loose for notes) and a builder whose output is silently
     // rewritten by those arguments could never evaluate them.
 
-    public int SelectByPattern(MatchPattern pattern)
+    public SelectionAddition SelectByPattern(MatchPattern pattern)
     {
         ArgumentNullException.ThrowIfNull(pattern);
         var track = FocusedOrActive();
         if (track == null)
         {
             _logger.Info(AppLogCategory.Input, $"Pattern '{pattern.Name}' skipped: no focused or active track.");
-            return 0;
+            return SelectionAddition.None(SelectionAddOutcome.NoTrack);
         }
 
         var seed = BuildSeed();
@@ -306,7 +314,7 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
         {
             _logger.Info(AppLogCategory.Input,
                 $"Pattern '{pattern.Name}' skipped: nothing selected to derive it from.");
-            return 0;
+            return SelectionAddition.None(SelectionAddOutcome.NothingSelected);
         }
 
         if (!SeedTouches(seed, track))
@@ -314,20 +322,21 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
             _logger.Info(AppLogCategory.Input,
                 $"Pattern '{pattern.Name}' skipped: the seed is on another arrangement than " +
                 $"'{track.Arrangement.Name}', so its string and fret indices mean something else here.");
-            return 0;
+            return SelectionAddition.None(SelectionAddOutcome.ForeignSeed);
         }
 
         var matches = PatternMatcher.Find(pattern, seed, BuildSource(track));
 
-        var added = SelectionBulkOps.AddRange(_selectionManager.SelectedNotes, matches.Notes)
-                    + SelectionBulkOps.AddRange(_selectionManager.SelectedChords, matches.Chords)
-                    + SelectionBulkOps.AddRange(_selectionManager.SelectedHandShapes, matches.HandShapes)
-                    + SelectionBulkOps.AddRange(_selectionManager.SelectedAnchors, matches.Anchors);
+        var notes = SelectionBulkOps.AddRange(_selectionManager.SelectedNotes, matches.Notes);
+        var chords = SelectionBulkOps.AddRange(_selectionManager.SelectedChords, matches.Chords);
+        var handShapes = SelectionBulkOps.AddRange(_selectionManager.SelectedHandShapes, matches.HandShapes);
+        var anchors = SelectionBulkOps.AddRange(_selectionManager.SelectedAnchors, matches.Anchors);
+        var added = notes + chords + handShapes + anchors;
 
         _logger.Info(AppLogCategory.Input,
             $"Pattern '{pattern.Name}' selected {added} element(s) from {matches.Groups.Count} occurrence(s) " +
             $"(seed={seed.Count}, scope={pattern.Scope}, fret={pattern.Fret}, grouping={pattern.Grouping}).");
-        return added;
+        return Addition(notes, chords, handShapes, anchors);
     }
 
     public int CountPatternMatches(MatchPattern pattern)
@@ -501,6 +510,30 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
             return;
         }
         _handShapeSplitter.SplitAtSelection(track);
+    }
+
+    public void GripsFromHeldNotes()
+    {
+        var track = FocusedOrActive();
+        if (track == null) return;
+
+        var (changed, selected, conflicts) = HeldNoteGrips.Apply(track, _configService.LoadAppConfig(), _historyManager);
+        _projectState.MainDisplayMessage = conflicts > 0
+            ? _localization.Format(conflicts == 1 ? "Status_HeldGripConflictOne" : "Status_HeldGripConflicts",
+                changed, selected, conflicts)
+            : _localization.Plural("Status_HeldGripsChangedOne", "Status_HeldGripsChanged", changed);
+    }
+
+    public void HandShapesFromLetRing()
+    {
+        var track = FocusedOrActive();
+        if (track == null) return;
+
+        var (created, existing) = LetRingHandShapes.Apply(track, _configService.LoadAppConfig(), _historyManager);
+        var message = _localization.Plural("Status_LetRingShapesCreatedOne", "Status_LetRingShapesCreated", created);
+        if (existing > 0)
+            message += " " + _localization.Plural("Status_LetRingShapesSkippedOne", "Status_LetRingShapesSkipped", existing);
+        _projectState.MainDisplayMessage = message;
     }
 
     public void DeleteSelected(EditorFocusArea focusArea)
@@ -759,11 +792,29 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
 
         if (notes.Count + chords.Count + hs.Count + anchors.Count == 0)
         {
-            _logger.Info(AppLogCategory.Editing, "SendSelectionToArrangement skipped: nothing selected.");
+            _logger.Info(AppLogCategory.Editing, "SendSelectionToArrangement skipped: no highway content selected.");
             return;
         }
 
+        var created = new List<ChordTemplate>();
+        var templateIds = ResolveSentTemplates(sourceTrack.Arrangement, target,
+            chords.Select(c => c.TemplateId).Concat(hs.Select(h => h.TemplateId)), created);
+        var payload = new ClipboardPayload
+        {
+            Notes = notes, Chords = chords, HandShapes = hs, Anchors = anchors
+        };
+        var (rangeStart, rangeEnd) = EditingClipboardCoordinator.ComputePayloadRange(payload);
+        var mode = _configService.LoadAppConfig().PasteReplacesExisting ? PasteSpecialMode.OverwriteSameType : PasteSpecialMode.Preserve;
+        var targetTrack = new TrackEditorContext(target, _selectionManager) { Level = targetLevel };
+        var removals = EditingClipboardCoordinator.CollectOverwriteTargets(targetTrack, payload, mode,
+            rangeStart, rangeEnd);
         var actions = new List<IChartAction>();
+        if (removals.notes.Count > 0) actions.Add(new RemoveNotesAction(targetLevel.Notes, removals.notes));
+        if (removals.chords.Count > 0) actions.Add(new RemoveChordsAction(targetLevel.Chords, removals.chords));
+        if (removals.hs.Count > 0) actions.Add(new RemoveHandShapesAction(targetLevel.HandShapes, removals.hs));
+        if (removals.retainedHandShapes.Count > 0) actions.Add(new AddHandShapesAction(targetLevel.HandShapes, removals.retainedHandShapes));
+        if (removals.anchors.Count > 0) actions.Add(new RemoveAnchorsAction(targetLevel.Anchors, removals.anchors));
+        if (created.Count > 0) actions.Add(new AddChordTemplatesAction(target.ChordTemplates, created));
         if (notes.Count > 0)
         {
             actions.Add(new RemoveNotesAction(sourceTrack.Notes, notes));
@@ -771,12 +822,26 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
         }
         if (chords.Count > 0)
         {
+            var newStates = chords.Select(chord =>
+            {
+                var clone = chord.Clone();
+                clone.TemplateId = templateIds[chord.TemplateId];
+                return clone;
+            }).ToList();
             actions.Add(new RemoveChordsAction(sourceTrack.Chords, chords));
+            actions.Add(new MutateChordsAction(targetLevel.Chords, chords, chords.Select(c => c.Clone()), newStates));
             actions.Add(new AddChordsAction(targetLevel.Chords, chords));
         }
         if (hs.Count > 0)
         {
+            var newStates = hs.Select(shape =>
+            {
+                var clone = shape.Clone();
+                clone.TemplateId = templateIds[shape.TemplateId];
+                return clone;
+            }).ToList();
             actions.Add(new RemoveHandShapesAction(sourceTrack.HandShapes, hs));
+            actions.Add(new MutateHandShapesAction(targetLevel.HandShapes, hs, hs.Select(h => h.Clone()), newStates));
             actions.Add(new AddHandShapesAction(targetLevel.HandShapes, hs));
         }
         if (anchors.Count > 0)
@@ -798,7 +863,34 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
         SelectionBulkOps.ReplaceWith(_selectionManager.SelectedAnchors, anchors);
 
         _logger.Info(AppLogCategory.Editing,
-            $"Sent selection from '{sourceTrack.Arrangement.Name}' to '{target.Name}': notes={notes.Count}, chords={chords.Count}, handshapes={hs.Count}, anchors={anchors.Count}.");
+            $"Moved highway selection from '{sourceTrack.Arrangement.Name}' to '{target.Name}': notes={notes.Count}, chords={chords.Count}, handshapes={hs.Count}, anchors={anchors.Count}, destinationMode={mode}.");
+    }
+
+    private static Dictionary<int, int> ResolveSentTemplates(Arrangement source, Arrangement target,
+        IEnumerable<int> ids, List<ChordTemplate> created)
+    {
+        var remapped = new Dictionary<int, int>();
+        var nextId = target.ChordTemplates.Select(t => t.Id).DefaultIfEmpty(-1).Max() + 1;
+        foreach (var id in ids.Distinct())
+        {
+            var incoming = source.FindChordTemplate(id);
+            if (incoming == null)
+            {
+                remapped[id] = -1;
+                continue;
+            }
+
+            // Frets alone would discard the source's authored name or fingering.
+            var resolved = target.ChordTemplates.Concat(created).FirstOrDefault(t => t.Equals(incoming));
+            if (resolved == null)
+            {
+                resolved = incoming.Clone();
+                resolved.Id = nextId++;
+                created.Add(resolved);
+            }
+            remapped[id] = resolved.Id;
+        }
+        return remapped;
     }
 
     public void SnapSelectedNotes(int gridDivisor)
@@ -846,8 +938,8 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
         if (notes.Count > 0)
         {
             actions.Add(new MutateNotesAction(track.Notes, notes,
-                n => n.Position = _tempoService.SnapToGrid(n.Position.GetPositionMs(track.Beats), track.Beats,
-                    gridDivisor),
+                n => SoundTimeMove.MoveTo(n, _tempoService.SnapToGrid(n.Position.GetPositionMs(track.Beats), track.Beats,
+                    gridDivisor)),
                 _highwayEditingService.GetLinkNextUpdater()));
         }
 
@@ -857,8 +949,8 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
             var newStates = chords.Select(c =>
             {
                 var clone = c.Clone();
-                clone.Position = _tempoService.SnapToGrid(c.Position.GetPositionMs(track.Beats), track.Beats,
-                    gridDivisor);
+                SoundTimeMove.MoveTo(clone, _tempoService.SnapToGrid(c.Position.GetPositionMs(track.Beats), track.Beats,
+                    gridDivisor));
                 return clone;
             }).ToList();
             actions.Add(new MutateChordsAction(track.Chords, chords, oldStates, newStates,

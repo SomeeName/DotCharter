@@ -47,18 +47,19 @@ public sealed class ChordOutsideHandShapeRule : IArrangementRule
 
         foreach (var (_, (chord, level, levels)) in found)
         {
-            var where = levels > 1 ? $" (on {levels} difficulty levels)" : string.Empty;
             // Every finding measured on a finished chart is this case: the shape
             // before the chord ENDS on it (the span is half-open). DLC Builder
             // called it I19 and lengthens such a shape on build.
-            var what = EndsOn(level, chord)
-                ? $"Chord sits exactly on the end of a hand shape{where}, so the shape stops as it is played"
-                : $"Chord is inside no hand shape{where}, so it exports with no grip: no chord frame or name in the game";
-            issues.Add(new ArrangementIssue(
-                ArrangementIssueType.ChordOutsideHandShape,
-                what + ". Auto-fix (or Tools ▸ Hand shapes ▸ Generate hand shapes) adds a shape.",
-                chord.Position.GetPositionMs(context.Beats),
-                Chord: chord));
+            var onEnd = EndsOn(level, chord);
+            var key = (onEnd, levels > 1) switch
+            {
+                (true, true) => "Validation_ChordOutsideHandShape_OnEndLevels",
+                (true, false) => "Validation_ChordOutsideHandShape_OnEnd",
+                (false, true) => "Validation_ChordOutsideHandShape_InsideNoneLevels",
+                _ => "Validation_ChordOutsideHandShape_InsideNone"
+            };
+            issues.Add(ArrangementIssues.Make(ArrangementIssueType.ChordOutsideHandShape, key,
+                chord.Position.GetPositionMs(context.Beats), chord: chord, args: [levels]));
         }
     }
 

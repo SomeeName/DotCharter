@@ -6,12 +6,33 @@ one snapshot source of truth, and the three walks that must each know about ever
 position-bearing collection. The guitar-side invariants (frets, capo, tuning,
 chord naming) are in [guitar-and-tuning.md](guitar-and-tuning.md).
 
+`BendMath.RescaleToSustain` keeps exact rational positions whenever both the
+absolute position and onset-relative offset fit. Wider intermediate arithmetic
+avoids overflow from imported denominators. Otherwise it samples within the new
+span on a grid whose denominator is a multiple of the onset denominator (near
+1,000,000, or the onset denominator when larger), retaining relative arithmetic
+for dragging and GP export. Prebends keep the exact onset; unchanged sustains are
+untouched (`BendMathTests`, `BendRescaleConsumerTests`, `GpExporterBarLineTests`).
+
+
+- **Elapsed song labels use `Utilities/ElapsedTimeLabel.Format`.** It prints
+  `m:ss` below an hour and `h:mm:ss` thereafter, keeping total hours beyond a
+  day. Callers select 0-3 fractional digits (truncated) and optional minute
+  padding below an hour. Negative times clamp to zero; punctuation is invariant.
+  `ChartPositionLabel.Time` and `RenderStringCache.MmSsFf` select hundredths
+  with padded minutes. `TimeRulerPolicy` rounds to whole seconds before calling
+  the same formatter. Bookmarks, annotations, diagnostics, AI review, result
+  sections and library lengths use the same elapsed clock at their own precision.
 
 - **Primitives are immutable, always-canonical value types.** `Fraction` reduces
   via GCD with a positive denominator; `FractionalPosition` normalizes so
   `Fraction ∈ [0,1)` and whole/negative beats carry into `BeatId`. Equal
   positions therefore have identical `(BeatId, Fraction)` — safe as dictionary
   keys / for direct comparison. (No `double` ctor — see the Live Play gotcha.)
+  Whole-beat normalization uses widened arithmetic: a carry outside `int`
+  throws from the constructor and returns false from `TryParse`, never wraps.
+  `Fraction.TryCreate` reduces and normalizes signs in `Int128`, so even
+  `long.MinValue` inputs either reduce to a canonical value or return false.
 - **`Fraction`'s constructor takes `long`s and EVERY operator widens before it
   multiplies — do not "simplify" a cast away.** The range guard at the end of the
   ctor reduces first and refuses anything that will not fit an `int`, but it can
@@ -24,8 +45,14 @@ chord naming) are in [guitar-and-tuning.md](guitar-and-tuning.md).
   error at all. One `.rscp` attribute reaches both (`<vocal p="0 1/536870912"/>`
   with no `ep`, where the parser adds a hard-coded `1/8`), and that file arrives
   from disk **and** over the unauthenticated LAN session transfer. Widening is
-  always safe here: every product of two ints fits a `long`, and `operator+`'s
-  sum of two of them is bounded by `2 * (2^31-1)^2 < long.MaxValue`.
+  always safe here: every product of two ints fits a `long`, and the
+  sum or difference of two cross products is bounded in magnitude by
+  `2 * 2^31 * (2^31-1) < long.MaxValue`. `Negate` widens before negating too:
+  `Negate`/`Absolute` of a canonical `int.MinValue` numerator throw
+  `ArgumentOutOfRangeException` because the positive numerator cannot fit.
+  Subtraction uses widened cross products directly, so equal minimum numerators
+  cancel to zero without first constructing an unrepresentable positive operand
+  (`FractionTests`).
 - **A `Try*` on a primitive NEVER throws — that is the whole contract, and both
   `Fraction.TryParse` and `FractionalPosition.TryParse` broke it.** The range
   guard above lives in the CONSTRUCTOR, so a string that parses as two `int`s
@@ -54,14 +81,19 @@ chord naming) are in [guitar-and-tuning.md](guitar-and-tuning.md).
   everything past the grid stacked on one position — reachable from any ms-keyed
   import (MIDI, EOF) whose audio outruns the authored beats.
   A one-beat grid uses `BeatMarker.Bpm`, not a hardcoded 120.
+  The interpolation guard checks the beat index before adding one, so even
+  `int.MaxValue` extrapolates without wrapping into a grid lookup. RSCP import
+  bounds positions to +/-1,000,000 beats through `RscpParsingUtilities`
+  (including vocal phrase boundaries); refused attributes keep the reader's
+  existing fallback rather than admitting an unsafe index.
   **`TryBeatOffsetFromMs` is that method's un-rounded half, and it is public so
   a caller snapping to its OWN resolution does not re-derive the arithmetic.**
   It answers "which beat anchors this time, and how many beats past it does it
   lie" with no rounding and no clamp; `PositionFromMs` is `Round(offset * 192)`
-  over it. `AudioToChartAnalyzer` (grid denominator 12) is the caller it was
-  extracted for — its private copy clamped the fraction and collapsed the whole
-  post-grid tail of every auto-generated chart onto one position, at maximum
-  confidence, which is the same defect `PositionFromMs` itself was fixed for.
+  over it. The removed chart-from-audio analyzer (#445) was the caller it was
+  extracted for: its private copy clamped the fraction and collapsed the whole
+  post-grid tail of every auto-generated chart onto one position, which is the
+  same defect `PositionFromMs` itself was fixed for.
 - **A file that stores MILLISECONDS imports through
   `TimelineMath.PositionFromImportedMs` and exports through
   `TimelineMath.ToWholeMs` — the pair round-trips every whole ms exactly
@@ -193,13 +225,38 @@ chord naming) are in [guitar-and-tuning.md](guitar-and-tuning.md).
   remap — it deliberately drops lyrics but not their phrases) and carries the
   same inventory obligation.
 - **`ChartProjectRestorer.Restore(live, snapshot)` reconciles a snapshot INTO an
-  existing graph** instead of swapping a clone in: index-wise `CopyFrom` onto the
-  live instances, then add/remove only at the tail. That is what keeps undo
+  existing graph** instead of swapping a clone in. History clones pass
+  `retainIdentities: true` to `ChartProjectCloner`; `ChartSnapshotIdentities`
+  remembers each collection's original instances, including removed elements,
+  and reattaches them in snapshot order. That is what keeps undo
   history attached across a whole-project tool — `AddNotesAction` captures the
   `ObservableCollection`, `MutateNotesAction` captures the individual
   `GuitarNote` INSTANCES, so preserving the containers alone is not enough.
-  Only the tail is freshly minted, so an action recorded after a GROWING tool
-  can still detach if that tool is undone and redone. `RestoreArrangement` bumps
+  New elements are minted once per live collection and reused on redo. Identity
+  associations use weak keys; ordinary save/export/analysis clones leave them off.
+  First restoration into an empty new owner adopts the retained source family;
+  materializing a parent binds its descendant collections recursively. This prevents
+  later CopyFrom calls from giving newly generated children unrelated identities
+  (`SnapshotMaterializationIdentityTests`). Link-only capture uses CloneLinkGroups;
+  RestoreLinkGroups reconciles the original groups/placements before arrangement rebinding.
+  Chord notes and bend points use shared child tokens across model `Clone` /
+  `CopyFrom`, replacement working collections and snapshot restore. Mutable
+  children remain independent copies; each live collection maps the tokens to
+  its own instances (`NestedCopyIdentityTests`, `NestedUndoIdentityTests`).
+  The three template-switch actions copy child contents into the existing owner;
+  spacing collateral retains original bend objects plus immutable saved values.
+  `ChartProjectCloner` explicitly disables identities for detached save/export copies. Working
+  snapshot mappings for removed clones are pruned during footprint accounting;
+  live owners retain detached originals until their history tokens die.
+  `ChartProjectFootprint.EstimateHistoryBytes` charges collection identity metadata,
+  detached graphs and a conservative second graph per snapshot for originals.
+  Shared originals are deliberately charged to each node that can retain them:
+  later actions can detach originals after a node's byte total has been cached,
+  and pruning another node must not release their entire accounting reserve.
+  Empty, never-tracked collections allocate no identity tables; collections
+  emptied by edits keep their mappings for undo (`HistoryByteBudgetTests`).
+  Unrelated graphs retain the positional field-copy path. Regression coverage:
+  `SingleUndoStepTests`, `ArrangementDeletionUndoTests`. `RestoreArrangement` bumps
   the target's revision (`Arrangement.MarkEdited`/`GetRevision()`, a content stamp, never copied or saved —
   #720), and `Restore(live, snapshot, isCurrent)` leaves alone an arrangement the
   caller KNOWS already matches (only the quality report's spare copy does).
@@ -207,3 +264,18 @@ chord naming) are in [guitar-and-tuning.md](guitar-and-tuning.md).
   `ChartData.SingleNotes`/`Chords` vs. per-difficulty
   `Arrangement → ChartLevel.Notes/Chords/Anchors/HandShapes/FretHandMutes`.
   `ChartData.EditMode`/`ChartFormatVersion` gate legacy behavior.
+
+- **Millisecond nudges clamp in milliseconds (#558).** `TimeShift.PlanMilliseconds`
+  reduces the delta to the distance from the earliest selection member to beat 0,
+  then applies that same millisecond delta to every position. Subtracting the
+  earliest beat position changes relative timing across a tempo change.
+  Beat-step nudges keep `TimeShift.Plan` and its beat-relative clamp.
+  (`NudgeInTimeTests`)
+- **Pre-roll items can be nudged toward the grid (#527).** `TimeShift.Plan` applies
+  the first-beat boundary only to earlier moves. A forward move from a negative
+  position is allowed even when its destination remains negative; a group keeps
+  the full shift and its relative timing.
+
+The timeline anchor span is `DotCharter.Core/Graphics/AnchorSpan.EndTimeMs`: the next anchor
+ends it, or the larger of the playhead plus `HighwaySpeedPolicy.MaxHorizonMs` and the
+anchor start plus `AnchorSpan.TailMaxMs`. A panned viewport does not extend that span.

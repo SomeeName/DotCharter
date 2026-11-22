@@ -1,5 +1,9 @@
 # DotCharter.Localization Agent Guide
 
+`WeakLanguageSubscription` lets display objects follow language changes without the
+process-wide localization service retaining them. Parameter captions and choices keep
+their native identifiers and translate only their displayed labels through `DspLabel_*`.
+
 The app's localization resources + lookup service. Three built-in languages:
 English (invariant), German and Japanese. Standalone leaf project (no
 DotCharter.* references, no external NuGet). Referenced by `DotCharter.Services`
@@ -319,6 +323,7 @@ every member is present and non-empty in EVERY resx file. The families:
 | `Inspector_EqPreset_*` | `EqPresets.Keys` via `EqPresets.ResourceKeyFor` |
 | `Inspector_Queue_Filter_*` | `SoundQueueFilter` |
 | amp group headers | `DspModelGrouping.AmpModelGroup` via `AmpGroupResourceKey` |
+| `Dialog_SectionName_*`, `Dialog_EventName_*` | `RsSectionCatalog.Names`, `RsEventCatalog.Events` |
 | `History_<Action>`, `History_Verb_<Verb>`, labelled composites' `History_*` | every concrete `IChartAction`, every merge-verb constant and every `LabelKey = "…"` literal, via `HistoryActionText.LabelKeyFor` (`HistoryLabelKeys` in `Services/Editing/HistoryLabelTests.cs`) |
 
 **Add a row when you add a computed lookup**, and never delete a key merely

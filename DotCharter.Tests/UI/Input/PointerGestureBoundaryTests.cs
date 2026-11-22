@@ -18,8 +18,9 @@ namespace DotCharter.Tests.UI.Input;
 ///     </para>
 ///     <para>
 ///         <c>ToolCoordinator</c> is the single funnel for all four timeline
-///         tools but takes a <c>MainWindowViewModel</c>, so it has no behavioural
-///         test — the call site is pinned by a source lint, the same shape as
+///         tools and takes a <c>MainWindowViewModel</c>. Real shell gestures run in
+///         <c>TimelineMiddlePanUiPerfSmokeTests</c>; this default-gate source guard
+///         pins the history boundary, the same shape as
 ///         <c>ResizeLyricGestureMergeTests.TheWheelCallSitePassesTheMergeVerb</c>,
 ///         and the BEHAVIOUR it buys is pinned below against the real
 ///         <c>HistoryService</c>.

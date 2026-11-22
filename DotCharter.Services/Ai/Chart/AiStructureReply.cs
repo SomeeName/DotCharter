@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using DotCharter.Services.Editing.Events;
 using DotCharter.Services.Export.Rocksmith;
 
 namespace DotCharter.Services.Ai.Chart;
@@ -11,8 +12,9 @@ namespace DotCharter.Services.Ai.Chart;
 public sealed class AiStructureContext
 {
     private AiStructureContext(AiStructureGrid grid, IReadOnlyList<AiStructureMarker> markers,
-        FractionalPosition? from, FractionalPosition? to)
+        FractionalPosition? from, FractionalPosition? to, AiStructureEventScope? events)
     {
+        Events = events;
         Grid = grid;
         Markers = markers;
         From = from;
@@ -20,6 +22,9 @@ public sealed class AiStructureContext
     }
 
     public AiStructureGrid Grid { get; }
+
+    /// <summary>The arrangements event changes may name, or null where the request allows no event change.</summary>
+    public AiStructureEventScope? Events { get; }
 
     /// <summary>Sections then phrases, each in song order.</summary>
     public IReadOnlyList<AiStructureMarker> Markers { get; }
@@ -34,7 +39,7 @@ public sealed class AiStructureContext
     ///     list has (<see cref="PhraseMarkers.All" /> reads both stores; those are [fixed]).
     /// </summary>
     public static AiStructureContext Of(Arrangement arrangement, IList<BeatMarker> beats, FractionalPosition? from,
-        FractionalPosition? to)
+        FractionalPosition? to, AiStructureEventScope? events = null, IReadOnlyList<Arrangement>? project = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         ArgumentNullException.ThrowIfNull(beats);
@@ -43,8 +48,12 @@ public sealed class AiStructureContext
             .OrderBy(e => e.Position).ToList();
         for (var i = 0; i < sections.Count; i++)
         {
+            var notes = AiStructureMarkerNotes.Of(arrangement, sections[i].Position, sections[i], beats, project, ownsPosition: true);
             markers.Add(new AiStructureMarker(string.Create(CultureInfo.InvariantCulture, $"s{i + 1}"),
-                AiStructureKind.Section, sections[i].Position, sections[i].Section, Editable: true));
+                AiStructureKind.Section, sections[i].Position, sections[i].Section, Editable: true)
+            {
+                Notes = notes
+            });
         }
 
         var authored = arrangement.EventPoints.Where(e => !string.IsNullOrWhiteSpace(e.Phrase))
@@ -53,12 +62,22 @@ public sealed class AiStructureContext
         for (var i = 0; i < phrases.Count; i++)
         {
             // PhraseMarkers.All trims; the guard compares the live field trimmed too.
+            var position = phrases[i].Position;
+            var point = FindPoint(arrangement, position, beats);
+            var notes = AiStructureMarkerNotes.Of(arrangement, position, point, beats, project,
+                ownsPosition: !sections.Any(e => e.Position == position), phrases[i].Name);
             markers.Add(new AiStructureMarker(string.Create(CultureInfo.InvariantCulture, $"p{i + 1}"),
-                AiStructureKind.Phrase, phrases[i].Position, phrases[i].Name, authored.Contains(phrases[i].Position)));
+                AiStructureKind.Phrase, position, phrases[i].Name, authored.Contains(position))
+            {
+                Notes = notes
+            });
         }
 
-        return new AiStructureContext(AiStructureGrid.Of(beats), markers, from, to);
+        return new AiStructureContext(AiStructureGrid.Of(beats), markers, from, to, events);
     }
+
+    private static EventPoint? FindPoint(Arrangement arrangement, FractionalPosition position, IList<BeatMarker> beats)
+        => EventMarkerEdit.EventAt(arrangement, position.GetPositionMs(beats), beats);
 
     /// <summary>True when <paramref name="position" /> lies inside the scope.</summary>
     public bool InScope(FractionalPosition position)
@@ -77,7 +96,7 @@ public static class AiStructureReply
     /// <summary>The most changes one reply may carry.</summary>
     public const int MaxChanges = 200;
 
-    private static readonly string[] ChangeFields = ["op", "kind", "id", "bar", "beat", "name"];
+    private static readonly string[] ChangeFields = ["op", "kind", "id", "bar", "beat", "name", "event"];
 
     /// <summary>Decodes and validates <paramref name="json" />.</summary>
     /// <param name="json">The reply.</param>
@@ -130,6 +149,8 @@ public static class AiStructureReply
                 if (change is not null) result.Add(change);
             }
 
+            if (EventConflict(result, context) is { } clash) return Refuse(AiChartRejectionCodes.Conflict, clash, out rejection);
+
             // A destination may not collide with a marker of its kind that this reply leaves in place.
             foreach (var c in result.Where(c => c.Op is AiStructureOp.Add or AiStructureOp.Move))
             {
@@ -169,6 +190,8 @@ public static class AiStructureReply
             return false;
         }
 
+        if (TryEventPart(item, at, context, out change, out why, out code) is { } done) return done;
+
         if (!Text(item, "op", out var op) || !Text(item, "kind", out var kindText) || !Text(item, "id", out var id) ||
             !Text(item, "name", out var name) || !Number(item, "bar", out var bar) || !Number(item, "beat", out var beat))
         {
@@ -176,14 +199,7 @@ public static class AiStructureReply
             return false;
         }
 
-        AiStructureOp? parsed = op switch
-        {
-            "add" => AiStructureOp.Add,
-            "rename" => AiStructureOp.Rename,
-            "move" => AiStructureOp.Move,
-            "remove" => AiStructureOp.Remove,
-            _ => null
-        };
+        var parsed = ParseOp(op);
         if (parsed is not { } operation)
         {
             code = AiChartRejectionCodes.NotStructure;
@@ -329,6 +345,56 @@ public static class AiStructureReply
         if (!RsPhraseName.IsLegal(trimmed)) return false;
         normalized = trimmed;
         return true;
+    }
+
+    private static AiStructureOp? ParseOp(string? op) => op switch
+    {
+        "add" => AiStructureOp.Add,
+        "rename" => AiStructureOp.Rename,
+        "move" => AiStructureOp.Move,
+        "remove" => AiStructureOp.Remove,
+        _ => null
+    };
+
+    /// <summary>Null for an ordinary change; else the result of reading an <c>event</c> op (or of refusing a stray
+    /// <c>event</c> object on any other op).</summary>
+    private static bool? TryEventPart(JsonElement item, string at, AiStructureContext context, out AiStructureChange? change,
+        out string why, out string code)
+    {
+        change = null;
+        why = "";
+        code = AiChartRejectionCodes.Malformed;
+        var isEvent = item.TryGetProperty("op", out var op) && op.ValueKind == JsonValueKind.String && op.GetString() == "event";
+        if (isEvent) return TryEventChange(item, at, context, out change, out why, out code);
+        if (!item.TryGetProperty("event", out var stray) || stray.ValueKind == JsonValueKind.Null) return null;
+        code = AiChartRejectionCodes.NotStructure;
+        why = at + " has an \"event\" without op event";
+        return false;
+    }
+
+    private static bool TryEventChange(JsonElement item, string at, AiStructureContext context, out AiStructureChange? change,
+        out string why, out string code)
+    {
+        change = null;
+        code = AiChartRejectionCodes.Malformed;
+        if (Number(item, "bar", out var bar) && Number(item, "beat", out var beat))
+            return AiStructureEvents.TryRead(item, at, bar, beat, context, out change, out why, out code);
+        why = at + " has a field of the wrong type";
+        return false;
+    }
+
+    /// <summary>An event change may not share its beat with another event change, or with a marker another change
+    /// adds, moves or removes: the dialog's marker at a beat is ONE, and two edits of it would race.</summary>
+    private static string? EventConflict(List<AiStructureChange> result, AiStructureContext context)
+    {
+        foreach (var e in result.Where(c => c.Op == AiStructureOp.Event))
+        {
+            var clash = result.Any(o => !ReferenceEquals(o, e) &&
+                (o.Op == AiStructureOp.Event ? o.To == e.To : o.To == e.To || o.From == e.To));
+            if (clash) return $"two changes touch the marker at {Where(context, e.To!.Value)}";
+        }
+
+        return null;
     }
 
     private static string Kind(AiStructureKind kind) => kind == AiStructureKind.Section ? "section" : "phrase";

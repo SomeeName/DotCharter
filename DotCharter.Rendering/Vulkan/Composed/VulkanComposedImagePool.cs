@@ -413,9 +413,7 @@ public sealed unsafe class VulkanComposedImagePool : IDisposable
             throw new Exception($"Failed to import D3D11 texture memory ({allocResult}).");
         }
 
-        VulkanCheck.Ok(_context.Api.BindImageMemory(_context.Device, image, memory, 0), "VulkanComposedImagePool.BindImageMemory");
-
-        return new Slot
+        var slot = new Slot
         {
             Texture = texture,
             Image = image,
@@ -423,6 +421,15 @@ public sealed unsafe class VulkanComposedImagePool : IDisposable
             MemorySize = memReq.Size,
             State = ComposedImageState.Free
         };
+
+        // A failed bind still owns all three objects: release them through the
+        // same teardown a live slot uses before the throw leaves this frame.
+        var bindResult = _context.Api.BindImageMemory(_context.Device, image, memory, 0);
+        NativeResourceSet.CompleteOrRollback(
+            () => VulkanCheck.Ok(bindResult, "VulkanComposedImagePool.BindImageMemory"),
+            () => DestroySlot(slot));
+
+        return slot;
     }
 
     private static nint CreateSharedNtHandle(ComPtr<ID3D11Texture2D> texture)

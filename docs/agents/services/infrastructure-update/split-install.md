@@ -11,9 +11,7 @@ DotCharter-v<ver>-win-x64/
 ├── app/                      the app and its ~390 files; app/DotCharter.exe is the real app
 │   └── payload-manifest.json this release's manifest (paths relative to the TOP)
 ├── voices/                   the voice sample packs
-├── tools/                    ffmpeg, yt-dlp and their notices
-└── DotCharter.runtimeconfig.json, DotCharter.deps.json, hostfxr.dll, coreclr.dll
-                              LegacyUpdaterShim: for pre-0.63 updaters only, deleted on first start
+└── tools/                    ffmpeg, yt-dlp and their notices
 ```
 
 A portable install's own state (`appconfig.json`, `keybinds.json`, profiles,
@@ -63,7 +61,7 @@ working directory (`LaunchCommandLine.WorkingDirectory`, never the caller's:
 Windows searches the working directory for DLLs, so a launch from a Downloads
 folder could otherwise load a DLL planted there; a relative path on the command
 line therefore resolves against `app\`, not the caller's folder), waits, and exits with the
-app's exit code. It never shows a window or a message box: a missing `app\DotCharter.exe` or a failed `CreateProcess` appends one line
+app's exit code. It shows no window of its own; a missing `app\DotCharter.exe`, a failed `CreateProcess` or an app that exits nonzero within 5 s shows ONE native `MessageBoxW` (reason, exit code, log path), except when the caller redirected the standard handles or chose a desktop (`LaunchCommandLine.ShouldShowDialog`; the reporter is an injectable seam in `ReportFailure`). The first two also append one line
 to `dotcharter-launcher.log` beside it (or, when that folder is read-only, to a
 randomly named `%TEMP%\dotcharter-launcher-<token>.log` created exclusively, never a
 fixed path; `LaunchCommandLine.TryWriteFailureLog`) and exits
@@ -92,9 +90,10 @@ the app does; robocopy's own retries (`/R:5 /W:2`) cover the instant in between.
   one-step migration.
 - `PayloadManifest.AlwaysIncludeFor` gives a split manifest's six must-ship files
   (the launcher and the app's five in `app/`); `PayloadDelta.Between` uses it.
-- `LegacyUpdaterShim.StripFrom` keeps the four shim files out of a partial fetch,
-  and `LegacyUpdaterShim.RemoveFrom` deletes them from a staged split payload
-  before the copy.
+- No shim files: since #322 a release has no top-level `DotCharter.runtimeconfig.json`,
+  `DotCharter.deps.json`, `hostfxr.dll` or `coreclr.dll`, so the partial fetch and the
+  staged copy need no special case. `SplitInstallCleanup.ShimFiles` is the list of
+  names kept only so old installs get cleaned.
 - The manifest an install carries is `app/payload-manifest.json`
   (`PayloadManifest.SplitInstalledPath`); `InstalledPayloadReader.FromDirectory`
   reads it before the top-level one.
@@ -102,13 +101,11 @@ the app does; robocopy's own retries (`/R:5 /W:2`) cover the instant in between.
   `app/` (`app/appconfig.json` is contraband just the same).
 
 **A v0.62 install (flat) reaches the split layout in ONE update**, run by its own
-old updater, which validates the payload ROOT with the flat rule. That is the
-whole reason for `LegacyUpdaterShim`: with its four copies at the top the old
-validator accepts the split payload, robocopies it over the flat install
-(launcher over the old apphost; `app/`, `tools/`, `voices/` alongside), and
-relaunches `DotCharter.exe` — now the launcher. `ValidateReleaseZip.cs`,
-`BuildPayloadManifest.cs` and `-SelfTest` refuse a split release without them.
-**Do not remove the shim while any pre-0.63 install is left to update.**
+old updater, which validates the payload ROOT with the flat rule. Zips up to
+1.3.0 carried four top-level copies (the legacy updater shim) so that validator
+accepted the split payload. No pre-0.63 build was ever public, so #322 dropped
+them: `ValidateReleaseZip.cs`, `BuildPayloadManifest.cs` and `-SelfTest` now
+REFUSE a split release that has one at the top (`SplitInstallCleanup.FindShimAtTop`).
 
 The old updater's full-download path deletes nothing, so the flat files stay at
 the top. **`SplitInstallCleanup`** removes them on the app's first start from
@@ -116,7 +113,7 @@ the top. **`SplitInstallCleanup`** removes them on the app's first start from
 few `File.Exists`, `NeedsCleanup`). Its plan (`Plan`, pure) deletes a top-level
 file only when the OLD release's manifest (still at the top, because the split
 payload keeps its own in `app/`) lists it, or `app/` has a file at the same
-path, or it is a shim file — and never when it is
+path, or it is one of `SplitInstallCleanup.ShimFiles` (installs unpacked from a zip up to 1.3.0 still hold them) — and never when it is
 `PayloadReceiptFilter.IsLocalState`, the launcher, under `tools/` or `voices/`,
 or listed at the top by the new manifest (the readme). A file nobody shipped
 stays. If the old updater took its PARTIAL path instead, it wrote the NEW

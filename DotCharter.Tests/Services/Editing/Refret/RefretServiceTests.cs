@@ -17,6 +17,23 @@ public class RefretServiceTests
 {
     // ─── Fixture helpers ─────────────────────────────────────────────────────
 
+    [Fact]
+    public void Letter_only_Drop_D_candidates_preserve_the_sounding_pitch()
+    {
+        var arrangement = BuildArrangement();
+        arrangement.TuningPitches.Clear();
+        arrangement.Tuning = ["D", "A", "D", "G", "B", "E"];
+        var level = arrangement.Levels[0];
+        level.Notes.Add(Note(Pos(1), 0, 7));
+
+        var plan = RefretPlanner.Plan(arrangement, level, BuildBeats(8), null, null, RefretOptions.Default);
+        var unit = Assert.Single(plan.Units);
+
+        Assert.Contains(unit.Candidates, c => c.StringIndex == 1 && c.Frets![0] == 0);
+        Assert.All(unit.Candidates, c =>
+            Assert.Equal(45, SoundingPitch.MidiFor(arrangement, c.StringIndex, c.Frets![0])));
+    }
+
     private static RefretService CreateService() => new(new FretAnchorGenerationService(), new FingeringGenerationService());
 
     private static List<BeatMarker> BuildBeats(int count, double msPerBeat = 500)
@@ -734,6 +751,41 @@ public class RefretServiceTests
 
         Assert.Equal((1, 10), (inside1.StringIndex, inside1.Fret));
         Assert.Equal((2, 12), (inside2.StringIndex, inside2.Fret));
+    }
+
+    [Fact]
+    public void Range_refret_keeps_a_hand_shape_that_also_covers_unchanged_chords()
+    {
+        var arr = BuildArrangement();
+        var beats = BuildBeats(40);
+        var level = arr.Levels[0];
+        var template = new ChordTemplate { Id = 0, Name = "A5", Frets = { [0] = 5, [1] = 7, [2] = 7 } };
+        arr.ChordTemplates.Add(template);
+        for (var beat = 1; beat <= 3; beat++)
+        {
+            var chord = new Chord { Position = Pos(beat), TemplateId = template.Id };
+            foreach (var (stringIndex, fret) in template.Frets)
+                chord.ChordNotes.Add(new ChordNote { StringIndex = stringIndex, Fret = fret });
+            level.Chords.Add(chord);
+        }
+
+        var shape = new HandShape { Position = Pos(1), EndPosition = Pos(4), TemplateId = template.Id };
+        level.HandShapes.Add(shape);
+        var before = PitchSignature(arr);
+
+        // Isolate grip cost from travel to the unchanged neighbours: the open
+        // A5 is strictly cheaper, so this case must exercise the write-back.
+        var options = new RefretOptions { MovementWeight = 0, StringCrossWeight = 0 };
+        var result = CreateService().RefretRange(arr, level, beats, Pos(2), Pos(2), options);
+
+        Assert.True(result.ChordsChanged > 0);
+        Assert.NotEqual(template.Id, level.Chords[1].TemplateId);
+        Assert.Equal(template.Id, level.Chords[0].TemplateId);
+        Assert.Equal(template.Id, level.Chords[2].TemplateId);
+        Assert.Equal(template.Id, shape.TemplateId);
+        Assert.Equal(Pos(1), shape.Position);
+        Assert.Equal(Pos(4), shape.EndPosition);
+        Assert.Equal(before, PitchSignature(arr));
     }
 
     // ─── Degenerate / extreme charts (must not crash; pitch stays exact) ──────

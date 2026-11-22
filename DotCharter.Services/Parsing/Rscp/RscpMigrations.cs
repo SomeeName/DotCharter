@@ -151,7 +151,7 @@ public sealed class RscpMigrations
                 // One unreadable sibling must not cost the user the other arrangements.
                 notes.Add($"Arrangement file '{fileName}' could not be read ({ex.Message}).");
                 _logger?.Warning(AppLogCategory.Project,
-                    $"Pre-v3 upgrade: failed to read arrangement '{path}': {ex.Message}");
+                    $"Pre-v3 upgrade: failed to read arrangement '{path}'", ex);
             }
         }
 
@@ -169,7 +169,7 @@ public sealed class RscpMigrations
 
         try
         {
-            var loaded = new RsXmlVocalsReader().Read(path);
+            var loaded = new RsXmlVocalsReader().Read(path, project.Beats);
             foreach (var track in loaded.VocalTracks.Where(t => t.Phrases.Count > 0))
             {
                 project.VocalTracks.Add(track);
@@ -180,7 +180,7 @@ public sealed class RscpMigrations
         {
             notes.Add($"vocals.xml could not be read ({ex.Message}).");
             _logger?.Warning(AppLogCategory.Project,
-                $"Pre-v3 upgrade: failed to read vocals '{path}': {ex.Message}");
+                $"Pre-v3 upgrade: failed to read vocals '{path}'", ex);
         }
     }
 }

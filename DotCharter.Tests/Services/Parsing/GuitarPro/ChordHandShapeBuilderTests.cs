@@ -14,6 +14,34 @@ namespace DotCharter.Tests.Services.Parsing.GuitarPro;
 /// </summary>
 public sealed class ChordHandShapeBuilderTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SameFrets_WithDifferentAuthoredNameOrFingers_KeepSeparateTemplatesAndBars(bool differentName)
+    {
+        var arrangement = Arr();
+        var level = new ChartLevel();
+        var first = Chord(0, new Fraction(1, 1), Cn(0, 3), Cn(1, 5));
+        var second = Chord(1, new Fraction(1, 1), Cn(0, 3), Cn(1, 5));
+        level.Chords.Add(first);
+        level.Chords.Add(second);
+        var names = new GpAuthoredChordNames();
+        names.Set(first.Position, "C6");
+        names.Set(second.Position, differentName ? "Am7" : "C6");
+        var fingers = new GpAuthoredFingering();
+        fingers.Set(0, first.Position, 1);
+        fingers.Set(0, second.Position, differentName ? 1 : 2);
+
+        ChordHandShapeBuilder.BuildAndTrim(level, arrangement, fingers, names);
+
+        Assert.NotEqual(first.TemplateId, second.TemplateId);
+        Assert.Equal(2, level.HandShapes.Count);
+        var template = arrangement.ChordTemplates.Single(t => t.Id == second.TemplateId);
+        Assert.Equal(differentName ? "Am7" : "C6", template.Name);
+        Assert.Equal(differentName ? 1 : 2, template.Fingers[0]);
+        Assert.True(fingers.IsAuthoredTemplate(template));
+    }
+
     private static Arrangement Arr()
     {
         var arr = new Arrangement { Name = "Lead", StringCount = 6 };

@@ -23,7 +23,7 @@ namespace DotCharter.UI.Input;
 ///             state" the mask contract forbids;
 ///         </item>
 ///         <item>
-///             <c>StringUp</c>'s ceiling is the active arrangement's lane count, not a
+///             <c>StringUp</c>'s ceiling is the focused edit arrangement's lane count, not a
 ///             project-level one (<c>ChartEditor.CurrentChart</c> is the PROJECT-level
 ///             <c>ChartData</c>). In a project whose lead is a 6-string guitar and whose
 ///             second arrangement is a 4-string bass, a project-level ceiling would clamp
@@ -38,7 +38,7 @@ namespace DotCharter.UI.Input;
 ///         <c>AppKeybindRegistrar</c>.
 ///     </para>
 ///     <para>
-///         <b>The bound is the ACTIVE ARRANGEMENT's tuning length</b>, because
+///         <b>The bound is the focused edit arrangement's tuning length</b>, because
 ///         that is what the editor draws lanes for
 ///         (<c>TrackEditorContext.StringCount =&gt; Arrangement.Tuning.Length</c>)
 ///         and what the pointer is already limited to. Pure by construction — an

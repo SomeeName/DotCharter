@@ -17,7 +17,10 @@ public enum AiStructureOp
     Add = 0,
     Rename = 1,
     Move = 2,
-    Remove = 3
+    Remove = 3,
+
+    /// <summary>Sets fields of the Edit event / phrase dialog on the marker at a beat (<see cref="AiStructureChange.Event" />).</summary>
+    Event = 4
 }
 
 /// <summary>
@@ -31,7 +34,11 @@ public sealed record AiStructureMarker(
     AiStructureKind Kind,
     FractionalPosition Position,
     string Name,
-    bool Editable);
+    bool Editable)
+{
+    /// <summary>What else the marker carries, compact (status, solo, tone, event codes, arrangements), "" when nothing but defaults.</summary>
+    public string Notes { get; init; } = "";
+}
 
 /// <summary>
 /// One validated change to the section/phrase ribbon, on the beat grid.
@@ -69,6 +76,9 @@ public sealed record AiStructureChange(
     ///     or removed.
     /// </summary>
     public IReadOnlyList<AiStructureAnchor> Anchors { get; init; } = [];
+
+    /// <summary>The dialog fields an <see cref="AiStructureOp.Event" /> change sets; null for every other op.</summary>
+    public AiEventEdit? Event { get; init; }
 }
 
 /// <summary>

@@ -61,7 +61,7 @@ public sealed class StatusBarRefreshTimerTests
             filePath: Path.Combine(Path.GetTempPath(), $"dotcharter-statusbar-{Guid.NewGuid():N}.json"));
         var vm = new DotCharter.UI.ViewModels.Application.StatusBarViewModel(
             new StatusBarService(ui), state, new FakeAudioPlaybackService(), ui, profiles,
-            new FakeFileStorageService(), FakeLocalization.English());
+            new FakeFileStorageService(), FakeLocalization.English(), new FakeConfigurationService());
 
         Assert.Equal(TimeSpan.FromSeconds(1), ui.Period);
         Assert.NotNull(ui.Tick);

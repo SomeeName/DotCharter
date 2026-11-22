@@ -10,7 +10,7 @@ internal sealed record AiChatCarryResult(int Copied, int Skipped, IReadOnlyList<
 /// <summary>
 /// Save As into ANOTHER folder carries the chart's AI chats, as it carries its
 /// checkpoints. The chats live beside the project, in
-///     <c>ai-chats/&lt;chart id&gt;/</c> (<see cref="AiChatStore" />), and the new copy keeps the
+///     <c>.dotcharter/ai-chats/&lt;chart id&gt;/</c> (<see cref="AiChatStore" />), and the new copy keeps the
 ///     chart id, so without this the copy opened with an empty history.
 ///     <para>
 ///         COPIED, never moved: the old project still exists and keeps its own chats. A file
@@ -34,8 +34,8 @@ internal static class AiChatSaveAsCarry
             return AiChatCarryResult.None;
         }
 
-        var fromDir = Path.GetFullPath(Path.Combine(fromProjectFolder, AiChatStore.FolderName, chartId!));
-        var toDir = Path.GetFullPath(Path.Combine(toProjectFolder, AiChatStore.FolderName, chartId!));
+        var fromDir = Path.GetFullPath(Path.Combine(fromProjectFolder, ProjectFolderLayout.MetadataFolderName, AiChatStore.FolderName, chartId!));
+        var toDir = Path.GetFullPath(Path.Combine(toProjectFolder, ProjectFolderLayout.MetadataFolderName, AiChatStore.FolderName, chartId!));
         if (string.Equals(fromDir, toDir, StringComparison.OrdinalIgnoreCase) || !Directory.Exists(fromDir))
             return AiChatCarryResult.None;
 
@@ -67,6 +67,7 @@ internal static class AiChatSaveAsCarry
             var temp = to + TempSuffix;
             try
             {
+                ProjectFolderLayout.MetadataDirectory(toProjectFolder);
                 Directory.CreateDirectory(toDir);
                 File.Copy(from, temp, overwrite: true);
                 AtomicFile.FlushFile(temp);

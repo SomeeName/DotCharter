@@ -22,6 +22,36 @@ public sealed record StemCacheSource(
     string SignedPath,
     string PlayablePath)
 {
+    /// <summary>Resolves the shared lookup/save key. Only a verified full-hash
+    /// mismatch forks a sampled key; the existing archive remains untouched.</summary>
+    public static StemCacheSource? ResolveForStore(StemCacheStore store, StemCacheIdentity identity, string playablePath)
+    {
+        var source = TryResolve(identity, playablePath);
+        if (source == null) return null;
+        try
+        {
+            var key = source.Key;
+            if (!store.TryGetManifest(key, out var manifest))
+            {
+                if (key.LegacyLibraryForm is not { } legacy || !store.TryGetManifest(legacy, out manifest)) return source;
+                key = legacy;
+            }
+            // An adopted WEM archive records its original playable WAV's hash.
+            // A different decoder's WAV is not evidence that the source WEM changed.
+            var adoptedPlayable = source.SignsSourceWem && !string.Equals(manifest.Key, key.Canonical, StringComparison.Ordinal);
+            if (string.IsNullOrEmpty(manifest.SourceFullHash) || adoptedPlayable) return source;
+            var fullHash = StemAudioSignature.ComputeFullFileHash(source.SignedPath);
+            if (fullHash == null || string.Equals(fullHash, manifest.SourceFullHash, StringComparison.OrdinalIgnoreCase)) return source;
+            var canonical = source.Key.Canonical + "|full=" + fullHash.ToLowerInvariant();
+            return source with { Key = new StemCacheKey(canonical, StemCacheKey.ShortHash(canonical)) };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Unreadable is not verified different: retain the sampled archive's claim.
+            return source;
+        }
+    }
+
     /// <summary>True when the key signs the source <c>.wem</c>, not the playable file.</summary>
     public bool SignsSourceWem => Key.SignsSourceWem;
 

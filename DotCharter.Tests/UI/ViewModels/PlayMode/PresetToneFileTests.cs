@@ -47,7 +47,7 @@ public sealed class PresetToneFileTests : IDisposable
         var presets = new FakeDspTonePresetService();
         var files = new FakeFileStorageService();
         var appliedCount = applied;
-        var browser = new PresetBrowserViewModel(presets, FakeLocalization.English(), LiveRig, () => appliedCount++, files: files);
+        var browser = new PresetBrowserViewModel(presets, FakeLocalization.English(), LiveRig, () => appliedCount++, new FakeConfigurationService(), files: files);
         return (browser, presets, files);
     }
 
@@ -170,7 +170,7 @@ public sealed class PresetToneFileTests : IDisposable
     [Fact]
     public void WithNoFilePickers_ExportCard_ShipsDisabled()
     {
-        var browser = new PresetBrowserViewModel(new FakeDspTonePresetService(), FakeLocalization.English(), LiveRig, () => { });
+        var browser = new PresetBrowserViewModel(new FakeDspTonePresetService(), FakeLocalization.English(), LiveRig, () => { }, new FakeConfigurationService());
 
         Assert.False(browser.ExportCardCommand.CanExecute(browser.Cards[0]));
     }
@@ -289,7 +289,7 @@ public sealed class PresetToneFileTests : IDisposable
         // A host with no window must not offer a half-working button (the
         // "a capability the app cannot honour never looks live" rule).
         var browser = new PresetBrowserViewModel(
-            new FakeDspTonePresetService(), FakeLocalization.English(), LiveRig, () => { });
+            new FakeDspTonePresetService(), FakeLocalization.English(), LiveRig, () => { }, new FakeConfigurationService());
 
         Assert.False(browser.CanExchangeToneFiles);
         Assert.False(browser.ExportActiveCommand.CanExecute(null));

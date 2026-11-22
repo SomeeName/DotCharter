@@ -80,10 +80,6 @@ public sealed class ClaudeCliLocator : IClaudeCliLocator
         return found;
     }
 
-    /// <summary>Drops the cached <c>PATH</c> answer. Tests only — the shipping app
-    /// never needs it, and nothing outside this assembly can reach it.</summary>
-    internal static string? SearchPathUncached() => SearchPath();
-
     private static string? SearchPath()
     {
         var path = Environment.GetEnvironmentVariable("PATH");

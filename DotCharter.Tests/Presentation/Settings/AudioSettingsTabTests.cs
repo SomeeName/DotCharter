@@ -15,7 +15,9 @@ public sealed class AudioSettingsTabTests
 {
     /// <summary>
     ///     Contract setters that are NOT settings, each with its reason. The
-    ///     device rows persist as NAMES and land on their value when the probe
+    ///     device rows persist as NAMES, counted together as one setting
+    ///     (<see cref="AudioSettingsViewModel.DeviceSelectionKey" />, pinned by the
+    ///     device-pick facts below), and land on their value when the probe
     ///     returns; the jack row mirrors <c>AsioInputChannelLeft</c> and the output
     ///     pair row mirrors <c>AsioOutputChannelLeft</c> / <c>Right</c>, which are
     ///     tracked; the disclosure is layout.
@@ -92,6 +94,50 @@ public sealed class AudioSettingsTabTests
         }
     }
 
+    /// <summary>
+    ///     Picking only another device (output, input, mirror or MIDI) is an
+    ///     edit Save must be offered for, while the probe landing the rows on
+    ///     the stored devices is not one.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(AudioSettingsViewModel.SelectedWasapiOutputIndex))]
+    [InlineData(nameof(AudioSettingsViewModel.SelectedWasapiInputIndex))]
+    [InlineData(nameof(AudioSettingsViewModel.SelectedStreamingMirrorIndex))]
+    [InlineData(nameof(AudioSettingsViewModel.SelectedMidiOutputIndex))]
+    public async Task PickingOnlyAnotherDevice_CountsOnce_AndTheProbeCountsNothing(string row)
+    {
+        var config = new FakeConfigurationService();
+        var c = config.AppConfig;
+        c.WasapiOutputDeviceName = "Speakers";
+        c.WasapiInputDeviceName = "Microphone";
+        c.StreamingMirrorDeviceName = "Speakers";
+        c.MidiOutputDeviceName = "Default MIDI Mapper";
+        var engine = new FakeAudioPlaybackService
+        {
+            WasapiOutputDevices = ["Speakers", "Headphones"],
+            WasapiInputDevices = ["Microphone", "Line In"],
+            MidiOutputs = [new(-1, "Default MIDI Mapper"), new(0, "Synth")]
+        };
+        var vm = new AudioSettingsViewModel(
+            engine, engine, config, new ProjectState(), new AudioSettingsWindows(new FakeWizard()), new GatedInlineDispatcher(), FakeLocalization.English());
+        var raised = 0;
+        vm.PropertyChanged += (_, e) => raised += e.PropertyName == nameof(vm.UnsavedSettings) ? 1 : 0;
+        vm.Open();
+        await vm.DeviceProbe.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        Assert.True(vm.DeviceListsLoaded);
+        Assert.Empty(vm.UnsavedSettings);
+        var property = typeof(AudioSettingsViewModel).GetProperty(row)!;
+        Assert.Equal(0, (int)property.GetValue(vm)!);
+        raised = 0;
+
+        property.SetValue(vm, 1);
+
+        Assert.Equal([AudioSettingsViewModel.DeviceSelectionKey], vm.UnsavedSettings);
+        Assert.True(raised > 0, "the footer was never told the count changed");
+        property.SetValue(vm, 0);
+        Assert.Empty(vm.UnsavedSettings);
+    }
+
     [Fact]
     public void Save_ClearsTheCount()
     {
@@ -106,13 +152,15 @@ public sealed class AudioSettingsTabTests
 
     /// <summary>Reset reloads the persisted values — through the same Open a page reload runs.</summary>
     [Fact]
-    public void Reset_PutsThePersistedValuesBack()
+    public async Task Reset_PutsThePersistedValuesBack()
     {
         var vm = OpenedVm();
         var persisted = vm.OutOfProcessVst;
         vm.OutOfProcessVst = !persisted;
 
         ((ISettingsTab)vm).Reset();
+        // Reset re-opens, and the inline dispatcher lands that probe's rows on the pool: settle it before reading the count.
+        await BoundedWait.ForAsync(vm.DeviceProbe, "the re-opened device probe", TestContext.Current.CancellationToken);
 
         Assert.Equal(persisted, vm.OutOfProcessVst);
         Assert.Empty(vm.UnsavedSettings);
@@ -172,6 +220,64 @@ public sealed class AudioSettingsTabTests
             .ToHashSet(StringComparer.Ordinal);
 
         Assert.Equal(inCatalogue.Order(), inView.Order());
+    }
+
+    /// <summary>
+    ///     A language switch while the screen is open renames the drop tuner quality rows in the
+    ///     same list, so the box keeps its pick and the tab gains no unsaved change.
+    /// </summary>
+    [Fact]
+    public void ALanguageSwitch_RenamesTheDropTunerRows_AndKeepsThePick()
+    {
+        var localization = FakeLocalization.English();
+        var engine = new FakeAudioPlaybackService();
+        var vm = new AudioSettingsViewModel(engine, engine, new FakeConfigurationService(), new ProjectState(),
+            new AudioSettingsWindows(new FakeWizard()), new GatedInlineDispatcher(), localization)
+        {
+            SelectedDropTunerEngineIndex = 2
+        };
+        var rows = vm.DropTunerEngineOptions;
+        var english = rows.ToArray();
+
+        localization.SwitchTo("de-DE");
+
+        Assert.Same(rows, vm.DropTunerEngineOptions);
+        Assert.Equal(
+            [localization["DropTuner_QualityTight"], localization["DropTuner_QualityBalanced"], localization["DropTuner_QualitySmooth"]],
+            rows);
+        Assert.NotEqual(english[0], rows[0]);
+        Assert.Equal(2, vm.SelectedDropTunerEngineIndex);
+    }
+
+    /// <summary>
+    ///     The same switch re-reads the readout header and the two buffer lines, which are formatted
+    ///     from a resx string on every read, and tells the view.
+    /// </summary>
+    [Fact]
+    public void ALanguageSwitch_RereadsTheReadoutHeader_AndTheBufferLines()
+    {
+        var localization = FakeLocalization.English();
+        var engine = new FakeAudioPlaybackService { ActiveSampleRate = 48000, ActualBufferFrames = 128 };
+        var vm = new AudioSettingsViewModel(engine, engine, new FakeConfigurationService(), new ProjectState(),
+            new AudioSettingsWindows(new FakeWizard()), new GatedInlineDispatcher(), localization)
+        {
+            SampleRate = 48000,
+            BufferSizeFrames = 128
+        };
+        Assert.Equal("No device yet", vm.ReadoutDevice);
+        Assert.Equal("≈ 2.67 ms at 48 kHz.", vm.BufferLatencyDescription);
+        Assert.Equal("Device negotiated: 128 frames (≈ 2.67 ms at 48 kHz).", vm.ActualBufferDescription);
+        var raised = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        localization.SwitchTo("de-DE");
+
+        Assert.Equal("Noch kein Gerät", vm.ReadoutDevice);
+        Assert.Equal("≈ 2.67 ms bei 48 kHz.", vm.BufferLatencyDescription);
+        Assert.Equal("Vom Gerät ausgehandelt: 128 Frames (≈ 2.67 ms bei 48 kHz).", vm.ActualBufferDescription);
+        Assert.Contains(nameof(AudioSettingsViewModel.ReadoutDevice), raised);
+        Assert.Contains(nameof(AudioSettingsViewModel.BufferLatencyDescription), raised);
+        Assert.Contains(nameof(AudioSettingsViewModel.ActualBufferDescription), raised);
     }
 
     private static object Different(Type type, object? current) => type switch

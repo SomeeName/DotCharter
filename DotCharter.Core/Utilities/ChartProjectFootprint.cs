@@ -1,3 +1,5 @@
+using DotCharter.Core.Domain.Guitar;
+using DotCharter.Core.Linking;
 using DotCharter.Core.Domain.Project;
 
 namespace DotCharter.Core.Utilities;
@@ -5,7 +7,7 @@ namespace DotCharter.Core.Utilities;
 /// <summary>
 ///     What one <see cref="ChartProjectCloner.Clone" /> of a project costs in managed memory, ESTIMATED
 /// from its element counts. An undo step of a whole-project tool holds two such clones, and
-///     the history needs their size to keep a byte budget without walking object graphs.
+///     the history also budgets identity metadata and objects retained for reattachment.
 ///     <para>
 ///         The per-element costs were measured two ways that agree within a few percent:
 ///         cloning 20,000 synthetic elements of each kind, and a least-squares fit over the 70 base-game
@@ -28,30 +30,96 @@ public static class ChartProjectFootprint
     public static long EstimateBytes(ChartProject project)
     {
         ArgumentNullException.ThrowIfNull(project);
-        var bytes = PerProject + (project.Beats.Count + project.Showlights.Count + project.Annotations.Count) * PerSmallElement;
-        foreach (var track in project.VocalTracks)
-        {
-            foreach (var phrase in track.Phrases) bytes += (phrase.Lyrics.Count + 1) * PerSmallElement;
-        }
-
-        foreach (var arrangement in project.Arrangements) bytes += EstimateBytes(arrangement);
-        return bytes;
+        return PerProject +
+               CollectionBytes(project.Beats, _ => PerSmallElement) +
+               CollectionBytes(project.Showlights, _ => PerSmallElement) +
+               CollectionBytes(project.Annotations, _ => PerSmallElement) +
+               CollectionBytes(project.Stems, _ => PerSmallElement) +
+               CollectionBytes(project.Bookmarks, _ => PerSmallElement) +
+               CollectionBytes(project.ToneDefinitions, _ => PerSmallElement) +
+               CollectionBytes(project.LinkGroups, g => PerSmallElement + CollectionBytes(g.Placements, _ => PerSmallElement)) +
+               CollectionBytes(project.VocalTracks, t => CollectionBytes(t.Phrases,
+                   p => PerSmallElement + CollectionBytes(p.Lyrics, _ => PerSmallElement))) +
+               CollectionBytes(project.Arrangements, EstimateBytes) +
+               CollectionBytes(project.Chart.SingleNotes, NoteBytes) +
+               CollectionBytes(project.Chart.Chords, ChordBytes);
     }
 
     public static long EstimateBytes(Arrangement arrangement)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
-        var bytes = PerArrangement +
-                    (arrangement.EventPoints.Count + arrangement.ToneChanges.Count + arrangement.PhraseIterations.Count +
-                     arrangement.ChordTemplates.Count) * PerSmallElement;
-        foreach (var level in arrangement.Levels)
-        {
-            bytes += PerLevel + level.Notes.Count * PerNote + level.Chords.Count * PerChord +
-                     level.Anchors.Count * PerAnchor + level.HandShapes.Count * PerHandShape +
-                     level.FretHandMutes.Count * PerSmallElement;
-            foreach (var chord in level.Chords) bytes += chord.ChordNotes.Count * PerChordNote;
-        }
-
-        return bytes;
+        return PerArrangement +
+               CollectionBytes(arrangement.EventPoints, _ => PerSmallElement) +
+               CollectionBytes(arrangement.ToneChanges, _ => PerSmallElement) +
+               CollectionBytes(arrangement.PhraseIterations, _ => PerSmallElement) +
+               CollectionBytes(arrangement.ChordTemplates, _ => PerSmallElement) +
+               CollectionBytes(arrangement.FretHandMuteTemplates, _ => PerSmallElement) +
+               CollectionBytes(arrangement.TuningPitches, _ => PerSmallElement) +
+               CollectionBytes(arrangement.NotationVoices, v => PerLevel + CollectionBytes(v.Notes, NoteBytes) +
+                   CollectionBytes(v.Chords, ChordBytes)) +
+               CollectionBytes(arrangement.Levels, l => PerLevel +
+                   CollectionBytes(l.Notes, NoteBytes) + CollectionBytes(l.Chords, ChordBytes) +
+                   CollectionBytes(l.Anchors, _ => PerAnchor) + CollectionBytes(l.HandShapes, _ => PerHandShape) +
+                   CollectionBytes(l.FretHandMutes, _ => PerSmallElement));
     }
+
+    /// <summary>
+    /// A history snapshot also keeps its original objects available for reattachment. Reserve
+    /// a second graph, including identity metadata, for those originals even while attached.
+    /// Charging each snapshot independently deliberately overcounts shared originals, so dropping
+    /// another history node can never leave the remaining node's retained graph unbudgeted.
+    /// </summary>
+    public static long EstimateHistoryBytes(ChartProject snapshot)
+    {
+        using var identities = ChartSnapshotIdentities.BeginCapture();
+        return 2 * EstimateBytes(snapshot);
+    }
+
+    /// <summary>Arrangement-scoped version of <see cref="EstimateHistoryBytes(ChartProject)" />.</summary>
+    public static long EstimateHistoryBytes(Arrangement snapshot)
+    {
+        using var identities = ChartSnapshotIdentities.BeginCapture();
+        return 2 * EstimateBytes(snapshot);
+    }
+
+    /// <summary>Link-only snapshots retain groups and placements, but do not copy arrangements.</summary>
+    public static long EstimateHistoryBytes(IList<LinkGroup> snapshot)
+    {
+        using var identities = ChartSnapshotIdentities.BeginCapture();
+        return 2 * CollectionBytes(snapshot, g => PerSmallElement + CollectionBytes(g.Placements, _ => PerSmallElement));
+    }
+
+    /// <summary>
+    ///     What one propagated linked-run copy keeps alive for undo and redo: every element it
+    ///     removed from the target run and every element it added, its minted templates and its
+    ///     hand-shape trims. A gesture keeps one copy per target per tick, so these add up.
+    /// </summary>
+    public static long EstimateCopyBytes(LinkedRunCopy copy)
+    {
+        ArgumentNullException.ThrowIfNull(copy);
+        return PerSmallElement +
+               copy.Notes.Removed.Sum(PlainNoteBytes) + copy.Notes.Added.Sum(PlainNoteBytes) +
+               copy.Chords.Removed.Sum(PlainChordBytes) + copy.Chords.Added.Sum(PlainChordBytes) +
+               (copy.Anchors.Removed.Count + copy.Anchors.Added.Count) * PerAnchor +
+               (copy.HandShapes.Removed.Count + copy.HandShapes.Added.Count) * PerHandShape +
+               (copy.Mutes.Removed.Count + copy.Mutes.Added.Count + copy.MintedList.Count + copy.TrimmedList.Count) *
+               PerSmallElement;
+    }
+
+    // The copy's elements are live chart objects, not a history snapshot: they are counted
+    // plainly, without registering them in the snapshot identity tables.
+    private static long PlainNoteBytes(GuitarNote note) => PerNote + note.BendValues.Count * PerSmallElement;
+
+    private static long PlainChordBytes(Chord chord) =>
+        PerChord + chord.ChordNotes.Sum(n => PerChordNote + n.BendValues.Count * PerSmallElement);
+
+    private static long NoteBytes(GuitarNote note) =>
+        PerNote + CollectionBytes(note.BendValues, _ => PerSmallElement);
+
+    private static long ChordBytes(Chord chord) =>
+        PerChord + CollectionBytes(chord.ChordNotes,
+            n => PerChordNote + CollectionBytes(n.BendValues, _ => PerSmallElement));
+
+    private static long CollectionBytes<T>(IList<T> items, Func<T, long> estimate) where T : class =>
+        ChartSnapshotIdentities.EstimateBytes(items, estimate);
 }

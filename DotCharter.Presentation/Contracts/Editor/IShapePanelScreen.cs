@@ -99,6 +99,44 @@ public interface IShapePanelScreen : INotifyPropertyChanged
 
     /// <summary>Drops the pending verb, or ends the merge-target choice.</summary>
     ICommand CancelPendingCommand { get; }
+
+    /// <summary>
+    ///     The shape the Shape and Uses pages show (inspector design D): the card last pressed or focused, else the
+    ///     first one listed. A search or filter that hides it moves it to the first card listed; null while none is.
+    /// </summary>
+    IShapePanelRow? CurrentRow { get; set; }
+
+    bool HasCurrentRow { get; }
+
+    /// <summary>The current shape's chords and hand shapes on the level on screen, in time order.</summary>
+    IReadOnlyList<IShapeUseRow> Uses { get; }
+
+    bool HasUses { get; }
+
+    /// <summary>"2 of 6 selected": how many of <see cref="Uses" /> the editor's selection holds.</summary>
+    string UsesSummary { get; }
+
+    /// <summary>True while some, but not every, use is ticked: Split uses gives the ticked ones their own copy.</summary>
+    bool CanSplitUses { get; }
+
+    /// <summary>Gives the ticked uses of the current shape their own copy of it, as one undo step.</summary>
+    ICommand SplitUsesCommand { get; }
+}
+
+/// <summary>One chord or hand shape that uses the current shape (the Uses page).</summary>
+public interface IShapeUseRow : INotifyPropertyChanged
+{
+    /// <summary>Where it starts, "1:24.5".</summary>
+    string TimeText { get; }
+
+    /// <summary>"Chord 3", "Hand shape 1".</summary>
+    string Label { get; }
+
+    /// <summary>Ticked while the editor's selection holds it; ticking adds it to the selection, unticking takes it out.</summary>
+    bool IsChecked { get; set; }
+
+    /// <summary>Selects this use alone and seeks to it, like a marker row.</summary>
+    ICommand JumpCommand { get; }
 }
 
 /// <summary>One chord shape in the panel.</summary>
@@ -106,6 +144,9 @@ public interface IShapePanelRow : INotifyPropertyChanged
 {
     /// <summary>Ticked for a bulk edit.</summary>
     bool IsSelected { get; set; }
+
+    /// <summary>True for the screen's <see cref="IShapePanelScreen.CurrentRow" />: the list frames its line.</summary>
+    bool IsCurrent { get; }
 
     /// <summary>The name being typed in place; it is applied by <see cref="CommitNameCommand" /> (Enter, or the box losing focus).</summary>
     string NameText { get; set; }
@@ -130,6 +171,15 @@ public interface IShapePanelRow : INotifyPropertyChanged
 
     /// <summary>True when the shape deliberately has no name.</summary>
     bool IsNoName { get; set; }
+
+    /// <summary>True while the card offers a suggested chord name: the shape has no name, is not marked No name, and the chord namer has one.</summary>
+    bool HasSuggestion { get; }
+
+    /// <summary>The one-click label for the suggested name, e.g. <c>Use “Am”</c>; empty while there is none.</summary>
+    string SuggestionLabel { get; }
+
+    /// <summary>Gives the shape the suggested name, so every chord and hand shape that uses it reads it.</summary>
+    ICommand UseSuggestionCommand { get; }
 
     /// <summary>The frets low string to high, <c>x</c> for an unplayed string.</summary>
     string FretsText { get; }

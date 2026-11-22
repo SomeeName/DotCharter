@@ -34,6 +34,51 @@ public sealed class LyricScriptDetectorTests
     [Fact]
     public void EnglishIsEnglish() => Assert.True(English(EnglishLyrics));
 
+    [Fact]
+    public void RomajiIsRomaji() => Assert.True(LyricScriptDetector.IsLikelyRomaji(LyricSheetParser.Parse(Romaji)));
+
+    [Fact]
+    public void EnglishIsNotRomaji() => Assert.False(LyricScriptDetector.IsLikelyRomaji(LyricSheetParser.Parse(EnglishLyrics)));
+
+    private static bool Romanized(string paste) =>
+        LyricScriptDetector.IsLikelyRomaji(LyricSheetParser.Parse(paste));
+
+    [Fact]
+    public void RomajiWithAFewEnglishLoanwordsIsStillRomaji()
+    {
+        const string romajiWithLoanwords = """
+            Mi-zu ta-ma-ri ni a-shi wo tsuk-kon-de
+            Ki-mi wa love wo ta-ke-te i-ta na-tsu no hi
+            So-ra wo mi-a-ge-te for-e-ver i-ta da-ke
+            Ka-ze ga fu-i-te ba-by ga chi-ru
+            Ha-na ga ya-ma-no u-e ni sa-ku to-ki
+            """;
+
+        Assert.True(Romanized(romajiWithLoanwords));
+    }
+
+    [Fact]
+    public void EnglishWithAFewJapaneseWordsIsNotRomaji()
+    {
+        const string mixed = """
+            And I know that you don't care sa-yo-na-ra
+            All the things that we could have been ar-i-ga-to
+            This is what they told me when
+            Just a lit-tle while long-er now
+            """;
+
+        Assert.False(Romanized(mixed));
+    }
+
+    [Fact]
+    public void KanaOnlyIsNotRomaji() =>
+        Assert.False(Romanized("""
+            みずたまりにあしをつっこんで
+            きみはわらっていたなつのひ
+            そらをみあげていただけ
+            かぜがふいてはながちる
+            """));
+
     /// <summary>
     ///     The three phonotactic features separated the two real corpora with NO
     ///     overlap. These pin the measured ranges so a future threshold change has
@@ -84,6 +129,7 @@ public sealed class LyricScriptDetectorTests
             """;
 
         Assert.False(English(spanish));
+        Assert.False(LyricScriptDetector.IsLikelyRomaji(LyricSheetParser.Parse(spanish)));
     }
 
     /// <summary>

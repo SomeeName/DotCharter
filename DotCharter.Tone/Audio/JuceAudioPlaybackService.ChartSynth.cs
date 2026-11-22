@@ -73,6 +73,23 @@ public sealed partial class JuceAudioPlaybackService : IChartSynthEngine
     }
 
     /// <inheritdoc />
+    public bool CanRouteChartToSeats => _chartSynth.CanRouteToSeats;
+
+    /// <inheritdoc />
+    public ChartSoundSeatRoute ChartSeatRoute
+    {
+        get => _chartSynth.SeatRoute;
+        set => _chartSynth.SeatRoute = value;
+    }
+
+    /// <inheritdoc />
+    public bool ChartSynthPlaysSongTones
+    {
+        get => _chartSynth.PlaysSongTones;
+        set => _chartSynth.PlaysSongTones = value;
+    }
+
+    /// <inheritdoc />
     public bool TryGetChartSynthStatus(out ChartSynthStatus status) => _chartSynth.TryGetStatus(out status);
 
     /// <summary>
@@ -93,7 +110,7 @@ public sealed partial class JuceAudioPlaybackService : IChartSynthEngine
         try { engine.SetSongClockSource(song); }
         catch (Exception ex) when (ex is ObjectDisposedException or JuceAudioException or ArgumentException)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Chart synth: binding the song clock failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Chart synth: binding the song clock failed", ex);
         }
     }
 }

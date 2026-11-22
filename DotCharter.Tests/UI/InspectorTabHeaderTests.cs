@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace DotCharter.Tests.UI;
 
 /// <summary>
-///     The inspector's tab strip is eight <c>ToggleButton.FireSegmentItem</c>
+///     The inspector's tab strip is eight <c>ToggleButton.ColumnFlowNav</c>
 ///     headers, each an icon plus a one-word caption. A one-word caption is the
 ///     case a tooltip exists for — "Sound", "Song", "Phrases" say what the tab is
 ///     called, not what it holds — so every header carries a
@@ -27,9 +27,9 @@ public sealed class InspectorTabHeaderTests
 {
     /// <summary>One tab header: everything from its <c>ToggleButton</c> open
     /// tag to the matching close tag. The class list may go on after
-    /// <c>FireSegmentItem</c> (the strip's "More" button wears it too, #573).</summary>
+    /// <c>ColumnFlowNav</c> (the strip's "More" button wears it too, #573).</summary>
     private static readonly Regex Header =
-        new(@"<ToggleButton\b[^>]*?Classes=""FireSegmentItem\b[^""]*""[\s\S]*?</ToggleButton>", RegexOptions.Compiled);
+        new(@"<ToggleButton\b[^>]*?Classes=""ColumnFlowNav\b[^""]*""[\s\S]*?</ToggleButton>", RegexOptions.Compiled);
 
     private static readonly Regex TipKey =
         new(@"ToolTip\.Tip=""\{localization:Loc\s+([A-Za-z0-9_.]+)", RegexOptions.Compiled);
@@ -50,7 +50,7 @@ public sealed class InspectorTabHeaderTests
         // Issues, Annotations, Phrases, Riff Library). A regex that stopped
         // matching would otherwise leave this guard asserting nothing.
         Assert.True(headers.Count >= 8,
-            $"only {headers.Count} FireSegmentItem headers found in InspectorView.axaml — " +
+            $"only {headers.Count} ColumnFlowNav headers found in InspectorView.axaml — " +
             "the tab strip moved or the selector changed, and this lint is now blind");
 
         var offenders = new List<string>();

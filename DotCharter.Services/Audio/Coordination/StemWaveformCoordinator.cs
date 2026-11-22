@@ -36,6 +36,7 @@ public sealed class StemWaveformCoordinator
 
     private readonly ConcurrentDictionary<string, WaveformSamples> _perStem = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private long _generation;
 
     /// <summary>The file waveform, kept so the toggle can go back to it without
     /// re-decoding the song.</summary>
@@ -73,6 +74,15 @@ public sealed class StemWaveformCoordinator
         _audio = audio;
         _state = state;
         _logger = logger;
+        _state.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(ProjectState.ActiveProject) or nameof(ProjectState.CurrentAudioFileName) ||
+                e.PropertyName == nameof(ProjectState.WaveformData) && !ReferenceEquals(_state.WaveformData, _published))
+            {
+                Interlocked.Increment(ref _generation);
+                _perStem.Clear();
+            }
+        };
     }
 
     /// <summary>
@@ -92,7 +102,11 @@ public sealed class StemWaveformCoordinator
     ///         the instant it publishes one, silence included.
     ///     </para>
     /// </summary>
-    public void Reset() => _perStem.Clear();
+    public void Reset()
+    {
+        Interlocked.Increment(ref _generation);
+        _perStem.Clear();
+    }
 
     /// <summary>
     ///     Recomputes and publishes the waveform for the given mixer state.
@@ -102,6 +116,13 @@ public sealed class StemWaveformCoordinator
     public async Task ApplyAsync(
         bool followMix, IReadOnlyList<(StemMixChannel Channel, string? Path)> channels)
     {
+        var generation = Volatile.Read(ref _generation);
+        var project = _state.ActiveProject;
+        var audioPath = _audio.CurrentAudioPath;
+        bool IsCurrent() => generation == Volatile.Read(ref _generation) &&
+                            ReferenceEquals(project, _state.ActiveProject) &&
+                            string.Equals(audioPath, _audio.CurrentAudioPath, StringComparison.OrdinalIgnoreCase);
+
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -111,11 +132,12 @@ public sealed class StemWaveformCoordinator
             // WaveformSamples.Empty for a project with no audio, and taking that
             // is what stops the PREVIOUS song's waveform being restored over it.
             var current = _state.WaveformData;
+            if (!IsCurrent()) return;
             if (!ReferenceEquals(current, _published)) _fileWaveform = current;
 
             if (!followMix || channels.Count == 0)
             {
-                if (_fileWaveform is { HasData: true }) Publish(_fileWaveform);
+                if (_fileWaveform is { HasData: true }) Publish(_fileWaveform, IsCurrent);
                 return;
             }
 
@@ -135,14 +157,16 @@ public sealed class StemWaveformCoordinator
                 }
 
                 if (!byName.TryGetValue(channel.Name, out var path) || string.IsNullOrWhiteSpace(path)) continue;
-                var waveform = await WaveformForAsync(path).ConfigureAwait(false);
+                var waveform = StemWaveformMix.ApplyOffset(
+                    await WaveformForAsync(path, IsCurrent).ConfigureAwait(false), channel.OffsetMs);
+                if (!IsCurrent()) return;
                 if (waveform.HasData) parts.Add((waveform, channel.Gain));
             }
 
             var mixed = StemWaveformMix.Mix(parts);
             // Everything muted really does draw as nothing; a source that failed
             // to generate must NOT, or one unreadable stem blanks the timeline.
-            if (mixed.HasData || parts.Count == 0) Publish(mixed);
+            if (mixed.HasData || parts.Count == 0) Publish(mixed, IsCurrent);
 
             _logger?.Info(AppLogCategory.Audio,
                 $"Waveform follows the mix: {parts.Count} audible channel(s) of {channels.Count}.");
@@ -150,7 +174,7 @@ public sealed class StemWaveformCoordinator
         catch (Exception ex)
         {
             _logger?.Error(AppLogCategory.Audio, "Mixed-waveform update failed; leaving the file waveform.", ex);
-            if (_fileWaveform is { HasData: true }) Publish(_fileWaveform);
+            if (_fileWaveform is { HasData: true }) Publish(_fileWaveform, IsCurrent);
         }
         finally
         {
@@ -161,18 +185,19 @@ public sealed class StemWaveformCoordinator
     /// <summary>The ONE place that writes <see cref="ProjectState.WaveformData" />
     /// from here, so <see cref="_published" /> can never fall out of step with what
     /// this coordinator actually put there.</summary>
-    private void Publish(WaveformSamples samples)
+    private void Publish(WaveformSamples samples, Func<bool> isCurrent)
     {
+        if (!isCurrent()) return;
         _published = samples;
         _state.WaveformData = samples;
     }
 
-    private async Task<WaveformSamples> WaveformForAsync(string path)
+    private async Task<WaveformSamples> WaveformForAsync(string path, Func<bool> isCurrent)
     {
         if (_perStem.TryGetValue(path, out var cached)) return cached;
 
         var generated = await _audio.GenerateWaveformAsync(path).ConfigureAwait(false);
-        _perStem[path] = generated;
+        if (isCurrent()) _perStem[path] = generated;
         return generated;
     }
 }

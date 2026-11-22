@@ -48,6 +48,7 @@ public sealed partial class PlaySetlistViewModel : ObservableObject,
     private IPlaySetlistHost? _host;
     private SetlistRunner? _runner;
     private Guid _loadedProfile;
+    private int _readGeneration;
     private Task? _loading;
     private Task _saving = Task.CompletedTask;
     private Task _refreshing = Task.CompletedTask;
@@ -180,8 +181,10 @@ public sealed partial class PlaySetlistViewModel : ObservableObject,
     {
         if (_store == null || _profiles == null) return;
         var profile = _profiles.ActiveProfile.Id;
+        var generation = ++_readGeneration;
         var store = _store;
         var read = await Task.Run(() => store.Load(profile));
+        if (generation != _readGeneration || profile != _profiles.ActiveProfile.Id) return;
         _loadedProfile = profile;
         Lists.Clear();
         foreach (var list in read.Setlists) Lists.Add(new PlaySetlistOption(list));
@@ -210,11 +213,14 @@ public sealed partial class PlaySetlistViewModel : ObservableObject,
     private async Task RefreshAsync()
     {
         if (_store == null || _profiles == null || _loading is not { IsCompleted: true }) return;
-        await _saving;
         var profile = _profiles.ActiveProfile.Id;
+        var generation = ++_readGeneration;
+        await _saving;
+        if (generation != _readGeneration || profile != _profiles.ActiveProfile.Id) return;
         if (profile != _loadedProfile) return; // a profile switch reads the new profile's lists itself
         var store = _store;
         var read = await Task.Run(() => store.Load(profile));
+        if (generation != _readGeneration || profile != _profiles.ActiveProfile.Id) return;
         if (read.Outcome != PlaySetlistReadOutcome.Loaded || IsRunning || !_saving.IsCompleted) return;
         if (Describe(read.Setlists) == Describe(Lists.Select(l => l.Setlist))) return;
 
@@ -499,7 +505,11 @@ public sealed partial class PlaySetlistViewModel : ObservableObject,
     private void Save()
     {
         RaiseListState();
-        if (_store is not { } store || _loading == null) return;
+        if (_store is not { } store || _loading is not { IsCompleted: true } ||
+            _profiles?.ActiveProfile.Id != _loadedProfile)
+        {
+            return;
+        }
         var profile = _loadedProfile;
         var snapshot = Lists.Select(l => l.Setlist.Clone()).ToList();
         _saving = _saving.ContinueWith(_ =>

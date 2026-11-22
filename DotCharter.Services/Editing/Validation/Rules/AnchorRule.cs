@@ -43,20 +43,18 @@ public sealed class AnchorRule : IArrangementRule
                     var type = context.IsOnPhraseBoundary(aMs)
                         ? ArrangementIssueType.AnchorInsideHandShapeAtPhraseBoundary
                         : ArrangementIssueType.AnchorInsideHandShape;
-                    var msg = type == ArrangementIssueType.AnchorInsideHandShapeAtPhraseBoundary
-                        ? "Anchor sits at a phrase boundary inside a hand shape — adjust by ~1 ms."
-                        : "Anchor is placed inside a hand shape — this can break the hand shape rendering.";
-                    issues.Add(new ArrangementIssue(type, msg, aMs, Anchor: anchor, HandShape: containing));
+                    var key = type == ArrangementIssueType.AnchorInsideHandShapeAtPhraseBoundary
+                        ? "Validation_AnchorInsideHandShapeAtPhraseBoundary"
+                        : "Validation_AnchorInsideHandShape";
+                    issues.Add(ArrangementIssues.Make(type, key, aMs, anchor: anchor, handShape: containing));
                 }
 
                 foreach (var endMs in slideEndsMs)
                 {
                     if (Math.Abs(aMs - endMs) < 4)
                     {
-                        issues.Add(new ArrangementIssue(
-                            ArrangementIssueType.AnchorCloseToUnpitchedSlide,
-                            "Anchor sits within 4 ms of an unpitched slide's end — move it slightly later.",
-                            aMs, Anchor: anchor));
+                        issues.Add(ArrangementIssues.Make(ArrangementIssueType.AnchorCloseToUnpitchedSlide,
+                            "Validation_AnchorCloseToUnpitchedSlide", aMs, anchor: anchor));
                         break;
                     }
                 }

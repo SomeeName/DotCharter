@@ -118,9 +118,9 @@ public sealed class ToneDesignerSlotEditorUiPerfSmokeTests
                 var boxA = toneA.Editor!;
                 boxA.Text = "";
                 Settle(window);
-                window.KeyTextInput("tone3");
+                window.KeyTextInput("tone");
                 Settle(window);
-                Assert.Equal("tone3", row.ToneA);
+                Assert.Equal("tone", row.ToneA);
                 Assert.True(boxA.IsDropDownOpen, "typing in a realized slot offered no completion");
                 Assert.Contains(boxA.ItemsSource!.Cast<object>(), k => (string)k == "tone3");
 

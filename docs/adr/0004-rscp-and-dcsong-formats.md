@@ -29,8 +29,8 @@ a chart should be able to travel to and from them.
 - A chart can move between DotCharter and the tools it descends from.
 - The format promise is a cost: a change to a frozen name needs a version bump
   and a migration, so such changes are rare and tested.
-- Compressed package audio is playback-only; charting from audio and stem
-  separation ask for lossless audio.
+- Compressed package audio is playback-only; stem separation asks
+  for lossless audio.
 
 ## Links
 

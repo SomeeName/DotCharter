@@ -179,7 +179,7 @@ public sealed class DockPaneContractTests
     [Fact]
     public void BothPopOutCloseHandlersBailOutOnTheShutdownPath()
     {
-        var source = DockingSource();
+        var source = PopOutsSource();
 
         Assert.Equal(2, Regex.Matches(source, @"if\s*\(_shuttingDown\)\s*return;").Count);
         // ...and the flag has to actually be raised before the close cascade.
@@ -291,9 +291,9 @@ public sealed class DockPaneContractTests
     /// was reported.</summary>
     private static void AssertClosePopOutWindowsClosesBoth()
     {
-        var source = DockingSource();
+        var source = PopOutsSource();
         var start = source.IndexOf("internal void ClosePopOutWindows", StringComparison.Ordinal);
-        Assert.True(start > 0, "ClosePopOutWindows not found in MainWindow.Docking.cs.");
+        Assert.True(start > 0, "ClosePopOutWindows not found in MainWindowPopOuts.cs.");
         var end = source.IndexOf("\n    }", start, StringComparison.Ordinal);
         Assert.True(end > start, "ClosePopOutWindows has no body.");
 
@@ -399,6 +399,11 @@ public sealed class DockPaneContractTests
             .Select(m => m.Groups[1].Value)
             .Distinct(StringComparer.Ordinal)
             .ToList();
+
+    /// <summary>The pop-out windows' owner, the collaborator <c>Views/Shell/MainWindowPopOuts</c>.</summary>
+    private static string PopOutsSource() =>
+        UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(
+            TestPaths.RepoRoot(), "DotCharter.UI", "Views", "Shell", "MainWindowPopOuts.cs")));
 
     private static string DockingSource() =>
         UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Views", "MainWindow.Docking.cs")));

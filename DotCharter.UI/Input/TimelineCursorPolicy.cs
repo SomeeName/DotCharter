@@ -17,9 +17,12 @@ namespace DotCharter.UI.Input;
 public static class TimelineCursorPolicy
 {
     public static StandardCursorType For(
-        double y, double viewportHeight, double topMargin, double bottomMargin, bool panning)
+        double y, double viewportHeight, double topMargin, double bottomMargin, bool panning,
+        bool overPinnedBadge = false)
     {
         if (panning) return StandardCursorType.SizeAll;
+        // A sticky tone/section/phrase badge opens the event editor on click: say so.
+        if (overPinnedBadge) return StandardCursorType.Hand;
         if (TimelineZones.IsTimeRuler(y, viewportHeight)) return StandardCursorType.Arrow;
         if (y < topMargin) return StandardCursorType.Arrow; // event/ribbon rows: pick & drag chips
         if (TimelineZones.IsHandShapeBand(y, viewportHeight, bottomMargin) ||

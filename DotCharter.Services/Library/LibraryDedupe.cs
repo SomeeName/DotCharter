@@ -7,11 +7,11 @@ namespace DotCharter.Services.Library;
 ///     file names (a misnamed clone of another package, a PC
 ///     vs. Mac variant of the same DLC, …). Every song inside such a copy scans
 ///     correctly, so the SAME song identity — <c>(SongKey, Charter, Version)</c>,
-///     the shared-leaderboard key — appears as two or three interchangeable rows
+///     the library song identity — appears as two or three interchangeable rows
 ///     in the song lists. This policy folds those rows down to one.
 ///
 ///     Identity casing mirrors <c>LibraryDoctorSong.Identity</c> (and the
-///     leaderboard key it mirrors): each component is trimmed and lower-cased
+///     library identity it mirrors): each component is trimmed and lower-cased
 ///     invariantly, so the collapse covers EXACTLY the duplicates LibraryDoctor
 ///     flags as <c>DuplicatePackage</c>. LibraryDoctor itself is the diagnosis
 ///     surface and deliberately keeps reporting the duplicates — the lists
@@ -102,7 +102,7 @@ public static class LibraryDedupe
         => path.EndsWith("_m.psarc", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Case-insensitive logical identity — mirrors
-    /// <c>LibraryDoctorSong.Identity</c> / the shared-leaderboard key, plus the
+    /// <c>LibraryDoctorSong.Identity</c> / the library song identity, plus the
     /// source kind: a <c>.dcsong</c> exported from a <c>.psarc</c> keeps its key and
     /// charter, and is a different file to play (its own chart and audio), not a copy.</summary>
     private static string IdentityKey(LibrarySongEntry e)

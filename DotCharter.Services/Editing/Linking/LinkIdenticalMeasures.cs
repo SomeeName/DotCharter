@@ -31,7 +31,7 @@ public static class LinkIdenticalMeasures
 
         var source = MeasureContentIndex.ForHardestLevel(arrangement, project.Beats, rule);
         var wanted = source.KeyFor(firstMeasure, count);
-        var name = SectionAt(arrangement, measures[firstMeasure].Start);
+        var name = SectionMarkers.At(arrangement, measures[firstMeasure].Start);
         var selection = new LinkRunRequest(arrangement, measures[firstMeasure].Start, measures[firstMeasure + count - 1].End);
         if (wanted.IsEmpty) return new LinkIdenticalPlan(LinkCreateRefusal.Empty, null, [selection], name);
 
@@ -80,10 +80,4 @@ public static class LinkIdenticalMeasures
 
     private static bool Overlaps(IEnumerable<LinkPlacement> placements, LinkRunRequest run) =>
         placements.Any(p => ReferenceEquals(p.Arrangement, run.Arrangement) && p.Position < run.End && run.Start < p.EndPosition);
-
-    /// <summary>The section in effect at <paramref name="at" />, or "".</summary>
-    private static string SectionAt(Arrangement arrangement, FractionalPosition at) =>
-        arrangement.EventPoints
-            .Where(e => !string.IsNullOrEmpty(e.Section) && e.Position <= at)
-            .MaxBy(e => e.Position)?.Section ?? "";
 }

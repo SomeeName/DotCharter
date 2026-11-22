@@ -52,9 +52,12 @@ below.
   close the Inspector, and an EMPTY `DockControl` held its third of the bottom row
   with `IsPreviewOnlyVisible` false, so the 3D preview could not widen into it
   either. Closing the Inspector now also clears both tab flags
-  (`OnIsInspectorVisibleChanged`) — they are what the View menu checks and what the
-  keybinds TOGGLE, so a stale `true` showed "Riff Library ✓" with no riff library
-  and made the keybind's first press a no-op. Both pinned by
+  (`OnIsInspectorVisibleChanged`) — they are what the keybinds TOGGLE, so a stale
+  `true` made the keybind's first press a no-op. The View menu lists only the four
+  real panels (Inspector, 3D preview, Sheet music, AI chat) under Panels; the tabs
+  are rows of View ▸ Inspector tab (`InspectorTabMenu`, one row per strip tab, the
+  open Inspector's selected tab ticked; the Riff library row keeps its keybind and
+  runs `TogglePhraseCatalogCommand`), pinned by `UI/ViewMenuPanelsTests`. Both pinned by
   `DockPaneContractTests`, which derives the flag set from the registry itself.
 - **A saved layout is UNTRUSTED INPUT and must never brick startup.** It
   round-trips through JSON, and `MainWindow.RestoreDockLayout` runs inside the
@@ -81,6 +84,19 @@ below.
   `x:Name="TimelineGrid"` / `"MainChartRenderer"` / `"Preview3DPane"` (one
   each). `ChartRenderer` itself is deliberately NOT unique — `StackedTracksView`
   draws one per arrangement — so the NAMED instances are what is pinned.
+- **Every floating window carries the shell along (#602)** — `Views/Shell/FloatingWindowShell`:
+  the interface scale (a `LayoutTransformControl` named `RootScaler` following
+  `UiScaleController` until the window closes) and the flow direction of
+  `MainWindow`'s `WindowRootGrid`. The two pop-outs wrap their content (`Host`); a
+  Dock float window gets the scaler around its template's `PART_ContentPresenter`
+  (`HostTemplated`) through `DotCharterDockFactory.HostWindowCreated`, which
+  `MainWindow.PrepareDockWindow` also uses to wire the shell's key routes
+  (`WireGlobalKeyRoutes`; the routes read focus from the SENDER's TopLevel). The
+  timeline pop-out takes the `InlineEditOverlay` with it and puts it back at its
+  old index on close. The gameplay focus watchdog reclaims focus only from the
+  shell's own CHILD windows (`MainWindowShellLayout.IsReclaimable`), never from a
+  floating pane. Pinned by `Perf/FloatingPaneShellUiPerfSmokeTests` and
+  `UI/FloatingWindowShellPolicyTests`.
 - **The two pop-outs are not dock panes, so `Rebuild()` cannot see them — every
   "bring it home" path has to name them separately.** Two consequences, both
   fixed in 0.58:
@@ -107,7 +123,8 @@ below.
     native child HWND re-attached — and its render loop restarted from
     `OnAttachedToVisualTree` — against a top-level mid-teardown, and for the
     timeline it is a `Focus()` on a closing window. `OnClosing` latches
-    `MainWindow._shuttingDown` and closes both BEFORE the persist steps; both
+    `_shuttingDown` in `Views/Shell/MainWindowPopOuts` (the collaborator that owns
+    both pop-outs) and closes both BEFORE the persist steps; both
     handlers bail on that flag. Pinned by `DockPaneContractTests`
     (`BothPopOutCloseHandlersBailOutOnTheShutdownPath`,
     `OnClosingLatchesTheShutdownFlagBeforePersistingTheLayout`,
@@ -139,9 +156,9 @@ below.
   hierarchy walk or its assembly would have made it inspect zero types and still
   report success; it now floors the scan (measured 2026-08 by flooring at 9999
   and reading the failure: 18 controls, all pairing).
-  (2) It only ever looked at method OVERRIDES, so the five controls
+  (2) It only ever looked at method OVERRIDES, so the controls
   that wire the same attach-time work from their CONSTRUCTOR
-  (`AttachedToVisualTree += …` — `BendEditorControl`, `AmpFxRigView`,
+  (`AttachedToVisualTree += …` — `AmpFxRigView`,
   `VstRackView` (the shared plugin rack; `AmpFxPanel` wired it until 2026-09-27),
   `MixPopoverView`, `ToolsPopoverView`) were inspected by nothing
   at all. `SourceLint_FilesWiringAttachAlsoWireDetach` covers that form, and
@@ -150,7 +167,7 @@ below.
   rooted for the PROCESS, not merely for a service's lifetime (the composition
   root's own subscription is the one reviewed exception).
 
-- `DockLayoutController.Rebuild()` (View → Reset Layout, and the fallback in `SetPaneVisible`) **tears the previous layout down first**: it detaches the old factory's `DockableClosed`/`WindowClosed` handlers, then `Exit()`s and clears the old root's float windows. Skipping either half left a stranded `HostWindow` over the same view model the rebuilt docked pane presents — invisible to `CaptureState`, so lost on restart — whose eventual close ran the OLD factory's handler against the NEW layout. That is why those two handlers are named methods, not lambdas. Regression: `DockLayoutControllerTests` (model-level; a real float needs a `HostWindow`, so the host is stubbed).
+- `DockLayoutController.Rebuild()` (View → Reset Layout, and the fallback in `SetPaneVisible`) **tears the previous layout down first**: it detaches the old factory's `DockableClosed`/`WindowClosed` handlers, then `Exit()`s and clears the old root's float windows. Skipping either half left a stranded `HostWindow` over the same view model the rebuilt docked pane presents — invisible to `CaptureState`, so lost on restart — whose eventual close ran the OLD factory's handler against the NEW layout. That is why those two handlers are named methods, not lambdas. Because the teardown is silent, `Rebuild()` then publishes every pane's `SetFloating` from the new layout itself, or the shell's "dock it back" card stays over a re-docked pane. `PinPane` is idempotent (`IsPanePinned`): Dock's `PinDockable` is a toggle, so restoring "Pinned" over an already pinned pane would dock it. Reset Layout also calls `MainWindowLayoutController.ResetDockRowMemory()`, because the dock-visibility change it causes posts a row sizing that would otherwise restore the old dock height; restored Inspector and AI chat widths are clamped to their split after layout and on every resize (`ClampSideColumns`, which only narrows; a width that fits, or one the user drags, is left alone). Shell-level regressions: `Perf/LayoutResetRestoreUiPerfSmokeTests` (reset, both clamp directions, the maximized start's normal size) and `LayoutResetRestoreTests` (the pure clamps). Regression: `DockLayoutControllerTests` (model-level; a real float needs a `HostWindow`, so the host is stubbed).
 
 Manual dock checklist after touching this area (dock drags can't be tested headless): float each pane → content renders (not black) → drag back over its dock → redocks; close a floating window → View-menu checkbox flips off → re-enable → pane returns docked; pin a pane → collapses to edge tab, flyout works, View menu still shows it checked; arrange panes, restart → layout restored; View → Reset Layout → defaults; **float a pane, THEN View → Reset Layout → the float window closes with it** (no orphan left on screen).
 

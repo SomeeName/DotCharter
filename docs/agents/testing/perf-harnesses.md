@@ -274,9 +274,12 @@ splits the suite and every runner goes through it:
   discovered-vs-reported check names (the gate wrapper fails on it; CI and the
   release re-run them in a fresh process and block if they still report
   nothing). Proved 2026-10-04 by killing one shard's testhost mid-run.
-- **Retries stay single-process**: a harness-race class, an absent class and an
-  order-dependent candidate are each re-run in one fresh process, exactly as
-  before. `Invoke-Gate.ps1 -Headless` (and so `Merge-Train.ps1`) re-runs only
+- **Retries stay single-process**: a harness-race class, an absent class (or one
+  from a shard whose exit its TRX does not explain) and an order-dependent
+  candidate are each re-run in one fresh process. CI and the release grade them
+  through `HeadlessShards.psm1` (`Resolve-HeadlessRetry`,
+  `Resolve-HeadlessIsolatedRun`): a candidate is cleared only when IT passed in
+  a cleanly-ended isolated run, and any other case that fails there blocks. `Invoke-Gate.ps1 -Headless` (and so `Merge-Train.ps1`) re-runs only
   harness-fault classes, only when no other failure and no absent class exists
   (`Get-HeadlessRaceRerunDecision`), up to `-RaceReruns` (2) times, and prints
   `headless race re-run: PASSED|RED` under the first run's counts.
@@ -428,6 +431,15 @@ for that reason; do the same in any harness that hosts a view `MainWindow` hosts
 Text should still name its own Fire token: `ResultsScreen_titlesAndProfileNameUseTheFireTitleToken`
 fails on Results text whose colour comes from the window.
 
+## Gallery capture ground
+
+`Perf/GalleryPagesUiPerfSmokeTests` uses the same capture window as the
+gallery's `--capture` command. The window resolves `AppBackground` from the
+application theme so a transparent page sits on the same ground as in
+`GalleryWindow`. With `DOTCHARTER_UI_SWEEP_DUMP=1`, the General Settings
+`AdvancedOpen` case samples the frame's empty corner and checks it against
+the brush.
+
 ## The narrow-width shell capture (#130, #134)
 
 `Perf/NarrowWidthShellCaptureUiPerfSmokeTests` shows the real `MainWindow` over
@@ -479,6 +491,16 @@ two TALL sizes nothing binds. With `DOTCHARTER_UI_SWEEP_DUMP=1` it writes
     is why the old advice was to run these as a whole class. That reproducer is
     the cheapest A/B if the drain is ever removed.
 
+## Chart editor wording captures (#532)
+
+`ChartEditorWordingUiPerfSmokeTests` constructs and attaches the surfaces whose labels grew,
+including both phrase-copy states, and asserts a non-zero measure. Set
+`DOTCHARTER_UI_SWEEP_DUMP=1` and `DOTCHARTER_WORDING_CAPTURE_DIR` to a review-artifact
+directory to save PNGs. Run before and after the resource changes, in separate test processes;
+`DOTCHARTER_HEADLESS_CULTURE` selects the built-in language. The dialog cases use the
+production dialog container so their shared styles resolve.
+`Perf/ArrangementReferencePitchUiPerfSmokeTests` captures the arrangement dialog's A440 check row the same way: `DOTCHARTER_UI_SWEEP_DUMP=1` plus `DOTCHARTER_REFERENCE_PITCH_CAPTURE_DIR` (and an optional `DOTCHARTER_REFERENCE_PITCH_CAPTURE_NAME` prefix), taken before the assertions.
+
 ## The cold-start profiler
 
   - `StartupProfileUiPerfSmokeTests` is the cold-start profiler: it rebuilds the
@@ -492,3 +514,28 @@ two TALL sizes nothing binds. With `DOTCHARTER_UI_SWEEP_DUMP=1` it writes
     (huge in round 1, gone after) from real work (flat across rounds). It asserts
     nothing on purpose — the startup guards are structural, in
     `UI/StartupWorkDeferralTests`.
+
+
+### Public export subprocesses (#664)
+
+`Infrastructure/PublicSnapshotExportTests` and `PublicSyncGuardTests` build
+separate fixture git repositories; each PowerShell child has its own release
+cache. Their nested classes can run concurrently in release-lane shards. They
+share the CPU allocation, not a git index or export lock. Recorded class weights
+are 23.4-99.7 s unloaded; export children reached 199-224 s under concurrent builds.
+
+`Infrastructure/BoundedProcess` drains both output pipes while waiting and uses
+`ProcessIdleGuard`: output renews a 15-minute silence guard, so total runtime is
+unbounded while progress continues. It kills only the child's process tree on
+silence and retains the output. `ProcessIdleGuardTests` advances an injected clock
+to represent a loaded export and renewed progress, and verifies that an actual
+silent Windows PowerShell child is killed. Neither test asserts elapsed time.
+
+### Opt-in services for a headless dispatch
+
+The internal async `HeadlessSessionFixture.Dispatch` overload accepts an optional
+service-composition callback after its standard fake Tonelab registration. Use it
+for real-shell integration tests needing an injected backend, such as a fixture-owned
+recycle archive. The next default dispatch resets the callback. Do not change the
+production recycle guard or rely on the machine's bin settings to make a positive
+UI deletion test pass.

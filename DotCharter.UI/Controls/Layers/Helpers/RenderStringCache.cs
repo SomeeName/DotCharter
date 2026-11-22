@@ -85,7 +85,7 @@ public static class RenderStringCache
 
         if (!MmSsFfCache.TryGetValue(key, out var s))
         {
-            s = TimeSpan.FromMilliseconds(key * 10.0).ToString(@"mm\:ss\.ff", CultureInfo.InvariantCulture);
+            s = ElapsedTimeLabel.Format(key * 10.0, 2, padMinutes: true);
             // Clear-and-continue rather than refuse: an unbounded dictionary is
             // the only other way to keep caching past the cap, and a song longer
             // than the cap would otherwise fall off the cache permanently.
@@ -205,32 +205,6 @@ public static class RenderStringCache
         s = beatsInMeasure.ToString(CultureInfo.InvariantCulture) + "/" +
             noteDenominator.ToString(CultureInfo.InvariantCulture);
         if (TimeSigLabelCache.Count < 256) TimeSigLabelCache.TryAdd(key, s);
-        return s;
-    }
-
-    // Bend "step / 2" fallback labels — quantized to 0.1 to bound cache size.
-    private static readonly ConcurrentDictionary<int, string> BendStepLabelCache = new();
-
-    public static string BendStepLabel(float step)
-    {
-        var key = (int)Math.Round(step * 10f);
-        if (BendStepLabelCache.TryGetValue(key, out var s)) return s;
-        s = (key / 20.0).ToString("0.#", CultureInfo.InvariantCulture);
-        if (BendStepLabelCache.Count < 256) BendStepLabelCache.TryAdd(key, s);
-        return s;
-    }
-
-    // Full bend-arrow labels ("ノ" + step text). Cached separately so the
-    // note-head renderer never concatenates per visible bend per frame —
-    // that concat was the only steady-state allocation in the render loop.
-    private static readonly ConcurrentDictionary<int, string> BendArrowLabelCache = new();
-
-    public static string BendArrowLabel(float step, string stepLabel)
-    {
-        var key = (int)Math.Round(step * 10f);
-        if (BendArrowLabelCache.TryGetValue(key, out var s)) return s;
-        s = "ノ" + stepLabel;
-        if (BendArrowLabelCache.Count < 256) BendArrowLabelCache.TryAdd(key, s);
         return s;
     }
 }

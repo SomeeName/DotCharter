@@ -37,6 +37,71 @@ public sealed class MatchModelViewModelTests
         return vm;
     }
 
+    /// <summary>
+    ///     #349: the installer reports its later steps from a pool thread; the bound detail lines
+    ///     must only be written on the UI thread.
+    /// </summary>
+    [Fact]
+    public async Task ProgressReportedOffTheUiThread_IsWrittenOnTheUiThread()
+    {
+        var ui = new PumpedDispatcher();
+        var downloads = new FakeRigEstimatorModelDownloadService { ReportOnPoolThread = true };
+        var vm = new MatchModelViewModel(FakeLocalization.English(), downloads, ui: ui);
+        vm.Refresh();
+        var writers = new List<bool>();
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is not (nameof(MatchModelViewModel.ModelDetail) or nameof(MatchModelViewModel.LibraryDetail))) return;
+            // Only the progress steps: the caller's own final write lands wherever its await resumed.
+            var detail = e.PropertyName == nameof(MatchModelViewModel.ModelDetail) ? vm.ModelDetail : vm.LibraryDetail;
+            if (detail is "Downloading…" or "Unpacking…") writers.Add(ui.CheckAccess());
+        };
+
+        // The gate holds each download open while its steps are pumped: a step that lands after the
+        // download returned is dropped by design.
+        foreach (var command in new[] { vm.DownloadModelCommand, vm.DownloadLibraryCommand })
+        {
+            var gate = new TaskCompletionSource();
+            downloads.Gate = gate;
+            var before = writers.Count;
+            var run = command.ExecuteAsync(null);
+            while (writers.Count < before + 2 && !run.IsCompleted)
+            {
+                ui.Pump();
+                await Task.Delay(1, TestContext.Current.CancellationToken);
+            }
+
+            gate.SetResult();
+            await run;
+            ui.Pump();
+        }
+
+        Assert.NotEmpty(writers);
+        Assert.All(writers, onUi => Assert.True(onUi));
+    }
+
+    /// <summary>A UI thread that is the test's own: posted work waits until <see cref="Pump" />.</summary>
+    private sealed class PumpedDispatcher : DotCharter.Tone.Diagnostics.IUiDispatcher
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<Action> _queue = new();
+        private volatile int _uiThread = -1;
+        public bool CheckAccess() => Environment.CurrentManagedThreadId == _uiThread;
+        public void Post(Action action) => _queue.Enqueue(action);
+        public void PostNormal(Action action) => _queue.Enqueue(action);
+
+        public void Pump()
+        {
+            // Whichever thread pumps is the UI thread for the duration (the test body hops threads across awaits).
+            _uiThread = Environment.CurrentManagedThreadId;
+            while (_queue.TryDequeue(out var action)) action();
+            _uiThread = -1;
+        }
+
+        public Task InvokeAsync(Action action) => throw new NotSupportedException();
+        public Task<T> InvokeAsync<T>(Func<T> func) => throw new NotSupportedException();
+        public Task<T> InvokeAsync<T>(Func<Task<T>> func) => throw new NotSupportedException();
+    }
+
     // ---- the tone library row -------------------------------------------------
 
     [Fact]
@@ -209,24 +274,36 @@ public sealed class MatchModelViewModelTests
     [Fact]
     public async Task WithADispatcher_TheLoadProbeNeverRunsInsideRefresh_AndANoStillArrives()
     {
-        // The stub waits for a gate the test opens only once Refresh has returned: a probe run
-        // INSIDE Refresh cannot see it open, times out, and says so. No timing, no thread ids.
-        using var released = new ManualResetEventSlim();
-        var blockedTheCaller = false;
+        // The stub records whether it was asked by the very call to Refresh: while Refresh runs,
+        // on the thread running it. A probe on a pool thread, early or late, is neither; nothing
+        // here depends on how soon a continuation is scheduled. The probe then holds its "no"
+        // until the test has read the row; the 60 s wait is only a deadlock detector.
+        using var release = new ManualResetEventSlim();
+        var refreshThread = Environment.CurrentManagedThreadId;
+        var insideRefresh = 0;
+        var askedInsideRefresh = false;
+        var released = false;
         var vm = new MatchModelViewModel(FakeLocalization.English(),
             new FakeRigEstimatorModelDownloadService { IsInstalled = true },
             () =>
             {
-                blockedTheCaller = !released.Wait(TimeSpan.FromSeconds(2));
+                askedInsideRefresh |= Volatile.Read(ref insideRefresh) == 1
+                    && Environment.CurrentManagedThreadId == refreshThread;
+                BoundedWait.For(release, "the model probe release");
+                released = true;
                 return new StubEstimator(available: false);
             },
             ui: new TestUiDispatcher());
+        Volatile.Write(ref insideRefresh, 1);
         vm.Refresh();
-        released.Set();
+        Volatile.Write(ref insideRefresh, 0);
 
+        Assert.False(askedInsideRefresh, "the estimator was asked inside Refresh, i.e. in the frame");
         Assert.False(vm.ModelIsError);
-        await vm.PendingProbe!.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
-        Assert.False(blockedTheCaller, "the estimator was asked inside Refresh, i.e. in the frame");
+        release.Set();
+        await BoundedWait.ForAsync(vm.PendingProbe!, "the model probe completion", TestContext.Current.CancellationToken);
+        Assert.True(released, "the model probe release never arrived; its failure was caught by the view model");
+        Assert.False(askedInsideRefresh, "the estimator was asked inside Refresh, i.e. in the frame");
         Assert.True(vm.ModelIsError);
     }
 

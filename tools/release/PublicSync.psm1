@@ -85,9 +85,34 @@ function Test-PublicSnapshotRecord {
     return ($Record.Message -ceq $initial) -or ($Record.Message -cmatch $update)
 }
 
-# The non-merge commits on $Ref after its last snapshot (the newest snapshot on the
-# first-parent chain), oldest first. Every commit when there is no snapshot at all.
-# A merge commit carries no change of its own: its non-merge commits are listed.
+# What a merge commit changed by hand: the tree git alone makes of its two parents
+# (`git merge-tree --write-tree`, conflict markers included) when the merge's own tree
+# differs from it - a conflict resolution or an edit made in the merge - else $null (a
+# clean merge adds nothing of its own). An octopus merge returns its first parent's tree:
+# everything it changed counts as its own. A two-parent merge git cannot replay (no
+# `merge-tree --write-tree` before git 2.38, or the command fails) THROWS: falling back to
+# the first parent would re-import the whole merged pull request and report every merge
+# as unimported.
+function Get-PublicMergeOwnBase {
+    param([Parameter(Mandatory)][string]$GitDir, [Parameter(Mandatory)][string]$Sha)
+    $parents = @((Invoke-SnapshotGit -Arguments @("--git-dir=$GitDir", 'log', '-1', '--format=%P', $Sha)).Split(' ', [StringSplitOptions]::RemoveEmptyEntries))
+    if ($parents.Count -lt 2) { return $null }
+    if ($parents.Count -gt 2) { return Invoke-SnapshotGit -Arguments @("--git-dir=$GitDir", 'rev-parse', "$($parents[0])^{tree}") }
+    $tree = Invoke-SnapshotGit -Arguments @("--git-dir=$GitDir", 'rev-parse', "$Sha^{tree}")
+    $mergeTree = @("--git-dir=$GitDir", 'merge-tree', '--write-tree', '--no-messages', $parents[0], $parents[1])
+    $need = "merge $Sha cannot be split into its own changes: 'git $($mergeTree -join ' ')' needs git 2.38 or newer"
+    try { $out = Invoke-SnapshotGit -Arguments $mergeTree -AllowExitCodes @(1) }
+    catch { throw "$need and failed: $($_.Exception.Message)" }
+    $auto = $out.Split("`n")[0].Trim()
+    if ($auto -notmatch '^[0-9a-f]{40,64}$') { throw "$need and printed no tree id (first line '$auto')." }
+    if ($auto -ceq $tree) { return $null }
+    return $auto
+}
+
+# The commits on $Ref after its last snapshot (the newest snapshot on the first-parent
+# chain), oldest first. Every commit when there is no snapshot at all. A merge commit is
+# listed only when it changed something by hand (Get-PublicMergeOwnBase): its merged
+# commits are listed on their own, but a conflict resolution exists only in the merge.
 function Get-PublicCommitsSinceSnapshot {
     param(
         [Parameter(Mandatory)][string]$GitDir,
@@ -104,11 +129,12 @@ function Get-PublicCommitsSinceSnapshot {
     for ($r = $records[0]; $r; $r = if ($r.Parents.Count -gt 0) { $bySha[$r.Parents[0]] } else { $null }) {
         if (Test-PublicSnapshotRecord -Record $r -Product $Repo -Identities $identities) { $snapshot = $r; break }
     }
-    $range = @('rev-list', '--no-merges', '--reverse', $Ref)
+    $range = @('rev-list', '--reverse', $Ref)
     if ($snapshot) { $range += "^$($snapshot.Sha)" }
     $shas = Invoke-SnapshotGit -Arguments (@("--git-dir=$GitDir") + $range)
     foreach ($sha in $shas.Split("`n", [StringSplitOptions]::RemoveEmptyEntries)) {
         $r = $bySha[$sha.Trim()]
+        if ($r.Parents.Count -gt 1 -and $null -eq (Get-PublicMergeOwnBase -GitDir $GitDir -Sha $r.Sha)) { continue }
         [pscustomobject]@{ Repo = $Repo; Sha = $r.Sha; Subject = $r.Subject; Author = $r.Author; Snapshot = $(if ($snapshot) { $snapshot.Sha } else { $null }) }
     }
 }
@@ -215,6 +241,37 @@ function Get-PublicImportIssueKey {
 
 # --- the reverse rename map --------------------------------------------------------
 
+# Preserve a dev-only suffix as unchanged context in both sides of an import diff.
+# Only an exact, complete-line public prefix is eligible; other edits still go
+# through git's ordinary three-way conflict detection.
+function Add-PublicImportTail {
+    param([AllowEmptyString()][string]$Text, [AllowEmptyString()][string]$BaseText, [AllowEmptyString()][string]$DevText)
+    if (-not $Text -or -not $BaseText -or -not $DevText -or -not $Text.EndsWith("`n") -or
+        -not $BaseText.EndsWith("`n") -or -not $DevText.StartsWith($BaseText, [StringComparison]::Ordinal)) { return $Text }
+    $suffix = $DevText.Substring($BaseText.Length)
+    if (-not $suffix) { return $Text }
+    # If public already added the same tail, keep one copy. Common repeated
+    # suffixes in the original base do not count as a new public addition. A match
+    # counts only as whole lines: a public edit that merely ends with the suffix's
+    # text ("end }" over a "}" tail) is not the tail.
+    $rest = $Text; $baseRest = $BaseText
+    while ((Test-EndsWithWholeLines $rest $suffix) -and (Test-EndsWithWholeLines $baseRest $suffix)) {
+        $rest = $rest.Substring(0, $rest.Length - $suffix.Length)
+        $baseRest = $baseRest.Substring(0, $baseRest.Length - $suffix.Length)
+    }
+    if (Test-EndsWithWholeLines $rest $suffix) { return $Text }
+    return $Text + $suffix
+}
+
+# $Text ends with $Suffix AND the suffix starts a line: at the start of $Text or right
+# after a line feed (a CRLF line ends in one too).
+function Test-EndsWithWholeLines {
+    param([AllowEmptyString()][string]$Text, [AllowEmptyString()][string]$Suffix)
+    if (-not $Text.EndsWith($Suffix, [StringComparison]::Ordinal)) { return $false }
+    $start = $Text.Length - $Suffix.Length
+    return $start -eq 0 -or $Text[$start - 1] -eq [char]10
+}
+
 # Public text -> dev text, line by line: a public line that is the renamed form of a line
 # in the dev file ($DevText) becomes that dev line again. A line with no dev counterpart
 # is left as it is. Lines keep their own "\r". Ambiguous lines (two dev lines renaming to
@@ -239,5 +296,5 @@ function Convert-PublicTextToDev {
 }
 
 Export-ModuleMember -Function Get-PublicSnapshotIdentity, Get-DevSyncHistories, Find-SnapshotIdentityProblems, Get-PublicCommitTrailerKey, Get-PublicCommitTrailer, Get-SyncCommitRecords, Get-SnapshotIdentities,
-    Test-PublicSnapshotRecord, Get-PublicCommitsSinceSnapshot, Get-ImportedPublicCommits, Find-UnimportedPublicCommits,
-    Format-PublicSyncRefusal, Get-PublicImportIssueTitle, Get-PublicImportIssueKey, Convert-PublicTextToDev
+    Test-PublicSnapshotRecord, Get-PublicMergeOwnBase, Get-PublicCommitsSinceSnapshot, Get-ImportedPublicCommits, Find-UnimportedPublicCommits,
+    Format-PublicSyncRefusal, Get-PublicImportIssueTitle, Get-PublicImportIssueKey, Convert-PublicTextToDev, Add-PublicImportTail

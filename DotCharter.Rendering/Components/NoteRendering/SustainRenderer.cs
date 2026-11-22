@@ -249,7 +249,7 @@ internal static class SustainRenderer
         }
 
         if ((flags & NoteFlags.HasBends) != 0 && slice.IsLast)
-            BendRenderer.RenderPeaks(context, tail.BendOffset, tail.BendCount, baseNy, nX);
+            BendRenderer.RenderPeaks(context, tail.Peaks, baseNy, nX);
     }
 
     private static void DrawOpenTail(RenderContext context, in Tail tail, int lane, KeySlice slice)
@@ -342,7 +342,7 @@ internal static class SustainRenderer
         // HOW FAR — and since the highway's open rule is `fret <= Capo`, every
         // bend at the capo's fret took this path and lost its label too.
         if ((flags & NoteFlags.HasBends) != 0 && slice.IsLast)
-            BendRenderer.RenderPeaks(context, tail.BendOffset, tail.BendCount, baseNy, spanCenter);
+            BendRenderer.RenderPeaks(context, tail.Peaks, baseNy, spanCenter);
     }
 
     private static void DrawOpenTailRail(RenderContext context, float x1, float y1, float z1, float x2, float y2,
@@ -361,6 +361,9 @@ internal static class SustainRenderer
     {
         /// <summary>A bend, or a bend carried in by a link, moves this tail off its lane.</summary>
         public bool Bends => (Flags & NoteFlags.HasBends) != 0 || BendCarry != 0f;
+
+        /// <summary>What the bend peaks and their gesture labels read.</summary>
+        public BendTail Peaks => new(Time, Flags, BendOffset, BendCount, BendCarry);
     }
 
     /// <summary>The draw key one pass stages, inside the range one tail spans.</summary>

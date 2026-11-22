@@ -159,27 +159,9 @@ public static class GpExporter
 
     internal static List<double> BuildTuningHighToLow(Arrangement arrangement)
     {
-        // 7, 8 and 9 strings extend DOWN (B1, F#1, then C#1) — the one table every importer
-        // measures offsets against. A 9-string must not fall to the six-string
-        // row, which would climb a fourth per extra string, writing A4 and D5 for its two low
-        // strings.
-        var standard = arrangement.StringCount switch
-        {
-            4 => [28, 33, 38, 43],
-            // 5 is E A D G B, an octave down for a bass: the importers subtract the same row.
-            5 => TuningUtilities.GetStandardMidiPitchesFor(5, arrangement.ArrangementType),
-            7 or 8 or 9 => TuningUtilities.GetStandardMidiPitches(arrangement.StringCount),
-            _ => [40, 45, 50, 55, 59, 64]
-        };
-
-        var offsets = TuningOffsetResolution.Resolve(arrangement);
         var lowToHigh = new List<double>(arrangement.StringCount);
         for (var i = 0; i < arrangement.StringCount; i++)
-        {
-            var offset = i < offsets.Count ? offsets[i] : 0;
-            var baseMidi = i < standard.Length ? standard[i] : standard[^1] + 5 * (i - standard.Length + 1);
-            lowToHigh.Add(baseMidi + offset);
-        }
+            lowToHigh.Add(SoundingPitch.OpenSoundingMidi(arrangement, i) ?? 0);
 
         lowToHigh.Reverse(); // alphaTab staff tuning is highest string first
         return lowToHigh;
@@ -346,16 +328,12 @@ public static class GpExporter
         {
             var carriedTicks = (int)Math.Round(carry.Quarters * TicksPerBeat * denominator / 4);
             var tied = Math.Min(carriedTicks, slots.Count > 0 ? slots[0].Tick : totalTicks);
-            EmitTied(voice, carried, tied, chunks, capo);
+            EmitTied(voice, carried, new FractionalPosition(startBeat), tied, chunks, capo);
             cursor = tied;
             // Only a bar with nothing else in it passes the rest of the carry on.
             carry.Quarters = slots.Count == 0 ? carry.Quarters - tied * 4.0 / (TicksPerBeat * denominator) : 0;
             if (carry.Quarters * TicksPerBeat * denominator / 4 < 1) carry.Slot = null;
         }
-
-        // Whether anything sounds after this bar: only then does a carry make sense.
-        var barEndBeat = startBeat + beatsInBar;
-        var following = events.FirstOrDefault(e => e.Position.BeatId >= barEndBeat);
 
         for (var s = 0; s < slots.Count; s++)
         {
@@ -389,7 +367,7 @@ public static class GpExporter
             if (wantedTicks <= gap && ReadsBackAsStaccato(slot, noteTicks, gap, denominator))
                 noteTicks = chunks.Chain.Fit(gap, gap);
             var isLast = s + 1 == slots.Count;
-            if (isLast && wantedTicks > gap && following != null)
+            if (isLast && wantedTicks > gap)
             {
                 carry.Slot = slot;
                 carry.Quarters = (wantedTicks - gap) * 4.0 / (TicksPerBeat * denominator);
@@ -516,14 +494,15 @@ public static class GpExporter
     // ------------------------------------------------------------ notes
 
     /// <summary>Writes <paramref name="ticks" /> of a carried sound as tie destinations.</summary>
-    private static void EmitTied(AT.Voice voice, EventSlot slot, int ticks, Durations chunks, int capo)
+    private static void EmitTied(AT.Voice voice, EventSlot slot, FractionalPosition start, int ticks, Durations chunks, int capo)
     {
         foreach (var chunk in chunks.Spell(ticks))
         {
             var beat = NewBeat(chunk);
-            AddSounds(beat, slot, Legato.None, ticks, first: false, capo);
+            var end = start + new FractionalPosition(0, new Fraction(chunk.Ticks, TicksPerBeat));
+            AddSounds(beat, slot, Legato.None, start, end, first: false, capo);
             voice.AddBeat(beat);
-            ticks -= chunk.Ticks;
+            start = end;
         }
     }
 
@@ -549,18 +528,21 @@ public static class GpExporter
                 beat.TupletDenominator = spelling.TupletDen;
             }
 
-            AddSounds(beat, slot, legato, ticks, first: true, capo);
+            AddSounds(beat, slot, legato, primary.Position,
+                primary.Position + new FractionalPosition(0, new Fraction(ticks, TicksPerBeat)), first: true, capo);
             voice.AddBeat(beat);
             return;
         }
 
         var first = true;
+        var start = primary.Position;
         foreach (var chunk in chunks.Spell(ticks))
         {
             var beat = NewBeat(chunk);
-            AddSounds(beat, slot, legato, ticks, first, capo);
+            var end = start + new FractionalPosition(0, new Fraction(chunk.Ticks, TicksPerBeat));
+            AddSounds(beat, slot, legato, start, end, first, capo);
             voice.AddBeat(beat);
-            ticks -= chunk.Ticks;
+            start = end;
             first = false;
         }
     }
@@ -577,7 +559,7 @@ public static class GpExporter
     ///     <c>Popped</c> on the beat), so any sound of the slot carrying one marks the beat.
     ///     </para>
     /// </summary>
-    private static void AddSounds(AT.Beat beat, EventSlot slot, Legato legato, int ticks, bool first,
+    private static void AddSounds(AT.Beat beat, EventSlot slot, Legato legato, FractionalPosition start, FractionalPosition end, bool first,
         int capo)
     {
         var tremolo = false;
@@ -591,7 +573,7 @@ public static class GpExporter
             if (ev.Note is { } note)
             {
                 if (!written.Add(note.StringIndex)) continue;
-                beat.AddNote(BuildNote(note, note, legato, ticks, isTieDestination: !first, capo));
+                beat.AddNote(BuildNote(note, note, legato, start, end, isTieDestination: !first, capo));
                 Observe(note);
             }
             else if (ev.Chord is { } chord)
@@ -599,7 +581,7 @@ public static class GpExporter
                 foreach (var chordNote in chord.ChordNotes)
                 {
                     if (!written.Add(chordNote.StringIndex)) continue;
-                    beat.AddNote(BuildNote(chordNote, chord, legato, ticks, isTieDestination: !first, capo));
+                    beat.AddNote(BuildNote(chordNote, chord, legato, start, end, isTieDestination: !first, capo));
                     Observe(chordNote);
                 }
 
@@ -616,7 +598,7 @@ public static class GpExporter
             beat.Pop = picking == BassPickingType.Pop;
         }
 
-        if (tremolo && first) beat.TremoloSpeed = AT.Duration.Eighth;
+        if (tremolo && first) beat.TremoloPicking = new AT.TremoloPickingEffect { Marks = 1 };
         if (accent && first)
         {
             foreach (var n in beat.Notes)
@@ -626,7 +608,7 @@ public static class GpExporter
         void Observe(IGuitarSound sound)
         {
             // A charted pick scrape implies its own tap and tremolo (see BuildNote).
-            var scrape = GpPickScrape.IsChartedScrape(sound);
+            var scrape = GpPickScrape.IsScrape(sound);
             tremolo |= sound.Tremolo && !scrape;
             tap |= sound.Hopo == HopoType.Tap && !scrape;
             if (picking == BassPickingType.None) picking = sound.BassPicking;
@@ -725,7 +707,7 @@ public static class GpExporter
     }
 
     private static AT.Note BuildNote(IGuitarSound sound, object owner, Legato legato,
-        int remainingTicks,
+        FractionalPosition start, FractionalPosition end,
         bool isTieDestination, int capo)
     {
         var note = new AT.Note
@@ -737,28 +719,20 @@ public static class GpExporter
             String = sound.StringIndex + 1 // domain 0 = lowest; alphaTab 1 = lowest
         };
 
+        var onset = owner is GuitarNote gn ? gn.Position : ((Chord)owner).Position;
+        GpBendCurve.AddTo(sound, onset, start, end, note);
         if (isTieDestination)
         {
-            // Continuation beat of a long rhythm — carry only the pitch.
+            // Continuations carry pitch and this beat's segment of the bend curve.
             note.IsTieDestination = true;
             return note;
         }
 
-        // A charted PICK SCRAPE is Guitar Pro's own technique: write the
-        // pick slide and nothing it implies. The importer charts the tap,
-        // tremolo, fret-hand mute, unpitched slide and ignore back from it
-        // (GpPickScrape.Apply), and the split chord from the strum, so a dead
-        // note, a slide-out or a tremolo mark here would only add notation the
-        // tab never had. The same predicate the import keys on decides it.
-        var scrape = GpPickScrape.IsChartedScrape(sound);
-        if (!scrape)
-        {
-            switch (sound.Mute)
-            {
-                case MuteType.Full: note.IsDead = true; break;
-                case MuteType.Palm: note.IsPalmMute = true; break;
-            }
-        }
+        // Guitar Pro represents a pick slide as a dead note carrying the slide flag.
+        // Chart mute is independent: import charts its tap, tremolo, slide and ignore unmuted.
+        var scrape = GpPickScrape.IsScrape(sound);
+        note.IsDead = scrape || sound.Mute == MuteType.Full;
+        if (!scrape && sound.Mute == MuteType.Palm) note.IsPalmMute = true;
 
         note.HarmonicType = sound.Harmonic switch
         {
@@ -793,37 +767,6 @@ public static class GpExporter
         if (legato.Origins.Contains(sound)) note.IsHammerPullOrigin = true;
         if (legato.LeftHandTaps.Contains(sound)) note.IsLeftHandTapped = true;
 
-        AddBends(sound, owner, note, remainingTicks);
         return note;
-    }
-
-    private static void AddBends(IGuitarSound sound, object owner, AT.Note note, int remainingTicks)
-    {
-        if (sound.BendValues.Count == 0) return;
-
-        var position = owner switch
-        {
-            GuitarNote gn => gn.Position,
-            Chord ch => ch.Position,
-            _ => FractionalPosition.Zero
-        };
-
-        // Bend offsets are 0..60 across the note's written rhythm.
-        var spanBeats = Math.Max(sound.Sustain.DoubleValue, (double)remainingTicks / TicksPerBeat);
-        if (spanBeats <= 0) spanBeats = 1;
-
-        note.BendType = AT.BendType.Custom;
-        note.BendPoints ??= [];
-        var hasOrigin = false;
-        foreach (var bend in sound.BendValues.OrderBy(b => b.Position))
-        {
-            var offsetBeats = (bend.Position - position).DoubleValue;
-            var offset = Math.Clamp(offsetBeats / spanBeats * 60.0, 0.0, 60.0);
-            if (offset < 0.001) hasOrigin = true;
-            // Domain step 1.0 = half step; alphaTab bend values are quarter tones.
-            note.BendPoints!.Add(new AT.BendPoint(offset, bend.Step * 2.0));
-        }
-
-        if (!hasOrigin) note.BendPoints!.Insert(0, new AT.BendPoint(0, 0));
     }
 }

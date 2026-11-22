@@ -1,4 +1,5 @@
 using DotCharter.Services.Parsing;
+using DotCharter.Services.Infrastructure.Storage;
 using DotCharter.Services.State.Checkpoints;
 using DotCharter.Tone.Infrastructure.Storage;
 
@@ -18,6 +19,48 @@ public sealed class CheckpointServiceTests : IDisposable
     }
 
     public void Dispose() => BestEffortDelete.Directory(_root);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Carried_checkpoints_keep_their_original_audio_stems_and_cover(bool interruptedManifest)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Uses Windows file locking.");
+        var source = Directory.CreateDirectory(Path.Combine(_root, "A")).FullName;
+        var destination = Directory.CreateDirectory(Path.Combine(_root, "B")).FullName;
+        foreach (var folder in new[] { source, destination })
+        {
+            File.WriteAllText(Path.Combine(folder, "song.ogg"), folder);
+            File.WriteAllText(Path.Combine(folder, "stem.wav"), folder);
+            File.WriteAllText(Path.Combine(folder, "cover.png"), folder);
+        }
+        var from = Path.Combine(source, "song.dcproj");
+        var to = Path.Combine(destination, "song.dcproj");
+        var project = BuildProject("Checkpoint", 1);
+        project.Stems.Add(new Stem { Name = "guitar", Path = "stem.wav" });
+        project.Chart.CoverArtPath = "cover.png";
+        var entry = _service.Create(from, "before Save As", project);
+
+        if (interruptedManifest)
+        {
+            var targetDir = Directory.CreateDirectory(Path.Combine(_root, CheckpointService.ComputeKey(to))).FullName;
+            var manifest = Path.Combine(targetDir, "manifest.json");
+            File.WriteAllText(manifest, System.Text.Json.JsonSerializer.Serialize(new CheckpointManifest { ProjectIdentity = to }));
+            using (var held = new FileStream(manifest, FileMode.Open, FileAccess.Read, FileShare.Read))
+                Assert.ThrowsAny<Exception>(() => _service.CopyTo(from, to));
+        }
+
+        Assert.Equal(1, _service.CopyTo(from, to));
+
+        var restored = _service.Restore(to, Assert.Single(_service.List(to)));
+        Assert.Equal(Path.Combine(source, "song.ogg"), restored.AudioFileName);
+        Assert.Equal(Path.Combine(source, "stem.wav"), Assert.Single(restored.Stems).Path);
+        var cover = ProjectRelativePath.TryResolve(destination, restored.Chart.CoverArtPath);
+        Assert.NotNull(cover);
+        Assert.Equal(source, File.ReadAllText(cover));
+        Assert.Equal(destination, File.ReadAllText(Path.Combine(destination, "cover.png")));
+        Assert.Equal("song.ogg", _service.Restore(from, entry).AudioFileName);
+    }
 
     private static ChartProject BuildProject(string songName, int noteCount)
     {
@@ -51,6 +94,57 @@ public sealed class CheckpointServiceTests : IDisposable
         Assert.Equal(entry.Id, list[0].Id);
         Assert.Equal("My checkpoint", list[0].Name);
         Assert.Equal("Song", list[0].SongName);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CopyTo_reconciles_unindexed_snapshots_without_overwriting_conflicts(bool conflict)
+    {
+        var targetIdentity = "C:/charts/variant.dcproj";
+        var entry = _service.Create(Identity, "checkpoint", BuildProject("Original", 3));
+        var source = Path.Combine(_root, CheckpointService.ComputeKey(Identity), entry.SnapshotFileName);
+        var targetDir = Directory.CreateDirectory(Path.Combine(_root, CheckpointService.ComputeKey(targetIdentity))).FullName;
+        var target = Path.Combine(targetDir, entry.SnapshotFileName);
+        // The snapshot landed, but publishing its index failed. A retry must reconcile it.
+        File.Copy(source, target);
+        if (conflict) File.WriteAllText(target, "unrelated snapshot");
+
+        Assert.Equal(conflict ? 0 : 1, _service.CopyTo(Identity, targetIdentity));
+
+        if (conflict)
+        {
+            Assert.Empty(_service.List(targetIdentity));
+            Assert.Equal("unrelated snapshot", File.ReadAllText(target));
+        }
+        else
+        {
+            Assert.Equal(entry.Id, Assert.Single(_service.List(targetIdentity)).Id);
+            Assert.Equal("Original", _service.Restore(targetIdentity, entry).Chart.SongName);
+        }
+
+        Assert.Equal(0, _service.CopyTo(Identity, targetIdentity));
+        Assert.Single(_service.List(Identity));
+    }
+
+    [Fact]
+    public void CopyTo_retries_after_the_manifest_swap_fails()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Relies on Windows file locking.");
+        var targetIdentity = "C:/charts/variant.dcproj";
+        var source = _service.Create(Identity, "source", BuildProject("Source", 3));
+        var existing = _service.Create(targetIdentity, "existing", BuildProject("Existing", 1));
+        var manifest = Path.Combine(_root, CheckpointService.ComputeKey(targetIdentity), "manifest.json");
+
+        using (new FileStream(manifest, FileMode.Open, FileAccess.Read, FileShare.Read))
+            Assert.ThrowsAny<Exception>(() => _service.CopyTo(Identity, targetIdentity));
+
+        Assert.Equal(1, _service.CopyTo(Identity, targetIdentity));
+
+        Assert.Equal(2, _service.List(targetIdentity).Count);
+        Assert.Equal("Source", _service.Restore(targetIdentity, source).Chart.SongName);
+        Assert.Equal("Existing", _service.Restore(targetIdentity, existing).Chart.SongName);
+        Assert.Equal(0, _service.CopyTo(Identity, targetIdentity));
     }
 
     [Fact]

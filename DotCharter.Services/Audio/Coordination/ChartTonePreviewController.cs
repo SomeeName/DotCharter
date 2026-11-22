@@ -463,7 +463,7 @@ public sealed partial class ChartTonePreviewController : ObservableObject, IDisp
         if (string.Equals(e.PropertyName, nameof(ProjectState.ActiveProject), StringComparison.Ordinal) ||
             string.Equals(e.PropertyName, nameof(ProjectState.ActiveArrangement), StringComparison.Ordinal))
         {
-            Refresh();
+            DotCharter.Services.Diagnostics.UiWorkTiming.Measure(nameof(ChartTonePreviewController), Refresh);
         }
     }
 

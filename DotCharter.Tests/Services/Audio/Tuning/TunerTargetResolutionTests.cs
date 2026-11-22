@@ -23,6 +23,7 @@ public sealed class TunerTargetResolutionTests
             ArrangementType = type,
             StringCount = strings,
             TuningType = tuningType,
+            Tuning = [],
             CentOffset = centOffset
         };
     }

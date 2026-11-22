@@ -4,6 +4,37 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
 
 **The playback-only half is linted now** (`LiveDetectionAudioSourceTests`), and it was not before: nothing under `Audio/LivePlay/` may name `StemTrack`, `IStemSeparationService`, the stem cache/archive types, `HasStems`/`LoadedStemNames` or a `.opus` literal. Its only input is the live capture ring. The file set is DERIVED by walking the folder, minus `Takes/` and `Replays/` — those hold the player's OWN recorded performance and its verdict track, which are outputs of a judged run and never inputs to one, so `LiveTakeStore` writes Opus legitimately. A second test asserts both excluded folders still exist, so the exclusion cannot silently widen onto something else.
 
+`StemArchive.OpenForRead` bounds the declared archive member count to 64 before
+ZIP entries are materialized. `ZipDirectoryBudget` scans actual bounded central
+directory records on that same open stream; a forged EOCD count cannot hide entries.
+`ZipDirectoryMetadata` reads ZIP64 offsets/counts without allocating the directory.
+EOCD and ZIP64 locator selection mirrors .NET 10: embedded signature bytes are allowed, and the selected directory is bounded before the library opens it. Guard refusal keeps durable stems intact.
+Unsupported or unparseable guard metadata is a preserved refusal; only independent
+proof of corruption (a file too short for any ZIP, bad manifest or payload) permits deletion.
+`ReadManifest` bounds `manifest.json` to 1 MiB of
+actually inflated bytes through `BoundedZipExtractor.ReadEntryText`, before JSON
+parsing. Both limits throw `StemArchiveRefusedException`, so a cache probe keeps
+the archive and reports a miss; an unreadable or malformed manifest still reads
+as corrupt. `StemArchiveHostileTests` covers both limits and the shared read paths.
+
+Stem registration marks the session dirty before awaiting its automatic save.
+A failed or declined save is logged and shown on the status rail; an unsaved
+session stays dirty without opening Save As. `StemPersistenceTests` pins this.
+Persisted stem offsets travel in `StemLoadRequest.OffsetMs` and the engine-rebuild
+snapshot. Nonzero offsets are applied once during worker-side load as a float WAV
+in memory (positive delays, negative trims), so native transport remains responsible
+for all playback timing; zero keeps the direct file-open path. This costs extra
+decode memory only for stems with a nonzero offset.
+"Waveform follows mix" carries the same saved offsets through `StemMixChannel`
+and pads or trims each cached stem waveform at its base-block resolution before
+mixing. The cached waveform stays in file time, so refreshing never applies an
+offset twice. `StemMixerWaveformBalanceTests` pins positive delay and negative trim.
+Master-source replacement preserves the loaded stems. Only `FreeAudio` publishes
+`ProjectState.AudioCleared` to invalidate the mixer's loaded-set cache, including
+loads still in flight (`ProjectSessionAttachAudioTests`).
+The separate `AudioLoaded` notification refreshes the selected waveform mix after
+the master publishes its file waveform, without reloading the stem sources.
+
 **A persisted stem path is relative to the PROJECT folder at BOTH ends (fixed
 2026-09-04).** `StemSeparationViewModel`'s `RegisterAndPersistStemsAsync`
 relativized against `ProjectAudioLocator.ResolveOutputDirectory` — the AUDIO's
@@ -40,8 +71,8 @@ drive resolves to nothing, unprobed — see
   separation verb sees existing stems and asks before replacing them. The `.dcstems`
   cache is not seeded (it would re-encode lossy Opus); the package is the durable copy.
   See `dcsong-format.md` § Opening as a project.
-- **One separation verb, two doors (#641).** Tools ▸ Separate Stems and chart from audio's **Separate stems** both run `StemSeparationViewModel.SeparateAsync`, the `ISongStemSeparation` seam (`Audio/StemSeparation/ISongStemSeparation.cs`, registered as the same singleton): cache first, the download and replace prompts, the status-bar task with its cancel. A caller's token and progress ride along, and `SongStemSeparationOutcome` says why nothing was separated. `GetAvailabilityAsync` reads state only. Never add a second separation path.
-- **A run outlives the screen that started it (#710).** `StemSeparationViewModel.SeparateAsync` publishes the run in flight as `ISongStemSeparation.Running` (`SongStemSeparationRun`: the resolved audio, the latest progress, `Completion`, `Cancel`) once it knows its audio, and clears it before completing it. Its token links the caller's, so only an explicit cancel (or opening another song) stops it; closing chart from audio does not, and the stems still reach the `.dcstems` cache. A screen opened mid-run follows `Running` for its file (`Separates`) rather than asking for a second run, which the in-flight guard would refuse as `AlreadyRunning` anyway.
+- **One separation verb, two doors (#641).** File ▸ Audio ▸ Separate stems (and any screen that takes the `ISongStemSeparation` seam) runs `StemSeparationViewModel.SeparateAsync`, the `ISongStemSeparation` seam (`Audio/StemSeparation/ISongStemSeparation.cs`, registered as the same singleton): cache first, the download and replace prompts, the status-bar task with its cancel. A caller's token and progress ride along, and `SongStemSeparationOutcome` says why nothing was separated. `GetAvailabilityAsync` reads state only. Never add a second separation path.
+- **A run outlives the screen that started it (#710).** `StemSeparationViewModel.SeparateAsync` publishes the run in flight as `ISongStemSeparation.Running` (`SongStemSeparationRun`: the resolved audio, the latest progress, `Completion`, `Cancel`) once it knows its audio, and clears it before completing it. Its token links the caller's, so only an explicit cancel (or opening another song) stops it; closing the screen that asked does not, and the stems still reach the `.dcstems` cache. A screen opened mid-run follows `Running` for its file (`Separates`) rather than asking for a second run, which the in-flight guard would refuse as `AlreadyRunning` anyway.
 - `Audio/StemSeparation/` — `CompositeStemSeparationService` (ONNX preferred, native demucs.cpp fallback) + `Onnx/` backend + `Cache/` durable stem cache. `StemSeparationResourcePolicy` caps worker threads (leaves 2 cores free).
   - **The composite has TWO backends and there is no third.** `App.AudioServices`
     builds `new IStemSeparationService[] { onnx, native }`: the owner wants the
@@ -89,7 +120,7 @@ drive resolves to nothing, unprobed — see
     separate. `ServiceRegistrationReachabilityTests` cannot see that shape,
     because the type IS named by product code. Before adding a knob for a
     backend, put the backend in `App.AudioServices`' array.
-- `Audio/Waveform/` — `WaveformDiskCache`: generate-once waveform pyramid cache (0.14 P4), keyed like the stem cache (identity + `StemAudioSignature`), base level only (BOTH pyramids rebuilt via `WaveformSamples.FromBasePeaks`); every failure = miss + regenerate — never precious, unlike the stem cache.
+- `Audio/Waveform/` — `WaveformDiskCache`: generate-once waveform pyramid cache (0.14 P4), keyed like the stem cache (identity + `StemAudioSignature`), and since schema 3 each entry records the WHOLE-file SHA-256 (`StemAudioSignature.ComputeFullFileHash`) that a load compares, so a same-length edit between the key's sample windows is a miss (#571); base level only (BOTH pyramids rebuilt via `WaveformSamples.FromBasePeaks`); every failure = miss + regenerate — never precious, unlike the stem cache.
   - **The base block is `WaveformSamples.GenerationBlockMs` (2 ms since v0.35,
     was 20 ms) and the cache VALIDATES it instead of trusting the entry's own
     value.** Level 0 is the finest level the renderer's LOD picker can reach, so
@@ -134,21 +165,57 @@ drive resolves to nothing, unprobed — see
     lyric-only onset snap) does: its flux thresholds are tuned for ~20 ms, and a
     2 ms cell ripples with the audio's own cycle (a low E's period is ~12 ms),
     which would feed the detector dozens of spurious local maxima per note.
-  - **A save may ADD to the cache or replace an entry with an equal-or-better
-    one; it may never SHRINK one, and a SHORT archive is corruption rather than a
-    smaller hit** (both found and fixed 2026-09-04, pinned by
-    `Services/Audio/StemCacheTests`). `SaveAsync`'s `usable` filter silently drops
-    any stem whose WAV has left disk (a cleaned playback dir, a run that failed
-    part-way, a file still open in the mixer) and then wrote the short set over
-    the archive — six stems became four, permanently, under an Info line that
-    read like a success; it now refuses and warns. And `ExtractAsync` skipped a
+  - **A save only creates a missing archive; it NEVER replaces one** (#634,
+    `Services/Audio/StemCacheTests`). The early existence check avoids encoding;
+    the final same-volume AtomicFile.PublishNew refuses overwrite even if another save won while
+    this one encoded. Equal-size and larger replacement sets are refused too.
+    `StemSeparationViewModel` always probes the cache, including when the mixer
+    already has stems; a failed load with an archive still present stops the run
+    with a localized reason. A decoder outage never authorizes regeneration.
+    `StemCacheSource.ResolveForStore` is shared by lookup, refusal and save: a full
+    hash proving different audio under the same sampled key selects a deterministic
+    `|full=` key. The old archive stays byte-identical; restoring either audio reuses
+    its own archive. Missing full-hash evidence never authorizes a second separation.
+    **A SHORT archive is corruption rather than a smaller hit.** `ExtractAsync` skipped a
     manifest entry the archive did not contain, with no log and no count check,
     while `StemCacheCoordinator` only rejects an EMPTY result: the short set was
     served as a HIT and `WriteMarker` then named that archive in the playback
     dir, so every later open served it from the fast path. That case throws
     `StemArchiveCorruptException` now (delete + re-separate); a failing DECODE
     still throws `StemDecodeUnavailableException` and still KEEPS the archive.
-  - **A RE-SEPARATION over an existing stem set is an explicit, confirmed
+    Expansion removes the old `.stemcache` marker before changing any WAV, validates
+    every manifest entry before scheduling decoders, and drains started decoders before
+    cleanup. Decoders write into a private sibling staging directory, never into
+    recoverable `stems/`. Only a fully decoded, uncancelled set reaches
+    `StemCacheExpansion.Publish`; its pending marker blocks mixer recovery during
+    an incomplete publication. `CanRecover` recognises the last-written matching
+    completion marker on ordinary reopen and clears only the pending record it
+    validated. Recovery holds the same exclusive `.stemcache-lock` file handle as
+    publication through its WAV snapshot; a busy probe hides the folder without
+    waiting. The lock file stays in place and the OS releases its handle on exit,
+    so a crashed process cannot strand the exclusion. The expansion fast path and
+    prior completion-marker invalidation take this exclusion too. Before decoding,
+    invalidation writes a pending record under the exclusion, hiding the old set
+    from probes throughout the decode (#656). Existing read-only lock files open
+    with read access and no sharing. **Busy is a
+    sharing or lock violation on the lock file (`StemCacheExpansion.IsBusy`) and
+    nothing else.** A lock file that cannot be opened at all (a read-only folder,
+    medium or file) makes the probe read the folder WITHOUT the exclusion
+    (`CanReadUnlocked`): a pending marker still hides the folder, nothing is
+    validated and nothing is deleted, and one WARN per folder names the exception
+    type and HRESULT, never the path. The publisher WAITS for a busy folder at
+    both of its acquisitions (the fast path and the commit, `AcquireAsync`):
+    `BusyRetries` (40) retries, `BusyRetryDelay` (50 ms) apart, through the delay
+    injected into `StemCacheStore`. After that bound, and at once on any other
+    failure, a complete expansion of this archive may still be served without
+    decoding or writes through `CanReadUnlocked`; a real publication throws and
+    the coordinator keeps the archive (`StemFolderLockTests`). Completed
+    pending records also carry every WAV's name, length and SHA-256; missing or
+    changed files remain hidden. Legacy token-only commit markers retain their
+    write-order contract. A failed/cancelled decode leaves no adoptable WAVs.
+    Publication has no cancellation point within the commit (#572).
+    Cached restoration passes the run token and checks it inside the UI apply too.
+  - **A separation over an UNCACHED stem folder is an explicit, confirmed
     action (2026-09-04).** `StemSeparationViewModel.SeparateStemsAsync` reaches
     the separator only after `ConfirmStemReplacementAsync` says so: the pure
     `StemReplacePlan.For(existing, modelWillProduce)` splits what the run would
@@ -161,7 +228,9 @@ drive resolves to nothing, unprobed — see
     not fall through to overwriting files. Stems the model does
     not produce are still moved aside and restored
     (`Services/Audio/StemSeparation/StemFolderBackup`), so a re-run never silently
-    DROPS one. This was `StemRegenerateDialog`, a per-stem replace picker,
+    DROPS one. A failed backup aborts replacement and restores earlier staged stems;
+    the separator must not run unless every promised backup succeeded (#572).
+    This was `StemRegenerateDialog`, a per-stem replace picker,
     until that dialog was deleted; the per-stem opt-out went with it, the
     explicit gate did not. Pinned by `UI/ViewModels/Shell/StemReplaceConfirmTests`.
   - **An OWN-CHART key does NOT fold the audio's path in, and it did until
@@ -211,7 +280,7 @@ drive resolves to nothing, unprobed — see
     only `*.dcstems` and skips an archive currently held open rather than
     failing the whole clear. `Delete(key)` stays what it always was: the
     corrupt-archive branch.
-  - `Cache/` — never-regenerate stem cache. `StemCacheCoordinator.GetOrSeparateAsync` is the front door: derive `StemCacheKey` (logical identity — `lib:SongKey|Charter|Version` for library songs (`StemCacheIdentity.ForLibrary` normalizes the `psarc:` spelling; an archive named after it is re-keyed, see "Library archives are re-keyed from `psarc:` to `lib:`" below), the constant `audio:` for own charts — folded with a `StemAudioSignature` content fingerprint so a re-packed CDLC never serves stale stems; WHICH file is fingerprinted is `StemCacheSource`'s one decision — a library song's source `.wem` since #426, see "Library songs are keyed on the source WEM" below), hit → expand archive (no separation), miss → separate + package. One compressed `.dcstems` archive per song under `%LocalAppData%/DotCharter/StemCache/` (LocalAppData, large/regenerable). Stems are Opus (via `FfmpegStemEncoder`, ffmpeg → Opus, else WAV) recorded in `StemCacheManifest`, expanded to WAV on demand for JUCE. Opus is playback-only — never fed to live detection.
+  - `Cache/` — never-regenerate stem cache. `StemCacheCoordinator.TryLoadCachedAsync` is the front door: derive `StemCacheKey` (logical identity — `lib:SongKey|Charter|Version` for library songs (`StemCacheIdentity.ForLibrary` normalizes the `psarc:` spelling; an archive named after it is re-keyed, see "Library archives are re-keyed from `psarc:` to `lib:`" below), the constant `audio:` for own charts — folded with a `StemAudioSignature` content fingerprint so a re-packed CDLC never serves stale stems; WHICH file is fingerprinted is `StemCacheSource`'s one decision — a library song's source `.wem` since #426, see "Library songs are keyed on the source WEM" below), hit → expand archive (no separation), miss → separate + package. One compressed `.dcstems` archive per song under `%LocalAppData%/DotCharter/StemCache/` (LocalAppData, large/durable). Stems are Opus (via `FfmpegStemEncoder`, ffmpeg → Opus, else WAV) recorded in `StemCacheManifest`, expanded to WAV on demand for JUCE. Opus is playback-only — never fed to live detection.
     **The key SAMPLES the audio; a hit is VERIFIED against the whole file (#334).**
     `StemAudioSignature.ComputeFile` hashes three 256 KB windows plus the length, so
     a same-length re-render with an edit between them kept the same key. The key
@@ -255,6 +324,14 @@ drive resolves to nothing, unprobed — see
     is a judgement about the audio thread, not a perf tidy-up, so it was left.
 
     **ffmpeg is located by the shared pure `MediaToolResolver` — configured path (`AppConfig.FfmpegPath`) → exe dir → exe dir/`tools` → dev-tree `tools/redist/win-x64` → PATH (empty unless `DOTCHARTER_TOOLS_FROM_PATH=1`) — and NEVER by a local re-spelling.** Both `FfmpegStemEncoder` and `OnnxStemSeparationService` take a `configuredFfmpegPath` provider, wired in `App.axaml.cs`. The encoder used to hand-roll its own order that (a) ignored the configured path outright, (b) looped names-outer/dirs-inner so all of PATH beat the bundled `tools/` copy, and (c) had no dev-tree fallback — so a `bin/Debug` run with no PATH ffmpeg silently wrote the archive as WAV, and because **the cache is never regenerated that song stayed WAV forever**.
+- **Custom model files are isolated by stable identity (#572).** Imports include the
+  complete URL in their identity; downloads, installation checks, selection and deletion
+  use the same identity-prefixed local filename. Built-in filenames stay unchanged.
+  Unique legacy custom filenames migrate on catalogue load. Ambiguous legacy files are
+  retained, never assigned to one of the colliding models. Checkpoint conversion stages
+  by source identity and moves the result into the registered model's own path.
+  Model fallback carries the installed descriptor AND path together so its kind cannot
+  come from a different active model. Covered by `StemModelManagerTests`.
 - **htdemucs ONNX comes in two IO layouts, and JuceSharp drives both** (#254):
   the host-STFT export (`htdemucs_6s.onnx`: waveform + CAC spectrogram in,
   spectrogram + waveform out) and the in-graph-STFT one (`input [batch,2,time]`
@@ -647,6 +724,10 @@ on the guitar stem the cache already delivered, from whichever model made it
   image writes NO audio, only the sidecar saying why, so the switch shows the
   reason from the start next time. Never two copies of one guitar.
 - **The files are a REGENERABLE artefact, not part of the `.dcstems` cache.**
+  Sidecar Lead and Rhythm references must be confined relative paths under the
+  derived folder. `GuitarRoleStemService` resolves both with
+  `ProjectRelativePath.TryResolve` before either size probe; an unsafe reference
+  invalidates the pair and allows derivation again.
   `GuitarRoleStemService` writes `<sig>-lead.wav` / `<sig>-rhythm.wav` and
   `split.json` in a `guitar-roles/` SUBFOLDER beside the guitar stem (a top-level
   WAV would be adopted by the mixer's `stems/` recovery and moved by
@@ -677,3 +758,5 @@ on the guitar stem the cache already delivered, from whichever model made it
 - `GuitarRolesRealStemProbeTests` measures real stems when
   `DOTCHARTER_GUITAR_ROLES_PROBE` names WAVs (copied to a scratch folder first);
   it skips otherwise.
+
+- **A GPU run that fails (#864):** `OnnxStemSeparationService.RunWithCpuRetryAsync` re-runs a real separation once on the CPU when a session that OPENED on a GPU throws while running, keeps the CPU for the session, logs the exception at WARN and sets `StemSeparationResult.GpuRunFellBackToCpu` (the view model shows `Progress_StemGpuFailedCpu`). A cached `.dcstems` never reaches this path.

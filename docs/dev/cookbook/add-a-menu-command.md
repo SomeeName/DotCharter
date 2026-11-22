@@ -6,10 +6,13 @@ A command has up to five homes. Miss one and it exists but cannot be reached.
 
 1. **Put the item in its menu file.** Each top-level menu is one file in
    `DotCharter.UI/Views/Shell/Menus/` (`FileMenu.axaml`, `EditMenu.axaml`,
-   `TempoMapMenu.axaml`, `ArrangementsMenu.axaml`, `VocalsMenu.axaml`,
+   `TempoMapMenu.axaml`, `ArrangementsMenu.axaml` (holds the Vocals submenu),
    `ToolsMenu.axaml`, `ViewMenu.axaml`, `HelpMenu.axaml`). Pick the right group:
    a long menu is one level of submenus, at most 14 direct entries, and no submenu
-   with fewer than three rows. A new group header needs its own resx key. A
+   with fewer than three rows. A new group header needs its own resx key. Tools is
+   grouped by the step of charting (Generate, Fix & clean up, AI, Repeats, Tones):
+   put a new tool in the group of the step it serves and add it to that group's
+   list in `DotCharter.Tests/UI/ToolsMenuWorkflowOrderTests.cs`. A
    brand-new top-level menu is a new `EditorTopMenu` subclass plus its element in
    `DotCharter.UI/Views/Shell/MainMenuView.axaml`.
 2. **Write the command.** Add a `[RelayCommand]` method to

@@ -206,6 +206,10 @@ public sealed class ClaudeToneModelTests
     [InlineData(HttpStatusCode.Unauthorized, ToneDesignFault.Authentication)]
     [InlineData(HttpStatusCode.Forbidden, ToneDesignFault.Authentication)]
     [InlineData(HttpStatusCode.TooManyRequests, ToneDesignFault.RateLimited)]
+    [InlineData((HttpStatusCode)529, ToneDesignFault.RateLimited)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, ToneDesignFault.RateLimited)]
+    [InlineData(HttpStatusCode.GatewayTimeout, ToneDesignFault.Network)]
+    [InlineData(HttpStatusCode.RequestTimeout, ToneDesignFault.Network)]
     public async Task AnErrorStatus_BecomesItsOwnFault(HttpStatusCode status, ToneDesignFault expected)
     {
         var handler = new SseHandler(status);
@@ -215,6 +219,20 @@ public sealed class ClaudeToneModelTests
             () => model.CompleteAsync(Prompt(), TestContext.Current.CancellationToken));
 
         Assert.Equal(expected, ex.Fault);
+    }
+
+    [Fact]
+    public async Task AnErrorWhoseJsonBodyIsNotTheExpectedShape_StillMapsByStatus()
+    {
+        // Anthropic 13.4: such a body throws the status exception, no longer
+        // InvalidOperationException (which would have landed in Unknown).
+        var handler = new SseHandler("[1,2]", json: true, HttpStatusCode.Unauthorized);
+        var model = new ClaudeToneModel(Settings(), "sk-ant-test", handler: handler);
+
+        var ex = await Assert.ThrowsAsync<ToneDesignException>(
+            () => model.CompleteAsync(Prompt(), TestContext.Current.CancellationToken));
+
+        Assert.Equal(ToneDesignFault.Authentication, ex.Fault);
     }
 
     [Fact]
@@ -315,11 +333,11 @@ public sealed class ClaudeToneModelTests
         private readonly bool _json;
         private readonly HttpStatusCode _status;
 
-        public SseHandler(string body, bool json = false)
+        public SseHandler(string body, bool json = false, HttpStatusCode status = HttpStatusCode.OK)
         {
             _body = body;
             _json = json;
-            _status = HttpStatusCode.OK;
+            _status = status;
         }
 
         public SseHandler(HttpStatusCode status)

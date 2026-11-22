@@ -1,6 +1,7 @@
 using DotCharter.Localization;
 using DotCharter.Services.Audio.Coordination;
 using DotCharter.Services.Editing;
+using DotCharter.Services.Editing.Lyrics;
 using DotCharter.Services.Infrastructure.Documents;
 using DotCharter.Services.Parsing.Eof;
 using DotCharter.Services.Parsing.Rscp;
@@ -131,8 +132,7 @@ public sealed class EofProjectCreator(
             ? Path.GetFileNameWithoutExtension(selection.FilePath)
             : meta.Title.Trim();
 
-        var folderName = $"{artist} - {title}";
-        foreach (var c in Path.GetInvalidFileNameChars()) folderName = folderName.Replace(c, '_');
+        var folderName = SafeFileName.ReplaceInvalid($"{artist} - {title}");
         if (string.IsNullOrWhiteSpace(folderName)) folderName = "Imported";
 
         // Derived from the metadata, so a second import of the same .eof gets a
@@ -159,6 +159,8 @@ public sealed class EofProjectCreator(
                 ChartSpacingEnforcer.EnforceArrangement(arr, importedBeats, appConfig);
 
             var built = BuildProject(result);
+            foreach (var vocals in built.VocalTracks)
+                LyricPhraseSpacing.CloseGaps(vocals.Phrases, built.Beats, appConfig);
             built.AudioFileName = audioFileName;
             documents.SaveChart(projectPath, built);
             return built;
@@ -214,6 +216,7 @@ public sealed class EofProjectCreator(
         }
 
         project.Chart.SongName = !string.IsNullOrWhiteSpace(meta.Title) ? meta.Title : "Imported";
+        project.Chart.KeyAccidentals = meta.KeyAccidentals;
         if (!string.IsNullOrWhiteSpace(meta.Artist))
         {
             project.Chart.Artist = meta.Artist;

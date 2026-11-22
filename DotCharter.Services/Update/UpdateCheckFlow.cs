@@ -153,15 +153,21 @@ public sealed class UpdateCheckFlow
     public void StartStartupCheck()
     {
         if (AppContext.TryGetSwitch(DisableStartupCheckSwitch, out var disabled) && disabled) return;
-        _ = RunStartupCheckAsync();
+        StartupCheck = RunStartupCheckAsync();
     }
+
+    /// <summary>Test seam: the started startup check, to await it out.</summary>
+    internal Task StartupCheck { get; private set; } = Task.CompletedTask;
+
+    /// <summary>Test seam: the grace period before the startup check.</summary>
+    internal Func<Task> StartupGrace { get; set; } = static () => Task.Delay(TimeSpan.FromSeconds(5));
 
     private async Task RunStartupCheckAsync()
     {
         try
         {
             // Give startup (audio init, project restore) room to breathe.
-            await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            await StartupGrace().ConfigureAwait(false);
 
             // Before the network check and regardless of the auto-check setting:
             // a payload staged by an earlier run is an unfinished job on this

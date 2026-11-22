@@ -188,7 +188,10 @@ public sealed class RefretService : IRefretService
             {
                 if (shape.TemplateId != oldTemplateId) continue;
                 var covers = unit.ChordMembers.Any(m => shape.Covers(m.Position));
-                if (covers) shape.TemplateId = newTemplate.Id;
+                // A selection can cut through this bar. Keep its authored grip
+                // while any covered chord still needs a different template.
+                if (covers && level.Chords.Where(c => shape.Covers(c.Position)).All(c => c.TemplateId == newTemplate.Id))
+                    shape.TemplateId = newTemplate.Id;
             }
         }
 

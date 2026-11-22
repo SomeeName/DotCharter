@@ -353,7 +353,7 @@ public sealed partial class SongSelectViewModel : ObservableObject
     {
         var stats = _stats.GetStatistics();
         var ownPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var key in stats.MostPlayed.Concat(stats.RecentlyPlayed).Select(m => m.SongKey))
+        foreach (var key in stats.KnownSongKeys)
         {
             if (LooksLikeProjectPath(key))
                 ownPaths.Add(key);

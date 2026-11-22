@@ -11,7 +11,7 @@ namespace DotCharter.Services.Parsing.GuitarPro;
 ///         <b>Both</b> Guitar Pro importers unfold through this one type — the
 ///         gpif path over <c>&lt;MasterBar&gt;</c> elements
 ///         (<see cref="Unfold(XElement)" />) and the GP3/4/5 binary path over
-///         its measure headers (<see cref="Unfold(IReadOnlyList{BarRepeat})" />,
+///         its measure headers (<see cref="Unfold(IReadOnlyList{BarRepeat}, IReadOnlyList{GpDirectionMark})" />,
 ///         the shared core). The binary reader must not READ the repeat bits and
 ///         throw them away: a <c>.gp5</c> with <c>|: 8 bars :|</c> would import
 ///         eight bars short and every later note would land early. Never write a
@@ -33,7 +33,8 @@ namespace DotCharter.Services.Parsing.GuitarPro;
 /// </summary>
 internal static class GpMasterBarSequence
 {
-    public readonly record struct UnfoldedBar(int OriginalIndex, XElement Element, int RepeatPass);
+    public readonly record struct UnfoldedBar(int OriginalIndex, XElement Element, int RepeatPass,
+        int EndingMask, bool StartsBlock, bool EndsBlock);
 
     /// <summary>One bar's repeat markers, spelled the same way by both file
     /// formats so the unfold core need not know which one it came from.
@@ -48,7 +49,8 @@ internal static class GpMasterBarSequence
         int RepeatCount,
         int AlternateEndingsMask);
 
-    public readonly record struct UnfoldedIndex(int OriginalIndex, int RepeatPass);
+    public readonly record struct UnfoldedIndex(int OriginalIndex, int RepeatPass,
+        bool StartsBlock = false, bool EndsBlock = false);
 
     /// <summary>Most times one repeat section may be played. The
     /// alternate-ending bitmask only spells 8 passes anyway, so anything
@@ -56,9 +58,10 @@ internal static class GpMasterBarSequence
     private const int MaxRepeatPasses = 64;
 
     /// <summary>The shared unfold. Pure: bar markers in, playback order out.</summary>
-    public static List<UnfoldedIndex> Unfold(IReadOnlyList<BarRepeat> bars)
+    public static List<UnfoldedIndex> Unfold(IReadOnlyList<BarRepeat> bars, IReadOnlyList<GpDirectionMark>? directions = null)
     {
         var unfolded = new List<UnfoldedIndex>(Math.Min(bars.Count, GpFormatBounds.MaxUnfoldedBars));
+        var skippedOnReturn = directions is { Count: > 0 } ? new bool[bars.Count] : null;
         // Checked after each straight run and each pass, so the list never
         // grows past the cap by more than one run of the input's own bars.
         void Bound()
@@ -136,25 +139,50 @@ internal static class GpMasterBarSequence
                 break;
             }
 
+            var playedEnd = EndingEnd(bars, repeatEnd);
+            if (skippedOnReturn != null) MarkEarlierEndings(skippedOnReturn, bars, repeatStart, playedEnd, totalPasses);
             for (var pass = 1; pass <= totalPasses; pass++)
             {
-                for (var k = repeatStart; k <= repeatEnd; k++)
-                {
-                    var altMask = bars[k].AlternateEndingsMask;
-                    // altMask == 0 means "always play"; otherwise only on the
-                    // matching pass(es).
-                    if (altMask != 0 && (altMask & (1 << (pass - 1))) == 0)
-                        continue;
-                    unfolded.Add(new UnfoldedIndex(k, pass));
-                }
-
+                AddPass(unfolded, bars, repeatStart, playedEnd, pass);
                 Bound();
             }
 
-            i = repeatEnd + 1;
+            i = playedEnd + 1;
         }
 
+        if (skippedOnReturn == null) return unfolded;
+        unfolded = GpDirections.Apply(unfolded, skippedOnReturn, directions!);
+        Bound();
         return unfolded;
+    }
+
+    private static void MarkEarlierEndings(bool[] skipped, IReadOnlyList<BarRepeat> bars, int start, int end, int pass)
+    {
+        for (var bar = start; bar <= end; bar++)
+            skipped[bar] = !PlaysOnPass(bars[bar].AlternateEndingsMask, pass);
+    }
+
+    private static bool PlaysOnPass(int mask, int pass) => mask == 0 || pass <= 8 && (mask & (1 << (pass - 1))) != 0;
+
+    private static int EndingEnd(IReadOnlyList<BarRepeat> bars, int repeatEnd)
+    {
+        var end = repeatEnd;
+        while (end + 1 < bars.Count && bars[end + 1] is { AlternateEndingsMask: > 0, RepeatStart: false, RepeatEnd: false })
+            end++;
+        return end;
+    }
+
+    private static void AddPass(List<UnfoldedIndex> unfolded, IReadOnlyList<BarRepeat> bars,
+        int start, int end, int pass)
+    {
+        var first = unfolded.Count;
+        for (var bar = start; bar <= end; bar++)
+        {
+            if (!PlaysOnPass(bars[bar].AlternateEndingsMask, pass)) continue;
+            unfolded.Add(new UnfoldedIndex(bar, pass, StartsBlock: unfolded.Count == first));
+        }
+
+        if (unfolded.Count > first) unfolded[^1] = unfolded[^1] with { EndsBlock = true };
     }
 
     public static List<UnfoldedBar> Unfold(XElement masterBarsNode)
@@ -174,10 +202,14 @@ internal static class GpMasterBarSequence
                 ParseAlternateEndingsMask(bar.Element("AlternateEndings")?.Value)));
         }
 
-        var unfolded = Unfold(markers);
+        var directions = rawBars.SelectMany(GpDirections.ReadGpif).ToList();
+        var unfolded = Unfold(markers, directions);
         var result = new List<UnfoldedBar>(unfolded.Count);
         foreach (var entry in unfolded)
-            result.Add(new UnfoldedBar(entry.OriginalIndex, rawBars[entry.OriginalIndex], entry.RepeatPass));
+        {
+            result.Add(new UnfoldedBar(entry.OriginalIndex, rawBars[entry.OriginalIndex], entry.RepeatPass,
+                markers[entry.OriginalIndex].AlternateEndingsMask, entry.StartsBlock, entry.EndsBlock));
+        }
         return result;
     }
 

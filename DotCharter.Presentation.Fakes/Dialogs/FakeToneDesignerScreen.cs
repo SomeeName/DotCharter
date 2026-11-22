@@ -37,6 +37,8 @@ public sealed class FakeToneDesignerScreen : FakeDialog<bool>, IToneDesignerScre
         CreateWithAiCommand = Idle();
         ImportFromToneRigCommand = Idle();
         AddImportedToProjectCommand = new RelayCommand<IImportedTone>(_ => { });
+        UndoCommand = Disabled();
+        RedoCommand = Disabled();
         CloseCommand = Answer(true);
     }
 
@@ -115,6 +117,12 @@ public sealed class FakeToneDesignerScreen : FakeDialog<bool>, IToneDesignerScre
     public ICommand AddToneCommand { get; }
     public ICommand DuplicateToneCommand { get; }
     public ICommand DeleteToneCommand { get; }
+    public void EndEditGesture(bool leavingField = false)
+    {
+    }
+
+    public ICommand UndoCommand { get; }
+    public ICommand RedoCommand { get; }
     public ICommand GenerateTonesFromAudioCommand { get; }
     public ICommand ImportTonesFromPsarcCommand { get; }
     public ICommand ImportToneFileCommand { get; }

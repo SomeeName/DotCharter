@@ -86,11 +86,12 @@ public static class PhrasePasteCompatibility
 {
     /// <summary>Model fret ceiling — the same bound
     /// <c>ChartExportValidator.KeyFretOutOfRange</c> enforces.</summary>
-    public const int MaxFret = 24;
+    public const int MaxFret = FretLimits.MaxFret;
 
     public const string KeyStringOutOfRange = "PhraseCatalog_Issue_StringOutOfRange";
     public const string KeyFretOutOfRange = "PhraseCatalog_Issue_FretOutOfRange";
     public const string KeyFretBelowCapo = "PhraseCatalog_Issue_FretBelowCapo";
+    public const string KeyAnchorOnOrBelowCapo = "PhraseCatalog_Issue_AnchorOnOrBelowCapo";
     public const string KeyTuningDiffers = "PhraseCatalog_Issue_TuningDiffers";
     public const string KeyCapoDiffers = "PhraseCatalog_Issue_CapoDiffers";
     public const string KeyPlayOnly = "PhraseCatalog_Issue_PlayOnly";
@@ -179,6 +180,8 @@ public static class PhrasePasteCompatibility
         if (subCapoFret != int.MinValue)
             issues.Add(new PhrasePasteIssue(PhrasePasteSeverity.Blocked, KeyFretBelowCapo, subCapoFret, targetCapo));
 
+        CheckAnchors(payload, targetCapo, issues);
+
         // Tuning: only the strings the phrase actually plays matter. A phrase
         // that never touches the low E does not care that the destination is in
         // drop D. Compare OFFSETS, not the tuning-type name — two arrangements
@@ -209,17 +212,37 @@ public static class PhrasePasteCompatibility
         return new PhrasePasteCheck(severity, issues);
     }
 
-    /// <summary>Every (string, fret) pair the phrase plays — notes and chord notes.
-    /// Hand shapes and anchors carry frets too, but they follow whatever the
-    /// sounds do, so blocking on them would double-report the same problem.</summary>
+    private static void CheckAnchors(ClipboardPayload payload, int capo, List<PhrasePasteIssue> issues)
+    {
+        var lowest = payload.Anchors.Select(a => a.Fret).DefaultIfEmpty(int.MaxValue).Min();
+        if (lowest <= capo)
+            issues.Add(new PhrasePasteIssue(PhrasePasteSeverity.Blocked, KeyAnchorOnOrBelowCapo, lowest, capo));
+    }
+
+    /// <summary>Every starting, slide-target and included hand-shape (string, fret) pair.
+    /// Anchors are checked separately: unlike open strings, they must start above the capo.</summary>
     private static IEnumerable<(int StringIndex, int Fret)> EnumerateSounds(ClipboardPayload payload)
     {
         foreach (var note in payload.Notes)
+        {
             yield return (note.StringIndex, note.Fret);
+            if (note.SlideTo is { } target) yield return (note.StringIndex, target);
+        }
         foreach (var chord in payload.Chords)
         {
             foreach (var chordNote in chord.ChordNotes)
+            {
                 yield return (chordNote.StringIndex, chordNote.Fret);
+                if (chordNote.SlideTo is { } target) yield return (chordNote.StringIndex, target);
+            }
+        }
+
+        var shapeIds = payload.HandShapes.Select(h => h.TemplateId).ToHashSet();
+        foreach (var templateId in shapeIds)
+        {
+            if (!payload.ChordTemplates.TryGetValue(templateId, out var template)) continue;
+            foreach (var (stringIndex, fret) in template.Frets)
+                yield return (stringIndex, fret);
         }
     }
 

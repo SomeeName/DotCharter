@@ -4,7 +4,7 @@ using DotCharter.Services.Audio.StemSeparation.Cache;
 namespace DotCharter.Services.Package.DcSong;
 
 /// <summary>What the export dialog asks about a song before it offers anything.</summary>
-/// <param name="AudioPath">The song audio, absolute.</param>
+/// <param name="AudioPath">The project's declared audio reference; resolved on the probe worker.</param>
 /// <param name="ProjectDirectory">The project's folder, the base of a relative stem path; "" for none.</param>
 /// <param name="Stems">The project's declared stems (a snapshot; never modified).</param>
 public sealed record DcSongProbeRequest(string AudioPath, string ProjectDirectory, IReadOnlyList<Stem> Stems);
@@ -18,10 +18,14 @@ public sealed record DcSongExportProbe(
     bool EncoderAvailable,
     bool AudioExists,
     long AudioBytes,
-    IReadOnlyList<DcSongStemCandidate> Stems);
+    IReadOnlyList<DcSongStemCandidate> Stems)
+{
+    /// <summary>The resolved local audio file, or null when missing or refused.</summary>
+    public string? AudioPath { get; init; }
+}
 
-/// <summary>One stem a package can carry: its package name, its file and the file's size.</summary>
-public sealed record DcSongStemCandidate(string Name, string SourcePath, long Bytes);
+/// <summary>One stem a package can carry: its package name, file, size and original project identity.</summary>
+public sealed record DcSongStemCandidate(string Name, string SourcePath, long Bytes, Stem? Original = null);
 
 /// <summary>
 /// The app's door onto <see cref="DcSongWriter" /> (File ▸ Export ▸ DotCharter song).
@@ -75,13 +79,18 @@ public sealed class DcSongExporter : IDcSongExporter
     private DcSongExportProbe Probe(DcSongProbeRequest request, IReadOnlyList<Stem> declared)
     {
         var encoder = _encoderAvailable();
-        var audio = new FileInfo(request.AudioPath);
-        var audioExists = !string.IsNullOrWhiteSpace(request.AudioPath) && audio.Exists;
-        var stems = FindStems(request, declared);
+        var projectPath = string.IsNullOrWhiteSpace(request.ProjectDirectory)
+            ? null
+            : Path.Combine(request.ProjectDirectory, "project.dcproj");
+        var audioPath = ProjectAudioLocator.TryResolve(projectPath, request.AudioPath);
+        var audio = audioPath != null && ProjectRelativePath.IsReadableMediaReference(audioPath) ? new FileInfo(audioPath) : null;
+        var audioExists = audio is { Exists: true };
+        var bytes = audioExists ? audio!.Length : 0;
+        var stems = FindStems(request with { AudioPath = audioPath ?? "" }, declared);
         _logger.Info(AppLogCategory.Project,
-            $".dcsong export probe: ffmpeg={(encoder ? "found" : "missing")}, audio={(audioExists ? audio.Length + " bytes" : "missing")}, " +
+            $".dcsong export probe: ffmpeg={(encoder ? "found" : "missing")}, audio={(audioExists ? bytes + " bytes" : "missing")}, " +
             $"stems={stems.Count} [{string.Join(", ", stems.Select(s => s.Name))}].");
-        return new DcSongExportProbe(encoder, audioExists, audioExists ? audio.Length : 0, stems);
+        return new DcSongExportProbe(encoder, audioExists, bytes, stems) { AudioPath = audioExists ? audioPath : null };
     }
 
     /// <summary>The declared stems whose files exist, under unique package names, at most
@@ -89,19 +98,19 @@ public sealed class DcSongExporter : IDcSongExporter
     private static List<DcSongStemCandidate> FindStems(DcSongProbeRequest request, IReadOnlyList<Stem> declared)
     {
         var legacyDir = Path.GetDirectoryName(request.AudioPath) ?? "";
-        var found = new List<(string Name, string Path, long Bytes)>();
+        var found = new List<(Stem Original, string Path, long Bytes)>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var stem in declared)
         {
             var path = StemFolderProbe.ResolveStemPath(request.ProjectDirectory, legacyDir, stem.Path);
-            if (string.IsNullOrEmpty(path)) continue;
+            if (!ProjectRelativePath.IsReadableMediaReference(path)) continue;
             var file = new FileInfo(path);
             if (!file.Exists || !seen.Add(file.FullName)) continue;
-            found.Add((stem.Name, file.FullName, file.Length));
+            found.Add((stem, file.FullName, file.Length));
             if (found.Count == DcSongFormat.MaxStems) break;
         }
 
-        var names = DcSongStemNames.ForPackage(found.Select(f => f.Name).ToList());
-        return found.Select((f, i) => new DcSongStemCandidate(names[i], f.Path, f.Bytes)).ToList();
+        var names = DcSongStemNames.ForPackage(found.Select(f => f.Original.Name).ToList());
+        return found.Select((f, i) => new DcSongStemCandidate(names[i], f.Path, f.Bytes, f.Original)).ToList();
     }
 }

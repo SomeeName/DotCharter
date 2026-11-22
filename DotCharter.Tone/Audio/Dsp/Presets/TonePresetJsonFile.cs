@@ -73,9 +73,11 @@ public static class TonePresetJsonFile
 
     /// <summary>The tone as an indented JSON document. Indented because a human
     /// reads and edits these.</summary>
-    public static string Serialize(DspTonePreset preset)
+    public static string Serialize(DspTonePreset preset, string? libraryDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(preset);
+        if (!string.IsNullOrWhiteSpace(libraryDirectory))
+            preset = preset with { Rig = DcRigPresetPreparation.MakeLibraryPathsPortable(preset.Rig, libraryDirectory) };
         return JsonSerializer.Serialize(UserTonePresetDto.FromPreset(preset), WriteOptions);
     }
 
@@ -128,6 +130,13 @@ public static class TonePresetJsonFile
                     string.IsNullOrWhiteSpace(id) ? "?" : id);
             }
 
+            if (module.StringParams is { } strings && strings.Any(p =>
+                    (p.Key is "modelPath" or "irPath" or "irPathB" or "irFile") && !string.IsNullOrEmpty(p.Value) &&
+                    !FileReferencePolicy.IsLocalAbsolute(p.Value) && !FileReferencePolicy.IsSafeRelative(p.Value)))
+            {
+                return new TonePresetImport(null, TonePresetImportFault.Malformed);
+            }
+
             sanitized.Add(Sanitize(module, id));
         }
 
@@ -149,8 +158,7 @@ public static class TonePresetJsonFile
     /// <summary>One module with every value forced into range: params clamped to
     /// their declared min/max (a non-finite value taken as the default), the branch
     /// tag clamped to 0..3, the sidechain key folded to a source this build knows,
-    /// string params copied verbatim (a path is the file
-    /// system's business, and the native module refuses one it cannot load).</summary>
+    /// string params copied after file references have passed the shared trust policy.</summary>
     private static DcRigModule Sanitize(UserToneModuleDto module, string moduleTypeId)
     {
         var values = new Dictionary<string, float>(StringComparer.Ordinal);

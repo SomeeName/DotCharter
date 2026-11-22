@@ -24,12 +24,20 @@ Related: the rails around it (menu bar / toolbar / status rail / popovers) are
   moved out of `Preview3DView`'s own `UserControl.Styles`). It is held to the
   same lints as the other three grammars — add it to
   `UI/FireStyleClassTests`' three Theory lists if you touch them.
-  - **It is included by FOUR views, and which ones is not a style choice.**
+  - **It is included by THREE views, and which ones is not a style choice.**
     `MainWindow.axaml` (on the timeline column's `DockPanel` and on the 3D
     preview's `PaneHeader` Border — the rail and the minimap are declared there
-    and have no view of their own), plus `Preview3DView`,
-    `PhraseCatalogView` and `StemMixerView` INDIVIDUALLY, because each of
-    those leaves the main window: a floated pane is re-hosted in a
+    and have no view of their own), plus `Preview3DView` (on its top bar's
+    and detection monitor's own `Border.Styles`) and `Preview3DPracticeStripView` (the practice strip,
+    its own view since #591 so it can be laid out without the Vulkan viewport;
+    its calibration status wraps in a full-width Grid row, outside the control
+    WrapPanel. `NarrowEditorPanesUiPerfSmokeTests` uses the longest real localized
+    failure message in all three cultures and checks painted text as well as
+    child bounds; the Riff Library fixture also populates status and compatibility
+    messages, and the practice fixture populates the pass summary;
+    one level per subtree, never both) INDIVIDUALLY, because each of
+    those leaves the main window (`PhraseCatalogView` left the list with its
+    pane header in #601): a floated pane is re-hosted in a
     Dock.Avalonia `HostWindow` and a popped-out preview in a plain `Window`,
     neither of which sees a window-scoped style. That is a fault nothing shows
     until someone drags a pane out;
@@ -57,6 +65,22 @@ Related: the rails around it (menu bar / toolbar / status rail / popovers) are
     `ChartMeasure`) — still `ThemeTokens`, deliberately NOT Fire keys, and
     `App.axaml` + `ThemePresets.DarkSlate` must carry the same five values.
     The renderer's DATA colours are untouched.
+
+## String order and handedness
+
+The 2D timeline, its gutter labels and pointer/marquee hit-testing, string-move
+keys and minimap follow `InvertStrings` alone: low E is on top by default and
+at the bottom in Tab order. The profile's `LeftyFlip` mirrors the 3D highway's
+fret axis; the timeline's horizontal axis is time, so handedness does not change
+its lanes. Existing left-handed profiles receive this order without migration.
+
+The chord box lays strings out as rows, so it and the per-string chord editor
+rows follow the timeline's order too. `ProjectState.FlipStrings`, the view-model
+forwarders and `IChartViewport.FlipStrings` all mean `InvertStrings` alone.
+`LeftyFlip` changes nothing in 2D; a fret-axis mirror in the chord box is outside
+this behavior. Regression evidence lives in `StringLaneOrderTests`,
+`LeftyTimelineHitTests`, `ChordBoxStringOrderTests`,
+`ChordTemplateEditorViewModelTests` and `LeftyTimelineUiPerfSmokeTests`.
 
 ## The timeline LEFT GUTTER (`Controls/TimelineGutterControl`)
 
@@ -143,7 +167,10 @@ Related: the rails around it (menu bar / toolbar / status rail / popovers) are
     per-row header are one number written THREE times (118, the design's own
     width).** For the stacked row that is correctness — change one and its chart
     shows a different slice of the song at the same screen x. For the song map it
-    is the design's single unbroken left edge.
+    is the design's single unbroken left edge. The stacked header has three row chips: TONES (T),
+    SECTIONS (S), PHRASES (P), all inside that fixed width. Lyrics are song-wide and occupy only
+    the active timeline: `RibbonLaneRules.Compose` excludes lyrics on stacked renderers even when
+    a saved per-track `RibbonVisibility.ShowLyrics` flag is on. The active lane menu keeps its toggle.
     `TheGutterColumn_TheSongMapCaption_AndTheStackedRowHeader_AreTheSameWidth`
     fails instead.
   - **The minimap strip is `SONG MAP` + `4:12 · 84 BARS` (`Border.SongMapCaption`
@@ -240,10 +267,11 @@ Related: the rails around it (menu bar / toolbar / status rail / popovers) are
       code asks the layout it draws with (`ribbon.BarTop`, `.Bar`, `.PillTop`),
       never the static normal-density constants.
     - **Which lanes get a row is `Editing/Tracks/RibbonLaneRules`**: the user's
-      toggles, minus empty lanes while "Hide empty lanes automatically" is on
+      toggles, minus empty lanes while "Hide empty rows automatically" is on
       (the default). A chart with ONE tone (base tone plus every change, by
       name) has an empty TONES lane. SECTIONS stays as the event dialog's entry
-      point while the track has no section, phrase or tone change. The
+      point while the track has no section, phrase or tone change. An empty LYRICS
+      lane hides like PHRASES (switching a lane toggle off and on keeps its empty row until switched off); the first syllable comes from "insert vocal at playhead". The
       renderer's `TopRibbon`, its hit tester and the lane menu's "auto-hidden"
       hints all read these rules (`UI/TimelineLaneTests`).
     - **The lane menu** is a right-click on the gutter (`TimelineGutterHost`'s
@@ -330,6 +358,13 @@ Related: the rails around it (menu bar / toolbar / status rail / popovers) are
       drawn plain, so a selection vanished when its chip pinned). Pinned by
       `UI/Controls/StickyLabelTests` and, on the real layer,
       `Rendering/EventLayerPinnedLabelHitTests`.
+    - **A bend is labelled once per GESTURE**, as Guitar Pro 8 shows it
+      (`DotCharter.Core/Domain/Guitar/BendGestures`, shared with the 3D highway):
+      a plain bend 0 → ½ → Full is one "↗Full" at its peak, a release one "↘Full"
+      where it lands (a note tied in from a bend starts at the carried pitch, so its
+      fall is a release), a struck note starting raised is "PB Full", and a hold
+      between two rises labels each. `Core/Guitar/BendGestureLabelTests`,
+      `Rendering/TimelineBendGestureLabelTests`, `Rendering/BendGesturePeakLabelTests`.
     - **A bend's step label never covers its note head** and two labels of one
       note never overlap — the bigger step stays
       (`Controls/Layers/Helpers/BendLabelPlacement`, `UI/Controls/BendLabelPlacementTests`).
@@ -353,11 +388,12 @@ Related: the rails around it (menu bar / toolbar / status rail / popovers) are
     It sits IN the time ruler (`PlayheadLayer.BadgeY`, from
     `TimelineZones.TimeRulerHeightPx`): a fixed 20 px below the lanes put it in
     the FHP band once SHAPES and FHP grew above the ruler (2026-09-23).
-  - **A section is one colour by NAME in both views** (`Controls/Layers/Helpers/SectionColors`,
-    2026-09-23): the song map's band and the timeline's SECTIONS chips and drop
-    lines. The chips were all one blue while the map coloured by name. Chip fills
-    are darkened so their light text stays above 6:1 on every palette colour
-    (`UI/Controls/SectionColorsTests` computes it).
+  - **The song map uses a fixed colour for each known section and phrase name**
+    (`Theming/SongMapPalette`). Pre-chorus, chorus and post-chorus use
+    distinct shades of blue. Custom names hash into a separate palette. Timeline
+    section chips and drop lines use the 3D view's section purple through
+    `Controls/Layers/Helpers/SectionColors`. `UI/Controls/SectionColorsTests`
+    checks text contrast on the song map and timeline.
   - **Bend curves are a light tint of their string**, not white
     (`BendLabelPlacement.CurveColor`): white under a slight bend read as a
     selection underline.

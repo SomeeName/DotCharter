@@ -15,9 +15,24 @@ internal static class PlaybackServiceSourceFiles
     public static readonly string[] Collaborators =
     [
         "DotCharter.Tone/Audio/ChartSynth/ChartSynthEngineDriver.cs",
+        "DotCharter.Tone/Audio/ChartSynth/IChartSynthBackend.cs",
         "DotCharter.Tone/Audio/Diagnostics/AudioHealthMonitor.cs",
+        "DotCharter.Tone/Audio/Engine/AudioWaveformGeneration.cs",
+        "DotCharter.Tone/Audio/Engine/MediaRebuildReplay.cs",
+        "DotCharter.Tone/Audio/Engine/MediaRebuildRecovery.cs",
+        "DotCharter.Tone/Audio/Engine/MediaSourceOwnership.cs",
+        "DotCharter.Tone/Audio/Engine/MediaSourceSwap.cs",
+        "DotCharter.Tone/Audio/Engine/PlayheadReadback.cs",
         "DotCharter.Tone/Audio/ExternalInsert/ExternalProcessInserts.cs",
         "DotCharter.Tone/Audio/Reamp/ReampTakes.cs",
+        "DotCharter.Tone/Audio/Vst/Sandbox/VstSandboxChainEdit.cs",
+        "DotCharter.Tone/Audio/Vst/Sandbox/VstSandboxLoadRejections.cs",
+        "DotCharter.Tone/Audio/Vst/Sandbox/VstSandboxShutdown.cs",
+        "DotCharter.Tone/Audio/Vst/Sandbox/VstSandboxSeat.cs",
+        "DotCharter.Tone/Audio/Vst/Sandbox/VstSandboxRecovery.cs",
+        "DotCharter.Tone/Audio/Vst/VstRebuildState.cs",
+        "DotCharter.Tone/Audio/Vst/VstInputOrder.cs",
+        "DotCharter.Tone/Audio/Vst/VstChainWork.cs",
     ];
 
     /// <summary>Absolute paths, partials then collaborators, each group in ordinal order.

@@ -1,4 +1,5 @@
 using static DotCharter.Tests.Presentation.Settings.SplitTabStubs;
+using CommunityToolkit.Mvvm.Input;
 using DotCharter.Presentation.Contracts.Settings;
 using DotCharter.Presentation.Screens.Settings;
 
@@ -13,7 +14,7 @@ namespace DotCharter.Tests.Presentation.Settings;
 public sealed class GeneralSettingsViewModelTests
 {
     private sealed record Rig(GeneralSettingsViewModel Vm, FakeConfigurationService Config,
-        RecordingLocalization Loc, FakeSetup Setup, FakeAppLogger Logger);
+        RecordingLocalization Loc, FakeSetup Setup, FakeAppLogger Logger, FakeFileStorageService Files);
 
     private static Rig NewRig(Action<AppConfig>? seed = null)
     {
@@ -22,9 +23,10 @@ public sealed class GeneralSettingsViewModelTests
         var loc = new RecordingLocalization();
         var setup = new FakeSetup();
         var logger = new FakeAppLogger();
-        var vm = new GeneralSettingsViewModel(config, loc, setup, logger);
+        var files = new FakeFileStorageService();
+        var vm = new GeneralSettingsViewModel(config, loc, setup, files, logger);
         vm.Load();
-        return new Rig(vm, config, loc, setup, logger);
+        return new Rig(vm, config, loc, setup, logger, files);
     }
 
     private static int IndexOf(string culture)
@@ -94,6 +96,60 @@ public sealed class GeneralSettingsViewModelTests
         var rig = NewRig();
         rig.Vm.IsAdvancedOpen = true;
         Assert.Empty(rig.Vm.UnsavedSettings);
+    }
+
+    [Fact]
+    public void AutoVolumeTarget_IsSearchableAndTrackedThroughSaveAndRevert()
+    {
+        var rig = NewRig(config => config.ExportAutoVolumeTargetLufs = -20);
+        var row = rig.Vm.SearchGroups.SelectMany(group => group.Rows).Single(r => r.Key == "general.autoVolumeTarget");
+
+        var hit = Assert.Single(SettingsSearch.Hits([new SettingsSearchSource("general", "General", rig.Vm.SearchGroups)], row.Label));
+        Assert.Equal(row.Label, hit.Label);
+        rig.Vm.ApplySearch(row.Label);
+        Assert.True(rig.Vm.IsAdvancedOpen);
+        Assert.DoesNotContain(row.Key, rig.Vm.HiddenKeys);
+        Assert.Equal(-20, rig.Vm.ExportAutoVolumeTargetLufs);
+
+        rig.Vm.ExportAutoVolumeTargetLufs = -10;
+        Assert.Single(rig.Vm.UnsavedSettings);
+        rig.Vm.Save();
+        Assert.Empty(rig.Vm.UnsavedSettings);
+        Assert.Equal(-10, rig.Config.AppConfig.ExportAutoVolumeTargetLufs);
+
+        rig.Vm.ExportAutoVolumeTargetLufs = -16;
+        rig.Vm.Revert();
+        Assert.Equal(-10, rig.Vm.ExportAutoVolumeTargetLufs);
+    }
+
+    [Fact]
+    public async Task TestExportDefaultFolder_IsSearchableAndCanBeBrowsedClearedAndSaved()
+    {
+        var initial = Path.Combine("exports", "test");
+        var chosen = Path.Combine("game", "dlc");
+        var rig = NewRig(config => config.ExportTestDefaultFolder = initial);
+        var row = rig.Vm.SearchGroups.SelectMany(group => group.Rows).Single(r => r.Key == "general.testExportDefaultFolder");
+        rig.Vm.ApplySearch(row.Label);
+        Assert.True(rig.Vm.IsAdvancedOpen);
+        Assert.DoesNotContain(row.Key, rig.Vm.HiddenKeys);
+        Assert.Equal(initial, rig.Vm.ExportTestDefaultFolder);
+
+        var browse = Assert.IsAssignableFrom<IAsyncRelayCommand>(rig.Vm.BrowseTestExportDefaultFolderCommand);
+        await browse.ExecuteAsync(null);
+        Assert.Equal(initial, rig.Vm.ExportTestDefaultFolder);
+        rig.Files.NextFolder = chosen;
+        await browse.ExecuteAsync(null);
+        Assert.Equal(new[] { initial, initial }, rig.Files.RequestedStartDirectories);
+        Assert.Equal(chosen, rig.Vm.ExportTestDefaultFolder);
+        Assert.Single(rig.Vm.UnsavedSettings);
+        Assert.Equal(initial, rig.Config.AppConfig.ExportTestDefaultFolder);
+
+        rig.Vm.Save();
+        Assert.Equal(chosen, rig.Config.AppConfig.ExportTestDefaultFolder);
+        rig.Vm.ClearTestExportDefaultFolderCommand.Execute(null);
+        Assert.Empty(rig.Vm.ExportTestDefaultFolder);
+        rig.Vm.Save();
+        Assert.Empty(rig.Config.AppConfig.ExportTestDefaultFolder);
     }
 
     [Fact]

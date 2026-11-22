@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.Input;
-using DotCharter.Services.Export;
 using DotCharter.Services.Export.Audio;
+using DotCharter.Services.Export;
+using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Core.Domain.Vocals;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.Services.Infrastructure.Documents;
@@ -12,11 +13,32 @@ using DotCharter.Services.Diagnostics;
 
 namespace DotCharter.Tests.UI.ViewModels.Dialogs;
 
-public sealed class RocksmithExportDialogViewModelTests : IDisposable
+public sealed partial class RocksmithExportDialogViewModelTests : IDisposable
 {
     private readonly string _tempDir = Directory.CreateTempSubdirectory("dotcharter-exportvm-").FullName;
 
     public void Dispose() => BestEffortDelete.Directory(_tempDir);
+
+    [Fact]
+    public async Task A_failed_test_export_keeps_the_installed_working_package()
+    {
+        var prompt = new RecordingPrompt();
+        var harness = new Harness(CreateValidProject(), prompt);
+        var vm = harness.Open();
+        vm.DlcKey = "reviewsong";
+        vm.TestFolder = _tempDir;
+        vm.OutputPath = Path.Combine(_tempDir, "release_p.psarc");
+        vm.AudioPath = Path.Combine(_tempDir, "missing.wem");
+        var installed = Path.Combine(_tempDir, "reviewsong_p.psarc");
+        File.WriteAllText(installed, "working package");
+
+        await ((IAsyncRelayCommand)vm.TestExportCommand).ExecuteAsync(null);
+
+        Assert.Equal("working package", File.ReadAllText(installed));
+        Assert.Equal(1, prompt.ShowCalls);
+        Assert.False(vm.HasResult);
+        Assert.False(vm.IsBuilding);
+    }
 
     // ---- harness --------------------------------------------------------------
 
@@ -51,11 +73,15 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
         public Func<bool>? Observe { get; set; }
         public bool? IsBuildingWhileShown { get; private set; }
         public int ShowCalls { get; private set; }
+        public string? LastMessage { get; private set; }
+        public string? LastDetails { get; private set; }
 
         public Task<bool> ShowAsync(string title, string message, MessageDialogKind kind = MessageDialogKind.Info,
             string? details = null, bool confirmation = false)
         {
             ShowCalls++;
+            LastMessage = message;
+            LastDetails = details;
             IsBuildingWhileShown = Observe?.Invoke();
             return Task.FromResult(true);
         }
@@ -75,7 +101,7 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
 
         public Harness(ChartProject project, RecordingPrompt? prompt = null)
         {
-            var logger = new FakeAppLogger();
+            var logger = Logger;
             State.ActiveProject = project;
             State.ActiveArrangement = project.Arrangements.FirstOrDefault();
             State.TotalAudioLengthMs = 32_000;
@@ -109,6 +135,13 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
         public DotCharter.Tests.Presentation.Dialogs.RecordingProxy MaintenanceCalls { get; }
 
         public HistoryService History { get; }
+        public ChartEditDialogServices Edit => _services;
+        public RocksmithExportServices Io => _io;
+        public IProjectDocumentService? ExportDocuments { get; set; }
+        public FakeAppLogger Logger { get; } = new();
+
+        /// <summary>The way to the Inspector's Issues tab; nothing set unless a test sets it.</summary>
+        public DotCharter.Presentation.Shared.ChartIssuesDoor IssuesDoor { get; } = new();
 
         public ProjectState State { get; } = new();
         public FakeConfigurationService Config { get; } = new();
@@ -122,9 +155,21 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
         /// <summary>The dialog of the current open; an open is a fresh view model, as the host builds one.</summary>
         public RocksmithExportViewModel Vm => _vm ?? throw new InvalidOperationException("open the dialog first");
 
+        public Func<string, PcmAudio>? VolumeDecoder { get; set; }
+        public Func<string, string>? VolumeSignature { get; set; }
+        public Func<string?, string, string, RocksmithTestPackageOwnership>? TestOwnershipFactory { get; set; }
+
         public RocksmithExportViewModel Open()
         {
-            _vm = new RocksmithExportViewModel(_services, _io, Dialogs, Memory, _maintenance, DlcBuilderWriter);
+            var io = _io with
+            {
+                Documents = ExportDocuments ?? Documents,
+                VolumeSignature = VolumeSignature,
+                TestOwnershipFactory = TestOwnershipFactory,
+                VolumeMeasure = VolumeDecoder is null ? null : (chart, audio, preview, start, warn, targetLufs) =>
+                    ProjectVolumes.Measure(chart, audio, preview, start, warn, VolumeDecoder, targetLufs)
+            };
+            _vm = new RocksmithExportViewModel(_services, io, Dialogs, Memory, _maintenance, DlcBuilderWriter, IssuesDoor);
             _prompt.Observe = () => _vm.IsBuilding;
             return _vm;
         }
@@ -150,54 +195,6 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
 
     private static FractionalPosition Pos(IList<BeatMarker> beats, double ms) => TimelineMath.PositionFromMs(ms, beats);
 
-    /// <summary>
-    ///     #293: "Full report" opens the Chart quality report over the export, and whatever
-    ///     changed while it was open (a Fix run from it) is in the export's own list when it closes.
-    /// </summary>
-    [Fact]
-    public async Task FullReport_OpensTheQualityReport_AndTheExportRechecksWhenItCloses()
-    {
-        var project = CreateValidProject();
-        var harness = new Harness(project);
-        var dialogs = new ReportDialogs(() =>
-            project.Arrangements[0].Levels[0].Notes[0].Fret = 30);
-        harness.Dialogs = dialogs;
-        var vm = harness.Open();
-        Assert.Empty(vm.ValidationItems);
-
-        await ((CommunityToolkit.Mvvm.Input.IAsyncRelayCommand)vm.ReviewReportCommand).ExecuteAsync(null);
-
-        Assert.Equal([typeof(DotCharter.Presentation.Contracts.Dialogs.IChartQualityReportScreen)], dialogs.Opened);
-        Assert.NotEmpty(vm.ValidationItems);
-    }
-
-    /// <summary>Records each open and runs <paramref name="whileOpen" /> as if the user had
-    /// fixed (or broken) something in the dialog before closing it.</summary>
-    private sealed class ReportDialogs(Action whileOpen) : DotCharter.Presentation.Dialogs.IDialogs
-    {
-        public List<Type> Opened { get; } = [];
-
-        public bool HasOpenDialog => false;
-
-        public event EventHandler<DotCharter.Presentation.Dialogs.DialogChange>? Changed
-        {
-            add { }
-            remove { }
-        }
-
-        public Task<TResult?> ShowAsync<TContract, TResult>(Action<TContract>? init = null)
-            where TContract : class, DotCharter.Presentation.Dialogs.IDialogScreen<TResult>
-        {
-            Opened.Add(typeof(TContract));
-            whileOpen();
-            return Task.FromResult(default(TResult));
-        }
-
-        public Task<bool> MessageAsync(string title, string message, bool isConfirmation = false) => Task.FromResult(false);
-
-        public bool CloseTop() => false;
-    }
-
     /// <summary>A minimal project that passes the export validator cleanly.</summary>
     internal static ChartProject CreateValidProject()
     {
@@ -206,6 +203,7 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
             Bpm = 120,
             Chart = { SongName = "Dialog Song", Artist = "DotCharter" }
         };
+        project.Showlights.Add(new Showlight { Position = new FractionalPosition(0), Type = "FOG_BLUE", Note = 28 });
         for (var i = 0; i < 64; i++)
         {
             project.Beats.Add(new BeatMarker
@@ -267,6 +265,39 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
     }
 
     // ---- tests ------------------------------------------------------------------
+
+    /// <summary>The "Full report" door: without an Inspector (no door set) it is disabled; with one it opens the tab and closes the dialog.</summary>
+    [Fact]
+    public void ShowInIssues_IsDisabledWithoutAnInspector_AndOpensTheTabWithOne()
+    {
+        var bare = new Harness(CreateValidProject()).Open();
+        Assert.False(bare.ShowInIssuesCommand.CanExecute(null));
+
+        var harness = new Harness(CreateValidProject());
+        var opened = 0;
+        harness.IssuesDoor.Open = () => opened++;
+        var vm = harness.Open();
+        Assert.True(vm.ShowInIssuesCommand.CanExecute(null));
+
+        vm.ShowInIssuesCommand.Execute(null);
+
+        Assert.Equal(1, opened);
+        Assert.True(vm.Result.IsCompleted);
+    }
+
+    [Fact]
+    public void ShowInIssues_ClosesBeforeItOpensTheTab()
+    {
+        var harness = new Harness(CreateValidProject());
+        var closedWhenOpened = false;
+        RocksmithExportViewModel? vm = null;
+        harness.IssuesDoor.Open = () => closedWhenOpened = vm!.Result.IsCompleted;
+        vm = harness.Open();
+
+        vm.ShowInIssuesCommand.Execute(null);
+
+        Assert.True(closedWhenOpened);
+    }
 
     [Fact]
     public void Opening_without_a_project_assembles_nothing_and_offers_no_export()
@@ -628,8 +659,13 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
     [Fact]
     public async Task Export_builds_a_psarc_and_persists_presets()
     {
-        var harness = new Harness(CreateValidProject());
+        var project = CreateValidProject();
+        var harness = new Harness(project);
         harness.Open();
+        using var dirty = new ProjectDirtyTracker(harness.History);
+        var beforeVolumes = (project.Chart.AudioVolume, project.Chart.PreviewVolume,
+            project.Chart.AudioVolumeManual, project.Chart.PreviewVolumeManual,
+            project.Chart.AudioVolumeSignature, project.Chart.PreviewVolumeSignature);
         harness.Vm.AudioPath = CreateFakeWem();
         harness.Vm.OutputPath = Path.Combine(_tempDir, "dialog_p.psarc");
         harness.Vm.AppId = "123456";
@@ -644,8 +680,47 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
         var config = harness.Config.AppConfig;
         Assert.Equal(_tempDir, config.LastExportDir);
         Assert.Equal("123456", config.LastExportAppId);
-        Assert.Equal(-10.5, config.ExportAudioVolume);
         Assert.True(config.ExportIncludeVocals);
+
+        // A volume typed in the dialog is the SONG's: kept in the project, never re-measured, never a global setting.
+        Assert.Equal(-10.5, project.Chart.AudioVolume);
+        Assert.True(project.Chart.AudioVolumeManual);
+        Assert.False(project.Chart.PreviewVolumeManual);
+        Assert.True(dirty.IsDirty);
+        Assert.Single(harness.History.GetUndoSteps());
+        harness.History.Undo();
+        Assert.Equal(beforeVolumes, (project.Chart.AudioVolume, project.Chart.PreviewVolume,
+            project.Chart.AudioVolumeManual, project.Chart.PreviewVolumeManual,
+            project.Chart.AudioVolumeSignature, project.Chart.PreviewVolumeSignature));
+        Assert.False(dirty.IsDirty);
+        harness.History.Redo();
+        Assert.Equal(-10.5, project.Chart.AudioVolume);
+        Assert.True(project.Chart.AudioVolumeManual);
+    }
+
+    [Fact]
+    public void The_dialog_opens_with_the_songs_own_volumes()
+    {
+        var project = CreateValidProject();
+        project.Chart.AudioVolume = -12.3;
+        project.Chart.PreviewVolume = -4.4;
+        var harness = new Harness(project);
+
+        harness.Open();
+
+        Assert.Equal(-12.3, harness.Vm.AudioVolume);
+        Assert.Equal(-4.4, harness.Vm.PreviewVolume);
+    }
+
+    [Fact]
+    public void A_project_never_measured_opens_with_the_defaults()
+    {
+        var harness = new Harness(CreateValidProject());
+
+        harness.Open();
+
+        Assert.Equal(ProjectVolumes.DefaultAudioVolume, harness.Vm.AudioVolume);
+        Assert.Equal(ProjectVolumes.DefaultPreviewVolume, harness.Vm.PreviewVolume);
     }
 
     /// <summary>The designer commits its slot rows to the arrangement when it closes, and the export reads the arrangement.</summary>
@@ -787,16 +862,16 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
         var seven = vm.Arrangements.Single(a => a.Name == "Seven");
         Assert.True(seven.IsExtendedString);
 
-        Assert.Equal(RocksmithMacBlock.ExtendedStrings, vm.MacBlock);
-        Assert.Equal(loc.Format("Dialog_Export_PcOnlyBecause", loc["Dialog_Export_MacSixStringsOnly"]), vm.PlatformNote);
+        Assert.Equal(RocksmithMacBlock.RsxrWindowsOnly, vm.MacBlock);
+        Assert.Equal(loc.Format("Dialog_Export_PcOnlyBecause", loc["Dialog_Export_RsxrWindowsOnly"]), vm.PlatformNote);
 
         Pick(vm, ExportPlatform.Mac);
-        Assert.Contains(loc.Format("Dialog_Export_MacUnavailable", loc["Dialog_Export_MacSixStringsOnly"]),
+        Assert.Contains(loc.Format("Dialog_Export_MacUnavailable", loc["Dialog_Export_RsxrWindowsOnly"]),
             vm.ExportBlockedReason.Split('\n'));
 
         seven.IsSelected = false;
         Assert.Null(vm.MacBlock);
-        Assert.DoesNotContain(loc.Format("Dialog_Export_MacUnavailable", loc["Dialog_Export_MacSixStringsOnly"]),
+        Assert.DoesNotContain(loc.Format("Dialog_Export_MacUnavailable", loc["Dialog_Export_RsxrWindowsOnly"]),
             vm.ExportBlockedReason.Split('\n'));
         Pick(vm, ExportPlatform.PcAndMac);
         Assert.Equal(loc.Format("Dialog_Export_WritesBoth", "seven_p.psarc", "seven_m.psarc"), vm.PlatformNote);
@@ -846,7 +921,7 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
     // ---- version, test export, auto volume (#953) ---------------------------------
 
     [Fact]
-    public void The_release_file_is_named_after_artist_title_and_version_and_follows_the_version()
+    public void The_release_file_uses_artist_title_version_and_only_derived_names_follow_versions()
     {
         using var keys = TestRocksmithKeys.UseNoKeys();
         var harness = new Harness(CreateValidProject());
@@ -887,7 +962,35 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Test_export_writes_into_the_test_folder_replacing_earlier_builds_while_the_game_is_closed()
+    public void The_preview_start_is_in_the_build_options_blocks_when_unreadable_and_becomes_the_songs_on_close()
+    {
+        var project = CreateValidProject();
+        project.Chart.PreviewStartMs = 30_000;
+        var harness = new Harness(project);
+        var vm = harness.Open();
+
+        Assert.Equal("0:30.000", vm.PreviewStartText);
+        Assert.Equal(30_000, vm.BuildOptions(project).PreviewStartMs);
+
+        vm.PreviewStartText = "1:30.250";
+        Assert.Equal(90_250, vm.BuildOptions(project).PreviewStartMs);
+
+        vm.PreviewStartText = "soon";
+        Assert.True(vm.HasInvalidPreviewStart);
+        Assert.Contains(vm.BlockingReasons(), r => r.Length > 0);
+        Assert.False(vm.ExportCommand.CanExecute(null));
+
+        vm.PreviewStartText = "1:30.250";
+        vm.CloseCommand.Execute(null);
+        Assert.Equal(90_250, project.Chart.PreviewStartMs);
+
+        // Blank is automatic, and one undo brings the old start back.
+        harness.History.Undo();
+        Assert.Equal(30_000, project.Chart.PreviewStartMs);
+    }
+
+    [Fact]
+    public async Task Test_export_writes_into_the_test_folder_preserving_unowned_earlier_builds_while_the_game_is_closed()
     {
         using var keys = TestRocksmithKeys.UseNoKeys();
         var project = CreateValidProject();
@@ -904,13 +1007,38 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
         await ((IAsyncRelayCommand)vm.TestExportCommand).ExecuteAsync(null);
 
         Assert.True(vm.HasResult);
-        Assert.Equal(Path.Combine(folder, "dcdotcharterdialogsong_p.psarc"), FirstResult(vm));
-        Assert.False(File.Exists(stale));
+        Assert.Equal(Path.Combine(folder, "DotCharter_Dialog-Song_test_p.psarc"), FirstResult(vm));
+        Assert.Equal("old", File.ReadAllText(stale));
         // The release is untouched: the chart keeps its version and the output field its name.
         Assert.Equal("1", project.Chart.Version);
         Assert.Equal("Dialog Song", project.Chart.SongName);
-        Assert.Equal(folder, harness.Config.AppConfig.ExportTestFolder);
         Assert.NotEqual(folder, harness.Config.AppConfig.LastExportDir);
+    }
+
+    [Fact]
+    public async Task Test_export_keeps_the_live_projects_imported_tone_bodies()
+    {
+        using var keys = TestRocksmithKeys.UseNoKeys();
+        var project = CreateValidProject();
+        project.Arrangements[0].ToneBase = "imported_clean";
+        project.Arrangements[0].ToneA = "imported_clean";
+        var harness = new Harness(project);
+        harness.Memory.ImportedTonesProject = project;
+        harness.Memory.ImportedTones.Add(new ToneDefinition
+        {
+            Key = "imported_clean", Name = "Imported clean", Json = "{\"Key\":\"imported_clean\",\"Name\":\"Imported clean\"}"
+        });
+        var vm = harness.Open();
+        vm.TestFolder = Path.Combine(_tempDir, "imported-tones");
+        vm.AudioPath = CreateFakeWem();
+
+        await ((IAsyncRelayCommand)vm.TestExportCommand).ExecuteAsync(null);
+
+        Assert.True(vm.HasResult);
+        Assert.True(File.Exists(FirstResult(vm)));
+        Assert.DoesNotContain(vm.ResultWarnings, w => w.Contains("declares tone 'imported_clean'", StringComparison.Ordinal));
+        Assert.Empty(project.ToneDefinitions);
+        Assert.Same(project, harness.Memory.ImportedTonesProject);
     }
 
     [Fact]
@@ -919,6 +1047,9 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
         using var keys = TestRocksmithKeys.UseNoKeys();
         var project = CreateValidProject();
         var harness = new Harness(project);
+        harness.State.CurrentProjectPath = Path.Combine(_tempDir, "running.dcproj");
+        File.WriteAllText(harness.State.CurrentProjectPath, "project");
+        harness.TestOwnershipFactory = (path, id, folder) => new RocksmithTestPackageOwnership(path, id, folder, RecycleOwnedTestPackage);
         var vm = harness.Open();
         var folder = Path.Combine(_tempDir, "running");
         vm.TestFolder = folder;
@@ -930,8 +1061,8 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
         await ((IAsyncRelayCommand)vm.TestExportCommand).ExecuteAsync(null);
         var second = FirstResult(vm);
 
-        Assert.Equal(Path.Combine(folder, "dcdotcharterdialogsong_v1_p.psarc"), first);
-        Assert.Equal(Path.Combine(folder, "dcdotcharterdialogsong_v2_p.psarc"), second);
+        Assert.Equal(Path.Combine(folder, "DotCharter_Dialog-Song_test_v1_p.psarc"), first);
+        Assert.Equal(Path.Combine(folder, "DotCharter_Dialog-Song_test_v2_p.psarc"), second);
         Assert.True(File.Exists(first));
         Assert.True(File.Exists(second));
         // The title change is on the build's private copy only.
@@ -940,8 +1071,16 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
         // Game closed again: the plain name is back and every earlier build goes.
         harness.Game.IsRunning = false;
         await ((IAsyncRelayCommand)vm.TestExportCommand).ExecuteAsync(null);
-        Assert.Equal(["dcdotcharterdialogsong_p.psarc"],
+        Assert.Equal(["DotCharter_Dialog-Song_test_p.psarc"],
             Directory.GetFiles(folder).Select(Path.GetFileName).ToArray());
+        Assert.Equal(2, Directory.GetFiles(Path.Combine(_tempDir, ".recycled-tests"), "*.psarc").Length);
+    }
+
+    private void RecycleOwnedTestPackage(string path)
+    {
+        var archive = Directory.CreateDirectory(Path.Combine(_tempDir, ".recycled-tests"));
+        if (OperatingSystem.IsWindows()) archive.Attributes |= FileAttributes.Hidden;
+        File.Move(path, Path.Combine(archive.FullName, Path.GetFileName(path)));
     }
 
     [Fact]
@@ -957,10 +1096,13 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
         Assert.False(vm.ExportCommand.CanExecute(null));
     }
 
-    [Fact]
-    public async Task Auto_volume_sets_the_volume_from_the_measured_loudness()
+    [Theory]
+    [InlineData(-20)]
+    [InlineData(-10)]
+    public async Task Both_Auto_buttons_use_the_configured_loudness_target(int targetLufs)
     {
         var harness = new Harness(CreateValidProject());
+        harness.Config.AppConfig.ExportAutoVolumeTargetLufs = targetLufs;
         var vm = harness.Open();
         Assert.False(vm.AutoVolumeCommand.CanExecute(null));
         Assert.False(vm.AutoPreviewVolumeCommand.CanExecute(null));
@@ -982,7 +1124,7 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
         await ((IAsyncRelayCommand)vm.AutoVolumeCommand).ExecuteAsync(null);
         await ((IAsyncRelayCommand)vm.AutoPreviewVolumeCommand).ExecuteAsync(null);
 
-        var expected = RocksmithAutoVolume.Calculate(path);
+        var expected = RocksmithAutoVolume.Calculate(path, targetLufs);
         Assert.NotEqual(-8.0, expected);
         Assert.Equal(expected, vm.AudioVolume);
         Assert.Equal(expected, vm.PreviewVolume);
@@ -1131,43 +1273,6 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
         var row = Assert.Single(harness.Vm.ValidationItems);
         Assert.False(row.HasFix);
         Assert.Equal("", row.FixDescription);
-    }
-
-    /// <summary>#743: a 7-string guitar offers the split option, off by default; ticked, the
-    /// package's SNG carries the 7th-string chord as single notes and no chord sidecar is
-    /// written. A six-string project never shows it.</summary>
-    [Fact]
-    public async Task Split_option_shows_for_a_seven_string_guitar_and_reaches_the_package()
-    {
-        Assert.False(OpenHarness(CreateValidProject()).Vm.HasExtendedStringGuitar);
-
-        var project = CreateValidProject();
-        var lead = project.Arrangements[0];
-        lead.StringCount = 7;
-        lead.TuningPitches.Add(new TuningOffset(0));
-        var template = new ChordTemplate { Id = 0, Name = "C#5" };
-        template.Frets[0] = 2; // low B
-        template.Frets[1] = 4; // low E
-        lead.ChordTemplates.Add(template);
-        var chord = new Chord { Position = Pos(project.Beats, 5000), TemplateId = 0 };
-        chord.ChordNotes.Add(new ChordNote { StringIndex = 0, Fret = 2 });
-        chord.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 4 });
-        lead.Levels[0].Chords.Add(chord);
-
-        var harness = OpenHarness(project);
-        Assert.True(harness.Vm.HasExtendedStringGuitar);
-        Assert.False(harness.Vm.SplitExtendedStringChords);
-        harness.Vm.SplitExtendedStringChords = true;
-        harness.Vm.AudioPath = CreateFakeWem();
-        harness.Vm.OutputPath = Path.Combine(_tempDir, "split_p.psarc");
-
-        await harness.Vm.ExportCommand.ExecuteAsync(null);
-
-        Assert.True(harness.Vm.HasResult, harness.Vm.ExportBlockedReason);
-        // What Split does to the SNG is the RS7 builder's tests'; the dialog must ask for it.
-        Assert.Equal(DotCharter.Services.Export.Rocksmith.Rs7ChordMode.Split, harness.Vm.BuildOptions(project).Rs7ChordMode);
-        Assert.False(File.Exists(DotCharter.Services.Export.Rocksmith.Rs7ChordSidecar.PathFor(FirstResult(harness.Vm), null)),
-            "split mode wrote a chord sidecar");
     }
 
     private static Harness OpenHarness(ChartProject project)

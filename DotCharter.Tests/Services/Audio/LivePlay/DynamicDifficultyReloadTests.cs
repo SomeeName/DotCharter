@@ -68,6 +68,54 @@ public sealed class DynamicDifficultyReloadTests
     }
 
     [Fact]
+    public void Reload_KeepsAHitsCreditWhileItsWindowIsStillOpen()
+    {
+        var arr = RepeatedRiff();
+        var matcher = new LiveNoteMatcher();
+        matcher.Load(arr, Beats(), _ => 1);
+        matcher.OfferNote(midi: 41, timeMs: 450);
+        var score = matcher.Stats.Score;
+
+        // The first hit is early; even its phrase's first note is ahead of the horizon.
+        // Lowering the phrase must not delete the second, level-1 note either.
+        matcher.Reload(arr, Beats(), _ => 0, playheadMs: 450);
+
+        Assert.Equal(1, matcher.Stats.Hits);
+        Assert.Equal(score, matcher.Stats.Score);
+        Assert.Equal(LivePlayVerdict.Hit, matcher.Expected[0].Verdict);
+        Assert.Equal(LiveTimingTier.Great, matcher.Expected[0].TimingTier);
+        Assert.Equal(2, matcher.Expected.Count(s => s.PhraseIterationIndex == 0));
+        Assert.All(matcher.Expected.Where(s => s.PhraseIterationIndex == 0), s => Assert.Equal(1, s.LevelIndex));
+        Assert.All(matcher.Expected.Where(s => s.PhraseIterationIndex == 1), s => Assert.Equal(0, s.LevelIndex));
+        Assert.Null(matcher.OfferNote(midi: 41, timeMs: 500));
+        matcher.AdvanceTo(800);
+        Assert.Equal(0, matcher.Stats.Misses);
+    }
+
+    [Fact]
+    public void Reload_KeepsAnEarlyCqtCreditThatIsStillAwaitingItsOnset()
+    {
+        var arr = RepeatedRiff();
+        var matcher = new LiveNoteMatcher
+        {
+            ChartVerify = _ => new ChartVerifyOutcome(false, 0f),
+            ChartVerifyEarly = _ => new ChartVerifyOutcome(true, 1f),
+            AwaitAttackOnsets = true
+        };
+        matcher.Load(arr, Beats(), _ => 1);
+        matcher.AdvanceTo(550);
+        Assert.Equal(1, matcher.Stats.Hits);
+
+        matcher.Reload(arr, Beats(), _ => 0, playheadMs: 550);
+
+        Assert.Equal(1, matcher.Stats.Hits);
+        Assert.Equal(LivePlayVerdict.Hit, matcher.Expected[0].Verdict);
+        Assert.Equal(LiveTimingTier.None, matcher.Expected[0].TimingTier);
+        matcher.AdvanceTo(800);
+        Assert.Equal(0, matcher.Stats.Misses);
+    }
+
+    [Fact]
     public void LevellingUp_DoesNotAddNotesBehindTheCursor()
     {
         var arr = RepeatedRiff();

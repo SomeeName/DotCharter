@@ -80,7 +80,7 @@ public sealed record MatchArtifact(
         try
         {
             if (!File.Exists(path)) return null;
-            var artifact = JsonSerializer.Deserialize<MatchArtifact>(File.ReadAllText(path), Json);
+            var artifact = JsonSerializer.Deserialize<MatchArtifact>(AtomicFile.ReadAllText(path), Json);
             return artifact is null || artifact.Version != CurrentVersion ? null : artifact;
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException
@@ -173,9 +173,7 @@ public sealed class MatchResultStore : IMatchResultStore
 
             // Temp + move: a reader that opens the folder mid-write must never see a
             // half-written document and decide the run was corrupt.
-            var tmp = path + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(artifact, MatchArtifact.Json));
-            File.Move(tmp, path, overwrite: true);
+            AtomicFile.WriteAllText(path, JsonSerializer.Serialize(artifact, MatchArtifact.Json));
             Prune();
             return path;
         }

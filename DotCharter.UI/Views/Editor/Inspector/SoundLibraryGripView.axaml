@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspector="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
+             xmlns:panels="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundLibraryGripView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Library page's GRIP card (#751 P5, design D): the picked template on the board, READ-ONLY (browsing can
+         never reshape a grip: Library_ReadOnlyShape says why), its frets and name under it. -->
+    <StackPanel x:Name="SoundLibraryGrip" DataContext="{Binding ChordTemplateEditor}" x:DataType="panels:ChordTemplateEditorViewModel"
+                Spacing="{StaticResource SpaceXs}">
+        <Border Classes="FretboardWell">
+            <ctl:ColumnFlowFretboard x:Name="SoundLibraryBoard" LanePitch="18" Role="ReadOnly"
+                                     Chord="{Binding PreviewChord}" Template="{Binding DraftTemplate}"
+                                     StringCount="{Binding StringInputs.Count}" FlipStrings="{Binding FlipStrings}"
+                                     Capo="{Binding Capo}" TuningNames="{Binding TuningNames}" MutedStrings="{Binding MutedStrings}"
+                                     AutomationProperties.Name="{localization:Loc Inspector_Library_Grip}" />
+        </Border>
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" Text="{localization:Loc Inspector_Library_ReadOnlyShape}" TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>

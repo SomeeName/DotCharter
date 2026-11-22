@@ -41,6 +41,7 @@ public sealed class ArrangementTunerLogic
         ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
     private TunerStringTarget[] _targets = [];
+    private bool _preferFlats;
 
     /// <summary>The chart's reference-pitch offset from A440, in cents. Every
     /// target frequency and every reported deviation is measured against it.</summary>
@@ -107,25 +108,17 @@ public sealed class ArrangementTunerLogic
 
     /// <summary>
     ///     THE resolver for an arrangement's per-string semitone offsets against
-    ///     standard (low string first): its <c>TuningPitches</c> when it has any,
-    ///     otherwise its <c>TuningType</c> name decoded by
-    ///     <see cref="TuningUtilities.TryGetOffsetsForTuningType" />. <c>false</c>
-    ///     when neither says anything (no offsets and a name the table does not
-    ///     know). Every tuner screen builds its targets through here, so they cannot
+    ///     standard (low string first), through <see cref="TuningOffsetResolution" />:
+    ///     authored offsets, otherwise a known tuning consistent with the letters,
+    ///     otherwise note letters. <c>false</c> when none can be resolved.
+    ///     Every tuner screen builds its targets through here, so they cannot
     ///     disagree about what a string is tuned to.
     /// </summary>
     public static bool TryResolveTuningSteps(Arrangement arrangement, out int[] steps)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
-        if (arrangement.TuningPitches.Count > 0)
-        {
-            steps = new int[arrangement.TuningPitches.Count];
-            for (var i = 0; i < steps.Length; i++) steps[i] = arrangement.TuningPitches[i].Step;
-            return true;
-        }
-
-        return TuningUtilities.TryGetOffsetsForTuningType(
-            arrangement.TuningType, ResolvedStringCount(arrangement), out steps);
+        steps = [.. TuningOffsetResolution.Resolve(arrangement)];
+        return steps.Length > 0;
     }
 
     /// <summary>
@@ -166,6 +159,9 @@ public sealed class ArrangementTunerLogic
         _centOffsetCents = ArrangementInstrument.ResidualCents(centOffsetCents);
         var baseMidi = StandardOpenStrings.LowEMidi(isBass)
                        + ArrangementInstrument.ReferenceOctaveSemitones(centOffsetCents);
+        var bassSpelling = isBass || (ArrangementInstrument.IsGuitarPath(type) && ArrangementInstrument.IsOctaveDownReference(centOffsetCents));
+        _preferFlats = TuningDisplayNames.PreferFlats(stringCount, tuningSteps, bassSpelling);
+        var names = TuningDisplayNames.For(stringCount, tuningSteps, bassSpelling);
         _targets = new TunerStringTarget[stringCount];
         for (var i = 0; i < stringCount; i++)
         {
@@ -173,7 +169,7 @@ public sealed class ArrangementTunerLogic
             var midi = baseMidi + StandardOpenStrings.SemitonesAboveLowE(stringCount, i) + step;
             // The NAME is the note; the FREQUENCY is where that note actually
             // sits for this chart. TuningCheckTargets makes the same split.
-            _targets[i] = new TunerStringTarget(i, midi, NoteNameOf(midi),
+            _targets[i] = new TunerStringTarget(i, midi, $"{names[i]}{midi / 12 - 1}",
                 FrequencyOf(midi + _centOffsetCents / 100.0));
         }
 
@@ -184,6 +180,8 @@ public sealed class ArrangementTunerLogic
     /// <summary>Standard MIDI note name with octave (E2, A2, D3, …).</summary>
     public static string NoteNameOf(int midi)
         => $"{NoteNames[((midi % 12) + 12) % 12]}{midi / 12 - 1}";
+
+    public string NameForMidi(int midi) => $"{TuningDisplayNames.PitchClass(midi, _preferFlats)}{midi / 12 - 1}";
 
     /// <summary>Equal-tempered frequency of a (fractional) MIDI note.</summary>
     public static double FrequencyOf(double midi)

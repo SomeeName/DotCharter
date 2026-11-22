@@ -194,6 +194,35 @@ public sealed class TonePreviewTargetsTests : IDisposable
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AStoppedOrFailedPreview_DoesNotResumeOnSessionLoss(bool failed)
+    {
+        var session = new FakeTonelabSession
+        {
+            State = TonelabSessionState.Ready,
+            ApplyReply = () => Task.FromResult(new TonelabResult(TonelabOutcome.UnknownGear, "missing gear"))
+        };
+        using var targets = Targets(session);
+        targets.IsInGame = true;
+        targets.Apply(RsToneAuthoring.CreateDefaultTone("tl", "TL", RsGearCatalog.Shared));
+        if (failed)
+        {
+            _scheduler.Elapse();
+            await BoundedWait.ForAsync(targets.InGame.LastTask, "the refused game preview", TestContext.Current.CancellationToken);
+        }
+        else
+        {
+            targets.Stop();
+        }
+
+        session.Change(TonelabSessionState.Disconnected);
+
+        Assert.True(targets.IsClone);
+        Assert.False(targets.Clone.IsActive);
+    }
+
+    [Theory]
     [InlineData(TonelabOutcome.UnknownGear, "Amp_Nope", "Rocksmith does not know the gear Amp_Nope.")]
     [InlineData(TonelabOutcome.Invalid, "knob out of range", "Not sent to Rocksmith: knob out of range")]
     [InlineData(TonelabOutcome.Timeout, "", "Rocksmith did not answer in time.")]

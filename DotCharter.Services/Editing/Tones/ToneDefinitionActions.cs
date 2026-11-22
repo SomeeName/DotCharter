@@ -9,14 +9,14 @@ namespace DotCharter.Services.Editing.Tones;
 /// <see cref="Arrangement"/> tone fields) so undo/redo and the dirty tracker
 /// work exactly like every other edit.
 /// </summary>
-public sealed class UpsertToneDefinitionAction : IChartAction, ILinkPolicyAction
+public sealed class UpsertToneDefinitionAction : IMergeableAction, ILinkPolicyAction
 {
     /// <summary>Linked measures: cannot change linked content in beats.</summary>
     public LinkPolicy LinkPolicy => LinkPolicy.Retain;
 
     private readonly ChartProject _project;
     private readonly string? _removeKey;
-    private readonly ToneDefinition? _newValue;
+    private ToneDefinition? _newValue;
 
     private ToneDefinition? _removed;
     private int _removedIndex = -1;
@@ -27,12 +27,26 @@ public sealed class UpsertToneDefinitionAction : IChartAction, ILinkPolicyAction
     /// null for a pure add.</param>
     /// <param name="newValue">The definition to insert (at the replaced entry's
     /// position, else appended); null for a pure delete.</param>
-    public UpsertToneDefinitionAction(ChartProject project, string? removeKey, ToneDefinition? newValue)
+    /// <param name="mergeVerb">Non-empty when the edit is one tick of a gesture (a knob drag, typing): ticks over the
+    /// same key fold into ONE undo step. Empty (default) never merges.</param>
+    public UpsertToneDefinitionAction(ChartProject project, string? removeKey, ToneDefinition? newValue, string mergeVerb = "")
     {
         _project = project;
         _removeKey = removeKey;
         _newValue = newValue;
+        MergeVerb = mergeVerb;
     }
+
+    public string MergeVerb { get; }
+
+    /// <summary>Only a same-key replace follows a same-key replace of the tone this one left behind.</summary>
+    public bool CanAbsorb(IChartAction next) =>
+        next is UpsertToneDefinitionAction { _newValue: { } value, _removeKey: { } key } other && _newValue is { } mine
+        && other.MergeVerb == MergeVerb && Same(key, mine.Key) && Same(value.Key, mine.Key);
+
+    public void Absorb(IChartAction next) => _newValue = ((UpsertToneDefinitionAction)next)._newValue;
+
+    private static bool Same(string a, string b) => string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
 
     public bool HasEffect => _removeKey != null || _newValue != null;
 
@@ -128,21 +142,34 @@ public sealed record ToneSlotAssignment(
 /// <summary>Assigns tone keys to one arrangement's Base/A–D slots (plus the
 /// derived ToneNames + StartingTone sync). Undo restores the captured
 /// pre-assignment state verbatim.</summary>
-public sealed class AssignArrangementTonesAction : IChartAction, ILinkPolicyAction
+public sealed class AssignArrangementTonesAction : IMergeableAction, ILinkPolicyAction
 {
     /// <summary>Linked measures: cannot change linked content in beats.</summary>
     public LinkPolicy LinkPolicy => LinkPolicy.Retain;
 
     private readonly Arrangement _arrangement;
     private readonly ToneSlotAssignment _before;
-    private readonly ToneSlotAssignment _after;
+    private ToneSlotAssignment _after;
 
-    public AssignArrangementTonesAction(Arrangement arrangement, ToneSlotAssignment before, ToneSlotAssignment after)
+    /// <param name="arrangement">The arrangement whose slots change.</param>
+    /// <param name="before">The slots as they were.</param>
+    /// <param name="after">The slots as assigned.</param>
+    /// <param name="mergeVerb">Non-empty when the edit is one tick of typing in a slot: ticks on the same
+    /// arrangement fold into ONE undo step. Empty (default) never merges.</param>
+    public AssignArrangementTonesAction(Arrangement arrangement, ToneSlotAssignment before, ToneSlotAssignment after, string mergeVerb = "")
     {
         _arrangement = arrangement;
         _before = before;
         _after = after;
+        MergeVerb = mergeVerb;
     }
+
+    public string MergeVerb { get; }
+
+    public bool CanAbsorb(IChartAction next) =>
+        next is AssignArrangementTonesAction other && ReferenceEquals(other._arrangement, _arrangement) && other.MergeVerb == MergeVerb;
+
+    public void Absorb(IChartAction next) => _after = ((AssignArrangementTonesAction)next)._after;
 
     public bool HasEffect => !_before.SameAs(_after);
 

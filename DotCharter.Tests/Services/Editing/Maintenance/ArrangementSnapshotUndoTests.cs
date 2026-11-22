@@ -80,10 +80,13 @@ public sealed class ArrangementSnapshotUndoTests
     {
         var h = Prepared(tool);
         var project = h.State.ActiveProject!;
-        var before = ChartProjectFootprint.EstimateBytes(project.Arrangements[0]);
+        var before = ChartProjectFootprint.EstimateHistoryBytes(
+            ChartProjectCloner.CloneArrangement(project.Arrangements[0], retainIdentities: true));
 
         Assert.True(Run(h, tool));
 
-        Assert.Equal(before + ChartProjectFootprint.EstimateBytes(project.Arrangements[0]), h.History.RetainedBytes);
+        var after = ChartProjectFootprint.EstimateHistoryBytes(
+            ChartProjectCloner.CloneArrangement(project.Arrangements[0], retainIdentities: true));
+        Assert.Equal(before + after, h.History.RetainedBytes);
     }
 }

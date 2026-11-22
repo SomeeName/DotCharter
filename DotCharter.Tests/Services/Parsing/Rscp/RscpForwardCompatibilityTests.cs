@@ -36,6 +36,21 @@ public sealed class RscpForwardCompatibilityTests : IDisposable
         return project;
     }
 
+    [Fact]
+    public void ANewerWriterStamp_SetsTheLoadedFlag_AndOwnOutputDoesNot()
+    {
+        var ser = new RscpChartSerializer();
+        var path = Path_("stamp.rscp");
+        ser.Save(path, OwnOutput());
+        Assert.Null(ser.Load(path).NewerWriterVersion);
+
+        var doc = XDocument.Load(path);
+        doc.Root!.Element(RscpFormatContract.WriterVersionElement)!.Value = "99.0.0";
+        doc.Save(path);
+
+        Assert.Equal("99.0.0", ser.Load(path).NewerWriterVersion);
+    }
+
     // ---------------------------------------------------------------- residue
 
     [Fact]

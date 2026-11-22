@@ -83,6 +83,12 @@ public sealed class DcRigApplier
         lock (_planGate) return ApplyLocked(preset);
     }
 
+    /// <summary>Checks queued work after acquiring the same gate as profile restoration.</summary>
+    internal DcRigApplyResult? ApplyWhen(DcRigPreset preset, Func<bool> canApply)
+    {
+        lock (_planGate) return canApply() ? ApplyLocked(preset) : null;
+    }
+
     private DcRigApplyResult ApplyLocked(DcRigPreset preset)
     {
         var current = _chain.GetNodes();

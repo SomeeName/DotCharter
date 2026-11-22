@@ -331,7 +331,9 @@ exist was any way to LOOK at a seat past 0: `PedalboardViewModel` held
   A/B compare push or a capture load with the rig switched OFF brought the sound
   back behind a lit lamp, and the next press then "restored" node ids belonging
   to a board that no longer existed. `Sync` now re-bypasses the live chain and
-  PRUNES `_bypassRestore` to surviving ids, and `AddGearCore` bypasses a pedal
+  PRUNES `_bypassRestore` to surviving ids. `OnPresetApplied` first replaces that
+  restore set with the incoming tone's own bypass pattern, before `Sync` forces
+  every node off; ordinary repeated syncs keep the saved pattern. `AddGearCore` bypasses a pedal
   added while armed (deliberately NOT into the restore set, so turning the rig
   back on switches it in). `ResyncAll` still DROPS the armed state — there the
   board belongs to another seat or profile. `UI/RigMasterBypassTests`.

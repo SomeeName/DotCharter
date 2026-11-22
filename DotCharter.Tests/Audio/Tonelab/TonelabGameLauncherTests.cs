@@ -41,8 +41,26 @@ public sealed class TonelabGameLauncherTests
 
     private void AssertIniIsTheUsers()
     {
-        Assert.True(SpinWait.SpinUntil(() => !_files.Exists(BackupPath), NeverFires), "the backup was never put back");
+        Assert.False(_files.Exists(BackupPath), "the backup was never put back");
         Assert.Equal(UserIni, _files.ReadAllBytes(IniPath));
+    }
+
+    [Fact]
+    public async Task ExitDuringInjection_DoesNotResurrectCurrentLaunch()
+    {
+        var game = new FakeRocksmith();
+        var injected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runner = new FakeHelperRunner(new HelperProcessRun(0, "ok", false)) { Hold = injected.Task };
+        var launcher = Launcher(game, runner);
+        var starting = launcher.LaunchAsync(Ct);
+        Assert.Single(runner.Calls);
+        Assert.NotNull(launcher.Current);
+        game.Exit();
+        injected.SetResult();
+        await starting.WaitAsync(NeverFires, Ct);
+        await launcher.ExitWatch.WaitAsync(NeverFires, Ct);
+        Assert.Null(launcher.Current);
+        AssertIniIsTheUsers();
     }
 
     [Fact]
@@ -66,6 +84,26 @@ public sealed class TonelabGameLauncherTests
     }
 
     [Fact]
+    public async Task StartingAgain_WhileTheGameItStartedStillRuns_ReusesThatLaunch_SoQuitStillEndsIt()
+    {
+        var game = new FakeRocksmith { HonoursQuit = true };
+        var runner = FakeHelperRunner.Ok();
+        var launcher = Launcher(game, runner);
+        var first = (await launcher.LaunchAsync(Ct))!;
+
+        // the session gave up on a hung boot; the user presses Start again
+        var again = await launcher.LaunchAsync(Ct);
+
+        Assert.Same(first, again);
+        Assert.True(again!.StartedByApp);
+        Assert.Equal(1, game.Starts);
+        Assert.Single(runner.Calls);   // already injected: no second injection
+        await again.EndAsync(game.SendQuit, Ct);
+        Assert.False(game.Running);
+        AssertIniIsTheUsers();
+    }
+
+    [Fact]
     public async Task QuitHonoured_EndsNothing_AndTheIniComesBackByteIdentical()
     {
         var game = new FakeRocksmith { HonoursQuit = true };
@@ -85,11 +123,20 @@ public sealed class TonelabGameLauncherTests
         var launcher = Launcher(game);
         var launch = (await launcher.LaunchAsync(Ct))!;
 
-        var started = DateTime.UtcNow;
-        await launch.EndAsync(game.SendQuit, Ct);
+        var grace = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        game.ExitWait = timeout =>
+        {
+            Assert.Equal(launcher.QuitGrace, timeout);
+            return grace.Task;
+        };
+        var ending = launch.EndAsync(game.SendQuit, Ct);
+        Assert.False(ending.IsCompleted);
+        Assert.Equal(0, game.Kills);
+        Assert.True(_files.Exists(BackupPath));
+        grace.SetResult(false);
+        await ending.WaitAsync(NeverFires, Ct);
 
         Assert.Equal(1, game.Kills);
-        Assert.True(DateTime.UtcNow - started >= launcher.QuitGrace - TimeSpan.FromMilliseconds(50), "ended before the grace was over");
         AssertIniIsTheUsers();
         Assert.Null(launcher.Current);
     }
@@ -136,9 +183,10 @@ public sealed class TonelabGameLauncherTests
         Assert.NotNull(await launcher.LaunchAsync(Ct));
 
         game.Exit();   // the user closed it, or it crashed
+        await launcher.ExitWatch.WaitAsync(NeverFires, Ct);
 
         AssertIniIsTheUsers();
-        Assert.True(SpinWait.SpinUntil(() => launcher.Current is null, NeverFires));
+        Assert.Null(launcher.Current);
     }
 
     [Theory]
@@ -182,15 +230,31 @@ public sealed class TonelabGameLauncherTests
     public async Task TheSessionsQuit_DrivesTheWholeSequence_ThroughTheLaunch()
     {
         using var mock = new TonelabGameMock();
+        var quitReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        mock.Responder = command =>
+        {
+            if (command == "status") return "ok " + mock.Status;
+            Assert.Equal("quit", command);
+            quitReceived.TrySetResult();
+            return "ok";
+        };
         var game = new FakeRocksmith { Pid = mock.ProcessId, HonoursQuit = false };
         var launcher = Launcher(game);
-        using var session = new TonelabSession(() => [], null, null, TonelabSessionTests.Quick) { Launcher = launcher };
+        using var session = new TonelabSession(() => [], null, null, TonelabSessionTests.Quick, time: TonelabSessionTests.ReplyClock)
+        {
+            Launcher = launcher,
+            Delay = (_, _) => Task.CompletedTask,
+            ReadLog = _ => $"tonelab M2 loaded into pid {mock.ProcessId}\nready: profile loaded\n"
+        };
 
-        Assert.Equal(TonelabSessionState.Ready, await session.LaunchAsync(Ct));
+        Assert.Equal(TonelabSessionState.Starting, await session.LaunchAsync(Ct));   // the log, not the pipe, is asked first
+        await session.ReadyPoll;
+        Assert.Equal(TonelabSessionState.Ready, session.State);
         Assert.False(session.GameHoldsAudioDevice);
         Assert.True((await session.QuitAsync(Ct)).IsOk);
 
-        Assert.Equal("quit", mock.Commands()[^1]);
+        await quitReceived.Task.WaitAsync(NeverFires, Ct);
+        Assert.Single(mock.Commands(), command => command == "quit");
         Assert.Equal(1, game.Kills);   // the mock answers ok but does not exit
         AssertIniIsTheUsers();
     }
@@ -232,6 +296,7 @@ public sealed class TonelabGameLauncherTests
         Assert.Equal(1, game.Starts);
         Assert.Equal(RsAsioIniGuard.DriverlessIni, _files.ReadAllBytes(IniPath));
         game.Exit();
+        await launcher.ExitWatch.WaitAsync(NeverFires, Ct);
         AssertIniIsTheUsers();
     }
 

@@ -136,7 +136,7 @@ public partial class AudioLintViewModel : ViewModelBase
             {
                 foreach (var finding in outcome.Findings)
                 {
-                    var time = TimeSpan.FromMilliseconds(Math.Max(0, finding.TimeMs)).ToString(@"m\:ss\.f");
+                    var time = ElapsedTimeLabel.Format(finding.TimeMs, 1);
                     var description = finding.ObservedMidi is { } observed
                         ? loc.Format("Inspector_AudioLint_FindingFmt",
                             NoteName(finding.ChartedMidi), time, NoteName(observed))

@@ -42,6 +42,9 @@ public abstract class DeferredFieldBase : Decorator
     private readonly Border _chrome;
     private readonly TextBlock _label;
     private readonly List<IDisposable> _chromeState = [];
+    private string? _restingText;
+    private string? _restingPlaceholder;
+    private bool _pointerOver;
 
     static DeferredFieldBase() => FocusableProperty.OverrideDefaultValue<DeferredFieldBase>(true);
 
@@ -77,8 +80,23 @@ public abstract class DeferredFieldBase : Decorator
     /// <summary>The text the resting field draws.</summary>
     protected string? RestingText
     {
-        get => _label.Text;
-        set => _label.Text = value;
+        get => _restingText;
+        set
+        {
+            _restingText = value;
+            RefreshResting();
+        }
+    }
+
+    /// <summary>The hint an empty resting field shows in the placeholder brush, so it reads as an input.</summary>
+    protected string? RestingPlaceholder
+    {
+        get => _restingPlaceholder;
+        set
+        {
+            _restingPlaceholder = value;
+            RefreshResting();
+        }
     }
 
     /// <summary>Builds the real editor in place (once) and returns it; the derived
@@ -137,12 +155,21 @@ public abstract class DeferredFieldBase : Decorator
     /// re-colours the keys), the same ones the realized editor draws with.</summary>
     private void ShowChromeState(bool pointerOver)
     {
+        _pointerOver = pointerOver;
         foreach (var state in _chromeState) state.Dispose();
         _chromeState.Clear();
         var suffix = pointerOver ? "PointerOver" : "";
         _chromeState.Add(_chrome.Bind(Border.BackgroundProperty, _chrome.GetResourceObservable("TextControlBackground" + suffix)));
         _chromeState.Add(_chrome.Bind(Border.BorderBrushProperty, _chrome.GetResourceObservable("TextControlBorderBrush" + suffix)));
-        _chromeState.Add(_label.Bind(TextBlock.ForegroundProperty, _label.GetResourceObservable("TextControlForeground" + suffix)));
+        var placeholder = string.IsNullOrEmpty(_restingText) && !string.IsNullOrEmpty(_restingPlaceholder);
+        _label.Text = placeholder ? _restingPlaceholder : _restingText;
+        _chromeState.Add(_label.Bind(TextBlock.ForegroundProperty,
+            _label.GetResourceObservable(placeholder ? "TextControlPlaceholderForeground" : "TextControlForeground" + suffix)));
+    }
+
+    private void RefreshResting()
+    {
+        if (!IsRealized) ShowChromeState(_pointerOver);
     }
 
     /// <summary>At rest the field is an Edit with a value, named by the

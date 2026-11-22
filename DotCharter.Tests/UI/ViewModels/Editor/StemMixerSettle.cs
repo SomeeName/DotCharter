@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace DotCharter.Tests.UI.ViewModels.Editor;
 
 /// <summary>
@@ -27,9 +29,16 @@ internal static class StemMixerSettle
     ///     predicate it is only that drain, for a case asserting that NOTHING
     ///     happened.
     /// </summary>
+    /// <remarks>The wait is a 60 s deadlock detector, never a budget: a state that never comes fails the case instead of
+    /// hanging the run (a mixer that stopped raising a property once held a filtered run for an hour).</remarks>
     public static async Task Async(Func<bool>? until = null)
     {
-        while (until != null && !until()) await Task.Delay(5, TestContext.Current.CancellationToken);
+        var clock = Stopwatch.StartNew();
+        while (until != null && !until())
+        {
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(60), "Deadlock detector: the stem mixer never reached the state this case waits for.");
+            await Task.Delay(5, TestContext.Current.CancellationToken);
+        }
 
         for (var i = 0; i < 40; i++) await Task.Yield();
     }

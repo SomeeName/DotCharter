@@ -42,6 +42,9 @@ internal sealed class RsXmlSongWriter
     /// </summary>
     public bool SixStringProjection { get; init; }
 
+
+    public Action<string>? Warning { get; init; }
+
     /// <summary>
     ///     Writes a phrase that starts on a note between two beats as moveR&lt;N&gt; on the
     ///     beat before it (<see cref="RsXmlPhraseMover.ToMoverForm" />), for tools that
@@ -52,6 +55,17 @@ internal sealed class RsXmlSongWriter
     /// <summary>What the last <see cref="Write(ChartProject, double?)" /> dropped when
     /// <see cref="SixStringProjection" /> applied to it; null otherwise.</summary>
     public SixStringLoss? LastLoss { get; private set; }
+
+    private string? ExportRefusal(ChartProject project) => project.Arrangements.Count == 0 ? null
+        : RsxrStringLayout.XmlExportRefusal(project.Arrangements[0], SixStringProjection);
+
+    public XDocument? TryWrite(ChartProject project, double? audioLengthMs = null)
+    {
+        if (ExportRefusal(project) is not { } refusal) return Write(project, audioLengthMs);
+        LastLoss = null;
+        Warning?.Invoke(refusal);
+        return null;
+    }
 
     public XDocument Write(ChartProject project) => Write(project, null);
 
@@ -71,20 +85,25 @@ internal sealed class RsXmlSongWriter
     /// </param>
     public XDocument Write(ChartProject project, double? audioLengthMs)
     {
+        if (ExportRefusal(project) is { } refusal)
+        {
+            LastLoss = null;
+            Warning?.Invoke(refusal);
+            throw new InvalidDataException(refusal);
+        }
         var chartArr = project.Arrangements.Count > 0 ? project.Arrangements[0] : new Arrangement();
         // A 7-/8-string guitar is spelled in the rs7string layout (indices 0..5 = E A D G B e,
         // then the extra strings) with its chords projected to the package's rules, so the
         // XML and the SNG built from one chart agree. Everything below reads this copy.
-        var projection = Rs7Projection.TryCreate(chartArr, sixStringOnly: SixStringProjection);
-        LastLoss = projection?.Loss;
-        var arr = projection?.Arrangement ?? chartArr;
+        var arr = ProjectArrangement(chartArr);
         var beats = project.Beats;
-        // The levels as the FILE shape says them: a level above a phrase's max
-        // leaves that phrase out (the chart keeps a copy there so its hardest
-        // level is the whole song — see RsLevelLadder). Every level read below
-        // goes through this list, and the SNG mapper reads the same one.
-        var ladder = RsLevelLadder.ForExport(arr);
-        var phraseData = BuildPhraseExportData(arr, beats, ladder.Levels);
+        // ONE resolved iteration table, the SNG mapper's too: the times written
+        // below, the phrase maxima and the levels as the FILE shape says them: a
+        // level above a phrase's max leaves that phrase out (the chart keeps a
+        // copy there so its hardest level is the whole song — see RsLevelLadder).
+        var songLengthMs = RsSongLength.ResolveMs(arr, beats, audioLengthMs);
+        var phraseData = RsPhraseExportData.ForExport(arr, beats, songLengthMs);
+        var ladder = phraseData.Ladder;
         // The SAME resolver the psarc manifest uses. A private,
         // SET-ONLY derivation into a local clone would promote an authored 0 to
         // 1 and never clear it, and the manifest (which derives
@@ -95,7 +114,7 @@ internal sealed class RsXmlSongWriter
         // The six-string copy is a plain six-string arrangement (its stock strings, in the
         // order the deriver assumes), so it derives from itself.
         var arrangementProperties = ArrangementPropertiesDeriver.Derive(LastLoss is null ? chartArr : arr);
-        if (!ReferenceEquals(arr, chartArr) && LastLoss is null) arrangementProperties.StandardTuning = 0;
+        if (!ReferenceEquals(arr, chartArr) && LastLoss is null && !Rs7StringLayout.IsExtendedBass(chartArr)) arrangementProperties.StandardTuning = 0;
 
         var song = new XElement(E.Song, new XAttribute(E.Version, 8));
 
@@ -106,10 +125,9 @@ internal sealed class RsXmlSongWriter
 
         // offset / centOffset / songLength / lastConversionDateTime / startBeat
         var firstBeatMs = beats.Count > 0 ? TimelineMath.ToWholeMs(beats[0].Time) : 0;
-        var lastBeatMs = beats.Count > 0 ? TimelineMath.ToWholeMs(beats[^1].Time) : 0;
         song.Add(new XElement(E.Offset, Fmt.Time(-firstBeatMs)));
         song.Add(new XElement(E.CentOffset, ((int)Math.Round(arr.CentOffset)).ToString(CultureInfo.InvariantCulture)));
-        song.Add(new XElement(E.SongLength, Fmt.Time(SongLengthMs(arr, beats, lastBeatMs, audioLengthMs))));
+        song.Add(new XElement(E.SongLength, Fmt.Time(songLengthMs)));
         song.Add(new XElement(E.LastConversionDateTime, Fmt.DateTime(DateTime.Now)));
         song.Add(new XElement(E.StartBeat, Fmt.Time(firstBeatMs)));
 
@@ -118,7 +136,7 @@ internal sealed class RsXmlSongWriter
         song.Add(new XElement(E.AverageTempo, Fmt.BigDecimal(avgTempo, 3)));
 
         // tuning
-        song.Add(WriteTuning(arr));
+        song.Add(UsesRsxr(arr) ? WriteRsxrTuning(chartArr) : WriteTuning(arr));
         song.Add(new XElement(E.Capo, arr.Capo));
 
         // artist / album
@@ -164,8 +182,8 @@ internal sealed class RsXmlSongWriter
                 phraseData.PhraseInfos.TryGetValue(phraseData.Phrases[i], out var pi) ? pi : null)));
 
         // phraseIterations
-        song.Add(Fmt.CountedList(E.PhraseIterations, phraseData.Iterations,
-            pi => WritePhraseIteration(TimelineMath.ToWholeMs(pi.Position.GetPositionMs(beats)), pi.PhraseId)));
+        song.Add(Fmt.CountedList(E.PhraseIterations, Enumerable.Range(0, phraseData.Iterations.Count).ToList(),
+            i => WritePhraseIteration(phraseData.IterationStartMs[i], phraseData.Iterations[i].PhraseId)));
 
         // newLinkedDiffs / linkedDiffs (always empty - required by RS toolkit)
         song.Add(new XElement(E.NewLinkedDiffs, new XAttribute(E.Count, 0)));
@@ -206,25 +224,24 @@ internal sealed class RsXmlSongWriter
 
         // levels
         var levels = ladder.Levels;
-        var phraseStartMs = phraseData.Iterations
-            .Select(pi => TimelineMath.ToWholeMs(pi.Position.GetPositionMs(beats)))
-            .ToList();
         song.Add(Fmt.CountedList(E.Levels, levels,
-            lvl => WriteLevel(lvl, beats, chordTemplates, phraseStartMs)));
+            lvl => WriteLevel(lvl, beats, chordTemplates, phraseData.IterationStartMs)));
 
         var doc = new XDocument(new XDeclaration("1.0", "UTF-8", "yes"), song);
         if (MoverPhrases) RsXmlPhraseMover.ToMoverForm(doc);
         return doc;
     }
 
-    public void WriteTo(ChartProject project, string filePath) => WriteTo(project, filePath, null);
+    public bool WriteTo(ChartProject project, string filePath) => WriteTo(project, filePath, null);
 
     /// <inheritdoc cref="Write(ChartProject, double?)"/>
-    public void WriteTo(ChartProject project, string filePath, double? audioLengthMs)
+    public bool WriteTo(ChartProject project, string filePath, double? audioLengthMs)
     {
-        var doc = Write(project, audioLengthMs);
+        var doc = TryWrite(project, audioLengthMs);
+        if (doc == null) return false;
         using var writer = XmlWriter.Create(filePath, Fmt.GetWriterSettings());
         doc.WriteTo(writer);
+        return true;
     }
 
     // ── Header helpers ───────────────────────────────────────────────────
@@ -264,32 +281,6 @@ internal sealed class RsXmlSongWriter
     }
 
     /// <summary>
-    /// EOF: <c>songLength = min(chart length, audio length) - 1 ms</c>
-    /// (EOF_SRC/rs.c:590-593 picks the chart length only when it is shorter
-    /// than the audio or no audio is loaded; :1762 subtracts the 1 ms so the
-    /// chart always reaches an end in-game). The chart's own length is the
-    /// later of the last beat and the last sound that has to still fit.
-    /// </summary>
-    private static int SongLengthMs(Arrangement arr, IList<BeatMarker> beats, int lastBeatMs, double? audioLengthMs)
-    {
-        double chartLengthMs = lastBeatMs;
-        foreach (var level in arr.Levels)
-        {
-            foreach (var note in level.Notes)
-                chartLengthMs = Math.Max(chartLengthMs, note.EndPosition.GetPositionMs(beats));
-
-            foreach (var chord in level.Chords)
-                chartLengthMs = Math.Max(chartLengthMs, chord.EndPosition.GetPositionMs(beats));
-        }
-
-        var endMs = audioLengthMs is { } audio && audio > 0
-            ? Math.Min(chartLengthMs, audio)
-            : chartLengthMs;
-
-        return Math.Max(0, TimelineMath.ToWholeMs(endMs) - 1);
-    }
-
-    /// <summary>
     ///     The same <see cref="RsChordTemplateExport" /> table
     ///     <c>SngFromDomainMapper.BuildChordTemplates</c> builds, so the XML and
     ///     the SNG built from one chart cannot describe different shapes: the
@@ -316,92 +307,29 @@ internal sealed class RsXmlSongWriter
         return string.Empty;
     }
 
-    /// <summary>
-    ///     Both phrase stores through <see cref="PhraseMarkers.Iterations" />, the reader the SNG
-    ///     mapper shares, padded with COUNT / END for a markers-only chart.
-    /// </summary>
-    private static PhraseExportData BuildPhraseExportData(Arrangement arr, IList<BeatMarker> beats,
-        IReadOnlyList<ChartLevel> levels)
+    private static bool UsesRsxr(Arrangement arr) => RsxrStringLayout.IsExtended(arr);
+
+    private Arrangement ProjectArrangement(Arrangement chartArr)
     {
-        var (phrases, iterations) = PhraseMarkers.Iterations(arr, () => FindEndPhrasePosition(arr, beats));
-        return new PhraseExportData(phrases, iterations, BuildPhraseInfoMap(arr, levels, phrases, iterations));
+        var projection = Rs7StringLayout.IsExtendedBass(chartArr)
+            ? Rs7Projection.TryCreateForSng(chartArr)
+            : Rs7Projection.TryCreate(chartArr, sixStringOnly: SixStringProjection);
+        LastLoss = projection?.Loss;
+        var arr = projection?.Arrangement ?? chartArr;
+        if (UsesRsxr(arr)) RsXmlSongStringOrder.ToRsxr(arr);
+        return arr;
     }
 
-    private static FractionalPosition FindEndPhrasePosition(Arrangement arr,
-        IList<BeatMarker> beats)
+    private static XElement WriteRsxrTuning(Arrangement chartArr)
     {
-        if (beats.Count == 0) return FractionalPosition.Zero;
-        return EndNoGuitarSection.BeatAfterContent(arr, beats) ?? new FractionalPosition(beats.Count - 1);
+        var el = new XElement(E.Tuning,
+            new XAttribute(E.ExtendedRange, RsxrStringLayout.FormatVersion),
+            new XAttribute(E.Strings, chartArr.StringCount));
+        var offsets = RsxrStringLayout.TuningOffsets(chartArr);
+        for (var i = 0; i < Math.Max(6, offsets.Length); i++)
+            el.Add(new XAttribute($"string{i}", i < offsets.Length ? offsets[i] : 0));
+        return el;
     }
-
-    private static Dictionary<string, PhraseInfo> BuildPhraseInfoMap(Arrangement arr, IReadOnlyList<ChartLevel> levels,
-        IReadOnlyList<string> phrases, IReadOnlyList<PhraseIteration> iterations)
-    {
-        var infos = new Dictionary<string, PhraseInfo>(StringComparer.OrdinalIgnoreCase);
-        foreach (var phrase in phrases)
-        {
-            if (arr.PhraseInfos.TryGetValue(phrase, out var existing))
-                infos[phrase] = new PhraseInfo(existing.MaxDifficulty, existing.Solo);
-            else
-                infos[phrase] = new PhraseInfo();
-        }
-
-        for (var i = 0; i < iterations.Count; i++)
-        {
-            var phraseName = phrases[iterations[i].PhraseId];
-            var start = iterations[i].Position;
-            var end = i + 1 < iterations.Count ? iterations[i + 1].Position : start;
-            var maxDifficulty = FindMaxDifficultyInRange(levels, start, end);
-            if (!infos.TryGetValue(phraseName, out var info))
-            {
-                infos[phraseName] = new PhraseInfo(maxDifficulty, false);
-                continue;
-            }
-
-            if (maxDifficulty > info.MaxDifficulty)
-                info.MaxDifficulty = maxDifficulty;
-        }
-
-        return infos;
-    }
-
-    private static int FindMaxDifficultyInRange(IReadOnlyList<ChartLevel> levels,
-        FractionalPosition start,
-        FractionalPosition end)
-    {
-        var maxDifficulty = 0;
-        foreach (var level in levels)
-        {
-            if (LevelHasContentInRange(level, start, end))
-                maxDifficulty = Math.Max(maxDifficulty, level.DifficultyIndex);
-        }
-
-        return maxDifficulty;
-    }
-
-    private static bool LevelHasContentInRange(ChartLevel level,
-        FractionalPosition start,
-        FractionalPosition end)
-    {
-        foreach (var note in level.Notes)
-        {
-            if (note.Position >= start && note.Position < end)
-                return true;
-        }
-
-        foreach (var chord in level.Chords)
-        {
-            if (chord.Position >= start && chord.Position < end)
-                return true;
-        }
-
-        return false;
-    }
-
-    private sealed record PhraseExportData(
-        IReadOnlyList<string> Phrases,
-        IReadOnlyList<PhraseIteration> Iterations,
-        Dictionary<string, PhraseInfo> PhraseInfos);
 
     private static XElement WriteTuning(Arrangement arr)
     {
@@ -416,7 +344,9 @@ internal sealed class RsXmlSongWriter
         // 6-string and everything derived from StringCount — tuning UI, refret, FHP
         // width — was wrong afterwards. Only written when it is not the canonical 6,
         // so a normal guitar arrangement stays byte-identical.
-        if (count != 6) el.Add(new XAttribute(E.Strings, count));
+        // A 5-/6-string bass always says so: its XML is in the package order (low B at
+        // 4, high C at 5) and the attribute is the only thing that tells the reader.
+        if (count != 6 || arr.ArrangementType is ArrangementType.Bass) el.Add(new XAttribute(E.Strings, count));
         // Through TuningOffsetResolution, not TuningPitches directly: an
         // arrangement carrying only note LETTERS would export as E standard.
         var offsets = TuningOffsetResolution.Resolve(arr);
@@ -886,23 +816,18 @@ internal sealed class RsXmlSongWriter
     {
         if (bendValues.Count == 0) return;
 
-        // Compute bend integer (max non-zero step, clamped 1-3)
-        var bendInt = 0;
-        foreach (var bv in bendValues)
-        {
-            if (bv.Step == 0) continue;
-            bendInt = Math.Max(1, Math.Min(3, Math.Max(bendInt, (int)bv.Step)));
-        }
-        if (bendInt == 0) return; // All zero - no bend attribute
+        var maximum = bendValues.Max(bv => RsBendStrength.Normalize(bv.Step));
+        if (maximum == 0) return; // All zero - no bend attribute
 
-        el.Add(new XAttribute(E.Bend, bendInt));
+        el.Add(new XAttribute(E.Bend, Fmt.Step(maximum)));
 
         var bvEls = bendValues.Select(bv =>
         {
             var bvEl = new XElement(E.BendValue);
             bvEl.Add(new XAttribute(E.Time, Fmt.Time(TimelineMath.ToWholeMs(bv.Position.GetPositionMs(beats)))));
-            if (bv.Step != 0)
-                bvEl.Add(new XAttribute(E.Step, Fmt.Step(Math.Min(3.0, bv.Step))));
+            var step = RsBendStrength.Normalize(bv.Step);
+            if (step != 0)
+                bvEl.Add(new XAttribute(E.Step, Fmt.Step(step)));
             return bvEl;
         }).ToList();
 

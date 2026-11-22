@@ -39,6 +39,18 @@ public sealed class ChartExportValidatorTests
     private static IReadOnlyList<ExportValidationFinding> Validate(ChartProject project) => new ChartExportValidator().Validate(project);
 
     [Fact]
+    public void Audio_length_warning_preserves_elapsed_hours()
+    {
+        var project = CreateValidProject();
+        for (var i = 0; i < project.Beats.Count; i++) project.Beats[i].Time = 3_600_000 + i * 500;
+
+        var findings = new ChartExportValidator().Validate(project, 3_601_000);
+        var warning = Assert.Single(findings, f => f.MessageKey == ChartExportValidator.KeyAudioShorterThanChart);
+
+        Assert.Equal("1:00:01 / 1:00:03", warning.Detail);
+    }
+
+    [Fact]
     public void Display_names_the_game_font_lacks_are_a_warning_each()
     {
         var project = CreateValidProject();
@@ -63,7 +75,22 @@ public sealed class ChartExportValidatorTests
     }
 
     [Fact]
-    public void Valid_project_produces_no_findings() => Assert.Empty(Validate(CreateValidProject()));
+    public void Valid_project_produces_no_findings()
+    {
+        var project = CreateValidProject();
+        project.Showlights.Add(new Showlight { Position = TimelineMath.PositionFromMs(0, project.Beats), Type = "FOG_BLUE", Note = 28 });
+        Assert.Empty(Validate(project));
+    }
+
+    [Fact]
+    public void A_project_without_show_lights_gets_one_project_wide_warning()
+    {
+        var finding = Assert.Single(Validate(CreateValidProject()));
+        Assert.Equal(ChartExportValidator.KeyNoShowlights, finding.MessageKey);
+        Assert.Equal(ExportFindingSeverity.Warning, finding.Severity);
+        Assert.Equal("", finding.ArrangementName);
+        Assert.Equal(ExportFixKind.GenerateShowlights, finding.Fix);
+    }
 
     [Fact]
     public void Missing_beat_map_is_an_error()

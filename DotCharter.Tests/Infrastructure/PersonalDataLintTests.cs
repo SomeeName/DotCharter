@@ -117,17 +117,10 @@ public sealed class PersonalDataLintTests
         var start = new ProcessStartInfo("git", "ls-files -z")
         {
             WorkingDirectory = root,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
             StandardOutputEncoding = Encoding.UTF8
         };
-        using var git = Process.Start(start) ?? throw new InvalidOperationException("git did not start.");
-        var stderr = git.StandardError.ReadToEndAsync();
-        var output = git.StandardOutput.ReadToEnd();
-        git.WaitForExit();
-        Assert.True(git.ExitCode == 0, $"git ls-files failed ({git.ExitCode}): {stderr.Result}");
-        return [.. output.Split('\0', StringSplitOptions.RemoveEmptyEntries)];
+        var git = BoundedProcess.Run(start, TimeSpan.FromMinutes(2), "git ls-files");
+        Assert.True(git.ExitCode == 0, $"git ls-files failed ({git.ExitCode}): {git.StandardError}");
+        return [.. git.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries)];
     }
 }

@@ -49,6 +49,16 @@ public sealed class SettingsChangeSet
         foreach (var (key, read) in _entries) _baseline[key] = read();
     }
 
+    /// <summary>Takes one tracked setting's current value as its baseline and leaves every other one alone.</summary>
+    public void Rebaseline(string key)
+    {
+        foreach (var (tracked, read) in _entries)
+        {
+            if (string.Equals(tracked, key, StringComparison.Ordinal))
+                _baseline[tracked] = read();
+        }
+    }
+
     public IReadOnlyList<string> Differences()
     {
         var differing = new List<string>();

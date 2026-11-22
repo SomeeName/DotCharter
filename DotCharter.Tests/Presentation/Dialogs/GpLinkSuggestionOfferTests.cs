@@ -12,8 +12,8 @@ namespace DotCharter.Tests.Presentation.Dialogs;
 
 /// <summary>
 ///     A real Guitar Pro import, then the link offer: a two-track score whose first bar sits in a
-///     repeat. The repeat links across both tracks (the reliable tier), the bar after it matches
-///     across the tracks too (the content tier); Link all is ONE undo step, Review opens the
+///     repeat. The two-bar shared run ranks ahead of that repeat and the remaining identical
+///     bar still links across both tracks. Link All is one undo step, Review opens the
 ///     manager with the suggestions, Skip links nothing, and only an add-new import is offered.
 /// </summary>
 public sealed class GpLinkSuggestionOfferTests : IDisposable
@@ -77,7 +77,7 @@ public sealed class GpLinkSuggestionOfferTests : IDisposable
     }
 
     [Fact]
-    public async Task Link_all_links_the_scores_repeat_and_the_shared_bar_in_one_undo_step()
+    public async Task Link_all_links_the_longer_shared_run_and_the_leftover_bar_in_one_undo_step()
     {
         var h = new Harness(screen => Choose(screen, LinkSuggestionsChoice.LinkAll));
         await h.ImportAsync(WriteScore());
@@ -89,11 +89,14 @@ public sealed class GpLinkSuggestionOfferTests : IDisposable
 
         Assert.Equal(2, linked);
         var summary = Assert.IsType<LinkSuggestionsViewModel>(Assert.Single(h.Dialogs.Opened));
-        Assert.Equal("2 groups to link, 6 placements.", summary.Headline);
+        Assert.Equal("2 groups to link, 4 placements.", summary.Headline);
         Assert.Equal(steps + 1, h.Edit.History.GetUndoSteps().Count);
         Assert.Equal(["A", "B"], project.LinkGroups.Select(g => g.Letter));
-        Assert.Equal(4, project.LinkGroups[0].Placements.Count); // the repeat: bars 1 and 2 of both tracks
-        Assert.Equal(2, project.LinkGroups[1].Placements.Count); // bar 3 of both tracks
+        Assert.Equal(2, project.LinkGroups[0].Placements.Count);
+        Assert.Equal(2, project.LinkGroups[1].Placements.Count);
+        Assert.All(project.LinkGroups[0].Placements, p => Assert.Equal(8, p.EndPosition.BeatId - p.Position.BeatId));
+        Assert.All(project.LinkGroups[1].Placements, p => Assert.Equal(4, p.EndPosition.BeatId - p.Position.BeatId));
+        Assert.Equal([0, 0, 1], project.GpSourceBars.Select(b => b.WrittenBar));
 
         h.Edit.History.Undo();
         Assert.Empty(project.LinkGroups);
@@ -109,7 +112,7 @@ public sealed class GpLinkSuggestionOfferTests : IDisposable
 
         var manager = Assert.IsType<LinkGroupsViewModel>(h.Dialogs.Opened[1]);
         Assert.Equal(2, manager.Suggestions.Count);
-        Assert.Contains("from the score's repeats", manager.Suggestions[0].Detail, StringComparison.Ordinal);
+        Assert.Contains("M2–M3", manager.Suggestions[0].Detail, StringComparison.Ordinal);
         Assert.Empty(h.Edit.Project.LinkGroups);
     }
 

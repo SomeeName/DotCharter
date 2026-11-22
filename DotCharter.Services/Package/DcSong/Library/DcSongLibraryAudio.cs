@@ -102,7 +102,7 @@ internal sealed class DcSongLibraryAudio(LibraryAudioCacheStore cache, IAppLogge
             await decoder.DecodeToWavAsync(encoded, StemCodec.Opus, decoded, ct).ConfigureAwait(false);
             if (!IsWhole(decoded, null))
                 throw new DcSongReadException(DcSongReadFailure.DecodeFailed, $"ffmpeg wrote no file for {what}.");
-            File.Move(decoded, wav, overwrite: true);
+            AtomicFile.Publish(decoded, wav);
             logger.Info(AppLogCategory.Import, $".dcsong {what} decoded into the audio cache: '{wav}'.");
         }
         catch (StemDecodeUnavailableException ex)
@@ -122,7 +122,7 @@ internal sealed class DcSongLibraryAudio(LibraryAudioCacheStore cache, IAppLogge
         try
         {
             write(staging);
-            File.Move(staging, target, overwrite: true);
+            AtomicFile.Publish(staging, target);
         }
         finally
         {

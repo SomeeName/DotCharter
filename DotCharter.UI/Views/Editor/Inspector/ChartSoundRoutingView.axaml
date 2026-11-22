@@ -1,0 +1,86 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor.Inspector"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.ChartSoundRoutingView"
+             x:DataType="viewModels:ChartSoundRoutingViewModel">
+    <!-- The Mixer ▸ MIDI Routing card's two rows in design D: Sound source (four segments, one per
+         ChartSoundSource value) and Route instrument (Guitar / Bass / Both). The host card disables the
+         whole view while the chart cannot sound; each choice the setup cannot honour is disabled here with its
+         reason under the row. -->
+    <StackPanel x:Name="ChartSoundRoutingRoot" Spacing="{StaticResource FireSpaceXs}">
+        <!-- design D: Sound source, one segment per value of ChartSoundRoutingViewModel;
+             the left column is the built-in voice, the right one the loaded VST instrument; an instrument value the
+             setup cannot honour is disabled and the line under the row says why. -->
+        <StackPanel x:Name="ChartSoundSourceRow" Spacing="{StaticResource FireSpaceXxs}">
+            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                       Text="{localization:Loc Mixer_ChartSound_Source}"
+                       ToolTip.Tip="{localization:Loc Mixer_ChartSound_Source_Tip}" />
+            <UniformGrid x:Name="ChartSoundSourceChoices" Columns="2" ColumnSpacing="{StaticResource FireSpaceXxs}" RowSpacing="{StaticResource FireSpaceXxs}">
+                <RadioButton x:Name="ChartSoundSourceSongTones" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                             GroupName="ChartSoundSource" HorizontalAlignment="Stretch"
+                             IsChecked="{Binding IsSongTones}"
+                             Content="{localization:Loc Mixer_ChartSynth_ToneSource_Song}"
+                             ToolTip.Tip="{localization:Loc Mixer_ChartSynth_ToneSource_Tip}"
+                             AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_ToneSource_Song}" />
+                <RadioButton x:Name="ChartSoundSourceMyInstrument" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                             GroupName="ChartSoundSource" HorizontalAlignment="Stretch"
+                             IsChecked="{Binding IsMyInstrument}"
+                             IsEnabled="{Binding CanUseMyInstrument}" ToolTip.ShowOnDisabled="True"
+                             Content="{localization:Loc Mixer_ChartSound_Source_MyInstrument}"
+                             ToolTip.Tip="{localization:Loc Mixer_ChartSound_Source_MyInstrument_Tip}"
+                             AutomationProperties.Name="{localization:Loc Mixer_ChartSound_Source_MyInstrument}" />
+                <RadioButton x:Name="ChartSoundSourceOwnRig" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                             GroupName="ChartSoundSource" HorizontalAlignment="Stretch"
+                             IsChecked="{Binding IsOwnRig}"
+                             Content="{localization:Loc Mixer_ChartSynth_ToneSource_OwnRig}"
+                             ToolTip.Tip="{localization:Loc Mixer_ChartSynth_ToneSource_Desc}"
+                             AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_ToneSource_OwnRig}" />
+                <RadioButton x:Name="ChartSoundSourceInstrumentRig" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                             GroupName="ChartSoundSource" HorizontalAlignment="Stretch"
+                             IsChecked="{Binding IsInstrumentThroughRig}"
+                             IsEnabled="{Binding CanUseInstrumentThroughRig}" ToolTip.ShowOnDisabled="True"
+                             Content="{localization:Loc Mixer_ChartSound_Source_InstrumentRig}"
+                             ToolTip.Tip="{localization:Loc Mixer_InstrumentThroughRig_Tip}"
+                             AutomationProperties.Name="{localization:Loc Mixer_ChartSound_Source_InstrumentRig}" />
+            </UniformGrid>
+            <TextBlock x:Name="ChartSoundSourceReason" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                       Text="{Binding SourceUnavailableReason}"
+                       IsVisible="{Binding SourceUnavailableReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        </StackPanel>
+        <TextBlock x:Name="ChartSynthToneSourceDesc" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                   Text="{localization:Loc Mixer_ChartSynth_ToneSource_Desc}"
+                   IsVisible="{Binding IsOwnRig}" />
+        <!-- design D: Route instrument - which live seat's rig the chart sound enters. Live only with a bass
+             seat and a source that goes through a rig (CanChooseSeatRoute); otherwise disabled with the reason. -->
+        <StackPanel x:Name="ChartSoundRouteRow" Spacing="{StaticResource FireSpaceXxs}">
+            <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                       Text="{localization:Loc Mixer_ChartSound_Route}"
+                       ToolTip.Tip="{localization:Loc Mixer_ChartSound_Route_Tip}" />
+            <UniformGrid x:Name="ChartSoundRouteChoices" Columns="3" ColumnSpacing="{StaticResource FireSpaceXxs}"
+                         IsEnabled="{Binding CanChooseSeatRoute}">
+                <RadioButton x:Name="ChartSoundRouteGuitar" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                             GroupName="ChartSoundRoute" HorizontalAlignment="Stretch"
+                             IsChecked="{Binding IsGuitarOnly}"
+                             Content="{localization:Loc Mixer_ChartSound_Route_Guitar}"
+                             ToolTip.Tip="{localization:Loc Mixer_ChartSound_Route_Tip}"
+                             AutomationProperties.Name="{localization:Loc Mixer_ChartSound_Route_Guitar}" />
+                <RadioButton x:Name="ChartSoundRouteBass" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                             GroupName="ChartSoundRoute" HorizontalAlignment="Stretch"
+                             IsChecked="{Binding IsBassOnly}"
+                             Content="{localization:Loc Mixer_ChartSynth_Bass}"
+                             ToolTip.Tip="{localization:Loc Mixer_ChartSound_Route_Tip}"
+                             AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_Bass}" />
+                <RadioButton x:Name="ChartSoundRouteBoth" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                             GroupName="ChartSoundRoute" HorizontalAlignment="Stretch"
+                             IsChecked="{Binding IsGuitarAndBass}"
+                             Content="{localization:Loc Mixer_ChartSound_Route_Both}"
+                             ToolTip.Tip="{localization:Loc Mixer_ChartSound_Route_Tip}"
+                             AutomationProperties.Name="{localization:Loc Mixer_ChartSound_Route_Both}" />
+            </UniformGrid>
+            <TextBlock x:Name="ChartSoundRouteReason" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" TextWrapping="Wrap"
+                       Text="{Binding SeatRouteUnavailableReason}"
+                       IsVisible="{Binding SeatRouteUnavailableReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

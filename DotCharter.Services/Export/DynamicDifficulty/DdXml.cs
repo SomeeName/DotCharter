@@ -121,6 +121,7 @@ internal static class DdXml
     {
         Notes = [.. Children(el, "notes", "note").Select(ReadNote)],
         Chords = [.. Children(el, "chords", "chord").Select(ReadChord)],
+        FretHandMutes = [.. Children(el, "fretHandMutes", "fretHandMute").Select(m => new XElement(m))],
         Anchors = [.. Children(el, "anchors", "anchor").Select(a => new DdAnchor(Time(a, "time"), Int(a, "fret"),
             (int)float.Parse(a.Attribute("width")?.Value ?? "4", CultureInfo.InvariantCulture), a))],
         HandShapes = [.. Children(el, "handShapes", "handShape").Select(h => new DdHandShape(Int(h, "chordId"), Time(h, "startTime"), Time(h, "endTime")))],
@@ -224,7 +225,7 @@ internal static class DdXml
     private static XElement WriteLevel(DdLevel level) => new("level", new XAttribute("difficulty", Num(level.Difficulty)),
         Counted("notes", level.Notes.Select(n => WriteNote(n, "note"))),
         Counted("chords", level.Chords.Select(WriteChord)),
-        new XElement("fretHandMutes", new XAttribute("count", "0")),
+        Counted("fretHandMutes", level.FretHandMutes.Select(m => new XElement(m))),
         Counted("anchors", level.Anchors.Select(a =>
         {
             var el = a.Source != null ? new XElement(a.Source) : new XElement("anchor");

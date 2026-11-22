@@ -120,15 +120,7 @@
                         <DockPanel Grid.Column="0">
                             <TextBlock Theme="{DynamicResource DlgSectionLabelText}" DockPanel.Dock="Top" Classes="DlgSectionLabel"
                                        Text="{localization:Loc Dialog_Tones_ProjectTones}" />
-                            <!-- Add / Duplicate / Delete. NOT three star columns: an
-                                 equal division of the rail (then 196 px; 212 since the German
-                                 import chip needed 173 px) gave each chip a
-                                 36 px content slot and "Duplicate" wants 52.7 px, so
-                                 it was sliced in ENGLISH. The German labels
-                                 ("Hinzufügen"/"Duplizieren"/"Löschen") are half again
-                                 as long, which is the proof that no fixed division of
-                                 the rail can hold three of these words on one line.
-                                 Content-sized and wrapping instead. -->
+                            <!-- Add / Duplicate / Delete: content-sized and wrapping, because no fixed division of the rail holds three of these words in every language. -->
                             <WrapPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                                        ItemSpacing="{DynamicResource FireSpaceSm}"
                                        LineSpacing="{DynamicResource FireSpaceSm}"
@@ -144,13 +136,17 @@
                                         Content="{localization:Loc Dialog_Tones_Delete}"
                                         Command="{Binding DeleteToneCommand}"
                                         IsEnabled="{Binding HasSelectedTone}" />
-                                <!-- The empty-list hint below says "add one or import from a
-                                     PSARC", and until now the only Import button was in the
-                                     IMPORTED TONES section far down the dialog — a section
-                                     that reads as empty until you have already imported. The
-                                     owner looked for it here and asked whether they were
-                                     blind. Same command, offered where the sentence that
-                                     names it can be read. -->
+                                <Button Classes="DlgChip" Margin="0" x:Name="UndoChip"
+                                        Content="{localization:Loc Menu_Undo}"
+                                        Command="{Binding UndoCommand}"
+                                        ToolTip.Tip="{localization:Loc Dialog_Tones_Undo_Tip}"
+                                        AutomationProperties.Name="{localization:Loc Dialog_Tones_Undo_Tip}" />
+                                <Button Classes="DlgChip" Margin="0" x:Name="RedoChip"
+                                        Content="{localization:Loc Menu_Redo}"
+                                        Command="{Binding RedoCommand}"
+                                        ToolTip.Tip="{localization:Loc Dialog_Tones_Redo_Tip}"
+                                        AutomationProperties.Name="{localization:Loc Dialog_Tones_Redo_Tip}" />
+                                <!-- Offered here because the empty-list hint below names it. -->
                                 <!-- Absent, not greyed, in a build that cannot read game packages (#887). -->
                                 <Button Classes="DlgChip" Margin="0" x:Name="ImportFromPackageChip"
                                         Content="{localization:Loc Dialog_Tones_ImportFromPsarc}"
@@ -197,7 +193,7 @@
                                     <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Margin="6"
                                                Text="{localization:Loc Dialog_Tones_NoProjectTones}"
                                                IsVisible="{Binding !HasProjectTones}" />
-                                    <ListBox Classes="DlgList" ItemsSource="{Binding ProjectTones}"
+                                    <ListBox x:Name="ProjectToneList" Classes="DlgList" ItemsSource="{Binding ProjectTones}"
                                              AutomationProperties.Name="{localization:Loc Dialog_Tones_ProjectTones}"
                                              SelectedItem="{Binding SelectedTone, Mode=TwoWay}">
                                         <ListBox.Styles>
@@ -487,7 +483,7 @@
                                                             <StackPanel>
                                                                 <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,0,0,4"
                                                                            Text="{localization:Loc Dialog_Tones_ToneBase}" />
-                                                                <controls:DeferredAutoCompleteBox FontFamily="{DynamicResource FireFontMono}"
+                                                                <controls:DeferredAutoCompleteBox PlaceholderText="{localization:Loc Dialog_Tones_SlotPlaceholder}" FontFamily="{DynamicResource FireFontMono}"
                                                                                                   AutomationProperties.Name="{localization:Loc Dialog_Tones_ToneBase}"
                                                                                                   ItemsSource="{Binding $parent[ItemsControl].((contracts:IToneDesignerScreen)DataContext).AuthoredToneKeys}"
                                                                                                   Text="{Binding ToneBase, Mode=TwoWay}" />
@@ -509,7 +505,7 @@
                                                                 <StackPanel Grid.Row="0" Grid.Column="0">
                                                                     <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,0,0,4"
                                                                                Text="{localization:Loc Dialog_Tones_SlotA}" />
-                                                                    <controls:DeferredAutoCompleteBox FontFamily="{DynamicResource FireFontMono}"
+                                                                    <controls:DeferredAutoCompleteBox PlaceholderText="{localization:Loc Dialog_Tones_SlotPlaceholder}" FontFamily="{DynamicResource FireFontMono}"
                                                                                                       AutomationProperties.Name="{localization:Loc Dialog_Tones_SlotA}"
                                                                                                       ItemsSource="{Binding $parent[ItemsControl].((contracts:IToneDesignerScreen)DataContext).AuthoredToneKeys}"
                                                                                                       Text="{Binding ToneA, Mode=TwoWay}" />
@@ -528,7 +524,7 @@
                                                                 <StackPanel Grid.Row="0" Grid.Column="1">
                                                                     <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,0,0,4"
                                                                                Text="{localization:Loc Dialog_Tones_SlotB}" />
-                                                                    <controls:DeferredAutoCompleteBox FontFamily="{DynamicResource FireFontMono}"
+                                                                    <controls:DeferredAutoCompleteBox PlaceholderText="{localization:Loc Dialog_Tones_SlotPlaceholder}" FontFamily="{DynamicResource FireFontMono}"
                                                                                                       AutomationProperties.Name="{localization:Loc Dialog_Tones_SlotB}"
                                                                                                       ItemsSource="{Binding $parent[ItemsControl].((contracts:IToneDesignerScreen)DataContext).AuthoredToneKeys}"
                                                                                                       Text="{Binding ToneB, Mode=TwoWay}" />
@@ -547,7 +543,7 @@
                                                                 <StackPanel Grid.Row="1" Grid.Column="0">
                                                                     <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,0,0,4"
                                                                                Text="{localization:Loc Dialog_Tones_SlotC}" />
-                                                                    <controls:DeferredAutoCompleteBox FontFamily="{DynamicResource FireFontMono}"
+                                                                    <controls:DeferredAutoCompleteBox PlaceholderText="{localization:Loc Dialog_Tones_SlotPlaceholder}" FontFamily="{DynamicResource FireFontMono}"
                                                                                                       AutomationProperties.Name="{localization:Loc Dialog_Tones_SlotC}"
                                                                                                       ItemsSource="{Binding $parent[ItemsControl].((contracts:IToneDesignerScreen)DataContext).AuthoredToneKeys}"
                                                                                                       Text="{Binding ToneC, Mode=TwoWay}" />
@@ -566,7 +562,7 @@
                                                                 <StackPanel Grid.Row="1" Grid.Column="1">
                                                                     <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,0,0,4"
                                                                                Text="{localization:Loc Dialog_Tones_SlotD}" />
-                                                                    <controls:DeferredAutoCompleteBox FontFamily="{DynamicResource FireFontMono}"
+                                                                    <controls:DeferredAutoCompleteBox PlaceholderText="{localization:Loc Dialog_Tones_SlotPlaceholder}" FontFamily="{DynamicResource FireFontMono}"
                                                                                                       AutomationProperties.Name="{localization:Loc Dialog_Tones_SlotD}"
                                                                                                       ItemsSource="{Binding $parent[ItemsControl].((contracts:IToneDesignerScreen)DataContext).AuthoredToneKeys}"
                                                                                                       Text="{Binding ToneD, Mode=TwoWay}" />

@@ -50,7 +50,28 @@ public sealed partial class InspectorRepeatVerdictTextTests
         var text = RepeatVerdictText.Format(new RepeatChordVerdict(RepeatChordReason.Vibrato, 1), 6, Tuning,
             FakeLocalization.English());
 
-        Assert.Equal("Repeat: no — vibrato on string A (5)", text);
+        Assert.Equal("In game: full chord box with its name (vibrato on string A (5))", text);
+    }
+
+    [Theory]
+    [InlineData(RepeatChordReason.Repeat, "In game: compact repeat box (same chord as the strum before)")]
+    [InlineData(RepeatChordReason.ForcedNoNotes, "In game: compact repeat box (No notes is on)")]
+    [InlineData(RepeatChordReason.FirstChord, "In game: full chord box with its name (first chord in this level)")]
+    [InlineData(RepeatChordReason.SplitIntoNotes, "In game: single notes (Split notes is on)")]
+    [InlineData(RepeatChordReason.LinkLanding, "In game: single notes (a linked note lands on it)")]
+    [InlineData(RepeatChordReason.UnresolvedTemplate, "In game: not shown (no chord template and no notes)")]
+    public void TheLine_SaysWhatThePlayerSees(RepeatChordReason reason, string expected) =>
+        Assert.Equal(expected, RepeatVerdictText.Format(new RepeatChordVerdict(reason), 6, Tuning, FakeLocalization.English()));
+
+    [Theory]
+    [InlineData("Resources.resx")]
+    [InlineData("Resources.de-DE.resx")]
+    [InlineData("Resources.ja-JP.resx")]
+    public void TheOtherFrames_AndTheDisabledReason_HaveWordsInEveryLanguage(string file)
+    {
+        Assert.Equal(1, Placeholders(ResxValue(file, "Inspector_RepeatVerdict_Notes")!));
+        Assert.Equal(1, Placeholders(ResxValue(file, "Inspector_RepeatVerdict_NotShown")!));
+        Assert.False(string.IsNullOrWhiteSpace(ResxValue(file, "Inspector_NoNotesDisabledTip")));
     }
 
     [Fact]
@@ -59,7 +80,7 @@ public sealed partial class InspectorRepeatVerdictTextTests
         var text = RepeatVerdictText.Format(new RepeatChordVerdict(RepeatChordReason.Repeat), 6, Tuning,
             FakeLocalization.English());
 
-        Assert.Equal("Repeat: yes — same chord as the previous strum", text);
+        Assert.Equal("In game: compact repeat box (same chord as the strum before)", text);
     }
 
     [Fact]

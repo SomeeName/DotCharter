@@ -7,17 +7,7 @@ using DotCharter.Services.Audio.LivePlay;
 
 namespace DotCharter.UI.ViewModels.Editor;
 
-/// <summary>
-///     Starting and stopping a judged run: the guitar analyzer's lifetime, the
-///     run-end auto-calibration, <c>StartCore</c> / <c>StopCore</c> (the one
-///     place a session, its pump, its recorder and its speed are armed and torn
-///     down) and the completed-session event.
-///     <para>
-///         Part of <see cref="LivePlayViewModel" />. The type's fields, its
-///         whole bound surface and its constructor stay in the ROOT file, so
-///         "where does this come from" is one look rather than a search.
-///     </para>
-/// </summary>
+/// <summary>Owns analyzer lifetime and run start/stop under the session gate.</summary>
 public partial class LivePlayViewModel
 {
     /// <summary>
@@ -25,13 +15,13 @@ public partial class LivePlayViewModel
     ///     device. Opt-in, and heavily guarded — see <see cref="LatencyBiasCalibrator" />
     ///     for why a player who simply drags must not be able to move the goalposts.
     /// </summary>
-    private void AutoCalibrateFromRun(LiveTimingReport? timing)
+    private void AutoCalibrateFromRun(LiveTimingReport? timing, double speed)
     {
         var config = _configService.LoadAppConfig();
         if (!config.LivePlayAutoCalibrateTiming) return;
 
         var decision = LatencyBiasCalibrator.Evaluate(
-            _latencyOffsetMs, config.LivePlayLatencyOffsetMs, timing);
+            _latencyOffsetMs, config.LivePlayLatencyOffsetMs, timing, speed);
 
         if (!decision.Adjusted)
         {
@@ -128,6 +118,8 @@ public partial class LivePlayViewModel
     /// <see cref="IsActive"/> outside the gate.</summary>
     private bool StartCore()
     {
+        _songEndMs = 0;
+        _completion.Reset();
         Volatile.Write(ref _uiEpoch, _uiEpoch + 1); // stale worker snapshots die here
 
         var arrangement = _projectState.ActiveArrangement;
@@ -151,7 +143,8 @@ public partial class LivePlayViewModel
         {
             // Lenient is also the forgiving detection mode.
             _cqtVerifier = LiveCqtVerifier.ForPreset(_analyzer!.SampleRate,
-                (LiveHitWindowPreset)Math.Clamp(HitWindowIndex, 0, 2));
+                (LiveHitWindowPreset)Math.Clamp(HitWindowIndex, 0, 2),
+                LivePlaySessionOptions.ParseChordStrictness(config.LivePlayChordStrictness), arrangement.CentOffset);
         }
         else
         {
@@ -177,7 +170,7 @@ public partial class LivePlayViewModel
         var options = new LivePlaySessionOptions
         {
             HitWindow = (LiveHitWindowPreset)Math.Clamp(HitWindowIndex, 0, 2),
-            ChordStrictness = ParseChordStrictness(config.LivePlayChordStrictness),
+            ChordStrictness = LivePlaySessionOptions.ParseChordStrictness(config.LivePlayChordStrictness),
             StringAwareVerification = config.LivePlayStringAware,
             TransposeSemitones = TransposeSemitones,
             ChartVerify = _cqtVerifier is { } cv ? cv.Verify : null,
@@ -302,19 +295,15 @@ public partial class LivePlayViewModel
             report = StopCore();
         }
 
-        // Events + teardown outside the gate: the handlers are heavyweight
-        // (results screen), and TearDownAnalysis JOINS the worker — a join
-        // under the gate the worker is waiting on would deadlock.
+        FinishStop(report);
+    }
+
+    private void FinishStop(LivePlaySessionReport? report)
+    {
+        // Publish and JOIN outside the gate: the worker may be waiting for it.
         if (report != null)
         {
-            // SessionCompleted rebuilds the results SCREEN, i.e. bound state —
-            // it is the only one of the three run events that was raised
-            // inline while TakeSaved and RockMeterFailed both marshal. Stop()
-            // is only reachable from OnIsActiveChanged today, so it is safe;
-            // it is one careless `IsActive = false` from a worker away from
-            // not being. Dispatching only when off-thread keeps the current
-            // ordering exactly (the results screen still builds before Stop
-            // returns) while closing the hole.
+            // Bound results publish on the UI thread, after the gated stop commit.
             if (Dispatcher.UIThread.CheckAccess()) PublishSessionCompleted(report);
             else Dispatcher.UIThread.Post(() => PublishSessionCompleted(report));
         }
@@ -325,10 +314,67 @@ public partial class LivePlayViewModel
 
     private void PublishSessionCompleted(LivePlaySessionReport report) => SessionCompleted?.Invoke(report);
 
+    /// <summary>Drains and settles judgments at audio EOF, then records the run.</summary>
+    public void CompleteSong(double endMs)
+    {
+        var snapshot = (Epoch: Volatile.Read(ref _uiEpoch), Seek: _audio.SeekGeneration);
+        LivePlaySessionReport? report;
+        lock (_sessionGate)
+        {
+            if (_session.Loop != null || !CanApplyTransport(snapshot, endMs)) return;
+            BeginSongCompletion(endMs);
+            TickCore();
+            if (!CanApplyTransport(snapshot, endMs)) return;
+            if (_analyzer is { } analyzer && _session.Matcher is { Expected.Count: > 0 } &&
+                !_audio.IsDeviceLost && _audio.InputSampleRate > 0 && !_completion.HasEvidence(analyzer.StreamPosition))
+            {
+                return;
+            }
+            var ui = new TickUiState { Epoch = Volatile.Read(ref _uiEpoch) };
+            var tick = _session.CompleteAt(endMs);
+            foreach (var judged in tick.Events) OnJudged(judged, ui);
+            foreach (var grade in tick.Grades) OnGraded(grade, ui);
+            foreach (var check in tick.TechniqueJudgments) OnTechniqueJudged(check, endMs, ui);
+            report = StopCore();
+            OnPropertyChanging(nameof(IsActive));
+            _isActive = false; // Commit under the gate; notification and worker join stay outside.
+        }
+
+        FinishStop(report);
+        OnPropertyChanged(nameof(IsActive));
+    }
+
+    public void RearmCompletion()
+    {
+        lock (_sessionGate)
+        {
+            _songEndMs = _completion.Arm(IsActive && _session.IsActive,
+                _projectState.TotalAudioLengthMs, _session.Loop?.EndMs);
+        }
+    }
+
+    public void ArmSongEnd(double endMs)
+    {
+        lock (_sessionGate)
+        {
+            _songEndMs = Math.Max(0, endMs);
+            if (_songEndMs == 0) _completion.Reset();
+        }
+    }
+
+    private void BeginSongCompletion(double endMs)
+    {
+        if (_analyzer is not { } analyzer) return;
+        _completion.Begin(endMs, analyzer.StreamPosition, analyzer.SampleRate, analyzer.LatencySamples,
+            _session.Matcher?.HitWindowLateMs ?? 0, _latencyOffsetMs, _audio.PlaybackSpeed);
+    }
+
     /// <summary>Session stop under the gate. Returns the results-screen report
     /// (null when no session was active) for the caller to publish outside it.</summary>
     private LivePlaySessionReport? StopCore()
     {
+        _songEndMs = 0;
+        _completion.Reset();
         Volatile.Write(ref _uiEpoch, _uiEpoch + 1); // stale worker snapshots die here
         LivePlaySessionReport? report = null;
 
@@ -359,25 +405,25 @@ public partial class LivePlayViewModel
             _logger.Info(AppLogCategory.Audio,
                 $"Live Play stopped. Score={result.Score}, hits={result.Hits}, misses={result.Misses}, " +
                 $"best streak={result.BestStreak}, accuracy={result.Accuracy:P1}, speed={result.SpeedPercent:0}%.");
-            var beforeProfile = _profiles.GetProfile(_profileSongKey, _profileArrangement);
+            var beforeProfile = _profiles.GetProfile(_profileSongKey, _profileArrangement, _runIdentity);
             var before = PracticeBests.From(beforeProfile);
             // Captured BEFORE recording: a genuine first attempt vs. a repeat.
             var hadPriorRun = beforeProfile.Sessions.Count > 0;
             var recorded = RecordSession(result, sections);
-            var after = PracticeBests.From(_profiles.GetProfile(_profileSongKey, _profileArrangement));
+            var after = PracticeBests.From(_profiles.GetProfile(_profileSongKey, _profileArrangement, _runIdentity));
             if (_sessionHadLadder) RequestSpeed(_speedBeforeSession);
             // Built from the same section snapshot, so the per-section bias lines up
             // with the section rows the results screen already shows.
             var timing = _timing.BuildReport(sections);
             // Opt-in: refine this device's judging offset from the run's residual bias.
-            AutoCalibrateFromRun(timing);
+            AutoCalibrateFromRun(timing, result.SpeedPercent / 100.0);
             report = new LivePlaySessionReport(result, before, after, recorded,
                 _profileSongKey, _profileArrangement, sections, hadPriorRun, timing, _session.LastTechniqueTallies);
             // Take recorder: finalize off-thread (WAV close + optional Opus
             // encode), attach to the just-recorded session, sweep orphans.
             if (takeRecorder != null)
             {
-                RunArchive.FinalizeTakeAsync(takeRecorder, recorded, _profileSongKey, _profileArrangement);
+                RunArchive.FinalizeTakeAsync(takeRecorder, recorded, _profileSongKey, _profileArrangement, _runIdentity);
                 takeRecorder = null;
             }
 
@@ -388,14 +434,14 @@ public partial class LivePlayViewModel
             {
                 RunArchive.SaveReplayAsync(DotCharter.Services.Audio.LivePlay.Replays.RunReplayCapture.FromExpected(
                     replaySounds, _profileSongKey, _profileArrangement,
-                    result.SpeedPercent, result.Score, DateTime.UtcNow));
+                    result.SpeedPercent, result.Score, DateTime.UtcNow), _runIdentity);
             }
         }
 
         // Session never became active (or nothing judged): close the file;
         // the unattached take is swept by the next cleanup pass.
         if (takeRecorder != null)
-            RunArchive.FinalizeTakeAsync(takeRecorder, attach: false, string.Empty, string.Empty);
+            RunArchive.FinalizeTakeAsync(takeRecorder, attach: false, string.Empty, string.Empty, _runIdentity);
 
         LoopActive = false;
         LoopStartArmed = false;

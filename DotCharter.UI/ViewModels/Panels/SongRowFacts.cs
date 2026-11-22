@@ -41,7 +41,7 @@ public static class SongRowFacts
     public static string TuningDisplay(string? tuningSummary) =>
         string.IsNullOrWhiteSpace(tuningSummary)
             ? ""
-            : DotCharter.Core.Utilities.TuningNameResolver.Resolve(tuningSummary) ?? tuningSummary;
+            : TuningDisplayNames.NameForSummary(tuningSummary) ?? TuningDisplayNames.Summary(tuningSummary);
 
     /// <summary>Not plain E standard. UNKNOWN (an empty summary — an own
     /// chart) is NOT "non-standard": a value we cannot judge never raises

@@ -36,7 +36,7 @@ public sealed class ArrangementValidationService : IArrangementValidationService
     {
     }
 
-    public static IReadOnlyList<IArrangementRule> DefaultRules() => new IArrangementRule[]
+    public static IReadOnlyList<IArrangementRule> DefaultRules(IConfigurationService? config = null) => new IArrangementRule[]
     {
         new PhraseRule(),
         new NoteRule(),
@@ -56,6 +56,10 @@ public sealed class ArrangementValidationService : IArrangementValidationService
         new TemplateAndOverlapRule(),
         // DotCharter-native pre-export gates (D-series), live in the FEHLER inspector:
         new ToneSilenceAndPhraseRule(),
+        new ShowlightRule(),
+        new DifficultyLevelRule(),
+        config == null ? new HandShapeGapRule() : new HandShapeGapRule(config),
+        new SectionNameVarietyRule(),
     };
 
     /// <summary><paramref name="project" /> lets rules see PROJECT-level facts the
@@ -80,10 +84,8 @@ public sealed class ArrangementValidationService : IArrangementValidationService
         {
             return new[]
             {
-                new ArrangementIssue(
-                    ArrangementIssueType.NoBeatGridSoNoChecksRan,
-                    "This arrangement has no beat grid, so none of the chart checks could run. " +
-                    "Nothing here means the chart is clean — generate or import a beat map first.")
+                ArrangementIssues.Make(ArrangementIssueType.NoBeatGridSoNoChecksRan,
+                    "Validation_NoBeatGridSoNoChecksRan")
             };
         }
 
@@ -112,10 +114,8 @@ public sealed class ArrangementValidationService : IArrangementValidationService
 
                 // A crashed rule checked NOTHING, and a shorter list with no
                 // marker reads exactly like a cleaner chart. Surface it.
-                issues.Add(new ArrangementIssue(
-                    ArrangementIssueType.ValidationRuleCrashed,
-                    $"The '{ruleName}' check could not run ({ex.GetType().Name}), so whatever it " +
-                    "inspects is UNCHECKED here. This is a bug — please report it."));
+                issues.Add(ArrangementIssues.Make(ArrangementIssueType.ValidationRuleCrashed,
+                    "Validation_ValidationRuleCrashed", args: [ruleName, ex.GetType().Name]));
             }
         }
 

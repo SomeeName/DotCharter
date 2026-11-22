@@ -94,10 +94,14 @@ public static class TempoMapBeats
         var beats = project.Beats;
         var originalTime = beats[pivot].Time;
         var template = beats[pivot];
-        // Compute the beat interval. Prefer the gap to the next beat; fall
-        // back to the gap from the previous beat; finally derive from BPM.
+        // Compute the beat interval. At the first beat it is the first beat's tempo, as
+        // Add measures at start uses: the gap to the second beat of a hand-mapped grid is
+        // not the bar's tempo, and four inserts built a first bar at the wrong BPM.
+        // Elsewhere prefer the gap to the next beat; fall back to the gap from the previous
+        // beat; finally derive from BPM.
         double interval;
-        if (pivot + 1 < beats.Count) interval = beats[pivot + 1].Time - beats[pivot].Time;
+        if (pivot == 0) interval = PrependIntervalMs(project);
+        else if (pivot + 1 < beats.Count) interval = beats[pivot + 1].Time - beats[pivot].Time;
         else if (pivot - 1 >= 0) interval = beats[pivot].Time - beats[pivot - 1].Time;
         else interval = 60000.0 / Math.Max(1.0, template.Bpm > 0 ? template.Bpm : project.Bpm);
 
@@ -108,14 +112,14 @@ public static class TempoMapBeats
         for (var i = pivot; i < beats.Count; i++)
             beats[i].Time += interval;
 
-        // The inserted beat normally sits INSIDE the bar the pivot belongs to,
-        // so it is not a bar line. Inserting before index 0 is the exception:
-        // the new beat becomes the start of the chart, and a grid whose first
-        // beat carries no IsMeasure has no bar 1 — ChartPositionLabel and the
-        // status bar both count bars by walking the flags from index 0, so the
-        // dropped line renumbered every bar in the song. Hand the line over
-        // rather than inventing a second one.
-        var takesOverBarLine = pivot == 0 && template.IsMeasure;
+        // The new beat sits at the time the pivot had. When the pivot was a bar
+        // line, the new beat becomes that bar's downbeat and the old one moves
+        // inside the bar: at index 0 a grid whose first beat carries no
+        // IsMeasure has no bar 1 at all (ChartPositionLabel and the status bar
+        // count bars from index 0), and anywhere else the bar line must stay on
+        // the time it marked. Hand the line over rather than inventing a second
+        // one; RelabelBarAt then gives the longer bar its new length.
+        var takesOverBarLine = template.IsMeasure;
         if (takesOverBarLine) template.IsMeasure = false;
 
         beats.Insert(pivot, new BeatMarker
@@ -144,17 +148,107 @@ public static class TempoMapBeats
         else if (pivot - 1 >= 0) interval = beats[pivot].Time - beats[pivot - 1].Time;
         else interval = 0;
 
-        // Removing index 0 promotes whatever followed it to the start of the
-        // chart, and that beat is usually mid-bar. The mirror of the hand-over
-        // in InsertBeatAt: the grid must still begin on a bar line, or bar 1
+        // Removing a bar line promotes the beat that followed it, which is
+        // usually mid-bar. The mirror of the hand-over in InsertBeatAt: the bar
+        // keeps its downbeat (and its time signature), or at index 0 bar 1
         // silently absorbs the promoted beat and every later bar number shifts.
-        var handOverBarLine = pivot == 0 && beats[0].IsMeasure && beats.Count > 1;
+        var removed = beats[pivot];
+        var handOverBarLine = removed.IsMeasure && pivot + 1 < beats.Count && !beats[pivot + 1].IsMeasure;
 
         beats.RemoveAt(pivot);
         for (var i = pivot; i < beats.Count; i++)
             beats[i].Time -= interval;
 
-        if (handOverBarLine) beats[0].IsMeasure = true;
+        if (!handOverBarLine) return;
+        beats[pivot].IsMeasure = true;
+        beats[pivot].BeatsInMeasure = removed.BeatsInMeasure;
+        beats[pivot].NoteDenominator = removed.NoteDenominator;
+    }
+
+    /// <summary>The last beat at or before <paramref name="timeMs" /> (a hair of tolerance); 0 before the first.</summary>
+    public static int BeatAtOrBefore(IList<BeatMarker> beats, double timeMs)
+    {
+        var index = 0;
+        for (var i = 0; i < beats.Count && beats[i].Time <= timeMs + 0.5; i++) index = i;
+        return index;
+    }
+
+    /// <summary>The last bar line at or before <paramref name="index" />; -1 when none is.</summary>
+    public static int BarLineAtOrBefore(IList<BeatMarker> beats, int index)
+    {
+        for (var i = Math.Min(index, beats.Count - 1); i >= 0; i--)
+            if (beats[i].IsMeasure) return i;
+        return -1;
+    }
+
+    /// <summary>
+    ///     Gives the bar that holds <paramref name="index" /> its real length as its time
+    ///     signature, on every beat of it. Insert / Remove Beat change how many beats that one
+    ///     bar holds and leave every bar line where it is, so a 4/4 bar becomes 5/4 (or 3/4)
+    ///     and every other bar, and the linked-measure groups after it, keep their bar lines
+    ///     and signatures. The last bar is open (nothing closes it), so it takes its old label
+    ///     plus <paramref name="delta" />. This is the rule <c>BeatScaleService</c> follows for
+    ///     an odd-length bar.
+    /// </summary>
+    public static void RelabelBarAt(IList<BeatMarker> beats, int index, int delta)
+    {
+        var barStart = BarLineAtOrBefore(beats, index);
+        if (barStart < 0) return;
+        var next = barStart + 1;
+        while (next < beats.Count && !beats[next].IsMeasure) next++;
+        var length = next < beats.Count ? next - barStart : Math.Max(1, beats[barStart].BeatsInMeasure + delta);
+        for (var i = barStart; i < next; i++) beats[i].BeatsInMeasure = length;
+    }
+
+    /// <summary>
+    ///     The time signature and tempo of the bar whose line is at <paramref name="barStart" />:
+    ///     its signature, and the tempo of its real beat spacing (at the first beat, the first
+    ///     beat's tempo, as Add measures at start uses), which may differ from the printed BPM
+    ///     of a hand-mapped grid.
+    /// </summary>
+    public static MeasureInsertTempo BarTempo(ChartProject project, int barStart)
+    {
+        var beats = project.Beats;
+        var head = beats[barStart];
+        var denominator = head.NoteDenominator > 0 ? head.NoteDenominator : 4;
+        var bpm = head.Bpm > 0 ? head.Bpm : project.Bpm > 0 ? project.Bpm : 120.0;
+        var interval = barStart == 0 ? PrependIntervalMs(project)
+            : barStart + 1 < beats.Count ? beats[barStart + 1].Time - head.Time : 0;
+        if (interval > 0) bpm = 60000.0 / interval * 4.0 / denominator;
+        return new MeasureInsertTempo(Math.Max(1, head.BeatsInMeasure), denominator, bpm);
+    }
+
+    /// <summary>
+    ///     Inserts <paramref name="measureCount" /> whole bars of <paramref name="tempo" /> before
+    ///     the bar line at <paramref name="barStart" />, pushing it and every later beat back by
+    ///     their length. Returns how many beats that came to. Every new beat carries the chosen
+    ///     signature; the bar at <paramref name="barStart" /> keeps its own on its beats, so the
+    ///     bars after the new ones read as before and nothing else changes.
+    /// </summary>
+    public static int InsertMeasuresBefore(ChartProject project, int barStart, int measureCount, MeasureInsertTempo tempo)
+    {
+        var beats = project.Beats;
+        var length = Math.Max(1, tempo.BeatsPerMeasure);
+        var interval = tempo.BeatIntervalMs;
+        var total = measureCount * length;
+        var startMs = beats[barStart].Time;
+        for (var i = barStart; i < beats.Count; i++)
+            beats[i].Time += interval * total;
+
+        for (var i = 0; i < total; i++)
+        {
+            beats.Insert(barStart + i, new BeatMarker
+            {
+                Time = startMs + interval * i,
+                Bpm = tempo.Bpm,
+                IsAnchor = false,
+                IsMeasure = i % length == 0,
+                BeatsInMeasure = length,
+                NoteDenominator = tempo.NoteDenominator
+            });
+        }
+
+        return total;
     }
 
     /// <summary>The beat interval <see cref="PrependBeats" /> extends the grid backwards with.</summary>

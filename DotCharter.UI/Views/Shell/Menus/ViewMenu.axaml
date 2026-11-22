@@ -8,9 +8,8 @@
           Classes="FireMenuTop" Header="{localization:Loc Menu_View}">
     <!-- Panel visibility — mirrors the sidebar toggles so panes closed
          from the dock (tab X / float-window X) are recoverable here.
-         Six toggles of ONE kind: the clearest group in the whole bar,
-         and the reason View read as a wall of checkboxes with the zoom
-         and layout verbs lost at the bottom of it. -->
+         Only the four things that own an area of the window; the
+         Inspector's tabs have their own submenu below. -->
     <MenuItem Header="{localization:Loc Menu_GroupPanels}">
         <MenuItem.Icon>
             <PathIcon
@@ -28,13 +27,36 @@
         <MenuItem Header="{localization:Loc Menu_PanelAiChat}" ToggleType="CheckBox"
                   IsChecked="{Binding IsAiChatVisible, Mode=TwoWay}"
                   InputGesture="{Binding ProjectState.Keybinds.ToggleAiChat, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
-        <MenuItem Header="{localization:Loc Menu_PanelStemMixer}" ToggleType="CheckBox"
-                  IsChecked="{Binding IsStemMixerVisible, Mode=TwoWay}" />
-        <MenuItem Header="{localization:Loc Menu_PanelStackedTracks}" ToggleType="CheckBox"
-                  IsChecked="{Binding IsStackedTracksVisible, Mode=TwoWay}" />
-        <MenuItem Header="{localization:Loc Menu_PanelPhraseCatalog}" ToggleType="CheckBox"
-                  IsChecked="{Binding IsPhraseCatalogVisible, Mode=TwoWay}"
+    </MenuItem>
+    <!-- The Inspector's tabs in the tab strip's order; `TabMenu` (an InspectorTabMenu)
+         ticks the open Inspector's selected tab. Mixer and Riff library keep their
+         palette ids and the Riff library its keybind. -->
+    <MenuItem Header="{localization:Loc Menu_GroupInspectorTab}">
+        <MenuItem Header="{localization:Loc Inspector_Tab_Note}" ToggleType="Radio"
+                  Command="{Binding TabMenu.ShowRowCommand}" CommandParameter="0"
+                  IsChecked="{Binding TabMenu.ActiveIndex, Converter={x:Static converters:IntEqualsConverter.Instance}, ConverterParameter=0, Mode=OneWay}" />
+        <MenuItem Header="{localization:Loc Inspector_Tab_ChordShapes}" ToggleType="Radio"
+                  Command="{Binding TabMenu.ShowRowCommand}" CommandParameter="7"
+                  IsChecked="{Binding TabMenu.ActiveIndex, Converter={x:Static converters:IntEqualsConverter.Instance}, ConverterParameter=7, Mode=OneWay}" />
+        <MenuItem Header="{localization:Loc Inspector_Tab_Song}" ToggleType="Radio"
+                  Command="{Binding TabMenu.ShowRowCommand}" CommandParameter="2"
+                  IsChecked="{Binding TabMenu.ActiveIndex, Converter={x:Static converters:IntEqualsConverter.Instance}, ConverterParameter=2, Mode=OneWay}" />
+        <MenuItem Header="{localization:Loc Inspector_Tab_Lyrics}" ToggleType="Radio"
+                  Command="{Binding TabMenu.ShowRowCommand}" CommandParameter="3"
+                  IsChecked="{Binding TabMenu.ActiveIndex, Converter={x:Static converters:IntEqualsConverter.Instance}, ConverterParameter=3, Mode=OneWay}" />
+        <MenuItem Header="{localization:Loc Inspector_Tab_Issues}" ToggleType="Radio"
+                  Command="{Binding TabMenu.ShowRowCommand}" CommandParameter="4"
+                  IsChecked="{Binding TabMenu.ActiveIndex, Converter={x:Static converters:IntEqualsConverter.Instance}, ConverterParameter=4, Mode=OneWay}" />
+        <MenuItem Header="{localization:Loc Inspector_Tab_Notes}" ToggleType="Radio"
+                  Command="{Binding TabMenu.ShowRowCommand}" CommandParameter="5"
+                  IsChecked="{Binding TabMenu.ActiveIndex, Converter={x:Static converters:IntEqualsConverter.Instance}, ConverterParameter=5, Mode=OneWay}" />
+        <MenuItem Header="{localization:Loc Menu_PanelPhraseCatalog}" ToggleType="Radio"
+                  Command="{Binding TogglePhraseCatalogCommand}"
+                  IsChecked="{Binding TabMenu.ActiveIndex, Converter={x:Static converters:IntEqualsConverter.Instance}, ConverterParameter=6, Mode=OneWay}"
                   InputGesture="{Binding ProjectState.Keybinds.TogglePhraseCatalog, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Inspector_Tab_Mixer}" ToggleType="Radio"
+                  Command="{Binding TabMenu.ShowRowCommand}" CommandParameter="1"
+                  IsChecked="{Binding TabMenu.ActiveIndex, Converter={x:Static converters:IntEqualsConverter.Instance}, ConverterParameter=1, Mode=OneWay}" />
     </MenuItem>
     <Separator />
     <!-- TIMELINE ROWS: the `ChartEditor.ActiveRibbon` flags (one visibility
@@ -59,6 +81,8 @@
     <MenuItem Header="{localization:Loc Menu_ShowWaveform}" ToggleType="CheckBox"
               IsChecked="{Binding ProjectState.ShowWaveform, Mode=TwoWay}"
               InputGesture="{Binding ProjectState.Keybinds.ToggleWaveform, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    <MenuItem Header="{localization:Loc Menu_PanelStackedTracks}" ToggleType="CheckBox"
+              IsChecked="{Binding IsStackedTracksVisible, Mode=TwoWay}" />
     <MenuItem Header="{localization:Loc Menu_ShowMinimap}" ToggleType="CheckBox"
               IsChecked="{Binding IsMinimapVisible, Mode=TwoWay}" />
     <MenuItem Header="{localization:Loc Menu_ShowSuggestedHandShapes}" ToggleType="CheckBox"

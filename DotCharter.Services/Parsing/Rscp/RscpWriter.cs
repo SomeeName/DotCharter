@@ -38,6 +38,7 @@ public class RscpWriter
         BuildBookmarksNode(root, project);
         BuildNotationVoicesNode(root, arrangements);
         RscpLinkGroups.Write(root, project);
+        RscpGpSource.Write(root, project);
 
         root.Add(new XElement("text", project.TextContent));
 
@@ -49,6 +50,18 @@ public class RscpWriter
         RscpFormatContract.EmitUnknownRootNodes(root, project.UnknownRscpNodes);
 
         doc.Add(root);
+    }
+
+    /// <summary>The song's own export volumes, the signatures they were measured from and the manual flags; absent while unmeasured.</summary>
+    private static void AddVolumes(XElement root, ChartData chart)
+    {
+        if (chart.AudioVolume is { } audioVolume) root.Add(new XElement("dcAudioVolume", FormatDouble(audioVolume)));
+        if (chart.PreviewVolume is { } previewVolume) root.Add(new XElement("dcPreviewVolume", FormatDouble(previewVolume)));
+        if (!string.IsNullOrWhiteSpace(chart.AudioVolumeSignature)) root.Add(new XElement("dcAudioVolumeSig", chart.AudioVolumeSignature.Trim()));
+        if (!string.IsNullOrWhiteSpace(chart.PreviewVolumeSignature)) root.Add(new XElement("dcPreviewVolumeSig", chart.PreviewVolumeSignature.Trim()));
+        if (chart.AudioVolumeManual) root.Add(new XElement("dcAudioVolumeManual", "true"));
+        if (chart.PreviewVolumeManual) root.Add(new XElement("dcPreviewVolumeManual", "true"));
+        if (chart.PreviewStartMs is { } previewStart and >= 0) root.Add(new XElement("dcPreviewStartMs", FormatDouble(previewStart)));
     }
 
     private static string FormatDouble(double v)
@@ -130,9 +143,18 @@ public class RscpWriter
             root.Add(new XElement("dcReleaseDate", project.Chart.ReleaseDate.Trim()));
         if (!string.IsNullOrWhiteSpace(project.Chart.CoverArtPath))
             root.Add(new XElement("dcCoverArt", project.Chart.CoverArtPath.Trim()));
+        // The sort names and the DLC key (DLC Builder's fields); absent while they are derived.
+        if (!string.IsNullOrWhiteSpace(project.Chart.TitleSort))
+            root.Add(new XElement("dcTitleSort", project.Chart.TitleSort.Trim()));
+        if (!string.IsNullOrWhiteSpace(project.Chart.AlbumSort))
+            root.Add(new XElement("dcAlbumSort", project.Chart.AlbumSort.Trim()));
+        if (!string.IsNullOrWhiteSpace(project.Chart.DlcKey))
+            root.Add(new XElement("dcDlcKey", project.Chart.DlcKey.Trim()));
         // The package version; absent at the default "1" so a chart that never set one is byte-identical.
         if (!string.IsNullOrWhiteSpace(project.Chart.Version) && project.Chart.Version.Trim() != "1")
             root.Add(new XElement("dcVersion", project.Chart.Version.Trim()));
+
+        AddVolumes(root, project.Chart);
 
         // Project state with no rscharter field. Same additive dc* contract:
         // absent at the default, so a chart that never carried them is
@@ -155,6 +177,8 @@ public class RscpWriter
         if (project.Chart.KeyAccidentals != 0)
             root.Add(new XElement("dcKeyAccidentals", project.Chart.KeyAccidentals));
         if (project.Chart.KeyIsMinor) root.Add(new XElement("dcKeyIsMinor", "true"));
+        // dcKeyLocked — the charter locked that key as the song's key; absent unlocked.
+        if (project.Chart.KeyLocked) root.Add(new XElement("dcKeyLocked", "true"));
         // dcSynthPlayStyle — how the chart synth plays this song: a
         //                      guitar and a bass rule set; absent at the defaults.
         if (!project.SynthPlayStyle.IsDefault)
@@ -313,6 +337,7 @@ public class RscpWriter
                 // written ONLY when the legacy flag could not carry the phrase end, so a
                 // chart without that combination stays byte-identical.
                 if (closesPhrase && l.IsWordPart) vNode.Add(new XAttribute("dcPhraseEnd", "true"));
+                LyricReviewSerialization.Write(vNode, l);
                 vocalsInner.Add(vNode);
             }
         }
@@ -828,11 +853,8 @@ public class RscpWriter
         if (n.VibratoStrength > 0) sn.Add(new XAttribute("vibratoStrength", n.VibratoStrength));
         if (n.Tremolo) sn.Add(new XAttribute("tremolo", "T"));
         if (n.LinkNext) sn.Add(new XAttribute("linkNext", "T"));
-        if (n.SlideTo.HasValue)
-        {
-            sn.Add(new XAttribute("slideTo", n.SlideTo.Value));
-            if (n.UnpitchedSlide) sn.Add(new XAttribute("unpitchedSlide", "T"));
-        }
+        if (n.SlideTo.HasValue) sn.Add(new XAttribute("slideTo", n.SlideTo.Value));
+        if (n.UnpitchedSlide) sn.Add(new XAttribute("unpitchedSlide", "T"));
     }
 
     /// <summary>
@@ -940,11 +962,8 @@ public class RscpWriter
         // export — see ChordNote.ExplicitSustain.
         if (n.ExplicitSustain) cn.Add(new XAttribute("expSus", "T"));
         if (n.LinkNext) cn.Add(new XAttribute("linkNext", "T"));
-        if (n.SlideTo.HasValue)
-        {
-            cn.Add(new XAttribute("slideTo", n.SlideTo.Value));
-            if (n.UnpitchedSlide) cn.Add(new XAttribute("unpitchedSlide", "T"));
-        }
+        if (n.SlideTo.HasValue) cn.Add(new XAttribute("slideTo", n.SlideTo.Value));
+        if (n.UnpitchedSlide) cn.Add(new XAttribute("unpitchedSlide", "T"));
 
         if (n.BendValues.Count > 0) cn.Add(new XAttribute("bendValues", BuildBendValuesString(n.BendValues)));
 
@@ -977,6 +996,7 @@ public class RscpWriter
             // `Integer.valueOf` then throws on, and a written `-1` would blow up
             // `HandShape.likeGenerator`'s `chordTemplates.get(-1)`.
             if (hs.TemplateId >= 0) node.Add(new XAttribute("templateId", hs.TemplateId));
+            if (hs.GhostMask is { } mask) node.Add(new XAttribute("ghost", RscpGhostStrings.Format(mask)));
 
             handShapesNode.Add(node);
         }

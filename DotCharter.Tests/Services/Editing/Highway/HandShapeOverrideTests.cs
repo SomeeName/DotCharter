@@ -101,6 +101,33 @@ public sealed class HandShapeOverrideTests
         Assert.DoesNotContain(ahead, h.Level.Notes);
     }
 
+    [Fact]
+    public void DroppingAHandShapeKeepsItsGhostMaskAndUnpinnedGrip()
+    {
+        var h = new Harness();
+        var grip = new ChordTemplate
+        {
+            Id = 5, Frets = new() { [0] = 3, [1] = 5 }, Fingers = new() { [0] = 1, [1] = 3 }
+        };
+        h.Arrangement.ChordTemplates.Add(grip);
+        var bar = h.AddHandShape(0, 4, grip.Id);
+        bar.GhostMask = 1 << 1;
+        var note = h.AddNote(1, 0, 3);
+        var movedNote = note.Clone();
+        movedNote.Position = new(9);
+        var movedBar = bar.Clone();
+        movedBar.Position = new(8);
+        movedBar.EndPosition = new(12);
+
+        Assert.True(h.Service.CommitHandShapeDragAndDrop([note], [movedNote], [], [], [bar], [movedBar], [], []));
+
+        var dropped = Assert.Single(h.Level.HandShapes);
+        Assert.Same(grip, h.Arrangement.FindChordTemplate(dropped.TemplateId));
+        Assert.Equal(1 << 1, dropped.GetGhostMask(grip));
+        Assert.Equal(3, grip.GetFinger(1));
+        Assert.False(grip.IsPinned);
+    }
+
     private sealed class Harness
     {
         private readonly ChartProject _project = new();

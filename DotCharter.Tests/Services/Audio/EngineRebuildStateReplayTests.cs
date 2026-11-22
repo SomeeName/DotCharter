@@ -76,7 +76,7 @@ public sealed class EngineRebuildStateReplayTests
                 // every live change and the rebuild replay (ChartSynthEngineDriver.ReplayTo,
                 // called from AttachPerPlayerStateToEngine). Safe to list only
                 // because TheChartSynth_IsReplayedByThePerPlayerAttach pins that chain.
-                "private void PushTo(JuceAudioEngine engine, string reason, bool includeNotes)",
+                "private void PushTo(IChartSynthBackend engine, string reason, bool includeNotes)",
             }
             .SelectMany(sig => EngineStateWritesIn(Body(source, sig), surface))
             .ToHashSet(StringComparer.Ordinal);
@@ -180,13 +180,23 @@ public sealed class EngineRebuildStateReplayTests
             Body(source, "private void AttachPerPlayerStateToEngine(JuceAudioEngine engine)"), StringComparison.Ordinal);
         // The replay re-uploads the notes (a live change does not: it would choke them).
         Assert.Contains("includeNotes: true",
-            Body(source, "public void ReplayTo(JuceAudioEngine engine)"), StringComparison.Ordinal);
-        var push = Body(source, "private void PushTo(JuceAudioEngine engine, string reason, bool includeNotes)");
+            Body(source, "internal void ReplayTo(IChartSynthBackend engine)"), StringComparison.Ordinal);
+        var push = Body(source, "private void PushTo(IChartSynthBackend engine, string reason, bool includeNotes)");
         foreach (var write in new[] { ".SetChartNotes(", ".TrySetChartVoice(", ".SetChartSourceParams(",
-                     ".SetChartSourceEnabled(", ".SetInstrumentRoute(", ".TrySetChartInstrument(" })
+                     ".SetChartSourceEnabled(", ".TrySetInstrumentRouteMask(", ".TrySetChartRouteMask(",
+                     ".TrySetChartInstrument(" })
         {
             Assert.Contains(write, push, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void ARebuild_ReplaysTheFullInstrumentFaderValue()
+    {
+        var source = Regex.Replace(ServiceSource(), @"//[^\n]*", " ");
+        var replay = Body(source, "private void ReapplyMasterBusStateLocked(JuceAudioEngine engine)");
+        Assert.Contains("engine.SetInstrumentGain((float)Math.Clamp(_vstInstrumentVolume, 0.0, 4.0))",
+            replay, StringComparison.Ordinal);
     }
 
     /// <summary>

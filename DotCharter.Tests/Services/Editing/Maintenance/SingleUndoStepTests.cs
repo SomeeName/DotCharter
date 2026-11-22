@@ -21,6 +21,40 @@ namespace DotCharter.Tests.Services.Editing.Maintenance;
 public sealed class SingleUndoStepTests
 {
     [Fact]
+    public void AFailedMutation_RestoresSelectionAndFocusBeforeItRan()
+    {
+        var h = new ChartPowerToolsTests.Harness();
+        var project = h.State.ActiveProject!;
+        var arrangement = h.State.ActiveArrangement!;
+        var level = h.State.ActiveLevel!;
+        var note = level.Notes[0];
+        var other = new Arrangement();
+        other.Levels.Add(new ChartLevel());
+        project.Arrangements.Add(other);
+        h.Selection.SelectedNotes.Add(note);
+        h.Selection.HoveredNote = note;
+        h.Selection.PreviewNotes.Add(note);
+        h.Selection.PreviewArrangement = arrangement;
+
+        Assert.Throws<InvalidOperationException>(() => h.Maintenance.RunAsSingleUndoStep(() =>
+        {
+            h.State.ActiveArrangement = other;
+            h.State.ActiveLevel = other.Levels[0];
+            h.Selection.ClearAll();
+            level.Notes.Clear();
+            throw new InvalidOperationException("partial import");
+        }));
+
+        Assert.Same(arrangement, h.State.ActiveArrangement);
+        Assert.Same(level, h.State.ActiveLevel);
+        Assert.Same(note, Assert.Single(h.Selection.SelectedNotes));
+        Assert.Same(note, h.Selection.SelectedNote);
+        Assert.Same(note, h.Selection.HoveredNote);
+        Assert.Same(note, Assert.Single(h.Selection.PreviewNotes));
+        Assert.Same(arrangement, h.Selection.PreviewArrangement);
+    }
+
+    [Fact]
     public void AReplacedBeatMapIsRestoredByUndo()
     {
         var h = new ChartPowerToolsTests.Harness();
@@ -85,6 +119,25 @@ public sealed class SingleUndoStepTests
     }
 
     [Fact]
+    public void RedoingAGrowingSnapshot_ReattachesTheNoteCapturedByALaterEdit()
+    {
+        var h = new ChartPowerToolsTests.Harness();
+        var level = h.State.ActiveLevel!;
+        var added = new GuitarNote { Position = new FractionalPosition(20), StringIndex = 0, Fret = 7 };
+        h.Maintenance.RunAsSingleUndoStep(() => level.Notes.Add(added));
+        h.History.Do(new MutateNotesAction(level.Notes, [added], n => n.Fret = 19));
+
+        h.History.Undo();
+        h.History.Undo();
+        Assert.DoesNotContain(added, level.Notes);
+        h.History.Redo();
+        h.History.Redo();
+
+        Assert.Same(added, level.Notes[^1]);
+        Assert.Equal(19, level.Notes[^1].Fret);
+    }
+
+    [Fact]
     public void WithNoProjectItRefusesRatherThanThrowing()
     {
         var h = new ChartPowerToolsTests.Harness();
@@ -93,5 +146,76 @@ public sealed class SingleUndoStepTests
 
         Assert.False(h.Maintenance.RunAsSingleUndoStep(() => ran = true));
         Assert.False(ran);
+    }
+
+    [Fact]
+    public void AMutationThatChangesTheChartThenThrows_RestoresTheChartAndExistingHistory()
+    {
+        var h = new ChartPowerToolsTests.Harness();
+        var project = h.State.ActiveProject!;
+        var arrangement = project.Arrangements[0];
+        var level = arrangement.Levels[0];
+        var note = level.Notes[0];
+        var originalFret = note.Fret;
+        var originalBeatCount = project.Beats.Count;
+        h.History.Do(new MutateNotesAction(level.Notes, [note], n => n.Fret = 19));
+        var node = h.History.CurrentNodeId;
+        var failure = new InvalidOperationException("import failed after mutation");
+
+        var thrown = Assert.Throws<InvalidOperationException>(() => h.Maintenance.RunAsSingleUndoStep(() =>
+        {
+            project.Beats.Clear();
+            project.Arrangements.Clear();
+            project.IsBeatMapLocked = true;
+            project.AudioFileName = "partial-import.wav";
+            throw failure;
+        }));
+
+        Assert.Same(failure, thrown);
+        Assert.Same(project, h.State.ActiveProject);
+        Assert.Same(arrangement, Assert.Single(project.Arrangements));
+        Assert.Same(level, arrangement.Levels[0]);
+        Assert.Same(note, level.Notes[0]);
+        Assert.Equal(19, note.Fret);
+        Assert.Equal(originalBeatCount, project.Beats.Count);
+        Assert.False(project.IsBeatMapLocked);
+        Assert.NotEqual("partial-import.wav", project.AudioFileName);
+        Assert.Equal(node, h.History.CurrentNodeId);
+        Assert.False(h.History.CanRedo);
+
+        h.History.Undo();
+        Assert.Equal(originalFret, note.Fret);
+    }
+
+    [Fact]
+    public void SnapshotUndoAndRedo_PreserveALaterLockAndAudioAttachment()
+    {
+        var h = new ChartPowerToolsTests.Harness();
+        var project = h.State.ActiveProject!;
+        h.Maintenance.RunAsSingleUndoStep(() => project.Arrangements[0].Name = "Edited");
+
+        h.Maintenance.ToggleBeatMapLock();
+        project.AudioFileName = "attached-later.wav";
+        h.History.Undo();
+
+        Assert.True(project.IsBeatMapLocked);
+        Assert.Equal("attached-later.wav", project.AudioFileName);
+        h.History.Redo();
+        Assert.True(project.IsBeatMapLocked);
+        Assert.Equal("attached-later.wav", project.AudioFileName);
+
+        // A step which changes these fields itself still owns their before/after values.
+        h.Maintenance.RunAsSingleUndoStep(() =>
+        {
+            project.IsBeatMapLocked = false;
+            project.AudioFileName = "imported.wav";
+        });
+        h.History.Undo();
+
+        Assert.True(project.IsBeatMapLocked);
+        Assert.Equal("attached-later.wav", project.AudioFileName);
+        h.History.Redo();
+        Assert.False(project.IsBeatMapLocked);
+        Assert.Equal("imported.wav", project.AudioFileName);
     }
 }

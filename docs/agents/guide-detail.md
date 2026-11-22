@@ -5,17 +5,26 @@ Moved verbatim from the root `AGENTS.md`, which keeps condensed forms. Section o
 ## Never `Read` these whole (full table and the file-size guards)
 
 **Never `Read` these whole** — one Read costs more context than most tasks need.
-Sizes measured 2026-10-11 and rounded on purpose; re-measure, never carry a
+Sizes are dated individually and rounded on purpose; re-measure, never carry a
 number forward.
 
 | File | Size | Instead |
 |---|---|---|
-| `DotCharter.Localization/Resources{,.de-DE,.ja-JP}.resx` | ~605 / 635 / 695 KB, ~5,000 keys each (5,274) | **Grep the key.** All THREE must stay in sync — grep all three, edit all three. ja-JP is biggest on disk because each kana/kanji is three UTF-8 bytes. |
-| `JuceSharp/.../dcdsp_cab_irs.h`, `dcdsp_acoustic_irs.h` | ~846 / 98 KB | Generated IR float tables, zero logic. |
-| `AmpFxRigView.axaml` | ~133 KiB (135,847 bytes / 1,622 lines, the split lane in `RigBoardLaneTemplate.axaml`, its own style rules in `AmpFxRigStyles.axaml`) | Grep the `x:Name`, read ±150 lines. |
-| Play Mode's screens, `Views/PlayMode/Screens/*.axaml` (lifted out of `PlayModeView.axaml` in #294) | 2–56 KB each, Song Select the biggest; `PlayModeView.axaml` itself ~14 KB | Grep the `x:Name` across `Views/PlayMode/`. **Each screen's names live in ITS view's namescope**, so `FindControl` on `PlayModeView` reaches none of them — search the visual tree. Five screens (settings modal, Get Ready, Pause, Song Select, Results) are `ContentTemplate` bodies under a `ContentControl` host (`PlayModeView.DeferredScreenHostNames`), not constructed before the first frame — the code-behind reaches Song Select and Results through on-demand lookups, never a field. Source lints read the set through `DotCharter.Tests/UI/PlayModeMarkup` (the screens inlined where they are declared). |
-| Any other `.axaml` view or style, and the tone-rig HTML prototype outside the repo | 5–160 KB each | Grep the `x:Name`, style class or CSS selector, then Read with offset/limit. |
-| `Audio/Dsp/Tones/tone_gear_data.json` | ~147 KB | Gear catalogue on ONE line — query it in code. |
+| `DotCharter.Localization/Resources{,.de-DE,.ja-JP}.resx` | 780,520 / 822,878 / 902,744 bytes (2026-11-18), 6,421 keys each | **Grep the key.** All THREE must stay in sync — grep all three, edit all three. ja-JP is biggest on disk because each kana/kanji is three UTF-8 bytes. |
+| `JuceSharp/.../dcdsp_cab_irs.h`, `dcdsp_acoustic_irs.h` | 825.9 KiB (845,707 bytes) / 95.3 KiB (97,604 bytes) | Generated IR float tables, zero logic. |
+| `DotCharter.Services/Export/Sng/SngFromDomainMapper.cs` | 69,115 bytes (2026-11-17) | Grep the conversion method, then read a slice. Phrase and song-length policy shared with XML lives in `Export/Rocksmith/RsPhraseExportData.cs` and `RsSongLength.cs`. |
+| `AmpFxRigView.axaml` | 135.9 KiB (139,143 bytes) / 1,655 lines (2026-11-13); the split lane in `RigBoardLaneTemplate.axaml`, its own style rules in `AmpFxRigStyles.axaml` | Grep the `x:Name`, read ±150 lines. |
+| Play Mode's screens, `Views/PlayMode/Screens/*.axaml` (lifted out of `PlayModeView.axaml` in #294) | 2.3–55.6 KiB each, Song Select the biggest; `PlayModeView.axaml` itself 14.5 KiB (14,850 bytes) | Grep the `x:Name` across `Views/PlayMode/`. **Each screen's names live in ITS view's namescope**, so `FindControl` on `PlayModeView` reaches none of them — search the visual tree. Five screens (settings modal, Get Ready, Pause, Song Select, Results) are `ContentTemplate` bodies under a `ContentControl` host (`PlayModeView.DeferredScreenHostNames`), not constructed before the first frame — the code-behind reaches Song Select and Results through on-demand lookups, never a field. Source lints read the set through `DotCharter.Tests/UI/PlayModeMarkup` (the screens inlined where they are declared). |
+| `DotCharter.Tone.UI/ViewModels/PlayMode/RigDockUnit*.cs` | Eight partials: 60,214 CR-excluded bytes, root 22,981 bytes (2026-11-14); ceiling 59 KiB | Open the editor-family partial. Capture rows now live in the separate `RigCaptureRow.cs` collaborator; class-total ratchet: `SplitTypePartialRatchetTests`. |
+
+| `Preview3DView.axaml`, `Preview3DPracticeStripView.axaml` | 30,722 / 12,114 bytes (2026-11-14) | The preview owns the viewport and top bar; the child view owns the wrapping practice controls and its own namescope. Search the visual tree for the practice strip's names. |
+| Any other `.axaml` view or style, and the tone-rig HTML prototype outside the repo | 0.6–135.9 KiB each for tracked production markup; measure the external prototype before reading | Grep the `x:Name`, style class or CSS selector, then Read with offset/limit. |
+| `Audio/Dsp/Tones/tone_gear_data.json` | 143.9 KiB (147,353 bytes) / 1 line (2026-11-13) | Gear catalogue on ONE line — query it in code. |
+
+Vocal placeholder insertion is built by `Services/Editing/Maintenance/VocalInsertion.cs`;
+`ChartMaintenanceService.ChordEditing.cs` keeps the playhead/status orchestration.
+The insertion factory prefers an existing syllable's start before overlapping line spans;
+equal starts in different lines choose the first owner in collection order.
 
 **Split types.** The most-opened types are split across partial files
 (`PlayModeViewModel`, `JuceAudioPlaybackService`, `LivePlayViewModel`,
@@ -29,9 +38,29 @@ class-total ceiling: the set may only shrink, the ceiling may only go down, each
 listed file must open with its header, and a NEW three-partial type fails until it
 is listed. Prefer extracting a real collaborator over
 adding a partial: `MainWindow`'s prewarm, shell layout, capture and diagnostics
-partials became classes under `Views/Shell/` because each shared zero or one
+partials, and its pop-out windows, became classes under `Views/Shell/` because each shared zero or one
 field with its siblings. Lints that read the shell source therefore glob
 `Views/**/MainWindow*.cs` RECURSIVELY; a non-recursive glob passes VACUOUSLY.
+
+The audio service's audible-position reader and speed-scaled latency conversion live in
+`DotCharter.Tone/Audio/Engine/PlayheadReadback.cs`; the service keeps the interpolation,
+floor and device-latency cache state. Source lints include the collaborator through
+`DotCharter.Tests/Services/Audio/PlaybackServiceSourceFiles.cs`.
+
+The Inspector's eight partials total (CR-excluded) 104,730 bytes (30,813 bytes in the root; ceiling 103 KiB).
+Its Note queue delegates chord eligibility to
+`DotCharter.Services/Editing/ChordWorkEligibility.cs`, shared with validation and
+export; the queue's Next up card and unnamed row read the same counts.
+The shell's four `MainWindowViewModel` partials total (CR-excluded) 74,719 bytes (34,855 bytes
+in the root); its Settings-close handler invalidates those queue counts.
+
+The audio service's 18 partials total (CR-excluded) 298,604 bytes (27,309 bytes in the root,
+measured 2026-11-15). Rebuild media recovery, effect attachment ordering and
+serialized chain admission and per-seat sandbox lifetime live in collaborators under
+`Audio/Engine` and `Audio/Vst`.
+
+The pedalboard's ten class files total (CR-excluded) 106,201 bytes (37,478 in the root),
+under the unchanged 104 KiB class ceiling; the exact file set is in MAP.md.
 
 **Source files have a size budget.** `Infrastructure/SourceFileSizeBudgetTests`
 fails the default gate when a new `.cs` / `.axaml` file passes the limit, or when
@@ -39,6 +68,10 @@ a file on its exceptions list grows. The list may only shrink: when you split a
 listed file, lower or delete its entry in the same change. Every entry carries
 the reason it is KEPT rather than split (Vulkan code, export-boundary
 algorithms, preset data, the rig view's namescope).
+
+The GP3-5 reader keeps byte-stream walking in `GpLegacyImporter.cs`; buffered beat
+placement and unfolded markers are handled by `GpLegacyBeatTiming.cs` and
+`GpLegacyMarkers.cs`, with scratch DTOs in `GpLegacyParseModels.cs`.
 
 **Methods have a complexity budget too.** `Infrastructure/MethodComplexityBudgetTests`
 measures every method, accessor and operator (syntax-only Roslyn,
@@ -84,7 +117,7 @@ issue and PR templates are the rest of the community files.
 | `DotCharter.RigLab` | The rig as a standalone app. References Core/Localization/Tone/Tone.UI and NEVER UI or Services (`RigLabDependencyTests`); published by `tools/release/Publish-RigLab.ps1` |
 | `DotCharter.Launcher` | The release's top-level `DotCharter.exe` (#413): a NativeAOT stub that starts `app\DotCharter.exe` with the same command line and exit code. References nothing first-party. The app resolves install-scoped paths (portable config, `tools/`, `voices/`, `models/`) through `InstallLocation.InstallRoot`, never `AppContext.BaseDirectory` — see [split-install.md](../../docs/agents/services/infrastructure-update/split-install.md) |
 | `DotCharter.UI.Gallery` | Standalone host (assembly `DotCharter.Gallery`) for screens on FAKE view models — no audio, no JUCE, no DI. `DotCharter.Gallery.exe --capture <dir>` writes a PNG per page and variant. See `DotCharter.UI.Gallery/AGENTS.md` |
-| `DotCharter.Tests` | xUnit on Microsoft.Testing.Platform. The default gate is ~21,900 cases (21,927 on 2026-10-21; the gate wrapper prints the live count); the release lane (`tools/ci/release-lane.json`) adds ~120; `UiPerfSmokeTests` run as a SEPARATE invocation (see Validation) |
+| `DotCharter.Tests` | xUnit on Microsoft.Testing.Platform. Native discovery lists 16,961 default items and 58 release items (deferred theories count once) (`tools/ci/release-lane.json`); the gate wrapper prints live runtime counts, including fixture-dependent rows; `UiPerfSmokeTests` run as a SEPARATE invocation (see Validation) |
 | `JuceSharp/` | **Git submodule** ([SomeeName/JuceSharp](https://github.com/SomeeName/JuceSharp), private). C# wrapper + native C++ engine. See `JuceSharp/src/JuceSharp/README.md` |
 
 Dependency direction (bottom → top): `Core` → { `Analysis`, `Rendering`,
@@ -126,8 +159,10 @@ CI 2, `tools/ci/GateShards.psm1`): shards 1..N-1 run explicit class lists from
 every listed class, so the shards are the gate's case set exactly — a new class
 runs in that remainder. `Invoke-Gate.ps1 -SelfTest` proves it against the
 runner's listing; `-Shards 1` is the one-process run above. `-Gate -Headless`
-runs both suites AT ONCE when `-MinFreeGB` (12) is free, else one after the
-other. After the gate the 20 slowest classes are printed and every class's
+(and `-ReleaseLane` with them) runs the lanes AT ONCE when `-MinFreeGB` (12) per
+two lanes is free, else one after the other; together they share `-Shards`
+testhosts per lane, dealt by `tools/ci/lane-weights.json` (#325,
+`GateShards.psm1` `Get-LaneShardCounts`). After the gate the 20 slowest classes are printed and every class's
 duration lands in `gate-durations.json` beside `gate.trx`.
 **CPUs (#171).** `Invoke-Gate.ps1` and `Merge-Train.ps1` pin themselves at
 below-normal priority on CPUs 8-15 (the owner games on 0-7); there is no game
@@ -155,8 +190,9 @@ live-detection harnesses, the native-engine tone fidelity checks), each with the
 reason it is not a per-change check. `Invoke-Gate.ps1 -Gate` and a plain
 `dotnet test` leave them out; `Invoke-Gate.ps1 -ReleaseLane` runs exactly them,
 sharded the same way (`-Gate -ReleaseLane` = both, the old full set). **It is
-never dropped:** `Merge-Train.ps1` runs it after a green gate on every train that
-is not docs-only (and records it), `New-Release.ps1` runs it in preflight with no
+never dropped:** `Merge-Train.ps1` runs it beside the gate (and the headless
+suite) on every train that is not docs-only, in one Release-build call (#325),
+and records it, `New-Release.ps1` runs it in preflight with no
 skip switch (it reuses only a green record of the same tree, `-ForceReleaseLane`
 re-runs), and CI's test job passes `-ReleaseLane`.
 `Infrastructure/ReleaseLaneLintTests` replays every lane's real shard plans over

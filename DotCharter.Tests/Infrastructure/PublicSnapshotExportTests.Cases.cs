@@ -22,6 +22,14 @@ public sealed partial class PublicSnapshotExportTests
         [Fact]
         public void ReleasePreflight_RefusesAnUnbumpedJuceSharp()
             => ReleasePreflight_RefusesAChangedJuceSharpUnderItsPublicVersion();
+
+        [Fact]
+        public void ReleasePreflight_RunsInsideAPublicSnapshotTree()
+            => ReleasePreflight_FindsTheSnapshotsOwnJuceSharpStore();
+
+        [Fact]
+        public void ReleasePreflight_ReadsALinkedWorktreesOwnHead()
+            => ReleasePreflight_ResolvesTheRefInTheWorktree();
     }
 
     /// <summary>The kept work tree, with its build outputs parked while the scans run.</summary>

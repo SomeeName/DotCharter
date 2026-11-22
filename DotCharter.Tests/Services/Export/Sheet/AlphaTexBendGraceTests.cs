@@ -12,7 +12,7 @@ namespace DotCharter.Tests.Services.Export.Sheet;
 /// <c>b (v0 v1 …)</c> quarter-step values (4 = whole tone, parser-verified);
 /// grace hints (<see cref="GuitarNote.GraceFret"/>) emit a 16th before-beat
 /// grace beat that consumes no bar time. All verified through the bundled
-/// AlphaTab 1.8.3 parser — the same one that renders the sheet.
+/// AlphaTab 1.9.0 parser — the same one that renders the sheet.
 /// </summary>
 [Collection("AlphaTab")]
 public class AlphaTexBendGraceTests

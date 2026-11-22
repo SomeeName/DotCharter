@@ -91,8 +91,8 @@ public static class PhraseCatalogFragment
         foreach (var chord in chordList)
         {
             chord.TemplateId = ResolveFrom(fragmentArrangement, source, chord.TemplateId, created)?.Id
-                               ?? ResolveMinting(fragmentArrangement, ChordTemplateResolver.FretsOf(chord),
-                                   ArpeggioFlavour.Plain, null, null, created).Id;
+                               ?? ChordTemplateResolver.Resolve(fragmentArrangement, ChordTemplateResolver.FretsOf(chord),
+                                   ArpeggioFlavour.Plain, null, created).Id;
         }
 
         foreach (var handShape in handShapeList.ToList())
@@ -115,6 +115,7 @@ public static class PhraseCatalogFragment
                 }
 
                 handShape.TemplateId = inner.TemplateId;
+                handShape.GhostMask = null;
                 continue;
             }
 
@@ -223,41 +224,10 @@ public static class PhraseCatalogFragment
     private static ChordTemplate? ResolveFrom(
         Arrangement fragment, Arrangement source, int sourceTemplateId, IList<ChordTemplate> created)
     {
-        var sourceTemplate = ChordTemplateResolver.FindById(source, sourceTemplateId);
+        var sourceTemplate = source.FindChordTemplate(sourceTemplateId);
         return sourceTemplate == null
             ? null
-            : ResolveMinting(fragment, sourceTemplate.Frets, ArpeggioFlavour.Of(sourceTemplate), sourceTemplate.Name,
-                sourceTemplate.Fingers, created);
-    }
-
-    /// <summary>
-    ///     Find-or-create in the fragment, preserving the source template's
-    ///     AUTHORED fingering when a template actually has to be minted.
-    ///     <c>ChordTemplateResolver</c> re-suggests fingers for every new template
-    ///     (it is a pure function of the shape), which would throw away a
-    ///     hand-authored or GP-imported fingering the phrase was captured with.
-    ///     Overwriting is safe here and ONLY here: a just-minted template is still
-    ///     private to <paramref name="created" /> and backs nothing. When the shape
-    ///     was already resolved, the existing template wins — the same
-    ///     "first fingering a shape is seen with wins" rule the import path uses.
-    /// </summary>
-    private static ChordTemplate ResolveMinting(
-        Arrangement fragment,
-        IReadOnlyDictionary<int, int> frets,
-        ArpeggioFlavour arpeggio,
-        string? preferredName,
-        IReadOnlyDictionary<int, int>? preferredFingers,
-        IList<ChordTemplate> created)
-    {
-        var before = created.Count;
-        var template = ChordTemplateResolver.Resolve(fragment, frets, arpeggio, preferredName, created);
-        if (created.Count > before && preferredFingers is { Count: > 0 })
-        {
-            template.Fingers.Clear();
-            foreach (var (stringIndex, finger) in preferredFingers) template.Fingers[stringIndex] = finger;
-        }
-
-        return template;
+            : ChordTemplateResolver.ResolveAuthored(fragment, sourceTemplate, created);
     }
 
     private static FractionalPosition Origin(

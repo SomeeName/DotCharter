@@ -55,6 +55,45 @@ public sealed class LinkDialogsUiPerfSmokeTests
     }
 
     [Fact]
+    public async Task TheManagerOpensWhileDetectionRunsOnAWorker()
+    {
+        using var entered = new ManualResetEventSlim();
+        var ranOnUi = false;
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancellation = TestContext.Current.CancellationToken;
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var (edit, _) = Edit();
+            var vm = new LinkGroupsViewModel(edit, (_, _, token, _) =>
+            {
+                ranOnUi = Dispatcher.UIThread.CheckAccess();
+                entered.Set();
+                if (!ranOnUi) WaitHandle.WaitAny([token.WaitHandle, cancellation.WaitHandle]);
+                stopped.TrySetResult();
+                return [];
+            });
+
+            WithOpenDialog<ILinkGroupsScreen, bool>(() =>
+            {
+                vm.Configure(new LinkGroupsRequest([]));
+                return vm;
+            }, view =>
+            {
+                entered.Wait(cancellation);
+                Assert.False(ranOnUi);
+                AssertLaidOut("detecting", view, "LinkDetectionProgress", "LinkDetectionCancel");
+                Assert.False(stopped.Task.IsCompleted);
+                var cancelButton = Assert.Single(view.GetVisualDescendants().OfType<Button>(), b => b.Name == "LinkDetectionCancel");
+                Assert.Same(vm.CancelDetectionCommand, cancelButton.Command);
+                cancelButton.Command!.Execute(cancelButton.CommandParameter);
+                Assert.False(vm.Result.IsCompleted);
+            });
+        }, cancellation);
+
+        await stopped.Task.WaitAsync(cancellation);
+    }
+
+    [Fact]
     public async Task TheRealSummary_ShowsItsLines_AndLaysOut()
     {
         await HeadlessSessionFixture.Dispatch(() =>
@@ -86,8 +125,12 @@ public sealed class LinkDialogsUiPerfSmokeTests
             Assert.True(managers.Count >= 3 && summaries.Count >= 3);
             foreach (var variant in managers)
             {
-                WithOpenDialog<ILinkGroupsScreen, bool>(() => (ILinkGroupsScreen)variant.Create(),
-                    view => AssertLaidOut(variant.Name, view));
+                WithOpenDialog<ILinkGroupsScreen, bool>(() => (ILinkGroupsScreen)variant.Create(), view =>
+                {
+                    if (variant.Name == FakeVariantNames.Error)
+                        AssertLaidOut(variant.Name, view, "LinkDetectionStatus", "LinkDetectionRetry");
+                    else AssertLaidOut(variant.Name, view);
+                });
             }
 
             foreach (var variant in summaries)

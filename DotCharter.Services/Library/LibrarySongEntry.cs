@@ -11,12 +11,12 @@ public sealed class LibrarySongEntry
 
     /// <summary>CDLC charter — the "Package Author" from the archive's
     /// toolkit.version stamp. Empty for the base game / un-stamped archives.
-    /// Part of the shared-leaderboard identity so two charters' cuts of the
+    /// Part of the library song identity so two charters' cuts of the
     /// same SongKey get distinct boards.</summary>
     public string Charter { get; init; } = "";
 
     /// <summary>CDLC package version — the "Package Version" from
-    /// toolkit.version. Empty when un-stamped. Part of the leaderboard
+    /// toolkit.version. Empty when un-stamped. Part of the library
     /// identity so re-charted/updated builds don't share a board with the
     /// old cut.</summary>
     public string Version { get; init; } = "";

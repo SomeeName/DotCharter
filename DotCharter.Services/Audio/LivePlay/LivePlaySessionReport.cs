@@ -95,10 +95,14 @@ public readonly record struct RunBestComparison(
     /// then refused to keep.
     /// </para></summary>
     public static RunBestComparison Evaluate(long runScore, double runAccuracy, double runCoverage,
-        PracticeBests previousBest, bool hadPriorRun)
+        PracticeBests previousBest, bool hadPriorRun, double runSpeedPercent = 100)
     {
         if (!hadPriorRun)
             return new RunBestComparison(RunBestOutcome.FirstRun, runScore, 0, ImprovedAccuracy: false);
+
+        // A slowed run never raises a stored best, so it never reads as one.
+        if (runSpeedPercent < PracticeProfileService.MinSpeedPercentForBests)
+            return new RunBestComparison(RunBestOutcome.BelowBest, runScore, previousBest.BestScore, ImprovedAccuracy: false);
 
         var outcome = runScore > previousBest.BestScore ? RunBestOutcome.NewBest
             : runScore == previousBest.BestScore ? RunBestOutcome.MatchedBest
@@ -187,7 +191,7 @@ public sealed record LivePlaySessionReport(
     /// stands"). Uses <see cref="HadPriorRun"/> so a genuine first run is not
     /// confused with a prior run that scored zero.</summary>
     public RunBestComparison Comparison =>
-        RunBestComparison.Evaluate(Result.Score, Result.Accuracy, Result.Coverage, Before, HadPriorRun);
+        RunBestComparison.Evaluate(Result.Score, Result.Accuracy, Result.Coverage, Before, HadPriorRun, Result.SpeedPercent);
 
     /// <summary>First section with the worst accuracy that was actually
     /// played — where the editor bridge drops the user.</summary>

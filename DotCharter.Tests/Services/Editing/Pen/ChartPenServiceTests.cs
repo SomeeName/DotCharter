@@ -359,6 +359,44 @@ public sealed class ChartPenServiceTests
     // === Esc ==================================================================
 
     [Fact]
+    public void ChangingTheMaskStartsANewTypingRunOnTheSameChord()
+    {
+        var h = new Harness();
+        var chord = h.AddChord(2, -1, (0, 5), (1, 7));
+        h.Selection.SelectedChords.Add(chord);
+        h.State.StringEditMask = StringEditMask.FromStrings(0);
+        h.Pen.TypeFretDigit(1, Divisor);
+
+        h.State.StringEditMask = StringEditMask.FromStrings(1);
+        h.Pen.TypeFretDigit(2, Divisor);
+
+        Assert.Equal(new[] { 1, 2 }, chord.ChordNotes.Select(n => n.Fret));
+        h.History.Undo();
+        Assert.Equal(new[] { 1, 7 }, chord.ChordNotes.Select(n => n.Fret));
+        h.History.Undo();
+        Assert.Equal(new[] { 5, 7 }, chord.ChordNotes.Select(n => n.Fret));
+    }
+
+    [Fact]
+    public void AddingAnotherTargetStartsANewRunEvenWhenTheFirstTargetIsUnchanged()
+    {
+        var h = new Harness();
+        var first = h.AddNote(2, 1, 3);
+        var second = h.AddNote(4, 1, 5);
+        h.Selection.SelectedNotes.Add(first);
+        h.Pen.TypeFretDigit(1, Divisor);
+
+        h.Selection.SelectedNotes.Add(second);
+        h.Pen.TypeFretDigit(2, Divisor);
+
+        Assert.Equal(2, first.Fret);
+        Assert.Equal(2, second.Fret);
+        h.History.Undo();
+        Assert.Equal(1, first.Fret);
+        Assert.Equal(5, second.Fret);
+    }
+
+    [Fact]
     public void EscapeRevertsTheInProgressEntry()
     {
         var h = new Harness();

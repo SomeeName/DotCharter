@@ -46,6 +46,30 @@ public sealed class DiTakeTests : IDisposable
     }
 
     [Fact]
+    public void AChangedCaptureRate_StopsAppendingAndKeepsTheOriginalWavRate()
+    {
+        var engine = new FakeReampEngine { ReampSampleRate = 44100 };
+        var path = Path.Combine(_dir, "rate-change.wav");
+        using var rec = new DiTakeRecorder(engine);
+        Assert.True(rec.Start(path));
+        engine.Capture(100);
+        rec.Poll();
+
+        engine.ReampSampleRate = 48000;
+        engine.Capture(200);
+        Assert.Equal(0, rec.Poll());
+        // Even returning to the original rate cannot resume this recording.
+        engine.ReampSampleRate = 44100;
+        engine.Capture(300);
+        Assert.Equal(0, rec.Poll());
+        Assert.Equal(path, rec.Stop());
+
+        var wav = WavIo.Read(path);
+        Assert.Equal(44100, wav.SampleRate);
+        Assert.Equal(100, wav.FrameCount);
+    }
+
+    [Fact]
     public void AReaderThatFallsARingBehind_WritesTheHoleAsSilence_AndKeepsTheTiming()
     {
         var engine = new FakeReampEngine();

@@ -1,4 +1,4 @@
-// InspectorViewModel: the two BendEditorViewModel factories and the chord-bend target rebuild - every bend write goes through the same undoable mutation funnel.
+// InspectorViewModel: the two BendEditorViewModel factories and the chord-bend target rebuild - every bend edit stages on the Bends page and the footer's Apply writes it.
 
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -70,68 +70,13 @@ public partial class InspectorViewModel
         OnPropertyChanged(nameof(ChordBendStringPosition));
     }
 
-    // --- Bend editor factories ---
-    //
-    // The editor needs a reader for the current BendValues, a writer that
-    // replaces them atomically, a pair of "start / end position" getters
-    // for slot projection, and a commit callback. All writes go through
-    // ApplyNoteMutation / ApplyChordMutation so the full bend-value list
-    // swap is part of a single undoable action.
+    // --- Bend editor factories: a curve edit STAGES on the Bends page; the footer's Apply writes it ---
 
-    private BendEditorViewModel BuildNoteBendEditor(GuitarNote note)
-    {
-        return new BendEditorViewModel(
-            () => note.BendValues.ToList(),
-            values =>
-            {
-                ApplyNoteMutation(n =>
-                {
-                    n.BendValues.Clear();
-                    foreach (var v in values)
-                        n.BendValues.Add(new BendValue(v.Position, v.Step));
-                });
-            },
-            () => note.Position,
-            () => note.EndPosition,
-            () =>
-            {
-                /* writer already pushed to history */
-            });
-    }
+    private BendEditorViewModel BuildNoteBendEditor(GuitarNote note) =>
+        Staged.Bends.BuildEditor(note, null, () => note.Position, () => note.EndPosition);
 
-    /// <summary>
-    ///     A chord's curve is written through <see cref="ApplyChordMutation" />, so it follows the
-    /// "Apply to" ladder pinned over the Bends section exactly as a technique does: the
-    ///     rung's chords on every level, one undo node. A bend is per string, and the picker's string
-    ///     is its mask: the curve lands on that STRING (by index) of every target chord, and a target
-    ///     that does not play it is left alone.
-    /// </summary>
-    private BendEditorViewModel BuildChordBendEditor(Chord chord, ChordNote target)
-    {
-        var stringIdx = target.StringIndex;
-        return new BendEditorViewModel(
-            () => target.BendValues.ToList(),
-            values => ApplyChordMutation(ChordBendWrite(stringIdx, values)),
-            () => chord.Position,
-            () => chord.Position + target.Sustain,
-            () => { });
-    }
-
-    /// <summary>
-    ///     What one chord-bend commit does to each chord it reaches: replaces the curve on the
-    ///     string at <paramref name="stringIndex" />, and on no other; a chord without that string
-    ///     is left as it is. Pure, so the default gate writes it per rung through the inspector's
-    ///     own builder (<c>ChordBendApplyToTests</c>).
-    /// </summary>
-    internal static Action<Chord> ChordBendWrite(int stringIndex, IReadOnlyList<BendValue> values)
-    {
-        return chord =>
-        {
-            var note = chord.ChordNotes.FirstOrDefault(n => n.StringIndex == stringIndex);
-            if (note == null) return;
-            note.BendValues.Clear();
-            foreach (var v in values)
-                note.BendValues.Add(new BendValue(v.Position, v.Step));
-        };
-    }
+    /// <summary>A chord's curve is drawn on the picked STRING; Apply lands it on that string of every chord the "Apply
+    /// to" rung reaches (a chord without it is passed by), remapped onto each one's onset and sustain.</summary>
+    private BendEditorViewModel BuildChordBendEditor(Chord chord, ChordNote target) =>
+        Staged.Bends.BuildEditor(chord, target.StringIndex, () => chord.Position, () => chord.Position + target.Sustain);
 }

@@ -57,9 +57,22 @@ public sealed class StemMixerWaveformBalanceTests : IDisposable
         Assert.All(mixed, v => Assert.Equal(0.6f, v, 3));
     }
 
+    [Theory]
+    [InlineData(1000)]
+    [InlineData(-4)]
+    public async Task ASoloedStem_WaveformFollowsItsPersistedOffset(double offsetMs)
+    {
+        var mixed = await DrawnMixAsync(songVolume: 1.0, offsetMs, solo: true);
+        var expected = offsetMs > 0
+            ? Enumerable.Repeat(0f, 500).Concat([0.2f, 0.4f, 0.6f, 0.8f]).ToArray()
+            : [0.6f, 0.8f];
+
+        Assert.Equal(expected, mixed);
+    }
+
     // ---- fixtures -----------------------------------------------------------
 
-    private async Task<float[]> DrawnMixAsync(double songVolume)
+    private async Task<float[]> DrawnMixAsync(double songVolume, double offsetMs = 0, bool solo = false)
     {
         var dir = Path.Combine(_root, songVolume.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
         Directory.CreateDirectory(Path.Combine(dir, "stems"));
@@ -74,12 +87,14 @@ public sealed class StemMixerWaveformBalanceTests : IDisposable
             Path = Path.Combine("stems", "drums.wav"),
             Local = true,
             Volume = 1.0,
-            Muted = false
+            Muted = false,
+            Offset = offsetMs,
+            Solo = solo
         });
 
         var file = WaveformSamples.FromBasePeaks([0.4f, 0.4f, 0.4f, 0.4f],
             WaveformSamples.GenerationBlockMs);
-        var stem = WaveformSamples.FromBasePeaks([0.2f, 0.2f, 0.2f, 0.2f],
+        var stem = WaveformSamples.FromBasePeaks(solo ? [0.2f, 0.4f, 0.6f, 0.8f] : [0.2f, 0.2f, 0.2f, 0.2f],
             WaveformSamples.GenerationBlockMs);
 
         var audio = new FakeAudioPlaybackService { SongVolume = songVolume, WaveformResult = stem };
@@ -92,12 +107,13 @@ public sealed class StemMixerWaveformBalanceTests : IDisposable
         };
 
         var coordinator = new StemWaveformCoordinator(audio, state);
-        var vm = new StemMixerViewModel(state, audio, FakeLocalization.KeysOnly(), ui: ui, waveform: coordinator);
+        using var vm = new StemMixerViewModel(state, audio, FakeLocalization.KeysOnly(), ui: ui, waveform: coordinator);
 
         await StemMixerSettle.Async(() =>
         {
             var tracks = ui.Snapshot(vm);
-            return tracks.Any(t => t.IsMasterMix) && tracks.Any(t => t.Name == "drums");
+            return tracks.Any(t => t.IsMasterMix) && tracks.Any(t => t.Name == "drums") &&
+                   ui.Read(() => !vm.IsRebuilding);
         });
 
         ui.Read(() => vm.WaveformFollowsMix = true);

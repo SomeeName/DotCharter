@@ -73,10 +73,11 @@ public static class RscpFormatContract
         // --- DotCharter additive extensions (dc*) ---
         WriterVersionElement, ProjectIdElement,
         "dcJapaneseTitle", "dcJapaneseArtist", "dcCharter", "dcGenre",
-        "dcReleaseDate", "dcCoverArt", "dcVersion", "dcBeatMapLocked",
-        "dcKeyAccidentals", "dcKeyIsMinor",
+        "dcReleaseDate", "dcCoverArt", "dcVersion", "dcBeatMapLocked", "dcTitleSort", "dcAlbumSort", "dcDlcKey", "dcPreviewStartMs",
+        "dcAudioVolume", "dcPreviewVolume", "dcAudioVolumeSig", "dcPreviewVolumeSig", "dcAudioVolumeManual", "dcPreviewVolumeManual",
+        "dcKeyAccidentals", "dcKeyIsMinor", "dcKeyLocked",
         "dcAnnotations", "dcToneDefinitions", "dcNotationVoices", "dcSynthPlayStyle",
-        RscpProvenance.ProjectElement, RscpLinkGroups.RootElement
+        RscpProvenance.ProjectElement, RscpLinkGroups.RootElement, RscpGpSource.RootElement
     };
 
     /// <summary>
@@ -126,7 +127,8 @@ public static class RscpFormatContract
         foreach (var element in doc.Root.Elements())
         {
             if (element.Name.Namespace == XNamespace.None &&
-                KnownRootElements.Contains(element.Name.LocalName))
+                KnownRootElements.Contains(element.Name.LocalName) &&
+                (element.Name.LocalName != RscpGpSource.RootElement || RscpGpSource.Recognizes(element)))
             {
                 continue;
             }

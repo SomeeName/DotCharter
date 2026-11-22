@@ -1,4 +1,5 @@
 using DotCharter.Tone.Audio.Dsp;
+using DotCharter.Tone.Audio.Dsp.Presets;
 using DotCharter.Tone.Audio.Dsp.RsToneConversion;
 using DotCharter.Tone.UI.ViewModels.PlayMode;
 
@@ -74,6 +75,34 @@ public sealed class RigMasterBypassTests
         rig.ToggleMasterBypassCommand.Execute(null);
         Assert.False(rig.IsMasterBypassed);
         Assert.All(chain.GetNodes(), n => Assert.False(n.Bypassed));
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void PresetLoadedWhileBypassed_RestoresItsOwnBypassPattern(bool ampBypassed, bool reverbBypassed)
+    {
+        var chain = new FakeDspChainService(Catalog());
+        var presets = new DspTonePresetService(chain, new FakeConfigurationService());
+        using var rig = TestRigBuilders.Pedalboard(chain, presets, FakeLocalization.English());
+        rig.AddGear(Gear(chain, "amp"))!.Bypassed = !ampBypassed;
+        rig.AddGear(Gear(chain, "cab"))!.Bypassed = true;
+        rig.ToggleMasterBypassCommand.Execute(null);
+        var preset = presets.SaveUser("Incoming", DspToneCategory.Clean, string.Empty, new DcRigPreset(
+        [
+            new("amp", new Dictionary<string, float>(), ampBypassed),
+            new("reverb", new Dictionary<string, float>(), reverbBypassed)
+        ]));
+
+        rig.Browser.ApplyPreset(preset);
+        Assert.True(rig.IsMasterBypassed);
+        Assert.All(chain.GetNodes(), n => Assert.True(n.Bypassed));
+        rig.Sync(); // another mirror must not capture the forced master-bypass flags
+        rig.ToggleMasterBypassCommand.Execute(null);
+
+        Assert.Equal(["amp", "reverb"], chain.GetNodes().Select(n => n.ModuleTypeId));
+        Assert.Equal(new[] { ampBypassed, reverbBypassed }, chain.GetNodes().Select(n => n.Bypassed));
     }
 
     /// <summary>A pedal dropped onto a board that is switched OFF joins it switched

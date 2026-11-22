@@ -10,7 +10,7 @@
     parallel with `HeadlessUI`, so an unfiltered run fails ~314 of its 330 cases
     and takes an unrelated gate test down with them (root AGENTS.md
     § Validation). It is display-free and GPU-free, so a plain `windows-latest`
-    runner can host it — this script is what `.github/workflows/build.yml`'s
+    runner can host it - this script is what `.github/workflows/build.yml`'s
     second job calls, and what to run locally after a view/XAML change.
 
     It mirrors `tools/release/New-Release.ps1`'s Invoke-HeadlessUiGate:
@@ -19,12 +19,18 @@
         "You've caused dispatcher loop") never ran its assertions, so its CLASS
         is re-run once in a fresh process; only a real failure blocks.
       * a class the filter DISCOVERS that reports no result at all is re-run the
-        same way, and blocks if it still reports nothing — "0 failed" on a
+        same way, and blocks if it still reports nothing - "0 failed" on a
         223-case run of a 330-case suite has happened and read as green.
       * a real failure's class is re-run once in isolation; a case that passes
-        there is ORDER-DEPENDENT and is printed loudly but does not block.
+        there is ORDER-DEPENDENT and is printed loudly but does not block. Any
+        OTHER case that fails there blocks too.
+      * every process's exit code is graded with its results (#611,
+        HeadlessShards.psm1 Test-HeadlessExitAccepted): a shard that exits
+        non-zero without a failure to show for it has its classes re-run like
+        an absent class, and a retry or isolated process that does the same
+        blocks.
 
-    …and adds the two numbers nobody had measured on a runner: wall time and
+    ...and adds the two numbers nobody had measured on a runner: wall time and
     the testhosts' PEAK working set, written to the step summary when
     `$env:GITHUB_STEP_SUMMARY` is set and always to stdout.
 
@@ -37,7 +43,7 @@
 
 .PARAMETER Configuration
     Build configuration the test assembly was built in (Debug locally, Release
-    in CI). The assembly must already be BUILT — this script passes --no-build.
+    in CI). The assembly must already be BUILT - this script passes --no-build.
 
 .PARAMETER Runtime
     Optional RID (`win-x64`) when the assembly was built with `-r`.
@@ -117,6 +123,7 @@ function Read-TrxResults([string]$TrxPath) {
         Skipped    = [int]$counters.total - [int]$counters.executed
         Failures   = @($failures)
         RanClasses = @($results | ForEach-Object { Get-ClassName ([string]$_.testName) } | Sort-Object -Unique)
+        PassedTests = @($results | Where-Object { $_.outcome -eq 'Passed' } | ForEach-Object { [string]$_.testName })
     }
 }
 
@@ -143,7 +150,7 @@ function Get-DiscoveredTestCounts([string[]]$RunFilter) {
 # The first, full run: $Shards concurrent testhosts, their TRX files merged
 # into one and read exactly like a single run's. A shard that died writes no
 # TRX, so its classes are ABSENT from the merge and the coverage check below
-# re-runs them — a crashed shard can never read as green.
+# re-runs them - a crashed shard can never read as green.
 function Invoke-HeadlessUiShardedRun([string[]]$RunFilter, [string]$Label, [hashtable]$Discovered) {
     $started = Get-Date
     $weights = Read-HeadlessShardWeights (Join-Path $PSScriptRoot 'headless-shard-weights.json')
@@ -159,7 +166,7 @@ function Invoke-HeadlessUiShardedRun([string[]]$RunFilter, [string]$Label, [hash
     $trxPath = Join-Path $ResultsDir "headless-ui-$Label.trx"
     if (Test-Path $trxPath) { Remove-Item $trxPath -Force }
     if (-not (Merge-HeadlessTrx @($runs | ForEach-Object { $_.TrxPath }) $trxPath)) {
-        throw "The headless UI suite produced no results file in ANY shard — the run never started. See $($runs[0].LogPath)."
+        throw "The headless UI suite produced no results file in ANY shard - the run never started. See $($runs[0].LogPath)."
     }
     $results = Read-TrxResults $trxPath
     $peak = if ($runs.Count -gt 0) { [long]$runs[0].PeakSumBytes } else { [long]0 }
@@ -182,13 +189,8 @@ function Invoke-HeadlessUiRun([string[]]$RunFilter, [string]$Label) {
     if (Test-Path $trxPath) { Remove-Item $trxPath -Force }
 
     $started = Get-Date
-    $psi = [System.Diagnostics.ProcessStartInfo]::new()
-    $psi.FileName = 'dotnet'
-    foreach ($a in (Get-DotnetTestArgs $RunFilter $trxName)) { $psi.ArgumentList.Add($a) }
-    $psi.UseShellExecute = $false
-    $psi.RedirectStandardOutput = $true
-    $psi.RedirectStandardError = $true
-    $psi.WorkingDirectory = $RepoRoot
+    # No console window of its own (HeadlessShards.psm1, #611).
+    $psi = New-HeadlessProcessStartInfo 'dotnet' (Get-DotnetTestArgs $RunFilter $trxName) $RepoRoot
     $proc = [System.Diagnostics.Process]::Start($psi)
     $stdout = $proc.StandardOutput.ReadToEndAsync()
     $stderr = $proc.StandardError.ReadToEndAsync()
@@ -205,15 +207,18 @@ function Invoke-HeadlessUiRun([string[]]$RunFilter, [string]$Label) {
     $elapsed = (Get-Date) - $started
 
     if (-not (Test-Path $trxPath)) {
-        throw "The headless UI suite produced no results file — the run never started. See $logPath."
+        throw "The headless UI suite produced no results file - the run never started. See $logPath."
     }
     $results = Read-TrxResults $trxPath
     Add-Member -InputObject $results -NotePropertyName Elapsed -NotePropertyValue $elapsed
     Add-Member -InputObject $results -NotePropertyName PeakRssBytes -NotePropertyValue $peakBytes
     Add-Member -InputObject $results -NotePropertyName LogPath -NotePropertyValue $logPath
     Add-Member -InputObject $results -NotePropertyName TrxPath -NotePropertyValue $trxPath
-    Write-Info ('[{0}] {1} cases: {2} passed, {3} failed, {4} skipped in {5:mm\:ss}; peak testhost RSS {6:0.0} GB' -f `
-        $Label, $results.Total, $results.Passed, $results.Failed, $results.Skipped, $elapsed, ($peakBytes / 1GB))
+    # Graded with the results (Resolve-HeadlessRetry / Resolve-HeadlessIsolatedRun, #611): a
+    # non-zero exit the TRX does not explain is an incomplete run, never a green one.
+    Add-Member -InputObject $results -NotePropertyName ExitCode -NotePropertyValue $proc.ExitCode
+    Write-Info ('[{0}] {1} cases: {2} passed, {3} failed, {4} skipped in {5:mm\:ss}; peak testhost RSS {6:0.0} GB; exit {7}' -f `
+        $Label, $results.Total, $results.Passed, $results.Failed, $results.Skipped, $elapsed, ($peakBytes / 1GB), $proc.ExitCode)
     return $results
 }
 
@@ -233,7 +238,7 @@ $overallStarted = Get-Date
 # Discovery FIRST: it is both the shard plan's input and the coverage check's.
 $discoveredCounts = Get-DiscoveredTestCounts $Filter
 $discovered = @($discoveredCounts.Keys | Sort-Object)
-if ($discovered.Count -eq 0) { throw 'test discovery listed no classes — there is nothing to shard and the coverage check would look at nothing.' }
+if ($discovered.Count -eq 0) { throw 'test discovery listed no classes - there is nothing to shard and the coverage check would look at nothing.' }
 $run = Invoke-HeadlessUiShardedRun -RunFilter $Filter -Label 'run1' -Discovered $discoveredCounts
 $peak = [long]$run.PeakRssBytes
 $product = @($run.Failures | Where-Object { -not $_.IsHarness })
@@ -241,12 +246,15 @@ $harness = @($run.Failures | Where-Object { $_.IsHarness })
 $unverified = @()
 
 $absent = @($discovered | Where-Object { @($run.RanClasses) -notcontains $_ })
+# A shard whose exit its own TRX does not explain (#611) wrote results that may be partial:
+# all its classes are re-run in the fresh retry process, and each must report there.
+$incomplete = @(Get-HeadlessIncompleteClasses $run $discovered | Where-Object { $absent -notcontains $_ })
 # Keep the first run's evidence (#55) before any retry or isolated re-run: the TRX,
 # every failed case's message, stack and stdout, and the shard logs. The workflow
 # uploads this folder as the `headless-failures` artifact when the job fails;
 # DOTCHARTER_HEADLESS_FAILURES_DIR points the module at it, else %TEMP%.
 $evidenceDir = $null
-if ($run.Failed -gt 0 -or $absent.Count -gt 0) {
+if ($run.Failed -gt 0 -or $absent.Count -gt 0 -or $incomplete.Count -gt 0) {
     $evidenceDir = Save-HeadlessFailureEvidence -TrxPath @($run.Shards | ForEach-Object { $_.TrxPath }) `
         -LogPath @($run.Shards | ForEach-Object { $_.LogPath }) -Label 'first-run' -Always
     Write-Info "failure evidence kept: $evidenceDir"
@@ -254,42 +262,44 @@ if ($run.Failed -gt 0 -or $absent.Count -gt 0) {
 if ($absent.Count -gt 0) {
     Write-Warn2 "$($absent.Count) DISCOVERED class(es) reported no result at all: $($absent -join ', ')"
 }
+if ($incomplete.Count -gt 0) {
+    Write-Warn2 "$($incomplete.Count) class(es) ran in a shard whose exit its results do not explain: $($incomplete -join ', ')"
+}
 
-if ($harness.Count -gt 0 -or $absent.Count -gt 0) {
-    $classes = @(@(@($harness | Select-Object -ExpandProperty Class) + $absent) | Sort-Object -Unique)
-    Write-Warn2 ("$($harness.Count) case(s) died inside the Avalonia headless session and $($absent.Count) class(es) " +
-                 "never reported. Re-running $($classes.Count) class(es) in a fresh process.")
+$mustReport = @(@($absent) + @($incomplete))
+if ($harness.Count -gt 0 -or $mustReport.Count -gt 0) {
+    $classes = @(@(@($harness | Select-Object -ExpandProperty Class) + $mustReport) | Sort-Object -Unique)
+    Write-Warn2 ("$($harness.Count) case(s) died inside the Avalonia headless session and $($mustReport.Count) class(es) " +
+                 "never reported or ran in a shard that did not end cleanly. Re-running $($classes.Count) class(es) in a fresh process.")
     $retry = Invoke-HeadlessUiRun -RunFilter (Join-ClassFilter $classes) -Label 'retry'
     if ($retry.PeakRssBytes -gt $peak) { $peak = $retry.PeakRssBytes }
     if ($retry.Failed -gt 0 -and $evidenceDir) { $null = Save-HeadlessFailureEvidence -TrxPath @($retry.TrxPath) -LogPath @($retry.LogPath) -Label 'retry' -Folder $evidenceDir }
-    $product += @($retry.Failures | Where-Object { -not $_.IsHarness })
-    $unverified = @($retry.Failures | Where-Object { $_.IsHarness } | Select-Object -ExpandProperty Name)
-    $stillAbsent = @($absent | Where-Object { @($retry.RanClasses) -notcontains $_ })
-    foreach ($class in $stillAbsent) {
-        $product += [pscustomobject]@{
-            Name = $class; Class = $class; Frame = ''; IsHarness = $false
-            Message = 'DISCOVERED but never executed, in the full run AND in its own retry process. Nothing in this class was graded.'
-        }
-    }
+    $graded = Resolve-HeadlessRetry $retry $harness $mustReport
+    $product += @($graded.Product)
+    $unverified += @($graded.Unverified)
 }
 
 $orderDependent = @()
-$orderCandidates = @($product | Where-Object { $_.Frame -ne '' -or $_.Class -ne $_.Name })
+$orderCandidates = @(Get-HeadlessIsolationCandidates $product)
 if ($orderCandidates.Count -gt 0) {
     $classes = @($orderCandidates | Select-Object -ExpandProperty Class | Sort-Object -Unique)
     Write-Warn2 "$($orderCandidates.Count) case(s) FAILED their assertions. Re-running $($classes.Count) class(es) in isolation."
     $isolated = Invoke-HeadlessUiRun -RunFilter (Join-ClassFilter $classes) -Label 'isolated'
     if ($isolated.PeakRssBytes -gt $peak) { $peak = $isolated.PeakRssBytes }
     if ($isolated.Failed -gt 0 -and $evidenceDir) { $null = Save-HeadlessFailureEvidence -TrxPath @($isolated.TrxPath) -LogPath @($isolated.LogPath) -Label 'isolated' -Folder $evidenceDir }
-    $isolatedFailed = @($isolated.Failures | Select-Object -ExpandProperty Name)
-    $orderDependent = @($orderCandidates | Where-Object {
-        (@($isolated.RanClasses) -contains $_.Class) -and ($isolatedFailed -notcontains $_.Name) })
+    # Every isolated failure joins the blocking set, not only the candidates' (#611).
+    $graded = Resolve-HeadlessIsolatedRun $product $isolated
+    $orderDependent = @($graded.OrderDependent)
+    $product = @($graded.Product)
+    $unverified += @($graded.Unverified)
     if ($orderDependent.Count -gt 0) {
         $names = @($orderDependent | Select-Object -ExpandProperty Name)
-        Write-Warn2 ("$($names.Count) case(s) passed in a fresh process and are ORDER-DEPENDENT in the full run — " +
+        Write-Warn2 ("$($names.Count) case(s) passed in a fresh process and are ORDER-DEPENDENT in the full run - " +
                      "not blocking, but a class earlier in the run leaves state behind: $($names -join ', ')")
-        $product = @($product | Where-Object { $names -notcontains $_.Name })
     }
+}
+if ($unverified.Count -gt 0) {
+    Write-Warn2 "$($unverified.Count) case(s) hit a harness fault again and are UNVERIFIED: $($unverified -join ', ')"
 }
 
 $overallElapsed = (Get-Date) - $overallStarted
@@ -305,6 +315,7 @@ $summary = @(
     ("| per shard (classes / wall / peak RSS) | {0} |" -f (@($run.Shards | ForEach-Object { '{0} / {1:mm\:ss} / {2:0.0} GB' -f $_.Classes.Count, $_.Elapsed, ($_.PeakBytes / 1GB) }) -join '; ')),
     ("| session-race cases | {0} (re-run: {1} still unverified) |" -f $harness.Count, $unverified.Count),
     ("| classes absent from the first run | {0} |" -f $absent.Count),
+    ("| classes from a shard that did not end cleanly | {0} |" -f $incomplete.Count),
     ("| order-dependent (non-blocking) | {0} |" -f $orderDependent.Count),
     ("| BLOCKING product failures | {0} |" -f $product.Count)
 )

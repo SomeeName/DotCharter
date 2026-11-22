@@ -2,6 +2,65 @@ namespace DotCharter.Tests.Services.Editing;
 
 public class ClipboardServiceTests
 {
+    [Fact]
+    public void MarkerCopiesPreserveEveryFieldAndRemainIndependentAcrossPastes()
+    {
+        var marker = DomainFieldProbe.Populated<EventPoint>();
+        var original = DomainFieldProbe.Populated<EventPoint>();
+        var clipboard = new ClipboardService(new FakeAppLogger());
+        clipboard.Copy([], [], [], [marker], [], []);
+        marker.Events = "changed after copy";
+        marker.Status = SectionStatus.Done;
+
+        var payload = clipboard.GetPastedData(new FractionalPosition(12));
+        Assert.NotNull(payload);
+        var first = Assert.Single(payload.EventPoints);
+        var expected = DomainFieldProbe.Populated<EventPoint>();
+        expected.Position = new FractionalPosition(12);
+        Assert.Empty(DeepCompare.Diff("marker", expected, first, new HashSet<string>()));
+        Assert.NotSame(marker, first);
+        first.Events = "changed after paste";
+        first.Status = SectionStatus.Done;
+
+        var secondPayload = clipboard.GetPastedData(original.Position);
+        Assert.NotNull(secondPayload);
+        var second = Assert.Single(secondPayload.EventPoints);
+        Assert.Empty(DeepCompare.Diff("marker", original, second, new HashSet<string>()));
+        Assert.NotSame(first, second);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(10)]
+    public void PasteTranslatesBendsWithoutChangingTheReusablePayload(int target)
+    {
+        var source = new ClipboardPayload
+        {
+            BasePosition = new FractionalPosition(4),
+            Notes = [new GuitarNote
+            {
+                Position = new FractionalPosition(4),
+                BendValues = { new BendValue { Position = new FractionalPosition(5), Step = 2 } }
+            }],
+            Chords = [new Chord
+            {
+                Position = new FractionalPosition(6),
+                ChordNotes = { new ChordNote
+                {
+                    BendValues = { new BendValue { Position = new FractionalPosition(7), Step = 1 } }
+                } }
+            }]
+        };
+        for (var i = 0; i < 2; i++)
+        {
+            var pasted = source.ShiftedTo(new FractionalPosition(target));
+            Assert.Equal(new FractionalPosition(target + 1), Assert.Single(pasted.Notes[0].BendValues).Position);
+            Assert.Equal(new FractionalPosition(target + 3), Assert.Single(pasted.Chords[0].ChordNotes[0].BendValues).Position);
+        }
+        Assert.Equal(new FractionalPosition(5), source.Notes[0].BendValues[0].Position);
+        Assert.Equal(new FractionalPosition(7), source.Chords[0].ChordNotes[0].BendValues[0].Position);
+    }
+
     private static GuitarNote Note(int beatId, int stringIdx = 0, int fret = 5) => new() { Position = new FractionalPosition(beatId), StringIndex = stringIdx, Fret = fret };
 
     [Fact]

@@ -46,7 +46,7 @@ public sealed class TemplatePinReachabilityTests
         ["DotCharter.Services/Ai/Chart/AiChartPrompt.cs"] = "reads the free grips to describe them; FreeGripResolver asks IsPinned",
         ["DotCharter.Services/Editing/FretAnchors/ImportFhpPass.cs"] = "delegates to FollowAuthored and FreeGripResolver, which ask IsPinned",
         ["DotCharter.Services/Editing/Maintenance/FhpGenerationCommands.cs"] = "Generate FHP: delegates to FreeGripResolver, which asks IsPinned",
-        ["DotCharter.UI/ViewModels/Panels/ChordTemplateEditorViewModel.cs"] = "the display seed of an UNTEMPLATED chord, a probe never added"
+        ["DotCharter.UI/ViewModels/Panels/ChordDisplayTemplates.cs"] = "the display seed of an UNTEMPLATED chord, a probe never added"
     };
 
     private static readonly Regex Verb = new(

@@ -1,4 +1,5 @@
 ﻿// ReSharper disable InconsistentNaming -- private static color channel fields use _camelCase to pair with same-named public PascalCase properties.
+using Avalonia;
 using Avalonia.Media;
 using DotCharter.Rendering.Data.Render;
 using DotCharter.Rendering.Timeline2D;
@@ -75,16 +76,15 @@ public class FretAnchorLayer : ITimelineRenderLayer
         // viewport while the anchor extends off-screen, and slide it out with
         // the anchor's END rather than hanging it over the next anchor's chip
         // (StickyLabel).
-        var chipW = Math.Max(tw + 10f, ChipHeight);
-        var chipX = Math.Max(x,
-            StickyLabel.PinnedX(ChartEditorConstants.RenderMetrics.ActiveLabelFixedX - 1f, chipW,
-                x + w + StickyLabel.PushGapPx - 1f));
+        var head = GetHeadBounds(x, endX, y, tw);
+        var chipW = (float)head.Width;
+        var chipX = (float)head.X;
         if (!StickyLabel.IsVisible(chipX, chipW)) return;
 
         // THE FRET: an opaque amber chip with anti-aliased corners and dark
         // text — the section / phrase chips' language, one size smaller. A
         // selected anchor wears the same outside ring they do.
-        var chipY = midY - ChipHeight * 0.5f;
+        var chipY = (float)head.Y;
         var chipText = Color.FromArgb((byte)(255 * alphaMul), 24, 18, 6);
         if (isPreview)
         {
@@ -109,12 +109,30 @@ public class FretAnchorLayer : ITimelineRenderLayer
         batcher.AddText(txt, chipX + (chipW - tw) * 0.5f, midY, chipText, centerY: true);
     }
 
+    /// <summary>The badge's drawn bounds, or the unlabelled marker with its minimum pointer width.</summary>
+    internal static Rect GetHeadBounds(float startX, float endX, float rowY, float? textWidth)
+    {
+        if (!textWidth.HasValue)
+        {
+            return new Rect(startX, rowY + (ChartEditorConstants.RenderMetrics.AnchorTailHeight - TickHeight) * 0.5f,
+                MinHitWidth, TickHeight);
+        }
+        var width = Math.Max(textWidth.Value + 10f, ChipHeight);
+        var spanWidth = Math.Max(endX - startX, 18f);
+        var x = Math.Max(startX,
+            StickyLabel.PinnedX(ChartEditorConstants.RenderMetrics.ActiveLabelFixedX - 1f, width,
+                startX + spanWidth + StickyLabel.PushGapPx - 1f));
+        var y = rowY + (ChartEditorConstants.RenderMetrics.AnchorTailHeight - ChipHeight) * 0.5f;
+        return new Rect(x, y, width, ChipHeight);
+    }
+
     /// <summary>The span's track: thin enough to read as a range, not a bar.</summary>
     internal const float TrackHeight = 3f;
 
     /// <summary>The gap a span leaves before the next anchor starts.</summary>
     internal const float SpanGap = 3f;
 
+    internal const float MinHitWidth = 15f;
     internal const float TickHeight = 10f;
     internal const float ChipHeight = 14f;
     internal const float ChipRadius = 4f;

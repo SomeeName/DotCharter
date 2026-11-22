@@ -8,7 +8,6 @@ using DotCharter.Localization;
 using DotCharter.Presentation.Fakes.Editor;
 using DotCharter.Presentation.Screens.Editor;
 using DotCharter.Tone.Ai;
-using DotCharter.Services.Ai.Chart;
 using DotCharter.Services.Ai.Chat;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.UI.Views.Editor;
@@ -53,6 +52,33 @@ public sealed class AiChatPaneConstructionUiPerfSmokeTests
         }
     }
 
+    /// <summary>#478: the arrangement button opens its flyout: "All arrangements" and one checkbox per arrangement realize and measure non-zero.</summary>
+    [Fact]
+    public Task ArrangementFlyout_OpensWithOneCheckBoxPerRow() =>
+        HeadlessSessionFixture.Dispatch(() =>
+        {
+            var screen = FakeAiChatScreen.Variants[0].Create();
+            var view = new AiChatPaneView { DataContext = screen };
+            var window = NarrowWidthLayout.NewWindow(340, PaneHeight, view);
+            window.Show();
+            try
+            {
+                NarrowWidthLayout.Settle(window);
+                var button = NarrowWidthLayout.Named<Button>(view, "AiChatArrangement");
+                button.Flyout!.ShowAt(button);
+                NarrowWidthLayout.Settle(window);
+                NarrowWidthLayout.Capture(window, "ai-chat-arrangement-flyout");
+                var list = window.GetVisualDescendants().OfType<ItemsControl>().Single(i => i.Name == "AiChatArrangementList");
+                var boxes = list.GetVisualDescendants().OfType<CheckBox>().ToList();
+                Assert.Equal(screen.ArrangementPicker.Choices.Count, boxes.Count);
+                Assert.All(boxes, b => Assert.True(b.Bounds is { Width: > 1, Height: > 1 }, $"a row laid out as {b.Bounds}"));
+            }
+            finally
+            {
+                window.Close();
+            }
+        }, CancellationToken.None);
+
     [Theory]
     [MemberData(nameof(VariantsAtWidths))]
     public Task EveryFakeVariant_LaysOutInsideTheDock(string variant, double width) =>
@@ -76,6 +102,12 @@ public sealed class AiChatPaneConstructionUiPerfSmokeTests
                 AssertLaidOut(view, "AiChatJob", at);
                 AssertLaidOut(view, "AiChatScope", at);
                 AssertLaidOut(view, "AiChatArrangement", at);
+                AssertLaidOut(view, "AiChatArrangementText", at);
+                Assert.Equal(screen.ArrangementPicker.PickerText, NarrowWidthLayout.Named<TextBlock>(view, "AiChatArrangementText").Text);
+                // The closed pickers clip long labels at 340 px: each carries its full selected text as a tooltip.
+                AssertClosedPickerTip(view, "AiChatJob", screen.SelectedJob!.Label, at);
+                AssertClosedPickerTip(view, "AiChatScope", screen.SelectedScope!.Label, at);
+                AssertClosedPickerTip(view, "AiChatArrangementText", screen.ArrangementPicker.PickerText, at);
                 AssertLaidOut(view, screen.IsBusy ? "AiChatCancel" : "AiChatSend", at);
                 if (!screen.HasProvider) AssertLaidOut(view, "AiChatOpenSettings", at);
 
@@ -186,6 +218,38 @@ public sealed class AiChatPaneConstructionUiPerfSmokeTests
             }
         }, CancellationToken.None);
 
+    /// <summary>#593: Esc in the open history dropdown (focus in its search box) closes it and gives the
+    /// keyboard back to the title toggle that opened it.</summary>
+    [Fact]
+    public Task Escape_ClosesTheHistoryDropdown_AndFocusesItsToggle() =>
+        HeadlessSessionFixture.Dispatch(() =>
+        {
+            var screen = FakeAiChatScreen.Default();
+            var view = new AiChatPaneView { DataContext = screen };
+            var window = NarrowWidthLayout.NewWindow(380, PaneHeight, view);
+            window.Show();
+            try
+            {
+                NarrowWidthLayout.Settle(window);
+                screen.History.IsOpen = true;
+                NarrowWidthLayout.Settle(window);
+                var search = NarrowWidthLayout.Named<TextBox>(HistoryDropdown(view), "AiChatHistorySearch");
+                Assert.True(search.IsFocused || search.Focus(), "the history search box refused focus");
+
+                window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+                window.KeyRelease(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+                NarrowWidthLayout.Settle(window);
+
+                Assert.False(screen.History.IsOpen, "Esc left the history dropdown open");
+                Assert.False(NarrowWidthLayout.Named<Popup>(view, "AiChatHistoryPopup").IsOpen);
+                Assert.Same(NarrowWidthLayout.Named<ToggleButton>(view, "AiChatHistoryToggle"), window.FocusManager?.GetFocusedElement());
+            }
+            finally
+            {
+                window.Close();
+            }
+        }, CancellationToken.None);
+
     /// <summary>#640: a click on an unanswered reply's Retry sends the message again: the reply leaves
     /// the thread and the pane shows it working, through the real button's binding.</summary>
     [Fact]
@@ -227,12 +291,15 @@ public sealed class AiChatPaneConstructionUiPerfSmokeTests
     ///     wrapped inside the pane; the box's hint is that task's and fits.
     /// </summary>
     [Theory]
-    [InlineData(AiChartJob.FingeringOnly, "FingeringOnly")]
-    [InlineData(AiChartJob.FhpAndFingering, "Fingering")]
-    [InlineData(AiChartJob.SectionsAndPhrases, "Structure")]
-    [InlineData(AiChartJob.Explain, "Explain")]
-    [InlineData(AiChartJob.Tones, "Tones")]
-    public Task EachTasksEmptyPaneAndHint_LayOutInsideThePane_InEveryShippedCulture(AiChartJob job, string name) =>
+    [InlineData("AiChat_Job_FingeringOnly", "FingeringOnly")]
+    [InlineData("AiChat_Job_Fingering", "Fingering")]
+    [InlineData("AiChat_Job_FhpOnly", "FhpOnly")]
+    [InlineData("AiChat_Job_ChordNamesEof", "ChordNames")]
+    [InlineData("AiChat_Job_ChordNamesMusical", "ChordNames")]
+    [InlineData("AiChat_Job_Structure", "Structure")]
+    [InlineData("AiChat_Job_Explain", "Explain")]
+    [InlineData("AiChat_Job_Tones", "Tones")]
+    public Task EachTasksEmptyPaneAndHint_LayOutInsideThePane_InEveryShippedCulture(string labelKey, string name) =>
         HeadlessSessionFixture.Dispatch(() =>
         {
             var restore = LocalizationService.Instance.ConfiguredCulture;
@@ -243,7 +310,7 @@ public sealed class AiChatPaneConstructionUiPerfSmokeTests
                 {
                     LocalizationService.Instance.SetConfiguredCulture(culture);
                     var screen = RealScreen(withChart: true);
-                    screen.SelectedJob = screen.Jobs.Single(j => j is AiChatOptionItem { Key: AiChartJob k } && k == job);
+                    screen.SelectedJob = screen.Jobs.Single(j => j.Label == LocalizationService.Instance[labelKey]);
                     var empty = LocalizationService.Instance["AiChat_Empty_" + name];
                     var hint = LocalizationService.Instance["AiChat_Hint_" + name];
                     Assert.Equal(empty, screen.EmptyText);
@@ -255,7 +322,7 @@ public sealed class AiChatPaneConstructionUiPerfSmokeTests
                     try
                     {
                         NarrowWidthLayout.Settle(window);
-                        NarrowWidthLayout.Capture(window, $"ai-chat-empty-{name.ToLowerInvariant()}-{culture}");
+                        NarrowWidthLayout.Capture(window, $"ai-chat-empty-{labelKey["AiChat_Job_".Length..].ToLowerInvariant()}-{culture}");
                         var at = $"{name} in {culture} at 340 px";
                         AssertLaidOut(view, "AiChatEmpty", at);
                         Assert.Equal(empty, NarrowWidthLayout.Named<TextBlock>(view, "AiChatEmpty").Text);
@@ -291,9 +358,12 @@ public sealed class AiChatPaneConstructionUiPerfSmokeTests
     ///     opened, every entry realizes and lays out, the picked one with its own words.
     /// </summary>
     [Theory]
-    [InlineData(AiChartJob.Explain, "AiChat_Job_Explain", "explain")]
-    [InlineData(AiChartJob.Tones, "AiChat_Job_Tones", "tones")]
-    public Task TheTaskPicker_OffersTheTask_AndLaysItOut_InEveryShippedCulture(AiChartJob job, string key, string capture) =>
+    [InlineData("AiChat_Job_Explain", "explain")]
+    [InlineData("AiChat_Job_Tones", "tones")]
+    [InlineData("AiChat_Job_FhpOnly", "fhponly")]
+    [InlineData("AiChat_Job_ChordNamesEof", "chordnameseof")]
+    [InlineData("AiChat_Job_ChordNamesMusical", "chordnamesmusical")]
+    public Task TheTaskPicker_OffersTheTask_AndLaysItOut_InEveryShippedCulture(string key, string capture) =>
         HeadlessSessionFixture.Dispatch(() =>
         {
             var restore = LocalizationService.Instance.ConfiguredCulture;
@@ -304,7 +374,7 @@ public sealed class AiChatPaneConstructionUiPerfSmokeTests
                 {
                     LocalizationService.Instance.SetConfiguredCulture(culture);
                     var screen = RealScreen();
-                    var explain = screen.Jobs.Single(j => j is AiChatOptionItem { Key: AiChartJob k } && k == job);
+                    var explain = screen.Jobs.Single(j => j.Label == LocalizationService.Instance[key]);
                     Assert.Equal(LocalizationService.Instance[key], explain.Label);
                     labels.Add(explain.Label + "|" + LocalizationService.Instance["AiChat_Job_Tip"]);
                     screen.SelectedJob = explain;
@@ -404,11 +474,14 @@ public sealed class AiChatPaneConstructionUiPerfSmokeTests
 
                             // Task · scope · arrangement on ONE row; the model picker beside Send.
                             var job = NarrowWidthLayout.Named<ComboBox>(view, "AiChatJob");
-                            foreach (var name in new[] { "AiChatScope", "AiChatArrangement" })
+                            foreach (var other in new Control[]
+                                     {
+                                         NarrowWidthLayout.Named<ComboBox>(view, "AiChatScope"),
+                                         NarrowWidthLayout.Named<Button>(view, "AiChatArrangement")
+                                     })
                             {
-                                var other = NarrowWidthLayout.Named<ComboBox>(view, name);
                                 Check(Math.Abs(NarrowWidthLayout.TopIn(other, view) - NarrowWidthLayout.TopIn(job, view)) < 1,
-                                    $"{at}: {name} is not on the Task picker's row");
+                                    $"{at}: {other.Name} is not on the Task picker's row");
                             }
 
                             var model = NarrowWidthLayout.Named<ComboBox>(view, "AiChatModel");
@@ -533,7 +606,7 @@ public sealed class AiChatPaneConstructionUiPerfSmokeTests
         config.AppConfig.Ai = new AiProviderSettings(AiProviderKind.ClaudeCli, "claude-sonnet-5-5", null, Effort: effort);
         var state = new ProjectState();
         if (withChart) NarrowWidthLayout.SeedSong(state);
-        var services = new AiChatServices(new AiChatHistory(new ProjectStateAiChatChartSource(state)), new NoChartActions());
+        var services = new AiChatServices(new AiChatHistory(new ProjectStateAiChatChartSource(state)), new NoChartActions(), new FakeAppLogger());
         return new AiChatViewModel(config, state, new SelectionService(), services, new TestUiDispatcher(),
             LocalizationService.Instance);
     }
@@ -546,6 +619,14 @@ public sealed class AiChatPaneConstructionUiPerfSmokeTests
 
         public Task<AiChatInstructionReply> RunInstructionAsync(AiChatInstructionRequest request, CancellationToken ct) =>
             throw new InvalidOperationException("the layout test never sends");
+    }
+
+    private static void AssertClosedPickerTip(Control view, string name, string text, string at)
+    {
+        var picker = NarrowWidthLayout.Named<Control>(view, name);
+        var shown = picker as TextBlock ?? picker.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == text);
+        Assert.Equal(text, shown.Text);
+        Assert.Equal(text, ToolTip.GetTip(shown) as string);
     }
 
     private static void AssertLaidOut(Control root, string name, string at)

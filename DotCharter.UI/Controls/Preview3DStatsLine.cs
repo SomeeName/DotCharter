@@ -61,10 +61,15 @@ internal static class Preview3DStatsLine
         Environment.GetEnvironmentVariable("DOTCHARTER_3D_HIDE_STATS") == "1";
 
     /// <summary>Whether the corner line is drawn. It is a diagnostic, not game HUD: the editor's
-    /// preview always shows it, an immersive run only while the detection monitor is open, and
-    /// <paramref name="hidden" /> (<see cref="HiddenByEnvironment" />) turns it off in both.</summary>
-    internal static bool Shown(bool gameplayPresentation, bool detectionMonitorOpen, bool hidden) =>
-        !hidden && (!gameplayPresentation || detectionMonitorOpen);
+    /// preview shows it only with the diagnostics setting on (<see cref="DiagnosticsOn" />), an
+    /// immersive run only while the detection monitor is open, and <paramref name="hidden" />
+    /// (<see cref="HiddenByEnvironment" />) turns it off in both.</summary>
+    internal static bool Shown(bool gameplayPresentation, bool detectionMonitorOpen, bool hidden, bool diagnosticsOn) =>
+        !hidden && (gameplayPresentation ? detectionMonitorOpen : diagnosticsOn);
+
+    /// <summary>The existing diagnostics setting (Settings ▸ General ▸ Advanced ▸ Logging, the minimum log
+    /// level): at Debug or lower the app is being diagnosed, so the preview prints its render statistics.</summary>
+    internal static bool DiagnosticsOn(AppLogLevel minimumLogLevel) => minimumLogLevel <= AppLogLevel.Debug;
 
     /// <summary>
     ///     <paramref name="framesLastSecond" /> is every frame the loop

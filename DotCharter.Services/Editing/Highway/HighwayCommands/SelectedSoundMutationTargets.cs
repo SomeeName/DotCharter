@@ -50,6 +50,9 @@ internal readonly record struct SelectedSoundMutationTargets(
     /// </summary>
     public ObservableCollection<HandShape>? SyncedHandShapes { get; init; }
 
+    /// <summary>The live anchor selection, so removing a selected anchor can restore it on undo.</summary>
+    public ObservableCollection<FretAnchor>? AnchorSelection { get; init; }
+
     /// <summary>The chords the chord half of a verb writes: the ladder's, else the selection's,
     /// through the mask either way.</summary>
     public List<Chord> TargetChords() => Ladder is { } ladder ? MaskedChords(ladder.Chords) : MaskedChords();

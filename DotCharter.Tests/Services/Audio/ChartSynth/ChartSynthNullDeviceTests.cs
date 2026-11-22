@@ -30,15 +30,15 @@ public sealed class ChartSynthNullDeviceTests : IDisposable
     private const int NotesToStart = 2;
     private readonly string _wav = Path.Combine(Path.GetTempPath(), $"chart-synth-{Guid.NewGuid():N}.wav");
 
-    public ChartSynthNullDeviceTests()
-    {
-        Environment.SetEnvironmentVariable("DCA_ENABLE_NULL_DEVICE", "1");
-        File.WriteAllBytes(_wav, SilentWav(8.0));
-    }
+    /// <summary>Puts back what the run started with: clearing the variable here took the
+    /// null device away from every later class when the run had set it (#606).</summary>
+    private readonly NullDeviceEnvScope _nullDevice = NullDeviceEnvScope.Enable();
+
+    public ChartSynthNullDeviceTests() => File.WriteAllBytes(_wav, SilentWav(8.0));
 
     public void Dispose()
     {
-        Environment.SetEnvironmentVariable("DCA_ENABLE_NULL_DEVICE", null);
+        _nullDevice.Dispose();
         try { File.Delete(_wav); } catch (IOException) { /* best effort */ }
     }
 
@@ -156,6 +156,7 @@ public sealed class ChartSynthNullDeviceTests : IDisposable
         await svc.LoadAudioAsync(_wav);
         IChartSynthEngine synth = svc;
         var chart = Chart();
+        synth.ChartSynthGain = 2f;
         // #50: a non-default instrument, which the rebuild must replay too.
         var lesPaul = new ChartSynthInstrument(ChartSynthModel.LesPaul, ChartSynthPickup.Neck, true);
         Assert.True(synth.TrySetChartSynthInstrument(lesPaul));
@@ -168,6 +169,9 @@ public sealed class ChartSynthNullDeviceTests : IDisposable
         svc.WaitForChartSynthPushes();
         Assert.True(synth.TryGetChartSynthStatus(out var armed) && armed.IsEnabled && armed.IsVoiceLoaded,
             $"the enable never reached the engine: {armed}");
+        var originalEngine = Assert.IsType<JuceAudioEngine>(svc.EngineForTesting);
+        Assert.True(originalEngine.TryGetChartSourceStatus(0, out var originalGain));
+        Assert.Equal(2f, originalGain.Gain);
 
         var first = PlayAndListen(svc);
         Assert.True(first.Status.NotesStarted >= NotesToStart,
@@ -179,6 +183,10 @@ public sealed class ChartSynthNullDeviceTests : IDisposable
         // The rebuild a device change runs. A fresh engine starts with the chart
         // source OFF and EMPTY; everything below is the replay.
         Rebuild(svc);
+        var replacement = Assert.IsType<JuceAudioEngine>(svc.EngineForTesting);
+        Assert.NotSame(originalEngine, replacement);
+        Assert.True(replacement.TryGetChartSourceStatus(0, out var replayedGain));
+        Assert.Equal(2f, replayedGain.Gain);
         Assert.True(synth.TryGetChartSynthStatus(out var after), "no engine after the rebuild");
         Assert.True(after.IsEnabled, "the rebuild dropped the chart synth's enabled state");
         Assert.Equal(chart.Notes.Length, after.NoteCount);

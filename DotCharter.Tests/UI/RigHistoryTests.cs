@@ -1,6 +1,7 @@
 using DotCharter.Tone.Audio.Dsp;
 using DotCharter.Tone.Audio.Dsp.Presets;
 using DotCharter.Tone.UI.ViewModels.PlayMode;
+using JuceSharp.Dsp;
 
 namespace DotCharter.Tests.UI;
 
@@ -130,6 +131,103 @@ public sealed class RigHistoryTests
 
         rig.RedoCommand.Execute(null);
         Assert.Equal(0.8f, rig.Nodes[0].Params.Single(p => p.Id == "drive").Value, 3);
+    }
+
+    [Fact]
+    public void SidechainSourceChanges_CanBeUndoneAndRedone()
+    {
+        var type = new DspModuleType("compressor", "Compressor", []) { SupportsSidechain = true };
+        var chain = new FakeDspChainService([type]);
+        using var rig = TestRigBuilders.Pedalboard(chain,
+            new DspTonePresetService(chain, new FakeConfigurationService()), FakeLocalization.English());
+        rig.AddGear(type);
+        rig.ResyncAll();
+        Assert.False(rig.CanUndo);
+
+        rig.Nodes[0].SidechainSource = JuceDspSidechainSource.SongMix;
+
+        Assert.True(rig.CanUndo);
+        rig.UndoCommand.Execute(null);
+        Assert.Equal(JuceDspSidechainSource.None, chain.GetNodeSidechain(rig.Nodes[0].NodeId));
+        Assert.Equal(JuceDspSidechainSource.None, rig.Nodes[0].SidechainSource);
+        rig.RedoCommand.Execute(null);
+        Assert.Equal(JuceDspSidechainSource.SongMix, chain.GetNodeSidechain(rig.Nodes[0].NodeId));
+        Assert.Equal(JuceDspSidechainSource.SongMix, rig.Nodes[0].SidechainSource);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MacroAndMidiAssignments_CanBeUndoneAndRedone(bool midiOnly)
+    {
+        var (rig, chain, _) = NewRig();
+        using var _ = rig;
+        rig.AddGear(Drive);
+        rig.ResyncAll();
+        rig.Controls.Edit(rig.Nodes[0]);
+        var editor = rig.Controls.Editor;
+        editor.MacroIndex = midiOnly ? -1 : 0;
+        editor.MidiChannel = midiOnly ? 2 : -1;
+        editor.MidiController = midiOnly ? 7 : -1;
+        Assert.False(rig.CanUndo);
+
+        editor.AssignCommand.Execute(null);
+
+        var saved = Assert.Single(chain.GetNodes()[0].ControlAssignments);
+        Assert.True(rig.CanUndo);
+        rig.UndoCommand.Execute(null);
+        Assert.Empty(chain.GetNodes()[0].ControlAssignments);
+        rig.RedoCommand.Execute(null);
+        Assert.Equal(saved, Assert.Single(chain.GetNodes()[0].ControlAssignments));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RemovingOrClearingMidiAssignments_RecordsThePostMutationState(bool clearMidi)
+    {
+        var (rig, chain, _) = NewRig();
+        using var _ = rig;
+        var node = rig.AddGear(Drive)!;
+        var saved = new RigControlAssignment("drive", 0, 0, 1, 2, 7);
+        chain.SetControlAssignments(node.NodeId, [saved]);
+        rig.ResyncAll();
+        rig.Controls.Edit(rig.Nodes[0]);
+        var editor = rig.Controls.Editor;
+        Assert.False(rig.CanUndo);
+
+        if (clearMidi) editor.ClearMidiCommand.Execute(null);
+        else editor.RemoveCommand.Execute(null);
+
+        Assert.True(rig.CanUndo);
+        rig.UndoCommand.Execute(null);
+        Assert.Equal(saved, Assert.Single(chain.GetNodes()[0].ControlAssignments));
+        rig.RedoCommand.Execute(null);
+        if (clearMidi)
+            Assert.Equal(saved with { MidiChannel = -1, MidiController = -1 }, Assert.Single(chain.GetNodes()[0].ControlAssignments));
+        else
+            Assert.Empty(chain.GetNodes()[0].ControlAssignments);
+    }
+
+    [Fact]
+    public void MidiLearn_RecordsAnAssignmentWithoutChangingTheParameter()
+    {
+        var (rig, chain, _) = NewRig();
+        using var _ = rig;
+        rig.AddGear(Drive);
+        rig.ResyncAll();
+        rig.Controls.Edit(rig.Nodes[0]);
+        rig.Controls.Editor.BeginMidiLearnCommand.Execute(null);
+
+        rig.Controls.HandleMidiControl(2, 7, 127);
+
+        Assert.Equal(0.5f, rig.Nodes[0].Params[0].Value);
+        var saved = Assert.Single(chain.GetNodes()[0].ControlAssignments);
+        Assert.True(rig.CanUndo);
+        rig.UndoCommand.Execute(null);
+        Assert.Empty(chain.GetNodes()[0].ControlAssignments);
+        rig.RedoCommand.Execute(null);
+        Assert.Equal(saved, Assert.Single(chain.GetNodes()[0].ControlAssignments));
     }
 
     [Fact]

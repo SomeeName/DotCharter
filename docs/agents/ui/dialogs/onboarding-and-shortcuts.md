@@ -74,7 +74,12 @@ every one of them linted by `UI/Onboarding/OnboardingReachabilityTests`:
   `Audio.InputJackOptions` / `Audio.SelectedInputJackIndex` — Settings' own
   rows — on ASIO and WASAPI alike, because the engine opens the picked jack as
   an input channel mask on both (`GuitarInputChannels.InputChannelMask`).
-  "Find my guitar" (`GuitarJackFinder`) works on either driver. A WASAPI device
+  "Find my guitar" (`GuitarJackFinder`) works on either driver; it forces Mono
+  on each input it tries, so hearing nothing or a cancel restores the whole
+  `GuitarInputRouting` snapshot (both jacks, Mono, the two-guitar split). A jack
+  or Mono pick applies at once only while the wizard is OPEN on the Input page:
+  Settings edits the same audio page and keeps its own Save/Cancel
+  (`OnboardingInputChannelTests`). A WASAPI device
   reporting two inputs or fewer shows `OnboardingWasapiDevicesNote`
   (`Audio.IsWasapiDevicesNoteShown`): some interfaces list one capture device per
   input pair. Smokes: `DialogConstructionUiPerfSmokeTests

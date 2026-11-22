@@ -4,7 +4,6 @@ using DotCharter.Services.Ai.Match;
 using DotCharter.Services.Audio.LivePlay;
 using DotCharter.Tone.Audio.Dsp.Tones;
 using DotCharter.Tone.Audio.Tuner;
-using DotCharter.Services.Import.Audio;
 using DotCharter.Tests.Core;
 using DotCharter.Tone.Audio.Tuning;
 
@@ -13,7 +12,7 @@ namespace DotCharter.Tests.Services.Audio;
 /// <summary>
 ///     Everything that LISTENS to, names or measures a 5/6-string bass charted on a
 ///     guitar path at A220 (#161): live judging, the tuner, the guided tuning check
-///     and the timeline gutter, the drift hint, the chart-from-audio string map, and
+///     and the timeline gutter, the drift hint, and
 ///     the tone half of the bass-part decision.
 /// </summary>
 public sealed class GuitarPathBassListeningTests
@@ -33,11 +32,6 @@ public sealed class GuitarPathBassListeningTests
         // A Bass path at A220 tuned up a fifth is a B-E-A-D bass: B0 as well.
         Assert.Equal(23, LivePitchAcceptance.SoundingMidi(GuitarPathBassShapes.BassPathAtA220(), 0, 0));
     }
-
-    [Fact]
-    public void Chart_from_audio_maps_a_guitar_path_bass_onto_its_real_open_strings() =>
-        Assert.Equal([23, 28, 33, 38, 43, 48],
-            ChartFromAudioOptions.OpenStringMidiFor(GuitarPathBassShapes.SixStringBassOnAltRhythm()));
 
     [Fact]
     public void The_tuner_names_B0_and_aims_at_B0()

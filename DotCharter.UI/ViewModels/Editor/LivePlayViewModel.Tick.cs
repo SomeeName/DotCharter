@@ -7,17 +7,7 @@ using DotCharter.Services.Audio.LivePlay;
 
 namespace DotCharter.UI.ViewModels.Editor;
 
-/// <summary>
-///     The WORKER loop and everything it drives off the captured samples: the
-///     latency calibration pump, the input silence and starvation watches, the
-///     peak probe, and <c>TickCore</c> itself - which runs OFF the UI thread and
-///     may therefore only publish through the coalescing channel.
-///     <para>
-///         Part of <see cref="LivePlayViewModel" />. The type's fields, its
-///         whole bound surface and its constructor stay in the ROOT file, so
-///         "where does this come from" is one look rather than a search.
-///     </para>
-/// </summary>
+/// <summary>Drains captured input on the existing detection worker and publishes coalesced UI state.</summary>
 public partial class LivePlayViewModel
 {
     // ---- latency calibration --------------------------------------------------
@@ -255,26 +245,95 @@ public partial class LivePlayViewModel
         if (ui != null && ui.HasContent) _uiChannel.Publish(ui);
     }
 
+    private (double PlayheadMs, bool IsPlaying) ReadJudgingClock()
+    {
+        if (_completion.IsPending && _audio.SeekGeneration != _lastSeekGeneration) _completion.Reset();
+        var endMs = _projectState.TotalAudioLengthMs;
+        if (_songEndMs > 0 && _session.IsActive && !_audio.IsPlaying && _audio.CurrentTimeMs >= endMs)
+            BeginSongCompletion(endMs);
+        return (_completion.IsPending ? _completion.EndMs : _audio.CurrentTimeMs, _audio.IsPlaying || _completion.IsPending);
+    }
+
+    private void ObserveCompletionClock(ulong streamPos, int read, double playheadMs, bool isPlaying)
+    {
+        if (!isPlaying)
+        {
+            _completion.ObservePaused(streamPos, read, LiveTimeMapping.ToTransportMs(playheadMs, _latencyOffsetMs, _audio.PlaybackSpeed));
+            return;
+        }
+        var edge = streamPos + (ulong)read;
+        TryMapStreamPosToTransportMs(edge, playheadMs, out var edgeMs);
+        _completion.Observe(edge, edgeMs, _analyzer!.SampleRate, _audio.PlaybackSpeed, streamPos != _analyzer.StreamPosition);
+    }
+
+    private bool CanApplyTransport((int Epoch, long Seek) snapshot, double boundaryMs = 0, bool allowPlaying = false)
+    {
+        var current = (Epoch: Volatile.Read(ref _uiEpoch), Seek: _audio.SeekGeneration);
+        return _completion.AllowTransport(_songEndMs, IsActive && _session.IsActive, snapshot, current,
+            boundaryMs, _audio.CurrentTimeMs, allowPlaying && _audio.IsPlaying);
+    }
+
+    private void CompleteLoopTransport(double seekTo, (int Epoch, long Seek) snapshot)
+    {
+        lock (_sessionGate)
+        {
+            if (!CanApplyTransport(snapshot, allowPlaying: true) || _session.Loop == null)
+            {
+                _completion.Reset();
+                _tickResult.SeekToMs = null;
+                return;
+            }
+            _session.CommitLoopPass(_tickResult);
+            RearmCompletion();
+            _audio.SeekTo(seekTo);
+            if (!_audio.IsPlaying && CanApplyTransport((snapshot.Epoch, _audio.SeekGeneration))) _audio.Play();
+        }
+    }
+
+    private LivePlayTickResult AdvanceSession(double playheadMs, bool isPlaying, long seekGen)
+    {
+        var sawSeek = seekGen != _lastSeekGeneration;
+        _lastSeekGeneration = seekGen;
+        if (sawSeek && !isPlaying) _completion.Reset();
+        if (isPlaying) ScheduleFirstNoteCountIn(sawSeek);
+        return _session.HandleCapturedTick(playheadMs, isPlaying, _tickResult, sawSeek, _completion.IsPending);
+    }
+
+    private void JudgeDetectionEvent(in LiveDetectionEvent ev, double playheadMs, bool isPlaying, TickUiState ui)
+    {
+        if (ShowDetectionMonitor) LogEvent(ev, playheadMs, ui);
+
+        if (_calibration != null && TryGetEventHostTicks(ev, out var hostTicks))
+            _calibration.OfferOnset(hostTicks);
+
+        // Paused noodling judges nothing.
+        var playingMs = isPlaying ? MapEventToTransportMs(ev, playheadMs) : 0;
+        if (!_session.IsActive || !_completion.TryMapDetection(ev.StreamSamplePosition, isPlaying, playingMs, out var detectedMs)) return;
+        var result = _session.Offer(ev.Pitches, ev.Chroma, detectedMs, ev.Techniques,
+            ev.SpectralCentroidHz, _simultaneousJudged, _graded, ev.DetectorSamplePosition);
+        if (result is { } judged) OnJudged(judged, ui);
+        // One attack can resolve more than one expected sound (a double
+        // stop the chart spells as two notes). The session has already
+        // tallied them; this is what puts them on the HUD, the rock
+        // meter and the 3D feedback queue like any other verdict.
+        foreach (var extra in _simultaneousJudged) OnJudged(extra, ui);
+        // CQT mode: this onset may time hits already credited (and shown)
+        // when the CQT confirmed them. Timing cues only - see OnGraded.
+        foreach (var grade in _graded) OnGraded(grade, ui);
+    }
+
     private TickUiState? TickCore()
     {
         var analyzer = _analyzer;
         if (analyzer == null) return null;
 
         var ui = new TickUiState { Epoch = Volatile.Read(ref _uiEpoch) };
+        var transportSnapshot = (ui.Epoch, Seek: _audio.SeekGeneration);
 
-        // The playhead comes straight from the audio service, NOT from
-        // ProjectState.CurrentTimeMs: the latter is the ≤60 Hz UI-thread
-        // coalesced copy, so a starved UI thread would stall it and then jump —
-        // re-importing the exact failure mode this worker exists to remove.
-        // The service getter is designed for cross-thread polling (the render
-        // threads already poll it every frame).
-        var playheadMs = _audio.CurrentTimeMs;
-        var isPlaying = _audio.IsPlaying;
+        // Ordinary scoring uses main's engine expiry clock; only natural EOF drains final capture.
+        var (playheadMs, isPlaying) = ReadJudgingClock();
 
-        // The CQT anchor is refreshed from the live playhead on every playing tick, so
-        // there is nothing to invalidate here when the transport stops. Capture keeps
-        // streaming while paused and we keep pushing it — that keeps the ring warm and
-        // gives the noise floor a genuine idle sample.
+        // Capture keeps streaming while paused to keep the detector and noise floor warm.
 
         PumpCalibration(ui);
 
@@ -290,12 +349,13 @@ public partial class LivePlayViewModel
             // because we fell behind (stem/CPU load), meaning detection lost
             // audio. Accounted here, surfaced by UpdateInputStarvation below.
             _captureMonitor?.OnRead(streamPos, read);
+            ObserveCompletionClock(streamPos, read, playheadMs, isPlaying);
 
             TrackInputSilence(_captureBuffer.AsSpan(0, read), ui);
 
             // Take-recorder tee: bounded SPSC ring, drop-don't-block,
             // allocation-free — mirrors the PCM without touching the pump.
-            _takeRecorder?.Write(_captureBuffer.AsSpan(0, read));
+            _takeRecorder?.Write(_captureBuffer.AsSpan(0, read), _audio.InputSampleRate);
 
             var events = analyzer.Push(_captureBuffer.AsSpan(0, read), streamPos);
 
@@ -329,31 +389,7 @@ public partial class LivePlayViewModel
                 foreach (var grade in _graded) OnGraded(grade, ui);
             }
 
-            foreach (var ev in events)
-            {
-                if (ShowDetectionMonitor) LogEvent(ev, playheadMs, ui);
-
-                if (_calibration != null && TryGetEventHostTicks(ev, out var hostTicks))
-                    _calibration.OfferOnset(hostTicks);
-
-                // Judge only while the transport runs — otherwise noodling
-                // while paused would score (or fail) chart notes near the
-                // playhead.
-                if (!_session.IsActive || !isPlaying) continue;
-
-                var detectedMs = MapEventToTransportMs(ev, playheadMs);
-                var result = _session.Offer(ev.Pitches, ev.Chroma, detectedMs, ev.Techniques,
-                    ev.SpectralCentroidHz, _simultaneousJudged, _graded, ev.DetectorSamplePosition);
-                if (result is { } judged) OnJudged(judged, ui);
-                // One attack can resolve more than one expected sound (a double
-                // stop the chart spells as two notes). The session has already
-                // tallied them; this is what puts them on the HUD, the rock
-                // meter and the 3D feedback queue like any other verdict.
-                foreach (var extra in _simultaneousJudged) OnJudged(extra, ui);
-                // CQT mode: this onset may time hits already credited (and shown)
-                // when the CQT confirmed them. Timing cues only - see OnGraded.
-                foreach (var grade in _graded) OnGraded(grade, ui);
-            }
+            foreach (var ev in events) JudgeDetectionEvent(ev, playheadMs, isPlaying, ui);
 
             if (read < _captureBuffer.Length) break;
         }
@@ -364,23 +400,7 @@ public partial class LivePlayViewModel
 
         UpdateTuningDrift(isPlaying, ui);
 
-        // Seek evidence: the audio service bumps SeekGeneration on every
-        // deliberate seek. A large playhead jump with an unchanged generation
-        // is this tick loop having stalled (CPU starvation, GC pause) — the
-        // session then advances through the gap instead of rewinding (the
-        // rare now that the pump owns a thread, but still the correct
-        // interpretation of an unseeked gap).
-        var seekGen = _audio.SeekGeneration;
-        var sawSeek = seekGen != _lastSeekGeneration;
-        _lastSeekGeneration = seekGen;
-
-        // Pre-first-note count-in: click the beats leading into the first note as
-        // the playhead reaches them (only while the transport is running).
-        // TryScheduleClick is engine-safe off the UI thread — the coordinator
-        // already calls it from the position-timer thread.
-        if (isPlaying) ScheduleFirstNoteCountIn(sawSeek);
-
-        var tick = _session.HandleTick(playheadMs, isPlaying, _tickResult, sawSeek);
+        var tick = AdvanceSession(playheadMs, isPlaying, transportSnapshot.Seek);
         foreach (var missed in tick.Events) OnJudged(missed, ui);
         foreach (var grade in tick.Grades) OnGraded(grade, ui);   // provisional cues
         foreach (var check in tick.TechniqueJudgments) OnTechniqueJudged(check, playheadMs, ui);
@@ -395,20 +415,9 @@ public partial class LivePlayViewModel
         ui.HasCountIn = true;
         ui.CountInRemaining = tick.InCountIn ? _session.CountInBeatsRemaining(playheadMs) : 0;
 
+        if (tick.SeekToMs is { } seekTo) CompleteLoopTransport(seekTo, transportSnapshot);
         if (tick.PassCompleted) OnPassCompleted(tick, playheadMs, ui);
         if (tick.SpeedChange is { } speed) ui.SpeedRequest = speed;
-        if (tick.SeekToMs is { } seekTo)
-        {
-            // Loop wrap. SeekTo is engine-safe off the UI thread: it snapshots
-            // sources, catches disposal races, and its synchronous
-            // PositionChanged is raised on the caller's thread — which the
-            // coordinator (whose normal source is a timer thread) already
-            // handles cross-thread. No CQT bookkeeping needed: the anchor is
-            // re-taken from the playhead on the next playing tick, and the CQT
-            // itself is indexed on the capture stream, which a transport seek
-            // does not disturb.
-            _audio.SeekTo(seekTo);
-        }
 
         if (tick.DifficultyChanged)
         {

@@ -52,6 +52,7 @@ internal static class NoteHeadRenderer
     /// the chords and hand shapes in ONE farthest-first walk.</summary>
     public static void Render(RenderContext context)
     {
+        for (var i = context.Snapshot.NoteCount - 1; i >= 0; i--) RenderNoteFloor(context, i);
         for (var i = context.Snapshot.NoteCount - 1; i >= 0; i--) RenderNote(context, i);
     }
 
@@ -66,7 +67,25 @@ internal static class NoteHeadRenderer
         if (zStart > context.FadeEndZ) return;
         if ((note.Flags & NoteFlags.LinkPrevious) != 0) return;
 
-        DrawHead(context, note, zStart);
+        DrawHead(context, note, zStart, false);
+    }
+
+    /// <summary>
+    ///     Stages the stem and floor marker of single note <paramref name="index" />, the part of
+    ///     <see cref="DrawHead" /> that lies on the board. The transparent pass writes no depth, so a
+    ///     far note's marker staged after a nearer sustain tail painted over it, so
+    ///     <see cref="NotesRenderComponent" /> runs this BEFORE the tails and the head walk skips it.
+    /// </summary>
+    public static void RenderNoteFloor(RenderContext context, int index)
+    {
+        var note = context.Snapshot.Notes[index];
+        if (note.Time < context.TimeMs || note.Time >= context.TimeMs + context.HorizonMs) return;
+
+        var zStart = context.GetZDepthForTime(note.Time, context.TimeMs);
+        if (zStart > context.FadeEndZ) return;
+        if ((note.Flags & NoteFlags.LinkPrevious) != 0) return;
+
+        DrawFloor(context, note, zStart);
     }
 
     /// <summary>
@@ -76,7 +95,34 @@ internal static class NoteHeadRenderer
     ///     the export writes that landing as loose single notes, so the game shows
     ///     the re-picked string as a note head, not as a chord.
     /// </summary>
-    internal static void DrawHead(RenderContext context, in RenderNote note, float zStart)
+    internal static void DrawHead(RenderContext context, in RenderNote note, float zStart, bool stageFloor = true)
+    {
+        if (stageFloor) DrawFloor(context, note, zStart);
+        DrawGem(context, note, zStart);
+    }
+
+    private static void DrawFloor(RenderContext context, in RenderNote note, float zStart)
+    {
+        var nY = FretboardConstants.BottomStringPosition +
+                 FretboardConstants.StringLaneIndex(note.StringIndex, context.Snapshot.StringCount,
+                     context.Snapshot.InvertStrings) * FretboardConstants.StringDistance +
+                 NoteRenderMath.GetBendOffset(context, note.BendOffset, note.BendCount, note.Time, note.Time) *
+                 NoteRenderMath.BendMultiplier;
+        var nc = FretboardConstants.StringColorFor(note.StringIndex, context.Snapshot.StringCount);
+        if (NoteRenderMath.IsDeadNote(context, note.Time)) nc = DeadNoteMath.Dim(nc);
+        if (note.Fret <= context.Snapshot.Capo)
+        {
+            var (barX0, barX1) = NoteRenderMath.GetAnchorSpan(context, note.Time);
+            NoteStemRenderer.DrawOpen(context, barX0, barX1, nY, zStart, nc);
+        }
+        else
+        {
+            NoteStemRenderer.DrawFretted(context, NoteRenderMath.GetNoteX(context, note.Time, note.Fret), nY, zStart,
+                note.Fret, nc);
+        }
+    }
+
+    private static void DrawGem(RenderContext context, in RenderNote note, float zStart)
     {
         var bendYOffset = NoteRenderMath.GetBendOffset(context, note.BendOffset, note.BendCount, note.Time, note.Time);
         var nY = FretboardConstants.BottomStringPosition +
@@ -96,14 +142,11 @@ internal static class NoteHeadRenderer
 
         if (isOpen)
         {
-            var (barX0, barX1) = NoteRenderMath.GetAnchorSpan(context, note.Time);
-            NoteStemRenderer.DrawOpen(context, barX0, barX1, nY, zStart, nc);
             if (accent) DrawAccentOpenBar(context, note.Time, note.StringIndex, nY, zStart, dead);
             NoteRenderMath.DrawOpenNoteBar(context, note.Time, note.StringIndex, nc, nY, zStart);
         }
         else
         {
-            NoteStemRenderer.DrawFretted(context, nX, nY, zStart, note.Fret, nc);
             var noteMatrix =
                 FretboardMath.GetFrettedNoteRotatedModelMatrix(new Vector3(nX, nY, zStart), context.TimeMs,
                     note.Time);

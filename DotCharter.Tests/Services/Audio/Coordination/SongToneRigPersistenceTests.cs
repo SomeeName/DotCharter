@@ -10,7 +10,7 @@ namespace DotCharter.Tests.Services.Audio.Coordination;
 ///     #166: while a song's tone drives the rig (the chart synth, the editor's tone
 ///     preview, a Play Mode run) the player's tone session must not save the live
 ///     chain as the player's rig. It used to, every second, so an exit mid-song left
-///     the SONG's tone on disk as "my rig" — found on the owner's profile as Muse
+///     the SONG's tone on disk as "my rig" â€” found on the owner's profile as Muse
 ///     "Hysteria"'s bass chain. One in-memory chain shared by the real coordinator and
 ///     the real session, the way the app wires seat 0; the store is a temp directory.
 /// </summary>
@@ -24,14 +24,16 @@ public sealed class SongToneRigPersistenceTests : IDisposable
     public void Dispose() => BestEffortDelete.Directory(_dir);
 
     private static IReadOnlyList<DspModuleType> Catalog() =>
-        new[] { "amp", "cab", "gain", "reverb", "delay" }
+        new[] { "amp", "cab", "gain", "gate", "reverb", "delay" }
             .Select(id => new DspModuleType(id, id, [new DspParamInfo("p", "p", -100f, 100f, 0f)]))
             .ToList();
+
+    private ProjectState _state = null!;
 
     private string[] Saved() =>
         new ProfileToneRigStore(_dir).GetRig(0)?.Modules.Select(m => m.ModuleTypeId).ToArray() ?? [];
 
-    private (FakeDspChainService Chain, ToneSessionService Session, RsTonePlaybackCoordinator Tones) Wire()
+    private (FakeDspChainService Chain, ToneSessionService Session, RsTonePlaybackCoordinator Tones) Wire(string toneBase = "clean", string? change = null)
     {
         var chain = new FakeDspChainService(Catalog());
         var config = new FakeConfigurationService();
@@ -41,9 +43,11 @@ public sealed class SongToneRigPersistenceTests : IDisposable
         var project = new ChartProject();
         for (var i = 0; i < 8; i++) project.Beats.Add(new BeatMarker { Time = i * 1000, IsMeasure = i % 4 == 0 });
         project.ToneDefinitions.Add(new ToneDefinition { Key = "clean", Name = "clean", Json = CleanJson });
-        var arr = new Arrangement { ToneBase = "clean" };
+        var arr = new Arrangement { ToneBase = toneBase };
+        if (change is not null) arr.ToneChanges.Add(new ToneChange { Position = new FractionalPosition(4), ToneName = change });
         project.Arrangements.Add(arr);
         var state = new ProjectState { ActiveProject = project, ActiveArrangement = arr };
+        _state = state;
         var tones = new RsTonePlaybackCoordinator(chain, new DcRigApplier(chain), state, config);
         tones.PrepareForProject(project, arr);
 
@@ -55,6 +59,44 @@ public sealed class SongToneRigPersistenceTests : IDisposable
         session.Flush();
         Assert.Equal(["reverb"], Saved());
         return (chain, session, tones);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RebuildAtAnUnresolvedTone_ReplaysTheLastAppliedTone_OrThePlayerRig(bool noValidToneYet)
+    {
+        var (chain, session, tones) = noValidToneYet ? Wire("missing", "clean") : Wire("clean", "missing");
+        using (session)
+        {
+            session.Start();
+            Assert.True(tones.BeginPreview());
+            if (!noValidToneYet) _state.CurrentTimeMs = 4500;
+            chain.AttachEngine(531);
+            if (noValidToneYet) Assert.Equal("reverb", Assert.Single(chain.GetNodes()).ModuleTypeId);
+            else Assert.Contains(chain.GetNodes(), n => n.ModuleTypeId == "amp");
+            Assert.Equal(["reverb"], Saved());
+            tones.EndPreview();
+            await tones.RestoreCompletion.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+            Assert.Equal("reverb", Assert.Single(chain.GetNodes()).ModuleTypeId);
+        }
+    }
+
+    [Fact]
+    public async Task RebuiltEngine_ReappliesTheBaseOnlySongTone_AndStillRestoresThePlayersBoard()
+    {
+        var (chain, session, tones) = Wire();
+        using (session)
+        {
+            session.Start();
+            Assert.True(tones.BeginPreview());
+            chain.AttachEngine(530);
+            Assert.Contains(chain.GetNodes(), n => n.ModuleTypeId == "amp");
+            Assert.Equal(["reverb"], Saved());
+            tones.EndPreview();
+            await tones.RestoreCompletion.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+            Assert.Equal("reverb", Assert.Single(chain.GetNodes()).ModuleTypeId);
+        }
     }
 
     [Fact]

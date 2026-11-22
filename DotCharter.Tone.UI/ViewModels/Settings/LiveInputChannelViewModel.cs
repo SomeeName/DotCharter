@@ -31,6 +31,7 @@ public partial class LiveInputChannelViewModel : ViewModelBase
     private readonly IUiDispatcher? _ui;
     private readonly ILocalizationService _loc;
     private bool _loading;
+    private int _probeGeneration;
 
     public LiveInputChannelViewModel(IAudioDeviceControl? audio, IRigConfigService? config,
         ILocalizationService localization, IUiDispatcher? ui = null)
@@ -88,13 +89,11 @@ public partial class LiveInputChannelViewModel : ViewModelBase
         }
 
         var config = _config.LoadRigConfig();
+        var generation = ++_probeGeneration;
         Rebuild(config, deviceJackCount: 0, []);
         if (!IsAvailable) return;
 
-        var driver = config.AudioDriver;
-        var name = string.Equals(driver, "ASIO", StringComparison.OrdinalIgnoreCase)
-            ? config.AsioInputDeviceName
-            : config.WasapiInputDeviceName;
+        var (driver, name) = CaptureDevice(config);
         if (_ui == null)
         {
             Rebuild(config, _audio.GetInputDeviceChannelCount(driver, name), _audio.GetInputChannelNames(driver, name));
@@ -116,9 +115,19 @@ public partial class LiveInputChannelViewModel : ViewModelBase
             }
 
             if (count <= 0) return;
-            _ui.Post(() => Rebuild(_config.LoadRigConfig(), count, names));
+            _ui.Post(() =>
+            {
+                // A slow read of a device the rig has since left must not list its jacks for the one it names now.
+                var current = _config.LoadRigConfig();
+                if (generation == _probeGeneration && CaptureDevice(current) == (driver, name)) Rebuild(current, count, names);
+            });
         });
     }
+
+    private static (string Driver, string Name) CaptureDevice(RigConfig config) =>
+        (config.AudioDriver, string.Equals(config.AudioDriver, "ASIO", StringComparison.OrdinalIgnoreCase)
+            ? config.AsioInputDeviceName
+            : config.WasapiInputDeviceName);
 
     private void Rebuild(RigConfig config, int deviceJackCount, IReadOnlyList<string> channelNames)
     {

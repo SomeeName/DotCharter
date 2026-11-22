@@ -46,7 +46,7 @@ public static class ProjectFiles
     public static string PreferProject(string path, Func<string, bool>? fileExists = null)
     {
         if (!CharterRscp.IsCharterProject(path)) return path;
-        var project = Beside(path);
+        var project = ProjectForCompanion(path);
         return (fileExists ?? File.Exists)(project) ? project : path;
     }
 
@@ -59,8 +59,12 @@ public static class ProjectFiles
     {
         var list = paths.ToList();
         var projects = new HashSet<string>(list.Where(IsProject).Select(Path.GetFullPath), StringComparer.OrdinalIgnoreCase);
-        return list.Where(p => !CharterRscp.IsCharterProject(p) || !projects.Contains(Path.GetFullPath(Beside(p)))).ToList();
+        return list.Where(p => !CharterRscp.IsCharterProject(p) || !projects.Contains(Path.GetFullPath(ProjectForCompanion(p)))).ToList();
     }
+
+    private static string ProjectForCompanion(string path) =>
+        Path.GetFileName(Path.GetDirectoryName(path))?.Equals(ProjectFolderLayout.ExportFolderName, StringComparison.OrdinalIgnoreCase) == true
+            ? Path.Combine(ProjectFolderLayout.RootForArtifact(path), Path.GetFileName(Beside(path))) : Beside(path);
 
     internal static bool HasExtension(string? path, string extension) =>
         !string.IsNullOrEmpty(path) && string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase);
@@ -69,7 +73,7 @@ public static class ProjectFiles
 /// <summary>
 ///     The ONE spelling of Charter's project file, <c>.rscp</c>: what DotCharter reads from
 ///     Charter (RsCharter) and from its own older builds, and the Charter-compatible
-///     companion it writes beside every <see cref="ProjectFiles.Extension" /> on save.
+///     companion it writes in export/ for every <see cref="ProjectFiles.Extension" /> on save.
 /// </summary>
 public static class CharterRscp
 {
@@ -89,19 +93,20 @@ public static class CharterRscp
     public static bool IsCharterProject(string? path) => ProjectFiles.HasExtension(path, Extension);
 
     /// <summary>The Charter companion of a project: the same name with <c>.rscp</c>.</summary>
-    public static string CompanionPath(string projectPath) => Path.ChangeExtension(projectPath, Extension);
+    public static string CompanionPath(string projectPath) => ProjectFolderLayout.CompanionPath(projectPath, Extension);
 
     /// <summary>
-    ///     The first free backup name for an older DotCharter <c>.rscp</c>:
+    ///     The first free name under visible backups/ for an older DotCharter <c>.rscp</c>:
     ///     <c>&lt;name&gt;.rscp.bak</c>, then <c>&lt;name&gt;.rscp.2.bak</c> and so on, so an
     ///     earlier backup is never overwritten.
     /// </summary>
     public static string LegacyBackupPath(string rscpPath, Func<string, bool>? fileExists = null)
     {
         var exists = fileExists ?? File.Exists;
-        var candidate = rscpPath + LegacyBackupSuffix;
+        var backupSource = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(rscpPath))!, "backups", Path.GetFileName(rscpPath));
+        var candidate = backupSource + LegacyBackupSuffix;
         for (var n = 2; exists(candidate); n++)
-            candidate = $"{rscpPath}.{n}{LegacyBackupSuffix}";
+            candidate = $"{backupSource}.{n}{LegacyBackupSuffix}";
         return candidate;
     }
 
@@ -114,7 +119,9 @@ public static class CharterRscp
     public static string? MoveToLegacyBackup(string rscpPath)
     {
         if (!File.Exists(rscpPath)) return null;
+        if (!IsWrittenByDotCharter(rscpPath)) return null;
         var backup = LegacyBackupPath(rscpPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
         File.Move(rscpPath, backup);
         return backup;
     }

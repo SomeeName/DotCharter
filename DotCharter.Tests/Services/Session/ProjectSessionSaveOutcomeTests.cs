@@ -8,6 +8,9 @@ using DotCharter.Services.Infrastructure.Documents;
 using DotCharter.Services.Infrastructure.Recovery;
 using DotCharter.Services.Infrastructure.Storage;
 using DotCharter.Services.Parsing.Rscp;
+using DotCharter.Services.Parsing.Xml;
+using DotCharter.Services.Parsing;
+using Microsoft.Extensions.DependencyInjection;
 using DotCharter.Tone.Diagnostics;
 using DotCharter.Tone.Infrastructure.Storage;
 using DotCharter.UI.ViewModels.Dialogs;
@@ -37,12 +40,94 @@ namespace DotCharter.Tests.Services.Session;
 ///         plain xunit thread the hop simply never completes.
 ///     </para>
 /// </summary>
-public sealed class ProjectSessionSaveOutcomeTests : IDisposable
+public sealed partial class ProjectSessionSaveOutcomeTests : IDisposable
 {
     private readonly string _tempDir =
         Directory.CreateTempSubdirectory("dotcharter-saveoutcome-").FullName;
 
     public void Dispose() => BestEffortDelete.Directory(_tempDir);
+
+    [Theory]
+    [InlineData("song_vocals.xml", "vocals")]
+    [InlineData("song_showlights.xml", "showlights")]
+    [InlineData("song.v2_vocals.xml", "vocals")]
+    [InlineData("song.v2_showlights.xml", "showlights")]
+    public async Task StagedXmlSave_PreservesTheOriginalDocumentType(string name, string root)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(_tempDir, "band.with.dots")).FullName;
+        var path = Path.Combine(folder, name);
+        File.WriteAllText(path, root == "vocals"
+            ? """<vocals count="1"><vocal time="1" note="60" length="0.75" lyric="before"/></vocals>"""
+            : """<showlights count="1"><showlight time="1" note="66"/></showlights>""");
+        var registrations = new ServiceCollection();
+        registrations.AddKeyedTransient<IChartSerializer, XmlChartSerializer>("xml");
+        using var services = registrations.BuildServiceProvider();
+        var documents = new ProjectDocumentService(services, new FakeAppLogger());
+        var project = documents.LoadChart(path);
+        if (root == "vocals")
+        {
+            project.VocalTracks[0].Phrases[0].Lyrics[0].Text = "after";
+        }
+        else
+        {
+            project.Showlights[0].Type = string.Empty;
+            project.Showlights[0].Note = 67;
+        }
+        var h = new Harness(project, path, new NoOpSaveCompanionService(), documents, null,
+            new CheckpointService(Path.Combine(_tempDir, "checkpoints")));
+
+        Assert.True(await h.Session.Saver.SaveProjectCoreAsync(path));
+        await h.Session.Saver.FlushCompanionsAsync();
+
+        Assert.Equal(root, System.Xml.Linq.XDocument.Load(path).Root!.Name.LocalName);
+        var restored = documents.LoadChart(path);
+        if (root == "vocals") Assert.Equal("after", restored.VocalTracks[0].Phrases[0].Lyrics[0].Text);
+        else Assert.Equal(67, restored.Showlights[0].Note);
+        Assert.False(h.Session.IsProjectDirty);
+    }
+
+    [Theory]
+    [InlineData(".dcproj", false)]
+    [InlineData(".rscp", false)]
+    [InlineData(".dcproj", true)]
+    [InlineData(".rscp", true)]
+    public async Task RandomStage_SavesThroughTheRealDocumentService(string extension, bool saveAs)
+    {
+        var registrations = new ServiceCollection();
+        registrations.AddKeyedTransient<IChartSerializer, RscpChartSerializer>("rscp");
+        using var services = registrations.BuildServiceProvider();
+        var documents = new ProjectDocumentService(services, new FakeAppLogger());
+        var h = CreateHarness(out var original, documentService: documents);
+        var target = Path.ChangeExtension(original, extension);
+        var planted = target + ".saving";
+        File.WriteAllText(planted, "unrelated stage");
+        using var held = new FileStream(planted, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        var saved = saveAs
+            ? await h.Session.Saver.SaveToPickedPathAsync(target)
+            : await h.Session.Saver.SaveProjectCoreAsync(target);
+        await h.Session.Saver.FlushCompanionsAsync();
+
+        Assert.True(saved, string.Join(Environment.NewLine, h.Messages.Shown.Select(m => m.Details)));
+        Assert.Equal(h.State.ActiveProject!.ProjectId, documents.LoadChart(target).ProjectId);
+        Assert.Equal("unrelated stage", File.ReadAllText(planted));
+        Assert.Equal([planted], Directory.GetFiles(Path.GetDirectoryName(target)!, "*.saving"));
+    }
+
+    [Fact]
+    public async Task Saving_DoesNotReuseOrTruncateAPredictableStage()
+    {
+        var h = CreateHarness(out var projectPath);
+        var planted = projectPath + ".saving";
+        File.WriteAllText(planted, "unrelated file");
+        using var held = new FileStream(planted, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        Assert.True(await h.Session.Saver.SaveProjectCoreAsync(projectPath));
+        await h.Session.Saver.FlushCompanionsAsync();
+
+        Assert.Equal("unrelated file", File.ReadAllText(planted));
+        Assert.Equal([planted], Directory.GetFiles(_tempDir, "*.saving", SearchOption.AllDirectories));
+    }
 
     [Fact]
     public async Task SaveProjectCore_WithALockedLegacySiblingXml_StillReportsSuccess()
@@ -57,6 +142,8 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
         using (new FileStream(legacyXmlPath, FileMode.Open, FileAccess.Read, FileShare.None))
         {
             saved = await h.Session.Saver.SaveProjectCoreAsync(projectPath);
+            // The companion queue meets the lock after the save has already succeeded.
+            await h.Session.Saver.FlushCompanionsAsync();
         }
 
         Assert.True(saved);
@@ -69,15 +156,16 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
 
     /// <summary>The cleanup itself must still happen when nothing blocks it.</summary>
     [Fact]
-    public async Task SaveProjectCore_DeletesAnUnlockedLegacySiblingXml()
+    public async Task SaveProjectCore_LeavesAnUnownedLegacySiblingXmlAlone()
     {
         var h = CreateHarness(out var projectPath);
         var legacyXmlPath = Path.ChangeExtension(projectPath, ".xml");
         File.WriteAllText(legacyXmlPath, "<song id=\"legacy\" />");
 
         Assert.True(await h.Session.Saver.SaveProjectCoreAsync(projectPath));
+        await h.Session.Saver.FlushCompanionsAsync();
 
-        Assert.False(File.Exists(legacyXmlPath));
+        Assert.Equal("<song id=\"legacy\" />", File.ReadAllText(legacyXmlPath));
     }
 
     /// <summary>
@@ -97,10 +185,13 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
             new ThrowingSaveCompanionService(throwOnRs2Dlc, throwOnEof));
 
         Assert.True(await h.Session.Saver.SaveProjectCoreAsync(projectPath));
+        await h.Session.Saver.FlushCompanionsAsync();
 
         Assert.True(File.Exists(projectPath));
         Assert.False(h.Session.IsProjectDirty);
         Assert.Equal(projectPath, Assert.Single(h.Recovery.SavedProjectPaths));
+        // A companion failure is never silent: it is on the status bar as well as in the log.
+        Assert.Equal(StatusSeverity.Error, h.State.MainDisplaySeverity);
     }
 
     /// <summary>
@@ -153,10 +244,16 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
 
         Assert.True(await h.Session.Saver.SaveProjectCoreAsync(projectPath));
 
-        Assert.Equal(["project-save"], h.StatusBar.Begun);
-        Assert.Equal(["project-save"], h.StatusBar.Completed);
+        // The companions are a SEPARATE detached pill since #411, begun on a pool
+        // thread whenever its drain gets a turn — before or after this line. Settle
+        // it so the recorder is quiescent, then pin the save's own pill exactly.
+        await h.Session.Saver.FlushCompanionsAsync();
+
+        Assert.Equal(["project-save"], h.StatusBar.Begun.Where(id => id == "project-save"));
+        Assert.Equal(["project-save"], h.StatusBar.Completed.Where(id => id == "project-save"));
         // Begun before the work: the pill exists to explain a stall it must not
         // arrive after.
+        Assert.Equal("project-save", h.StatusBar.Begun[0]);
         Assert.True(h.StatusBar.WasIndeterminate);
     }
 
@@ -377,7 +474,7 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
         var targetDir = Path.Combine(_tempDir, "Somewhere Else");
         Directory.CreateDirectory(targetDir);
         // A FILE where the chats' folder has to go: every copy under it throws.
-        await File.WriteAllTextAsync(Path.Combine(targetDir, "ai-chats"), "not a folder", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(targetDir, ".dotcharter"), "not a folder", TestContext.Current.CancellationToken);
 
         Assert.True(await h.Session.Saver.SaveToPickedPathAsync(Path.Combine(targetDir, "copy.rscp")));
 
@@ -395,7 +492,7 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
     }
 
     private static string ChatFolder(Harness h, string projectPath) =>
-        Path.Combine(Path.GetDirectoryName(projectPath)!, "ai-chats", h.State.ActiveProject!.ProjectId);
+        Path.Combine(Path.GetDirectoryName(projectPath)!, ".dotcharter", "ai-chats", h.State.ActiveProject!.ProjectId);
 
     /// <summary>The untitled bucket is shared by every unsaved session, so a first save claims none of it.</summary>
     [Fact]
@@ -473,6 +570,23 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
     ///     is relative for.
     /// </summary>
     [Fact]
+    public async Task SaveAs_IntoAFolderWithDifferentSameNamedAudio_KeepsTheOriginalAudio()
+    {
+        var h = CreateHarness(out var projectPath);
+        var source = Path.Combine(Path.GetDirectoryName(projectPath)!, "song.ogg");
+        File.WriteAllText(source, "original audio");
+        var targetDir = Directory.CreateDirectory(Path.Combine(_tempDir, "Other Song")).FullName;
+        File.WriteAllText(Path.Combine(targetDir, "song.ogg"), "different audio");
+        var picked = Path.Combine(targetDir, "copy.dcproj");
+
+        Assert.True(await h.Session.Saver.SaveToPickedPathAsync(picked));
+
+        Assert.Equal(source, ProjectAudioLocator.TryResolve(picked, h.State.CurrentAudioFileName));
+        var reopened = new RscpChartSerializer().Load(picked);
+        Assert.Equal(source, ProjectAudioLocator.TryResolve(picked, reopened.AudioFileName));
+    }
+
+    [Fact]
     public async Task SaveAs_NextToTheAudio_KeepsTheRelativeReference()
     {
         var h = CreateHarness(out var projectPath);
@@ -521,8 +635,102 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
         Assert.Equal(2, h.Recovery.ProjectChangedCount);
     }
 
+    [Theory]
+    [InlineData("variant.rscp", false)]
+    [InlineData("variant.rscp", true)]
+    [InlineData("variant", false)]
+    public async Task SaveAs_confirms_the_normalized_destination(string typed, bool confirmed)
+    {
+        var h = CreateHarness(out var projectPath);
+        var folder = Path.GetDirectoryName(projectPath)!;
+        var target = Path.Combine(folder, "variant.dcproj");
+        File.WriteAllText(target, "existing project");
+        h.Storage.NextSaveFile = Path.Combine(folder, typed);
+        h.Messages.Answer = confirmed;
+
+        Assert.Equal(confirmed, await h.Session.SaveProjectAsAsync());
+        await h.Session.Saver.FlushCompanionsAsync();
+
+        var prompt = Assert.Single(h.Messages.Shown);
+        Assert.Equal(MessageDialogKind.Question, prompt.Kind);
+        Assert.Contains(target, prompt.Message);
+        if (!confirmed)
+        {
+            Assert.Equal("existing project", File.ReadAllText(target));
+            Assert.Equal(projectPath, h.State.CurrentProjectPath);
+        }
+        else
+        {
+            Assert.Equal(target, h.State.CurrentProjectPath);
+            Assert.Equal(h.State.ActiveProject!.ProjectId, new RscpChartSerializer().Load(target).ProjectId);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SaveAs_preserves_stems_and_cover_in_another_folder(bool conflictingMedia)
+    {
+        var h = CreateHarness(out var projectPath);
+        var folder = Path.GetDirectoryName(projectPath)!;
+        Directory.CreateDirectory(Path.Combine(folder, "stems"));
+        var stem = Path.Combine(folder, "stems", "guitar.wav");
+        var cover = Path.Combine(folder, "cover.png");
+        File.WriteAllText(stem, "original stem");
+        File.WriteAllText(cover, "original cover");
+        h.State.ActiveProject!.Stems.Add(new Stem { Name = "guitar", Path = "stems/guitar.wav" });
+        h.State.ActiveProject.Chart.CoverArtPath = "cover.png";
+        var destination = Directory.CreateDirectory(Path.Combine(_tempDir, "variant")).FullName;
+        if (conflictingMedia)
+        {
+            Directory.CreateDirectory(Path.Combine(destination, "stems"));
+            File.WriteAllText(Path.Combine(destination, "stems", "guitar.wav"), "other stem");
+            File.WriteAllText(Path.Combine(destination, "cover.png"), "other cover");
+        }
+
+        var picked = Path.Combine(destination, "variant.dcproj");
+        Assert.True(await h.Session.Saver.SaveToPickedPathAsync(picked));
+        await h.Session.Saver.FlushCompanionsAsync();
+
+        var reopened = new RscpChartSerializer().Load(picked);
+        var savedStem = ProjectAudioLocator.TryResolve(picked, Assert.Single(reopened.Stems).Path);
+        Assert.NotNull(savedStem);
+        Assert.Equal(stem, Path.GetFullPath(savedStem));
+        var savedCover = ProjectRelativePath.TryResolve(destination, reopened.Chart.CoverArtPath);
+        Assert.NotNull(savedCover);
+        Assert.Equal("original cover", File.ReadAllText(savedCover));
+        Assert.Equal(reopened.Stems[0].Path, h.State.ActiveProject.Stems[0].Path);
+        Assert.Equal(reopened.Chart.CoverArtPath, h.State.ActiveProject.Chart.CoverArtPath);
+        Assert.Equal("original stem", File.ReadAllText(stem));
+        Assert.Equal("original cover", File.ReadAllText(cover));
+        if (conflictingMedia)
+        {
+            Assert.Equal("other stem", File.ReadAllText(Path.Combine(destination, "stems", "guitar.wav")));
+            Assert.Equal("other cover", File.ReadAllText(Path.Combine(destination, "cover.png")));
+        }
+    }
+
+    [Fact]
+    public async Task A_failed_SaveAs_keeps_live_media_references_and_removes_its_copied_cover()
+    {
+        var h = CreateHarness(out var projectPath, documentService: new ThrowingDocumentService());
+        var folder = Path.GetDirectoryName(projectPath)!;
+        File.WriteAllText(Path.Combine(folder, "song.ogg"), "audio");
+        File.WriteAllText(Path.Combine(folder, "cover.png"), "cover");
+        h.State.ActiveProject!.Chart.CoverArtPath = "cover.png";
+        var destination = Directory.CreateDirectory(Path.Combine(_tempDir, "failed-variant")).FullName;
+
+        Assert.False(await h.Session.Saver.SaveToPickedPathAsync(Path.Combine(destination, "variant.dcproj")));
+
+        Assert.Equal("song.ogg", h.State.CurrentAudioFileName);
+        Assert.Equal("song.ogg", h.State.ActiveProject.AudioFileName);
+        Assert.Equal("cover.png", h.State.ActiveProject.Chart.CoverArtPath);
+        Assert.Empty(Directory.GetFiles(destination));
+    }
+
     private Harness CreateHarness(out string projectPath, ISaveCompanionService? companions = null,
-        IProjectDocumentService? documentService = null, IUiDispatcher? uiDispatcher = null)
+        IProjectDocumentService? documentService = null, IUiDispatcher? uiDispatcher = null,
+        Func<string, DotCharter.Services.Export.Audio.PcmAudio>? volumeDecoder = null)
     {
         var projectDir = Path.Combine(_tempDir, "Band - Song");
         Directory.CreateDirectory(projectDir);
@@ -532,7 +740,7 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
         project.Arrangements.Add(new Arrangement { Name = "Lead Guitar" });
         return new Harness(project, projectPath, companions ?? new NoOpSaveCompanionService(),
             documentService ?? new RealRscpDocumentService(), uiDispatcher,
-            new CheckpointService(Path.Combine(_tempDir, "checkpoints")));
+            new CheckpointService(Path.Combine(_tempDir, "checkpoints")), volumeDecoder);
     }
 
     /// <summary>Fails the .rscp write itself — the only failure the outer catch
@@ -566,13 +774,14 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
     private sealed class RecordingMessageDialog : MessageDialogViewModel
     {
         public List<ShownMessage> Shown { get; } = [];
+        public bool Answer { get; set; } = true;
 
         public override Task<bool> ShowAsync(string title, string message,
             MessageDialogKind kind = MessageDialogKind.Info, string? details = null,
             bool confirmation = false)
         {
             Shown.Add(new ShownMessage(title, message, kind, details));
-            return Task.FromResult(true);
+            return Task.FromResult(Answer);
         }
     }
 
@@ -631,6 +840,47 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
         public void Dispose() { }
     }
 
+    /// <summary>
+    ///     The save returns while the psarc is still being built: the companions are a queue,
+    ///     not part of the save (#345). The fake's build is parked until the test releases it,
+    ///     which it does only after the save returned; a save that waited for the build would
+    ///     never return, and the 60 s cap reports that deadlock.
+    /// </summary>
+    [Fact]
+    public async Task SaveProjectCore_ReturnsBeforeTheCompanionPsarcIsBuilt()
+    {
+        var companions = new SlowPsarcCompanionService();
+        var h = CreateHarness(out var projectPath, companions);
+
+        var saved = await BoundedWait.ForAsync(h.Session.Saver.SaveProjectCoreAsync(projectPath),
+            "saving while a companion build is parked", TestContext.Current.CancellationToken);
+
+        Assert.True(saved);
+        Assert.False(companions.PsarcFinished, "the save waited for the psarc");
+        companions.Release.TrySetResult();
+        await BoundedWait.ForAsync(h.Session.Saver.FlushCompanionsAsync(), "the released companion build", TestContext.Current.CancellationToken);
+        Assert.True(companions.PsarcFinished);
+    }
+
+    private sealed class SlowPsarcCompanionService : ISaveCompanionService
+    {
+        public readonly TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public volatile bool PsarcFinished;
+
+        public string? WriteEof(string projectPath, ChartProject snapshot) => null;
+
+        public string? WriteDlcBuilderProject(
+            string projectPath, ChartProject snapshot, double? audioLengthMs) => null;
+
+        public async Task<string?> BuildPsarcAsync(string projectPath, ChartProject snapshot,
+            double? audioLengthMs, CancellationToken cancellationToken)
+        {
+            await BoundedWait.ForAsync(Release.Task, "the companion build release", cancellationToken);
+            PsarcFinished = true;
+            return null;
+        }
+    }
+
     private sealed class NoOpSaveCompanionService : ISaveCompanionService
     {
         public string? WriteEof(string projectPath, ChartProject snapshot) => null;
@@ -660,7 +910,12 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
         { }
 
         public ChartProject AssembleProject(ChartProject? baseProject, double bpm, string audioFileName,
-            IEnumerable<LyricPhrase> lyrics) => baseProject ?? new ChartProject();
+            IEnumerable<LyricPhrase> lyrics)
+        {
+            var project = baseProject ?? new ChartProject();
+            project.AudioFileName = audioFileName;
+            return project;
+        }
 
         public ChartProject CreateNewProject(string title, string artist, string audioFileName)
             => new() { AudioFileName = audioFileName };
@@ -669,13 +924,15 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
     private sealed class Harness
     {
         public Harness(ChartProject project, string projectPath, ISaveCompanionService companions,
-            IProjectDocumentService documentService, IUiDispatcher? uiDispatcher, CheckpointService checkpoints)
+            IProjectDocumentService documentService, IUiDispatcher? uiDispatcher, CheckpointService checkpoints,
+            Func<string, DotCharter.Services.Export.Audio.PcmAudio>? volumeDecoder = null)
         {
             Checkpoints = checkpoints;
             var logger = Logger;
             var transport = new TransportViewModel(new FakeAudioPlaybackService(), State, Config, FakeLocalization.KeysOnly());
             var selection = new SelectionService();
-            var history = new HistoryService(logger);
+            History = new HistoryService(logger);
+            var history = History;
             var editor = new ChartEditorViewModel(
                 State, transport, history, selection,
                 new TempoService(logger), new TrackContextRegistry(State, selection), FakeLocalization.KeysOnly());
@@ -684,8 +941,9 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
             State.CurrentProjectPath = projectPath;
             State.CurrentAudioFileName = project.AudioFileName;
 
+            if (volumeDecoder is not null) companions = new MeasuringCompanions(companions, volumeDecoder);
             Session = new ProjectSessionService(
-                new FakeAudioPlaybackService(), Config, logger, new FakeFileStorageService(),
+                new FakeAudioPlaybackService(), Config, logger, Storage,
                 documentService, State, transport, editor, new TempoService(logger),
                 Recovery, history, companions,
                 messageDialog: Messages, statusBar: StatusBar,
@@ -698,11 +956,13 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
         public CheckpointService Checkpoints { get; }
 
         public FakeAppLogger Logger { get; } = new();
+        public HistoryService History { get; }
 
         public ProjectState State { get; } = new();
         public FakeConfigurationService Config { get; } = new();
         public RecordingCrashRecoveryService Recovery { get; } = new();
         public RecordingMessageDialog Messages { get; } = new();
+        public FakeFileStorageService Storage { get; } = new();
         public RecordingStatusBar StatusBar { get; } = new();
         public ProjectSessionService Session { get; }
     }

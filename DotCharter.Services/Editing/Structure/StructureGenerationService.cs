@@ -107,15 +107,31 @@ public sealed class StructureGenerationService : IStructureGenerationService
         var mergeNewStates = new List<EventPoint>();
         int counts = 0, ends = 0, noGuitar = 0;
 
-        void Place(FractionalPosition position, string? section, string? phrase)
+        static bool Fill(EventPoint marker, string? section, string? phrase)
+        {
+            var changed = false;
+            if (section != null && string.IsNullOrWhiteSpace(marker.Section))
+            {
+                marker.Section = section;
+                changed = true;
+            }
+
+            if (phrase != null && string.IsNullOrWhiteSpace(marker.Phrase))
+            {
+                marker.Phrase = phrase;
+                changed = true;
+            }
+
+            return changed;
+        }
+
+        bool Place(FractionalPosition position, string? section, string? phrase)
         {
             var pending = additions.FirstOrDefault(ep => ep.Position.Equals(position));
             if (pending != null)
             {
                 // Not in the chart yet, so this one IS the new state.
-                if (section != null && string.IsNullOrWhiteSpace(pending.Section)) pending.Section = section;
-                if (phrase != null && string.IsNullOrWhiteSpace(pending.Phrase)) pending.Phrase = phrase;
-                return;
+                return Fill(pending, section, phrase);
             }
 
             var existing = target.EventPoints.FirstOrDefault(ep => ep.Position.Equals(position));
@@ -126,15 +142,15 @@ public sealed class StructureGenerationService : IStructureGenerationService
                 var index = mergeTargets.IndexOf(existing);
                 if (index < 0)
                 {
+                    var snapshot = Snapshot(existing);
+                    if (!Fill(snapshot, section, phrase)) return false;
                     mergeTargets.Add(existing);
-                    mergeNewStates.Add(Snapshot(existing));
-                    index = mergeTargets.Count - 1;
+                    mergeNewStates.Add(snapshot);
+                    return true;
                 }
 
                 var staged = mergeNewStates[index];
-                if (section != null && string.IsNullOrWhiteSpace(staged.Section)) staged.Section = section;
-                if (phrase != null && string.IsNullOrWhiteSpace(staged.Phrase)) staged.Phrase = phrase;
-                return;
+                return Fill(staged, section, phrase);
             }
 
             additions.Add(new EventPoint
@@ -143,6 +159,7 @@ public sealed class StructureGenerationService : IStructureGenerationService
                 Section = section ?? "",
                 Phrase = phrase ?? ""
             });
+            return true;
         }
 
         // Only the triple MutateEventPointsAction transfers. Events and Status
@@ -154,24 +171,17 @@ public sealed class StructureGenerationService : IStructureGenerationService
             Position = source.Position, Phrase = source.Phrase, Section = source.Section
         };
 
-        if (plan.CountPhrase is { } countAt)
-        {
-            Place(countAt, null, "COUNT");
+        if (plan.CountPhrase is { } countAt && Place(countAt, null, "COUNT"))
             counts = 1;
-        }
 
-        if (plan.EndPhrase is { } endAt)
-        {
-            Place(endAt, null, "END");
+        if (plan.EndPhrase is { } endAt && Place(endAt, null, "END"))
             ends = 1;
-        }
 
         foreach (var at in plan.NoGuitarSections)
         {
             // Phrase follows the section, exactly as the event dialog now does and
             // as 93.2% of the corpus stores it.
-            Place(at, "noguitar", "noguitar");
-            noGuitar++;
+            if (Place(at, "noguitar", "noguitar")) noGuitar++;
         }
 
         // ONE gesture, ONE node: the merges onto existing markers and the new

@@ -151,8 +151,10 @@ zero.
 
 `RigLabelVocabulary` is built from `DcRigTargetCatalog`, and
 `RigLabelVocabularyTests` exports it to `tools/rig-model/rig_label_vocab.json`.
-**That JSON is a build product — never hand-edit it**; running the gate
-refreshes it. The trainer reads it, so a catalogue range that moves reaches
+**That JSON is a build product — never hand-edit it**: the gate only COMPARES the
+committed file with the export and fails when it is stale; regenerate it with
+`DOTCHARTER_REGEN_RIG_VOCAB=1` on `RigLabelVocabularyTests` and review the diff
+(#606). The trainer reads it, so a catalogue range that moves reaches
 python without anyone re-typing a number.
 
 Shape as of 2026-09-12: **100 modules**, **13 families**, a **573-dim** flat
@@ -220,7 +222,7 @@ download now, by the same convention as the lyric acoustic models
 | Piece | What it does |
 |---|---|
 | `RigEstimatorModelCatalog` | TWO entries since 2026-09-14: `rig-estimator` → `rig-estimator-v1.zip` (the model) and `rig-library` → `rig-library-v1.zip` (the pre-rendered retrieval library for the bundled DI; see [ai-match-search.md](ai-match-search.md) § "The library GROWS"). **Versioned in the asset NAME, not by a pinned tag** — the fetcher scans releases for the name, so re-uploading unchanged weights on every app release stays optional. |
-| `RigEstimatorModelInstaller` | `.incoming` staging + atomic `Directory.Move`, never-overwrite, zip-slip and byte/entry caps through `BoundedZipExtractor`, non-throwing failure carrying a REASON string. |
+| `RigEstimatorModelInstaller` | Unique `.incoming-*` staging per attempt + atomic `Directory.Move`; publication serialized per target across instances with a winner recheck, never-overwrite, zip-slip and byte/entry caps through `BoundedZipExtractor`, non-throwing failure carrying a REASON string. |
 | `RigEstimatorModelDownloadService` | `IRigEstimatorModelDownloadService`: is it installed, how big is the download, what does the installed sidecar say, fetch it. |
 | the fetcher | **`LyricModelAssetFetcher`, reused and not forked.** It is a GitHub release-asset reader with nothing lyric-specific in it, and it carries the one piece of hard-won knowledge a copy would silently lose: the release scan must PAGE (5 × 100), because a model asset sits on a release a hundred behind HEAD. A fork would have re-broken the download the same way and reported it as "the model is not available". |
 

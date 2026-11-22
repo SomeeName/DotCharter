@@ -94,6 +94,8 @@ public sealed class RecoveryViewModel
     private async Task RecoverAsync(RecoverySessionRow? row)
     {
         if (row == null || IsBusy) return;
+        var previous = _state.ActiveProject;
+        var previousPath = _state.CurrentProjectPath;
         IsBusy = true;
         try
         {
@@ -107,7 +109,8 @@ public sealed class RecoveryViewModel
             if (!string.Equals(_state.CurrentProjectPath, snapshotPath, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.Warning(AppLogCategory.Project, $"Recovery load failed for '{snapshotPath}' — leaving snapshot on disk.");
-                _state.SetMessage(_localization.Format("Recovery_RecoverFailed", row.DisplayName), StatusSeverity.Error);
+                if (ReferenceEquals(previous, _state.ActiveProject) && previousPath == _state.CurrentProjectPath)
+                    _state.SetMessage(_localization.Format("Recovery_RecoverFailed", row.DisplayName), StatusSeverity.Error);
                 return;
             }
 
@@ -129,7 +132,8 @@ public sealed class RecoveryViewModel
         catch (Exception ex)
         {
             _logger.Error(AppLogCategory.Project, $"Recovery failed for '{row.DisplayName}'.", ex);
-            _state.SetMessage(_localization.Format("Recovery_RecoverFailed", ex.Message), StatusSeverity.Error);
+            if (ReferenceEquals(previous, _state.ActiveProject) && previousPath == _state.CurrentProjectPath)
+                _state.SetMessage(_localization.Format("Recovery_RecoverFailed", ex.Message), StatusSeverity.Error);
         }
         finally
         {

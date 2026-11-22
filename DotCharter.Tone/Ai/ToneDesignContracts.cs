@@ -246,7 +246,8 @@ public interface IToneDesignModelFactory
 public interface IAiSecretStore
 {
     string? Read(AiProviderKind kind);
-    void Write(AiProviderKind kind, string? secret);
+    /// <summary>Returns true only when the requested key change was stored.</summary>
+    bool Write(AiProviderKind kind, string? secret);
 
     /// <summary>True when this store SEALS a secret at rest and it survives the
     /// process (DPAPI on Windows). False means the key lives for the session and is

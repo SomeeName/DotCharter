@@ -1,7 +1,9 @@
 using System.Net;
 using System.Text;
+using DotCharter.Tone.Ai;
 using DotCharter.Tone.Online;
 using DotCharter.Tone.Online.Tone3000;
+using DotCharter.Tone.UI.ViewModels.PlayMode;
 
 namespace DotCharter.Tests.Services.Online;
 
@@ -14,6 +16,222 @@ namespace DotCharter.Tests.Services.Online;
 public sealed class Tone3000AuthServiceTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task RejectedRefresh_UpdatesTheBrowserAuthBindings()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = new InMemoryTone3000TokenStore();
+        store.Save(new Tone3000SessionData("old-at", "old-rt", now.AddMinutes(-1), "user", "name"));
+        using var auth = NewService(new ScriptedHandler((_, _) =>
+            Json("""{"error":"invalid_grant"}""", HttpStatusCode.BadRequest)), store, nowUtc: () => now);
+        using var client = new Tone3000Client(auth.GetAccessTokenAsync,
+            handler: new ScriptedHandler((_, _) => Json("{}", HttpStatusCode.Unauthorized)));
+        var browser = new NamCaptureBrowserViewModel(client, auth, new InertNamCaptureLibrary(),
+            () => new FakeDspChainService([]), FakeLocalization.English(), () => { });
+        var notifications = new List<string?>();
+        browser.PropertyChanged += (_, args) => notifications.Add(args.PropertyName);
+        Assert.True(browser.IsSignedIn);
+
+        await browser.SearchAsync();
+
+        Assert.False(auth.IsSignedIn);
+        Assert.Contains(nameof(browser.SignedInLabel), notifications);
+        Assert.Contains(nameof(browser.IsSignedOut), notifications);
+        Assert.Contains(nameof(browser.ShowSignInCta), notifications);
+        Assert.True(browser.ShowSignInCta);
+        Assert.Equal(FakeLocalization.English()["Nam_SessionExpired"], browser.StatusMessage);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AnOldAiSearchCannotInvalidateTheNewAccount(bool holdRefresh)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = new InMemoryTone3000TokenStore();
+        store.Save(new Tone3000SessionData("old-at", "old-rt",
+            holdRefresh ? now.AddMinutes(-1) : now.AddHours(1), "old-user", "old-name"));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var auth = NewService(new ScriptedHandler(async (request, body) =>
+        {
+            if (body.Contains("grant_type=refresh_token", StringComparison.Ordinal))
+            {
+                entered.TrySetResult();
+                await release.Task.WaitAsync(Ct);
+                return Json("""{"access_token":"stale-at","refresh_token":"stale-rt","expires_in":3600}""");
+            }
+            return request.RequestUri!.AbsolutePath.EndsWith("/oauth/token", StringComparison.Ordinal)
+                ? Json("""{"access_token":"account-at","refresh_token":"account-rt","expires_in":3600}""")
+                : Json("""{"user":{"id":"new-user","username":"new-name"}}""");
+        }), store, nowUtc: () => now);
+        using var client = new Tone3000Client(auth.GetAccessTokenAsync,
+            handler: new ScriptedHandler(async (_, _) =>
+            {
+                if (!holdRefresh)
+                {
+                    entered.TrySetResult();
+                    await release.Task.WaitAsync(Ct);
+                }
+                return Json("{}", HttpStatusCode.Unauthorized);
+            }));
+        var source = new Tone3000CaptureSource(client, auth, new InertNamCaptureLibrary());
+        var pending = source.FindAsync("Fender Twin", Ct);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+            auth.SignOut();
+            Assert.True((await auth.SignInAsync(Ct)).Ok);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await pending.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+        }
+
+        Assert.True(auth.IsSignedIn);
+        Assert.Equal("account-at", store.Load()!.AccessToken);
+        Assert.Equal("new-name", auth.UserName);
+    }
+
+    [Fact]
+    public async Task RefreshingTheCurrentAccountKeepsItsSearchResult()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = new InMemoryTone3000TokenStore();
+        store.Save(new Tone3000SessionData("old-at", "old-rt", now.AddMinutes(-1), "user", "name"));
+        using var auth = NewService(new ScriptedHandler((_, _) =>
+            Json("""{"access_token":"fresh-at","refresh_token":"fresh-rt","expires_in":3600}""")), store, nowUtc: () => now);
+        using var client = new Tone3000Client(auth.GetAccessTokenAsync,
+            handler: new ScriptedHandler((_, _) => Json("""{"data":[],"total":0}""")));
+        var browser = new NamCaptureBrowserViewModel(client, auth, new InertNamCaptureLibrary(),
+            () => new FakeDspChainService([]), FakeLocalization.English(), () => { });
+
+        await browser.SearchAsync();
+
+        Assert.True(auth.IsSignedIn);
+        Assert.Equal("fresh-at", store.Load()!.AccessToken);
+        Assert.Equal(FakeLocalization.English()["Nam_NoResults"], browser.StatusMessage);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AnOldSearchCannotInvalidateTheNewlySignedInAccount(bool holdRefresh)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = new InMemoryTone3000TokenStore();
+        store.Save(new Tone3000SessionData("old-at", "old-rt",
+            holdRefresh ? now.AddMinutes(-1) : now.AddHours(1), "old-user", "old-name"));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var authHandler = new ScriptedHandler(async (request, body) =>
+        {
+            if (body.Contains("grant_type=refresh_token", StringComparison.Ordinal))
+            {
+                entered.TrySetResult();
+                await release.Task.WaitAsync(Ct);
+                return Json("""{"access_token":"stale-at","refresh_token":"stale-rt","expires_in":3600}""");
+            }
+            return request.RequestUri!.AbsolutePath.EndsWith("/oauth/token", StringComparison.Ordinal)
+                ? Json("""{"access_token":"account-at","refresh_token":"account-rt","expires_in":3600}""")
+                : Json("""{"user":{"id":"new-user","username":"new-name"}}""");
+        });
+        using var auth = NewService(authHandler, store, nowUtc: () => now);
+        var apiHandler = new ScriptedHandler(async (_, _) =>
+        {
+            if (!holdRefresh)
+            {
+                entered.TrySetResult();
+                await release.Task.WaitAsync(Ct);
+            }
+            return Json("{}", HttpStatusCode.Unauthorized);
+        });
+        using var client = new Tone3000Client(auth.GetAccessTokenAsync, handler: apiHandler);
+        var browser = new NamCaptureBrowserViewModel(client, auth, new InertNamCaptureLibrary(),
+            () => new FakeDspChainService([]), FakeLocalization.English(), () => { });
+        var pending = browser.SearchAsync();
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+            auth.SignOut();
+            Assert.True((await auth.SignInAsync(Ct)).Ok);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await pending.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+        }
+
+        Assert.True(auth.IsSignedIn);
+        Assert.Equal("new-name", auth.UserName);
+        Assert.Equal("account-at", store.Load()!.AccessToken);
+        Assert.NotEqual(FakeLocalization.English()["Nam_SessionExpired"], browser.StatusMessage);
+    }
+
+    [Theory]
+    [InlineData(false, "sign-out")]
+    [InlineData(true, "sign-out")]
+    [InlineData(false, "invalidate")]
+    [InlineData(true, "invalidate")]
+    [InlineData(false, "new-account")]
+    [InlineData(true, "new-account")]
+    public async Task PendingRefresh_CannotChangeAReplacedSession(bool rejected, string change)
+    {
+        var now = new DateTimeOffset(2026, 7, 11, 12, 0, 0, TimeSpan.Zero);
+        var store = new InMemoryTone3000TokenStore();
+        store.Save(new Tone3000SessionData("old-at", "old-rt", now.AddMinutes(-1), "old-user", "old-name"));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new ScriptedHandler(async (request, body) =>
+        {
+            if (body.Contains("grant_type=refresh_token", StringComparison.Ordinal))
+            {
+                entered.SetResult();
+                await release.Task.WaitAsync(Ct);
+                return rejected
+                    ? Json("{}", HttpStatusCode.Unauthorized)
+                    : Json("""{"access_token":"stale-at","refresh_token":"stale-rt","expires_in":3600}""");
+            }
+
+            return request.RequestUri!.AbsolutePath.EndsWith("/oauth/token", StringComparison.Ordinal)
+                ? Json("""{"access_token":"account-at","refresh_token":"account-rt","expires_in":3600}""")
+                : Json("""{"user":{"id":"new-user","username":"new-name"}}""");
+        });
+        using var service = NewService(handler, store, nowUtc: () => now);
+        var changes = 0;
+        service.AuthStateChanged += () => changes++;
+        var pending = service.GetAccessTokenAsync(Ct);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+            if (change == "new-account") Assert.True((await service.SignInAsync(Ct)).Ok);
+            else if (change == "invalidate") service.InvalidateSession("unauthorized");
+            else service.SignOut();
+        }
+        finally
+        {
+            release.TrySetResult();
+            await pending.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+        }
+
+        Assert.Null(await pending);
+        Assert.Equal(1, changes);
+        if (change == "new-account")
+        {
+            Assert.Equal("account-at", store.Load()!.AccessToken);
+            Assert.Equal("account-rt", store.Load()!.RefreshToken);
+            Assert.Equal("new-name", service.UserName);
+            Assert.Equal("account-at", await service.GetAccessTokenAsync(Ct));
+        }
+        else
+        {
+            Assert.False(service.IsSignedIn);
+            Assert.Null(store.Load());
+            Assert.Null(await service.GetAccessTokenAsync(Ct));
+        }
+    }
 
     [Fact]
     public async Task InvalidatingSessionClearsStoredCredentialsAndNotifiesOnce()
@@ -102,10 +320,13 @@ public sealed class Tone3000AuthServiceTests
 
     private sealed class ScriptedHandler : HttpMessageHandler
     {
-        private readonly Func<HttpRequestMessage, string, HttpResponseMessage> _respond;
+        private readonly Func<HttpRequestMessage, string, Task<HttpResponseMessage>> _respond;
         public readonly List<(HttpRequestMessage Request, string Body)> Requests = [];
 
         public ScriptedHandler(Func<HttpRequestMessage, string, HttpResponseMessage> respond) =>
+            _respond = (request, body) => Task.FromResult(respond(request, body));
+
+        public ScriptedHandler(Func<HttpRequestMessage, string, Task<HttpResponseMessage>> respond) =>
             _respond = respond;
 
         protected override async Task<HttpResponseMessage> SendAsync(
@@ -115,7 +336,7 @@ public sealed class Tone3000AuthServiceTests
                 ? string.Empty
                 : await request.Content.ReadAsStringAsync(cancellationToken);
             Requests.Add((request, body));
-            return _respond(request, body);
+            return await _respond(request, body);
         }
     }
 

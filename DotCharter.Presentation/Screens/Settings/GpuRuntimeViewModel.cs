@@ -81,7 +81,7 @@ public sealed partial class GpuRuntimeViewModel : ObservableObject, IGpuRuntimeP
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Measuring the old CUDA runtime failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Measuring the old CUDA runtime failed", ex);
         }
     }
 
@@ -114,7 +114,7 @@ public sealed partial class GpuRuntimeViewModel : ObservableObject, IGpuRuntimeP
         }
         catch (Exception ex)
         {
-            _logger?.Error(AppLogCategory.Audio, $"Removing the old CUDA runtime failed: {ex.Message}", ex);
+            _logger?.Error(AppLogCategory.Audio, "Removing the old CUDA runtime failed", ex);
             Detail = _localization.Format("Settings_Ai_MatchModel_Failed", ex.Message);
         }
         finally

@@ -48,6 +48,8 @@ public partial class StringFingeringInput : ObservableObject
     public string PitchName => SoundingPitchReadout.ForFretText(Arrangement, StringIndex, FretText);
 
     public StringFingeringInput(int index) => StringIndex = index;
+
+    internal void RefreshPitch() => OnPropertyChanged(nameof(PitchName));
 }
 
 /// <summary>One entry of the chord panel's template picker: the name, or for an unnamed grip its

@@ -93,6 +93,42 @@ public sealed class HandShapeSplitter
         return splits;
     }
 
+    /// <summary>Cuts shapes around excluded sounds, retaining pieces containing ordinary notes or chords.</summary>
+    internal static List<HandShape> ExcludeSounds(IReadOnlyList<HandShape> shapes,
+        IReadOnlyCollection<FractionalPosition> remainingSounds, IReadOnlyCollection<FractionalPosition> excluded)
+    {
+        var result = new List<HandShape>();
+        foreach (var shape in shapes)
+        {
+            var cuts = excluded.Where(shape.Covers).ToHashSet();
+            foreach (var position in excluded.Where(shape.Covers))
+            {
+                var next = remainingSounds.Where(p => shape.Covers(p) && p > position)
+                    .DefaultIfEmpty(shape.EndPosition).Min();
+                cuts.Add(next);
+            }
+
+            var split = ComputeSplits([shape], cuts).FirstOrDefault();
+            var spans = Enumerable.Repeat(
+                    (Start: shape.Position, End: split.Shape == null ? shape.EndPosition : split.TrimmedEnd), 1)
+                .Concat(split.Shape == null ? [] : split.NewSpans);
+            foreach (var (start, end) in spans)
+            {
+                if (excluded.Any(p => p.IsWithin(start, end)) ||
+                    !remainingSounds.Any(p => p.IsWithin(start, end)))
+                {
+                    continue;
+                }
+                var piece = shape.Clone();
+                piece.Position = start;
+                piece.EndPosition = end;
+                result.Add(piece);
+            }
+        }
+
+        return result;
+    }
+
     public void SplitAtSelection(TrackEditorContext track)
     {
         var positions = new HashSet<FractionalPosition>();
@@ -125,28 +161,22 @@ public sealed class HandShapeSplitter
             // The head keeps the original template: its content did not change,
             // and re-deriving it would silently re-shape a bar the charter did
             // not ask about.
-            added.Add(new HandShape
-            {
-                Position = split.Shape.Position,
-                EndPosition = split.TrimmedEnd,
-                Name = split.Shape.Name,
-                TemplateId = split.Shape.TemplateId
-            });
+            var head = split.Shape.Clone();
+            head.EndPosition = split.TrimmedEnd;
+            added.Add(head);
 
             foreach (var (start, end) in split.NewSpans)
             {
-                added.Add(new HandShape
+                var tail = split.Shape.Clone();
+                tail.Position = start;
+                tail.EndPosition = end;
+                // A tail with playable sounds gets a new grip for its span.
+                if (ResolveTemplateId(track, start, end, newTemplates, ref nextTemplateId) is { } templateId)
                 {
-                    Position = start,
-                    EndPosition = end,
-                    Name = split.Shape.Name,
-                    // A new piece describes a NEW hand position — that is the
-                    // whole point of splitting — so it gets a template built
-                    // from what actually sounds inside it. A span with no
-                    // sounds falls back to the original's.
-                    TemplateId = ResolveTemplateId(track, start, end, split.Shape.TemplateId,
-                        newTemplates, ref nextTemplateId)
-                });
+                    tail.TemplateId = templateId;
+                    tail.GhostMask = null;
+                }
+                added.Add(tail);
             }
         }
 
@@ -166,11 +196,11 @@ public sealed class HandShapeSplitter
             $"(new templates={newTemplates.Count}) on track '{track.Arrangement.Name}'.");
     }
 
-    private int ResolveTemplateId(TrackEditorContext track, FractionalPosition start, FractionalPosition end,
-        int fallbackTemplateId, List<ChordTemplate> newTemplates, ref int nextTemplateId)
+    private int? ResolveTemplateId(TrackEditorContext track, FractionalPosition start, FractionalPosition end,
+        List<ChordTemplate> newTemplates, ref int nextTemplateId)
     {
         var seed = _fingeringService.BuildTemplateForRange(track.Arrangement, track.Notes, track.Chords, start, end);
-        if (seed == null) return fallbackTemplateId;
+        if (seed == null) return null;
 
         // A tail that is exactly one chord's notes belongs on THAT chord's template, so the bar and its
         // chord stay on one template instead of the first equal-fret one a lookup meets.
@@ -190,5 +220,40 @@ public sealed class HandShapeSplitter
         seed.Id = nextTemplateId++;
         newTemplates.Add(seed);
         return seed.Id;
+    }
+
+    /// <summary>Cuts out replacement spans using the editor's split boundaries, retaining
+    /// only outside pieces that cover a surviving sound. Destination templates stay attached.</summary>
+    internal static List<HandShape> RetainOutsideSpans(IReadOnlyList<HandShape> shapes,
+        IReadOnlyList<HandShape> replacements, IReadOnlyList<FractionalPosition> survivingSoundPositions)
+    {
+        var occupied = replacements.Where(h => h.EndPosition > h.Position).ToArray();
+        var boundaries = occupied.SelectMany(h => new[] { h.Position, h.EndPosition }).ToArray();
+        var splits = ComputeSplits(shapes, boundaries).ToDictionary(s => s.Shape);
+        var retained = new List<HandShape>();
+        foreach (var shape in shapes)
+        {
+            var spans = new List<(FractionalPosition Start, FractionalPosition End)>();
+            if (splits.TryGetValue(shape, out var split))
+            {
+                spans.Add((shape.Position, split.TrimmedEnd));
+                spans.AddRange(split.NewSpans);
+            }
+            else
+            {
+                spans.Add((shape.Position, shape.EndPosition));
+            }
+
+            foreach (var (start, end) in spans)
+            {
+                if (occupied.Any(h => h.Position < end && h.EndPosition > start)) continue;
+                if (!survivingSoundPositions.Any(position => position >= start && position < end)) continue;
+                var piece = shape.Clone();
+                piece.Position = start;
+                piece.EndPosition = end;
+                retained.Add(piece);
+            }
+        }
+        return retained;
     }
 }

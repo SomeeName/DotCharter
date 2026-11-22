@@ -157,6 +157,7 @@ public sealed record ChordApplyResult(ChordTemplate Shown, ChordApplyTargets Tar
 /// </summary>
 public sealed class ChordApplyScope
 {
+    private readonly Arrangement _arrangement;
     private readonly ChordTemplate _loaded;
     private readonly ChordApplySounds _this;
     private readonly ChordApplySounds _selected;
@@ -164,20 +165,23 @@ public sealed class ChordApplyScope
     private readonly IReadOnlyList<Chord> _selectedChordsRaw;
     private readonly IReadOnlyList<ChartLevel> _levelsOfArrangement;
     private readonly IReadOnlyList<Chord> _activeLevelChords;
+    private readonly IReadOnlyList<HandShape> _activeLevelHandShapes;
     private readonly bool _templateIsReal;
     private readonly List<Chord> _boundChords = [];
     private readonly List<HandShape> _boundHandShapes = [];
     private readonly int _levels;
     private readonly int _capo;
-    private readonly List<ChordTemplate> _sameFrets = [];
-    private readonly List<ChordTemplate> _grip = [];
+    private readonly ChordGripMatches _matches;
+    private readonly IReadOnlyList<ChordTemplate> _grip;
     private readonly Dictionary<ChordTemplate, List<Chord>> _chordsOnTemplate = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<ChordTemplate, List<HandShape>> _handShapesOnTemplate = new(ReferenceEqualityComparer.Instance);
     private List<Chord>? _enclosedBySelection;
 
     private ChordApplyScope(Arrangement arrangement, ChordTemplate loaded, ChordApplySounds thisSounds,
-        ChordApplySounds selected, IReadOnlyList<Chord> activeLevelChords)
+        ChordApplySounds selected, IReadOnlyList<Chord> activeLevelChords, IReadOnlyList<HandShape> activeLevelHandShapes)
     {
+        _arrangement = arrangement;
+        _activeLevelHandShapes = activeLevelHandShapes;
         _loaded = loaded;
         _capo = arrangement.Capo;
         _activeLevelChords = activeLevelChords;
@@ -192,20 +196,8 @@ public sealed class ChordApplyScope
         // (`ChordMask.Arpeggio` is load-bearing on export), so neither a
         // fingering nor a name crosses it — BOTH flags, as every find-or-create
         // key reads them (editing-invariants.md).
-        var flavour = ArpeggioFlavour.Of(loaded);
-        foreach (var template in arrangement.ChordTemplates)
-        {
-            if (ReferenceEquals(template, loaded) || !flavour.Matches(template)) continue;
-            if (FingersDictHelper.Equal(template.Frets, loaded.Frets) && template.Frets.Count > 0)
-                _sameFrets.Add(template);
-        }
-
-        _grip.AddRange(_sameFrets);
-        var inGrip = new HashSet<ChordTemplate>(_grip, ReferenceEqualityComparer.Instance);
-        foreach (var moved in ChordShapeTransposition.FindTransposed(arrangement, loaded, arrangement.Capo))
-        {
-            if (flavour.Matches(moved) && inGrip.Add(moved)) _grip.Add(moved);
-        }
+        _matches = ChordGripMatches.Find(arrangement, loaded);
+        _grip = _matches.For(ChordTemplateEditKind.Fingering);
 
         var gripById = new Dictionary<int, ChordTemplate>();
         foreach (var template in _grip) gripById.TryAdd(template.Id, template);
@@ -246,8 +238,9 @@ public sealed class ChordApplyScope
     /// <summary>Builds the scope. <paramref name="activeLevelChords" /> is where
     /// a hand shape's enclosed, still-unbound chords are looked for.</summary>
     public static ChordApplyScope Prepare(Arrangement arrangement, ChordTemplate loaded,
-        ChordApplySounds thisSounds, ChordApplySounds selected, IReadOnlyList<Chord> activeLevelChords) =>
-        new(arrangement, loaded, thisSounds, selected, activeLevelChords);
+        ChordApplySounds thisSounds, ChordApplySounds selected, IReadOnlyList<Chord> activeLevelChords,
+        IReadOnlyList<HandShape>? activeLevelHandShapes = null) =>
+        new(arrangement, loaded, thisSounds, selected, activeLevelChords, activeLevelHandShapes ?? []);
 
     /// <summary>True when the selection narrowed to the shown shape is empty —
     /// browse mode, where the panel edits the shape itself.</summary>
@@ -456,7 +449,7 @@ public sealed class ChordApplyScope
     {
         var targets = ResolveSounds(chosen, kind);
         if (targets.Path == ChordApplyPath.Refused || targets.Rung != ChordApplyRung.SameGrip) return targets;
-        var grips = GripsFor(kind);
+        var grips = kind == ChordTemplateEditKind.Fingering ? _grip : _matches.For(kind);
         if (fullyFingered) return WithGrips(targets, grips);
         return targets with { GripsWithheld = grips.Count > 0 };
     }
@@ -476,11 +469,13 @@ public sealed class ChordApplyScope
 
         if (rung <= ChordApplyRung.Selected)
         {
-            var sounds = SoundsOf(rung);
+            var picked = SoundsOf(rung);
+            var sounds = WholeHandShape(picked, kind);
             // Every user of the shape is in the set: an in-place edit is the same
             // edit, and it leaves no orphaned template behind. The unbound strums
-            // under its hand shapes join it, as on "every use".
-            if (kind != ChordTemplateEditKind.Switch && CoversEveryUse(sounds))
+            // under its hand shapes join it, as on "every use". The whole-bar
+            // sweep adds unbound strums too, so the test looks at the bound ones.
+            if (kind != ChordTemplateEditKind.Switch && (CoversEveryUse(picked) || (picked.Chords.All(IsBound) && CoversEveryUse(BoundOnly(sounds)))))
                 return InPlace(rung, kind, EnclosedUnbound(sounds.HandShapes), []);
             return new ChordApplyTargets(rung, kind, ChordApplyPath.Rebind, sounds, [], 0, [], 0);
         }
@@ -528,19 +523,47 @@ public sealed class ChordApplyScope
         _ => _selected
     };
 
-    /// <summary>The grip templates an edit of this kind may write. Each one is
-    /// edited IN PLACE and moves no fret, which is the sanctioned exception to
-    /// "never mutate a shared template" (editing-invariants.md): every chord on
-    /// it plays this very grip.</summary>
-    private IReadOnlyList<ChordTemplate> GripsFor(ChordTemplateEditKind kind) => kind switch
+    /// <summary>
+    ///     THE rule for a fingering edit that reaches a hand shape: the
+    ///     strums of one bar are one authored grip, so the chords under every
+    ///     (non-arpeggio) bar in <paramref name="sounds" /> that carry the shown
+    ///     shape join the targets. Otherwise the bar mixes two templates and the
+    ///     untouched strums ship as full chord panels instead of repeats. Every
+    ///     edit path (finger buttons, SetFinger keybinds, hover typing, Save)
+    ///     resolves through here. Other bars holding the shape are the "every
+    ///     use" rung's business; arpeggio chords differ on purpose.
+    /// </summary>
+    private ChordApplySounds WholeHandShape(ChordApplySounds sounds, ChordTemplateEditKind kind)
     {
-        ChordTemplateEditKind.Fingering or ChordTemplateEditKind.Technique => _grip,
-        // A name belongs to the PITCHES, so a grip moved along the neck is a
-        // different chord; only a same-fret template (of the same flavour, as
-        // every grip is) can share it.
-        ChordTemplateEditKind.Name => _sameFrets,
-        _ => []
-    };
+        if (kind != ChordTemplateEditKind.Fingering || _loaded.IsArpeggio) return sounds;
+
+        // The bars over the picked chords join whatever template they point at: a
+        // bar whose template differs from its strums' (so narrowing dropped it) is
+        // still the bar of those strums, and it moves with them.
+        var handShapes = new List<HandShape>(sounds.HandShapes);
+        foreach (var bar in _activeLevelHandShapes)
+        {
+            if (handShapes.Contains(bar) || (_arrangement.FindChordTemplate(bar.TemplateId)?.IsArpeggio ?? false)) continue;
+            if (sounds.Chords.Any(c => bar.Covers(c.Position))) handShapes.Add(bar);
+        }
+
+        if (handShapes.Count == 0) return sounds;
+
+        var chords = new List<Chord>(sounds.Chords);
+        var seen = new HashSet<Chord>(chords, ReferenceEqualityComparer.Instance);
+        foreach (var chord in _activeLevelChords)
+        {
+            if (seen.Contains(chord) || !ChordTemplateEditPlanner.TemplateMatchesChord(_loaded, chord)) continue;
+            if (!handShapes.Any(h => h.Covers(chord.Position))) continue;
+            if (_arrangement.FindChordTemplate(chord.TemplateId)?.IsArpeggio ?? false) continue;
+            seen.Add(chord);
+            chords.Add(chord);
+        }
+
+        return chords.Count == sounds.Chords.Count && handShapes.Count == sounds.HandShapes.Count
+            ? sounds
+            : new ChordApplySounds(chords, handShapes);
+    }
 
     private int GripChordsOf(IReadOnlyList<ChordTemplate> grips)
     {
@@ -554,6 +577,9 @@ public sealed class ChordApplyScope
         if (!_templateIsReal || sounds.Count != _boundChords.Count + _boundHandShapes.Count) return false;
         return sounds.Chords.All(IsBound) && sounds.HandShapes.All(h => h.TemplateId == _loaded.Id);
     }
+
+    private ChordApplySounds BoundOnly(ChordApplySounds sounds) =>
+        new([.. sounds.Chords.Where(IsBound)], sounds.HandShapes);
 
     private bool IsBound(Chord chord) =>
         _templateIsReal && chord.TemplateId == _loaded.Id && ChordTemplateEditPlanner.TemplateMatchesChord(_loaded, chord);

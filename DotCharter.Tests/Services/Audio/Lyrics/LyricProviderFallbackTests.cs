@@ -101,9 +101,10 @@ public sealed class LyricProviderFallbackTests : IDisposable
         public void Dispose() => Disposed = true;
     }
 
-    private LyricAutoSyncService Service(string roots, Rig rig, LyricProviderMemory memory) => new(
+    private LyricAutoSyncService Service(
+        string roots, Rig rig, LyricProviderMemory memory, DotCharter.Tests.Infrastructure.FakeAppLogger? logger = null) => new(
         FakeLocalization.English(),
-        logger: null,
+        logger: logger,
         modelDirectoryOverride: null,
         vocalStemLocator: _ => null,
         sessionOpener: rig.Open,
@@ -112,6 +113,81 @@ public sealed class LyricProviderFallbackTests : IDisposable
         providerMemory: memory);
 
     private static readonly LyricSyncOptions Options = new() { StarLogProb = -20.0 };
+
+    [Theory]
+    [InlineData(OnnxExecutionProvider.Auto)]
+    [InlineData(OnnxExecutionProvider.DirectML)]
+    public void AGpuGraphThatCannotOpenFallsBackAndRemembersTheCpu(OnnxExecutionProvider requested)
+    {
+        var opened = new List<OnnxExecutionProvider>();
+        var memory = new LyricProviderMemory();
+        var model = new LyricModel("m", _dir, 0);
+        ILyricAcousticSession Open(LyricModel _, OnnxExecutionProvider provider, Action<string>? log)
+        {
+            opened.Add(provider);
+            if (provider != OnnxExecutionProvider.Cpu) throw new InvalidOperationException("unsupported graph");
+            return new FakeSession(provider, null);
+        }
+
+        using (var session = new LyricProviderFallbackSession(model, requested, Open, memory, null, null))
+            Assert.Equal(OnnxExecutionProvider.Cpu, session.ActiveProvider);
+        using var next = new LyricProviderFallbackSession(model, requested, Open, memory, null, null);
+        Assert.True(memory.IsCpuOnly(model.Id));
+        Assert.Equal(new[] { requested, OnnxExecutionProvider.Cpu, OnnxExecutionProvider.Cpu }, opened);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CpuOpenFailuresAndCancellationAreNotRetried(bool cancelled)
+    {
+        var opens = 0;
+        var memory = new LyricProviderMemory();
+        ILyricAcousticSession Open(LyricModel _, OnnxExecutionProvider provider, Action<string>? log)
+        {
+            opens++;
+            if (cancelled) throw new OperationCanceledException();
+            throw new InvalidOperationException("cpu graph failure");
+        }
+
+        var model = new LyricModel("m", _dir, 0);
+        if (cancelled)
+        {
+            Assert.Throws<OperationCanceledException>(() => new LyricProviderFallbackSession(
+                model, OnnxExecutionProvider.DirectML, Open, memory, null, null));
+        }
+        else
+        {
+            Assert.Throws<InvalidOperationException>(() => new LyricProviderFallbackSession(
+                model, OnnxExecutionProvider.Cpu, Open, memory, null, null));
+        }
+        Assert.Equal(1, opens);
+        Assert.False(memory.IsCpuOnly(model.Id));
+    }
+
+    [Fact]
+    public async Task AGpuFailureTellsTheUserAndLogsTheExceptionOnTheWarning()
+    {
+        var rig = new Rig();
+        rig.GpuBroken.Add(LyricModelCatalog.MultilingualId);
+        var logger = new DotCharter.Tests.Infrastructure.FakeAppLogger();
+        var shown = new List<string>();
+
+        var result = await Service(InstallModels(english: false), rig, new LyricProviderMemory(), logger)
+            .AlignAsync("a-b", Audio(), Options, new SyncProgress(shown), Ct);
+
+        Assert.True(result.Ran, result.Error);
+        var notice = FakeLocalization.English()["Progress_LyricGpuFailedCpu"];
+        Assert.Contains(notice, result.Warnings);
+        Assert.Contains(notice, shown);
+        var warn = Assert.Single(logger.Entries, e => e.Level == "WARN");
+        Assert.IsType<InvalidOperationException>(warn.Exception);
+    }
+
+    private sealed class SyncProgress(List<string> sink) : IProgress<string>
+    {
+        public void Report(string value) => sink.Add(value);
+    }
 
     [Fact]
     public async Task AGpuRunThatFailsIsRetriedOnTheCpuAndTheResultIsReturned()
@@ -219,7 +295,7 @@ public sealed class LyricProviderFallbackTests : IDisposable
         Assert.True(first.Ran, first.Error);
         Assert.True(first.IsEnsemble);
         // The retry made the second head work: nothing degraded to the primary alone.
-        Assert.Empty(first.Warnings);
+        Assert.Equal([FakeLocalization.English()["Progress_LyricGpuFailedCpu"]], first.Warnings);
         Assert.Single(rig.Opened, o => o.Id == LyricModelCatalog.MultilingualId);
         Assert.Contains((LyricModelCatalog.MultilingualId, OnnxExecutionProvider.DirectML), rig.Opened);
         Assert.Contains((LyricModelCatalog.EnglishId, OnnxExecutionProvider.DirectML), rig.Opened);

@@ -6,6 +6,7 @@ using DotCharter.Presentation.Screens.Dialogs;
 using DotCharter.Services.Editing.Maintenance;
 using DotCharter.Services.Import.GuitarPro;
 using DotCharter.Services.Parsing.GuitarPro;
+using DotCharter.Tests.Services.Parsing.GuitarPro;
 using DotCharter.Tone.Infrastructure.Storage;
 
 namespace DotCharter.Tests.Presentation.Dialogs;
@@ -142,6 +143,180 @@ public sealed class GpImportViewModelTests : IDisposable
     }
 
     private static Task ImportAsync(GpImportViewModel vm) => ((IAsyncRelayCommand)vm.ImportCommand).ExecuteAsync(null);
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Selected_only_reordered_Lead_is_paired_or_reported_before_any_edits(bool missingOlderLead, bool selectRhythm)
+    {
+        var project = NewProjectWithFlat120Grid();
+        var lead = new GuitarNote { StringIndex = 0, Fret = 5 };
+        var rhythm = new GuitarNote { StringIndex = 0, Fret = 5 };
+        project.Arrangements.Add(new Arrangement { Name = "Lead", Levels = { new ChartLevel { Notes = { lead } } } });
+        project.Arrangements.Add(new Arrangement { Name = "Rhythm", Levels = { new ChartLevel { Notes = { rhythm } } } });
+        var oldTracks = new List<(string Name, IReadOnlyList<FxMeasure> Measures)>();
+        if (!missingOlderLead) oldTracks.Add(("Lead", [new FxMeasure().AddVoice(FxBeat.Note(0, 0, 5))]));
+        oldTracks.Add(("Rhythm", [new FxMeasure().AddVoice(FxBeat.Note(0, 0, 5))]));
+        var older = LegacyGpFixtureBuilder.WriteMultiTrackFile("5.10", oldTracks);
+        var newer = LegacyGpFixtureBuilder.WriteMultiTrackFile("5.10",
+        [
+            ("Rhythm", new[] { new FxMeasure().AddVoice(FxBeat.Chord(0, new FxNote(0, 5, Accent: true))) }),
+            ("Lead", new[] { new FxMeasure().AddVoice(FxBeat.Chord(0, new FxNote(0, 5, Accent: true))) })
+        ]);
+        try
+        {
+            var h = new Harness(project);
+            var vm = await h.OpenOnAsync(newer);
+            vm.Tracks[0].IsSelected = selectRhythm;
+            vm.IsDiffCompareMode = true;
+            h.Storage.NextOpenFile = older;
+            await ((IAsyncRelayCommand)vm.PickOldFileCommand).ExecuteAsync(null);
+
+            await ImportAsync(vm);
+
+            Assert.False(rhythm.Accent);
+            if (missingOlderLead)
+            {
+                Assert.Contains("Lead", vm.ErrorMessage);
+                Assert.False(vm.Result.IsCompleted);
+                Assert.False(lead.Accent);
+                Assert.Empty(h.Recorder.Calls);
+            }
+            else
+            {
+                Assert.Empty(vm.ErrorMessage);
+                Assert.True(lead.Accent);
+                Assert.True(ChartEditHarness.Answer(vm.Result));
+            }
+        }
+        finally
+        {
+            File.Delete(older);
+            File.Delete(newer);
+        }
+    }
+
+    [Fact]
+    public async Task Reordered_legacy_tracks_compare_the_same_named_parts_and_preserve_user_edits()
+    {
+        var project = NewProjectWithFlat120Grid();
+        var lead = new GuitarNote { StringIndex = 0, Fret = 5, Accent = true };
+        var rhythm = new GuitarNote { StringIndex = 0, Fret = 5 };
+        project.Arrangements.Add(new Arrangement { Name = "Lead", Levels = { new ChartLevel { Notes = { lead } } } });
+        project.Arrangements.Add(new Arrangement { Name = "Rhythm", Levels = { new ChartLevel { Notes = { rhythm } } } });
+        var older = LegacyGpFixtureBuilder.WriteMultiTrackFile("5.10",
+        [
+            ("Lead", new[] { new FxMeasure().AddVoice(FxBeat.Chord(0, new FxNote(0, 5))) }),
+            ("Rhythm", new[] { new FxMeasure().AddVoice(FxBeat.Chord(0, new FxNote(0, 5, Accent: true))) })
+        ]);
+        var newer = LegacyGpFixtureBuilder.WriteMultiTrackFile("5.10",
+        [
+            ("Rhythm", new[] { new FxMeasure().AddVoice(FxBeat.Chord(0, new FxNote(0, 5, Accent: true))) }),
+            ("Lead", new[] { new FxMeasure().AddVoice(FxBeat.Chord(0, new FxNote(0, 5))) })
+        ]);
+        try
+        {
+            var h = new Harness(project);
+            var vm = await h.OpenOnAsync(newer);
+            vm.IsDiffCompareMode = true;
+            h.Storage.NextOpenFile = older;
+            await ((IAsyncRelayCommand)vm.PickOldFileCommand).ExecuteAsync(null);
+
+            await ImportAsync(vm);
+
+            Assert.Empty(vm.ErrorMessage);
+            Assert.True(lead.Accent);
+            Assert.False(rhythm.Accent);
+        }
+        finally
+        {
+            File.Delete(older);
+            File.Delete(newer);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    public async Task Duplicate_track_names_merge_by_source_id(bool diff, bool secondOnly, bool gpif)
+    {
+        var project = NewProjectWithFlat120Grid();
+        var first = new GuitarNote { StringIndex = 0, Fret = 5 };
+        var second = new GuitarNote { StringIndex = 0, Fret = 5 };
+        project.Arrangements.Add(new Arrangement { Name = "First", Levels = { new ChartLevel { Notes = { first } } } });
+        project.Arrangements.Add(new Arrangement { Name = "Second", Levels = { new ChartLevel { Notes = { second } } } });
+        var h = new Harness(project);
+        var path = WriteDuplicateTrackFixture(accentSecond: true, gpif);
+        var older = WriteDuplicateTrackFixture(accentSecond: false, gpif);
+        try
+        {
+            var vm = await h.OpenOnAsync(path);
+            vm.IsTechniqueOnlyMode = !diff;
+            if (diff)
+            {
+                vm.IsDiffCompareMode = true;
+                h.Storage.NextOpenFile = older;
+                await ((IAsyncRelayCommand)vm.PickOldFileCommand).ExecuteAsync(null);
+                first.Accent = true; // An unchanged old/new field must preserve the user's edit.
+            }
+
+            vm.Tracks[0].TargetIndex = 0;
+            vm.Tracks[1].TargetIndex = 1;
+            vm.Tracks[0].IsSelected = !secondOnly;
+
+            await ImportAsync(vm);
+
+            Assert.Empty(vm.ErrorMessage);
+            Assert.Equal(diff, first.Accent);
+            Assert.True(second.Accent);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(older);
+        }
+    }
+
+    private string WriteDuplicateTrackFixture(bool accentSecond, bool gpif)
+    {
+        if (!gpif)
+        {
+            return LegacyGpFixtureBuilder.WriteMultiTrackFile("5.10",
+            [
+                ("Guitar", new[] { new FxMeasure().AddVoice(FxBeat.Note(0, 0, 5)) }),
+                ("Guitar", new[] { new FxMeasure().AddVoice(FxBeat.Chord(0, new FxNote(0, 5, Accent: accentSecond))) })
+            ]);
+        }
+
+        var path = Path.Combine(_tempDir, $"duplicates-{Guid.NewGuid():N}.gp");
+        using var fs = File.Create(path);
+        using var zip = new ZipArchive(fs, ZipArchiveMode.Create);
+        using var writer = new StreamWriter(zip.CreateEntry("Content/score.gpif").Open(), Encoding.UTF8);
+        writer.Write($"""
+            <GPIF>
+              <MasterTrack><Tracks>4 9</Tracks></MasterTrack>
+              <Tracks>
+                <Track id="4"><Name>Guitar</Name></Track>
+                <Track id="9"><Name>Guitar</Name></Track>
+              </Tracks>
+              <MasterBars><MasterBar><Time>4/4</Time><Bars>0 1</Bars></MasterBar></MasterBars>
+              <Bars><Bar id="0"><Voices>0 -1 -1 -1</Voices></Bar><Bar id="1"><Voices>1 -1 -1 -1</Voices></Bar></Bars>
+              <Voices><Voice id="0"><Beats>0</Beats></Voice><Voice id="1"><Beats>1</Beats></Voice></Voices>
+              <Beats><Beat id="0"><Rhythm ref="0"/><Notes>0</Notes></Beat><Beat id="1"><Rhythm ref="0"/><Notes>1</Notes></Beat></Beats>
+              <Notes>
+                <Note id="0"><Properties><Property name="String"><String>0</String></Property><Property name="Fret"><Fret>5</Fret></Property></Properties></Note>
+                <Note id="1">{(accentSecond ? "<Accent>4</Accent>" : "")}<Properties><Property name="String"><String>0</String></Property><Property name="Fret"><Fret>5</Fret></Property></Properties></Note>
+              </Notes>
+              <Rhythms><Rhythm id="0"><NoteValue>Quarter</NoteValue></Rhythm></Rhythms>
+            </GPIF>
+            """);
+        return path;
+    }
 
     // ---- the launcher ------------------------------------------------------------
 

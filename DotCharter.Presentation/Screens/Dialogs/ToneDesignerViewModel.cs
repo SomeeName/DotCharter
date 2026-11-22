@@ -6,7 +6,6 @@ using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Dialogs;
 using DotCharter.Services.Audio.Coordination;
 using DotCharter.Services.Editing.Tones;
-using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Services.State;
 using DotCharter.Services.Plugins;
 using DotCharter.Tone.Audio.Dsp.Tones;
@@ -16,12 +15,10 @@ using DotCharter.Tone.Infrastructure.Storage;
 namespace DotCharter.Presentation.Screens.Dialogs;
 
 /// <summary>
-///     The Tone designer, one instance per open, over the active project: its tone
-///     definitions (edited through <see cref="ToneEditorViewModel" />, committed as ONE
-///     undo step per tone on a switch or on close), each arrangement's tone slots
-///     (committed on close as one undo step) and tones imported from another package
-///     (kept in <see cref="DialogMemory" /> for the export). Import and generate live in
-///     <c>ToneDesignerViewModel.Import.cs</c>.
+///     The Tone designer, one instance per open, over the active project: its tone definitions (edited through
+///     <see cref="ToneEditorViewModel" />) and each arrangement's tone slots, every edit recorded in the history as made
+///     (<see cref="ToneDesignerCommits" />), and tones imported from another package (kept in <see cref="DialogMemory" />).
+///     Import and generate live in <c>ToneDesignerViewModel.Import.cs</c>.
 /// </summary>
 public sealed partial class ToneDesignerViewModel : DialogViewModel<bool>, IToneDesignerScreen, ICancelableDialog, IDisposable
 {
@@ -36,6 +33,7 @@ public sealed partial class ToneDesignerViewModel : DialogViewModel<bool>, ITone
     private readonly RelayCommand _delete;
     private ProjectToneItem? _selectedTone;
     private bool _isPreviewOn;
+    private bool _recording;
     private string _importStatus = "";
 
     public ToneDesignerViewModel(ChartEditDialogServices edit, IFileStorageService storage, TonePreviewTargets preview,
@@ -53,16 +51,19 @@ public sealed partial class ToneDesignerViewModel : DialogViewModel<bool>, ITone
         Editor = new ToneEditorViewModel(edit.Localization, () => ProjectTones);
         Editor.Changed += (_, _) =>
         {
+            CommitEdit(true);
             ApplyPreviewIfOn();
             PushLiveEdit();
         };
 
         AddToneCommand = new RelayCommand(AddTone);
         _duplicate = new RelayCommand(DuplicateTone, () => HasSelectedTone);
-        _delete = new RelayCommand(DeleteTone, () => HasSelectedTone);
+        _delete = new RelayCommand(DeleteSelectedTone, () => HasSelectedTone);
         GenerateTonesFromAudioCommand = new AsyncRelayCommand(GenerateTonesFromAudioAsync);
         ImportTonesFromPsarcCommand = new AsyncRelayCommand(ImportTonesFromPsarcAsync);
         AddImportedToProjectCommand = new RelayCommand<IImportedTone>(AddImportedToProject);
+        UndoCommand = new RelayCommand(() => StepHistory(redo: false));
+        RedoCommand = new RelayCommand(() => StepHistory(redo: true));
         CloseCommand = new RelayCommand(() => Finish(true));
 
         _project = edit.State.ActiveProject;
@@ -82,6 +83,7 @@ public sealed partial class ToneDesignerViewModel : DialogViewModel<bool>, ITone
         Editor.SelectedGearSlot = Editor.GearSlots[0];
         RebuildProjectTones(null);
         RebuildArrangementRows();
+        _edit.History.HistoryChanged += OnHistoryChanged;
         edit.Logger.Info(AppLogCategory.Project,
             $"Tone designer opened. ProjectTones={ProjectTones.Count}, arrangements={Arrangements.Count}, importedTones={ImportedTones.Count}.");
     }
@@ -152,6 +154,8 @@ public sealed partial class ToneDesignerViewModel : DialogViewModel<bool>, ITone
     public ICommand AddToneCommand { get; }
     public ICommand DuplicateToneCommand => _duplicate;
     public ICommand DeleteToneCommand => _delete;
+    public ICommand UndoCommand { get; }
+    public ICommand RedoCommand { get; }
     public ICommand GenerateTonesFromAudioCommand { get; }
     public ICommand ImportTonesFromPsarcCommand { get; }
     public ICommand AddImportedToProjectCommand { get; }
@@ -159,7 +163,7 @@ public sealed partial class ToneDesignerViewModel : DialogViewModel<bool>, ITone
 
     internal TonePreviewSession Preview => _preview.Clone;
 
-    /// <summary>Esc commits what is buffered exactly as Done does; it only answers the default.</summary>
+    /// <summary>Esc commits what is buffered exactly as Done does and only answers the default.</summary>
     public bool TryCancel()
     {
         Finish(false);
@@ -167,7 +171,11 @@ public sealed partial class ToneDesignerViewModel : DialogViewModel<bool>, ITone
     }
 
     /// <summary>Ends a running preview (the rig or the game gets its tone back) and lets go of the session.</summary>
-    public void Dispose() => _preview.Dispose();
+    public void Dispose()
+    {
+        _edit.History.HistoryChanged -= OnHistoryChanged;
+        _preview.Dispose();
+    }
 
     /// <summary>Done and Esc alike commit what is buffered: an edit here is never discarded by leaving.</summary>
     private void Finish(bool result)
@@ -184,76 +192,86 @@ public sealed partial class ToneDesignerViewModel : DialogViewModel<bool>, ITone
             _edit.Logger.Error(AppLogCategory.Project, "Tone designer flush failed on close.", ex);
         }
 
+        _edit.History.HistoryChanged -= OnHistoryChanged;
         IsPreviewOn = false;
         _liveEdit?.EndToneEditPreview();
         Close(result);
     }
 
-    /// <summary>Commits the loaded tone's buffered edit as ONE undoable action; per-knob actions would flood the undo stack.</summary>
-    internal void CommitPendingEdit()
+    /// <summary>Records the loaded tone's pending edit (a key edit waits for leaving the field, close or a switch) as an undo step.</summary>
+    internal void CommitPendingEdit() => CommitEdit(false);
+
+    /// <param name="tick">One tick of a gesture (a drag, typing): ticks fold into one undo step, and a key edit stays pending.</param>
+    private void CommitEdit(bool tick)
     {
         if (_project is null || Editor.Loaded is not { } item || !Editor.IsDirty) return;
-        var key = Editor.EffectiveKey();
-        if (!string.Equals(key, Editor.EditKey.Trim(), StringComparison.Ordinal)) Editor.ShowKey(key);
+        var key = tick ? item.Key : Editor.EffectiveKey();
+        if (!tick && !string.Equals(key, Editor.EditKey.Trim(), StringComparison.Ordinal)) Editor.ShowKey(key);
 
         var tone = Editor.BuildTone(key);
         var json = RsToneJsonWriter.Write(tone);
-        Editor.IsDirty = false;
+        Editor.IsDirty = tick && !string.Equals(Editor.EffectiveKey(), item.Key, StringComparison.Ordinal);
         if (json == item.Json && key == item.Key && tone.Name == item.Name) return;
 
         var definition = new ToneDefinition { Key = key, Name = tone.Name, Json = json };
-        if (string.Equals(key, item.Key, StringComparison.Ordinal))
+        var plan = ToneDesignerCommits.PlanEdit(_project, item.Key, key, definition, tick && !Editor.LastChangeDiscrete, Editor, _edit.Logger);
+        Record(plan.Action);
+        if (plan.Renamed) RetargetSlotRows(item.Key, plan.Key);
+        item.Key = plan.Key;
+        item.Name = tone.Name;
+        item.Json = plan.Json;
+        OnTonesChanged();
+        _edit.Logger.Info(AppLogCategory.Project, $"Tone designer committed edit of tone '{plan.Key}'.");
+    }
+
+    /// <summary>The slot rows as an undo step; typing in one folds into a single step.</summary>
+    internal void CommitSlotAssignments()
+    {
+        if (ToneDesignerCommits.SlotAction(Arrangements) is not { } action) return;
+        Record(action);
+        _edit.Logger.Info(AppLogCategory.Project, "Tone designer assigned tone slots.");
+    }
+
+    /// <summary>The user let go of a control or left a field: the next edit is a new undo step, and a pending key edit is recorded.</summary>
+    public void EndEditGesture(bool leavingField = false)
+    {
+        if (leavingField) CommitPendingEdit();
+        _edit.History.EndGesture();
+    }
+
+    /// <summary>Runs one history step of the designer's own; the history-changed refresh ignores it, the caller updates the lists.</summary>
+    private void Record(IChartAction action)
+    {
+        _recording = true;
+        try
         {
-            _edit.History.Do(new UpsertToneDefinitionAction(_project, item.Key, definition));
+            _edit.History.Do(action);
         }
-        else
+        finally
         {
-            // A KEY edit renames the tone everywhere it is stored, body included, as ONE
-            // undo step: slots, starting tone, declared names and tone changes follow.
-            var plan = ToneKeyEdits.PlanRename(_project, item.Key, key, definition);
-            if (!plan.IsReady)
+            _recording = false;
+        }
+    }
+
+    /// <summary>An undo, a redo or another writer moved the project: the lists and the editor show what it holds now.</summary>
+    private void OnHistoryChanged()
+    {
+        if (_recording || _project is null || IsClosed) return;
+        if (!ToneDesignerCommits.Matches(_project.ToneDefinitions, ProjectTones))
+        {
+            if (ToneDesignerCommits.UpdateInPlace(_project.ToneDefinitions, ProjectTones))
             {
-                _edit.Logger.Warning(AppLogCategory.Project, $"Tone designer: renaming '{item.Key}' to '{key}' refused ({plan.Outcome}); the edit stays under the old key.");
-                Editor.ShowKey(item.Key);
-                definition = new ToneDefinition { Key = item.Key, Name = tone.Name, Json = RsToneJsonWriter.Write(Editor.BuildTone(item.Key)) };
-                key = item.Key;
-                json = definition.Json;
-                _edit.History.Do(new UpsertToneDefinitionAction(_project, item.Key, definition));
+                Editor.Load(SelectedTone);
+                ApplyPreviewIfOn();
             }
             else
             {
-                _edit.History.Do(plan.Action!);
-                RetargetSlotRows(item.Key, key);
+                RebuildProjectTones(SelectedTone?.Key);
             }
         }
 
-        item.Key = key;
-        item.Name = tone.Name;
-        item.Json = json;
+        if (ToneDesignerCommits.RowsStale(_project, Arrangements)) RebuildArrangementRows();
         OnTonesChanged();
-        _edit.Logger.Info(AppLogCategory.Project, $"Tone designer committed edit of tone '{key}'.");
-    }
-
-    /// <summary>Edited slot rows as ONE undoable action; an untouched row is never rewritten, so imported orderings survive.</summary>
-    internal void CommitSlotAssignments()
-    {
-        var actions = new List<IChartAction>();
-        foreach (var row in Arrangements)
-        {
-            var a = row.Arrangement;
-            if (row.ToneBase.Trim() == a.ToneBase && row.ToneA.Trim() == a.ToneA && row.ToneB.Trim() == a.ToneB &&
-                row.ToneC.Trim() == a.ToneC && row.ToneD.Trim() == a.ToneD)
-            {
-                continue;
-            }
-
-            actions.Add(new AssignArrangementTonesAction(a, ToneSlotAssignment.Capture(a),
-                ToneSlotAssignment.FromSlots(row.ToneBase, row.ToneA, row.ToneB, row.ToneC, row.ToneD)));
-        }
-
-        if (actions.Count == 0) return;
-        _edit.History.Do(actions.Count == 1 ? actions[0] : new CompositeAction(actions) { LabelKey = "History_AssignTones" });
-        _edit.Logger.Info(AppLogCategory.Project, $"Tone designer assigned tone slots on {actions.Count} arrangement(s).");
     }
 
     private void AddTone()
@@ -278,28 +296,40 @@ public sealed partial class ToneDesignerViewModel : DialogViewModel<bool>, ITone
         _edit.Logger.Info(AppLogCategory.Project, $"Tone designer duplicated '{source.Key}' as '{key}'.");
     }
 
-    /// <summary>
-    ///     The victim's buffered edits die with it: nothing is committed first. The tone goes
-    /// EVERYWHERE, as one undo step — its slots, declared names and tone changes too —
-    ///     so no reference is left naming a body that is gone.
-    /// </summary>
-    private void DeleteTone()
+    private void DeleteSelectedTone()
     {
-        if (_project is null || SelectedTone is not { } victim) return;
+        if (SelectedTone is { } victim) DeleteTone(victim);
+    }
+
+    /// <summary>Removes ONLY the definition and its buffered edits (DLC Builder behaviour). Tone changes, slots, the
+    /// starting tone and declared names keep the key, ready for a replacement tone or an import under it; export
+    /// validation reports the undefined key while no definition exists. ONE undo step.</summary>
+    private void DeleteTone(ProjectToneItem victim)
+    {
+        if (_project is null) return;
         Editor.IsDirty = false;
         var index = ProjectTones.IndexOf(victim);
-        _edit.History.Do(ToneKeyEdits.BuildDelete(_project, victim.Key) ?? new UpsertToneDefinitionAction(_project, victim.Key, null));
-        RetargetSlotRows(victim.Key, "");
+        Record(new UpsertToneDefinitionAction(_project, victim.Key, null));
         ProjectTones.Remove(victim);
         OnTonesChanged();
         SelectedTone = ProjectTones.Count > 0 ? ProjectTones[Math.Clamp(index, 0, ProjectTones.Count - 1)] : null;
-        _edit.Logger.Info(AppLogCategory.Project, $"Tone designer deleted tone '{victim.Key}'.");
+        _edit.Logger.Info(AppLogCategory.Project, $"Tone designer deleted the definition of tone '{victim.Key}'.");
+    }
+
+    /// <summary>One step of the app's single history; the history-changed refresh brings the lists and the editor to it.</summary>
+    private void StepHistory(bool redo)
+    {
+        if (_project is null) return;
+        CommitPendingEdit();
+        if (redo) _edit.History.Redo();
+        else _edit.History.Undo();
+        OnHistoryChanged();
     }
 
     /// <summary>One undoable upsert, listed and selected.</summary>
     private void Upsert(string? replaceKey, ToneDefinition definition)
     {
-        _edit.History.Do(new UpsertToneDefinitionAction(_project!, replaceKey, definition));
+        Record(new UpsertToneDefinitionAction(_project!, replaceKey, definition));
         var item = new ProjectToneItem(definition.Key, definition.Name, definition.Json);
         ProjectTones.Add(item);
         OnTonesChanged();
@@ -318,47 +348,19 @@ public sealed partial class ToneDesignerViewModel : DialogViewModel<bool>, ITone
         if (SelectedTone is null) OnSelectionChanged();
     }
 
-    /// <summary>
-    ///     A row slot that named <paramref name="from" /> now names <paramref name="to" /> ("" clears
-    ///     it), so the rows agree with the arrangements a rename or delete just rewrote. Without it
-    ///     <see cref="CommitSlotAssignments" /> would read the stale row text as an edit and write the
-    ///     old key back on close. A row the user edited to something else is left alone.
-    /// </summary>
+    /// <summary>Rows follow a rename or delete, else <see cref="CommitSlotAssignments" /> writes the old key back on close.</summary>
     private void RetargetSlotRows(string from, string to)
     {
-        string Swap(string value) => ToneKeyEdits.Same(value, from) && value.Trim().Length > 0 ? to : value;
-
-        foreach (var row in Arrangements)
-        {
-            row.ToneBase = Swap(row.ToneBase);
-            row.ToneA = Swap(row.ToneA);
-            row.ToneB = Swap(row.ToneB);
-            row.ToneC = Swap(row.ToneC);
-            row.ToneD = Swap(row.ToneD);
-        }
+        foreach (var row in Arrangements) row.Retarget(from, to);
     }
 
     /// <summary>The per-arrangement rows, from the arrangements' CURRENT tone fields.</summary>
     private void RebuildArrangementRows()
     {
+        foreach (var old in Arrangements) old.SlotEdited -= CommitSlotAssignments;
         Arrangements.Clear();
-        foreach (var arrangement in _project!.Arrangements.Where(a => a.ArrangementType != ArrangementType.Vocal))
-        {
-            var (toneBase, slots) = RsToneSlots.Resolve(arrangement);
-            Arrangements.Add(new ToneDesignerArrangementItem
-            {
-                Name = arrangement.Name,
-                TypeLabel = ArrangementTypeLabel.For(arrangement.Name, arrangement.ArrangementType.ToString()),
-                Arrangement = arrangement,
-                Tones = ProjectTones,
-                ToneBase = toneBase,
-                ToneA = slots.ElementAtOrDefault(0) ?? "",
-                ToneB = slots.ElementAtOrDefault(1) ?? "",
-                ToneC = slots.ElementAtOrDefault(2) ?? "",
-                ToneD = slots.ElementAtOrDefault(3) ?? ""
-            });
-        }
-
+        foreach (var row in ToneDesignerCommits.BuildRows(_project!, ProjectTones)) Arrangements.Add(row);
+        foreach (var row in Arrangements) row.SlotEdited += CommitSlotAssignments;
         OnPropertyChanged(nameof(HasArrangements));
     }
 
@@ -381,12 +383,8 @@ public sealed partial class ToneDesignerViewModel : DialogViewModel<bool>, ITone
         if (!CanPreviewNow && _isPreviewOn) IsPreviewOn = false;
     }
 
-    /// <summary>
-    /// the buffered body goes to the chart's tone playback at once, under the
-    ///     tone's COMMITTED key (what the chart names), so a knob or the Volume is heard
-    ///     while it moves. Not while this dialog's own ▶ Preview holds the rig — that
-    ///     plays the edited tone alone, and two writers would fight over one rig.
-    /// </summary>
+    /// <summary>The buffered body goes to the chart's tone playback at once, under the tone's COMMITTED key, so a knob is heard
+    /// while it moves. Not while this dialog's own Preview holds the rig: two writers would fight over one rig.</summary>
     private void PushLiveEdit()
     {
         if (_liveEdit is null || _isPreviewOn || Editor.Loaded is not { } item) return;

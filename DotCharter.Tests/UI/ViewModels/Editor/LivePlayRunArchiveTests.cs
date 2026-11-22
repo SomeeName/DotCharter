@@ -26,7 +26,7 @@ public sealed class LivePlayRunArchiveTests
         Assert.False(archive.KeepsReplays);
         Assert.Null(archive.TryStartTake(48_000));
 
-        archive.SaveReplayAsync(Replay());
+        archive.SaveReplayAsync(Replay(), archive.BeginRun());
 
         Assert.Equal(0, profiles.ReplayAttaches);
     }
@@ -46,13 +46,19 @@ public sealed class LivePlayRunArchiveTests
     public void A_finalized_take_is_attached_under_the_runs_keys_and_announced()
     {
         var profiles = new RecordingPracticeStore();
-        var takes = new FakeTakeStore { FinalizedName = "take-1.opus" };
+        var takes = new FakeTakeStore
+        {
+            FinalizedName = "take-1.opus",
+            IsAttached = () => profiles.LastTakeAttach != null
+        };
         var archive = new LivePlayRunArchive(profiles, new FakeAppLogger(), takeStore: takes);
 
-        archive.FinalizeTakeAsync(Recorder(), attach: true, "song.rscp", "Lead:Lead");
+        archive.FinalizeTakeAsync(Recorder(), attach: true, "song.rscp", "Lead:Lead", archive.BeginRun());
 
         Assert.True(takes.CleanedUp.Wait(Ceiling, TestContext.Current.CancellationToken), "the take was never finalized and swept");
         Assert.Equal(("song.rscp", "Lead:Lead", "take-1.opus"), profiles.LastTakeAttach);
+        Assert.True(takes.Completed);
+        Assert.True(takes.CompletedAfterAttach);
     }
 
     [Fact]
@@ -62,10 +68,11 @@ public sealed class LivePlayRunArchiveTests
         var takes = new FakeTakeStore { FinalizedName = "take-2.opus" };
         var archive = new LivePlayRunArchive(profiles, new FakeAppLogger(), takeStore: takes);
 
-        archive.FinalizeTakeAsync(Recorder(), attach: false, string.Empty, string.Empty);
+        archive.FinalizeTakeAsync(Recorder(), attach: false, string.Empty, string.Empty, archive.BeginRun());
 
         Assert.True(takes.CleanedUp.Wait(Ceiling, TestContext.Current.CancellationToken), "the take was never finalized and swept");
         Assert.Null(profiles.LastTakeAttach);
+        Assert.True(takes.Completed);
     }
 
     [Fact]
@@ -76,13 +83,50 @@ public sealed class LivePlayRunArchiveTests
         var archive = new LivePlayRunArchive(profiles, new FakeAppLogger(), replayStore: replays);
 
         Assert.True(archive.KeepsReplays);
-        archive.SaveReplayAsync(Replay());
+        archive.SaveReplayAsync(Replay(), archive.BeginRun());
 
         Assert.True(profiles.ReplayAttached.Wait(Ceiling, TestContext.Current.CancellationToken), "the replay was never attached");
         Assert.Equal(("song.rscp", "Lead:Lead", "replay-1.json"), profiles.LastReplayAttach);
     }
 
     private static RunReplay Replay() => new() { SongKey = "song.rscp", ArrangementName = "Lead:Lead" };
+
+    [Fact]
+    public async Task ADelayedTake_KeepsItsOriginalRunWhenAnotherRunStarts()
+    {
+        var profiles = new RecordingPracticeStore();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var takes = new FakeTakeStore { FinalizedName = "old.opus", FinalizationGate = release.Task };
+        var archive = new LivePlayRunArchive(profiles, new FakeAppLogger(), takeStore: takes);
+        var first = archive.BeginRun();
+        archive.FinalizeTakeAsync(Recorder(), true, "song.rscp", "Lead:Lead", first);
+        await takes.Finalizing.Task.WaitAsync(TestContext.Current.CancellationToken);
+        var second = archive.BeginRun();
+        release.SetResult();
+        Assert.True(takes.CleanedUp.Wait(Ceiling, TestContext.Current.CancellationToken));
+
+        Assert.NotEqual(first, second);
+        Assert.Equal(first, profiles.LastTakeRun);
+    }
+
+    [Fact]
+    public void ADelayedReplay_KeepsItsOriginalRunWhenAnotherRunStarts()
+    {
+        var profiles = new RecordingPracticeStore();
+        using var release = new ManualResetEventSlim();
+        var replays = new FakeReplayStore { SavedName = "old.json", SaveGate = release };
+        var archive = new LivePlayRunArchive(profiles, new FakeAppLogger(), replayStore: replays);
+        var first = archive.BeginRun();
+        archive.SaveReplayAsync(Replay(), first);
+        try
+        {
+            Assert.True(replays.Saving.Wait(Ceiling, TestContext.Current.CancellationToken));
+            archive.BeginRun();
+        }
+        finally { release.Set(); }
+        Assert.True(profiles.ReplayAttached.Wait(Ceiling, TestContext.Current.CancellationToken));
+        Assert.Equal(first, profiles.LastReplayRun);
+    }
 
     private static LiveTakeRecorder Recorder() => new(new MemoryStream(), "take.wav", 48_000, TimeSpan.FromSeconds(1));
 
@@ -93,6 +137,11 @@ public sealed class LivePlayRunArchiveTests
         public string? FinalizedName { get; init; }
 
         public ManualResetEventSlim CleanedUp { get; } = new();
+        public bool Completed { get; private set; }
+        public bool CompletedAfterAttach { get; private set; }
+        public Func<bool>? IsAttached { get; set; }
+        public Task? FinalizationGate { get; init; }
+        public TaskCompletionSource Finalizing { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public bool IsEnabled => true;
 
@@ -104,10 +153,12 @@ public sealed class LivePlayRunArchiveTests
             return null;
         }
 
-        public Task<string?> FinalizeTakeAsync(LiveTakeRecorder recorder)
+        public async Task<string?> FinalizeTakeAsync(LiveTakeRecorder recorder)
         {
             recorder.Dispose();
-            return Task.FromResult(FinalizedName);
+            Finalizing.SetResult();
+            if (FinalizationGate != null) await FinalizationGate;
+            return FinalizedName;
         }
 
         public Task CleanupAsync()
@@ -115,15 +166,28 @@ public sealed class LivePlayRunArchiveTests
             CleanedUp.Set();
             return Task.CompletedTask;
         }
+
+        public void CompleteTake(LiveTakeRecorder recorder)
+        {
+            Completed = true;
+            CompletedAfterAttach = IsAttached?.Invoke() == true;
+        }
     }
 
     private sealed class FakeReplayStore : IReplayStore
     {
         public string? SavedName { get; init; }
+        public ManualResetEventSlim? SaveGate { get; init; }
+        public ManualResetEventSlim Saving { get; } = new();
 
         public string ReplaysDirectory => "replays";
 
-        public string? Save(RunReplay replay) => SavedName;
+        public string? Save(RunReplay replay)
+        {
+            Saving.Set();
+            SaveGate?.Wait(TestContext.Current.CancellationToken);
+            return SavedName;
+        }
 
         public RunReplay? TryLoad(string fileName) => null;
     }
@@ -136,6 +200,8 @@ public sealed class LivePlayRunArchiveTests
         public (string, string, string)? LastTakeAttach { get; private set; }
 
         public (string, string, string)? LastReplayAttach { get; private set; }
+        public PracticeRunIdentity? LastTakeRun { get; private set; }
+        public PracticeRunIdentity? LastReplayRun { get; private set; }
 
         public ManualResetEventSlim ReplayAttached { get; } = new();
 
@@ -152,7 +218,7 @@ public sealed class LivePlayRunArchiveTests
             IReadOnlyList<PhraseMasteryOutcome>? phraseOutcomes = null,
             IReadOnlyList<SectionResult>? sections = null,
             IReadOnlyList<TechniqueResult>? techniques = null,
-            double? chartDifficulty = null, bool failed = false) => new();
+            double? chartDifficulty = null, bool failed = false, PracticeRunIdentity? run = null) => new();
 
         public IReadOnlyDictionary<string, PracticeArrangementProfile> GetAll() => new Dictionary<string, PracticeArrangementProfile>();
 
@@ -168,6 +234,18 @@ public sealed class LivePlayRunArchiveTests
             Interlocked.Increment(ref _replayAttaches);
             ReplayAttached.Set();
             return true;
+        }
+
+        public bool AttachTakeFile(string songKey, string arrangementName, string takeFileName, PracticeRunIdentity run)
+        {
+            LastTakeRun = run;
+            return AttachTakeFile(songKey, arrangementName, takeFileName);
+        }
+
+        public bool AttachReplayFile(string songKey, string arrangementName, string replayFileName, PracticeRunIdentity run)
+        {
+            LastReplayRun = run;
+            return AttachReplayFile(songKey, arrangementName, replayFileName);
         }
 
         public void InvalidateCache()

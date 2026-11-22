@@ -62,8 +62,14 @@ public sealed class DialogSession<TResult> : IDialogSession
     {
         ArgumentNullException.ThrowIfNull(result);
         _cancel = cancel;
-        result.ContinueWith(Complete, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
+        // On the context the dialog opened on (the UI thread), never the pool: a pool continuation
+        // completed the session off the UI queue, so a caller could still be waiting after that
+        // queue had drained. Dismiss can still win between the result and the queued completion;
+        // both paths use TrySet, so the first one decides.
+        var scheduler = SynchronizationContext.Current is null
+            ? TaskScheduler.Default
+            : TaskScheduler.FromCurrentSynchronizationContext();
+        result.ContinueWith(Complete, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, scheduler);
     }
 
     public Task<TResult?> Completion => _done.Task;

@@ -173,7 +173,7 @@ public sealed partial class StemBackendViewModel : ObservableObject, IStemBacken
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Persisting stem-separation settings failed: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Persisting stem-separation settings failed", ex);
         }
     }
 }

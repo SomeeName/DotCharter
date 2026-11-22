@@ -119,8 +119,8 @@ public sealed class ChordTemplateScopeHonestyTests
         vm.ChordName = "A5 power";
         Assert.True(h.History.CanUndo);
 
-        vm.SetHoveredFretCommand.Execute(new ChordBoxFretEdit(2, 1, ContinuesRun: false));
-        vm.SetHoveredFretCommand.Execute(new ChordBoxFretEdit(2, 12, ContinuesRun: true));
+        vm.SetHoveredFret(new ChordBoxFretEdit(2, 1, ContinuesRun: false));
+        vm.SetHoveredFret(new ChordBoxFretEdit(2, 12, ContinuesRun: true));
 
         Assert.Equal("A5 power", shape.Name);
         Assert.Equal(7, shape.Frets[2]);

@@ -80,7 +80,8 @@ public sealed class DcSongWriter
         var audioMember = DcSongManifestJson.AudioPath(codec);
         var coverMember = cover == null ? null : DcSongManifestJson.ImagePath(DcSongFileRole.Cover, cover.MediaType);
         var chart = DcSongChart.ForPackage(request.Project, audioMember, coverMember,
-            stems.Select(s => (s.Name, DcSongManifestJson.StemPath(s.Name))).ToList(), request.ArrangementIndexes);
+            stems.Select(s => (s.Name, DcSongManifestJson.StemPath(s.Name))).ToList(), request.ArrangementIndexes,
+            stems.Select(s => s.Original).ToList());
 
         var work = Directory.CreateTempSubdirectory("dotcharter_dcsong_").FullName;
         try
@@ -118,7 +119,7 @@ public sealed class DcSongWriter
         var audioFile = await EncodeSongAsync(request, pcm, codec, warnings, work, ct).ConfigureAwait(false);
 
         Report(DcSongWriteStage.EncodingPreview);
-        var previewStart = Math.Clamp(request.PreviewStartMs ?? PreviewClip.DefaultStartMs(lengthMs), 0, lengthMs);
+        var previewStart = PreviewClip.ClampStartMs(request.PreviewStartMs ?? request.Project.Chart.PreviewStartMs ?? PreviewClip.DefaultStartMs(lengthMs), lengthMs);
         var clip = PreviewClip.Create(pcm, previewStart);
         var previewWav = Path.Combine(work, "preview.wav");
         PcmAudioLoader.WriteWav(previewWav, clip);
@@ -146,18 +147,23 @@ public sealed class DcSongWriter
         serializer.Save(chartFile, chart);
 
         Report(DcSongWriteStage.WritingPackage);
+        if (new FileInfo(chartFile).Length > DcSongFormat.MaxChartBytes)
+            throw new DcSongWriteException(DcSongWriteFailure.PackageTooLarge, "The serialized chart exceeds the package chart size limit.");
         var members = new List<Staged>
         {
-            Staged.FromFile(DcSongFormat.ChartPath, DcSongFileRole.Chart, chartFile, compress: true),
-            Staged.FromFile(DcSongManifestJson.AudioPath(codec), DcSongFileRole.Audio, audioFile, compress: false),
-            Staged.FromFile(DcSongFormat.PreviewPath, DcSongFileRole.Preview, previewFile, compress: false)
+            await Staged.FromFileAsync(DcSongFormat.ChartPath, DcSongFileRole.Chart, chartFile, true, ct).ConfigureAwait(false),
+            await Staged.FromFileAsync(DcSongManifestJson.AudioPath(codec), DcSongFileRole.Audio, audioFile, false, ct).ConfigureAwait(false),
+            await Staged.FromFileAsync(DcSongFormat.PreviewPath, DcSongFileRole.Preview, previewFile, false, ct).ConfigureAwait(false)
         };
         if (cover != null)
-            members.Add(Staged.FromImage(DcSongFileRole.Cover, cover));
+            members.Add(await Staged.FromImageAsync(DcSongFileRole.Cover, cover, ct).ConfigureAwait(false));
         if (banner != null)
-            members.Add(Staged.FromImage(DcSongFileRole.Banner, banner));
+            members.Add(await Staged.FromImageAsync(DcSongFileRole.Banner, banner, ct).ConfigureAwait(false));
         foreach (var (stem, file) in stemFiles)
-            members.Add(Staged.FromFile(DcSongManifestJson.StemPath(stem.Name), DcSongFileRole.Stem, file, compress: false, stem.Name));
+        {
+            members.Add(await Staged.FromFileAsync(DcSongManifestJson.StemPath(stem.Name), DcSongFileRole.Stem, file, false, ct, stem.Name)
+                .ConfigureAwait(false));
+        }
 
         var manifest = new DcSongManifest(
             DcSongFormat.CurrentMajor,
@@ -168,7 +174,7 @@ public sealed class DcSongWriter
                 codec == DcSongAudioCodec.Opus ? _encoder.OpusBitrateKbps : null, previewStart, previewLengthMs),
             members.Select(m => m.Entry).ToList());
 
-        WriteZip(request.OutputPath, DcSongManifestJson.Write(manifest), members);
+        await WriteZipAsync(request.OutputPath, DcSongManifestJson.Write(manifest), members, ct).ConfigureAwait(false);
         var bytes = new FileInfo(request.OutputPath).Length;
         _logger?.Info(AppLogCategory.Project,
             $".dcsong written: '{request.OutputPath}', {bytes} bytes, {DcSongManifestJson.CodecName(codec)}, " +
@@ -312,8 +318,11 @@ public sealed class DcSongWriter
         return dest;
     }
 
-    private static void WriteZip(string outputPath, byte[] manifest, IReadOnlyList<Staged> members)
+    private static async Task WriteZipAsync(string outputPath, byte[] manifest, IReadOnlyList<Staged> members, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+        if (manifest.LongLength > DcSongFormat.MaxManifestBytes)
+            throw new DcSongWriteException(DcSongWriteFailure.PackageTooLarge, "The serialized manifest exceeds the package manifest size limit.");
         var full = Path.GetFullPath(outputPath);
         var directory = Path.GetDirectoryName(full);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -322,33 +331,36 @@ public sealed class DcSongWriter
         var staging = full + ".writing";
         try
         {
-            using (var file = new FileStream(staging, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
+            await using (var file = new FileStream(staging, FileMode.Create, FileAccess.Write, FileShare.None, 65536, useAsync: true))
             {
                 using (var zip = new ZipArchive(file, ZipArchiveMode.Create, leaveOpen: true))
                 {
                     // The manifest first, so a reader that streams the zip meets it first.
                     using (var entry = zip.CreateEntry(DcSongFormat.ManifestPath, CompressionLevel.Optimal).Open())
-                        entry.Write(manifest);
+                        await entry.WriteAsync(manifest, ct).ConfigureAwait(false);
 
                     foreach (var member in members)
                     {
+                        ct.ThrowIfCancellationRequested();
                         var level = member.Compress ? CompressionLevel.Optimal : CompressionLevel.NoCompression;
                         using var entry = zip.CreateEntry(member.Entry.Path, level).Open();
                         if (member.Bytes != null)
                         {
-                            entry.Write(member.Bytes);
+                            await entry.WriteAsync(member.Bytes, ct).ConfigureAwait(false);
                         }
                         else
                         {
-                            using var source = new FileStream(member.File!, FileMode.Open, FileAccess.Read, FileShare.Read, 81920);
-                            source.CopyTo(entry);
+                            await using var source = new FileStream(member.File!, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+                            await source.CopyToAsync(entry, ct).ConfigureAwait(false);
                         }
                     }
                 }
 
+                await file.FlushAsync(ct).ConfigureAwait(false);
                 file.Flush(flushToDisk: true);
             }
 
+            ct.ThrowIfCancellationRequested();
             AtomicFile.ReplaceWithRetry(staging, full);
         }
         finally
@@ -361,16 +373,22 @@ public sealed class DcSongWriter
     /// <summary>One member, staged on disk or in memory, with its manifest entry.</summary>
     private sealed record Staged(DcSongFileEntry Entry, string? File, byte[]? Bytes, bool Compress)
     {
-        public static Staged FromFile(string path, DcSongFileRole role, string file, bool compress, string? stemName = null)
+        public static async Task<Staged> FromFileAsync(string path, DcSongFileRole role, string file, bool compress,
+            CancellationToken ct, string? stemName = null)
         {
-            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 81920);
-            var hash = Convert.ToHexStringLower(SHA256.HashData(stream));
+            ct.ThrowIfCancellationRequested();
+            await using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+            var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, ct).ConfigureAwait(false));
             return new Staged(new DcSongFileEntry(path, role, stream.Length, hash, stemName), file, null, compress);
         }
 
         /// <summary>PNG and JPEG are compressed already, so images are stored as they are.</summary>
-        public static Staged FromImage(DcSongFileRole role, DcSongImage image) =>
-            new(new DcSongFileEntry(DcSongManifestJson.ImagePath(role, image.MediaType), role, image.Bytes.Length,
-                Convert.ToHexStringLower(SHA256.HashData(image.Bytes)), MediaType: image.MediaType), null, image.Bytes, false);
+        public static async Task<Staged> FromImageAsync(DcSongFileRole role, DcSongImage image, CancellationToken ct)
+        {
+            using var stream = new MemoryStream(image.Bytes, writable: false);
+            var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, ct).ConfigureAwait(false));
+            return new Staged(new DcSongFileEntry(DcSongManifestJson.ImagePath(role, image.MediaType), role, image.Bytes.Length,
+                hash, MediaType: image.MediaType), null, image.Bytes, false);
+        }
     }
 }

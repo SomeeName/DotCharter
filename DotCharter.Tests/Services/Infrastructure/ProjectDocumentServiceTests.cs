@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.Xml.Linq;
 using DotCharter.Core.Domain.Vocals;
 using DotCharter.Services.Infrastructure.Documents;
+using DotCharter.Services.Export;
+using DotCharter.Services.Export.DlcBuilder;
 using DotCharter.Services.Parsing;
 using DotCharter.Services.Parsing.Rscp;
 using DotCharter.Services.Parsing.Xml;
@@ -12,6 +14,45 @@ namespace DotCharter.Tests.Services.Infrastructure;
 
 public class ProjectDocumentServiceTests : IDisposable
 {
+    [Theory]
+    [InlineData(false, false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    public void XmlAndDlcBundle_UseConfiguredDoubleStopNames(bool suppress, bool keepPower, bool named)
+    {
+        Directory.CreateDirectory(_tempDirectory);
+        var config = new FakeConfigurationService();
+        config.AppConfig.SuppressDoubleStopChordNames = suppress;
+        config.AppConfig.KeepPowerChordNames = keepPower;
+        using var provider = new ServiceCollection()
+            .AddKeyedTransient<IChartSerializer, XmlChartSerializer>("xml")
+            .AddSingleton<IConfigurationService>(config)
+            .BuildServiceProvider();
+        var service = new ProjectDocumentService(provider, new FakeAppLogger());
+        var project = BuildProject();
+        var arrangement = project.Arrangements[0];
+        arrangement.ChordTemplates.Add(new ChordTemplate
+        {
+            Id = 0, Name = "G5", Frets = new() { [0] = 3, [1] = 5 }, Fingers = new() { [0] = 1, [1] = 3 }
+        });
+        var chord = new Chord { TemplateId = 0, Position = new FractionalPosition(2) };
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 0, Fret = 3 });
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 5 });
+        arrangement.Levels[0].Chords.Add(chord);
+        var xml = Path.Combine(_tempDirectory, "song.xml");
+
+        service.SaveChart(xml, project);
+        service.SaveDlcBuilderXmlBundle(Path.Combine(_tempDirectory, "project.rscp"), project);
+
+        var bundle = Path.Combine(_tempDirectory, "export", "DTRS XML", "1_Lead_Main_RS2.xml");
+        foreach (var path in new[] { xml, bundle })
+        {
+            var names = XDocument.Load(path).Descendants("chordTemplate").Select(t => (string?)t.Attribute("chordName")).ToList();
+            Assert.NotEmpty(names);
+            Assert.Equal(named, names.Contains("G5"));
+        }
+    }
+
     private readonly ServiceProvider _serviceProvider;
     private readonly string _tempDirectory;
 
@@ -62,7 +103,7 @@ public class ProjectDocumentServiceTests : IDisposable
 
         service.SaveDlcBuilderXmlBundle(projectPath, project);
 
-        var exportDirectory = Path.Combine(_tempDirectory, "DTRS XML");
+        var exportDirectory = Path.Combine(_tempDirectory, "export", "DTRS XML");
         Assert.True(Directory.Exists(exportDirectory));
 
         var arrangementPath = Path.Combine(exportDirectory, "1_Lead_Main_RS2.xml");
@@ -96,7 +137,7 @@ public class ProjectDocumentServiceTests : IDisposable
 
         service.SaveDlcBuilderXmlBundle(Path.Combine(_tempDirectory, "project.rscp"), project);
 
-        var doc = XDocument.Load(Path.Combine(_tempDirectory, "DTRS XML", "1_Lead_Main_RS2.xml"));
+        var doc = XDocument.Load(Path.Combine(_tempDirectory, "export", "DTRS XML", "1_Lead_Main_RS2.xml"));
         int Count(string el) => int.Parse(doc.Root!.Element(el)!.Attribute("count")!.Value);
         Assert.True(Count("phrases") >= 2, "expected at least the COUNT and END phrases");
         Assert.True(Count("phraseIterations") >= 2, "every phrase must be placed");
@@ -111,14 +152,15 @@ public class ProjectDocumentServiceTests : IDisposable
     [Fact]
     public void SaveDlcBuilderXmlBundle_RemovesStaleXmlFilesBeforeRegenerating()
     {
-        Directory.CreateDirectory(Path.Combine(_tempDirectory, "DTRS XML"));
-        File.WriteAllText(Path.Combine(_tempDirectory, "DTRS XML", "stale.xml"), "<stale/>");
+        Directory.CreateDirectory(Path.Combine(_tempDirectory, "export", "DTRS XML"));
+        CompanionOwnership.WriteIfUnmodified(Path.Combine(_tempDirectory, "export", "DTRS XML", "stale.xml"),
+            path => File.WriteAllText(path, "<stale/>"), out _);
         var service = CreateService();
         var project = BuildProject();
 
         service.SaveDlcBuilderXmlBundle(Path.Combine(_tempDirectory, "project.rscp"), project);
 
-        Assert.False(File.Exists(Path.Combine(_tempDirectory, "DTRS XML", "stale.xml")));
+        Assert.False(File.Exists(Path.Combine(_tempDirectory, "export", "DTRS XML", "stale.xml")));
     }
 
     /// <summary>
@@ -133,7 +175,7 @@ public class ProjectDocumentServiceTests : IDisposable
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Relies on Windows file locking.");
 
-        var exportDirectory = Path.Combine(_tempDirectory, "DTRS XML");
+        var exportDirectory = Path.Combine(_tempDirectory, "export", "DTRS XML");
         Directory.CreateDirectory(exportDirectory);
 
         // A complete previous bundle, plus a file something else holds open.
@@ -141,6 +183,7 @@ public class ProjectDocumentServiceTests : IDisposable
         File.WriteAllText(previousArrangement, "<song id=\"previous\" />");
         var lockedPath = Path.Combine(exportDirectory, "locked.xml");
         File.WriteAllText(lockedPath, "<locked/>");
+        OwnedDlcBuilderBundle.Record(exportDirectory);
 
         var service = CreateService();
         var project = BuildProject();
@@ -163,14 +206,69 @@ public class ProjectDocumentServiceTests : IDisposable
     [Fact]
     public void SaveDlcBuilderXmlBundle_CleansUpAStaleOldFolderFromAnEarlierFailure()
     {
-        var exportDirectory = Path.Combine(_tempDirectory, "DTRS XML");
+        var exportDirectory = Path.Combine(_tempDirectory, "export", "DTRS XML");
         Directory.CreateDirectory(exportDirectory + ".old");
         File.WriteAllText(Path.Combine(exportDirectory + ".old", "leftover.xml"), "<leftover/>");
+        OwnedDlcBuilderBundle.Record(exportDirectory + ".old");
 
         CreateService().SaveDlcBuilderXmlBundle(Path.Combine(_tempDirectory, "project.rscp"), BuildProject());
 
         Assert.True(File.Exists(Path.Combine(exportDirectory, "1_Lead_Main_RS2.xml")));
         Assert.False(Directory.Exists(exportDirectory + ".old"));
+    }
+
+    [Fact]
+    public void SaveDlcBuilderXmlBundle_LeavesForeignXmlInPlace()
+    {
+        var directory = Directory.CreateDirectory(Path.Combine(_tempDirectory, "export", "DTRS XML")).FullName;
+        var foreign = Path.Combine(directory, "foreign.xml");
+        File.WriteAllText(foreign, "foreign");
+        Assert.Throws<IOException>(() => CreateService().SaveDlcBuilderXmlBundle(Path.Combine(_tempDirectory, "project.dcproj"), BuildProject()));
+        Assert.Equal("foreign", File.ReadAllText(foreign));
+        Assert.False(Directory.Exists(directory + ".old"));
+    }
+
+    [Fact]
+    public void A_failed_bundle_after_writing_xml_can_be_saved_again()
+    {
+        var config = new FakeConfigurationService();
+        config.AppConfig.RsXmlSixStringProjection = true;
+        using var provider = new ServiceCollection().AddSingleton<IConfigurationService>(config).BuildServiceProvider();
+        var logger = new FakeAppLogger();
+        var service = new ProjectDocumentService(provider, logger, RecycleBundle);
+        var path = Path.Combine(_tempDirectory, "project.dcproj");
+        var stage = Path.Combine(_tempDirectory, "export", "DTRS XML.saving");
+        var project = BuildProject();
+        project.Arrangements[0].StringCount = 7;
+        project.Arrangements[0].TuningPitches.Add(new TuningOffset(0));
+        project.Arrangements[0].Levels[0].Notes.Add(new GuitarNote { Position = new FractionalPosition(1), StringIndex = 0, Fret = 3 });
+        var interrupted = false;
+        logger.OnEntry = _ =>
+        {
+            if (interrupted || !Directory.Exists(stage) || Directory.GetFiles(stage, "*.xml").Length == 0) return;
+            interrupted = true;
+            throw new IOException("Interrupted after an XML file was written");
+        };
+        Assert.Throws<IOException>(() => service.SaveDlcBuilderXmlBundle(path, project));
+        Assert.True(interrupted);
+        logger.OnEntry = null;
+        service.SaveDlcBuilderXmlBundle(path, project);
+        Assert.False(Directory.Exists(stage));
+        Assert.NotEmpty(Directory.GetFiles(Path.Combine(_tempDirectory, "export", "DTRS XML"), "*.xml"));
+    }
+
+    [Fact]
+    public void A_partial_xml_serialization_failure_does_not_block_the_next_save()
+    {
+        var project = BuildProject();
+        project.VocalTracks[0].Phrases[0].Lyrics[0].Text = "\u0001";
+        var service = CreateService();
+        var path = Path.Combine(_tempDirectory, "project.dcproj");
+        Assert.Throws<ArgumentException>(() => service.SaveDlcBuilderXmlBundle(path, project));
+        project.VocalTracks[0].Phrases[0].Lyrics[0].Text = "corrected";
+        service.SaveDlcBuilderXmlBundle(path, project);
+        Assert.False(Directory.Exists(Path.Combine(_tempDirectory, "export", "DTRS XML.saving")));
+        Assert.NotEmpty(Directory.GetFiles(Path.Combine(_tempDirectory, "export", "DTRS XML"), "*.xml"));
     }
 
     /// <summary>
@@ -358,11 +456,17 @@ public class ProjectDocumentServiceTests : IDisposable
 
     private string ExportedSongLength()
     {
-        var arrangementPath = Path.Combine(_tempDirectory, "DTRS XML", "1_Lead_Main_RS2.xml");
+        var arrangementPath = Path.Combine(_tempDirectory, "export", "DTRS XML", "1_Lead_Main_RS2.xml");
         return XDocument.Load(arrangementPath).Root!.Element("songLength")!.Value;
     }
 
-    private ProjectDocumentService CreateService() => new(_serviceProvider, new FakeAppLogger());
+    private void RecycleBundle(string directory)
+    {
+        var bin = Directory.CreateDirectory(Path.Combine(_tempDirectory, "recycled-bundles")).FullName;
+        Directory.Move(directory, Path.Combine(bin, Guid.NewGuid().ToString("N")));
+    }
+
+    private ProjectDocumentService CreateService() => new(_serviceProvider, new FakeAppLogger(), RecycleBundle);
 
     private static ChartProject BuildProject()
     {

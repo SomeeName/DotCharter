@@ -75,11 +75,11 @@ public sealed partial class RocksmithPlatformPackageTests
             }, cancellationToken: TestContext.Current.CancellationToken);
 
         var error = await Assert.ThrowsAsync<InvalidDataException>(() => Build("seven_m.psarc", ExportPlatform.Mac));
-        Assert.Contains("rs7string", error.Message, StringComparison.Ordinal);
+        Assert.Contains("RS Extended Range", error.Message, StringComparison.Ordinal);
 
         var result = await Build("seven_p.psarc", ExportPlatform.PcAndMac);
-        Assert.Equal([Path.Combine(_tempDir, "seven_p.psarc")], result.PackagePaths);
-        Assert.Contains(result.Warnings, w => w.Contains("rs7string", StringComparison.Ordinal));
+        Assert.Equal([Path.Combine(_tempDir, "seven_rsxr_p.psarc")], result.PackagePaths);
+        Assert.Contains(result.Warnings, w => w.Contains("RS Extended Range", StringComparison.Ordinal));
         Assert.False(File.Exists(Path.Combine(_tempDir, "seven_m.psarc")));
     }
 

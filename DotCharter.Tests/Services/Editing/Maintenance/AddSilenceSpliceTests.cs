@@ -39,6 +39,71 @@ public sealed class AddSilenceSpliceTests : IDisposable
     private static string Amount(double seconds) => seconds.ToString("0.###", CultureInfo.CurrentCulture);
 
     [Fact]
+    public async Task Audio_splice_and_undo_redo_commit_song_replacement_revisions()
+    {
+        var h = SavedProject();
+        var revision = h.State.SongAudioRevision;
+        await h.Maintenance.AddSilenceAtEndAsync(1);
+        Assert.Equal(++revision, h.State.SongAudioRevision);
+        h.History.Undo();
+        Assert.Equal(++revision, h.State.SongAudioRevision);
+        h.History.Redo();
+        Assert.Equal(++revision, h.State.SongAudioRevision);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FretScaleAndSilence_KeepTheOriginalBendAcrossUndoRedo(bool atStart)
+    {
+        var h = SavedProject();
+        var project = h.State.ActiveProject!;
+        var level = h.State.ActiveLevel!;
+        level.Notes.Clear();
+        var note = new GuitarNote
+        {
+            Position = new FractionalPosition(1), Sustain = new FractionalPosition(4), Fret = 5
+        };
+        var bend = new BendValue(new FractionalPosition(3), 1);
+        note.BendValues.Add(bend);
+        level.Notes.Add(note);
+        var initial = ChartProjectCloner.Clone(project);
+        h.History.Do(new MutateNotesAction(level.Notes, [note], n => n.Fret = 7));
+        var afterFret = ChartProjectCloner.Clone(project);
+        h.History.Do(Assert.IsType<BeatScaleAction>(new BeatScaleService(new FakeAppLogger())
+            .BuildScaleAction(project, project.Beats[0].Time, project.Beats[^1].Time, 2)));
+        Assert.Equal(new FractionalPosition(6), bend.Position);
+
+        if (atStart) await h.Maintenance.AddSilenceAtBeginningAsync(1);
+        else await h.Maintenance.AddSilenceAtEndAsync(1);
+        var padded = ChartProjectCloner.Clone(project);
+        for (var cycle = 0; cycle < 2; cycle++)
+        {
+            h.History.Undo();
+            h.History.Undo();
+            Assert.Equal(new FractionalPosition(3), note.BendValues[0].Position);
+            Assert.Same(bend, note.BendValues[0]);
+            AssertChart(afterFret, project);
+            h.History.Redo();
+            h.History.Redo();
+            Assert.Same(bend, note.BendValues[0]);
+            AssertChart(padded, project);
+        }
+
+        h.History.Undo();
+        h.History.Undo();
+        h.History.Undo();
+        Assert.Same(bend, note.BendValues[0]);
+        AssertChart(initial, project);
+    }
+
+    private static void AssertChart(ChartProject expected, ChartProject actual)
+    {
+        var differences = DeepCompare.Diff("project", expected, actual, new HashSet<string>());
+        Assert.True(differences.Count == 0, string.Join("\n", differences));
+    }
+
+    [Fact]
     public async Task At_the_start_the_song_and_stems_are_padded_and_the_chart_moves_with_the_music()
     {
         var h = SavedProject();

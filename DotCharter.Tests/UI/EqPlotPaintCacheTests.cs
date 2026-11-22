@@ -4,7 +4,7 @@ using DotCharter.Tone.Audio.Equalizer;
 namespace DotCharter.Tests.UI;
 
 /// <summary>
-///     Static perf audit 2026-08-29, P0 #1–#4: <c>EqPlotControl</c> repaints at
+///     Static perf audit 2026-08-29, P0 #1–#4: <c>ColumnFlowEqPlot</c> repaints at
 ///     ~15 Hz for as long as the EQ module is attached and used to resolve ~26
 ///     theme brushes by full visual-tree walk, build 7 interpolated resource
 ///     keys, shape ~15 <c>FormattedText</c> runs, and allocate three
@@ -183,5 +183,5 @@ public sealed class EqPlotPaintCacheTests
     }
 
     private static string Source() =>
-        UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Controls", "EqPlotControl.cs")));
+        UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(TestPaths.RepoRoot(), "DotCharter.UI", "Controls", "ColumnFlowEqPlot.cs")));
 }

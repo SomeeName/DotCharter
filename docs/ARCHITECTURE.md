@@ -86,7 +86,7 @@ lays out in under 150 ms.
    deep-copy the project on the UI thread, then on a worker apply the spacing
    rules, write to `<file>.saving`, and atomically replace the real file. A crash
    mid-save can never leave a half-written project.
-4. **Companions.** The same save writes derived files beside the project: the DLC
+4. **Companions.** The same save writes derived files in `export/`: the DLC
    Builder XML bundle, an Editor on Fire `.eof`, a `.rs2dlc`, and (after the save,
    in the background) a playable `.psarc`. A failing companion never fails the save.
 

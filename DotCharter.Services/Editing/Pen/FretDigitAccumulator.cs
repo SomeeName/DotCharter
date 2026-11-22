@@ -39,7 +39,7 @@ public readonly record struct FretDigitAccumulator(int PendingFret, long LastDig
     /// <summary>The largest fret a typed number may reach — the same 0..24 the
     /// note path clamps to (<c>SelectedNoteMutationCommands</c>) and the export
     /// gate enforces (<c>ChartExportValidator.KeyFretOutOfRange</c>).</summary>
-    public const int MaxTypedFret = 24;
+    public const int MaxTypedFret = FretLimits.MaxFret;
 
     /// <summary>Nothing typed yet. <c>-1</c> — not <c>0</c> — because fret 0 is
     /// a real, common fret (the open string / the capo).</summary>

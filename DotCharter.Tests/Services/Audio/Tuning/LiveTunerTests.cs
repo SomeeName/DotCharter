@@ -172,7 +172,7 @@ public sealed class LiveTunerTests
         {
             var state = new ProjectState();
             var project = new ChartProject();
-            var arrangement = new Arrangement { Name = "Lead", ArrangementType = type, TuningType = tuningType };
+            var arrangement = new Arrangement { Name = "Lead", ArrangementType = type, TuningType = tuningType, Tuning = [] };
             arrangement.Levels.Add(new ChartLevel());
             project.Arrangements.Add(arrangement);
             state.ActiveProject = project;

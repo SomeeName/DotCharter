@@ -1,6 +1,7 @@
 using DotCharter.Services.Audio.LivePlay;
 using DotCharter.Services.Audio.LivePlay.Takes;
 using DotCharter.Services.Audio.StemSeparation.Cache;
+using DotCharter.Services.Gameplay.Profiles;
 using DotCharter.Tone.Infrastructure.Storage;
 
 namespace DotCharter.Tests.Services.Audio.LivePlay;
@@ -99,6 +100,81 @@ public sealed class LiveTakeStoreTests : IDisposable
 
     // ---------- cleanup policy (pure) ----------
 
+    [Fact]
+    public async Task Cleanup_skips_the_closed_encoder_output_before_finalize_returns()
+    {
+        var practice = new PracticeProfileService(logger: null, filePath: Path.Combine(_dir, "profiles.json"));
+        practice.Record("old", "lead", new LivePlaySessionResult(100, 0.9, 9, 1, 20, 5, 30, 100, 0.5));
+        Assert.True(practice.AttachTakeFile("old", "lead", "old.wav"));
+        var written = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = NewStore(new FakeTakeEncoder(available: true, afterEncode: async () =>
+        {
+            written.SetResult();
+            await release.Task;
+        }), practice);
+        var recorder = store.TryStartTake(48000)!;
+        recorder.Write(new float[4800]);
+        var finalizing = store.FinalizeTakeAsync(recorder);
+        await written.Task.WaitAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            await store.CleanupAsync();
+            Assert.True(File.Exists(recorder.FilePath));
+            Assert.True(File.Exists(Path.ChangeExtension(recorder.FilePath, ".opus")));
+        }
+        finally
+        {
+            release.SetResult();
+            await finalizing;
+            typeof(LiveTakeStore).GetMethod("CompleteTake")?.Invoke(store, [recorder]);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Cleanup_keeps_closed_outputs_until_attachment_finishes(bool encode)
+    {
+        var practice = new PracticeProfileService(logger: null, filePath: Path.Combine(_dir, "profiles.json"));
+        practice.Record("old", "lead", new LivePlaySessionResult(100, 0.9, 9, 1, 20, 5, 30, 100, 0.5));
+        Assert.True(practice.AttachTakeFile("old", "lead", "old.wav"));
+        var encoder = new FakeTakeEncoder(available: encode);
+        var store = NewStore(encoder, practice);
+        var recorder = store.TryStartTake(48000)!;
+        recorder.Write(new float[4800]);
+        var name = await store.FinalizeTakeAsync(recorder);
+        Assert.NotNull(name);
+
+        // The writer and encoder are closed, but B has not attached its name.
+        await store.CleanupAsync();
+        Assert.True(File.Exists(Path.Combine(_dir, name)));
+
+        practice.Record("new", "lead", new LivePlaySessionResult(100, 0.9, 9, 1, 20, 5, 30, 100, 0.5));
+        Assert.True(practice.AttachTakeFile("new", "lead", name));
+        CompleteTake(store, recorder);
+        await store.CleanupAsync();
+        Assert.True(File.Exists(Path.Combine(_dir, name)));
+    }
+
+    [Fact]
+    public async Task Cleanup_can_delete_an_abandoned_take_after_its_reservation_is_released()
+    {
+        var practice = new PracticeProfileService(logger: null, filePath: Path.Combine(_dir, "profiles.json"));
+        practice.Record("old", "lead", new LivePlaySessionResult(100, 0.9, 9, 1, 20, 5, 30, 100, 0.5));
+        Assert.True(practice.AttachTakeFile("old", "lead", "old.wav"));
+        var store = NewStore(practice: practice);
+        var recorder = store.TryStartTake(48000)!;
+        recorder.Write(new float[4800]);
+        var name = await store.FinalizeTakeAsync(recorder);
+        Assert.NotNull(name);
+        CompleteTake(store, recorder);
+
+        await store.CleanupAsync();
+
+        Assert.False(File.Exists(Path.Combine(_dir, name)));
+    }
+
     private static LiveTakeStore.TakeFileInfo File_(string name, long size, int ageDays)
         => new(name, size, DateTime.UtcNow.AddDays(-ageDays));
 
@@ -153,6 +229,65 @@ public sealed class LiveTakeStoreTests : IDisposable
     }
 
     // ---------- cleanup end-to-end against the practice store ----------
+
+    [Fact]
+    public async Task RetentionThenCleanup_KeepsStarredTakesAndReampOnlyReferences()
+    {
+        var practice = new PracticeProfileService(filePath: Path.Combine(_dir, "store", "practice.json"));
+        var result = new LivePlaySessionResult(100, 0.9, 9, 1, 20, 5, 30, 100, 0.5);
+        var profile = practice.Record("song", "lead", result);
+        profile.Sessions[0].TakeFile = "keeper.wav";
+        profile.Sessions[0].TakeStarred = true;
+        practice.Record("song", "lead", result);
+        profile.Sessions[1].ReampFiles = ["render.wav"];
+        for (var i = 0; i < 205; i++) practice.Record("song", "lead", result);
+        Directory.CreateDirectory(_dir);
+        File.WriteAllBytes(Path.Combine(_dir, "keeper.wav"), [1]);
+        File.WriteAllBytes(Path.Combine(_dir, "render.wav"), [2]);
+        File.WriteAllBytes(Path.Combine(_dir, "orphan.wav"), [3]);
+
+        await NewStore(practice: practice).CleanupAsync();
+
+        Assert.True(File.Exists(Path.Combine(_dir, "keeper.wav")));
+        Assert.True(File.Exists(Path.Combine(_dir, "render.wav")));
+        Assert.False(File.Exists(Path.Combine(_dir, "orphan.wav")));
+    }
+
+    [Fact]
+    public async Task CleanupAfterAProfileSwitch_UsesTheCapturedOwnersFilesAndReferences()
+    {
+        var players = new PlayerProfileService(FakeLocalization.English(), null, Path.Combine(_dir, "players.json"), "First");
+        var practice = new PracticeProfileService(players, legacyFilePath: Path.Combine(_dir, "legacy.json"));
+        var owner = players.ActiveProfile.Id;
+        var result = new LivePlaySessionResult(100, 0.9, 9, 1, 20, 5, 30, 100, 0.5);
+        practice.Record("song", "lead", result);
+        practice.AttachTakeFile("song", "lead", "owner.wav");
+        var store = new LiveTakeStore(players, practice, new FakeTakeEncoder(false), () => _config);
+        var ownerDirectory = store.TakesDirectory;
+        Directory.CreateDirectory(ownerDirectory);
+        File.WriteAllBytes(Path.Combine(ownerDirectory, "owner.wav"), [1]);
+        File.WriteAllBytes(Path.Combine(ownerDirectory, "orphan.wav"), [2]);
+        players.SwitchTo(players.Create("Second").Id);
+        practice.Record("song", "lead", result);
+        practice.AttachTakeFile("song", "lead", "second.wav");
+        Directory.CreateDirectory(store.TakesDirectory);
+        var secondFile = Path.Combine(store.TakesDirectory, "owner.wav");
+        File.WriteAllBytes(secondFile, [3]);
+
+        await store.CleanupAsync(owner);
+
+        Assert.True(File.Exists(Path.Combine(ownerDirectory, "owner.wav")));
+        Assert.False(File.Exists(Path.Combine(ownerDirectory, "orphan.wav")));
+        Assert.True(File.Exists(secondFile));
+
+        // A fixed-directory host may still use a profile-scoped practice store.
+        var secondTake = Path.Combine(store.TakesDirectory, "second.wav");
+        File.WriteAllBytes(secondTake, [4]);
+        var fixedStore = new LiveTakeStore(store.TakesDirectory, new FakeTakeEncoder(false), () => _config, practice);
+        await fixedStore.CleanupAsync();
+        Assert.True(File.Exists(secondTake));
+        Assert.False(File.Exists(secondFile));
+    }
 
     [Fact]
     public async Task Cleanup_DeletesOrphans_KeepsSessionReferencedTakes()
@@ -222,14 +357,21 @@ public sealed class LiveTakeStoreTests : IDisposable
 
     public void Dispose() => BestEffortDelete.Directory(_dir);
 
+    private static void CompleteTake(LiveTakeStore store, LiveTakeRecorder recorder)
+    {
+        var complete = typeof(LiveTakeStore).GetMethod("CompleteTake");
+        Assert.NotNull(complete);
+        complete.Invoke(store, [recorder]);
+    }
+
     /// <summary>Fake ffmpeg seam: mirrors <see cref="FfmpegStemEncoder"/>'s
     /// contract (encode to the requested codec, or fall back to a WAV copy).</summary>
-    private sealed class FakeTakeEncoder(bool available, bool failEncode = false) : IStemEncoder
+    private sealed class FakeTakeEncoder(bool available, bool failEncode = false, Func<Task>? afterEncode = null) : IStemEncoder
     {
         public StemCodec PreferredCodec => available ? StemCodec.Opus : StemCodec.Wav;
         public bool IsExternalEncoderAvailable => available;
 
-        public Task<string> EncodeAsync(string wavPath, string destPathWithoutExtension, StemCodec codec,
+        public async Task<string> EncodeAsync(string wavPath, string destPathWithoutExtension, StemCodec codec,
             CancellationToken ct = default)
         {
             if (!available || failEncode || codec == StemCodec.Wav)
@@ -237,12 +379,13 @@ public sealed class LiveTakeStoreTests : IDisposable
                 var wavDest = destPathWithoutExtension + ".wav";
                 if (!string.Equals(wavPath, wavDest, StringComparison.OrdinalIgnoreCase))
                     File.Copy(wavPath, wavDest, overwrite: true);
-                return Task.FromResult(wavDest);
+                return wavDest;
             }
 
             var dest = destPathWithoutExtension + "." + codec.FileExtension();
             File.WriteAllBytes(dest, [1, 2, 3]);
-            return Task.FromResult(dest);
+            if (afterEncode != null) await afterEncode();
+            return dest;
         }
 
         public Task<string> DecodeToWavAsync(string encodedPath, StemCodec codec, string destWavPath,

@@ -2,6 +2,46 @@
 
 public sealed class ChartImprovementServiceTests
 {
+    [Fact]
+    public void TemplateOnlyCompatibilityCleanupIsCounted()
+    {
+        var project = new ChartProject();
+        var arrangement = new Arrangement();
+        var template = new ChordTemplate { Id = 0, Name = "C-arp" };
+        arrangement.ChordTemplates.Add(template);
+        project.Arrangements.Add(arrangement);
+        var service = new ChartImprovementService();
+
+        var result = service.ImproveProject(project, Config(), 0);
+
+        Assert.Equal("C", template.Name);
+        Assert.True(template.ForceArpeggioInRs);
+        Assert.True(result.TotalChanges > 0);
+        Assert.Equal(0, service.ImproveProject(project, Config(), 0).TotalChanges);
+    }
+
+    [Fact]
+    public void SpacingOnlyPolishIsCountedAndANormalizedChartIsANoOp()
+    {
+        var project = new ChartProject();
+        foreach (var beat in Beats()) project.Beats.Add(beat);
+        var arrangement = new Arrangement();
+        var level = new ChartLevel();
+        var note = new GuitarNote { Position = new FractionalPosition(1), Fret = 24, StringIndex = 0 };
+        level.Notes.Add(note);
+        arrangement.Levels.Add(level);
+        arrangement.EventPoints.Add(new EventPoint { Position = new FractionalPosition(11), Phrase = "END" });
+        project.Arrangements.Add(arrangement);
+        var service = new ChartImprovementService();
+
+        var result = service.ImproveProject(project, Config(), 0);
+
+        Assert.True(note.Ignore);
+        Assert.True(note.IgnoreDerived);
+        Assert.True(result.TotalChanges > 0);
+        Assert.Equal(0, service.ImproveProject(project, Config(), 0).TotalChanges);
+    }
+
     private static List<BeatMarker> Beats(int count = 12, double bpm = 120)
     {
         var ms = 60000.0 / bpm;
@@ -13,6 +53,105 @@ public sealed class ChartImprovementServiceTests
         MinNoteDistanceMode = MinNoteDistanceMode.BeatFraction,
         MinNoteDistanceDivisor = 64
     };
+
+    [Fact]
+    public void ImproveProject_TrimsTheGridWithoutRetimingRetainedSounds()
+    {
+        var project = new ChartProject();
+        foreach (var beat in Beats()) project.Beats.Add(beat);
+        var interpolationBeat = project.Beats[2];
+        var arrangement = new Arrangement { Name = "Lead" };
+        var level = new ChartLevel();
+        var note = new GuitarNote
+        {
+            Position = new FractionalPosition(1, new Fraction(1, 4)),
+            Sustain = new FractionalPosition(new Fraction(1, 2)),
+            StringIndex = 0,
+            Fret = 5
+        };
+        var chord = new Chord { Position = new FractionalPosition(1, new Fraction(1, 8)) };
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 5 });
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 2, Fret = 7 });
+        level.Notes.Add(note);
+        level.Chords.Add(chord);
+        level.Notes.Add(new GuitarNote { Position = new FractionalPosition(3), StringIndex = 0, Fret = 7 });
+        arrangement.Levels.Add(level);
+        project.Arrangements.Add(arrangement);
+
+        new ChartImprovementService().ImproveProject(project, Config(), 750);
+
+        Assert.Single(level.Notes);
+        Assert.Equal(625.0, note.Position.GetPositionMs(project.Beats), 6);
+        Assert.Equal(750.0, note.EndPosition.GetPositionMs(project.Beats), 6);
+        Assert.Equal(562.5, chord.Position.GetPositionMs(project.Beats), 6);
+        Assert.Equal(3, project.Beats.Count);
+        Assert.Same(interpolationBeat, project.Beats[^1]);
+        Assert.Equal(1000.0, interpolationBeat.Time);
+    }
+
+    [Fact]
+    public void ImproveProject_DoesNotAppendAnAudioEndBeatThatRetimesExtrapolatedContent()
+    {
+        var project = new ChartProject();
+        foreach (var beat in Beats(2)) project.Beats.Add(beat);
+        var arrangement = new Arrangement { Name = "Lead" };
+        var level = new ChartLevel();
+        var note = new GuitarNote { Position = new FractionalPosition(2), StringIndex = 0, Fret = 5 };
+        level.Notes.Add(note);
+        arrangement.Levels.Add(level);
+        project.Arrangements.Add(arrangement);
+
+        new ChartImprovementService().ImproveProject(project, Config(), 1250);
+
+        Assert.Equal(1000.0, note.Position.GetPositionMs(project.Beats), 6);
+        Assert.Equal(2, project.Beats.Count);
+    }
+
+    [Theory]
+    [InlineData(100)]
+    [InlineData(500)]
+    [InlineData(750)]
+    public void ImproveProject_KeepsEveryLockedBeatUnchanged(double audioEndMs)
+    {
+        var project = new ChartProject { IsBeatMapLocked = true };
+        foreach (var beat in Beats()) project.Beats.Add(beat);
+        project.Beats[2].IsAnchor = true;
+        project.Beats[2].NoteDenominator = 8;
+        var originals = project.Beats.ToArray();
+        var snapshots = project.Beats.Select(b => b.Clone()).ToArray();
+
+        var result = new ChartImprovementService().ImproveProject(project, Config(), audioEndMs);
+
+        Assert.Equal(originals.Length, project.Beats.Count);
+        for (var i = 0; i < originals.Length; i++)
+        {
+            Assert.Same(originals[i], project.Beats[i]);
+            Assert.Equal(snapshots[i].Time, project.Beats[i].Time);
+            Assert.Equal(snapshots[i].Bpm, project.Beats[i].Bpm);
+            Assert.Equal(snapshots[i].IsAnchor, project.Beats[i].IsAnchor);
+            Assert.Equal(snapshots[i].IsMeasure, project.Beats[i].IsMeasure);
+            Assert.Equal(snapshots[i].BeatsInMeasure, project.Beats[i].BeatsInMeasure);
+            Assert.Equal(snapshots[i].NoteDenominator, project.Beats[i].NoteDenominator);
+        }
+
+        Assert.DoesNotContain("extra beats", result.Changes.Keys);
+    }
+
+    [Fact]
+    public void PhraseStartAnchors_AreSeededFromTheAnchorInEffect_NotTheLastStored()
+    {
+        var arrangement = new Arrangement { Name = "Lead" };
+        var level = new ChartLevel();
+        // Stored out of order, as a level is mid-session: the hand in effect at beat 4 is fret 7.
+        level.Anchors.Add(new FretAnchor(new FractionalPosition(2), 7));
+        level.Anchors.Add(new FretAnchor(new FractionalPosition(0), 3));
+        arrangement.Levels.Add(level);
+        arrangement.EventPoints.Add(new EventPoint { Position = new FractionalPosition(4), Phrase = "verse" });
+
+        Assert.Equal(1, ChartImprovementService.EnsurePhraseStartAnchors(arrangement));
+
+        Assert.Equal(7, level.Anchors.Single(a => a.Position == new FractionalPosition(4)).Fret);
+    }
 
     [Fact]
     public void ImproveProject_AddsEndPhrase_WhenArrangementIsMissingOne()

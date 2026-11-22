@@ -290,15 +290,13 @@ public sealed class FireStyleClassTests
     }
 
     /// <summary>
-    ///     …and the same ban reaches the three views that include the inspector
-    ///     grammar and carry style blocks of their own. Two of them
-    ///     (<c>StemMixerView</c>, the old tab strip in <c>InspectorView</c>)
-    ///     held a <c>Transitions</c> setter until the 0.50 conversion, and a
-    ///     lint on the grammar file alone would not have seen either.
+    ///     …and the same ban reaches the views that include the inspector
+    ///     grammar and carry style blocks of their own. The old tab strip in
+    ///     <c>InspectorView</c> held a <c>Transitions</c> setter until the 0.50
+    ///     conversion, and a lint on the grammar file alone would not have seen it.
     /// </summary>
     [Theory]
     [InlineData("Views/Editor/InspectorView.axaml")]
-    [InlineData("Views/Editor/StemMixerView.axaml")]
     [InlineData("Views/Editor/Inspector/IssuesInspectorView.axaml")]
     public void NoInspectorSurface_AnimatesItsOwnChrome(string relativePath)
     {

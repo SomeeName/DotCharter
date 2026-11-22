@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DotCharter.Tone.Audio.Tuner;
 using DotCharter.Core.Domain.Project;
+using DotCharter.Core.Utilities;
 using DotCharter.Tone.Audio.Tuning;
 using DotCharter.Tone.UI.Controls.Dsp;
 
@@ -347,17 +348,24 @@ public sealed partial class RigTunerViewModel : ObservableObject
 
         var centOffset = 1200.0 * Math.Log2(ReferenceHz / RigTunerMath.DefaultReferenceHz);
         _targets.Load(tuning.IsBass ? ArrangementType.Bass : ArrangementType.Lead, tuning.Steps.Count, tuning.Steps, centOffset);
-        foreach (var target in _targets.Targets) Strings.Add(new RigTunerStringChip(target.Midi));
+        foreach (var target in _targets.Targets) Strings.Add(new RigTunerStringChip(target));
     }
 
     /// <summary>The note a reading is judged against: the nearest string of the
     /// chosen tuning, or the nearest semitone when chromatic.</summary>
-    internal int TargetMidiFor(double frequencyHz)
+    private (int Midi, string Name) TargetFor(double frequencyHz)
     {
-        if (Strings.Count == 0) return RigTunerMath.NearestMidi(frequencyHz, ReferenceHz);
+        if (Strings.Count == 0)
+        {
+            var midi = RigTunerMath.NearestMidi(frequencyHz, ReferenceHz);
+            return (midi, _targets.NameForMidi(midi));
+        }
+
         var index = _targets.NearestString(frequencyHz);
         for (var i = 0; i < Strings.Count; i++) Strings[i].IsCurrent = i == index;
-        return index < 0 ? -1 : _targets.Targets[index].Midi;
+        if (index < 0) return (-1, "");
+        var target = _targets.Targets[index];
+        return (target.Midi, target.NoteName);
     }
 
     private string LoadPersistedTuning()
@@ -458,7 +466,7 @@ public sealed partial class RigTunerViewModel : ObservableObject
 
         // Against the player's OWN concert pitch: at A442 the note grid, the
         // cents and the strobe target all move together.
-        var midi = TargetMidiFor(reading.FrequencyHz);
+        var (midi, name) = TargetFor(reading.FrequencyHz);
         if (midi < 0)
         {
             OnSilence(nowMs);
@@ -489,7 +497,7 @@ public sealed partial class RigTunerViewModel : ObservableObject
         var smoothed = _smoother.Process(cents, nowMs);
 
         HasReading = true;
-        NoteText = ArrangementTunerLogic.NoteNameOf(midi);
+        NoteText = name;
         var clamped = Math.Clamp(smoothed.Cents, -RigTunerMath.MaxDisplayCents, RigTunerMath.MaxDisplayCents);
         CentsText = string.Create(CultureInfo.CurrentCulture, $"{clamped:+0;-0;±0} ¢");
         CentsOff = clamped;
@@ -538,26 +546,27 @@ public sealed partial class RigTunerViewModel : ObservableObject
         if (HasInput) SetStatus("Tuner_Listening");
     }
 
+    /// <summary>Unavailable input clears the last reading, and the
+    /// footer only draws the reason while there is no reading.</summary>
+    private bool LoseInput(string reasonKey)
+    {
+        HasInput = false;
+        _smoother.Reset();
+        ResetReadingState();
+        SetStatus(reasonKey);
+        return false;
+    }
+
     /// <summary>(Re)creates the pitch engine + strobe once an input stream
     /// exists; tracks sample-rate changes while the panel sits open.</summary>
     private bool TryEnsureEngine()
     {
         var sampleRate = _audio!.InputSampleRate;
-        if (sampleRate <= 0)
-        {
-            HasInput = false;
-            SetStatus("Tuner_NoInput");
-            return false;
-        }
+        if (sampleRate <= 0) return LoseInput("Tuner_NoInput");
 
         // A seat the engine is not running has no ring to read: say so rather
         // than sitting on "Listening…" over a guitar that can never appear.
-        if (!IsSeatLive)
-        {
-            HasInput = false;
-            SetStatus("Tuner_SeatNotLive");
-            return false;
-        }
+        if (!IsSeatLive) return LoseInput("Tuner_SeatNotLive");
 
         if (_engine == null || _engineSampleRate != sampleRate)
         {
@@ -599,12 +608,12 @@ public sealed class RigTunerTuningChoice(TunerTuning? tuning, ILocalizationServi
 }
 
 /// <summary>One open string of the chosen tuning, as a chip in the tuner strip.</summary>
-public sealed partial class RigTunerStringChip(int midi) : ObservableObject
+public sealed partial class RigTunerStringChip(TunerStringTarget target) : ObservableObject
 {
-    public int Midi { get; } = midi;
+    public int Midi { get; } = target.Midi;
 
     /// <summary>The pitch letter without its octave ("D", "C#").</summary>
-    public string Note { get; } = TunerTuningNotes.LetterOf(midi);
+    public string Note { get; } = target.NoteName.TrimEnd('-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9');
 
     /// <summary>The string the last reading was judged against.</summary>
     [ObservableProperty] private bool _isCurrent;
@@ -616,13 +625,6 @@ public sealed partial class RigTunerStringChip(int midi) : ObservableObject
 /// <summary>Note letters for a tuning's open strings. Pure.</summary>
 public static class TunerTuningNotes
 {
-    public static string LetterOf(int midi) =>
-        ArrangementTunerLogic.NoteNameOf(midi).TrimEnd('-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9');
-
-    public static IEnumerable<string> Of(TunerTuning tuning)
-    {
-        var logic = new ArrangementTunerLogic();
-        logic.Load(tuning.IsBass ? ArrangementType.Bass : ArrangementType.Lead, tuning.Steps.Count, tuning.Steps);
-        return logic.Targets.Select(t => LetterOf(t.Midi));
-    }
+    public static IEnumerable<string> Of(TunerTuning tuning) =>
+        TuningDisplayNames.For(tuning.Steps.Count, tuning.Steps, tuning.IsBass);
 }

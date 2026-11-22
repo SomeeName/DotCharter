@@ -47,12 +47,14 @@ public sealed class TimelineLaneMenuUiPerfSmokeTests
             Assert.True(menu.DesiredSize is { Width: > 0, Height: > 0 }, "the prewarm left the lane menu unmeasured");
 
             // One tone: TONES auto-hides, and the menu says why.
+            renderer.Editor!.LyricPhrases.Clear();
             var arrangement = state.ActiveArrangement!;
             arrangement.ToneBase = "Clean";
             arrangement.ToneChanges.Clear();
             arrangement.ToneChanges.Add(new ToneChange { ToneName = "Clean" });
             var ribbon = renderer.CurrentRibbon!;
             ribbon.ShowAllLanes();
+            ribbon.ForceLyrics = false; // the toggles were not touched by the user: only auto-hide decides
             ribbon.AutoHideEmpty = true;
             ribbon.CompactRows = false;
             Assert.False(renderer.TopRibbon.ShowTones, "one tone did not auto-hide the TONES lane");
@@ -73,6 +75,11 @@ public sealed class TimelineLaneMenuUiPerfSmokeTests
                 Assert.True(tones.IsChecked, "the TONES toggle is on — only auto-hidden");
                 Assert.Equal(LocalizationService.Instance["TimelineLanes_HiddenOneTone"], tones.Tag);
                 Assert.Contains("AutoHidden", tones.Classes);
+
+                // No lyrics in the chart: LYRICS auto-hides too, and the menu says why (#846).
+                var lyrics = NarrowWidthLayout.Named<ToggleButton>(menu, "LaneLyrics");
+                Assert.Equal(LocalizationService.Instance["TimelineLanes_HiddenEmpty"], lyrics.Tag);
+                Assert.Contains("AutoHidden", lyrics.Classes);
 
                 // Compact rows from the menu: the ribbon gets shorter, the note lanes taller.
                 var before = renderer.TopRibbon.TotalHeight;

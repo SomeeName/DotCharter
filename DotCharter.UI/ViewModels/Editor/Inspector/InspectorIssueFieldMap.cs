@@ -144,7 +144,16 @@ public static class InspectorIssueFieldMap
         ArrangementIssueType.PhraseChangeOnLinkNextNote => InspectorField.Position,
         ArrangementIssueType.ToneChangeOnNote => InspectorField.Position,
 
-        // Structure — nothing on a SOUND causes these, so they stay on the card.
+        _ => MapStructure(type)
+    };
+
+    private static InspectorField MapStructure(ArrangementIssueType type) => type switch
+    {
+        ArrangementIssueType.ShowlightSequence => InspectorField.Position,
+        ArrangementIssueType.LyricStyle => InspectorField.Position,
+        ArrangementIssueType.HandShapeGap => InspectorField.Span,
+        ArrangementIssueType.SectionNameVariety => InspectorField.Position,
+        // These findings belong to the arrangement card.
         ArrangementIssueType.FirstPhraseNotEmpty => InspectorField.Card,
         ArrangementIssueType.NoEndPhrase => InspectorField.Card,
         ArrangementIssueType.MoreThan100Phrases => InspectorField.Card,
@@ -166,6 +175,8 @@ public static class InspectorIssueFieldMap
         ArrangementIssueType.HandShapeWithoutTemplate => InspectorField.Card,
         // D10 names a PHRASE, which no sound owns.
         ArrangementIssueType.PhraseNameRewrittenForRocksmith => InspectorField.Card,
+        // D14 names a phrase's level ladder; no single sound owns it either.
+        ArrangementIssueType.DifficultyLevelCount => InspectorField.Card,
         // D11 is about a hand shape that does NOT exist, so no field of the chord
         // owns it; the fix is auto-fix or Generate hand shapes.
         ArrangementIssueType.ChordOutsideHandShape => InspectorField.Card,
@@ -177,11 +188,12 @@ public static class InspectorIssueFieldMap
     ///     True when the export validator would refuse the package over this
     ///     issue — i.e. the finding is not advice, it is a wall.
     ///     <para>
-    ///         Paired with the twelve <c>ChartExportValidator.Key*</c> constants
+    ///         Paired with the fourteen <c>ChartExportValidator.Key*</c> constants
     ///         that produce an <c>ExportFindingSeverity.Error</c>. Four of them
     ///         (<c>KeyNoBeatMap</c>, <c>KeyNoArrangements</c>, <c>KeyNoNotes</c>,
     ///         <c>KeyTooManyTones</c>) are project-level and have no per-sound
-    ///         editing counterpart, and <c>KeyLyricTooLong</c> is a vocal track,
+    ///         editing counterpart, and <c>KeyLyricTooLong</c>,
+    ///         <c>KeyLyricsOutOfOrder</c> and <c>KeyLyricMarkerText</c> are a vocal track,
     ///         so eight issue types map here.
     ///     </para>
     ///     <para>
@@ -212,7 +224,7 @@ public static class InspectorIssueFieldMap
         _ => false
     };
 
-    /// <summary>The twelve export keys that produce an ERROR. Kept next to
+    /// <summary>The fourteen export keys that produce an ERROR. Kept next to
     /// <see cref="BlocksExport" /> so the pairing test can assert against the
     /// validator's own constants rather than a copy of the list.</summary>
     public static IReadOnlyList<string> BlockingExportKeys { get; } = new[]
@@ -228,6 +240,8 @@ public static class InspectorIssueFieldMap
         ChartExportValidator.KeyFretOutOfRange,
         ChartExportValidator.KeyNoteBelowCapo,
         ChartExportValidator.KeyStringOutOfRange,
-        ChartExportValidator.KeyLyricTooLong
+        ChartExportValidator.KeyLyricTooLong,
+        ChartExportValidator.KeyLyricsOutOfOrder,
+        ChartExportValidator.KeyLyricMarkerText
     };
 }

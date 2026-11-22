@@ -2,101 +2,165 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
              xmlns:inspector="using:DotCharter.UI.Views.Editor.Inspector"
+             xmlns:ctl="using:DotCharter.UI.Controls"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              x:Class="DotCharter.UI.Views.Editor.Inspector.SongInspectorView"
-             x:DataType="viewModels:SongOverviewViewModel">
-    <!-- #601: the Inspector's dense language. Key signature, Tones, Sections and Phrases sit
-         behind the same icon-only rail as the Sound tab, ONE section at a time (InspectorSectionRail;
-         each body binds its IsVisible to its entry); no header repeats the tab's name and no card
-         frames a section. Refresh re-reads every list, so it sits under whichever is open. -->
-    <Grid ColumnDefinitions="38,*">
-        <!-- ── the section rail: icons only, the name is the tooltip and the accessible name (#601) ── -->
-        <Border x:Name="SongRail" Grid.Column="0"
-                Background="{DynamicResource FireSurfaceSunken}"
-                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,1,0">
-            <StackPanel x:Name="SongRailEntries" Spacing="{StaticResource SpaceXxs}" Margin="{StaticResource GapTopXs}"
-                        HorizontalAlignment="Center">
-                <Panel x:Name="SongRailKey">
-                    <ToggleButton x:Name="SongRailKeyEntry" Tag="SongKeyBody" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
-                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                  AutomationProperties.Name="{localization:Loc Inspector_KeySignature}"
-                                  ToolTip.Tip="{localization:Loc Inspector_KeySignature}" ToolTip.Placement="Right">
-                        <PathIcon Data="{DynamicResource IconSheetMusic}" Width="13" Height="13" />
-                    </ToggleButton>
-                    <!-- the open section's accent bar -->
-                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
-                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False"
-                            IsVisible="{Binding #SongRailKeyEntry.IsChecked}" />
-                </Panel>
-                <Panel x:Name="SongRailTones">
-                    <ToggleButton x:Name="SongRailTonesEntry" Tag="SongTonesBody" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
-                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                  AutomationProperties.Name="{localization:Loc Inspector_Tones}"
-                                  ToolTip.Tip="{localization:Loc Inspector_Tones}" ToolTip.Placement="Right">
-                        <PathIcon Data="{DynamicResource IconTune}" Width="13" Height="13" />
-                    </ToggleButton>
-                    <!-- the open section's accent bar -->
-                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
-                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False"
-                            IsVisible="{Binding #SongRailTonesEntry.IsChecked}" />
-                </Panel>
-                <Panel x:Name="SongRailSections">
-                    <ToggleButton x:Name="SongRailSectionsEntry" Tag="SongSectionsBody" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
-                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                  AutomationProperties.Name="{localization:Loc Inspector_Sections}"
-                                  ToolTip.Tip="{localization:Loc Inspector_Sections}" ToolTip.Placement="Right">
-                        <PathIcon Data="{DynamicResource IconMapMarker}" Width="13" Height="13" />
-                    </ToggleButton>
-                    <!-- the open section's accent bar -->
-                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
-                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False"
-                            IsVisible="{Binding #SongRailSectionsEntry.IsChecked}" />
-                </Panel>
-            </StackPanel>
-        </Border>
-
-        <ScrollViewer x:Name="SongSectionScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled"
-                      Padding="{StaticResource PaddingRow}">
-            <StackPanel Spacing="{StaticResource SpaceSm}">
-                <Panel>
-                    <Grid x:Name="SongKeyBody" IsVisible="{Binding #SongRailKeyEntry.IsChecked}" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*"
-                          ColumnSpacing="{StaticResource SpaceMd}" RowSpacing="{StaticResource SpaceSm}">
-                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"
-                                   Text="{localization:Loc Inspector_Key}" Theme="{StaticResource LabelText}" Classes="Label" />
-                        <ComboBox Grid.Row="0" Grid.Column="1"
+             x:DataType="viewModels:SongOverviewViewModel"
+             x:CompileBindings="True">
+    <!--
+        The Song tab, laid out as inspector design D: a ColumnFlowPanel of four cards over a pinned footer.
+        * SONG INFORMATION: title, artist, album, year and the key with its Minor toggle, all STAGED
+          (SongDetailsDraft; Enter applies, Esc reverts), Refresh (one undo node puts every marker list in time
+          order and drops exact duplicates, then re-reads every list, the phrases too) and More details (File ▸
+          Song metadata…, the whole dialog).
+        * SECTIONS / TONES: the named-marker lists (MarkerGroupsView) under an "All groups" filter: a row per name
+          folding open to its places, renamed in place, deleted as one undo step. Tones also picks the active
+          arrangement's starting tone (written at once, one undo node).
+        * PHRASES: the phrase groups (PhrasesInspectorView), with Propagate.
+        At Small the information keeps the left column and the three lists share a pager beside it; at Tiny
+        every card is paged; wider panes give them columns (ColumnFlowPages). The footer's Apply song details
+        writes the staged fields as ONE undo node; Revert drops them.
+    -->
+    <Grid RowDefinitions="*,Auto">
+        <ctl:ColumnFlowPanel x:Name="SongCards" Grid.Row="0" Margin="8,6">
+            <!-- ── the song's information ── -->
+            <ctl:ColumnFlowCard x:Name="SongInfoCard" ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Song_Information}">
+                <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                    <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                               Text="{localization:Loc Inspector_Song_Information}" />
+                    <Grid x:Name="SongDetailsFields" DataContext="{Binding Details}" x:DataType="viewModels:SongDetailsDraft"
+                          ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto"
+                          ColumnSpacing="{StaticResource FireSpaceSm}" RowSpacing="{StaticResource FireSpaceXs}">
+                        <Grid.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding ApplyCommand}" />
+                            <KeyBinding Gesture="Escape" Command="{Binding RevertCommand}" />
+                        </Grid.KeyBindings>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                   Text="{localization:Loc Inspector_Song_Title}" />
+                        <TextBox Grid.Row="0" Grid.Column="1" x:Name="SongTitleBox" Classes="ColumnFlowField"
+                                 IsEnabled="{Binding HasProject}" Text="{Binding Title}"
+                                 AutomationProperties.Name="{localization:Loc Inspector_Song_Title}" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                   Text="{localization:Loc Inspector_Song_Artist}" />
+                        <TextBox Grid.Row="1" Grid.Column="1" x:Name="SongArtistBox" Classes="ColumnFlowField"
+                                 IsEnabled="{Binding HasProject}" Text="{Binding Artist}"
+                                 AutomationProperties.Name="{localization:Loc Inspector_Song_Artist}" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                   Text="{localization:Loc Inspector_Song_Album}" />
+                        <TextBox Grid.Row="2" Grid.Column="1" x:Name="SongAlbumBox" Classes="ColumnFlowField"
+                                 IsEnabled="{Binding HasProject}" Text="{Binding Album}"
+                                 AutomationProperties.Name="{localization:Loc Inspector_Song_Album}" />
+                        <TextBlock Grid.Row="3" Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                                   Text="{localization:Loc Inspector_Song_Year}" />
+                        <TextBox Grid.Row="3" Grid.Column="1" x:Name="SongYearBox" Classes="ColumnFlowField"
+                                 IsEnabled="{Binding HasProject}" Text="{Binding Year}"
+                                 AutomationProperties.Name="{localization:Loc Inspector_Song_Year}" />
+                    </Grid>
+                    <!-- The key: the tonic and the mode beside it, staged with the fields above. -->
+                    <Grid x:Name="SongKeyBody" ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+                        <ComboBox Grid.Column="0" x:Name="SongKeyPicker" Classes="ColumnFlowField"
                                   AutomationProperties.Name="{localization:Loc Inspector_Key}"
                                   ItemsSource="{Binding KeyOptions}"
                                   SelectedIndex="{Binding KeyAccidentalsIndex, Mode=TwoWay}"
                                   PlaceholderText="{localization:Loc Combo_NotSet}"
-                                  HorizontalAlignment="Stretch"
                                   ToolTip.Tip="{localization:Loc Inspector_KeySignatureTip}" />
-                        <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"
-                                   Text="{localization:Loc Inspector_Mode}" Theme="{StaticResource LabelText}" Classes="Label" />
-                        <CheckBox Grid.Row="1" Grid.Column="1"
-                                  Content="{localization:Loc Inspector_Minor}"
-                                  AutomationProperties.Name="{localization:Loc Inspector_Minor}"
-                                  IsChecked="{Binding KeyIsMinor, Mode=TwoWay}" />
+                        <ToggleButton Grid.Column="1" x:Name="SongMinorToggle" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                                      HorizontalAlignment="Stretch"
+                                      IsChecked="{Binding KeyIsMinor, Mode=TwoWay}"
+                                      AutomationProperties.Name="{localization:Loc Inspector_Minor}">
+                            <TextBlock Text="{localization:Loc Inspector_Minor}" TextTrimming="CharacterEllipsis" />
+                        </ToggleButton>
                     </Grid>
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+                        <Button Grid.Column="0" x:Name="SongRefresh" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="{localization:Loc Action_Refresh}"
+                                Command="{Binding RefreshCommand}">
+                            <TextBlock Text="{localization:Loc Action_Refresh}" TextTrimming="CharacterEllipsis" />
+                        </Button>
+                        <!-- File ▸ Song metadata… from here, so the Song tab and the dialog read as one song (#494). -->
+                        <Button Grid.Column="1" x:Name="EditSongMetadataButton" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="{localization:Loc Inspector_EditSongMetadata}"
+                                ToolTip.Tip="{localization:Loc Inspector_EditSongMetadata}"
+                                Command="{Binding OpenSongMetadataCommand}">
+                            <TextBlock Text="{localization:Loc Inspector_Song_MoreDetails}" TextTrimming="CharacterEllipsis" />
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </ctl:ColumnFlowCard>
 
-                    <!-- The tones and the sections are named-marker lists in the Phrases panel's shape
-                         (MarkerGroupsView): a row per name folding open to its places, renamed in
-                         place and deleted as one undo step. A Panel around each, so the section
-                         prewarm (which measures a hidden root's VISIBLE children) builds the rows. -->
-                    <Panel x:Name="SongTonesBody" IsVisible="{Binding #SongRailTonesEntry.IsChecked}">
-                        <inspector:MarkerGroupsView x:Name="SongTonesList" DataContext="{Binding TonesPanel}" />
-                    </Panel>
+            <!-- ── the named-marker lists and the phrases; a Panel around each list, so the
+                 tab's prewarm (which measures VISIBLE children) builds its rows ── -->
+            <ctl:ColumnFlowCard x:Name="SongSectionsCard" ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Sections}">
+                <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                    <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                               Text="{localization:Loc Inspector_Sections}" />
+                    <ComboBox x:Name="SongSectionsFilter" Classes="ColumnFlowField" HorizontalAlignment="Stretch"
+                              DataContext="{Binding SectionsPanel}" x:DataType="viewModels:MarkerGroupsViewModel"
+                              AutomationProperties.Name="{localization:Loc Inspector_Markers_GroupFilter}"
+                              ToolTip.Tip="{localization:Loc Inspector_Markers_GroupFilter}"
+                              ItemsSource="{Binding GroupFilterOptions}"
+                              SelectedIndex="{Binding GroupFilterIndex, Mode=TwoWay}" />
+                    <inspector:MarkerGroupsView x:Name="SongSectionsList" DataContext="{Binding SectionsPanel}" />
+                </StackPanel>
+            </ctl:ColumnFlowCard>
 
-                    <Panel x:Name="SongSectionsBody" IsVisible="{Binding #SongRailSectionsEntry.IsChecked}">
-                        <inspector:MarkerGroupsView x:Name="SongSectionsList" DataContext="{Binding SectionsPanel}" />
-                    </Panel>
+            <ctl:ColumnFlowCard x:Name="SongTonesCard" ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Tones}">
+                <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                    <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                               Text="{localization:Loc Inspector_Tones}" />
+                    <ComboBox x:Name="SongTonesFilter" Classes="ColumnFlowField" HorizontalAlignment="Stretch"
+                              DataContext="{Binding TonesPanel}" x:DataType="viewModels:MarkerGroupsViewModel"
+                              AutomationProperties.Name="{localization:Loc Inspector_Markers_GroupFilter}"
+                              ToolTip.Tip="{localization:Loc Inspector_Markers_GroupFilter}"
+                              ItemsSource="{Binding GroupFilterOptions}"
+                              SelectedIndex="{Binding GroupFilterIndex, Mode=TwoWay}" />
+                    <Grid x:Name="SongStartingToneRow" DataContext="{Binding StartingTone}" x:DataType="viewModels:StartingToneChoice"
+                          ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceXs}" IsVisible="{Binding HasArrangement}">
+                        <TextBlock Grid.Column="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted" VerticalAlignment="Center"
+                                   Text="{localization:Loc Inspector_Tones_StartingTone}" />
+                        <ComboBox Grid.Column="1" x:Name="SongStartingTone" Classes="ColumnFlowField" HorizontalAlignment="Stretch"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Tones_StartingTone}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Tones_StartingToneTip}"
+                                  PlaceholderText="{localization:Loc Combo_NotSet}"
+                                  ItemsSource="{Binding Options}"
+                                  SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}" />
+                    </Grid>
+                    <inspector:MarkerGroupsView x:Name="SongTonesList" DataContext="{Binding TonesPanel}" />
+                </StackPanel>
+            </ctl:ColumnFlowCard>
 
-                </Panel>
-                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                        Content="{localization:Loc Action_Refresh}"
-                        Command="{Binding RefreshCommand}"
-                        HorizontalAlignment="Right" />
-            </StackPanel>
-        </ScrollViewer>
+            <ctl:ColumnFlowCard x:Name="SongPhrasesCard" ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Tab_Phrases}">
+                <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                    <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                               Text="{localization:Loc Inspector_Tab_Phrases}" />
+                    <inspector:PhrasesInspectorView x:Name="SongPhrasesList" DataContext="{Binding PhrasesPanel}" />
+                </StackPanel>
+            </ctl:ColumnFlowCard>
+        </ctl:ColumnFlowPanel>
+
+        <!-- ── the pinned footer: what is staged, Revert and Apply song details ── -->
+        <Border Grid.Row="1" x:Name="SongFooter" DataContext="{Binding Details}" x:DataType="viewModels:SongDetailsDraft"
+                Background="{DynamicResource FireSurfaceFooter}"
+                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,1,0,0"
+                Padding="{StaticResource FirePadTag}">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceXs}">
+                <TextBlock Grid.Column="0" x:Name="SongFooterStatus" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowMuted"
+                           TextTrimming="CharacterEllipsis" IsVisible="{Binding IsDirty}"
+                           Text="{localization:Loc Inspector_Song_Pending}" />
+                <Button Grid.Column="1" x:Name="SongRevert" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                        IsVisible="{Binding IsDirty}"
+                        AutomationProperties.Name="{localization:Loc Inspector_Song_Revert}"
+                        Command="{Binding RevertCommand}">
+                    <TextBlock Text="{localization:Loc Inspector_Song_Revert}" />
+                </Button>
+                <Button Grid.Column="2" x:Name="SongApply" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary"
+                        AutomationProperties.Name="{localization:Loc Inspector_Song_Apply}"
+                        Command="{Binding ApplyCommand}">
+                    <TextBlock Text="{localization:Loc Inspector_Song_Apply}" />
+                </Button>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

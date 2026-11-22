@@ -6,7 +6,8 @@ using DotCharter.Services.Editing.Tempo.RecordingAlignment;
 
 namespace DotCharter.Presentation.Screens.Dialogs;
 
-/// <summary>One section row of the align-to-recording result, ticked when its confidence suggests it.</summary>
+/// <summary>One section row of the fit-to-recording result, ticked when its confidence suggests it. A section
+///     without notes has nothing to be judged on: it carries its reason instead of a score and cannot be ticked.</summary>
 public sealed class AlignSectionRow : ObservableObject, IAlignSectionRow
 {
     private bool _isApplied;
@@ -15,13 +16,16 @@ public sealed class AlignSectionRow : ObservableObject, IAlignSectionRow
     {
         Index = section.Index;
         Title = title;
-        var measured = double.IsFinite(section.Confidence);
+        CanApply = section.HasNotes && section.FreeBeats > 0;
+        var measured = CanApply && double.IsFinite(section.Confidence);
         Confidence = measured ? section.Confidence : 0;
-        ConfidenceText = measured ? PercentText.Format(section.Confidence, 0) : loc["Dialog_AlignToRecording_NoNotes"];
-        IsLow = !section.SuggestApply;
-        ShiftText = loc.Format("Dialog_AlignToRecording_Shift", Math.Round(section.MeanShiftMs).ToString("0", System.Globalization.CultureInfo.CurrentCulture));
-        CanApply = section.FreeBeats > 0;
-        _isApplied = section.SuggestApply;
+        ConfidenceText = measured ? PercentText.Format(section.Confidence, 0) : "";
+        IsLow = CanApply && !section.SuggestApply;
+        ShiftText = CanApply
+            ? loc.Format("Dialog_AlignToRecording_Shift", Math.Round(section.MeanShiftMs).ToString("0", System.Globalization.CultureInfo.CurrentCulture))
+            : "";
+        SkipReason = section.HasNotes ? "" : loc["Dialog_AlignToRecording_NoNotes"];
+        _isApplied = CanApply && section.SuggestApply;
     }
 
     public int Index { get; }
@@ -43,4 +47,6 @@ public sealed class AlignSectionRow : ObservableObject, IAlignSectionRow
     }
 
     public bool CanApply { get; }
+
+    public string SkipReason { get; }
 }

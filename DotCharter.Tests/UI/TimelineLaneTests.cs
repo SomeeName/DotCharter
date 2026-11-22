@@ -63,9 +63,34 @@ public sealed class TimelineLaneTests
         var bare = new RibbonContent(DistinctTones: 1, HasSections: false, HasPhrases: false, HasLyrics: false);
         var layout = RibbonLaneRules.Compose(Visibility(), bare);
         Assert.Equal(RibbonLanes.Sections | RibbonLanes.MeasureMetadata, layout.Lanes);
+        Assert.Equal(RibbonLaneHiddenReason.Empty,
+            RibbonLaneRules.HiddenReason(RibbonLanes.Lyrics, RibbonLanes.All, true, bare));
+        Assert.Equal(RibbonLaneHiddenReason.Shown,
+            RibbonLaneRules.HiddenReason(RibbonLanes.Lyrics, RibbonLanes.All, true, bare with { HasLyrics = true }));
+        Assert.Equal(RibbonLaneHiddenReason.Shown,
+            RibbonLaneRules.HiddenReason(RibbonLanes.Lyrics, RibbonLanes.All, false, bare));
 
         // …but once a phrase exists, an empty Sections lane hides like any other.
         Assert.False(RibbonLaneRules.Compose(Visibility(), bare with { HasPhrases = true }).ShowSections);
+    }
+
+    /// <summary>A toggle switched on keeps its empty row until switched off again (#846): the way
+    /// to reveal a hidden empty Lyrics row from the lane menu.</summary>
+    [Fact]
+    public void SwitchingAnEmptyLaneOn_ShowsItUntilSwitchedOff()
+    {
+        var vis = Visibility();
+        var bare = Everything with { HasLyrics = false };
+        Assert.False(RibbonLaneRules.Compose(vis, bare).ShowLyrics);
+
+        vis.ShowLyrics = false;
+        vis.ShowLyrics = true;
+        Assert.True(RibbonLaneRules.Compose(vis, bare).ShowLyrics);
+        Assert.Equal(RibbonLaneHiddenReason.Shown, RibbonLaneRules.HiddenReason(
+            RibbonLanes.Lyrics, vis.Lanes(), vis.AutoHideEmpty, bare, vis.ForcedLanes()));
+
+        vis.ShowLyrics = false;
+        Assert.False(RibbonLaneRules.Compose(vis, bare).ShowLyrics);
     }
 
     // ── the height goes to the note lanes ──────────────────────────────────────
@@ -79,7 +104,7 @@ public sealed class TimelineLaneTests
         var noLyrics = TimelineGutterLayout.For(600, RibbonLaneRules.Compose(off, Everything), 6, false, BottomMargin);
         Assert.Equal(all.LaneAreaHeight + RibbonLayout.RowHeight, noLyrics.LaneAreaHeight, 3);
 
-        // The same for an AUTO-hidden lane: an empty lyrics track.
+        // An empty lyric row hides like the other empty rows (#846).
         var empty = TimelineGutterLayout.For(600,
             RibbonLaneRules.Compose(Visibility(), Everything with { HasLyrics = false }), 6, false, BottomMargin);
         Assert.Equal(noLyrics.LaneAreaHeight, empty.LaneAreaHeight, 3);
@@ -135,14 +160,6 @@ public sealed class TimelineLaneTests
     }
 
     /// <summary>The renderer reads the lanes through the shared rules, not a copy of them.</summary>
-    [Fact]
-    public void TheRenderer_LaysTheRibbonOutThroughTheLaneRules()
-    {
-        var src = UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine(
-            TestPaths.RepoRoot(), "DotCharter.UI", "Controls", "ChartRenderer.cs")));
-        Assert.Contains("RibbonLaneRules.Compose(ctx.Ribbon, RibbonContentOf(ctx))", src, StringComparison.Ordinal);
-    }
-
     // ── settings survive a restart ─────────────────────────────────────────────
 
     [Fact]

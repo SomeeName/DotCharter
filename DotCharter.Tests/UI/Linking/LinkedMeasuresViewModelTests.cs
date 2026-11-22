@@ -107,6 +107,33 @@ public sealed class LinkedMeasuresViewModelTests
     }
 
     [Fact]
+    public void On_a_lower_level_the_banner_says_links_hold_the_hardest_and_only_this_one_is_unavailable()
+    {
+        var t = LinkedMeasuresHarness.WithRhythm();
+        var h = t.Links;
+        h.Link((h.Lead, 1), (h.Lead, 4), (h.Rhythm, 4));
+        var hardest = LinkHarness.Hardest(h.Lead);
+        var easy = new ChartLevel { DifficultyIndex = hardest.DifficultyIndex - 1 };
+        var note = Note(At(4, 0), 0, 5, 1);
+        easy.Notes.Add(note);
+        h.Lead.Levels.Insert(0, easy);
+        h.State.ActiveLevel = easy;
+
+        t.Select(note);
+
+        Assert.True(t.Vm.IsBannerVisible);
+        Assert.Equal("· links hold the hardest level only; edits on this level stay here", t.Vm.BannerText);
+        Assert.False(t.Vm.OnlyThisOneCommand.CanExecute(null));
+        t.Vm.OnlyThisOneCommand.Execute(null);
+        Assert.Equal(3, h.Project.LinkGroups.Single().Placements.Count);
+
+        // Back on the hardest level the banner offers it again.
+        h.State.ActiveLevel = hardest;
+        t.Select(t.NoteIn(4));
+        Assert.True(t.Vm.OnlyThisOneCommand.CanExecute(null));
+    }
+
+    [Fact]
     public void Only_this_one_unlinks_the_placement_of_the_selection_in_one_step()
     {
         var t = LinkedMeasuresHarness.WithRhythm();

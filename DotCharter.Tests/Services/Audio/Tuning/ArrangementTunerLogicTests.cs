@@ -4,6 +4,44 @@ namespace DotCharter.Tests.Services.Audio.Tuning;
 
 public sealed class ArrangementTunerLogicTests
 {
+    [Theory]
+    [InlineData(ArrangementType.Bass, "5_STRING_BASS_STANDARD", new[] { "B", "E", "A", "D", "G" }, new[] { 23, 28, 33, 38, 43 })]
+    [InlineData(ArrangementType.Lead, "7_STRING_DROP_A", new[] { "A", "E", "A", "D", "G", "B", "E" }, new[] { 33, 40, 45, 50, 55, 59, 64 })]
+    [InlineData(ArrangementType.Lead, "B_DROP_A", new[] { "A", "E", "A", "D", "F#", "B" }, new[] { 33, 40, 45, 50, 54, 59 })]
+    public void Coherent_named_tunings_keep_extended_strings_and_the_authored_octave(
+        ArrangementType type, string name, string[] letters, int[] expected)
+    {
+        var arrangement = new Arrangement { ArrangementType = type, StringCount = letters.Length, Tuning = letters, TuningType = name };
+        arrangement.TuningPitches.Clear();
+        var logic = new ArrangementTunerLogic();
+
+        logic.Load(arrangement);
+
+        Assert.Equal(expected, logic.Targets.Select(t => t.Midi));
+        Assert.Equal(expected.Select(pitch => (int?)pitch),
+            Enumerable.Range(0, letters.Length).Select(i => SoundingPitch.OpenSoundingMidi(arrangement, i)));
+    }
+
+    [Theory]
+    [InlineData("D", "E_STANDARD", 38)]
+    [InlineData("E", "E_DROP_D", 40)]
+    public void Letters_take_precedence_over_the_tuning_name(string lowString, string tuningType, int expected)
+    {
+        var arrangement = new Arrangement
+        {
+            Tuning = [lowString, "A", "D", "G", "B", "E"],
+            TuningType = tuningType
+        };
+        var logic = new ArrangementTunerLogic();
+
+        logic.Load(arrangement);
+
+        Assert.Equal(expected, logic.Targets[0].Midi);
+        Assert.Equal(SoundingPitch.OpenSoundingMidi(arrangement, 0), logic.Targets[0].Midi);
+        Assert.True(ArrangementTunerLogic.TryResolveTuningSteps(arrangement, out var steps));
+        Assert.Equal(expected - 40, steps[0]);
+    }
+
     private static ArrangementTunerLogic Loaded(
         ArrangementType type = ArrangementType.Lead,
         int stringCount = 6,

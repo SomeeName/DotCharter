@@ -24,6 +24,35 @@ public sealed class DialogStackTests
         Assert.Equal(7, await session.Completion.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    ///     A dialog's result completes asynchronously. Completing the session from a POOL continuation
+    ///     made it a second completer racing <see cref="DialogStack.CloseTop" />'s dismissal, and a caller
+    ///     on the UI thread could still be waiting after its queue had drained (shown by a headless close
+    ///     under load). The completion is queued to the context the dialog opened on instead.
+    /// </summary>
+    [Fact]
+    public async Task A_dialogs_own_result_completes_the_session_on_the_context_it_opened_on()
+    {
+        var context = new QueueingContext();
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(context);
+        try
+        {
+            // As DialogViewModel's: its continuations never run inline.
+            var result = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var session = new DialogStack().Open(result.Task);
+            result.SetResult(7);
+
+            Assert.True(context.RunAll() > 0, "the session's completion was not queued to the dialog's context");
+            Assert.True(session.Completion.IsCompletedSuccessfully, "running the queued work did not complete the session");
+            Assert.Equal(7, await session.Completion);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
     [Fact]
     public async Task CloseTop_dismisses_only_the_top_with_the_default_result()
     {
@@ -90,5 +119,33 @@ public sealed class DialogStackTests
         ((IMessagePromptSetup)prompt).Configure("T", "M", isConfirmation: true);
 
         Assert.Equal(["Title", "Message", "HasMessage", "IsConfirmation"], raised);
+    }
+
+    /// <summary>A context that only queues what is posted to it, until the test runs it.</summary>
+    private sealed class QueueingContext : SynchronizationContext
+    {
+        private readonly Queue<(SendOrPostCallback Callback, object? State)> _posted = new();
+
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            lock (_posted) _posted.Enqueue((d, state));
+        }
+
+        public int RunAll()
+        {
+            var ran = 0;
+            while (true)
+            {
+                (SendOrPostCallback Callback, object? State) next;
+                lock (_posted)
+                {
+                    if (_posted.Count == 0) return ran;
+                    next = _posted.Dequeue();
+                }
+
+                next.Callback(next.State);
+                ran++;
+            }
+        }
     }
 }

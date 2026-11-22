@@ -25,12 +25,22 @@ public sealed class UnusedResxKeyTests
     [
         "ChartSynth_Model_", "ChartSynth_Pickup_", "ChordTemplate_Applied_",
         "DcSong_ReadFailure_", "DcSong_WriteFailure_", "DcSong_WriteStage_", "DcSong_WriteWarning_",
-        "Dialog_Export_Stage_", "EofLoss_", "History_",
+        // The event dialog's catalogue labels: Dialog_SectionName_<section> and Dialog_EventName_<code>, English where none.
+        "Dialog_EventName_", "Dialog_Export_Stage_", "Dialog_SectionName_",
+        // A rig knob or picker entry: DspParamText.KeyOf builds DspLabel_<letters and digits of the engine's name>.
+        "DspLabel_", "EofLoss_",
+        // Fix chart lists what each operation changed: FixChartChangeKey builds FixChart_Change_<label> from the operation's label.
+        "FixChart_Change_", "History_",
         "Inspector_EqPreset_", "Inspector_EqTypeName_", "Inspector_EqTypeShort_",
         "Inspector_Queue_Filter_", "Inspector_RepeatReason_",
         // Link identical measures shows why it refused: LinkCreate_<LinkCreateRefusal>.
         "LinkCreate_",
-        "RigImport_Loss_", "RigImport_Rail_", "ToneMatch_Block_"
+        // A built-in match pattern's name: MatchPatternCatalog.DisplayName builds Pattern_Builtin_<id> from the pattern id.
+        "Pattern_Builtin_",
+        "RigImport_Loss_", "RigImport_Rail_",
+        // A technique toggle reports its count: TechniqueSpec.Items appends _One or _Many to the family.
+        "Status_TechniqueCleared_", "Status_TechniqueSet_", "Status_TechniqueToggled_",
+        "ToneMatch_Block_"
     ];
 
     /// <summary>Companion suffixes appended to another key at run time (<c>key + "_Short"</c>): used when the base key is.</summary>

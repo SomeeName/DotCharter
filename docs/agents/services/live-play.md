@@ -4,9 +4,58 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
 
 ---
 
+- Pending seek generations are consumed only by `TickCore`, including when the end watch reaches EOF first; resetting the completion anchor preserves skipped-note semantics.
+
+- Completion restarts and song-end stops recheck the armed state, active session, epoch and seek generation under the session gate. Pause, stop, user seek and run end cancel an older loop restart or song-end stop; judging keeps the captured position, playing state and seek generation. Loop completion is reserved without changing pass state, then committed only after action validation; rejection clears the completion latch and leaves no pending loop seek. An ordinary playing-loop seek needs no song-end arm.
+
+- In an owned Play Mode run, every accepted transport Play (including Space, auditions, count-in, restart and retry) notifies `LivePlayViewModel.RearmCompletion`; direct section/punch-in starts and validated loop-pass restarts use the same door. `LivePlayCompletion.Arm` alone chooses the active loop boundary or song end, using the current session loop rather than a UI flag. Clearing a playing loop re-arms song completion. Pause still disarms older actions, and no audio clock is refreshed between capture and judging. Native source/device rebuilds preserve the existing transport arm; an explicitly paused run resumes through transport Play.
+
+- Natural audio EOF uses `LivePlaySessionService.CompleteAt` before `Stop`:
+  expire the final late window, consume CQT evidence and update section tallies.
+  `LivePlayCompletion` freezes the last capture-to-chart anchor at EOF; the existing
+  detector worker drains through the late-hit window plus the analyzer's advertised
+  `LatencySamples` before `LivePlayViewModel.CompleteSong` expires judgments.
+  Ordinary scoring, loops, seeks and ladder decisions use origin/main's engine
+  expiry clock for every input offset. Capture maturity does not reorder hits and
+  misses or hold a loop boundary (batch-4 decision B). The one exception is the end
+  itself: while the completion is pending the stopped playhead expires nothing
+  (`HandleCapturedTick(..., settlingSongEnd: true)`), so a last note whose window is
+  still open is settled by `CompleteAt` from its capture, not expired before it
+  arrives (a positive offset, #629).
+  A loop wrap closes the outgoing pass's still-open late windows before its totals
+  are taken (`ClosePassWindows`): an unplayed note just before B is one miss.
+  While paused, a finalised event is judged only when its attack was captured
+  before the pause (`LivePlayCompletion.TryMapCapturedBeforePause`, the pause-time
+  mapping); playing during the pause judges nothing. The capture's stream sample
+  decides, not which tick read it: the first paused read fixes the pause point on
+  the capture stream (`ObservePaused`, the stopped playhead through the last playing
+  read's mapping), so an attack between that read and the pause still counts. A
+  read that starts behind the last one (the counter restarted: engine rebuild,
+  device change) ends the mapping until play resumes. A seek while paused drops it.
+  A seek while stopped at the song end with the completion pending restarts the
+  completion when the playhead is still at the end (`ReadJudgingClock` begins it
+  again, and the end watch's `CompleteSong` does too); a seek away leaves the run
+  going, unrecorded, until it reaches the end again (`SeekWhilePausedAtEndTests`).
+  A non-progressing capture settles after one late-window/offset/detector evidence
+  budget on the injected `LivePlayCompletion.Clock`, never waiting forever for an
+  output-only device. Missing evidence produces misses, never invented hits.
+  A capture epoch reset reanchors subsequent evidence; a pending EOF uses elapsed
+  injected-clock time because the stopped engine playhead no longer advances.
+  A synthetic EOF anchor is replaced by the first real capture sync, even when
+  the new counter starts at zero. Only natural song EOF drains capture; no loop
+  capture-completion state can survive clearing a loop.
+  Main follow-up: with a positive input offset, a final note can expire before
+  its correctly timed capture finalizes. This is deliberately retained instead
+  of changing ordinary scoring order with a delayed expiry clock.
+  The end watch polls the authoritative audio position when the UI copy is throttled. Ordinary stop remains a partial
+  run so pausing or quitting does not manufacture misses for unplayed notes.
+
 - `Audio/LivePlay/` — the pure Live Play session brain (`LivePlaySessionService`,
   `LiveNoteMatcher`, `SpeedLadder`, `DynamicDifficultyEngine`,
   `PracticeProfileService`), driven by ticks; no audio/dispatcher deps.
+  Persisted chord strictness is parsed by the pure
+  `LivePlaySessionOptions.ParseChordStrictness` policy, shared by the editor's
+  initial setting, session options and CQT factory inputs.
   **The matcher is three types (#650).** `LiveNoteMatcher` judges at run time
   (`Load`/`Reload` and their carry-over, `Rewind*`, `AdvanceTo`, `Offer*`,
   `Verifies`, grading); `LiveExpectedTimeline` BUILDS what it judges (the
@@ -16,6 +65,10 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   `HarmonicOvertoneSemis`, `MaxBendSemis`, `NeedsTimbreEvidence`,
   `PitchIsUnreliable`). Pinned directly by `LivePitchAcceptanceTests` and
   `LiveExpectedTimelineTests`.
+  Without phrase spans, `LiveExpectedTimeline` selects `ChartLevels.Hardest`
+  (greatest `DifficultyIndex`, first on a tie), then records its actual storage
+  index in `ExpectedSound.LevelIndex`. Imported level order is not difficulty
+  order. Phrase selectors and their count bounds still address ladder slots.
   **The detection pump is a DEDICATED WORKER THREAD (0.24)** —
   `LivePlayDetectionPump` (~33 ms cadence, drift-aware pacing: ticks aim at
   absolute cadence multiples and REALIGN instead of bursting after a stall;
@@ -80,6 +133,7 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   (accuracy tracked separately), matching the local leaderboard ordering. The pure `RunBestComparison` in
   `LivePlaySessionReport.cs` is the single source of truth for the "new best /
   by how much" verdict; `report.Comparison` drives the results screen.
+  **Only a FULL-SPEED run raises a best** (PracticeProfileService.QualifiesForBests, speed >= 99.5 %, #390): score, streak, accuracy, FC flag, best-run metadata and detector bests. A slowed run still lands in `Sessions` and mastery (speed-scaled). The results screen's `RunBestComparison` is not speed-aware.
   **`BestAccuracy` additionally needs COVERAGE** (`PracticeProfileService.
   MinCoverageForBestAccuracy`, 0.5, via the one predicate
   `QualifiesForBestAccuracy`): `Accuracy` is `Hits / (Hits + Misses)` over the
@@ -382,6 +436,12 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   ladder state, not a best — plus an EMA accuracy). The DD ladder resumes via
   `LivePlaySessionOptions.InitialPhraseLevels` → `DynamicDifficultyEngine.Seed`;
   `LivePlaySessionService.LastPhraseOutcomes` hands results back at Stop.
+  Tick judgments are applied BEFORE elapsed phrases are completed. `Stop` tallies
+  every still-uncompleted span from its judged sounds, including the open-ended
+  final phrase; future unplayed sounds are not fabricated as misses and completed
+  spans are not tallied twice (`PhraseMasteryPersistenceTests`, `LivePlaySessionServiceTests`).
+  A difficulty change explicitly re-arms the completed pass before reloading its next level.
+  Loop tails retain main's expiry policy; #629 owns changes to that boundary.
   **Dynamic difficulty needs a LADDER: `DynamicDifficultyEngine.CanLevel` is
   `Levels.Count > 1`.** On one level the matcher clamps every phrase to it, so
   the engine would move and persist levels that select nothing. A ONE-level
@@ -427,10 +487,12 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   unreachable. Levelling DOWN deleted notes the player had already HIT, so
   `Hits` and `Score` went DOWN mid-run — the scoreboard moving backwards over
   playing that never happened. `Reload` now freezes an iteration's level the
-  moment ANY of its sounds is behind the horizon (a change part-way through one
-  phrase would add or remove notes under the player's hands). Pinned by
+  moment ANY of its sounds is behind the horizon OR has already been credited,
+  including an early hit inside the open window. Every verdict and timing tier
+  survives the reload. A change part-way through one phrase must not add or
+  remove notes under the player's hands. Pinned by
   `DynamicDifficultyReloadTests`, including the half the reload exists FOR: an
-  unplayed iteration still moves, and nothing is frozen before the first note.
+  unplayed iteration still moves, and nothing is frozen before the first note or credit.
   **A `LivePlaySection`'s `StartBar`/`EndBar` are captured ONCE, in
   `BuildSections`, and every later rebuild must carry them forward.** They are
   `init`-only, so a rebuild that omits them nulls them SILENTLY, and there is no
@@ -456,11 +518,7 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   `LivePlayCqtDefaultMigrated` latch — a later "off" sticks). Measured on real DI
   with ground truth (`tools/detection-eval`, Guitar-TECHS, 14,250 sounds): the
   classic candidate matcher credited 59.5 % of perfectly played sounds (40 % of the
-  chord sets, 45 % of the songs), the CQT verifier 92.4 %. (The classic path's
-  `JuceGuitarAnalyzer` WRITING a chart from a song's mix — Chart from audio — is
-  scored separately:
-  onset F1 44.7 %, note F1 4.3 % on `TestData/EOF`, see
-  [../testing/autochart-eval.md](../testing/autochart-eval.md).) `LiveCqtVerifier`
+  chord sets, 45 % of the songs), the CQT verifier 92.4 %. `LiveCqtVerifier`
   (wraps JuceSharp.Dsp's `JuceConstantQ`/`JuceChartVerifier`) plugs into
   `LiveNoteMatcher.ChartVerify`, which then judges pitched sounds *pull-based*
   in `AdvanceTo` (candidate paths short-circuit); pitchless sounds (mutes,
@@ -573,11 +631,37 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   - **Targeted leniency (0.58), each measured on the Guitar-TECHS songs for recall AND for
     wrong-note / octave-down / idle / stop-mid-song acceptance:**
     - *Dense chords* (`LiveCqtConfig.DenseChordTones` = 4, `DenseChordCoverage` = 0.4): no
-      lone-third rule and a lower bar; free (songs 91.9 → 92.0 %, nothing else moved).
+      lone-third rule and a lower bar outside Strict chord voicing practice; free
+      (songs 91.9 → 92.0 %, nothing else moved). `LivePlayViewModel.StartCore` passes
+      the configured chord strictness to `LiveCqtVerifier.ForPreset`: Strict requires
+      every distinct tone, including dense voicings (`LiveCqtVerifierTests`,
+      `LivePlayInputSilenceResetTests`).
     - *Pinch harmonics* also count from the attack detector's pushed evidence in CQT mode
       (`LiveNoteMatcher.PinchHarmonicAttackEvidence`).
     - *Bends and slides* are verified at every semitone they travel through
-      (`LiveCqtVerifier.TryTravel`) — the range the attack path always accepted.
+      (`LiveCqtVerifier.TryTravel`), for each chord tone as well as single notes —
+      chord slides displace each tone's own range by `SlideSemis`.
+      `LiveExpectedTimeline` carries `ExpectedSound.ChordBendSemis` per pitched
+      string; an unbent tone cannot borrow another string's bend range.
+      Unison strings with different bend ranges require separate audible pitches;
+      identical unison requirements still share evidence. `ConfirmsDistinctUnisons`
+      matches the nested ranges from smallest to largest without per-tick allocations.
+      Each fretted requirement retains Lenient's ordinary quarter-tone tolerance;
+      the matched CQT bin is recorded so detuned evidence cannot be spent twice.
+      Distinct requirements must match distinct local peaks in the SAME CQT frame
+      (`UnisonEvidenceBin`), retaining the preset's floor, onset-rise, noise and
+      detuning gates. Combining peaks from different frames credits one swept string
+      twice. Comparing a pair of semitone neighbours against each other also rejects
+      the quieter tone: immediate quarter-tone neighbours resolve both peaks (#656).
+      `CqtUnisonResolutionTests` measures simultaneous pairs from MIDI 40 to 69 and
+      swept strings in both modes, offline and on the shipping streaming kernel cap.
+    - *Authored reference pitch*: `StartCore` passes `Arrangement.CentOffset` to
+      the CQT factory. `ArrangementInstrument.ResidualCents` removes the reference
+      octave already included in the sounding MIDI; the remainder shifts every
+      expected CQT pitch, travel range, harmonic and contour reference. The drift
+      monitor folds the difference AFTER subtracting authored detuning, so crossing
+      the nearest-semitone boundary cannot reverse the drift direction
+      (`LiveTuningDriftMonitorTests`, `LiveCqtTechniqueContourTests`).
     - *Fast-run semitone tolerance* was MEASURED AND REJECTED: +0.8 recall, but semitone-off
       notes 19.4 → 31.3 % accepted and idle hum scored. See the note in `LiveCqtConfig`.
     - *Forgiving* (`LiveCqtVerifier.Forgiving`, created by `LiveCqtVerifier.ForPreset` for
@@ -656,11 +740,28 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   never allocates, and DROPS (counted) when the writer starves — keep it that
   way. `LiveTakeStore` owns the active profile's `takes/` dir, encodes finished
   takes to Opus via the `FfmpegStemEncoder` seam (WAV without ffmpeg), attaches
-  the file name to the newest `PracticeSessionRecord.TakeFile`
+  the file name to its owning `PracticeSessionRecord.TakeFile`
   (`IPracticeProfileService.AttachTakeFile`) and sweeps orphaned/over-cap takes
   (`SelectDeletions` is the pure policy). Opt-in via
   `AppConfig.LivePlayTakeRecorderEnabled` (default OFF; Settings → Audio →
   "Listen back", `AudioSettingsViewModel.TakeRecorderEnabled`).
+  `LivePlayRunArchive.BeginRun` captures a `PracticeRunIdentity` (profile +
+  session GUID) at run start. Recording and both asynchronous attachments use
+  that identity, never the active profile's latest session. Replay writes and
+  take cleanup also use the captured profile. A take completion announces
+  listen-back only if that run and profile still own the Results screen.
+  `LiveTakeRecorder` disposes its owned stream and cancellation source if the
+  initial WAV header write fails; a failed constructor leaves no locked handle
+  (`LiveTakeRecorderTests`, #551).
+  **Pending takes are reserved through attachment (#634):** `LiveTakeStore`
+  reserves WAV and Opus output paths before creating the recorder. Cleanup holds
+  the reservation gate from reference collection through deletion and excludes
+  reserved outputs from orphan and size-cap eviction. `LivePlayRunArchive` calls
+  `CompleteTake` in its finalization `finally`, after attachment or abandonment,
+  then sweeps. Releasing inside the encoder/store finalizer is too early.
+  The capture tee passes the current sample rate into `LiveTakeRecorder.Write`;
+  a changed rate permanently stops acceptance while the existing prefix remains
+  finalizable with its original WAV rate (`LivePlayInputSilenceResetTests`).
   **Listen-back (0.19):** the take is reachable from Play Mode's results screen
   (`LivePlayViewModel.RunArchive.TakeSaved` — `ViewModels/Editor/LivePlayRunArchive.cs`,
   which owns both stores, starts the take and runs the off-thread finalize and
@@ -671,9 +772,12 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   that screen on 2026-09-19. **There is only ONE master transport**, so
   playback BORROWS it: `RunListenBackViewModel.PlayTakeAsync` (Play Mode's
   `ListenBack`) snapshots
-  `IAudioPlaybackService.CurrentAudioPath` + the playhead, run-scope-mutes the
+  `IAudioPlaybackService.CurrentAudioPath` + the playhead + the master mute,
+  temporarily unmutes the master and run-scope-mutes the
   stems (they ride the same transport and would play the song under the take),
-  and `StopAsync` puts all three back. Every exit path — Stop, the take
+  and `StopAsync` restores them after an owned hand-back. A pending decode belongs to a cancellable
+  request too: the transport retains the song until publication, and only a
+  current request may mute stems or start playing. Every exit path — Stop, the take
   running out (`_takeWatchTimer`), leaving the screen — goes through it, or the
   results screen's Retry would play the recording instead of the song.
   **Take library (v0.27) — the UI was removed on 2026-09-19** (the History
@@ -688,6 +792,12 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   sit over the budget — deliberate); orphaned re-amps and interrupted `.tmp`
   writes sweep like orphaned takes. Dropping the fields would let the next
   sweep delete recordings the player chose to keep.
+  The 200-session history cap always retains the newly recorded run, starred
+  sessions and sessions carrying re-amp references. `PracticeHistoryTrim` selects
+  only older ordinary sessions; history may exceed the cap when all older runs
+  are protected. Re-amp references remain referenced even without a dry take.
+  `PracticeHistoryTrimTests` covers the trim table; `PracticeProfileServiceTests`
+  verifies exact-session take and replay attachment at a full protected cap.
   `Services/Gameplay/RemovedPracticeDataCompatibilityTests` pins a store
   written by the library: it loads, per-song stats read from it, the metadata
   survives a re-save and the sweep deletes none of its files.
@@ -700,7 +810,7 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   `PracticeSessionRecord.ReplayFile` reads as "no replay"). Capture rides
   `LivePlayViewModel.StopCore`: projected UNDER the gate from
   `Matcher.Expected` BEFORE `_session.Stop()` (same reason as the sections
-  snapshot), persisted + attached (`AttachReplayFile`, newest-session-once
+  snapshot), persisted + attached (`AttachReplayFile`, owning-session-once
   like takes) OFF-thread by `LivePlayRunArchive.SaveReplayAsync`. Recorded runs only; always on (no flag).
 - **Per-string detection confidence in the analysis monitor (#314)** —
   `Audio/LivePlay/LiveStringConfidence.cs`, pure. It surfaces evidence the judging path
@@ -748,9 +858,9 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   `TunerCentOffsetTests`, whose middle case asserts the two target tables are
   the same frequencies — the assertion that would have caught it.
   **One resolver for a chart's open strings:**
-  `ArrangementTunerLogic.TryResolveTuningSteps` (`TuningPitches`, else the
-  `TuningType` name decoded by `TuningUtilities.TryGetOffsetsForTuningType`;
-  `false` when neither says anything). `Load(Arrangement)` (Tools ▸ Tuner,
+  `ArrangementTunerLogic.TryResolveTuningSteps` delegates to `TuningOffsetResolution`:
+  authored offsets, then readable note letters, then a known `TuningType` when
+  the letters array is empty; `false` when none resolves. `Load(Arrangement)` (Tools ▸ Tuner,
   through `LiveTuner`) and `TuningCheckTargets.TryBuild`/`Build` (Get Ready's
   `GuidedTuningCheck`, the timeline gutter) both go through it, and both fall
   back to standard the same way for an unknown name (`ResolveTuningSteps`).

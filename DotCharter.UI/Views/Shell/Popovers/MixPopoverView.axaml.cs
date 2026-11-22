@@ -37,7 +37,7 @@ public partial class MixPopoverView : UserControl
         InitializeComponent();
 
         _meterClock = new DispatcherTimer(DispatcherPriority.Background) { Interval = MeterInterval };
-        _meterClock.Tick += (_, _) => (DataContext as MainWindowViewModel)?.Transport.PollInputMeter();
+        _meterClock.Tick += (_, _) => (DataContext as MainWindowViewModel)?.Transport.InputMeter.Poll();
 
         AttachedToVisualTree += (_, _) => _meterClock.Start();
         DetachedFromVisualTree += (_, _) => _meterClock.Stop();

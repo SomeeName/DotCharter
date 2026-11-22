@@ -20,6 +20,7 @@ public sealed class DspTonePresetService : IDspTonePresetService
     private readonly IAppLogger? _logger;
     private readonly HashSet<string> _factoryIds;
     private readonly Func<string?>? _namCaptureDirectory;
+    private readonly IProfileToneRigStore? _rigStore;
 
     // ABI v28: one applier per SEAT, built lazily. Null when the app is
     // running without the per-player registry (headless tests), in which case
@@ -47,6 +48,13 @@ public sealed class DspTonePresetService : IDspTonePresetService
     public DspTonePresetService(
         IDspChainService chain, IRigConfigService config, IAppLogger? logger = null,
         Func<string?>? namCaptureDirectory = null, IPlayerDspChains? chains = null)
+        : this(chain, config, logger, namCaptureDirectory, chains, null) { }
+
+    /// <summary>Profile-aware hosts pass their shared scope explicitly; fixed-scope hosts use the other overload.</summary>
+    public DspTonePresetService(
+        IDspChainService chain, IRigConfigService config, IAppLogger? logger,
+        Func<string?>? namCaptureDirectory, IPlayerDspChains? chains,
+        IProfileToneRigStore? rigStore)
     {
         _chain = chain;
         _chains = chains;
@@ -54,11 +62,27 @@ public sealed class DspTonePresetService : IDspTonePresetService
         _store = new UserTonePresetStore(config, logger);
         _applier = new DcRigApplier(chain, logger);
         _namCaptureDirectory = namCaptureDirectory;
+        _rigStore = rigStore;
         Presets = DspTonePresetLibrary.All;
         _factoryIds = new HashSet<string>(Presets.Select(p => p.Id), StringComparer.OrdinalIgnoreCase);
     }
 
     public IReadOnlyList<DspTonePreset> Presets { get; }
+
+    public event Action<int, long>? PresetApplied;
+
+    public long ProfileGeneration => _rigStore?.ScopeGeneration ?? 0;
+
+    public DcRigApplyResult? ApplyToPlayerForProfile(int player, DspTonePreset preset, long generation)
+    {
+        if (_rigStore is null) return generation == 0 ? ApplyToPlayer(player, preset) : null;
+        var applier = ApplierFor(player);
+        if (applier is null) return generation == ProfileGeneration ? ApplyToPlayer(player, preset) : null;
+        var rig = DcRigPresetPreparation.Prepare(preset, _namCaptureDirectory?.Invoke());
+        var result = applier.ApplyWhen(rig, () => generation == ProfileGeneration);
+        NotifySuccessfulApply(player, generation, result);
+        return result;
+    }
 
     public IReadOnlyList<DspTonePreset> UserPresets => _store.List();
 
@@ -95,8 +119,7 @@ public sealed class DspTonePresetService : IDspTonePresetService
     // The default-filling / factory-loudness / NAM-path rules live in the
     // shared DcRigPresetPreparation pipeline so the offline take re-amp
     // prepares presets IDENTICALLY to this live apply.
-    public DcRigApplyResult Apply(DspTonePreset preset)
-        => _applier.Apply(DcRigPresetPreparation.Prepare(preset, _namCaptureDirectory?.Invoke()));
+    public DcRigApplyResult Apply(DspTonePreset preset) => ApplyToPlayer(0, preset);
 
     public DcRigApplyResult? ApplyById(string id)
     {
@@ -120,7 +143,17 @@ public sealed class DspTonePresetService : IDspTonePresetService
             return new DcRigApplyResult(0, 0, 0, 0, 0, NoOp: true);
         }
 
-        return applier.Apply(DcRigPresetPreparation.Prepare(preset, _namCaptureDirectory?.Invoke()));
+        var generation = ProfileGeneration;
+        var result = applier.Apply(DcRigPresetPreparation.Prepare(preset, _namCaptureDirectory?.Invoke()));
+        NotifySuccessfulApply(player, generation, result);
+        return result;
+    }
+
+    private void NotifySuccessfulApply(int player, long generation, DcRigApplyResult? result)
+    {
+        var chain = player <= 0 ? _chain : _chains?.For(player);
+        if (result is { FailedOps: 0 } && chain?.HasEngine == true && generation == ProfileGeneration)
+            PresetApplied?.Invoke(player, generation);
     }
 
     /// <inheritdoc />
@@ -165,9 +198,22 @@ public sealed class DspTonePresetService : IDspTonePresetService
     // implementation is the point.
 
     public DspTonePreset SaveUser(
-        string name, DspToneCategory category, string description, DcRigPreset rig, string? overwriteId = null)
+        string name, DspToneCategory category, string description, DcRigPreset rig, string? overwriteId = null) =>
+        SaveUser(name, category, description, rig, overwriteId, out _);
+
+    public DspTonePreset SaveUser(
+        string name, DspToneCategory category, string description, DcRigPreset rig, string? overwriteId, out bool written)
+    {
+        var saved = StageUser(name, category, description, rig, overwriteId, out var write);
+        written = write();
+        return saved;
+    }
+
+    public DspTonePreset StageUser(
+        string name, DspToneCategory category, string description, DcRigPreset rig, string? overwriteId, out Func<bool> write)
     {
         rig ??= new DcRigPreset([]);
+        write = static () => true;
 
         // Refuse to overwrite a factory preset — return it unchanged, persist nothing.
         if (!string.IsNullOrEmpty(overwriteId) && _factoryIds.Contains(overwriteId))
@@ -189,7 +235,7 @@ public sealed class DspTonePresetService : IDspTonePresetService
         }
 
         var preset = new DspTonePreset(id, CleanName(name), category, CleanName(description), rig, DspToneOrigin.User);
-        return _store.Upsert(preset) ?? preset;
+        return _store.Stage(preset, out write) ?? preset;
     }
 
     public bool DeleteUser(string id)

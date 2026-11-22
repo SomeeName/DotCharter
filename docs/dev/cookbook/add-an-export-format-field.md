@@ -37,6 +37,6 @@ too, start with [add-a-note-technique.md](add-a-note-technique.md).
 
 ## Example in the code
 
-Guitar Pro export writes pick scrapes back as pick slides, with
+Guitar Pro export writes unmuted chart pick slides as dead-note pick-slide notation, with
 `DotCharter.Tests/Services/Export/GuitarPro/GpExporterPickScrapeTests.cs` as the
 round-trip test.

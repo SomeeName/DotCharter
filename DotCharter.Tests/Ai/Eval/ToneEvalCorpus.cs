@@ -144,8 +144,9 @@ public static class ToneEvalCorpus
     }
 
     /// <summary>
-    ///     <see cref="TryLoadLocal" />'s body. Never throws: one unreadable
-    ///     package must not take the whole corpus down.
+    ///     <see cref="TryLoadLocal" />'s body. A missing corpus is an empty list;
+    ///     a corpus file that is corrupt or unreadable THROWS, so it cannot quietly
+    ///     shrink the corpus a test then loops over.
     /// </summary>
     public static IReadOnlyList<ToneEvalEntry> LoadLocal(int limit = DefaultLimit)
     {
@@ -164,6 +165,7 @@ public static class ToneEvalCorpus
     /// <param name="root">The directory to walk.</param>
     /// <param name="limit">Hard ceiling on songs.</param>
     /// <returns>One elected tone per song, already converted.</returns>
+    /// <exception cref="InvalidDataException">A <c>.rs2dlc</c> file could not be read or parsed.</exception>
     public static IReadOnlyList<ToneEvalEntry> LoadLocalFrom(string root, int limit = DefaultLimit)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -173,8 +175,12 @@ public static class ToneEvalCorpus
         // .rs2dlc only: it is plain JSON carrying both the metadata and the tone
         // bodies, and the EOF corpus ships one per song. Built packages need the
         // package reader, an optional plugin this project does not reference (#889).
+        var problems = new List<string>();
         foreach (var file in SafeEnumerate(root, "*.rs2dlc"))
-            HarvestRs2Dlc(file, bySong);
+            HarvestRs2Dlc(file, bySong, problems);
+
+        if (problems.Count > 0)
+            throw new InvalidDataException($"{problems.Count} corpus file(s) could not be read:{Environment.NewLine}{string.Join(Environment.NewLine, problems)}");
 
         return bySong.Values
             .OrderBy(e => e.SongId, StringComparer.Ordinal)
@@ -266,7 +272,7 @@ public static class ToneEvalCorpus
         catch (UnauthorizedAccessException) { return Array.Empty<string>(); }
     }
 
-    private static void HarvestRs2Dlc(string path, Dictionary<string, ToneEvalEntry> bySong)
+    private static void HarvestRs2Dlc(string path, Dictionary<string, ToneEvalEntry> bySong, List<string> problems)
     {
         try
         {
@@ -301,9 +307,10 @@ public static class ToneEvalCorpus
 
             Elect(candidates, bySong);
         }
-        catch (JsonException) { }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            problems.Add($"{path}: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     /// <summary>

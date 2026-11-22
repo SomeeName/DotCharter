@@ -3,7 +3,7 @@
 `DotCharter.Services/Ai/Generate/**` — one **in-game Rocksmith tone** per placed
 `ToneChange`, built from that change's window of the arrangement's own separated
 stem plus what is known about the song. The user-facing name is **Generate tones
-with AI…** (Tools ▸ Tone & sound, and the palette's `tools.generateRocksmithTones`);
+with AI…** (Tools ▸ Tones, and the palette's `tools.generateRocksmithTones`);
 the command is `ToneRigViewModel.GenerateRocksmithTonesCommand`, exposed as
 `MainWindowViewModel.ToneRig`, and it is one line over **`AiToneGenerationRun`**
 (the generator arrives there as a `Func<IRsToneGenerator?>` factory).
@@ -201,8 +201,13 @@ instruction ⇒ no section: the menu verb's prompt for a generic name is byte-fo
   serialized by **`RsToneJsonWriter`** — the app's one `RsTone` → manifest-JSON
   writer, which the package export embeds verbatim;
 - each placed `ToneChange.ToneName` pointed at its tone (matched by the window's
-  INDEX into the time-sorted change list, not by its old name);
-- the arrangement's `ToneBase` / `ToneA`–`ToneD` / `ToneNames` filled.
+  INDEX into the time-sorted change list, not by its old name, and only while that
+  change still sits at the window's `PlacedMs` with the window's `ToneName`; else
+  the one change that does, or none — a change inserted, moved or renamed while the
+  request ran is never renamed, #598);
+- the arrangement's `ToneBase` / `ToneA`–`ToneD` / `ToneNames` filled, in play
+  order, from EVERY name a change still uses (a failed window's or an untouched
+  change's included, #598) and then the generated keys.
 
 **What it deliberately does NOT touch: the `.rs2dlc`'s `Tones` arrays.**
 `Rs2DlcProjectBuilder` hard-codes them empty because DLC Builder's project file is

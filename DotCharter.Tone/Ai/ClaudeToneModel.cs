@@ -22,9 +22,8 @@ namespace DotCharter.Tone.Ai;
 ///         request holds one HTTP response open for the whole generation, and a long
 ///         reply on a slow link hits the client timeout with nothing to show for it;
 ///         the streamed form keeps bytes moving and is what the API asks for on long
-///         generations. There is no <c>GetFinalMessage</c> helper in the C# SDK
-///         (12.55.0), so this accumulates the text deltas itself and reads the stop
-///         reason and output usage off the <c>message_delta</c> event.
+///         generations. This accumulates the text deltas from the C# SDK
+///         (13.9.0) itself and reads the stop reason and output usage off the <c>message_delta</c> event.
 ///     </para>
 ///     <para>
 ///         <b>Adaptive thinking.</b> The <c>Thinking</c> parameter is OMITTED:
@@ -172,7 +171,7 @@ public sealed class ClaudeToneModel : IToneDesignModel
             {
                 Model = _modelId,
                 MaxTokens = 16,
-                Messages = [new() { Role = Role.User, Content = "Reply with the single word: ok" }]
+                Messages = [new UserMessageParam { Content = "Reply with the single word: ok" }]
             }, ct).ConfigureAwait(false);
 
             // The model the API ANSWERED with, not the one we asked for: an alias
@@ -199,11 +198,10 @@ public sealed class ClaudeToneModel : IToneDesignModel
         var messages = new List<MessageParam>();
         foreach (var turn in prompt.Messages)
         {
-            messages.Add(new MessageParam
-            {
-                Role = turn.Role == ToneDesignRole.Assistant ? Role.Assistant : Role.User,
-                Content = turn.Text
-            });
+            // 13.x made MessageParam a union of per-role types; the role is the type.
+            messages.Add(turn.Role == ToneDesignRole.Assistant
+                ? new AssistantMessageParam { Content = turn.Text }
+                : new UserMessageParam { Content = turn.Text });
         }
 
         return new MessageCreateParams
@@ -279,6 +277,16 @@ public sealed class ClaudeToneModel : IToneDesignModel
         AnthropicRateLimitException => new ToneDesignException(
             ToneDesignFault.RateLimited,
             "Claude is rate-limiting this key. Wait a moment and try again.",
+            Redacted(ex), ex),
+        // 529 and 503 are Anthropic saying "too busy", not "your key is wrong": 13.5
+        // gives them their own classes, so they must not fall into the catch-all.
+        AnthropicOverloadedException or AnthropicServiceUnavailableException => new ToneDesignException(
+            ToneDesignFault.RateLimited,
+            "Claude is overloaded right now. Wait a moment and try again.",
+            Redacted(ex), ex),
+        AnthropicGatewayTimeoutException or AnthropicRequestTimeoutException => new ToneDesignException(
+            ToneDesignFault.Network,
+            "Claude took too long to answer. Try again.",
             Redacted(ex), ex),
         AnthropicIOException => new ToneDesignException(
             ToneDesignFault.Network,

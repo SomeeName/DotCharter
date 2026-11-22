@@ -2,6 +2,10 @@
 
 ## `Data/` — the frame snapshot
 
+- `RenderLyricWord.NeedsReview` projects a syllable's advisory alignment
+  findings. `EventLayer` draws a mark inside that pill in the lyrics lane;
+  the projection changes no lyric text or timing.
+
 - `Data/` — `FrameSnapshot` (partial; the per-frame, GC-reused flat `Render*[]`
   projection of the visible chart slice) + `Data/Render/` POD structs +
   `*Constants`. Every projection is windowed: notes/chords/anchors/beats/
@@ -15,6 +19,16 @@
   sticky-prefix entries prepended to the windowed arrays — see
   `FrameSnapshot.Events.cs`. Chord templates stay a FULL projection on purpose
   (`Templates[TemplateId]` is id-indexed).
+  - Bend counts in `RenderNote` and `RenderChordNote` are `int`, matching the
+    shared bend buffer; authored curves with 256 or more points must not wrap.
+    Active, preview and ghost projections share this rule
+    (`FrameSnapshotAuthoredStateTests`).
+  - Measure-prefix caching also keys on `SnapshotUpdateContext.BeatsVersion`.
+    Both app builders feed `ChartEditorViewModel.HistoryRevision`, covering
+    in-place measure/time-signature edits and undo/redo. Unversioned contexts
+    (-1) recount on every update; immutable fixtures may supply a stable revision.
+    Identity, count and viewport start alone cannot detect these edits
+    (`FrameSnapshotAuthoredStateTests`, `FrameSnapshotPerfGateTests`).
   - **The repeat box is DATA, never derived here (#487).** Whether a chord shows
     as Rocksmith's frame-only repeat box is the EXPORT's decision
     (`DotCharter.Services/Export/Rocksmith/RepeatChords`: `RsChordDensity`, plus
@@ -38,7 +52,8 @@
     tails and NO box, and `ChordNameRenderer` / `FingeringRenderer` show no name or
     grip for it. The 2D timeline keeps drawing it as one chord — the editor's
     selection unit (`SplitChordSnapshotTests`; pixels in
-    `HeadlessPickScrapeRenderTests`).
+    `HeadlessPickScrapeRenderTests`). Pick slides have unmuted tap heads with
+    tremolo and unpitched-slide tails; the note's mute field alone controls the X.
   - **…but that full projection is LATCHED, not re-run every frame.**
     `UpdateTemplates` rebuilt the whole table on both renderers at frame rate —
     per template a struct build plus 8× `GetFret` + 8× `GetFinger` DICTIONARY

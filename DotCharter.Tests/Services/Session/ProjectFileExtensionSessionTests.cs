@@ -55,6 +55,7 @@ public sealed class ProjectFileExtensionSessionTests : IDisposable
         var h = new Harness(Project(), path);
 
         Assert.True(await h.Session.Saver.SaveProjectCoreAsync(path));
+        await h.Session.Saver.FlushCompanionsAsync();
 
         Assert.True(CharterRscp.IsWrittenByDotCharter(path));
         var companion = CharterRscp.CompanionPath(path);
@@ -94,7 +95,7 @@ public sealed class ProjectFileExtensionSessionTests : IDisposable
         var dcproj = Path.Combine(folder, "project.dcproj");
         Assert.Equal(dcproj, h.State.CurrentProjectPath);
         Assert.True(File.Exists(dcproj));
-        Assert.Equal(legacyBytes, File.ReadAllBytes(legacy + ".bak"));
+        Assert.Equal(legacyBytes, File.ReadAllBytes(Path.Combine(folder, "backups", "project.rscp.bak")));
         // The .rscp name now holds the Charter companion, not DotCharter's XML.
         Assert.False(CharterRscp.IsWrittenByDotCharter(legacy));
         Assert.Contains("project.rscp.bak", h.State.MainDisplayMessage, StringComparison.Ordinal);
@@ -105,14 +106,15 @@ public sealed class ProjectFileExtensionSessionTests : IDisposable
     {
         var folder = SongFolder();
         var legacy = Path.Combine(folder, "project.rscp");
-        File.WriteAllText(legacy + ".bak", "earlier backup");
+        Directory.CreateDirectory(Path.Combine(folder, "backups"));
+        File.WriteAllText(Path.Combine(folder, "backups", "project.rscp.bak"), "earlier backup");
         new RscpChartSerializer().Save(legacy, Project());
 
         var h = new Harness(Project(), legacy);
         Assert.True(await h.Session.Saver.SaveFromRscpAsync(legacy));
 
-        Assert.Equal("earlier backup", File.ReadAllText(legacy + ".bak"));
-        Assert.True(File.Exists(Path.Combine(folder, "project.rscp.2.bak")));
+        Assert.Equal("earlier backup", File.ReadAllText(Path.Combine(folder, "backups", "project.rscp.bak")));
+        Assert.True(File.Exists(Path.Combine(folder, "backups", "project.rscp.2.bak")));
     }
 
     [Fact]
@@ -274,6 +276,25 @@ public sealed class ProjectFileExtensionSessionTests : IDisposable
         "  <artistName>Charter Band</artistName>\n  <title>Charter Song</title>\n" +
         "  <beats>\n    <beat2 t=\"0.0\" sig=\"4/4\" bar=\"T\"/>\n    <beat2 t=\"500.0\" sig=\"4/4\"/>\n  </beats>\n" +
         "  <arrangements/>\n</project>";
+
+    [Theory]
+    [InlineData(".dcproj")]
+    [InlineData(".rscp")]
+    public async Task OpeningAnOldLayout_MovesOwnedCompanionsWithoutACommand(string extension)
+    {
+        var folder = SongFolder();
+        var path = Path.Combine(folder, "project" + extension);
+        new RscpChartSerializer().Save(path, Project());
+        var oldEof = Path.Combine(folder, "project.eof");
+        CompanionOwnership.WriteIfUnmodified(oldEof, file => File.WriteAllText(file, "owned"), out _);
+        var h = new Harness(new ChartProject(), "");
+        await h.Session.LoadFile(path);
+        await h.Session.Saver.FlushCompanionsAsync();
+        Assert.Equal(path, h.State.CurrentProjectPath);
+        Assert.False(File.Exists(oldEof));
+        Assert.Equal("owned", File.ReadAllText(Path.Combine(folder, "export", "project.eof")));
+        Assert.True(File.Exists(Path.Combine(folder, ".dotcharter", "companions.json")));
+    }
 
     /// <summary>Reads and writes real project files, and skips the export bundle.</summary>
     private sealed class FileDocumentService : IProjectDocumentService

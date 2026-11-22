@@ -21,4 +21,7 @@ public static class BoolConverters
     /// </summary>
     public static readonly FuncValueConverter<bool, FlowDirection> ToFlowDirection =
         new(rtl => rtl ? FlowDirection.RightToLeft : FlowDirection.LeftToRight);
+
+    /// <summary>A row that is off (a muted stem on the Mixer's Monitor card) is drawn at reduced strength, still readable.</summary>
+    public static readonly FuncValueConverter<bool, double> ToDimmedOpacity = new(off => off ? 0.45 : 1.0);
 }

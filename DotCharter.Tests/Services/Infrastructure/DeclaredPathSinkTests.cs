@@ -119,6 +119,15 @@ public sealed class DeclaredPathSinkTests : IDisposable
     }
 
     [Fact]
+    public void Stem_ARelativeNameCannotTurnAnUnsafeBaseIntoAProbe()
+    {
+        var stem = Touch(@"elsewhere\guitar.wav");
+        var unsafeBase = @"\\?\" + Path.GetDirectoryName(stem);
+
+        Assert.Equal("", StemFolderProbe.ResolveStemPath(unsafeBase, "", "guitar.wav"));
+    }
+
+    [Fact]
     public void Stem_TheParentRelativePathTheAppWritesStillResolves()
     {
         var stem = Touch(@"song\stems\guitar.wav");
@@ -204,6 +213,41 @@ public sealed class DeclaredPathSinkTests : IDisposable
         var files = new RecordingFiles();
 
         Assert.Null(ExportPathDefaults.ProjectAudio(@"\\server\share\song.wav", Path.Combine(_root, "proj", "project.rscp"), files));
+        Assert.Empty(files.Probed);
+    }
+
+    [Fact]
+    public void ExportAudio_AProjectOnAnUnsafeBaseIsNeverProbed()
+    {
+        var files = new RecordingFiles();
+
+        Assert.Null(ExportPathDefaults.ProjectAudio("song.wav", @"\\server\share\project.dcproj", files));
+        Assert.Empty(files.Probed);
+    }
+
+    [Fact]
+    public void ExportAudio_NeverSubstitutesASiblingWavAtTheSongRoot()
+    {
+        var audio = Path.Combine(_root, "song.wav");
+        var files = new RecordingFiles(audio);
+
+        Assert.Null(ExportPathDefaults.ProjectAudio("song.ogg", Path.Combine(_root, "lead", "project.dcproj"), files));
+        Assert.DoesNotContain(audio, files.Probed);
+    }
+
+    [Theory]
+    [InlineData(@"\\server\share\song.wav")]
+    [InlineData(@"\\?\C:\song.wav")]
+    [InlineData("song.wav:stream")]
+    public void ToneAnalysis_NeverProbesUnsafeCapturedInputs(string reference)
+    {
+        var files = new RecordingFiles();
+        var logger = new FakeAppLogger();
+        var input = new DotCharter.Services.Editing.Tones.ToneGenerationInput(
+            [], [], 0, [("guitar", reference)], reference, [], []);
+
+        new DotCharter.Services.Editing.Tones.ToneGenerationRun(new HistoryService(logger), files, logger).Analyse(input);
+
         Assert.Empty(files.Probed);
     }
 

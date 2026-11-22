@@ -81,8 +81,11 @@ dotnet build DotCharter.sln --nologo -v:m
 # the same pictures out of the headless suite
 $env:DOTCHARTER_UI_SWEEP_DUMP = "1"
 $env:DOTCHARTER_RIG_CAPTURE_DIR = "$env:TEMP\gallery-capture"
-powershell -NoProfile -File tools/agent/Invoke-Gate.ps1 -Headless -NoBuild -FilterClass "*GalleryPagesUiPerfSmokeTests"
+powershell -NoProfile -File tools/agent/Invoke-Gate.ps1 -NoBuild -FilterClass "*GalleryPagesUiPerfSmokeTests"
 ```
+
+Both capture paths host the page on `AppBackground`, the same theme brush
+used by `GalleryWindow` and `MainWindow`.
 
 Both write `gallery-<section>-<page>-<variant>.png` at 1600×900, from the same
 `GalleryCapture.FileName`, whose slugs are `ScreenCatalog.Slug` — the goldens'

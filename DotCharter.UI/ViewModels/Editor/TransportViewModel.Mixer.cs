@@ -270,6 +270,17 @@ public partial class TransportViewModel : IGuitarMonitorMixer
     /// </summary>
     public bool IsAnythingSoloed => IsSongSoloed || IsInputSoloed || IsMidiSoloed;
 
+    private double EffectiveChartSoundVolume => IsMidiMuted || (IsAnythingSoloed && !IsMidiSoloed) ? 0.0 : _midiVolume;
+
+    private void ApplyInstrumentVolume(double gain)
+    {
+        // The plugin can still be attached after MIDI Out is switched off.
+        // Keep its legacy input level without boosting the seat's live guitar.
+        _audioService.VstInstrumentVolume = HasInstrumentVst && !_audioService.IsVstInstrumentEnabled
+            ? Math.Min(gain, 1.0)
+            : gain;
+    }
+
     private void ApplyVolumes()
     {
         var anySolo = IsAnythingSoloed;
@@ -280,15 +291,13 @@ public partial class TransportViewModel : IGuitarMonitorMixer
         var effInput = _inputVolume;
         if (IsInputMuted || (anySolo && !IsInputSoloed)) effInput = 0;
 
-        var effMidi = _midiVolume;
-        if (IsMidiMuted || (anySolo && !IsMidiSoloed)) effMidi = 0;
+        var effMidi = EffectiveChartSoundVolume;
 
         _audioService.Volume = IsMasterMuted ? 0 : _volume;
         _audioService.SongVolume = effSong;
         _audioService.InputVolume = effInput;
-        _audioService.VstInstrumentVolume = effMidi;
-        // MIDI in is the chart's instrument, whichever plays it: the plugin or the
-        // built-in synth, with the same mute and solo.
+        ApplyInstrumentVolume(effMidi);
+        // Keep the full request for the engine's post-rig boost and rebuild replay.
         if (ChartSynth is { } synth) synth.ChartSynthGain = (float)effMidi;
 
         // The Mix popover's QUICK BALANCE lights whichever of the three the
@@ -445,8 +454,8 @@ public partial class TransportViewModel : IGuitarMonitorMixer
     }
 
     /// <summary>
-    /// Resets one mixer/DSP parameter to its default value. Keys match the
-    /// slider names in MixerInspectorView; the defaults live here so views
+    /// Resets one mixer/DSP parameter to its default value. Keys are the names the
+    /// Mix / Tempo popovers and the EQ module pass as their reset parameter; the defaults live here so views
     /// never carry domain constants (butterworth Q, filter band edges, ...).
     /// </summary>
     [RelayCommand]
@@ -501,8 +510,7 @@ public partial class TransportViewModel : IGuitarMonitorMixer
 
     /// <summary>
     ///     The Mix popover's footer: every level back to unity at once — master
-    ///     included, because the popover does not show master and a bus left
-    ///     at 0.2 is otherwise only recoverable from the Mixer inspector.
+    ///     included, so a bus left at 0.2 comes back with the rest.
     /// </summary>
     [RelayCommand]
     private void ResetMixLevels()

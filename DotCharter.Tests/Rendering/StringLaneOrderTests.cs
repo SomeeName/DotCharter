@@ -4,8 +4,7 @@ using DotCharter.UI.Controls.Layers;
 namespace DotCharter.Tests.Rendering;
 
 // Pins the inverted-string layout: the 3D string→row helper and the 2D lane
-// map must flip together, and the 2D flip must COMPOSE with lefty (XOR) so a
-// lefty player who also inverts ends up back at the default order.
+// map must flip together. Left-handed mode mirrors frets, never timeline lanes.
 public class StringLaneOrderTests
 {
     [Theory]
@@ -28,12 +27,12 @@ public class StringLaneOrderTests
 
     [Theory]
     // Default (no flip): low E (string 0) sits at the TOP 2D lane (row 0),
-    // matching the 3D highway. Lefty OR Invert flips it; both together cancel.
+    // matching the 3D highway. Only InvertStrings changes the vertical order.
     [InlineData(false, false, 0)] // neither: low E at row 0 = top (Rocksmith)
-    [InlineData(true, false, 5)]  // lefty only: flipped
+    [InlineData(true, false, 0)]  // lefty only: unchanged
     [InlineData(false, true, 5)]  // invert only: tab layout (low E at the bottom)
-    [InlineData(true, true, 0)]   // both: cancel back to default
-    public void LaneTopFor_ComposesLeftyAndInvert(bool lefty, bool invert, int expectedRow)
+    [InlineData(true, true, 5)]   // lefty preserves the inverted order
+    public void LaneTopFor_OnlyInvertChangesStringOrder(bool lefty, bool invert, int expectedRow)
     {
         var rc = new ChartRenderContext
         {

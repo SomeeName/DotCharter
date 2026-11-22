@@ -5,7 +5,7 @@ namespace DotCharter.Analysis.BeatMap;
 public sealed class BeatMapAnalyzerOptions
 {
     public double MinBpm { get; init; } = 60;
-    public double MaxBpm { get; init; } = 200;
+    public double MaxBpm { get; init; } = 220;
 
     /// <summary>Length of one tempo-estimation window.</summary>
     public double WindowSeconds { get; init; } = 6.0;
@@ -56,35 +56,46 @@ public sealed class BeatMapAnalyzer
     private const int HopSize = 256;
     private const double WhitenSeconds = 0.5;
     private const double SnapWindowFraction = 0.15;
+    private const double FirstBeatSeconds = 1.5;
+    private const int CombHarmonics = 4;
+    private const int FineSteps = 8;
+    private static readonly double[] CombWeights = [1.0, 0.5, 0.33, 0.25];
 
     public BeatMapAnalysisResult Analyze(ReadOnlyMemory<float> monoSamples, int sampleRate,
-        BeatMapAnalyzerOptions? options = null) => Analyze(SliceChunks(monoSamples), sampleRate, options);
+        BeatMapAnalyzerOptions? options = null, CancellationToken cancellationToken = default) =>
+        Analyze(SliceChunks(monoSamples), sampleRate, options, cancellationToken);
 
     public BeatMapAnalysisResult Analyze(IEnumerable<ReadOnlyMemory<float>> monoChunks, int sampleRate,
-        BeatMapAnalyzerOptions? options = null)
+        BeatMapAnalyzerOptions? options = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(sampleRate));
         options ??= new BeatMapAnalyzerOptions();
         if (options.MinBpm <= 0 || options.MaxBpm <= options.MinBpm)
             throw new ArgumentException("0 < MinBpm < MaxBpm required.", nameof(options));
 
         var fps = (double)sampleRate / HopSize;
-        var flux = ComputeFluxEnvelope(monoChunks);
+        var flux = ComputeFluxEnvelope(monoChunks, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         if (flux.Count < (int)(2.0 * fps)) return BeatMapAnalysisResult.Empty;
 
-        var envelope = Whiten(flux, (int)(WhitenSeconds * fps));
-        var windows = EstimateWindowPeriods(envelope, fps, options);
+        var envelope = Whiten(flux, (int)(WhitenSeconds * fps), cancellationToken);
+        var windows = EstimateWindowPeriods(envelope, fps, options, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         if (windows.Count == 0) return BeatMapAnalysisResult.Empty;
 
-        var beats = TrackBeats(envelope, windows, fps);
+        var beats = TrackBeats(envelope, windows, fps, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         if (beats.Count == 0) return BeatMapAnalysisResult.Empty;
 
         MarkDownbeats(beats, envelope, fps, options.BeatsPerBar);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var averageBpm = 0.0;
         foreach (var b in beats) averageBpm += b.Bpm;
         averageBpm /= beats.Count;
 
+        cancellationToken.ThrowIfCancellationRequested();
         return new BeatMapAnalysisResult(beats, averageBpm);
     }
 
@@ -101,7 +112,7 @@ public sealed class BeatMapAnalyzer
 
     // ------------------------------------------------------------ envelope
 
-    private static List<float> ComputeFluxEnvelope(IEnumerable<ReadOnlyMemory<float>> chunks)
+    private static List<float> ComputeFluxEnvelope(IEnumerable<ReadOnlyMemory<float>> chunks, CancellationToken ct)
     {
         var fft = new JuceFft(FftSize);
         var hann = new float[FftSize];
@@ -120,10 +131,12 @@ public sealed class BeatMapAnalyzer
 
         foreach (var chunk in chunks)
         {
+            ct.ThrowIfCancellationRequested();
             var span = chunk.Span;
             var offset = 0;
             while (offset < span.Length)
             {
+                ct.ThrowIfCancellationRequested();
                 var copy = Math.Min(FftSize - fill, span.Length - offset);
                 span.Slice(offset, copy).CopyTo(window.AsSpan(fill));
                 fill += copy;
@@ -187,7 +200,7 @@ public sealed class BeatMapAnalyzer
 
     /// <summary>Subtract a moving local average so sustained energy does not
     /// mask rhythmic accents; negative values clamp to zero.</summary>
-    private static float[] Whiten(List<float> flux, int averageLength)
+    private static float[] Whiten(List<float> flux, int averageLength, CancellationToken ct)
     {
         var n = flux.Count;
         var result = new float[n];
@@ -204,6 +217,7 @@ public sealed class BeatMapAnalyzer
 
         for (var i = 0; i < n; i++)
         {
+            ct.ThrowIfCancellationRequested();
             if (i + half < n)
             {
                 running += flux[i + half];
@@ -229,7 +243,7 @@ public sealed class BeatMapAnalyzer
     private readonly record struct TempoWindow(int CenterHop, double PeriodHops, float Confidence);
 
     private static List<TempoWindow> EstimateWindowPeriods(float[] envelope, double fps,
-        BeatMapAnalyzerOptions options)
+        BeatMapAnalyzerOptions options, CancellationToken ct)
     {
         var windowLength = Math.Max((int)(options.WindowSeconds * fps), (int)(4 * fps / (options.MinBpm / 60.0)));
         windowLength = Math.Min(windowLength, envelope.Length);
@@ -248,57 +262,63 @@ public sealed class BeatMapAnalyzer
         maxLag = Math.Min(maxLag, windowLength / 2);
         if (maxLag <= minLag) return [];
 
-        var acLimit = Math.Min(windowLength - 1, maxLag * 3);
-        var ac = new double[acLimit + 1];
+        var acLimit = Math.Min(windowLength - 1, (maxLag + 1) * CombHarmonics);
+        var ac = new double[acLimit + 2];
+        var smooth = new double[acLimit + 2];
         var windows = new List<TempoWindow>();
 
         for (var start = 0; start + windowLength <= envelope.Length || start == 0; start += hop)
         {
+            ct.ThrowIfCancellationRequested();
             var length = Math.Min(windowLength, envelope.Length - start);
             if (length < windowLength / 2 && start > 0) break;
 
-            for (var lag = minLag; lag <= acLimit; lag++)
+            for (var lag = Math.Max(1, minLag - 1); lag <= acLimit; lag++)
             {
+                ct.ThrowIfCancellationRequested();
                 double v = 0;
                 for (var i = start; i + lag < start + length; i++)
                     v += envelope[i] * envelope[i + lag];
                 ac[lag] = v;
             }
 
+            // Three-lag box sum: a pulse pair separated by a fractional number of
+            // hops lands on one of two neighbouring integer lags, so the raw
+            // value at any ONE lag undercounts it by an amount that depends on
+            // the fractional part. The sum keeps every pair, whatever the phase.
+            for (var lag = minLag; lag < acLimit; lag++)
+                smooth[lag] = ac[lag - 1] + ac[lag] + ac[lag + 1];
+
             double best = 0;
-            var bestLag = -1;
+            double bestLagF = -1;
             double sum = 0;
             var candidates = 0;
-            for (var lag = minLag; lag <= maxLag; lag++)
+            var step = 1.0 / FineSteps;
+            for (var lagF = (double)minLag; lagF <= maxLag + 1e-9; lagF += step)
             {
-                var score = ac[lag];
-                if (lag * 2 <= acLimit) score += 0.5 * ac[lag * 2];
-                if (lag * 3 <= acLimit) score += 0.33 * ac[lag * 3];
+                ct.ThrowIfCancellationRequested();
+                var score = 0.0;
+                for (var m = 1; m <= CombHarmonics; m++)
+                {
+                    var x = lagF * m;
+                    if (x >= acLimit - 1) break;
+                    var lo = (int)x;
+                    var frac = x - lo;
+                    score += CombWeights[m - 1] * (smooth[lo] * (1 - frac) + smooth[lo + 1] * frac);
+                }
+
                 sum += score;
                 candidates++;
                 if (score > best)
                 {
                     best = score;
-                    bestLag = lag;
+                    bestLagF = lagF;
                 }
             }
 
-            if (bestLag > 0 && best > 0)
+            if (bestLagF > 0 && best > 0)
             {
-                // Parabolic refinement around the winning lag.
-                var period = (double)bestLag;
-                if (bestLag > minLag && bestLag < maxLag)
-                {
-                    var y0 = ac[bestLag - 1];
-                    var y1 = ac[bestLag];
-                    var y2 = ac[bestLag + 1];
-                    var denom = y0 - 2 * y1 + y2;
-                    if (Math.Abs(denom) > 1e-12)
-                    {
-                        var delta = 0.5 * (y0 - y2) / denom;
-                        if (Math.Abs(delta) < 1) period += delta;
-                    }
-                }
+                var period = bestLagF;
 
                 // The refinement moves the period by up to a whole hop, which is
                 // the other way out of the requested range. Clamping here is what
@@ -374,19 +394,44 @@ public sealed class BeatMapAnalyzer
 
     // -------------------------------------------------------- beat tracking
 
-    private static List<DetectedBeat> TrackBeats(float[] envelope, List<TempoWindow> windows, double fps)
+    private static List<DetectedBeat> TrackBeats(float[] envelope, List<TempoWindow> windows, double fps, CancellationToken ct)
     {
         var beats = new List<DetectedBeat>();
         var evidence = new List<bool>();
         var initialPeriod = windows[0].PeriodHops;
 
-        // First beat: strongest onset within the first 1.5 periods.
-        var searchEnd = Math.Min(envelope.Length - 1, (int)(initialPeriod * 1.5));
-        var position = 0;
-        for (var i = 1; i <= searchEnd; i++)
+        // First beat: the first prominent onset. The search covers at least
+        // FirstBeatSeconds, not just 1.5 periods: at 190 BPM that is 0.47 s, and
+        // a song whose first hit lands at 0.5 s (a count-in's silence, an intro)
+        // would otherwise find nothing and return no beat map at all. "Prominent"
+        // is half the strongest onset of the search, so an accented downbeat
+        // later in the window does not push the first beat past the earlier ones.
+        // Skip wholly silent windows until there is onset evidence to track.
+        var searchLength = (int)Math.Max(initialPeriod * 1.5, FirstBeatSeconds * fps);
+        var searchStart = 0;
+        var searchEnd = Math.Min(envelope.Length - 1, searchLength);
+        var strongest = 0;
+        while (true)
         {
-            if (envelope[i] > envelope[position])
-                position = i;
+            ct.ThrowIfCancellationRequested();
+            for (var i = searchStart + 1; i <= searchEnd; i++)
+            {
+                if (envelope[i] > envelope[strongest])
+                    strongest = i;
+            }
+
+            if (envelope[strongest] > 0f || searchEnd == envelope.Length - 1) break;
+            searchStart = searchEnd;
+            searchEnd = Math.Min(envelope.Length - 1, searchStart + searchLength);
+        }
+
+        var position = strongest;
+        for (var i = searchStart + 1; i <= searchEnd; i++)
+        {
+            var isPeak = envelope[i] >= envelope[i - 1] && (i == searchEnd || envelope[i] > envelope[i + 1]);
+            if (!isPeak || envelope[i] < 0.5f * envelope[strongest]) continue;
+            position = i;
+            break;
         }
 
         if (envelope[position] <= 0f) return beats;
@@ -394,6 +439,7 @@ public sealed class BeatMapAnalyzer
         double current = position;
         while (current < envelope.Length)
         {
+            ct.ThrowIfCancellationRequested();
             var period = PeriodAt(windows, current);
             var snapWindow = Math.Max(1, (int)(period * SnapWindowFraction));
             var center = (int)Math.Round(current);

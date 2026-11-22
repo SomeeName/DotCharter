@@ -67,7 +67,7 @@ public sealed class RsToneFeedbackLoopTests
         var session = new FakeTonelabSession { State = TonelabSessionState.Ready, GameHoldsAudioDevice = false };
         var preview = new object();
         session.RouteAudio(preview, true);
-        var game = new TonelabOfflineRenderer(session, null, Path.Combine(Path.GetTempPath(), "dotcharter-tonelab-loop-tests"));
+        var game = new TonelabOfflineRenderer(session, null, Path.Combine(Path.GetTempPath(), "dotcharter-tonelab-loop-tests-" + Guid.NewGuid().ToString("N")));
         var loop = new RsToneFeedbackLoop(new Mapper(_ => MakeTone(AmpA, 10)), new Clone(), new Scorer(), game);
 
         var result = await loop.RunAsync(Input(0.7), Ct);

@@ -35,7 +35,12 @@ public sealed class AiChartRuleGateCoverageTests
         [typeof(LinkNextRule)] = NotesAndPhrases,
         [typeof(SlideTechniqueRule)] = NotesAndPhrases,
         [typeof(ToneSilenceAndPhraseRule)] = NotesAndPhrases,
+        [typeof(ShowlightRule)] = "the job cannot change the project's showlights or beat grid",
+        [typeof(DifficultyLevelRule)] =
+            "compares a phrase across difficulty levels; the gate's scratch copy holds the one level the job edits",
+        [typeof(SectionNameVarietyRule)] = "the job cannot add, rename or move a section",
         [typeof(ChordOutsideHandShapeRule)] = "positions only; a chord or a hand shape is never moved in time",
+        [typeof(HandShapeGapRule)] = "positions only; a hand shape's end and every note or chord stay where they are",
         [typeof(HandShapeContentRule)] =
             "compares FRETS under a shape with the shape's template frets; a reply echoes every fret unchanged",
     };

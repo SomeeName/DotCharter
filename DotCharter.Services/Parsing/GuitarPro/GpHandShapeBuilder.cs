@@ -1,6 +1,7 @@
 ﻿using Arrangement = DotCharter.Core.Domain.Project.Arrangement;
 using ChartLevel = DotCharter.Core.Domain.Project.ChartLevel;
 using DotCharter.Services.Editing.ChordShapes;
+using DotCharter.Services.Editing.HandShapes;
 
 namespace DotCharter.Services.Parsing.GuitarPro;
 
@@ -26,7 +27,8 @@ internal static class GpHandShapeBuilder
 {
     public static void BuildLetRingHandShapes(ChartLevel level, Arrangement arrangement,
         HashSet<FractionalPosition>? letRingPositions, GpChordDiagrams? diagrams = null,
-        GpAuthoredFingering? authoredFingers = null)
+        GpAuthoredFingering? authoredFingers = null, ChordNamingOptions? naming = null,
+        HashSet<FractionalPosition>? otherRunPositions = null)
     {
         if (letRingPositions == null || letRingPositions.Count == 0) return;
 
@@ -37,7 +39,7 @@ internal static class GpHandShapeBuilder
         // it (owner report: let-ring bars overlapped the following note).
         var allOnsets = beatBuckets.Keys.ToList();
 
-        foreach (var run in SplitIntoRuns(beatBuckets.Values, letRingPositions))
+        foreach (var run in SplitIntoRuns(beatBuckets.Values, letRingPositions, otherRunPositions))
         {
             // Aggregate every (string, fret) pair the run touches into one
             // shape; "first wins" if the same string is fretted twice (the
@@ -51,7 +53,7 @@ internal static class GpHandShapeBuilder
 
             if (frets.Count == 0) continue;
 
-            var template = FindOrCreateTemplate(arrangement, frets, diagrams, authoredFingers);
+            var template = FindOrCreateTemplate(arrangement, frets, diagrams, authoredFingers, naming);
             var first = run[0];
             var end = RunEnd(run, allOnsets);
 
@@ -69,7 +71,8 @@ internal static class GpHandShapeBuilder
             // to chords (owner report: let-ring arpeggio notes shouldn't keep their
             // sustain under the shape). A sound that needs its sustain to render a
             // technique (bend / slide / vibrato / tremolo / link) keeps it.
-            foreach (var sound in run.SelectMany(beat => beat.Sounds))
+            // A trailing grip tone was not tabbed let ring: its own sustain stays.
+            foreach (var sound in run.Where(b => letRingPositions.Contains(b.Position)).SelectMany(beat => beat.Sounds))
             {
                 if (!NeedsSustain(sound))
                     sound.Sustain = FractionalPosition.Zero;
@@ -140,9 +143,11 @@ internal static class GpHandShapeBuilder
         return info;
     }
 
-    /// <summary>The let-ring runs of two or more consecutive let-ring beats, each one hand position.</summary>
+    /// <summary>The let-ring runs of two or more consecutive let-ring beats, each one hand position,
+    /// plus the plain note that directly follows a run when the run's grip plays it
+    /// (<see cref="IsTrailingGripTone" />).</summary>
     private static List<List<BeatInfo>> SplitIntoRuns(IEnumerable<BeatInfo> orderedBeats,
-        HashSet<FractionalPosition> letRingPositions)
+        HashSet<FractionalPosition> letRingPositions, HashSet<FractionalPosition>? otherRunPositions)
     {
         var runs = new List<List<BeatInfo>>();
         List<BeatInfo>? current = null;
@@ -178,7 +183,12 @@ internal static class GpHandShapeBuilder
             }
             else if (current != null)
             {
-                if (current.Count >= 2) runs.Add(current);
+                if (current.Count >= 2)
+                {
+                    if (IsTrailingGripTone(current[^1], held, beat, otherRunPositions)) current.Add(beat);
+                    runs.Add(current);
+                }
+
                 current = null;
                 held.Clear();
             }
@@ -186,6 +196,24 @@ internal static class GpHandShapeBuilder
 
         if (current != null && current.Count >= 2) runs.Add(current);
         return runs;
+    }
+
+    /// <summary>
+    ///     Whether <paramref name="beat" />, the beat right after a let-ring run, is the arpeggio's last
+    ///     note played inside the run's grip: s1f1 LR, s2f3 LR, s4f3 LR, then s3f3 with no
+    ///     let ring is one hand shape over four notes. It must be one single note, start no later than
+    ///     the run's last beat rings to (no rest in between), sit on a string the run does not hold
+    ///     and fit the grip (<see cref="HandShapeGripFit" />). A beat the OTHER run set rings from
+    ///     (roll vs authored let ring) opens its own run and is never a tail.
+    /// </summary>
+    private static bool IsTrailingGripTone(BeatInfo last, Dictionary<int, int> held, BeatInfo beat,
+        HashSet<FractionalPosition>? otherRunPositions)
+    {
+        if (beat.Sounds.Count != 1 || beat.Sounds[0] is not GuitarNote) return false;
+        if (otherRunPositions?.Contains(beat.Position) == true) return false;
+        var ringOut = last.AuthoredSpan.CompareTo(FractionalPosition.Zero) > 0 ? last.AuthoredSpan : last.Sustain;
+        if (beat.Position.CompareTo(last.Position + ringOut) > 0) return false;
+        return !held.ContainsKey(beat.Notes[0].StringIndex) && HandShapeGripFit.Grow(held, beat.Notes) != null;
     }
 
     private static FractionalPosition RunEnd(List<BeatInfo> run, List<FractionalPosition> allOnsets)
@@ -292,7 +320,7 @@ internal static class GpHandShapeBuilder
 
     /// <summary>Frets between the lowest and highest FRETTED note of one hand
     /// shape, above which the grip is not a hand position at all.</summary>
-    private const int MaxPlayableFretSpan = 5;
+    private const int MaxPlayableFretSpan = HandShapeGripFit.MaxFretSpan;
 
     /// <summary>Whether <paramref name="beat" /> plays a string the run already
     /// holds, at a DIFFERENT fret — the signal that the fret hand moved and the
@@ -319,7 +347,7 @@ internal static class GpHandShapeBuilder
     ///     duplicate.
     /// </summary>
     private static ChordTemplate FindOrCreateTemplate(Arrangement arrangement, Dictionary<int, int> frets,
-        GpChordDiagrams? diagrams, GpAuthoredFingering? authoredFingers)
+        GpChordDiagrams? diagrams, GpAuthoredFingering? authoredFingers, ChordNamingOptions? naming)
     {
         foreach (var t in arrangement.ChordTemplates)
         {
@@ -336,14 +364,13 @@ internal static class GpHandShapeBuilder
         // hand-aware fallback fingering, tuning-aware name). The human can
         // still override both.
         ChordTemplateFingerSetter.SetSuggestedFingers(template, arrangement.StringCount);
-        template.Name = NewChordNames.For(arrangement, template.Frets);
 
         // ...unless a GP6-8 chord DIAGRAM of the track is fretted exactly like
         // the run (an arpeggiated chord): then its name and fingering are
         // the tab's, and the fingering is marked authored for the FHP pass, as
         // ChordHandShapeBuilder does for a strum.
         var (authoredName, authoredGrip) = diagrams?.Borrow(frets) ?? (null, null);
-        if (authoredName != null) template.Name = authoredName;
+        template.Name = authoredName ?? NewChordNames.For(arrangement, template.Frets, naming);
         if (authoredGrip != null)
         {
             foreach (var (stringIdx, finger) in authoredGrip) template.Fingers[stringIdx] = finger;

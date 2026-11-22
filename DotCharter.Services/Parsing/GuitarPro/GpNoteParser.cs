@@ -146,14 +146,14 @@ public sealed class GpNoteParser
     }
 
     public GuitarNote ParseNote(XElement noteNode, FractionalPosition pos, FractionalPosition sustain,
-        int stringCount, bool hasTremolo)
+        int stringCount, bool hasTremolo, bool isGrace = false)
     {
         LastTrill = null;
         LastLeftHandTapped = false;
         LastLeftFingering = null;
         var note = new GuitarNote
         { Position = pos, Sustain = sustain, StringIndex = 0, Fret = 0, Tremolo = hasTremolo };
-        ApplyNoteAttributes(noteNode, note, pos);
+        ApplyNoteAttributes(noteNode, note, pos, isGrace);
         TryCaptureTrill(noteNode, note.Fret);
         LastStringValid = (uint)note.StringIndex < (uint)stringCount;
         if (LastLeftHandTapped && LastStringValid) LeftHandTappedNotes.Add(note);
@@ -190,7 +190,7 @@ public sealed class GpNoteParser
             upperFret = baseFret + (trillMidi - baseMidi);
 
         if (upperFret < 0) upperFret = 0;
-        if (upperFret > 24) upperFret = 24;
+        if (upperFret > FretLimits.MaxFret) upperFret = FretLimits.MaxFret;
         if (upperFret == baseFret) return;
 
         LastTrill = new TrillInfo(upperFret);
@@ -208,13 +208,14 @@ public sealed class GpNoteParser
     ///     one on an OPEN string is a scrape/fall the fret hand cannot perform, and
     ///     importing it produces the inspector's L09
     ///     (<see cref="ArrangementIssueType.SlideFromOpenString"/>) on every save —
-    ///     so the note survives and the ornament is dropped. A slide IN is exempt
+    ///     so the note survives and the ornament is dropped. Dead-note slide-outs
+    ///     instead get a fretted start through <see cref="GpDeadNoteSlide"/>. A slide IN is exempt
     ///     from that rule: its origin is a SYNTHESIZED fret above/below the target,
     ///     so the fretted start lives on the materialized lead-in note rather than
     ///     on this one.
     ///     </para>
     /// </summary>
-    private void ApplySlideFlags(IGuitarSound note, int flags)
+    private void ApplySlideFlags(IGuitarSound note, int flags, bool dead)
     {
         // A PICK SCRAPE (64 down / 128 up) is the whole gesture: it outranks the
         // ordinary slide bits and is charted the Rocksmith way — see GpPickScrape.
@@ -224,6 +225,8 @@ public sealed class GpNoteParser
             GpPickScrape.Apply(note, flags, Capo);
             return;
         }
+
+        if (dead && GpDeadNoteSlide.Mark(note, flags)) return;
 
         if (note.Fret > 0)
         {
@@ -260,7 +263,7 @@ public sealed class GpNoteParser
         else if ((flags & 32) > 0) note.SlideTo = SlideInFromAbove;
     }
 
-    private void ApplyNoteAttributes(XElement noteNode, IGuitarSound note, FractionalPosition absolutePos)
+    private void ApplyNoteAttributes(XElement noteNode, IGuitarSound note, FractionalPosition absolutePos, bool isGrace = false)
     {
         ApplyDirectChildren(noteNode, note);
 
@@ -272,7 +275,7 @@ public sealed class GpNoteParser
         ApplyTechniques(found, note);
 
         if (found.Slide != null && int.TryParse(found.Slide.Element("Flags")?.Value, CultureInfo.InvariantCulture, out var flags))
-            ApplySlideFlags(note, flags);
+            ApplySlideFlags(note, flags, found.Muted != null && !isGrace);
 
         if (found.Bended != null)
             ApplyBend(found.Bended, found, note, absolutePos);
@@ -420,10 +423,34 @@ public sealed class GpNoteParser
         var destValue = PropFloat(found.BendDestinationValue);
 
         note.BendValues.Add(new BendValue(BendPosition(note, absolutePos, originOffset), originValue / 50.0));
-        note.BendValues.Add(new BendValue(BendPosition(note, absolutePos, midOffset1), midValue / 50.0));
-        if (Math.Abs(midOffset2 - midOffset1) > 0.001)
+        var heldMiddle = Math.Abs(midOffset2 - midOffset1) > 0.001;
+        var shaped = heldMiddle || !OnTheLine(originOffset, originValue, midOffset1, midValue, destOffset, destValue);
+        if (shaped && Drawn(midOffset1, originOffset, destOffset))
+            note.BendValues.Add(new BendValue(BendPosition(note, absolutePos, midOffset1), midValue / 50.0));
+        if (heldMiddle && Drawn(midOffset2, originOffset, destOffset))
             note.BendValues.Add(new BendValue(BendPosition(note, absolutePos, midOffset2), midValue / 50.0));
         note.BendValues.Add(new BendValue(BendPosition(note, absolutePos, destOffset), destValue / 50.0));
+    }
+
+    /// <summary>
+    ///     Whether Guitar Pro draws a middle point: only between origin and destination. GP keeps its default middle
+    ///     (offset 12, ½) when the destination is moved BEFORE it (a quick bend to Full at 8) and does not draw it;
+    ///     kept, the curve fell back to ½ after reaching Full and the tie then jumped back up.
+    /// </summary>
+    private static bool Drawn(double midOffset, double originOffset, double destOffset) =>
+        midOffset >= Math.Min(originOffset, destOffset) - 0.001 && midOffset <= Math.Max(originOffset, destOffset) + 0.001;
+
+    /// <summary>
+    ///     Whether GP's single middle point lies on the straight line from origin to destination. GP writes a
+    ///     middle point for EVERY bend, so a plain bend 0 → Full arrives as 0, ½, Full; kept, it adds a point that
+    ///     changes nothing but a second label. One GP value unit (1/50 of a half step) of slack.
+    /// </summary>
+    private static bool OnTheLine(double originOffset, double originValue, double midOffset, double midValue,
+        double destOffset, double destValue)
+    {
+        if (destOffset - originOffset <= 0.001) return false;
+        var t = (midOffset - originOffset) / (destOffset - originOffset);
+        return t is > 0 and < 1 && Math.Abs(originValue + (destValue - originValue) * t - midValue) <= 1.0;
     }
 
     private static double PropFloat(XElement? property)

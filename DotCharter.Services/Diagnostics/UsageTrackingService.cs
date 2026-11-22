@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace DotCharter.Services.Diagnostics;
 
 /// <summary>Records that something was used. The seam UI code depends on.</summary>
@@ -40,6 +42,7 @@ public sealed class UsageTrackingService : IUsageTracker, IDisposable
     private readonly Func<long> _clock;
     private readonly Lock _gate = new();
     private readonly UsageStatistics _stats;
+    private readonly bool _canPersist = true;
 
     private bool _dirty;
     private bool _disposed;
@@ -53,15 +56,35 @@ public sealed class UsageTrackingService : IUsageTracker, IDisposable
         UsageStatistics loaded;
         try
         {
-            loaded = UsageStatistics.FromJson(File.Exists(_path) ? AtomicFile.ReadAllText(_path) : null);
+            loaded = UsageStatistics.ParseJson(AtomicFile.ReadAllText(_path));
         }
-        catch (IOException)
+        catch (FileNotFoundException)
         {
             loaded = new UsageStatistics();
         }
-        catch (UnauthorizedAccessException)
+        catch (DirectoryNotFoundException)
         {
             loaded = new UsageStatistics();
+        }
+        catch (JsonException ex)
+        {
+            loaded = new UsageStatistics();
+            try
+            {
+                AtomicFile.MoveAside(_path, _path + ".corrupt-" + Guid.NewGuid().ToString("N"));
+            }
+            catch (Exception moveError)
+            {
+                _canPersist = false;
+                _logger?.Warning(AppLogCategory.Application, "Could not preserve corrupt usage history", moveError);
+            }
+            _logger?.Warning(AppLogCategory.Application, "Usage history is corrupt; using session counters", ex);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            loaded = new UsageStatistics();
+            _canPersist = false;
+            _logger?.Warning(AppLogCategory.Application, "Usage history unreadable; refusing to replace it", ex);
         }
 
         _stats = loaded;
@@ -107,22 +130,19 @@ public sealed class UsageTrackingService : IUsageTracker, IDisposable
 
     public void Flush()
     {
-        string json;
         lock (_gate)
         {
-            if (!_dirty) return;
-            json = _stats.ToJson();
-            _dirty = false;
-        }
-
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            AtomicFile.WriteAllText(_path, json);
-        }
-        catch (Exception ex)
-        {
-            _logger?.Debug(AppLogCategory.Application, $"Could not write usage statistics: {ex.Message}");
+            if (!_dirty || !_canPersist) return;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+                AtomicFile.WriteAllText(_path, _stats.ToJson());
+                _dirty = false;
+            }
+            catch (Exception ex)
+            {
+                _logger?.Debug(AppLogCategory.Application, $"Could not write usage statistics: {ex.Message}");
+            }
         }
     }
 

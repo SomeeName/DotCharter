@@ -14,8 +14,8 @@ namespace DotCharter.Tests.UI;
 ///     <para>
 ///         These are behavioural, not wall-clock: the fake catalog counts how
 ///         many times the library was actually read. The view model's constructor
-///         touches nothing but the catalog subscription, which is exactly why the
-///         other collaborators can be passed as null here.
+///         subscribes to the catalog and destination state without loading the library;
+///         the remaining collaborators can be passed as null here.
 ///     </para>
 /// </summary>
 public sealed class PhraseCatalogDeferralTests
@@ -78,9 +78,9 @@ public sealed class PhraseCatalogDeferralTests
         Assert.Equal("chorus-stab", vm.Entries[0].Id);
     }
 
-    // Only the catalog is touched by the constructor — see the class summary.
+    // The constructor subscribes to the catalog and destination state without reading entries.
     private static PhraseCatalogViewModel Build(IPhraseCatalogService catalog)
-        => new(catalog, null!, null!, null!, null!, FakeLocalization.English());
+        => new(catalog, null!, null!, null!, new ProjectState(), FakeLocalization.English());
 
     private static PhraseCatalogEntry Entry(string id, string name) => new()
     {

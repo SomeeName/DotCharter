@@ -19,6 +19,13 @@ public static class RibbonVisibilityLayout
         | (visibility.ShowMeasureMetadata ? RibbonLanes.MeasureMetadata : RibbonLanes.None)
         | (visibility.ShowLinks ? RibbonLanes.Links : RibbonLanes.None);
 
+    /// <summary>The lanes whose toggle the user switched on this session: they keep a row while empty.</summary>
+    public static RibbonLanes ForcedLanes(this RibbonVisibility visibility) =>
+        (visibility.ForceTones ? RibbonLanes.Tones : RibbonLanes.None)
+        | (visibility.ForceSections ? RibbonLanes.Sections : RibbonLanes.None)
+        | (visibility.ForcePhrases ? RibbonLanes.Phrases : RibbonLanes.None)
+        | (visibility.ForceLyrics ? RibbonLanes.Lyrics : RibbonLanes.None);
+
     /// <summary>The row height the user picked (Compact rows).</summary>
     public static RibbonDensity Density(this RibbonVisibility visibility) =>
         visibility.CompactRows ? RibbonDensity.Compact : RibbonDensity.Normal;

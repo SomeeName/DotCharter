@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Dialogs;
+using DotCharter.Presentation.Screens.Dialogs;
 using DotCharter.Services.Editing.Maintenance;
 using DotCharter.Services.Import.Audio;
 using DotCharter.Services.Session;
@@ -46,6 +47,7 @@ public sealed partial class ProjectMenuViewModel : ViewModelBase, IDisposable
     private readonly IFileStorageService? _fileStorage;
     private readonly IShellLauncher? _shell;
     private readonly IExportTargetWriter _exportFiles;
+    private readonly ReferencePitchOffer? _referencePitchOffer;
     private int _recentProjectsGeneration;
 
     public ProjectMenuViewModel(
@@ -60,8 +62,10 @@ public sealed partial class ProjectMenuViewModel : ViewModelBase, IDisposable
         IPackageFeatures packageFeatures,
         IFileStorageService? fileStorage = null,
         IShellLauncher? shell = null,
-        IExportTargetWriter? exportFiles = null)
+        IExportTargetWriter? exportFiles = null,
+        ReferencePitchOffer? referencePitchOffer = null)
     {
+        _referencePitchOffer = referencePitchOffer;
         _projectSession = projectSession;
         _projectState = projectState;
         _imports = imports;
@@ -87,6 +91,9 @@ public sealed partial class ProjectMenuViewModel : ViewModelBase, IDisposable
     /// <summary>False disables the Open Recent submenu header instead of
     /// opening an empty dropdown.</summary>
     public bool HasRecentProjects => RecentProjects.Count > 0;
+
+    /// <summary>A dropped or recent file applied a new chart; show it in the editor.</summary>
+    public event Action? ProjectOpened;
 
     public void Dispose() => _projectSession.RecentProjectsChanged -= OnRecentProjectsChanged;
 
@@ -253,7 +260,13 @@ public sealed partial class ProjectMenuViewModel : ViewModelBase, IDisposable
                 return;
         }
 
+        // LoadFile also handles audio and returns normally on cancel or a failed
+        // parse. Only a newly applied chart means there is an editor to reveal;
+        // checking the path would miss reopening the same project.
+        var previous = _projectState.ActiveProject;
         await _projectSession.LoadFile(filePath);
+        if (_projectState.ActiveProject is { } opened && !ReferenceEquals(previous, opened))
+            ProjectOpened?.Invoke();
     }
 
     [RelayCommand]
@@ -308,19 +321,25 @@ public sealed partial class ProjectMenuViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        await _projectSession.AttachAudioAsync(path);
+        // A song tuned off A440 is offered its correction on the status rail; nothing changes without the click.
+        if (await _projectSession.AttachAudioAsync(path) && _referencePitchOffer != null) await _referencePitchOffer.OfferAsync();
     }
 
     [RelayCommand]
-    private async Task SaveProject() => await _projectSession.SaveProjectAsync();
+    private async Task SaveProject() => await _projectSession.SaveProjectAsync(SaveInitiator.User);
 
     [RelayCommand]
     private async Task SaveProjectAs() => await _projectSession.SaveProjectAsAsync();
 
+    /// <summary>The window-close gate: asks the session's <see cref="IProjectSessionService.HasUnsavedWork" />,
+    /// never <see cref="IProjectSessionService.IsProjectDirty" />, because a pending editor draft is
+    /// applied first and so counts as unsaved work.</summary>
+    public bool HasUnsavedWork() => _projectSession.HasUnsavedWork();
+
     /// <summary>Save for the close prompt: true when the project ended up
     /// safely on disk, false when the user canceled the Save As picker or the
     /// save failed — the caller must then abort the close.</summary>
-    public Task<bool> SaveProjectForCloseAsync() => _projectSession.SaveProjectAsync();
+    public Task<bool> SaveProjectForCloseAsync() => _projectSession.SaveProjectAsync(SaveInitiator.Prompt);
 
     /// <summary>Save / Don't save / Cancel over unsaved work; Esc answers Cancel.
     /// Asked before the window closes and before anything replaces the open project.</summary>
@@ -345,7 +364,7 @@ public sealed partial class ProjectMenuViewModel : ViewModelBase, IDisposable
         switch (await AskAboutUnsavedChangesAsync())
         {
             case UnsavedChangesChoice.Save:
-                return await _projectSession.SaveProjectAsync();
+                return await _projectSession.SaveProjectAsync(SaveInitiator.Prompt);
             case UnsavedChangesChoice.Discard:
                 return true;
             default:

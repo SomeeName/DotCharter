@@ -182,6 +182,123 @@ public sealed class PublicSyncGuardTests
         }
     }
 
+    /// <summary>A merge commit carries a change of its own when a conflict was resolved in it or
+    /// it was edited by hand: the guard lists it (the merged commits are listed anyway), and a
+    /// clean merge stays unlisted. Otherwise the next snapshot overwrites the resolution.</summary>
+    [Fact]
+    public void Guard_ListsAMergeThatChangedSomethingByHand_AndNotACleanMerge()
+    {
+        var scratch = Directory.CreateTempSubdirectory("dc-public-merges-").FullName;
+        try
+        {
+            var publicDc = Path.Combine(scratch, "public-dc");
+            Git(scratch, "init", "-q", "-b", "main", publicDc);
+            WriteTree(publicDc, "README.md", "readme\n");
+            WriteTree(publicDc, "guide.md", "a\nb\nc\n");
+            Contribute(publicDc, "base", ".");
+
+            // A conflict, resolved in the merge to text neither side wrote.
+            Git(publicDc, "branch", "feat");
+            WriteTree(publicDc, "guide.md", "a-main\nb\nc\n");
+            Contribute(publicDc, "main edit", "guide.md");
+            Git(publicDc, "switch", "-q", "feat");
+            WriteTree(publicDc, "guide.md", "a-feat\nb\nc\n");
+            Contribute(publicDc, "feature edit", "guide.md");
+            Git(publicDc, "switch", "-q", "main");
+            WriteTree(publicDc, "guide.md", "a-resolved\nb\nc\n");
+            var resolved = MergeByHand(publicDc, "feat", "Merge feat (conflict resolved)", "guide.md");
+
+            // A clean merge: nothing of its own.
+            Git(publicDc, "switch", "-q", "-c", "other");
+            WriteTree(publicDc, "other.md", "other\n");
+            Contribute(publicDc, "other file", "other.md");
+            Git(publicDc, "switch", "-q", "main");
+            WriteTree(publicDc, "README.md", "readme 2\n");
+            Contribute(publicDc, "readme edit", "README.md");
+            Git(publicDc, "-c", "user.name=Contributor", "-c", "user.email=contributor@example.com", "merge", "-q", "--no-ff", "-m", "Merge other", "other");
+            var clean = Git(publicDc, "rev-parse", "HEAD");
+
+            // A clean merge with an edit made in the merge itself.
+            Git(publicDc, "switch", "-q", "-c", "evil");
+            WriteTree(publicDc, "guide.md", "a-resolved\nb\nc-feat\n");
+            Contribute(publicDc, "evil branch edit", "guide.md");
+            Git(publicDc, "switch", "-q", "main");
+            WriteTree(publicDc, "guide.md", "a-resolved\nb-in-the-merge\nc-feat\n");
+            var edited = MergeByHand(publicDc, "evil", "Merge evil (edited in the merge)", "guide.md");
+
+            var run = RunPwsh(scratch, $$"""
+                Import-Module {{Quote(Release("PublicSync.psm1"))}} -Force
+                foreach ($c in Get-PublicCommitsSinceSnapshot -GitDir {{Quote(Path.Combine(publicDc, ".git"))}} -Ref main -Repo DotCharter) { "listed=$($c.Sha)" }
+                """);
+            Assert.True(run.ExitCode == 0, run.Output);
+            Assert.Contains($"listed={resolved}", run.Output, StringComparison.Ordinal);
+            Assert.Contains($"listed={edited}", run.Output, StringComparison.Ordinal);
+            Assert.DoesNotContain($"listed={clean}", run.Output, StringComparison.Ordinal);
+            // The merged commits are listed on their own, as before: 6 non-merge commits and 2 merges.
+            Assert.Equal(8, run.Output.Split('\n').Count(l => l.StartsWith("listed=", StringComparison.Ordinal)));
+        }
+        finally
+        {
+            DeleteTree(scratch);
+        }
+    }
+
+    /// <summary>The import of a merge commit applies only what the merge changed by hand, and
+    /// its trailer satisfies the guard.</summary>
+    [Fact]
+    public void Import_OfAMergeEditedByHand_AppliesThatEdit_AndSatisfiesTheGuard()
+    {
+        var scratch = Directory.CreateTempSubdirectory("dc-public-merge-import-").FullName;
+        try
+        {
+            var (devDc, _) = NewDevRepos(scratch);
+            WriteTree(devDc, "docs/guide.md", $"# Guide\nClone SomeeName/DotCharter{Dev} first.\nStep one.\nStep two.\nDev-only tail.\n");
+            Commit(devDc, "dev guide", "docs/guide.md");
+
+            var publicDc = Path.Combine(scratch, "public-dc");
+            Git(scratch, "init", "-q", "-b", "main", publicDc);
+            WriteTree(publicDc, "docs/guide.md", "# Guide\nClone SomeeName/DotCharter first.\nStep one.\nStep two.\n");
+            Git(publicDc, "add", "--", ".");
+            Git(publicDc, "-c", "user.name=Owner Name", "-c", "user.email=owner@example.com", "commit", "-q", "-m", "Initial public commit of DotCharter");
+            Git(publicDc, "switch", "-q", "-c", "feat");
+            WriteTree(publicDc, "docs/guide.md", "# Guide\nClone SomeeName/DotCharter first.\nStep one.\nStep 2.\n");
+            var feature = Contribute(publicDc, "Step two, shorter", "docs/guide.md");
+            Git(publicDc, "switch", "-q", "main");
+            WriteTree(publicDc, "docs/guide.md", "# Guide\nClone SomeeName/DotCharter first.\nStep 1, in the merge.\nStep 2.\n");
+            var merge = MergeByHand(publicDc, "feat", "Merge feat", "docs/guide.md");
+
+            var noJuce = Path.Combine(scratch, "none.git");
+            Git(scratch, "init", "-q", "--bare", noJuce);
+            string Check() => RunPwsh(scratch, $"& {Quote(Release("Find-UnimportedPublicCommits.ps1"))} -DevRepo {Quote(devDc)} -DevRef HEAD " +
+                                               $"-PublicDotCharterUrl {Quote(publicDc)} -PublicJuceSharpUrl {Quote(noJuce)}; exit $LASTEXITCODE").Output;
+            Assert.Contains("DotCharter: 2 public commit(s) not imported", Check(), StringComparison.Ordinal);
+
+            var run = RunPwsh(scratch, $"& {Quote(Release("Import-PublicCommit.ps1"))} -Repo DotCharter -Commit {feature},{merge} " +
+                                       $"-DevRepo {Quote(devDc)} -Base main -PublicUrl {Quote(publicDc)} -NoPullRequest; exit $LASTEXITCODE");
+            Assert.True(run.ExitCode == 0, run.Output);
+            Assert.Equal($"# Guide\nClone SomeeName/DotCharter{Dev} first.\nStep 1, in the merge.\nStep 2.\nDev-only tail.\n",
+                File.ReadAllText(Path.Combine(devDc, "docs", "guide.md")).Replace("\r\n", "\n"));
+            Assert.Equal($"DotCharter@{feature}\nDotCharter@{merge}", Git(devDc, "log", "-1", "--format=%(trailers:key=Public-Commit,valueonly)").Replace("\r\n", "\n"));
+            Assert.Contains("DotCharter: 0 public commit(s) not imported", Check(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteTree(scratch);
+        }
+    }
+
+    // Merges $branch into the checked-out branch with the work tree's $paths as the result
+    // (a resolution or an edit made in the merge), whatever git alone would have made of it.
+    private static string MergeByHand(string repo, string branch, string message, params string[] paths)
+    {
+        Git(repo, ["add", "--", .. paths]);
+        var tree = Git(repo, "write-tree");
+        var merge = Git(repo, "-c", "user.name=Contributor", "-c", "user.email=contributor@example.com",
+            "commit-tree", tree, "-p", "HEAD", "-p", branch, "-m", message);
+        Git(repo, "reset", "-q", "--hard", merge);
+        return merge;
+    }
+
     [Fact]
     public void ReleasePreflight_RunsTheLocalSyncCheck_AndStopsOnAMissingImport()
     {

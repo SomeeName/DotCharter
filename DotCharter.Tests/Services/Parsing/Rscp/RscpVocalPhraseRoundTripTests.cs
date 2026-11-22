@@ -280,8 +280,8 @@ public sealed class RscpVocalPhraseRoundTripTests : IDisposable
 
         Assert.Equal(2, loaded.Phrases.Count);
         Assert.Equal(["w0", "w1", "w2"], loaded.Phrases[0].Lyrics.Select(l => l.Text));
-        // The mid-phrase flag survives (the last lyric always reloads as its phrase's end).
-        Assert.Equal([false, true], loaded.Phrases[0].Lyrics.Take(2).Select(l => l.IsPhraseEnd));
+        // #624: the explicit containers win over legacy inconsistent flags.
+        Assert.Equal([false, false, true], loaded.Phrases[0].Lyrics.Select(l => l.IsPhraseEnd));
         Assert.Equal(new FractionalPosition(0), loaded.Phrases[0].Position);
         Assert.Equal(new FractionalPosition(3), loaded.Phrases[0].EndPosition);
         Assert.Equal("next", loaded.Phrases[1].Lyrics.Single().Text);
@@ -311,6 +311,49 @@ public sealed class RscpVocalPhraseRoundTripTests : IDisposable
         Assert.Empty(loaded.Phrases[0].Lyrics);
         Assert.Equal("a", loaded.Phrases[1].Lyrics.Single().Text);
         Assert.Equal("b", loaded.Phrases[2].Lyrics.Single().Text);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ALastSyllableWithoutATerminator_LoadsAsAPhraseEnd(bool legacyLayout)
+    {
+        var vocals = new XElement("vocals",
+            new XElement("vocal", new XAttribute("p", "0 0/1"), new XAttribute("ep", "1 0/1"),
+                new XAttribute("lyric", "hello")));
+        var document = new XDocument(new XElement("chart",
+            legacyLayout ? vocals : new XElement("vocalPaths", new XElement("vocals",
+                new XElement("name", "Lead"), vocals))));
+        var project = NewProject();
+
+        new RscpVocalsParser().ParseVocals(document, project);
+
+        Assert.True(Assert.Single(Assert.Single(project.VocalTracks).Phrases).Lyrics.Single().IsPhraseEnd);
+    }
+
+    [Fact]
+    public void ExplicitContainers_NormalizeBothMidLineAndMissingLastFlags()
+    {
+        var document = XDocument.Parse("""
+            <chart><vocalPaths><vocals><name>Lead</name><vocals>
+              <vocal p="1 0/1" ep="2 0/1" lyric="hel" flag="PHRASE_END"/>
+              <vocal p="2 0/1" ep="3 0/1" lyric="lo"/>
+              <vocal p="4 0/1" ep="5 0/1" lyric="next"/>
+            </vocals><dcPhrases>
+              <phrase p="0 0/1" ep="3 0/1" n="2"/>
+              <phrase p="4 0/1" ep="6 0/1" n="1"/>
+            </dcPhrases></vocals></vocalPaths></chart>
+            """);
+        var project = NewProject();
+
+        new RscpVocalsParser().ParseVocals(document, project);
+
+        var track = Assert.Single(project.VocalTracks);
+        Assert.Equal(2, track.Phrases.Count);
+        Assert.Equal([false, true], track.Phrases[0].Lyrics.Select(l => l.IsPhraseEnd));
+        Assert.True(track.Phrases[1].Lyrics.Single().IsPhraseEnd);
+        Assert.Equal(new FractionalPosition(0), track.Phrases[0].Position);
+        Assert.Equal(new FractionalPosition(6), track.Phrases[1].EndPosition);
     }
 
     private static LyricPhrase OneLyricPhrase(int bar, string text, bool isWordPart = false)

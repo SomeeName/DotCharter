@@ -1,16 +1,22 @@
 using System.Windows.Input;
 using DotCharter.Core.Domain.Events;
 using DotCharter.Presentation.Dialogs;
+using DotCharter.Core.Domain.Primitives;
+using DotCharter.Services.Editing.Tracks;
 
 namespace DotCharter.Presentation.Contracts.Dialogs;
 
 /// <summary>
 ///     Opens <see cref="IFhpScreen" /> at <paramref name="TimeMs" /> (the playhead
 ///     when negative), editing <paramref name="Anchor" /> or the anchor already on
-///     that grid position, else creating one.
+///     that grid position, else creating one. Target retains a pointer's clicked row and snap;
+///     without it, the active editor supplies the target.
 /// </summary>
-public sealed record FhpRequest(double TimeMs = -1, FretAnchor? Anchor = null)
+public sealed record FhpRequest(double TimeMs = -1, FretAnchor? Anchor = null, FhpTrackTarget? Target = null)
     : IDialogRequest<FhpRequest, IFhpScreen, bool>;
+
+/// <summary>The clicked row and its already snapped position; retained across active-arrangement changes.</summary>
+public sealed record FhpTrackTarget(TrackEditorContext Track, FractionalPosition Position);
 
 /// <summary>
 ///     The fret-hand position (anchor) at one grid position: its fret and its

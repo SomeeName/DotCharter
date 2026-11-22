@@ -155,7 +155,9 @@ public sealed partial class DialogConstructionUiPerfSmokeTests
     private static void AssertRows(string name, Control dialog)
     {
         var rows = Descendants<Grid>(dialog)
-            .Where(g => g.Classes.Contains("DlgRow") && g.IsEffectivelyVisible)
+            .Where(g => g.Classes.Contains("DlgRow") && g.IsEffectivelyVisible
+                        // A collapsed expander (the shared song-names block's "Advanced") keeps its rows at 0 px.
+                        && !g.GetLogicalAncestors().OfType<Expander>().Any(e => !e.IsExpanded))
             .ToList();
 
         foreach (var row in rows)

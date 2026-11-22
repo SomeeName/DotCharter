@@ -1,7 +1,10 @@
 using System.Collections.ObjectModel;
+using DotCharter.Analysis.Lyrics;
 using DotCharter.Core.Domain.Vocals;
 using DotCharter.Services.Audio.Lyrics;
 using DotCharter.Services.Editing.Selection;
+using DotCharter.Services.Editing.Lyrics;
+using DotCharter.Services.Import.Lyrics;
 using DotCharter.Services.Parsing.Lrc;
 using DotCharter.Tone.Infrastructure.Storage;
 using DotCharter.UI.ViewModels.Editor;
@@ -69,6 +72,34 @@ public sealed class LyricAutoSyncProjectIdentityTests : IDisposable
     }
 
     [Fact]
+    public async Task Switching_vocal_tracks_during_sync_leaves_both_tracks_unchanged()
+    {
+        var rig = Build();
+        var other = new VocalTrack { Name = "Other vocals" };
+        rig.Project.VocalTracks.Add(other);
+        rig.AutoSync.WhileRunning = () => rig.Editor.ActiveVocalTrack = other;
+
+        await rig.Inspector.AutoSyncCommand.ExecuteAsync(null);
+
+        Assert.Empty(rig.Track.Phrases);
+        Assert.Empty(other.Phrases);
+        Assert.Contains("discarded", rig.Inspector.StatusText);
+    }
+
+    [Fact]
+    public async Task Removing_the_destination_track_during_sync_does_not_edit_a_detached_track()
+    {
+        var rig = Build();
+        rig.AutoSync.WhileRunning = () => rig.Project.VocalTracks.Remove(rig.Track);
+
+        await rig.Inspector.AutoSyncCommand.ExecuteAsync(null);
+
+        Assert.Empty(rig.Track.Phrases);
+        Assert.Empty(rig.Project.VocalTracks);
+        Assert.Contains("discarded", rig.Inspector.StatusText);
+    }
+
+    [Fact]
     public async Task A_result_for_the_project_that_is_still_open_is_applied()
     {
         var rig = Build();
@@ -79,6 +110,54 @@ public sealed class LyricAutoSyncProjectIdentityTests : IDisposable
         Assert.NotEmpty(rig.Track.Phrases.SelectMany(p => p.Lyrics));
     }
 
+    [Theory]
+    [InlineData("download", false)]
+    [InlineData("download", true)]
+    [InlineData("inference", false)]
+    [InlineData("inference", true)]
+    [InlineData("before-apply", false)]
+    [InlineData("before-apply", true)]
+    [InlineData("none", false)]
+    [InlineData("none", true)]
+    public async Task Replacement_at_each_await_boundary_cancels_without_editing_either_project(
+        string replacementPoint, bool reopenSameProject)
+    {
+        var gate = new RunGate();
+        var rig = Build(replacementPoint, gate);
+        var replacement = new ChartProject
+        {
+            ProjectId = reopenSameProject ? rig.Project.ProjectId : ProjectIdentity.NewId(),
+            AudioFileName = "song.wav"
+        };
+        var replacementTrack = new VocalTrack { Name = "Existing vocals" };
+        var originalPhrase = new LyricPhrase();
+        replacementTrack.Phrases.Add(originalPhrase);
+        replacement.VocalTracks.Add(replacementTrack);
+
+        var run = rig.Inspector.AutoSyncCommand.ExecuteAsync(null);
+        if (replacementPoint != "none")
+        {
+            await gate.Entered.Task;
+            rig.State.ActiveProject = replacement;
+            gate.Release.SetResult();
+        }
+        await run;
+
+        Assert.False(rig.Inspector.IsAutoSyncing);
+        if (replacementPoint == "none")
+        {
+            Assert.NotEmpty(rig.Track.Phrases.SelectMany(p => p.Lyrics));
+            return;
+        }
+
+        Assert.Same(replacement, rig.State.ActiveProject);
+        Assert.Empty(rig.Track.Phrases);
+        Assert.Same(originalPhrase, Assert.Single(replacementTrack.Phrases));
+        Assert.Single(replacement.VocalTracks);
+        Assert.Equal(FakeLocalization.English()["Status_LyricAutoSync_ProjectChanged"], rig.Inspector.StatusText);
+        if (replacementPoint == "download") Assert.Null(rig.AutoSync.SeenBeats);
+    }
+
     // ---- rig ---------------------------------------------------------------
 
     private sealed record Rig(
@@ -86,9 +165,10 @@ public sealed class LyricAutoSyncProjectIdentityTests : IDisposable
         ProjectState State,
         ChartProject Project,
         VocalTrack Track,
+        ChartEditorViewModel Editor,
         CapturingAutoSync AutoSync);
 
-    private Rig Build()
+    private Rig Build(string? gatePoint = null, RunGate? gate = null)
     {
         Directory.CreateDirectory(_root);
         // ProjectAudioLocator must resolve real audio beside the project, or the
@@ -127,14 +207,18 @@ public sealed class LyricAutoSyncProjectIdentityTests : IDisposable
             ActiveVocalTrack = track
         };
 
-        var autoSync = new CapturingAutoSync();
+        var autoSync = new CapturingAutoSync { Gate = gatePoint == "inference" ? gate : null };
+        ILyricAutoSyncRunner runner = new LyricAutoSyncRunner(autoSync,
+            gatePoint == "download" ? new GatedDownloads(gate!) : null, null, state);
+        if (gatePoint == "before-apply") runner = new GatedRunner(runner, gate!);
         var inspector = new LyricsInspectorViewModel(editor, history, state, logger,
-            new FakeFileStorageService(), new LrcLyricsParser(), autoSync, FakeLocalization.English())
+            new FakeFileStorageService(), new LyricsFileService(new ExportTargetWriter(), new LrcLyricsParser()),
+            runner, FakeLocalization.English())
         {
             RawLyrics = "hel-lo world"
         };
 
-        return new Rig(inspector, state, project, track, autoSync);
+        return new Rig(inspector, state, project, track, editor, autoSync);
     }
 
     /// <summary>An aligner that records what it was handed, lets the test move
@@ -146,6 +230,7 @@ public sealed class LyricAutoSyncProjectIdentityTests : IDisposable
         public bool IsModelInstalled => true;
         public IList<BeatMarker>? SeenBeats { get; private set; }
         public Action? WhileRunning { get; set; }
+        public RunGate? Gate { get; init; }
 
         public async Task<LyricAutoSyncOutcome> SyncAsync(string lyricsText, string audioPath,
             IList<BeatMarker> beats, LyricAutoSyncOptions? options = null,
@@ -154,7 +239,8 @@ public sealed class LyricAutoSyncProjectIdentityTests : IDisposable
             SeenBeats = beats;
             // A real await, so the continuation genuinely runs after whatever the
             // test does next — a synchronous return would never reach the guard.
-            await Task.Yield();
+            if (Gate != null) await Gate.WaitAsync();
+            else await Task.Yield();
             WhileRunning?.Invoke();
 
             var phrase = new LyricPhrase
@@ -170,5 +256,46 @@ public sealed class LyricAutoSyncProjectIdentityTests : IDisposable
             });
             return new LyricAutoSyncOutcome(true, null, [phrase], 1, 0, 0, "mix");
         }
+    }
+
+    private sealed class RunGate
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task WaitAsync()
+        {
+            Entered.SetResult();
+            return Release.Task;
+        }
+    }
+
+    private sealed class GatedRunner(ILyricAutoSyncRunner inner, RunGate gate) : ILyricAutoSyncRunner
+    {
+        public async Task<LyricAutoSyncRunResult> RunAsync(string rawLyrics, IList<BeatMarker> liveBeats,
+            Action<int> onModelDownloadStarting, IProgress<string> progress)
+        {
+            var result = await inner.RunAsync(rawLyrics, liveBeats, onModelDownloadStarting, progress);
+            await gate.WaitAsync();
+            return result;
+        }
+    }
+
+    private sealed class GatedDownloads(RunGate gate) : ILyricModelDownloadService
+    {
+        public bool IsRequiredModelInstalled => false;
+        public IReadOnlyList<LyricModelStatus> Models => [];
+        public int PendingMegabytesFor(LyricSheet sheet) => 400;
+        public bool RetryGpu(string id) => false;
+
+        public async Task<bool> EnsureModelsForAsync(LyricSheet sheet, IProgress<string>? progress = null,
+            CancellationToken ct = default)
+        {
+            await gate.WaitAsync();
+            return true;
+        }
+
+        public Task<bool> InstallAsync(string id, bool repair, IProgress<string>? progress = null,
+            CancellationToken ct = default) => throw new NotSupportedException();
     }
 }

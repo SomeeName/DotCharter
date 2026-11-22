@@ -9,21 +9,32 @@ public interface IGuitarJackScanTarget
     /// <summary>The capture device's inputs, as the jack picker lists them.</summary>
     IReadOnlyList<InputJackOption> Jacks { get; }
 
-    /// <summary>The input the guitar is set to now: put back when nothing is heard.</summary>
-    int CurrentJack { get; }
+    /// <summary>The guitar's whole input routing now: put back when nothing is heard or the scan is cancelled.</summary>
+    GuitarInputRouting CurrentRouting { get; }
 
     /// <summary>Opens <paramref name="jack" /> alone (mono) and points the meter at it.</summary>
     void ListenOn(int jack);
+
+    /// <summary>Puts <paramref name="routing" /> back exactly, Mono and the two-guitar split included, and applies it.</summary>
+    void Restore(GuitarInputRouting routing);
 
     /// <summary>The latest captured window's peak in dBFS; −∞ for silence.</summary>
     double ReadPeakDb();
 }
 
 /// <summary>
+///     The guitar input's routing as Settings stores it: both jacks, Mono and the
+///     two-guitar split. A scan forces Mono on every input it tries, so it
+///     snapshots all of this, not just the jack, to put back.
+/// </summary>
+public readonly record struct GuitarInputRouting(int Left, int Right, bool Mono, bool SeparateGuitars);
+
+/// <summary>
 ///     "Find my guitar" on the first-run Input page: while the user strums, each
 ///     of the capture device's inputs is opened in turn, its loudest peak kept,
 ///     and the loudest input above <see cref="HeardFloorDb" /> becomes the guitar's
-///     jack. Nothing heard puts the jack back as it was and says so.
+///     jack. Nothing heard, or a cancelled scan, puts the whole routing back as it
+///     was (stereo and two-guitar setups included) and says so.
 ///     <para>
 ///         One input at a time, through the same configuration Settings writes,
 ///         because the engine opens only the inputs the configuration names. The
@@ -45,6 +56,8 @@ public sealed partial class GuitarJackFinder : ObservableObject
     private readonly IGuitarJackScanTarget _target;
     private readonly ILocalizationService _localization;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
+    private int _run;
+    private GuitarInputRouting _original;
 
     public GuitarJackFinder(IGuitarJackScanTarget target, ILocalizationService localization,
         Func<TimeSpan, CancellationToken, Task>? delay = null)
@@ -84,11 +97,26 @@ public sealed partial class GuitarJackFinder : ObservableObject
     /// <summary>Re-asks <see cref="CanFind" /> when the device, and with it the input count, changes.</summary>
     public void Refresh() => FindCommand.NotifyCanExecuteChanged();
 
+    /// <summary>
+    ///     Ends a running scan NOW, before its page is left: the input routing goes back
+    ///     to the one it started from, and the scan's pending steps touch nothing.
+    /// </summary>
+    public void Stop()
+    {
+        if (!IsRunning) return;
+        Interlocked.Increment(ref _run);
+        FindCommand.Cancel();
+        _target.Restore(_original);
+        Status = string.Empty;
+        IsRunning = false;
+    }
+
     [RelayCommand(CanExecute = nameof(CanFind))]
     private async Task FindAsync(CancellationToken ct)
     {
         var jacks = _target.Jacks.ToArray();
-        var original = _target.CurrentJack;
+        var original = _original = _target.CurrentRouting;
+        var run = Interlocked.Increment(ref _run);
         var peaks = new double[jacks.Length];
         IsRunning = true;
         HeardNothing = false;
@@ -98,12 +126,12 @@ public sealed partial class GuitarJackFinder : ObservableObject
             {
                 Status = _localization.Format("Onboarding_Input_FindListeningFmt", jacks[i].Label, i + 1, jacks.Length);
                 _target.ListenOn(jacks[i].Jack);
-                await _delay(Settle, ct);
+                await WaitAsync(Settle, run, ct);
                 var peak = double.NegativeInfinity;
                 for (var p = 0; p < PollsPerJack; p++)
                 {
                     peak = Math.Max(peak, _target.ReadPeakDb());
-                    await _delay(Poll, ct);
+                    await WaitAsync(Poll, run, ct);
                 }
 
                 peaks[i] = peak;
@@ -116,19 +144,30 @@ public sealed partial class GuitarJackFinder : ObservableObject
             }
             else
             {
-                _target.ListenOn(original);
+                _target.Restore(original);
                 HeardNothing = true;
                 Status = _localization["Onboarding_Input_NotFound"];
             }
         }
+        catch (OperationCanceledException) when (run != Volatile.Read(ref _run))
+        {
+            // Stop already put the jack back; this scan's page is gone.
+        }
         catch (OperationCanceledException)
         {
-            _target.ListenOn(original);
+            _target.Restore(original);
             Status = string.Empty;
         }
         finally
         {
-            IsRunning = false;
+            if (run == Volatile.Read(ref _run)) IsRunning = false;
         }
+    }
+
+    /// <summary>One wait of the scan; a scan <see cref="Stop" /> ended goes no further, whatever the delay does with its token.</summary>
+    private async Task WaitAsync(TimeSpan span, int run, CancellationToken ct)
+    {
+        await _delay(span, ct);
+        if (run != Volatile.Read(ref _run)) throw new OperationCanceledException(ct);
     }
 }

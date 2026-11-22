@@ -1,5 +1,4 @@
-// TransportViewModel: what the Mix / Tempo / Tools popovers add - the input peak meter, the pitch note, the plugin rescan and drag-to-reorder.
-using System.Globalization;
+// TransportViewModel: what the Mix / Tempo / Tools popovers add - the pitch note, the plugin rescan and drag-to-reorder.
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -7,9 +6,9 @@ namespace DotCharter.UI.ViewModels.Editor;
 
 /// <summary>
 ///     What the transport bar's Mix / Tempo / Tools popovers show that nothing
-///     else on this view model already carried — `Play Menus.dc.html`'s INPUT
-///     LEVEL meter, its PITCH note, and the Tools panel's plugin rescan and
-///     drag-to-reorder.
+///     else on this view model already carried — the INPUT LEVEL meter
+///     (<see cref="InputMeter" />), the PITCH note, and the Tools panel's
+///     plugin rescan and drag-to-reorder.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -23,55 +22,8 @@ namespace DotCharter.UI.ViewModels.Editor;
 /// </remarks>
 public partial class TransportViewModel
 {
-    /// <summary>The window the peak is taken over. Same size as
-    /// <c>LivePlayViewModel</c>'s probe, and for the same reason: it is the
-    /// windowed (multi-consumer) tap, so reading it cannot starve live note
-    /// detection.</summary>
-    private readonly float[] _inputLevelProbe = new float[2048];
-
-    /// <summary>
-    ///     Live capture peak in dBFS. <see cref="double.NegativeInfinity" />
-    ///     until something is heard — the meter's own floor decides how that
-    ///     draws, exactly as on the amp rig's header.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(InputPeakLabel))]
-    [NotifyPropertyChangedFor(nameof(IsInputClipping))]
-    private double _inputLevelDb = double.NegativeInfinity;
-
-    /// <summary>
-    ///     The mockup's `−14.2 dB PEAK`, from the real number. Silence prints an
-    ///     em dash rather than `-∞ dB`, and the minus sign is U+2212 because the
-    ///     readout is mono and a hyphen sits a pixel high in IBM Plex.
-    /// </summary>
-    public string InputPeakLabel =>
-        double.IsNegativeInfinity(InputLevelDb) || InputLevelDb < -90
-            ? Loc("Toolbar_Mix_NoInput")
-            : string.Format(CultureInfo.InvariantCulture, "{0}{1:0.0} dB PEAK",
-                InputLevelDb < 0 ? "−" : "+", Math.Abs(InputLevelDb));
-
-    /// <summary>Digital full scale is 0 dBFS, so at or above it the converter
-    /// could not represent the sample. A real threshold on a real peak.</summary>
-    public bool IsInputClipping => InputLevelDb >= 0.0;
-
-    /// <summary>
-    ///     One tick of the Mix popover's meter. Driven by the VIEW's clock,
-    ///     which runs only while that popover is open — never by a timer inside
-    ///     a view model that outlives the surface (the amp rig's rule, and the
-    ///     reason the app does not accumulate meter clocks).
-    /// </summary>
-    public void PollInputMeter()
-    {
-        var read = _audioService.ReadInputCaptureWindow(_inputLevelProbe);
-        var peak = 0f;
-        for (var i = 0; i < read; i++)
-        {
-            var a = Math.Abs(_inputLevelProbe[i]);
-            if (a > peak) peak = a;
-        }
-
-        InputLevelDb = peak <= 0f ? double.NegativeInfinity : 20.0 * Math.Log10(peak);
-    }
+    /// <summary>The Mix popover's INPUT LEVEL meter (peak, readout, clip flag); the view's clock drives <c>Poll</c>.</summary>
+    public TransportInputMeter InputMeter { get; }
 
     /// <summary>
     ///     Tools → "Rescan plugin folders". Re-runs the same scan the constructor
@@ -112,7 +64,7 @@ public partial class TransportViewModel
 
             AvailableVstPlugins.Clear();
             InstrumentVstPlugins.Clear();
-            var none = new VstPluginInfo { Name = "None", PluginPath = "" };
+            var none = new VstPluginInfo { Name = _localization["Inspector_None"], PluginPath = "" };
             AvailableVstPlugins.Add(none);
             InstrumentVstPlugins.Add(none);
 

@@ -49,6 +49,18 @@ public interface IHistoryService
     event Action? ActionFailed;
 
     /// <summary>
+    ///     Raised once when an outermost <see cref="Undo" />, <see cref="Redo" /> or <see cref="NavigateTo" />
+    ///     step is over, on EVERY exit: <c>true</c> when the step applied (after its
+    ///     <see cref="HistoryChanged" />), <c>false</c> when it threw — a failed apply (after
+    ///     <see cref="ActionFailed" />), a failed link rebuild or a throwing <see cref="FocusRequested" />
+    ///     listener, none of which raises <see cref="HistoryChanged" /> for the step. The steps a jump walks
+    ///     raise it once, for the jump. <see cref="IsApplyingStep" /> is false inside it. Whatever was
+    ///     deferred to the step's end settles here; a listener that throws after a failed step is logged,
+    ///     and the step's own exception surfaces.
+    /// </summary>
+    event Action<bool>? StepEnded;
+
+    /// <summary>
     ///     Raised after a step copied an edit into other linked placements, with every group the
     ///     step (the whole gesture so far) propagated into. The editor shows the "Linked" toast.
     /// </summary>
@@ -61,13 +73,42 @@ public interface IHistoryService
     /// </summary>
     bool OnlyHere(LinkPropagationReport report);
 
+    /// <summary>
+    ///     True while an <see cref="Undo" /> / <see cref="Redo" /> step is being applied: from before
+    ///     <see cref="FocusRequested" /> is raised until the step has applied (or
+    ///     <see cref="ActionFailed" /> has been raised for it), and false again before
+    ///     <see cref="HistoryChanged" /> is raised. A <see cref="NavigateTo" /> jump is ONE step: true
+    ///     from its first focus request to its last state change, with one <see cref="HistoryChanged" />
+    ///     at the end. Anything that would record an edit in reaction to
+    ///     the step (a selection cleared by the focus request, say) asks this and defers to
+    ///     <see cref="StepEnded" />.
+    /// </summary>
+    bool IsApplyingStep { get; }
+
     bool CanUndo { get; }
     bool CanRedo { get; }
     /// <summary>Id of the node the chart state currently corresponds to
     /// (the root sentinel's id when there is nothing to undo).</summary>
     int CurrentNodeId { get; }
+    /// <summary>Identity of the current content, renewed when a gesture tick rewrites a node.
+    /// Undo/redo restores the target node's content identity.</summary>
+    int CurrentContentId { get; }
     void Clear();
+    /// <summary>
+    ///     Applies <paramref name="action" /> and records it as one step (or merges it into the open
+    ///     gesture). Returns false, applying nothing, for an action without effect and for one requested
+    ///     while <see cref="IsApplyingStep" />: run then, it would land under the node being undone and
+    ///     the step would move the history past it, so the chart kept the edit and the history lost it.
+    ///     A caller with an edit to make at that moment defers it to <see cref="HistoryChanged" />.
+    /// </summary>
     bool Do(IChartAction action);
+
+    /// <summary>
+    ///     Records an action the caller has ALREADY applied, as one step (or merged into the open gesture),
+    ///     without executing it and without raising <see cref="HistoryChanged" />. Returns false, recording
+    ///     nothing, for an action without effect and, as <see cref="Do" />, for one pushed while
+    ///     <see cref="IsApplyingStep" />.
+    /// </summary>
     bool PushAction(IChartAction action);
     void Undo();
     void Redo();
@@ -98,7 +139,10 @@ public interface IHistoryService
     /// <summary>
     /// Walks undo/redo along the tree (up to the common ancestor, then down
     /// the target branch) until <paramref name="nodeId"/> is the current
-    /// state. Returns false if the id is unknown (e.g. already pruned).
+    /// state, as ONE step: <see cref="IsApplyingStep"/> holds for the whole walk and
+    /// <see cref="HistoryChanged"/> is raised once, when the chosen node is current (or,
+    /// when a step throws, once for the node the walk stopped on).
+    /// Returns false if the id is unknown (e.g. already pruned).
     /// </summary>
     bool NavigateTo(int nodeId);
 

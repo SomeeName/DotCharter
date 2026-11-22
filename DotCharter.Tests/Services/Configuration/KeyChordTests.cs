@@ -11,6 +11,20 @@ public class KeyChordTests
         Assert.Equal("—", KeyChord.None.ToString());
     }
 
+    /// <summary>#588 row 1: a cleared digit family (BookmarkBase, SetFretBase,
+    /// StringMaskBase, PenToggleStringBase) bound the BARE digits, because each
+    /// slot took only the base's modifiers. An unbound base gives unbound slots.</summary>
+    [Fact]
+    public void WithDigit_OfAnUnboundBase_IsUnbound()
+    {
+        Assert.False(KeyChord.None.WithDigit(0).IsBound);
+        Assert.False(KeyChord.None.WithDigit(7).IsBound);
+        Assert.False(new KeyChord(Key.None, KeyModifiers.Control).WithDigit(3).IsBound);
+
+        Assert.Equal(new KeyChord(Key.D7, KeyModifiers.Control), new KeyChord(Key.D0, KeyModifiers.Control).WithDigit(7));
+        Assert.Equal(new KeyChord(Key.D0), new KeyChord(Key.D1).WithDigit(0));
+    }
+
     [Fact]
     public void Matches_AllFlagsMustAlign()
     {

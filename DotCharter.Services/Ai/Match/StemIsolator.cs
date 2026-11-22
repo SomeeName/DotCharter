@@ -91,13 +91,6 @@ public sealed class StemIsolator : IStemIsolator
     public StemIsolator CacheOnly() =>
         new(_separation, _store, _localization, _logger, _clips) { SeparateOnMiss = false };
 
-    /// <summary>
-    ///     True when a separation COULD run. A false here is not fatal: a song whose
-    ///     stems are already cached isolates fine without any backend at all, which is
-    ///     exactly the state a machine is in after one eval run.
-    /// </summary>
-    public Task<bool> CanSeparateAsync(CancellationToken ct = default) => _separation.IsAvailableAsync(ct);
-
     /// <inheritdoc />
     public async Task<MonoAudio> IsolateGuitarAsync(
         string songAudioPath, TimeSpan from, TimeSpan to, IProgress<string>? status, CancellationToken ct)
@@ -159,12 +152,12 @@ public sealed class StemIsolator : IStemIsolator
         var wanted = AcceptableSourcesFor(stem);
 
         var identity = StemCacheIdentity.ForAudioFile(songAudioPath);
-        var signature = StemAudioSignature.ComputeFile(songAudioPath);
-        var key = StemCacheKey.TryDerive(identity, signature)
+        var source = StemCacheSource.ResolveForStore(_store, identity, songAudioPath)
                   ?? throw new InvalidOperationException(
                       "No cache key could be derived for " + songAudioPath +
                       " — the audio could not be signed, so a separation could not be cached and will " +
                       "not be run.");
+        var key = source.Key;
 
         var playbackDirectory = Path.Combine(_store.Root, PlaybackFolderName, key.DirectoryToken);
         Directory.CreateDirectory(playbackDirectory);
@@ -179,7 +172,8 @@ public sealed class StemIsolator : IStemIsolator
 
         if (stems is null || stems.Count == 0)
         {
-            stems = await SeparateAndCacheAsync(songAudioPath, identity, signature, key, playbackDirectory, status, ct)
+            if (_coordinator.HasArchive(identity, songAudioPath)) throw new InvalidOperationException(_localization["StemSeparation_CacheUnavailable"]);
+            stems = await SeparateAndCacheAsync(songAudioPath, identity, playbackDirectory, status, ct)
                 .ConfigureAwait(false);
         }
         else
@@ -221,8 +215,7 @@ public sealed class StemIsolator : IStemIsolator
     }
 
     private async Task<IReadOnlyList<StemTrack>> SeparateAndCacheAsync(
-        string songAudioPath, StemCacheIdentity identity, StemAudioSignature signature, StemCacheKey key,
-        string playbackDirectory, IProgress<string>? status, CancellationToken ct)
+        string songAudioPath, StemCacheIdentity identity, string playbackDirectory, IProgress<string>? status, CancellationToken ct)
     {
         if (!await _separation.IsAvailableAsync(ct).ConfigureAwait(false))
         {
@@ -252,8 +245,11 @@ public sealed class StemIsolator : IStemIsolator
         status?.Report(_localization["Progress_CachingStems"]);
         try
         {
-            await _store.SaveAsync(key, identity, signature, result.Stems, backend, AppVersion(), ct,
-                    StemAudioSignature.ComputeFullFileHash(songAudioPath))
+            // Lookup may have adopted a historical key; resolve again at the save boundary.
+            var source = StemCacheSource.ResolveForStore(_store, identity, songAudioPath)
+                         ?? throw new IOException("The source audio could not be fingerprinted for the stem cache.");
+            await _store.SaveAsync(source.Key, identity, source.Signature, result.Stems, backend, AppVersion(), ct,
+                    StemAudioSignature.ComputeFullFileHash(source.SignedPath))
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

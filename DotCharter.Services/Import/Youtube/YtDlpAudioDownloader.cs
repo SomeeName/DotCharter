@@ -192,7 +192,7 @@ public sealed partial class YtDlpAudioDownloader : IYtDlpAudioDownloader
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Import, $"yt-dlp run threw: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Import, "yt-dlp run threw", ex);
             return new YtDlpDownloadResult(false, null, ex.Message);
         }
         finally

@@ -10,4 +10,7 @@
     <Style Selector="ColorPicker /template/ DropDownButton">
         <Setter Property="AutomationProperties.Name" Value="{Binding $parent[ColorPicker].(AutomationProperties.Name)}" />
     </Style>
+    <Style Selector="AutoCompleteBox /template/ TextBox#PART_TextBox">
+        <Setter Property="AutomationProperties.Name" Value="{Binding $parent[AutoCompleteBox].(AutomationProperties.Name)}" />
+    </Style>
 </Styles>

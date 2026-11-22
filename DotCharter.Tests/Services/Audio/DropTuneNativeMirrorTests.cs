@@ -98,22 +98,32 @@ public sealed class DropTuneNativeMirrorTests
     }
 
     /// <summary>
-    ///     The shifter runs INSIDE the per-player loop. Above it — where it sat
-    ///     until v31 — one pedal detuned every seat, and that is not visible in
-    ///     any managed assertion: the whole failure is which side of the split
-    ///     three lines of C++ live on.
+    ///     The shifter runs INSIDE the per-seat front pass, which the per-player
+    ///     loop calls once for each seat. Above it — where it sat until v31 — one
+    ///     pedal detuned every seat, and that is not visible in any managed
+    ///     assertion: the whole failure is which side of the split three lines of
+    ///     C++ live on.
     /// </summary>
     [Fact]
     public void TheShifter_RunsInsideThePerPlayerLoop_NotAheadOfTheSplit()
     {
         var engine = NativeSource(Path.Combine("src", "AudioEngine.h"));
-
-        var loop = engine.IndexOf("for (int p = 0; p < players; ++p)", StringComparison.Ordinal);
-        Assert.True(loop > 0, "the per-player rig loop is gone from the audio callback.");
+        var (front, back) = SeatFrontPass(engine);
 
         var shift = engine.IndexOf("shifter.process(ptrs.data()", StringComparison.Ordinal);
-        Assert.True(shift > loop,
-            "the drop-tune shifter runs BEFORE the per-player split again — one pedal is detuning every seat.");
+        Assert.True(shift > front && shift < back,
+            "the drop-tune shifter runs OUTSIDE the per-seat front pass again — one pedal is detuning every seat.");
+        Assert.Matches(@"for \(int p = 0; p < players; \+\+p\)\s*seatFront\(p\);", engine);
+    }
+
+    /// <summary>The per-seat front pass of the audio callback: from its lambda to the back pass that follows it.</summary>
+    private static (int Start, int End) SeatFrontPass(string engine)
+    {
+        var front = engine.IndexOf("auto seatFront = [&](int p)", StringComparison.Ordinal);
+        Assert.True(front > 0, "the per-seat front pass is gone from the audio callback.");
+        var back = engine.IndexOf("auto seatBackPass = [&](int p)", front, StringComparison.Ordinal);
+        Assert.True(back > front, "the per-seat back pass is gone from the audio callback.");
+        return (front, back);
     }
 
     /// <summary>
@@ -128,8 +138,8 @@ public sealed class DropTuneNativeMirrorTests
     public void EachSeatShiftsItsOwnCaptureChannel_NotChannelsZeroAndOne()
     {
         var engine = NativeSource(Path.Combine("src", "AudioEngine.h"));
-        var loop = engine[engine.IndexOf("for (int p = 0; p < players; ++p)", StringComparison.Ordinal)..];
-        var scope = loop[..Math.Min(loop.Length, 8000)];
+        var (front, back) = SeatFrontPass(engine);
+        var scope = engine[front..back];
 
         // The seat's OWN channel, and the seat's OWN shifter/scratch.
         Assert.Contains("owner_.inputCaptureChannel_[(size_t) p]", scope, StringComparison.Ordinal);

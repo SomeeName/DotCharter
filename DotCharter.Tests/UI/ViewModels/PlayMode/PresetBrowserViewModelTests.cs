@@ -1,3 +1,4 @@
+using DotCharter.Tone.Infrastructure.Storage;
 using DotCharter.Tone.Audio.Dsp.Presets;
 using DotCharter.Tone.Audio.Dsp.RsToneConversion;
 using DotCharter.Tone.UI.Controls.Dsp;
@@ -19,7 +20,7 @@ public sealed class PresetBrowserViewModelTests
         svc = new FakeDspTonePresetService();
         var appliedCounter = 0;
         // captured rig is irrelevant to these tests; hand back an empty rig.
-        var vm = new PresetBrowserViewModel(svc, FakeLocalization.English(), () => new DcRigPreset([]), () => appliedCounter++);
+        var vm = new PresetBrowserViewModel(svc, FakeLocalization.English(), () => new DcRigPreset([]), () => appliedCounter++, new FakeConfigurationService());
         applyCount = appliedCounter;
         return vm;
     }
@@ -29,9 +30,101 @@ public sealed class PresetBrowserViewModelTests
         svc = new FakeDspTonePresetService();
         var counter = 0;
         var s = svc;
-        var vm = new PresetBrowserViewModel(s, FakeLocalization.English(), () => new DcRigPreset([]), () => counter++);
+        var vm = new PresetBrowserViewModel(s, FakeLocalization.English(), () => new DcRigPreset([]), () => counter++, new FakeConfigurationService());
         applied = () => counter;
         return vm;
+    }
+
+    [Fact]
+    public void A_save_the_disk_refused_is_named_on_the_tone_file_status_line()
+    {
+        var svc = new FakeDspTonePresetService { FailWrites = true };
+        var vm = new PresetBrowserViewModel(svc, FakeLocalization.KeysOnly(), () => new DcRigPreset([]), () => { }, new FakeConfigurationService())
+        {
+            SaveName = "Lost Tone"
+        };
+
+        vm.ConfirmSave();
+
+        Assert.Equal("Rig_ToneSaveFailed(Lost Tone)", vm.ImportStatus);
+    }
+
+    [Fact]
+    public void A_save_returns_before_its_disk_write_and_names_the_failure_after_it()
+    {
+        var svc = new FakeDspTonePresetService { FailWrites = true };
+        var worker = new Queue<Action>();
+        var vm = new PresetBrowserViewModel(svc, FakeLocalization.KeysOnly(), () => new DcRigPreset([]), () => { }, new FakeConfigurationService(),
+            applyWorker: worker.Enqueue)
+        {
+            SaveName = "Slow Tone"
+        };
+
+        vm.ConfirmSave();
+
+        Assert.Equal(0, svc.WritesRun);
+        Assert.False(vm.HasImportStatus);
+        Assert.Contains(vm.Cards, c => c.Name == "Slow Tone");
+        worker.Dequeue()();
+        Assert.Equal(1, svc.WritesRun);
+        Assert.Equal("Rig_ToneSaveFailed(Slow Tone)", vm.ImportStatus);
+    }
+
+    [Fact]
+    public void A_save_the_disk_took_clears_an_earlier_failure()
+    {
+        var svc = new FakeDspTonePresetService { FailWrites = true };
+        var vm = new PresetBrowserViewModel(svc, FakeLocalization.KeysOnly(), () => new DcRigPreset([]), () => { }, new FakeConfigurationService())
+        {
+            SaveName = "Lost Tone"
+        };
+        vm.ConfirmSave();
+        Assert.True(vm.HasImportStatus);
+
+        svc.FailWrites = false;
+        vm.SaveName = "Kept Tone";
+        vm.ConfirmSave();
+
+        Assert.False(vm.HasImportStatus);
+    }
+
+    [Fact]
+    public void A_save_the_disk_took_leaves_the_status_line_alone()
+    {
+        var vm = NewVm(out _, out int _);
+        vm.SaveName = "Kept Tone";
+
+        vm.ConfirmSave();
+
+        Assert.False(vm.HasImportStatus);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_delayed_save_cannot_clear_a_newer_import_error_or_export_message(bool export)
+    {
+        var path = Path.Combine(Path.GetTempPath(), "tone-status-" + Guid.NewGuid().ToString("N") + ".json");
+        var worker = new Queue<Action>();
+        var files = new FakeFileStorageService { NextOpenFile = path, NextSaveFile = path };
+        var vm = new PresetBrowserViewModel(new FakeDspTonePresetService(), FakeLocalization.KeysOnly(),
+            () => RigOf("delay"), () => { }, new FakeConfigurationService(), applyWorker: worker.Enqueue, files: files)
+        {
+            SaveName = "Slow Tone"
+        };
+        try
+        {
+            vm.ConfirmSave();
+            if (export) await vm.ExportActiveCommand.ExecuteAsync(null);
+            else await vm.ImportCommand.ExecuteAsync(null);
+            var status = vm.ImportStatus;
+            Assert.NotEmpty(status);
+
+            worker.Dequeue()();
+
+            Assert.Equal(status, vm.ImportStatus);
+        }
+        finally { BestEffortDelete.File(path); }
     }
 
     private static PresetRailRow Rail(PresetBrowserViewModel vm, PresetFilterKind kind, DspToneCategory cat = default)
@@ -67,7 +160,7 @@ public sealed class PresetBrowserViewModelTests
     {
         var queue = new List<System.Action>();
         var svc = new FakeDspTonePresetService();
-        var vm = new PresetBrowserViewModel(svc, FakeLocalization.English(), () => new DcRigPreset([]), () => { },
+        var vm = new PresetBrowserViewModel(svc, FakeLocalization.English(), () => new DcRigPreset([]), () => { }, new FakeConfigurationService(),
             searchPost: queue.Add);
         queue.Clear(); // ctor-time refreshes are not the claim
 
@@ -295,7 +388,7 @@ public sealed class PresetBrowserViewModelTests
     private static PresetBrowserViewModel NewVmWithLiveRig(out FakeDspTonePresetService svc)
     {
         svc = new FakeDspTonePresetService();
-        return new PresetBrowserViewModel(svc, FakeLocalization.English(), () => RigOf("live-unit"), () => { });
+        return new PresetBrowserViewModel(svc, FakeLocalization.English(), () => RigOf("live-unit"), () => { }, new FakeConfigurationService());
     }
 
     private static PresetCardViewModel UserCard(PresetBrowserViewModel vm, DspTonePreset saved)

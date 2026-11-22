@@ -10,7 +10,7 @@ namespace DotCharter.Services.Session;
 ///     project, asks where the new project folder goes, unpacks the package into a NEW
 ///     folder there (<see cref="DcSongProjectUnpacker" />) and opens the written
 ///     <c>project.dcproj</c> through the session's ordinary load. The status line says when
-///     the package's audio is lossy (Opus): chart-from-audio and stem separation work best
+///     the package's audio is lossy (Opus): stem separation works best
 ///     from a lossless (FLAC) package. Built by <see cref="ProjectSessionService" />, which
 ///     routes the extension here.
 /// </summary>
@@ -38,11 +38,23 @@ internal sealed class DcSongProjectOpener(
             return;
         }
 
+        // The confirmation replaces THIS session: a project opened while the picker or
+        // the unpack is open is newer than the package and keeps the window.
+        var project = state.ActiveProject;
+        var projectPath = state.CurrentProjectPath;
+        bool Superseded() => !ReferenceEquals(project, state.ActiveProject) ||
+            !string.Equals(projectPath, state.CurrentProjectPath, StringComparison.OrdinalIgnoreCase);
+
         var baseDir = await storage.OpenFolderPickerAsync(localization["Picker_SelectProjectFolder"],
             config.LoadAppConfig().LastProjectFolderDir);
         if (string.IsNullOrEmpty(baseDir))
         {
             logger.Info(AppLogCategory.Project, $"Song package open cancelled at the folder picker. Package='{packagePath}'.");
+            return;
+        }
+        if (Superseded())
+        {
+            logger.Info(AppLogCategory.Project, $"Song package open dropped: another project opened during the folder picker. Package='{packagePath}'.");
             return;
         }
 
@@ -63,7 +75,7 @@ internal sealed class DcSongProjectOpener(
         }
         catch (DcSongReadException ex)
         {
-            logger.Warning(AppLogCategory.Project, $"Song package '{packagePath}' refused ({ex.Reason}): {ex.Message}");
+            logger.Warning(AppLogCategory.Project, $"Song package '{packagePath}' refused ({ex.Reason})", ex);
             state.SetMessage(localization.Format("Status_DcSong_OpenFailed", localization[ex.ResourceKey]), StatusSeverity.Error);
             return;
         }
@@ -76,6 +88,13 @@ internal sealed class DcSongProjectOpener(
         finally
         {
             statusBar?.CompleteTask(TaskId);
+        }
+
+        if (Superseded())
+        {
+            logger.Info(AppLogCategory.Project,
+                $"Song package open dropped: another project opened during the unpack. The unpacked folder stays at '{result.ProjectDirectory}'.");
+            return;
         }
 
         await loadConfirmedProject(result.ProjectPath);

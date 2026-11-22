@@ -67,7 +67,7 @@ public sealed partial class PlayModeViewModel
         // Listen-back borrows the master transport. Leaving the screen that
         // offers it (results) must hand the song straight back — most of all
         // before a new run, which would otherwise start on the take.
-        if (ListenBack.IsTakePlaying && value != PlayModeScreen.Results)
+        if (value != PlayModeScreen.Results)
             _ = ListenBack.StopAsync();
     }
 
@@ -183,6 +183,7 @@ public sealed partial class PlayModeViewModel
                 HomeRequested?.Invoke();
                 return true;
             case PlayModeScreen.TuningCheck:
+                EndRunSideEffects();
                 CurrentScreen = PlayModeScreen.SongSelect;
                 return true;
             case PlayModeScreen.Countdown:

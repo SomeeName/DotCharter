@@ -42,6 +42,9 @@ public sealed record RsToneWriteResult(IReadOnlyList<string> Keys, int ToneChang
 /// </summary>
 public static class RsToneProjectWriter
 {
+    /// <summary>A change still at its planned time reads back the same milliseconds; this only absorbs rounding.</summary>
+    private const double PlacedToleranceMs = 0.001;
+
     /// <summary>
     ///     Writes every generated tone of <paramref name="tones" /> into
     ///     <paramref name="project" /> and points <paramref name="arrangement" />'s
@@ -94,28 +97,39 @@ public static class RsToneProjectWriter
         }
 
         // Point the placed changes at their tones. The window carries the INDEX into
-        // the sorted change list, which is what the planner sorted them by — so a
-        // change is matched by position in that order rather than by its old name,
-        // which may be empty or may be another tone's.
+        // the sorted change list the planner saw, and the time and name the change had
+        // then. The charter may have inserted, removed, moved or renamed changes while
+        // the request ran, so a window lands only on a change that still reads as its
+        // target; one whose target changed is left alone.
         var ordered = arrangement.ToneChanges
             .Select((change, i) => (Change: change, Ms: change.GetTimeMs(project.Beats), Original: i))
             .OrderBy(x => x.Ms)
             .ThenBy(x => x.Original)
             .ToList();
 
-        var pointed = 0;
+        var targets = new List<(ToneChange Change, string Key)>(written.Count);
         foreach (var (window, tone) in written)
         {
-            if (window.Index < 0 || window.Index >= ordered.Count) continue;
-            ordered[window.Index].Change.ToneName = tone.Key;
-            pointed++;
+            if (TargetOf(ordered, window) is { } change && targets.All(t => !ReferenceEquals(t.Change, change)))
+                targets.Add((change, tone.Key));
         }
 
-        // The arrangement's Rocksmith tone SLOTS. Rocksmith has one base plus four
-        // switchable slots; a set longer than five keeps every DEFINITION (the
-        // package embeds them all) but only the first five can be slotted, which is
-        // the game's limit and not this app's.
-        var keys = written.Select(w => w.Tone.Key).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        foreach (var (change, key) in targets) change.ToneName = key;
+        var pointed = targets.Count;
+
+        // The arrangement's Rocksmith tone SLOTS, in the order the changes play. Every
+        // name a change still uses is declared, the ones this set did not repoint (a
+        // failed window, a target that changed) included: rebuilding the slots from the
+        // successful tones alone left those changes naming an undeclared tone.
+        // Rocksmith has one base plus four switchable slots; a set longer than five keeps
+        // every DEFINITION (the package embeds them all) but only the first five can be
+        // slotted, which is the game's limit and not this app's.
+        var keys = new List<string>();
+        foreach (var name in ordered.Select(o => o.Change.ToneName).Concat(written.Select(w => w.Tone.Key)))
+        {
+            if (!string.IsNullOrEmpty(name) && !keys.Contains(name, StringComparer.OrdinalIgnoreCase)) keys.Add(name);
+        }
+
         arrangement.ToneBase = keys[0];
         arrangement.ToneA = keys.Count > 1 ? keys[1] : "";
         arrangement.ToneB = keys.Count > 2 ? keys[2] : "";
@@ -125,6 +139,24 @@ public static class RsToneProjectWriter
         arrangement.ToneNames.Clear();
         foreach (var key in keys) arrangement.ToneNames.Add(key);
 
-        return new RsToneWriteResult(keys, pointed, arrangement.ToneBase);
+        return new RsToneWriteResult([.. written.Select(w => w.Tone.Key).Distinct(StringComparer.OrdinalIgnoreCase)], pointed,
+            arrangement.ToneBase);
     }
+
+    /// <summary>
+    ///     The change <paramref name="window" /> was planned for: the one at its index when that one
+    ///     still sits at the planned time with the planned name, else the only change that does;
+    ///     null when none (or several) do.
+    /// </summary>
+    private static ToneChange? TargetOf(List<(ToneChange Change, double Ms, int Original)> ordered, ToneWindow window)
+    {
+        if (window.Index >= 0 && window.Index < ordered.Count && IsTarget(ordered[window.Index], window))
+            return ordered[window.Index].Change;
+        var matches = ordered.Where(o => IsTarget(o, window)).Take(2).ToList();
+        return matches.Count == 1 ? matches[0].Change : null;
+    }
+
+    private static bool IsTarget((ToneChange Change, double Ms, int Original) entry, ToneWindow window) =>
+        Math.Abs(entry.Ms - window.PlacedMs) < PlacedToleranceMs &&
+        string.Equals(entry.Change.ToneName, window.ToneName, StringComparison.Ordinal);
 }

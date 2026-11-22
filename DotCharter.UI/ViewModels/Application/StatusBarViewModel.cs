@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
@@ -6,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DotCharter.Services.Diagnostics;
 using DotCharter.Services.Gameplay.Profiles;
 using DotCharter.Services.Gameplay.Stats;
 using DotCharter.Tone.Diagnostics;
@@ -16,20 +17,16 @@ namespace DotCharter.UI.ViewModels.Application;
 
 /// <summary>
 ///     The status rail's EDITING-STATE readouts (P1-11), pure so the strings
-///     are testable without a dispatcher: SNAP (the grid label from
-///     <see cref="GridSnapOption" />), SEL n (total selected objects), ZOOM ×n
+///     are testable without a dispatcher: SEL n (total selected objects), ZOOM ×n
 ///     (timeline zoom over the default pixels-per-ms) and, only while one is
 ///     set, the string-edit MASK. Each takes its localized FORMAT, so the
 ///     strings stay testable without the culture singleton; the rail passes
-///     <c>StatusBar_Snap</c> / <c>_Selection</c> / <c>_Zoom</c>.
+///     <c>StatusBar_Selection</c> / <c>_Zoom</c>. The grid snap is the toolbar's, not the rail's.
 /// </summary>
 internal static class EditStateReadouts
 {
     /// <summary>`UserSettingsState.PixelsPerMs`'s default — the ×1.0 baseline.</summary>
     internal const double BaselinePixelsPerMs = 0.2;
-
-    public static string Snap(int gridDivisor, string format) =>
-        string.Format(CultureInfo.InvariantCulture, format, GridSnapOption.LabelFor(gridDivisor));
 
     public static string Selection(int count, string format) =>
         string.Format(CultureInfo.InvariantCulture, format, count);
@@ -103,6 +100,7 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
 {
     private readonly IStatusBarService _statusBar;
     private readonly ILocalizationService _localization;
+    private readonly IConfigurationService _config;
 
     /// <summary>The rail's localization; the shell that hosts it speaks through the same.</summary>
     internal ILocalizationService Localization => _localization;
@@ -112,6 +110,7 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
     private readonly IPlayerProfileService _playerProfiles;
     private readonly IArtworkSource _artwork;
     private readonly IFileStorageService _storage;
+    private readonly IMessagePrompt? _messagePrompt;
     private readonly TransportViewModel? _transport;
     private readonly ISelectionService? _selection;
 
@@ -123,10 +122,14 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
         IPlayerProfileService playerProfiles,
         IFileStorageService storage,
         ILocalizationService localization,
+        IConfigurationService config,
         TransportViewModel? transport = null,
         ISelectionService? selection = null,
-        IArtworkSource? artwork = null)
+        IArtworkSource? artwork = null,
+        IMessagePrompt? messagePrompt = null)
     {
+        _config = config;
+        _messagePrompt = messagePrompt;
         _artwork = artwork ?? new ArtworkSource(playerProfiles);
         _localization = localization;
         _playbackStatus = localization["StatusBar_Stopped"];
@@ -160,7 +163,6 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
         // both coalesce into ONE Background-priority post, single-flight, so
         // the rail never competes with input. No per-frame bindings: these are
         // plain strings refreshed on real state changes only.
-        _transport?.PropertyChanged += OnTransportChanged;
         _selection?.SelectionChanged += OnSelectionChanged;
         _refreshEditReadoutsPost = () =>
         {
@@ -330,7 +332,18 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
     /// read — maintained from the log collection's change events.</summary>
     [ObservableProperty] private bool _hasRecentLogMessages;
 
+    /// <summary>The audio detail: the rail's dot carries it as its tooltip, and prints it in full
+    /// while <see cref="HasAudioProblem" />.</summary>
     [ObservableProperty] private string _audioStatus = string.Empty;
+
+    /// <summary>True while audio is not fine: no device, a lost device, or recent dropouts.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AudioHealthy))]
+    private bool _hasAudioProblem;
+
+    public bool AudioHealthy => !HasAudioProblem;
+
+    private readonly AudioRailHealth _audioHealth = new();
 
     // ---- editing-state readouts (P1-11) ------------------------------------
 
@@ -352,7 +365,6 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
     /// <summary>The editing readouts show when they exist AND the editor is the surface.</summary>
     public bool ShowsEditReadouts => HasEditReadouts && IsEditorSurface;
 
-    [ObservableProperty] private string _snapLabel = string.Empty;
     [ObservableProperty] private string _selectionLabel = string.Empty;
     [ObservableProperty] private string _zoomLabel = string.Empty;
     [ObservableProperty] private string _maskLabel = string.Empty;
@@ -376,21 +388,14 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
             _ui.Post(_refreshEditReadoutsPost);
     }
 
-    private void OnTransportChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(TransportViewModel.GridDivisor))
-            QueueEditReadoutsRefresh();
-    }
-
     private void OnSelectionChanged(object? sender, EventArgs e) => QueueEditReadoutsRefresh();
 
     private void RefreshEditReadouts()
     {
         if (_transport == null || _selection == null) return;
-        SnapLabel = EditStateReadouts.Snap(_transport.GridDivisor, _localization["StatusBar_Snap"]);
         SelectionLabel = EditStateReadouts.Selection(EditStateReadouts.TotalSelected(_selection), _localization["StatusBar_Selection"]);
         ZoomLabel = EditStateReadouts.Zoom(_projectState.PixelsPerMs, _localization["StatusBar_Zoom"]);
-        MaskLabel = EditStateReadouts.Mask(_projectState.StringEditMask, _projectState.ActiveArrangement?.Tuning,
+        MaskLabel = EditStateReadouts.Mask(_projectState.StringEditMask, TuningDisplayNames.For(_projectState.ActiveArrangement),
             _localization["StatusBar_Mask"], _localization["Inspector_StringLabelFmt"]);
     }
 
@@ -445,6 +450,10 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private bool _hasActiveTask;
     [ObservableProperty] private string _activeTaskLabel = string.Empty;
+
+    /// <summary>The task chip's tooltip: the whole task name while a task runs, NULL otherwise.
+    /// A bound empty string still opens an empty tooltip box, so the finished task's chip must carry no tip at all.</summary>
+    [ObservableProperty] private string? _activeTaskTip;
     [ObservableProperty] private double _activeTaskProgress;
     [ObservableProperty] private bool _activeTaskIndeterminate;
     [ObservableProperty] private int _activeTaskCount;
@@ -545,8 +554,10 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
             {
                 new FilePickerFilter(_localization["Profile_ImageFilter"],
                     new[] { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif", "*.webp" })
-            });
+            },
+            _config.StartDirectory(c => c.LastProfilePictureDir));
         if (string.IsNullOrEmpty(path)) return;
+        _config.RememberDirectory(path, (c, d) => c.LastProfilePictureDir = d);
 
         // Downscale BEFORE the service copies it: SetAvatar is a plain File.Copy
         // (Services owns no image dependency), so without this a 12 MP phone
@@ -577,9 +588,16 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
             {
                 new FilePickerFilter(_localization["Profile_FileFilter"],
                     new[] { "*.dcprofile" })
-            });
+            },
+            _config.StartDirectory(c => c.LastProfileDir));
         if (string.IsNullOrEmpty(path)) return;
-        _playerProfiles.ExportProfile(active.Id, path);
+        _config.RememberDirectory(path, (c, d) => c.LastProfileDir = d);
+        if (_playerProfiles.ExportProfile(active.Id, path)) return;
+
+        var message = _localization["Profile_Export_Failed"];
+        _projectState.SetMessage(message, StatusSeverity.Error);
+        if (_messagePrompt != null)
+            await _messagePrompt.ShowAsync(_localization["Profile_Export_Title"], message, MessageDialogKind.Error);
     }
 
     [RelayCommand]
@@ -591,8 +609,10 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
             {
                 new FilePickerFilter(_localization["Profile_FileFilter"],
                     new[] { "*.dcprofile" })
-            });
+            },
+            _config.StartDirectory(c => c.LastProfileDir));
         if (string.IsNullOrEmpty(path)) return;
+        _config.RememberDirectory(path, (c, d) => c.LastProfileDir = d);
         var imported = _playerProfiles.ImportProfile(path);
         if (imported != null) _playerProfiles.SwitchTo(imported.Id);
         RefreshProfiles();
@@ -863,14 +883,23 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
     {
         var rate = _audio.ActiveSampleRate;
         var buf = _audio.ActualBufferFrames;
-        if (rate <= 0 || buf <= 0)
+        var problem = _audioHealth.Evaluate(rate, buf, _audio.IsDeviceLost, _audio.DropoutCount, Environment.TickCount64);
+        HasAudioProblem = problem != AudioRailProblem.None;
+        if (problem == AudioRailProblem.DeviceLost)
+        {
+            AudioStatus = _localization["StatusBar_Audio_DeviceLost"];
+            return;
+        }
+        if (problem == AudioRailProblem.NoDevice)
         {
             AudioStatus = _localization["StatusBar_Audio_NotReady"];
             return;
         }
         var ms = buf * 1000.0 / rate;
         // The BUFFER's duration, labelled as such: output latency is a larger, separate figure.
-        AudioStatus = _localization.Format("StatusBar_Audio_Fmt", rate / 1000.0, buf, ms);
+        AudioStatus = _localization.Format(
+            problem == AudioRailProblem.Dropouts ? "StatusBar_Audio_Dropouts" : "StatusBar_Audio_Fmt",
+            rate / 1000.0, buf, ms);
     }
 
     private void RefreshActiveTaskLabel()
@@ -880,6 +909,7 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
         if (ActiveTasks.Count == 0)
         {
             ActiveTaskLabel = string.Empty;
+            ActiveTaskTip = null;
             ActiveTaskProgress = 0;
             ActiveTaskIndeterminate = false;
             ActiveTaskCanCancel = false;
@@ -889,6 +919,7 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
         ActiveTaskLabel = ActiveTasks.Count > 1
             ? _localization.Format("StatusBar_Task_MoreFmt", primary.Label, ActiveTasks.Count - 1)
             : primary.Label;
+        ActiveTaskTip = string.IsNullOrEmpty(ActiveTaskLabel) ? null : ActiveTaskLabel;
         ActiveTaskIndeterminate = primary.IsIndeterminate;
         ActiveTaskProgress = primary.Progress;
         ActiveTaskCanCancel = primary.CanCancel;
@@ -904,7 +935,6 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
         RecentMessages.CollectionChanged -= OnMessagesChanged;
         ActiveTasks.CollectionChanged -= OnTasksChanged;
         _projectState.PropertyChanged -= OnProjectStateChanged;
-        _transport?.PropertyChanged -= OnTransportChanged;
         _selection?.SelectionChanged -= OnSelectionChanged;
         _audio.DeviceReconnected -= OnAudioDeviceChanged;
         _audio.DeviceLost -= OnAudioDeviceLost;

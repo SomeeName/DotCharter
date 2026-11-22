@@ -73,7 +73,8 @@ public sealed class SimpleDialogTests
     {
         var (vm, _) = OpenTempoMap(operation);
 
-        Assert.Equal(FakeLocalization.English()[titleKey], vm.Title);
+        Assert.Equal(FakeLocalization.English()["Dialog_TempoMap_StartEnd_Title"], vm.Title);
+        Assert.Equal(FakeLocalization.English()[titleKey], vm.SelectedChoice!.Label);
         Assert.Equal(FakeLocalization.English()[labelKey], vm.Label);
         Assert.False(string.IsNullOrEmpty(vm.Subtitle));
         Assert.Equal(minimum, vm.Minimum);

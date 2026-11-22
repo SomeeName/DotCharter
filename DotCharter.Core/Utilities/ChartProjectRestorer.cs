@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using DotCharter.Core.Domain.Events;
 using DotCharter.Core.Domain.Guitar;
 using DotCharter.Core.Domain.Project;
@@ -8,9 +8,9 @@ namespace DotCharter.Core.Utilities;
 
 /// <summary>
 ///     Restores a <see cref="ChartProject" /> snapshot INTO an existing live
-///     graph instead of swapping a fresh clone in for it — a positional
-///     reconcile that copies the snapshot's field values onto the live
-///     instances and only adds/removes at the tail.
+///     graph instead of swapping a fresh clone in for it. Identity-retaining snapshots
+///     retain the identities belonging to the live collections, including removed
+///     elements; unrelated graphs use a positional field copy.
 ///     <para>
 ///         This exists because undo history holds LIVE REFERENCES. An
 ///         <c>AddNotesAction</c> captures the <see cref="ObservableCollection{T}" />
@@ -26,15 +26,10 @@ namespace DotCharter.Core.Utilities;
 ///         the leaf elements.
 ///     </para>
 ///     <para>
-///         It is sound because a snapshot action always restores the state as of
-///         immediately before/after itself, i.e. a state the earlier actions were
-///         built against: an index-wise copy therefore puts the original
-///         instances back holding their original values, and the captured
-///         references are live again. The one residual gap is the TAIL — elements
-///         a growing snapshot appends are freshly minted, so an action recorded
-///         AFTER the tool that captured a tail element detaches if the tool is
-///         undone and redone. That is strictly smaller than the whole-graph swap
-///         it replaces.
+///         Clone-related collections share identity tokens through
+///         <see cref="ChartSnapshotIdentities" />. A shrinking snapshot can detach an
+///         element, but restoring its counterpart reattaches that same instance.
+///         New elements are minted once per live collection and reused on redo.
 ///     </para>
 ///     <para>
 ///         <b>This is the same field-copy code the cloner runs.</b>
@@ -71,6 +66,7 @@ public static class ChartProjectRestorer
         live.OriginalMixMuted = snapshot.OriginalMixMuted;
         live.GuitarRolesSplit = snapshot.GuitarRolesSplit;
         live.Provenance = snapshot.Provenance;
+        live.NewerWriterVersion = snapshot.NewerWriterVersion;
         live.SynthPlayStyle.CopyFrom(snapshot.SynthPlayStyle);
 
         RestoreChartData(live.Chart, snapshot.Chart);
@@ -100,6 +96,7 @@ public static class ChartProjectRestorer
         // project would delete a newer build's data — the loss this collection
         // exists to prevent (see ChartProject.UnknownRscpNodes).
         ReconcileValues(live.UnknownRscpNodes, snapshot.UnknownRscpNodes);
+        ReconcileValues(live.GpSourceBars, snapshot.GpSourceBars.Select(bar => bar with { }).ToList());
         RestoreLinkGroups(live, snapshot);
     }
 
@@ -113,26 +110,33 @@ public static class ChartProjectRestorer
     {
         ArgumentNullException.ThrowIfNull(live);
         ArgumentNullException.ThrowIfNull(snapshot);
-        Reconcile(live.LinkGroups, snapshot.LinkGroups, (t, s) =>
+        RestoreLinkGroups(live.LinkGroups, snapshot.LinkGroups);
+        for (var g = 0; g < live.LinkGroups.Count; g++)
+        {
+            var group = live.LinkGroups[g];
+            var source = snapshot.LinkGroups[g];
+            for (var i = group.Placements.Count - 1; i >= 0; i--)
+            {
+                var arrangement = source.Placements[i].Arrangement;
+                var index = arrangement == null ? -1 : snapshot.Arrangements.IndexOf(arrangement);
+                if (index < 0 || index >= live.Arrangements.Count) group.Placements.RemoveAt(i);
+                else group.Placements[i].Arrangement = live.Arrangements[index];
+            }
+        }
+    }
+
+    /// <summary>Restores group/placement owners while keeping their arrangement references live.</summary>
+    public static void RestoreLinkGroups(IList<LinkGroup> live, IList<LinkGroup> snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(live);
+        ArgumentNullException.ThrowIfNull(snapshot);
+        Reconcile(live, snapshot, (t, s) =>
         {
             t.Id = s.Id;
             t.Letter = s.Letter;
             t.Name = s.Name;
             t.Rule = s.Rule;
-            var placements = new List<LinkPlacement>(s.Placements.Count);
-            foreach (var placement in s.Placements)
-            {
-                var index = placement.Arrangement == null ? -1 : snapshot.Arrangements.IndexOf(placement.Arrangement);
-                if (index < 0 || index >= live.Arrangements.Count) continue;
-                placements.Add(new LinkPlacement
-                {
-                    Arrangement = live.Arrangements[index],
-                    Position = placement.Position,
-                    EndPosition = placement.EndPosition
-                });
-            }
-
-            Reconcile(t.Placements, placements, (lp, sp) => lp.CopyFrom(sp));
+            Reconcile(t.Placements, s.Placements, (lp, sp) => lp.CopyFrom(sp));
         });
     }
 
@@ -197,11 +201,38 @@ public static class ChartProjectRestorer
 
         live.DifficultyIndex = snapshot.DifficultyIndex;
 
-        Reconcile(live.Notes, snapshot.Notes, (t, s) => t.CopyFrom(s));
-        Reconcile(live.Chords, snapshot.Chords, (t, s) => t.CopyFrom(s));
+        Reconcile(live.Notes, snapshot.Notes, RestoreNote);
+        Reconcile(live.Chords, snapshot.Chords, RestoreChord);
         Reconcile(live.Anchors, snapshot.Anchors, RestoreAnchor);
         Reconcile(live.HandShapes, snapshot.HandShapes, (t, s) => t.CopyFrom(s));
         Reconcile(live.FretHandMutes, snapshot.FretHandMutes, (t, s) => t.Position = s.Position);
+    }
+
+    internal static void RestoreNote(GuitarNote live, GuitarNote snapshot)
+    {
+        live.CopyFieldsFrom(snapshot);
+        Reconcile(live.BendValues, snapshot.BendValues, RestoreBend);
+    }
+
+    internal static void RestoreChord(Chord live, Chord snapshot)
+    {
+        live.CopyFieldsFrom(snapshot);
+        RestoreChordNotes(live, snapshot);
+    }
+
+    internal static void RestoreChordNotes(Chord live, Chord snapshot) =>
+        Reconcile(live.ChordNotes, snapshot.ChordNotes, RestoreChordNote);
+
+    internal static void RestoreChordNote(ChordNote live, ChordNote snapshot)
+    {
+        live.CopyFieldsFrom(snapshot);
+        Reconcile(live.BendValues, snapshot.BendValues, RestoreBend);
+    }
+
+    private static void RestoreBend(BendValue live, BendValue snapshot)
+    {
+        live.Position = snapshot.Position;
+        live.Step = snapshot.Step;
     }
 
     private static void RestoreNotationVoice(NotationVoice live, NotationVoice snapshot)
@@ -211,8 +242,8 @@ public static class ChartProjectRestorer
         // Deliberately NOT NotationVoice.CopyFrom: that rebuilds both
         // collections from clones, and the sheet editor records ordinary
         // MutateNotesAction/MutateChordsAction over these sidecars.
-        Reconcile(live.Notes, snapshot.Notes, (t, s) => t.CopyFrom(s));
-        Reconcile(live.Chords, snapshot.Chords, (t, s) => t.CopyFrom(s));
+        Reconcile(live.Notes, snapshot.Notes, RestoreNote);
+        Reconcile(live.Chords, snapshot.Chords, RestoreChord);
     }
 
     private static void RestoreChordTemplate(ChordTemplate live, ChordTemplate snapshot)
@@ -238,6 +269,9 @@ public static class ChartProjectRestorer
         live.ArrangementId = snapshot.ArrangementId;
         live.Artist = snapshot.Artist;
         live.ArtistSort = snapshot.ArtistSort;
+        live.TitleSort = snapshot.TitleSort;
+        live.AlbumSort = snapshot.AlbumSort;
+        live.DlcKey = snapshot.DlcKey;
         live.JapaneseTitle = snapshot.JapaneseTitle;
         live.JapaneseArtist = snapshot.JapaneseArtist;
         live.BeatsPerMinute = snapshot.BeatsPerMinute;
@@ -252,15 +286,23 @@ public static class ChartProjectRestorer
         live.Genre = snapshot.Genre;
         live.ReleaseDate = snapshot.ReleaseDate;
         live.Version = snapshot.Version;
+        live.AudioVolume = snapshot.AudioVolume;
+        live.PreviewVolume = snapshot.PreviewVolume;
+        live.AudioVolumeSignature = snapshot.AudioVolumeSignature;
+        live.PreviewVolumeSignature = snapshot.PreviewVolumeSignature;
+        live.AudioVolumeManual = snapshot.AudioVolumeManual;
+        live.PreviewVolumeManual = snapshot.PreviewVolumeManual;
+        live.PreviewStartMs = snapshot.PreviewStartMs;
         live.CoverArtPath = snapshot.CoverArtPath;
         live.Time = snapshot.Time;
         live.KeyAccidentals = snapshot.KeyAccidentals;
         live.KeyIsMinor = snapshot.KeyIsMinor;
+        live.KeyLocked = snapshot.KeyLocked;
         // No tuning here — see the note on ChartData. The arrangement's tuning is
         // restored by RestoreArrangement, which is the only copy there is.
 
-        Reconcile(live.SingleNotes, snapshot.SingleNotes, (t, s) => t.CopyFrom(s));
-        Reconcile(live.Chords, snapshot.Chords, (t, s) => t.CopyFrom(s));
+        Reconcile(live.SingleNotes, snapshot.SingleNotes, RestoreNote);
+        Reconcile(live.Chords, snapshot.Chords, RestoreChord);
     }
 
     private static void RestoreStem(Stem live, Stem snapshot)
@@ -304,6 +346,9 @@ public static class ChartProjectRestorer
 
     private static void RestoreLyricEvent(LyricEvent live, LyricEvent snapshot)
     {
+        live.AlignmentConfidence = snapshot.AlignmentConfidence;
+        live.IsSustainShortened = snapshot.IsSustainShortened;
+        live.ReviewReasons = snapshot.ReviewReasons;
         live.EndPosition = snapshot.EndPosition;
         live.IsWordPart = snapshot.IsWordPart;
         live.IsPhraseEnd = snapshot.IsPhraseEnd;
@@ -349,14 +394,14 @@ public static class ChartProjectRestorer
     }
 
     /// <summary>
-    ///     Index-wise field copy onto the existing instances, then add/remove at
-    ///     the tail — the whole point is that <paramref name="live" /> keeps both
-    ///     its collection instance and, for the overlapping prefix, its element
-    ///     instances, so history actions that captured either stay attached.
+    ///     Reattaches the original instances for clone-related collections. Unrelated
+    ///     graphs retain the positional field-copy contract onto the existing prefix.
     /// </summary>
     private static void Reconcile<T>(IList<T> live, IList<T> snapshot, Action<T, T> restoreInto)
         where T : class, new()
     {
+        if (ChartSnapshotIdentities.Reconcile(live, snapshot, restoreInto)) return;
+
         var shared = Math.Min(live.Count, snapshot.Count);
         for (var i = 0; i < shared; i++) restoreInto(live[i], snapshot[i]);
 

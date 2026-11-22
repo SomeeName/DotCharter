@@ -161,6 +161,51 @@ public sealed class LiveInputChannelViewModelTests
         Assert.Equal(2, vm.Options.Count);
     }
 
+    /// <summary>
+    ///     Device A's slow read lands after the rig moved to device B and B's own
+    ///     read landed: the list stays B's, in either picker order.
+    /// </summary>
+    [Fact]
+    public async Task ALateProbeOfTheDeviceLeft_DoesNotListItsJacksForTheNewDevice()
+    {
+        var audio = new FakeAudioPlaybackService { InputDeviceChannelCount = 3 };
+        var config = new FakeConfigurationService();
+        config.AppConfig.EnableInput = true;
+        config.AppConfig.AudioDriver = "ASIO";
+        config.AppConfig.AsioInputDeviceName = "Interface A";
+        var ui = new HeldPostsDispatcher();
+        var vm = new LiveInputChannelViewModel(audio, config, FakeLocalization.English(), ui);
+        await ui.WaitForHeldAsync(1);             // A read three jacks
+
+        audio.InputDeviceChannelCount = 12;
+        config.AppConfig.AsioInputDeviceName = "Interface B";
+        vm.Refresh();
+        await ui.WaitForHeldAsync(2);             // B read twelve
+
+        ui.RunNewestFirst();                      // B lands, then A's late read
+
+        Assert.Equal(12, vm.Options.Count);
+    }
+
+    /// <summary>The same late read when the device moved WITHOUT a refresh here (Settings ▸ Audio saved it): it is not B's list either.</summary>
+    [Fact]
+    public async Task AProbeOfADeviceTheConfigNoLongerNames_IsDropped()
+    {
+        var audio = new FakeAudioPlaybackService { InputDeviceChannelCount = 3 };
+        var config = new FakeConfigurationService();
+        config.AppConfig.EnableInput = true;
+        config.AppConfig.AudioDriver = "ASIO";
+        config.AppConfig.AsioInputDeviceName = "Interface A";
+        var ui = new HeldPostsDispatcher();
+        var vm = new LiveInputChannelViewModel(audio, config, FakeLocalization.English(), ui);
+        await ui.WaitForHeldAsync(1);
+
+        config.AppConfig.AsioInputDeviceName = "Interface B";
+        ui.RunNewestFirst();
+
+        Assert.Equal(GuitarInputChannels.FallbackJackCount, vm.Options.Count);
+    }
+
     /// <summary>Condition-driven, with a cap that is a deadlock detector and not
     /// a budget: a green run leaves on its first or second turn and never reads
     /// it. Returns whether the condition was met, so the caller can say so.</summary>

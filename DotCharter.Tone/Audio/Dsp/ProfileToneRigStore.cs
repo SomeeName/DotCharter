@@ -4,6 +4,9 @@ using DotCharter.Tone.Audio.Dsp.Presets;
 
 namespace DotCharter.Tone.Audio.Dsp;
 
+/// <summary>A cloned seat, its read authority, publication state and owning profile generation.</summary>
+public readonly record struct ProfileToneRigRead(UserTonePresetDto? Rig, bool IsAuthoritative, bool IsPersisted, long Generation);
+
 /// <summary>
 ///     Where a player's live tone rig lives: one <c>tone-rig.json</c> per PLAYER
 ///     PROFILE, holding that profile's board for every SEAT.
@@ -51,8 +54,25 @@ public interface IProfileToneRigStore
     /// "inherit the previous profile".</summary>
     UserTonePresetDto? GetRig(int player);
 
-    /// <summary>Persists one seat's rig for the scoped profile.</summary>
-    void SetRig(int player, UserTonePresetDto rig);
+    /// <summary>Persists one seat's rig; false means the caller must retry.</summary>
+    bool SetRig(int player, UserTonePresetDto rig);
+
+    ProfileToneRigRead ReadRig(int player) => new(GetRig(player), true, true, ScopeGeneration);
+
+    bool SetRig(int player, UserTonePresetDto rig, long generation)
+        => generation == ScopeGeneration && SetRig(player, rig);
+
+    /// <summary>The last full rig preserved when a supported replacement superseded an incomplete restore.</summary>
+    UserTonePresetDto? GetRecoveryRig(int player) => null;
+
+    /// <summary>Publishes the replacement and its recovery copy atomically; unsupported stores refuse recovery writes.</summary>
+    bool SetRigWithRecovery(int player, UserTonePresetDto rig, UserTonePresetDto? recovery, long generation)
+        => recovery is null && SetRig(player, rig, generation);
+
+    void FlushPending() { }
+
+    /// <summary>Monotonic scope identity, including switches away and back.</summary>
+    long ScopeGeneration { get; }
 
     /// <summary>Repoints at the now-active profile and drops the cache. Returns
     /// true when the scope actually changed.</summary>
@@ -82,6 +102,9 @@ public sealed class ProfileToneRigStore : IProfileToneRigStore
     private Guid? _scopedProfileId;
     private StoreFile? _store;
     private string? _loadedPath;
+    private bool _loadFailed;
+    private readonly Dictionary<string, StoreFile> _pending = new(StringComparer.Ordinal);
+    private long _scopeGeneration;
 
     /// <summary>Player-profile-scoped store (production). The pre-0.45 global rig
     /// in <paramref name="legacyConfig" /> is adopted once — see
@@ -116,27 +139,53 @@ public sealed class ProfileToneRigStore : IProfileToneRigStore
         }
     }
 
-    public UserTonePresetDto? GetRig(int player)
-    {
-        if (player < 0) return null;
-        lock (_gate)
-        {
-            // A defensive copy: the caller materializes this into a live chain and
-            // the cached instance must never become an alias of someone's board.
-            return LoadLocked().Rigs.TryGetValue(Key(player), out var dto) ? dto?.Clone() : null;
-        }
-    }
+    public UserTonePresetDto? GetRig(int player) => ReadRig(player).Rig;
 
-    public void SetRig(int player, UserTonePresetDto rig)
+    public ProfileToneRigRead ReadRig(int player)
     {
-        if (player < 0 || rig is null) return;
         lock (_gate)
         {
             var store = LoadLocked();
-            store.Rigs[Key(player)] = rig.Clone();
-            SaveLocked(store);
+            var rig = player >= 0 && store.Rigs.TryGetValue(Key(player), out var dto) ? dto?.Clone() : null;
+            return new ProfileToneRigRead(rig, !_loadFailed, !_pending.ContainsKey(ResolveStorePathLocked()), _scopeGeneration);
         }
     }
+
+    public bool SetRig(int player, UserTonePresetDto rig) => SetRig(player, rig, ScopeGeneration);
+
+    public bool SetRig(int player, UserTonePresetDto rig, long generation)
+        => SetRigWithRecovery(player, rig, null, generation);
+
+    public UserTonePresetDto? GetRecoveryRig(int player)
+    {
+        lock (_gate)
+            return LoadLocked().RecoveryRigs.TryGetValue(Key(player), out var rig) ? rig?.Clone() : null;
+    }
+
+    public bool SetRigWithRecovery(int player, UserTonePresetDto rig, UserTonePresetDto? recovery, long generation)
+    {
+        if (player < 0 || rig is null) return false;
+        lock (_gate)
+        {
+            if (generation != _scopeGeneration) return false;
+            var store = LoadLocked();
+            if (_loadFailed) return false;
+            store.Rigs[Key(player)] = rig.Clone();
+            if (recovery is not null) store.RecoveryRigs[Key(player)] = recovery.Clone();
+            store.Revision++;
+            return SaveLocked(store);
+        }
+    }
+
+    public void FlushPending()
+    {
+        lock (_gate)
+        {
+            foreach (var (path, store) in _pending.ToArray()) SaveLocked(store, path);
+        }
+    }
+
+    public long ScopeGeneration => Interlocked.Read(ref _scopeGeneration);
 
     public bool Rescope()
     {
@@ -146,6 +195,7 @@ public sealed class ProfileToneRigStore : IProfileToneRigStore
             var active = ActiveProfileIdLocked();
             if (_scopedProfileId == active) return false;
             _scopedProfileId = active;
+            Interlocked.Increment(ref _scopeGeneration);
             _store = null;
             _loadedPath = null;
             return true;
@@ -181,7 +231,7 @@ public sealed class ProfileToneRigStore : IProfileToneRigStore
             // report and fall back to an empty scope, which resolves to no stored
             // rig and therefore to the first-run default preset.
             _logger?.Warning(AppLogCategory.Audio,
-                $"Tone rig store could not resolve the active profile: {ex.GetType().Name}: {ex.Message}");
+                "Tone rig store could not resolve the active profile", ex);
             return Guid.Empty;
         }
     }
@@ -199,25 +249,64 @@ public sealed class ProfileToneRigStore : IProfileToneRigStore
         if (_store != null && path == _loadedPath) return _store;
 
         _store = null;
+        _loadFailed = false;
+        if (_pending.TryGetValue(path, out var pending))
+        {
+            _loadedPath = path;
+            return _store = pending;
+        }
+        var absent = false;
         try
         {
-            if (File.Exists(path))
-                _store = JsonSerializer.Deserialize<StoreFile>(AtomicFile.ReadAllText(path), JsonOptions);
+            var published = ReadCandidate(path);
+            var journal = ReadCandidate(path + ".pending");
+            var useJournal = journal is not null && (published is null || journal.Revision > published.Revision);
+            _store = useJournal ? journal : published;
+            if (useJournal) _pending[path] = journal!;
+            absent = _store is null;
         }
         catch (Exception ex)
         {
-            // Unlike the practice store this cannot lose anything irreplaceable —
-            // a rig is rebuildable and the factory default is one apply away — so
-            // there is no quarantine dance here, just a warning and a fresh start.
-            _logger?.Warning(AppLogCategory.Audio,
-                $"Tone rig store unreadable, starting from the default tone: {ex.Message}");
+            _loadFailed = true;
+            _logger?.Warning(AppLogCategory.Audio, "Tone rig store unreadable; refusing to replace it", ex);
         }
-
+        if (_loadFailed)
+        {
+            _store = null;
+            return new StoreFile();
+        }
         _loadedPath = path;
         _store ??= new StoreFile();
-
-        if (!File.Exists(path)) AdoptLegacyGlobalRigLocked(_store, path);
+        if (absent) AdoptLegacyGlobalRigLocked(_store, path);
         return _store;
+    }
+
+    private StoreFile? ReadCandidate(string path)
+    {
+        if (Directory.Exists(path)) return null;
+        try
+        {
+            var candidate = JsonSerializer.Deserialize<StoreFile>(AtomicFile.ReadAllText(path), JsonOptions);
+            if (candidate?.Rigs is null || candidate.RecoveryRigs is null || candidate.Revision < 0 || candidate.Revision >= long.MaxValue - 1)
+                throw new JsonException("Invalid rig map or revision.");
+            try
+            {
+                foreach (var rig in candidate.Rigs.Values.Concat(candidate.RecoveryRigs.Values)) _ = rig?.Clone();
+            }
+            catch (Exception ex) when (ex is ArgumentException or NullReferenceException or InvalidOperationException)
+            {
+                throw new JsonException("Invalid rig contents.", ex);
+            }
+            return candidate;
+        }
+        catch (FileNotFoundException) { return null; }
+        catch (DirectoryNotFoundException) { return null; }
+        catch (JsonException ex)
+        {
+            AtomicFile.MoveAside(path, path + ".corrupt-" + Guid.NewGuid().ToString("N"));
+            _logger?.Warning(AppLogCategory.Audio, "Corrupt tone rig store preserved", ex);
+            return null;
+        }
     }
 
     /// <summary>
@@ -257,7 +346,7 @@ public sealed class ProfileToneRigStore : IProfileToneRigStore
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Tone rig migration skipped: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Tone rig migration skipped", ex);
             return;
         }
 
@@ -303,24 +392,31 @@ public sealed class ProfileToneRigStore : IProfileToneRigStore
             // not be cleared only means the next launch re-adopts the same bytes
             // over the same file, which is idempotent.
             _logger?.Warning(AppLogCategory.Audio,
-                $"Tone rig migration wrote the profile store but could not clear the global rig: {ex.Message}");
+                "Tone rig migration wrote the profile store but could not clear the global rig", ex);
         }
     }
 
-    private bool SaveLocked(StoreFile store)
+    private bool SaveLocked(StoreFile store) => SaveLocked(store, ResolveStorePathLocked());
+
+    private bool SaveLocked(StoreFile store, string path)
     {
-        var path = ResolveStorePathLocked();
+        _pending[path] = store;
+        string? json = null;
         try
         {
+            json = JsonSerializer.Serialize(store, JsonOptions);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            AtomicFile.WriteAllText(path, JsonSerializer.Serialize(store, JsonOptions));
-            _store = store;
-            _loadedPath = path;
+            AtomicFile.WriteAllText(path, json);
+            _pending.Remove(path);
+            try { File.Delete(path + ".pending"); }
+            catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, "Published rig journal could not be removed", ex); }
             return true;
         }
         catch (Exception ex)
         {
-            _logger?.Warning(AppLogCategory.Audio, $"Tone rig store not writable: {ex.Message}");
+            _logger?.Warning(AppLogCategory.Audio, "Tone rig store not writable; retaining pending rig", ex);
+            try { if (json is not null) AtomicFile.WriteAllText(path + ".pending", json); }
+            catch (Exception journalError) { _logger?.Warning(AppLogCategory.Audio, "Pending rig journal could not be written", journalError); }
             return false;
         }
     }
@@ -331,6 +427,10 @@ public sealed class ProfileToneRigStore : IProfileToneRigStore
     /// a silent amp.</summary>
     internal sealed class StoreFile
     {
+        public long Revision { get; set; }
+
         public Dictionary<string, UserTonePresetDto?> Rigs { get; set; } = new(StringComparer.Ordinal);
+
+        public Dictionary<string, UserTonePresetDto?> RecoveryRigs { get; set; } = new(StringComparer.Ordinal);
     }
 }

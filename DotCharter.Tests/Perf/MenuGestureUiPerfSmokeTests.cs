@@ -50,7 +50,6 @@ public sealed class MenuGestureUiPerfSmokeTests
                 var rows = Rows(menus).ToList();
 
                 MenuItem Row(string key) => rows.Single(r => r.Header?.ToString() == LocalizationService.Instance[key]);
-                MenuItem Bookmark(int digit) => rows.Single(r => r.Header?.ToString() == digit.ToString(CultureInfo.InvariantCulture));
 
                 (string Key, Func<KeybindConfig, KeyChord> Chord)[] keyed =
                 [
@@ -63,7 +62,9 @@ public sealed class MenuGestureUiPerfSmokeTests
                     ("Menu_DecreaseLength", k => k.DecreaseLength),
                     ("Menu_InsertBeatAtPlayhead", k => k.InsertBeatAtPlayhead),
                     ("Menu_RemoveBeatAtPlayhead", k => k.RemoveBeatAtPlayhead),
+                    ("Menu_InsertMeasuresAtPlayhead", k => k.InsertMeasuresAtPlayhead),
                     ("Menu_InsertVocalAtPlayhead", k => k.InsertVocalAtPlayhead),
+                    ("Menu_PickSlide", k => k.PickSlide),
                 ];
                 foreach (var (key, chord) in keyed)
                 {
@@ -72,11 +73,8 @@ public sealed class MenuGestureUiPerfSmokeTests
                     Assert.Equal(Gesture(chord(state.Keybinds)), row.InputGesture);
                 }
 
-                var bookmarkModifiers = state.Keybinds.BookmarkBase.Modifiers;
-                for (var digit = 0; digit <= 9; digit++)
-                {
-                    Assert.Equal(new KeyGesture((Key)((int)Key.D0 + digit), bookmarkModifiers), Bookmark(digit).InputGesture);
-                }
+                // The ten digit rows are one Bookmarks… row; the dialog shows the live chords (BookmarksViewModelTests).
+                Assert.Single(rows, r => r.Header?.ToString() == LocalizationService.Instance["Menu_Bookmarks"]);
 
                 // A rebind in Settings writes the property on the live table…
                 var inspector = Row("Menu_PanelInspector");
@@ -89,11 +87,9 @@ public sealed class MenuGestureUiPerfSmokeTests
                 var replaced = new KeybindConfig
                 {
                     ToggleWaveform = new KeyChord(Key.W, KeyModifiers.Control | KeyModifiers.Shift),
-                    BookmarkBase = new KeyChord(Key.D0, KeyModifiers.Control | KeyModifiers.Shift),
                 };
                 state.Keybinds = replaced;
                 Assert.Equal(new KeyGesture(Key.W, KeyModifiers.Control | KeyModifiers.Shift), Row("Menu_ShowWaveform").InputGesture);
-                Assert.Equal(new KeyGesture(Key.D7, KeyModifiers.Control | KeyModifiers.Shift), Bookmark(7).InputGesture);
 
                 // An UNBOUND chord shows nothing rather than a stale key.
                 replaced.SnapAll = KeyChord.None;
@@ -122,6 +118,9 @@ public sealed class MenuGestureUiPerfSmokeTests
             var property = typeof(KeybindConfig).GetProperty(chordProperty)!;
             var original = (KeyChord)property.GetValue(keybinds)!;
 
+            // Play and Pause are ONE button; its name and tip follow the transport.
+            var wasPlaying = shell.Transport.IsPlaying;
+            shell.Transport.IsPlaying = nameKey == "Toolbar_Pause";
             var view = new ToolbarView { DataContext = shell };
             var window = new Window { Width = Slot.Width, Height = 80, Content = view };
             window.Show();
@@ -148,6 +147,7 @@ public sealed class MenuGestureUiPerfSmokeTests
             finally
             {
                 property.SetValue(keybinds, original);
+                shell.Transport.IsPlaying = wasPlaying;
                 window.Close();
             }
         }, CancellationToken.None);

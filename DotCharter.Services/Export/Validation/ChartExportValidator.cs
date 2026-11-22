@@ -2,6 +2,7 @@
 using System.Text;
 using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Services.Export.Sng;
+using DotCharter.Services.Parsing.Xml.Vocals;
 
 namespace DotCharter.Services.Export.Validation;
 
@@ -39,6 +40,7 @@ public sealed class ChartExportValidator
 {
     public const string KeyNoBeatMap = "Export.Validation.NoBeatMap";
     public const string KeyNoArrangements = "Export.Validation.NoArrangements";
+    public const string KeyNoShowlights = "Export.Validation.NoShowlights";
     public const string KeyNoNotes = "Export.Validation.NoNotes";
     public const string KeyMissingFhpCoverage = "Export.Validation.MissingFhpCoverage";
     public const string KeyOverlappingNotes = "Export.Validation.OverlappingNotes";
@@ -52,11 +54,16 @@ public sealed class ChartExportValidator
     public const string KeyFretOutOfRange = "Export.Validation.FretOutOfRange";
     public const string KeyStringOutOfRange = "Export.Validation.StringOutOfRange";
     public const string KeyExtendedRangeGuitar = "Export.Validation.ExtendedRangeGuitar";
-    public const string KeyEightStringMod = "Export.Validation.EightStringMod";
+    public const string KeyExtendedRangeBass = "Export.Validation.ExtendedRangeBass";
+    public const string KeyExtendedRangeTuning = "Export.Validation.ExtendedRangeTuning";
+    public const string KeySixStringDrop = "Export.Validation.SixStringDrop";
+    public const string KeyAudioShorterThanChart = "Export.Validation.AudioShorterThanChart";
     public const string KeyNoteBelowCapo = "Export.Validation.NoteBelowCapo";
     public const string KeyFirstNoteTooEarly = "Export.Validation.FirstNoteTooEarly";
     public const string KeyFirstPhraseNotAtStart = "Export.Validation.FirstPhraseNotAtStart";
     public const string KeyLyricTooLong = "Export.Validation.LyricTooLong";
+    public const string KeyLyricsOutOfOrder = "Export.Validation.LyricsOutOfOrder";
+    public const string KeyLyricMarkerText = "Export.Validation.LyricMarkerText";
     public const string KeyDisplayNameGlyphs = "Export.Validation.DisplayNameGlyphs";
     public const string KeyTooManyLevels = "Export.Validation.TooManyLevels";
     public const string KeyTooManyNotes = "Export.Validation.TooManyNotes";
@@ -64,13 +71,21 @@ public sealed class ChartExportValidator
     public const string KeyStringBeyondTuning = "Export.Validation.StringBeyondTuning";
     public const string KeyStringCountUnsupported = "Export.Validation.StringCountUnsupported";
 
-    private const int MaxFret = 24;
+    private const int MaxFret = FretLimits.MaxFret;
+
+    /// <summary>
+    ///     The companion XML and DLC Builder project are written as a SIX-string projection (the Files setting).
+    ///     On: a 7-/8-string guitar gets one <see cref="KeySixStringDrop" /> finding with what that projection leaves out.
+    /// </summary>
+    public bool SixStringProjection { get; init; }
 
     private const int MaxPhrases = 100;
     private const double MinFirstNoteMs = 1000.0;
     private const int MaxLyricBytes = 47; // 48-byte fixed SNG field incl. terminator
 
-    public IReadOnlyList<ExportValidationFinding> Validate(ChartProject project)
+    /// <param name="project">The chart to check.</param>
+    /// <param name="audioLengthMs">The project's audio length when known (null or 0: no audio, no check).</param>
+    public IReadOnlyList<ExportValidationFinding> Validate(ChartProject project, double? audioLengthMs = null)
     {
         var findings = new List<ExportValidationFinding>();
 
@@ -93,8 +108,33 @@ public sealed class ChartExportValidator
         foreach (var track in project.VocalTracks)
             ValidateVocals(project, track, findings);
 
+        // The package writes a default set when there is none: say so, with the fix that stores it.
+        if (project.Showlights.Count == 0 && instrumentals.Count > 0)
+            findings.Add(new ExportValidationFinding("", ExportFindingSeverity.Warning, KeyNoShowlights));
+
         ValidateDisplayNames(project, findings);
+        ValidateAudioLength(project, audioLengthMs, findings);
         return findings;
+    }
+
+    /// <summary>
+    ///     The game ends the song when its audio ends, so any note past the audio is never played. A
+    ///     WARNING (the charter may mean it); the detail names both elapsed lengths, including hours when needed.
+    /// </summary>
+    private static void ValidateAudioLength(ChartProject project, double? audioLengthMs, List<ExportValidationFinding> findings)
+    {
+        if (audioLengthMs is not > 0) return;
+        var chartEndMs = 0.0;
+        foreach (var level in project.Arrangements.Where(a => a.ArrangementType != ArrangementType.Vocal).SelectMany(a => a.Levels))
+        {
+            foreach (var note in level.Notes) chartEndMs = Math.Max(chartEndMs, note.EndPosition.GetPositionMs(project.Beats));
+            foreach (var chord in level.Chords) chartEndMs = Math.Max(chartEndMs, chord.EndPosition.GetPositionMs(project.Beats));
+        }
+
+        if (audioLengthMs.Value >= chartEndMs) return;
+        static string Clock(double ms) => ElapsedTimeLabel.Format(ms);
+        findings.Add(new ExportValidationFinding("", ExportFindingSeverity.Warning, KeyAudioShorterThanChart, null,
+            $"{Clock(audioLengthMs.Value)} / {Clock(chartEndMs)}"));
     }
 
     /// <summary>
@@ -115,7 +155,7 @@ public sealed class ChartExportValidator
         }
     }
 
-    private static void ValidateArrangement(
+    private void ValidateArrangement(
         ChartProject project, Arrangement arrangement, List<ExportValidationFinding> findings)
     {
         var beats = project.Beats;
@@ -133,7 +173,7 @@ public sealed class ChartExportValidator
         CheckPhrases(arrangement, beats, sink);
         if (arrangement.ToneChanges.Count > 0)
             CheckTones(project, arrangement, beats, sink);
-        CheckFretsAndStrings(arrangement, beats, sink);
+        CheckFretsAndStrings(arrangement, beats, sink, SixStringProjection);
         CheckFormatLimits(arrangement, sink);
         CheckChordTemplates(arrangement, sink);
 
@@ -296,21 +336,21 @@ public sealed class ChartExportValidator
             sink.Add(ExportFindingSeverity.Warning, KeyToneNotDefined, null, missing);
     }
 
-    // Six strings, or a 7-string GUITAR through the rs7string mod's layout and its
-    // RS7X block (Rs7StringLayout): that one ships, with a warning naming
-    // the mod. An 8-string guitar is REFUSED until the mod plays one
-    // (Rs7StringLayout.ExportRefusal, which the SNG mapper enforces too).
-    private static void CheckFretsAndStrings(Arrangement arrangement, IList<BeatMarker> beats, ArrangementFindings sink)
+    // Stock content and RS Extended Range share one domain string-count gate.
+    // Extended content carries a warning naming its package requirements. A sound past
+    // the arrangement's own strings stays an Error (index <= 7 for 8 strings, <= 5 for a 6-string bass).
+    private static void CheckFretsAndStrings(Arrangement arrangement, IList<BeatMarker> beats, ArrangementFindings sink, bool sixStringProjection)
     {
         var maxStringIndex = SngStringLimits.MaxNoteStringIndex(arrangement);
         var strings = arrangement.StringCount.ToString(CultureInfo.InvariantCulture);
         if (Rs7StringLayout.IsExtendedGuitar(arrangement))
-        {
-            if (arrangement.StringCount > Rs7StringLayout.ModPlayableStrings)
-                sink.Add(ExportFindingSeverity.Error, KeyEightStringMod);
-            else
-                sink.Add(ExportFindingSeverity.Warning, KeyExtendedRangeGuitar, null, strings);
-        }
+            sink.Add(ExportFindingSeverity.Warning, KeyExtendedRangeGuitar, null, strings);
+        else if (Rs7StringLayout.IsExtendedBass(arrangement))
+            sink.Add(ExportFindingSeverity.Warning, KeyExtendedRangeBass, null, strings);
+        if (RsxrStringLayout.IsExtended(arrangement) && RsxrStringLayout.ExportRefusal(arrangement) is { } refusal)
+            sink.Add(ExportFindingSeverity.Warning, KeyExtendedRangeTuning, null, refusal);
+        if (sixStringProjection && Rs7Projection.TryCreate(arrangement, sixStringOnly: true)?.Loss is { IsEmpty: false } loss)
+            sink.Add(ExportFindingSeverity.Warning, KeySixStringDrop, null, loss.Detail(arrangement));
 
         foreach (var level in arrangement.Levels)
         {
@@ -425,10 +465,13 @@ public sealed class ChartExportValidator
 
     private void ValidateVocals(ChartProject project, VocalTrack track, List<ExportValidationFinding> findings)
     {
+        CheckLineOverlap(project, track, findings);
         foreach (var phrase in track.Phrases)
         {
-            foreach (var lyric in phrase.Lyrics)
+            CheckLyricOrder(project, track, phrase, findings);
+            for (var i = 0; i < phrase.Lyrics.Count; i++)
             {
+                var lyric = phrase.Lyrics[i];
                 // "-"/"+" markers are appended on export, reserve one byte.
                 var byteCount = Encoding.UTF8.GetByteCount(lyric.Text.TrimEnd(' ')) + 1;
                 if (byteCount > MaxLyricBytes)
@@ -440,7 +483,69 @@ public sealed class ChartExportValidator
                     lyric.Position.GetPositionMs(project.Beats),
                     lyric.Text));
                 }
+
+                CheckMarkerText(project, track, phrase, i, findings);
             }
+        }
+    }
+
+    /// <summary>
+    ///     Text that literally ends in a structure marker without the structure it stands for
+    ///     cannot survive the vocals XML: RS2014 has no escape, so the reader takes a trailing
+    ///     <c>+</c> as a line end and a trailing <c>-</c> as a word part. "a+" inside a line
+    ///     comes back as a new line break; "a-" that joins no word comes back joined to the next
+    ///     syllable, and a word part "a-" comes back as "a". A line end is safe — the writer
+    ///     appends its own <c>+</c> after the text, by the writer's own line rule (the flag or the
+    ///     last syllable of the phrase). The check asks the encoder itself whether the written
+    ///     text reads back, so the two cannot drift. An ERROR, as the game would show other lines
+    ///     or other text than the editor.
+    /// </summary>
+    private static void CheckMarkerText(ChartProject project, VocalTrack track, LyricPhrase phrase, int index,
+        List<ExportValidationFinding> findings)
+    {
+        if (!RsVocalLyricEncoding.LosesText(phrase, index)) return;
+        var lyric = phrase.Lyrics[index];
+        findings.Add(new ExportValidationFinding(track.Name, ExportFindingSeverity.Error, KeyLyricMarkerText,
+            lyric.Position.GetPositionMs(project.Beats), lyric.Text));
+    }
+
+    /// <summary>
+    ///     A line whose syllables are not in time order cannot ship: the package sorts every
+    ///     vocal by time, so the game would show different lines than the editor. An ERROR.
+    /// </summary>
+    private static void CheckLyricOrder(ChartProject project, VocalTrack track, LyricPhrase phrase,
+        List<ExportValidationFinding> findings)
+    {
+        for (var i = 1; i < phrase.Lyrics.Count; i++)
+        {
+            if (phrase.Lyrics[i].Position >= phrase.Lyrics[i - 1].Position) continue;
+            findings.Add(new ExportValidationFinding(track.Name, ExportFindingSeverity.Error, KeyLyricsOutOfOrder,
+                phrase.Lyrics[i].Position.GetPositionMs(project.Beats),
+                string.Join(" ", phrase.Lyrics.Select(l => l.Text))));
+            return;
+        }
+    }
+
+    /// <summary>
+    ///     Two lines that overlap in time cannot ship either: the package carries one vocal track
+    ///     and sorts its vocals by time, so the syllables of the two lines would interleave, while
+    ///     the vocals XML keeps each line together in the order of its first syllable. The same
+    ///     ERROR, reported on the later line.
+    /// </summary>
+    private static void CheckLineOverlap(ChartProject project, VocalTrack track, List<ExportValidationFinding> findings)
+    {
+        FractionalPosition? latest = null;
+        foreach (var phrase in track.Phrases.Where(p => p.Lyrics.Count > 0).OrderBy(p => p.Lyrics.Min(l => l.Position)))
+        {
+            var first = phrase.Lyrics.Min(l => l.Position);
+            if (latest.HasValue && first < latest.Value)
+            {
+                findings.Add(new ExportValidationFinding(track.Name, ExportFindingSeverity.Error, KeyLyricsOutOfOrder,
+                    first.GetPositionMs(project.Beats), string.Join(" ", phrase.Lyrics.Select(l => l.Text))));
+            }
+
+            var last = phrase.Lyrics.Max(l => l.Position);
+            if (!latest.HasValue || last > latest.Value) latest = last;
         }
     }
 
@@ -449,7 +554,7 @@ public sealed class ChartExportValidator
     /// <summary>Referenced tone keys (base + slots) that have no matching
     /// <see cref="ChartProject.ToneDefinitions"/> entry. Matching is trim- and
     /// case-tolerant like the in-game-tone coordinator's key normalization.</summary>
-    private static IEnumerable<string> MissingToneDefinitions(
+    internal static IEnumerable<string> MissingToneDefinitions(
         ChartProject project, string toneBase, string[] slots)
     {
         var defined = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

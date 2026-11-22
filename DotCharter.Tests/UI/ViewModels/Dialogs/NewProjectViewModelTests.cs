@@ -1,4 +1,5 @@
 ﻿using DotCharter.Core.Domain.Vocals;
+using DotCharter.Services.Editing;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.Services.Import.Audio;
 using DotCharter.Services.Infrastructure.Documents;
@@ -71,7 +72,8 @@ public sealed class NewProjectViewModelTests : IDisposable
         public Task LoadSilentTransportAsync(double projectLengthMs) => Task.CompletedTask;
 
         public Task OpenProject() => Task.CompletedTask;
-        public Task<bool> SaveProjectAsync() => Task.FromResult(true);
+        public bool HasUnsavedWork() => IsProjectDirty;
+        public Task<bool> SaveProjectAsync(SaveInitiator initiator) => Task.FromResult(true);
         public Task<bool> SaveProjectAsAsync() => Task.FromResult(true);
         public IReadOnlyList<RecentProjectEntry> GetRecentProjects() => [];
         public event Action? RecentProjectsChanged { add { } remove { } }
@@ -88,6 +90,115 @@ public sealed class NewProjectViewModelTests : IDisposable
         public void MarkProjectDirty() => DirtyMarks++;
         public event Action? ProjectDirtyChanged { add { } remove { } }
         public void Dispose() { }
+    }
+
+    // ---- DLC Builder fields (#292) -------------------------------------------
+
+    [Fact]
+    public void TheSortNamesAndDlcKey_ArePrefilledFromTheNames_AndFollowThemUntilEdited()
+    {
+        var h = new Harness();
+        h.Vm.StartWithoutAudioCommand.Execute(null);
+
+        h.Vm.Artist = "The Polkadot Stingray";
+        h.Vm.Title = "The Sakasama";
+        Assert.Equal(SongMetadataDefaults.ArtistSort("The Polkadot Stingray"), h.Vm.ArtistSort);
+        Assert.Equal(SongMetadataDefaults.TitleSort("The Sakasama"), h.Vm.TitleSort);
+        Assert.Equal(SongMetadataDefaults.DlcKey("The Polkadot Stingray", "The Sakasama"), h.Vm.DlcKey);
+
+        h.Vm.Title = "An Ice Wall";
+        Assert.Equal(SongMetadataDefaults.TitleSort("An Ice Wall"), h.Vm.TitleSort);
+
+        // An edited field stops following.
+        h.Vm.TitleSort = "Wall, Ice";
+        h.Vm.Title = "Ice Wall II";
+        Assert.Equal("Wall, Ice", h.Vm.TitleSort);
+    }
+
+    [Fact]
+    public async Task Create_StoresOnlyWhatWasAuthored_AndTheAuthorOverridesTheDefault()
+    {
+        var h = new Harness();
+        h.Storage.NextFolder = _tempDir;
+        h.Vm.StartWithoutAudioCommand.Execute(null);
+        h.Vm.Artist = "The Polkadot Stingray";
+        h.Vm.Title = "The Sakasama";
+        h.Vm.AlbumSort = "Wall, Ice";
+        h.Vm.DlcKey = "DCMyOwnKey1";
+        h.Vm.Version = "4";
+        h.Vm.Charter = "Zed";
+
+        await h.CreateAsync();
+
+        var chart = h.State.ActiveProject!.Chart;
+        Assert.Equal("", chart.TitleSort);          // left at its derived value: blank, keeps following
+        Assert.Equal("Wall, Ice", chart.AlbumSort); // authored
+        Assert.Equal("DCMyOwnKey1", chart.DlcKey);
+        Assert.Equal("4", chart.Version);
+        Assert.Equal("Zed", chart.Charter);
+    }
+
+    [Fact]
+    public void ANonLatinMainName_OffersToMoveToTheJapaneseField()
+    {
+        var h = new Harness();
+        h.Vm.StartWithoutAudioCommand.Execute(null);
+        Assert.False(h.Vm.HasOriginalScriptOffer);
+        Assert.False(h.Vm.ShowJapaneseFields);
+
+        h.Vm.Artist = "藤川千愛";
+        h.Vm.Title = "Chiai song";
+        Assert.True(h.Vm.HasOriginalScriptOffer);
+
+        h.Vm.MoveToOriginalScriptCommand.Execute(null);
+
+        Assert.Equal("藤川千愛", h.Vm.JapaneseArtist);
+        Assert.Equal("", h.Vm.Artist);       // no online name yet: the charter types the Latin one
+        Assert.Equal("Chiai song", h.Vm.Title);
+        Assert.True(h.Vm.ShowJapaneseFields);
+        Assert.False(h.Vm.HasOriginalScriptOffer);
+    }
+
+    [Fact]
+    public async Task NewProjectWithAudio_OffersTheTuningCorrection()
+    {
+        var h = new Harness();
+        h.Storage.NextFolder = _tempDir;
+        var source = Path.Combine(_tempDir, "source.wav");
+        File.WriteAllBytes(source, [0]);
+        var details = new NewProjectDetails("Band", "Song", "", "", "", "", "", "", null, source);
+        var services = new ChartEditDialogServices(h.Editor, new HistoryService(new FakeAppLogger()), h.State, h.Config,
+            FakeLocalization.English(), new FakeAppLogger());
+        var offer = new ReferencePitchOffer(new FixedPitch(-31), services);
+        var launcher = new NewProjectLauncher(new AnsweringDialogs(details), h.Creator, h.State, offer);
+
+        await launcher.OpenAsync();
+
+        Assert.IsType<StatusMessageAction>(h.State.MainDisplayAction);
+    }
+
+    private sealed class FixedPitch(double cents) : DotCharter.Services.Audio.Tuning.IReferencePitchService
+    {
+        public Task<DotCharter.Services.Audio.Tuning.ReferencePitchCheck> MeasureAsync(bool bass, double authoredCentOffset,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(DotCharter.Services.Audio.Tuning.ReferencePitchCheck.From(
+                new DotCharter.Analysis.Tuning.ReferencePitchEstimate(cents, 0.8, 500, 60), authoredCentOffset,
+                DotCharter.Services.Editing.Tempo.RecordingAlignment.RecordingAlignmentSource.Mix));
+    }
+
+    private sealed class AnsweringDialogs(NewProjectDetails answer) : DotCharter.Presentation.Dialogs.IDialogs
+    {
+        public bool HasOpenDialog => false;
+
+        public event EventHandler<DotCharter.Presentation.Dialogs.DialogChange>? Changed { add { } remove { } }
+
+        public Task<TResult?> ShowAsync<TContract, TResult>(Action<TContract>? init = null)
+            where TContract : class, DotCharter.Presentation.Dialogs.IDialogScreen<TResult> =>
+            Task.FromResult((TResult?)(object?)answer);
+
+        public Task<bool> MessageAsync(string title, string message, bool isConfirmation = false) => Task.FromResult(false);
+
+        public bool CloseTop() => false;
     }
 
     private sealed class Harness

@@ -3,7 +3,7 @@ namespace DotCharter.Tone.Audio.Vst.Sandbox;
 /// <summary>
 /// Managed mirror of the shared-memory bridge layout defined in
 /// <c>JuceSharp/src/JuceSharp.Native/include/dotcharter_vst_bridge.h</c>
-/// (bridge version 3). The native side pins these numbers with
+/// (bridge version 4). The native side pins these numbers with
 /// <c>static_assert</c>s; the managed test-suite pins them here — if either
 /// side drifts, one of the two builds breaks instead of the bridge silently
 /// corrupting audio.
@@ -27,15 +27,27 @@ namespace DotCharter.Tone.Audio.Vst.Sandbox;
 /// would ignore the offsets and play every scheduled note at sample 0 of the
 /// block that carried it, so the version moved and both sides refuse the mix.
 /// </para>
+/// <para>
+/// <b>v4.</b> Sandboxed chain plugins belong to a seat: a seat-routing
+/// block is APPENDED after the MIDI-timing block (<see cref="OffSeatRouting"/>).
+/// The parent writes the seat each request is for, the child publishes which
+/// seats hold a chain plugin, and the child runs only the requested seat's
+/// chain (the instrument only on seat 0). Every v3 offset is unchanged;
+/// <see cref="TotalBytes"/> includes <see cref="SeatRoutingBytes"/>. Both sides
+/// reject a layout that cannot route effects to the owning seat.
+/// </para>
 /// </summary>
 public static class VstSandboxLayout
 {
     public const uint Magic = 0x44435642; // 'DCVB'
-    public const uint BridgeVersion = 3;
+    public const uint BridgeVersion = 4;
 
     public const int MaxChannels = 2;
     public const int MaxBlockFrames = 8192;
     public const int MaxMidiEvents = 128;
+
+    /// <summary>v4: seats the bridge routes (the engine's player cap).</summary>
+    public const int MaxSeats = 4;
 
     // Header field offsets (bytes from the start of the mapping).
     public const int OffMagic = 0;
@@ -43,6 +55,26 @@ public static class VstSandboxLayout
     public const int OffMaxBlockFrames = 8;
     public const int OffMaxChannels = 12;
     public const int OffRequestSeq = 16;
+
+    /// <summary>
+    /// Mirror of <c>dcvb::kRequestWriting</c>: the value the parent stores in
+    /// <see cref="OffRequestSeq"/> BEFORE the first payload byte of a request and
+    /// replaces with the new sequence after the last, so the child can tell a
+    /// payload it copied whole from one overwritten mid-copy. It is never a
+    /// sequence (<see cref="NextRequestSeq"/>), so no response can equal it.
+    /// </summary>
+    public const uint RequestWriting = 0xFFFFFFFFu;
+
+    /// <summary>
+    /// Mirror of <c>dcvb::nextRequestSeq</c>: the sequence after
+    /// <paramref name="seq"/>, never 0 (a mapping nobody posted to) and never
+    /// <see cref="RequestWriting"/>.
+    /// </summary>
+    public static uint NextRequestSeq(uint seq)
+    {
+        unchecked { seq++; }
+        return seq is 0u or RequestWriting ? 1u : seq;
+    }
     public const int OffResponseSeq = 20;
     public const int OffHeartbeat = 24;
     public const int OffSampleRate = 28;
@@ -95,7 +127,18 @@ public static class VstSandboxLayout
     public const int OffMidiOffsets = OffMidiTiming + sizeof(long);
 
     public const int MidiTimingBytes = sizeof(long) + MaxMidiEvents * sizeof(uint);
-    public const int TotalBytes = OffMidiTiming + MidiTimingBytes;
+
+    /// <summary>v4: start of the seat-routing block, right after the MIDI-timing block.</summary>
+    public const int OffSeatRouting = OffMidiTiming + MidiTimingBytes;
+
+    /// <summary>v4: <c>uint32</c>, the seat whose chain the request runs (parent writes).</summary>
+    public const int OffRequestSeat = OffSeatRouting;
+
+    /// <summary>v4: <c>uint32</c> bit mask, bit s set when seat s holds a chain plugin (child writes).</summary>
+    public const int OffSeatChainMask = OffSeatRouting + sizeof(uint);
+
+    public const int SeatRoutingBytes = 2 * sizeof(uint);
+    public const int TotalBytes = OffSeatRouting + SeatRoutingBytes;
 
     public const uint ChildStarting = 0;
     public const uint ChildReady = 1;

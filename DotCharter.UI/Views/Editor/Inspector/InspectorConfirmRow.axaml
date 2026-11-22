@@ -1,0 +1,27 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:inspector="using:DotCharter.UI.ViewModels.Editor.Inspector"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.InspectorConfirmRow"
+             x:DataType="inspector:InspectorPendingAction"
+             IsVisible="{Binding IsPending}">
+    <!-- Design D's inline confirmation under a card's buttons: the question, then Confirm and Cancel. -->
+    <Border Theme="{StaticResource ColumnFlowFrame}" Classes="ColumnFlowFrame">
+        <StackPanel Spacing="{StaticResource FireSpaceXs}">
+            <TextBlock x:Name="ConfirmSentence" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowBody" TextWrapping="Wrap"
+                       Text="{Binding Sentence}" />
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+                <Button Grid.Column="0" x:Name="ConfirmYes" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton ColumnFlowPrimary"
+                        HorizontalAlignment="Stretch"
+                        Content="{localization:Loc Inspector_Confirm}"
+                        AutomationProperties.Name="{localization:Loc Inspector_Confirm}"
+                        Command="{Binding ConfirmCommand}" />
+                <Button Grid.Column="1" x:Name="ConfirmNo" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                        HorizontalAlignment="Stretch"
+                        Content="{localization:Loc Action_Cancel}"
+                        AutomationProperties.Name="{localization:Loc Action_Cancel}"
+                        Command="{Binding CancelCommand}" />
+            </Grid>
+        </StackPanel>
+    </Border>
+</UserControl>

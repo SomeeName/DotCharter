@@ -138,14 +138,52 @@ public sealed class UpdateCheckFlowTests
         Assert.Equal("1.2.3", flow.CurrentVersionText);
     }
 
+    /// <summary>The positive control for the case below: the same flow, the same
+    /// grace released, and the switch absent, DOES check.</summary>
     [Fact]
-    public void TheStartupCheck_IsDisabledByTheSwitch()
+    public async Task TheStartupCheck_ChecksOnceItsGraceEnds()
+    {
+        var (flow, service, _, _) = Build(UpdateCheckStatus.UpToDate);
+        await RunStartupCheckAsync(flow, switchValue: null);
+
+        Assert.Equal(1, service.Checks);
+    }
+
+    /// <summary>#607: this used to assert zero checks straight after the call, while
+    /// the product waits five seconds before checking even WITHOUT the switch, so a
+    /// switch that did nothing passed; and it left the process-wide switch set.
+    /// Now the grace is injected and released, the scheduled check is awaited out,
+    /// and the switch is restored.</summary>
+    [Fact]
+    public async Task TheStartupCheck_IsDisabledByTheSwitch()
     {
         var (flow, service, _, _) = Build(UpdateCheckStatus.UpdateAvailable, StubUpdateService.Newer);
-        AppContext.SetSwitch(UpdateCheckFlow.DisableStartupCheckSwitch, true);
-
-        flow.StartStartupCheck();
+        await RunStartupCheckAsync(flow, switchValue: true);
 
         Assert.Equal(0, service.Checks);
+    }
+
+    /// <summary>Starts the startup check with <paramref name="switchValue" /> set (null:
+    /// the switch as the run has it, which no other test sets), ends its grace at once
+    /// and awaits whatever it scheduled. The switch is restored on every path.</summary>
+    private static async Task RunStartupCheckAsync(UpdateCheckFlow flow, bool? switchValue)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        flow.StartupGrace = () => Task.CompletedTask;
+        var had = AppContext.TryGetSwitch(UpdateCheckFlow.DisableStartupCheckSwitch, out var previous);
+        try
+        {
+            if (switchValue is { } value) AppContext.SetSwitch(UpdateCheckFlow.DisableStartupCheckSwitch, value);
+            else Assert.False(had && previous, "the run already has the startup check disabled");
+            flow.StartStartupCheck();
+        }
+        finally
+        {
+            // AppContext cannot forget a switch: an absent one is restored as "off",
+            // which is what an absent one means to the flow.
+            AppContext.SetSwitch(UpdateCheckFlow.DisableStartupCheckSwitch, had && previous);
+        }
+
+        await BoundedWait.ForAsync(flow.StartupCheck, "the scheduled startup check", ct);
     }
 }

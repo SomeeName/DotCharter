@@ -28,9 +28,6 @@ public partial class App
     {
         // Main UI Panels (Singletons are fine here because they exist permanently)
         services.AddSingleton<StemSeparationViewModel>();
-        // The same run as a seam a screen can drive: chart from audio's Separate stems.
-        services.AddSingleton<DotCharter.Services.Audio.StemSeparation.ISongStemSeparation>(sp =>
-            sp.GetRequiredService<StemSeparationViewModel>());
         services.AddSingleton<HelpMenuViewModel>();
         services.AddSingleton<ImportMenuViewModel>();
         // The Tone designer's live edit goes to the shell's tone rig, which owns
@@ -39,10 +36,9 @@ public partial class App
         AddToneRigViewModel(services);
         services.AddSingleton<ExportMenuViewModel>();
         services.AddSingleton<ProjectMenuViewModel>();
-        services.AddSingleton<ShellDialogsViewModel>();
+        FhpInputModule.Register(services);
         services.AddSingleton<AiChartReviewViewModel>();
         services.AddSingleton<AiChartViewModel>();
-        services.AddSingleton<DraftMergeReviewViewModel>();
         services.AddSingleton<ViewModels.Editor.AiChatDockViewModel>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<StatusBarViewModel>();
@@ -130,6 +126,7 @@ public partial class App
                 sp.GetService<IAudioPlaybackService>() as DotCharter.Tone.Audio.Reamp.IReampEngine,
                 new DotCharter.Tone.Audio.Reamp.DiTakeLibrary(),
                 sp.GetRequiredService<ILocalizationService>(),
+                sp.GetRequiredService<IRigConfigService>(),
                 sp.GetService<IShellLauncher>(),
                 sp.GetService<IFileStorageService>(),
                 sp.GetService<IAppLogger>()));
@@ -220,25 +217,24 @@ public partial class App
         services.AddSingleton<DotCharter.Services.Update.UpdateCheckFlow>();
         // The four file importers' doors (picker → read off the UI thread →
         // hosted dialog), the EOF project creation that follows its dialog, the
-        // Guitar Pro apply half, and the chart-from-audio analysis the
-        // Presentation layer cannot reference.
+        // Guitar Pro apply half.
         services.AddSingleton<EofImportLauncher>();
         services.AddSingleton<DotCharter.Presentation.Screens.Dialogs.MidiImportLauncher>();
         services.AddSingleton<RsXmlImportLauncher>();
         services.AddSingleton<GpImportLauncher>();
         services.AddSingleton<DotCharter.Services.Import.Eof.EofProjectCreator>();
         services.AddSingleton<DotCharter.Services.Import.GuitarPro.GpImportApplier>();
-        // ONE locator: the analyzer listens to the stem it finds, and the dialog asks it
-        // whether to offer a separation. It reads the app's own stem cache.
-        services.AddSingleton<DotCharter.Services.Import.Audio.IChartFromAudioStemLocator>(_ =>
-            new DotCharter.Services.Import.Audio.ChartFromAudioStemLocator());
-        services.AddSingleton<DotCharter.Services.Import.Audio.IChartFromAudioAnalyzer,
-            DotCharter.Services.Import.Audio.ChartFromAudioAnalyzer>();
         services.AddSingleton<MessageDialogViewModel>();
         // The app-wide message box as the Services-side coordinators see it
         // (the project session's failed-save and replace-audio prompts).
         services.AddSingleton<IMessagePrompt>(sp => sp.GetRequiredService<MessageDialogViewModel>());
 
+        AddKeybindServices(services);
+    }
+
+    /// <summary>The chart keybind handler, its registry and dispatch seams, and the MIDI controller binds.</summary>
+    private static void AddKeybindServices(IServiceCollection services)
+    {
         // Keybinds
         services.AddSingleton<ChartKeybindHandler>(sp =>
         {

@@ -4,19 +4,21 @@ using DotCharter.Presentation.Contracts.Shell;
 
 namespace DotCharter.UI.ViewModels.Shell;
 
-/// <summary>
-///     <see cref="IShellDestinations" /> on the window's view model.
-///     <para>
-///         A screen in <c>DotCharter.Presentation</c> cannot reach this type —
-///         that project may not see Avalonia — so it declares the seam and the
-///         shell implements it, the same shape as <c>IChartEditorSurface</c>
-///         and <c>IMessagePrompt</c>. Every member writes state the activity
-///         rail is already bound to, so a screen navigating and a user clicking
-///         the rail are the same event.
-///     </para>
-/// </summary>
+/// <summary>Routes screen navigation through the shell state bound to the activity rail.</summary>
 public partial class MainWindowViewModel : IShellDestinations
 {
+    private void OnProjectOpened()
+    {
+        PlayMode.EndForProjectOpen();
+        ShowEditor();
+    }
+
+    private void ShowEditor()
+    {
+        IsGameplayPresentation = false;
+        SelectedMainTabIndex = ChartEditorTabIndex;
+    }
+
     public void Go(ShellDestination destination)
     {
         // Home's Play opens the song library: Start is behind Home, not ahead of it.

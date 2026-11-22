@@ -59,6 +59,10 @@ internal sealed class AudioHealthMonitor
 
     // Since-start + since-last-heartbeat tallies.
     private long _healthTotalDropouts;
+
+    /// <summary>Dropout bursts detected since start; the status rail turns its audio dot into the full
+    /// readout while this moves. Read from the UI thread.</summary>
+    internal long TotalDropouts => Interlocked.Read(ref _healthTotalDropouts);
     private double _healthWorstStalenessMs;
     private long _hbDropouts;
     private double _hbWorstStalenessMs;
@@ -141,7 +145,7 @@ internal sealed class AudioHealthMonitor
     {
         _hbLastTicks = Stopwatch.GetTimestamp();
         RunPollLoop(_healthStop, HealthPollIntervalMs, HealthPoll,
-            ex => _logger?.Warning(AppLogCategory.Audio, $"Audio health poll failed: {ex.Message}"));
+            ex => _logger?.Warning(AppLogCategory.Audio, "Audio health poll failed", ex));
     }
 
     /// <summary>

@@ -116,7 +116,7 @@ public sealed partial class RunResultsViewModel(ILocalizationService localizatio
         {
             ResultSections.Add(new SectionRow(
                 s.Name,
-                TimeSpan.FromMilliseconds(s.StartMs).ToString(@"m\:ss"),
+                ElapsedTimeLabel.Format(s.StartMs),
                 s.WasPlayed ? PercentText.Format(s.Accuracy, 0) : "—",
                 s.Misses, s.WasPlayed, s.StartMs,
                 s.StartBar is { } from

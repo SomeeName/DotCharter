@@ -1,12 +1,8 @@
-﻿// Partial: out-of-process VST sandbox (0.12.0) — plugin hosting in a child
-// process (juce_vst_host.exe), audio bridged over shared memory by the
-// native engine (ABI v19), control over a named pipe. See
-// JuceAudioPlaybackService.cs for the shared state and locking rules.
+// Partial: per-seat sandbox routing, mode switching and recovery replay (ABI v50).
 using System.Runtime.InteropServices;
 using DotCharter.Tone.Audio.Midi;
 using DotCharter.Tone.Audio.Vst.Sandbox;
 using JuceSharp;
-using Timer = System.Timers.Timer;
 
 namespace DotCharter.Tone.Audio;
 
@@ -15,21 +11,56 @@ public sealed partial class JuceAudioPlaybackService
     // Feature flag (RigConfig.OutOfProcessVst). Flipped by ApplySandboxMode;
     // read on many paths, hence volatile.
     private volatile bool _outOfProcessVst;
+    private readonly Func<IJuceAudioEngine?> _sandboxEngine;
+    private readonly Func<IVstSandboxHost> _sandboxHostFactory = () => new VstSandboxHost();
+    private readonly Func<TimeSpan, Task> _sandboxRestartDelay = delay => Task.Delay(delay);
+    private readonly IVstSandboxStopWait _sandboxStopWait = new VstSandboxStopWait();
+    private readonly TimeSpan _sandboxHealthInterval = VstSandboxRecoveryLink.DefaultHealthInterval;
 
-    // All fields below are guarded by _sandboxGate unless noted.
+    internal JuceAudioPlaybackService(DotCharter.Localization.ILocalizationService localization,
+        Func<IJuceAudioEngine?> engine, Func<IVstSandboxHost> createHost,
+        Func<TimeSpan, Task>? restartDelay, IVstSandboxStopWait? stopWait,
+        IAppLogger? logger, TimeSpan? healthInterval = null) : this(localization, logger)
+    {
+        _sandboxEngine = engine;
+        _sandboxHostFactory = createHost;
+        if (restartDelay != null) _sandboxRestartDelay = restartDelay;
+        if (stopWait != null) _sandboxStopWait = stopWait;
+        if (healthInterval != null) _sandboxHealthInterval = healthInterval.Value;
+        _outOfProcessVst = true;
+    }
+
+    // Each context owns its live slots, desired state and recovery policy.
     private readonly object _sandboxGate = new();
-    private VstSandboxHost? _sandbox;
-    private readonly VstSandboxChainState _sandboxDesired = new();
-    private readonly Dictionary<Guid, (string Path, bool Bypass)> _sandboxSlots = [];
-    private volatile bool _sandboxInstrumentLoaded;
-    private bool _sandboxGaveUp;
+    private readonly VstSandboxSeat[] _sandboxSeats;
+    private bool SandboxInstrumentLoaded => _sandboxSeats[0].InstrumentLoaded;
 
-    private readonly VstSandboxRestartPolicy _sandboxRestartPolicy = new();
-    private readonly System.Diagnostics.Stopwatch _sandboxClock = System.Diagnostics.Stopwatch.StartNew();
-    private int _sandboxRestartInFlight;
-    private Timer? _sandboxHealthTimer;
-    private uint _sandboxLastHeartbeat;
-    private bool _sandboxHeartbeatPrimed;
+    private VstSandboxSeat[] CreateSandboxSeats()
+    {
+        return Enumerable.Range(0, JuceAudioEngine.MaxPlayers).Select(player =>
+        {
+            var seat = new VstSandboxSeat(player, _sandboxGate, () => _sandboxEngine(), () => _sandboxHostFactory(), _logger);
+            seat.EditorClosed += slot => OnSandboxEditorClosed(seat, slot);
+            seat.Recovery = new VstSandboxRecovery(_sandboxGate, seat.Desired, _vstGate, _logger, _localization, _statusBar,
+                new VstSandboxRecoveryLink
+                {
+                    TaskId = $"vst-sandbox-restart-{player}",
+                    IsActive = () => !IsDisposing && _outOfProcessVst && !seat.Desired.IsEmpty,
+                    IsCurrentHost = host => { lock (_sandboxGate) return ReferenceEquals(seat.Host, host); },
+                    MarkGaveUp = () => { lock (_sandboxGate) seat.GaveUp = true; },
+                    NotifySlotsUnloaded = () => NotifySlotsUnloadedAfterCrash(seat),
+                    LiveSlotIds = seat.LiveSlotIds,
+                    CurrentHost = () => { lock (_sandboxGate) return seat.Host; },
+                    ReadHeartbeat = seat.ReadHeartbeat,
+                    HealthInterval = () => _sandboxHealthInterval,
+                    ShutdownLocked = () => seat.ShutdownAsync(disarmBridge: true),
+                    RebuildLocked = () => RebuildSandboxLockedAsync(seat),
+                }, delay => _sandboxRestartDelay(delay));
+            return seat;
+        }).ToArray();
+    }
+
+    private VstSandboxSeat? SandboxSlotOwner(Guid id) => _sandboxSeats.FirstOrDefault(seat => seat.Slots.ContainsKey(id));
 
     /// <summary>
     /// True when the app may take the clean (non-TerminateNow) shutdown
@@ -77,6 +108,7 @@ public sealed partial class JuceAudioPlaybackService
             lock (_gate)
             {
                 chain = _guitarChain
+                    .OrderBy(kv => _guitarChainOrder.IndexOf(kv.Key))
                     .Select(kv => new VstChainEntry
                     {
                         Id = kv.Key, PluginPath = kv.Value.Path,
@@ -95,23 +127,26 @@ public sealed partial class JuceAudioPlaybackService
             // Tear down the in-proc plugins first (strict order, engine alive).
             TearDownInProcPluginsForModeSwitch();
             _outOfProcessVst = true;
-            _sandboxRestartPolicy.Reset();
-            lock (_sandboxGate) _sandboxGaveUp = false;
+            foreach (var seat in _sandboxSeats)
+            {
+                seat.Recovery.ResetBudget();
+                lock (_sandboxGate) seat.GaveUp = false;
+            }
         }
         else
         {
             lock (_sandboxGate)
             {
-                chain = _sandboxDesired.Chain.Select(e => new VstChainEntry
+                chain = _sandboxSeats.SelectMany(seat => seat.Desired.Chain).Select(e => new VstChainEntry
                 { Id = e.Id, PluginPath = e.PluginPath, Bypass = e.Bypass, Player = e.Player }).ToList();
-                instrumentPath = _sandboxDesired.InstrumentPath;
+                instrumentPath = _sandboxSeats[0].Desired.InstrumentPath;
             }
             _outOfProcessVst = false;
             _ = Task.Run(async () =>
             {
-                await _vstGate.WaitAsync().ConfigureAwait(false);
+                if (!await _vstGate.TryEnterAsync().ConfigureAwait(false)) return;
                 try { await ShutdownSandboxLockedAsync(disarmBridge: true).ConfigureAwait(false); }
-                catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, $"Sandbox shutdown on mode switch failed: {ex.Message}"); }
+                catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, "Sandbox shutdown on mode switch failed", ex); }
                 finally { _vstGate.Release(); }
             });
         }
@@ -131,7 +166,7 @@ public sealed partial class JuceAudioPlaybackService
     {
         _ = Task.Run(async () =>
         {
-            await _vstGate.WaitAsync().ConfigureAwait(false);
+            if (!await _vstGate.TryEnterAsync().ConfigureAwait(false)) return;
             try
             {
                 try { DetachInstrumentLocked(); } catch { /* ignored */ }
@@ -153,143 +188,26 @@ public sealed partial class JuceAudioPlaybackService
         });
     }
 
-    // ------------------------------------------------------------------
-    //  Sandbox lifecycle (caller holds _vstGate unless noted)
-    //
-    //  Every pipe round trip is AWAITED through VstSandboxCalls, never
-    //  blocked on: _vstGate is a SemaphoreSlim, so a worker may hold it
-    //  across an await (it serializes VST work against the engine swap,
-    //  whatever thread the continuation lands on). No Monitor — _gate,
-    //  _sandboxGate, _midiGate — is ever held across one.
-    //  SandboxBlockingWaitLintTests forbids a blocking wait in this file.
-    // ------------------------------------------------------------------
+    /// <summary>Stops all seat children and disarms every seat. Caller holds _vstGate.</summary>
+    private Task ShutdownSandboxLockedAsync(bool disarmBridge)
+        => VstSandboxShutdown.StopAsync(_sandboxSeats, disarmBridge, _sandboxStopWait);
 
-    /// <summary>Spawn the child (if needed) and arm the native bridge.
-    /// Caller holds _vstGate; engine must be non-null.</summary>
-    private async Task<VstSandboxHost> EnsureSandboxLockedAsync(JuceAudioEngine engine)
+    /// <summary>Re-arms surviving children synchronously; pipe preparation waits behind _vstGate.</summary>
+    private void RearmSandboxAfterEngineSwapLocked(IJuceAudioEngine engine)
     {
-        lock (_sandboxGate)
-        {
-            if (_sandbox is { IsRunning: true }) return _sandbox;
-            if (_sandboxGaveUp)
-            {
-                // The crash budget was exhausted earlier, but a fresh
-                // user-driven plugin request is an explicit "try again" —
-                // grant a new budget.
-                _sandboxGaveUp = false;
-                _sandboxRestartPolicy.Reset();
-            }
-        }
-
-        var host = new VstSandboxHost();
-        var sr = SafeRead(e => e.SampleRate) is var s and > 0 ? s : 44100;
-        var blk = SafeRead(e => e.BufferFrames) is var b and > 0 ? b : 512;
-
-        _logger?.Info(AppLogCategory.Audio,
-            $"Starting VST sandbox ({VstSandboxHost.ExecutableName}, sr={sr}, block={blk}).");
-        host.ChildLog += line => _logger?.Debug(AppLogCategory.Audio, $"[sandbox] {line}");
-        host.EditorClosedByUser += OnSandboxEditorClosed;
-        host.Exited += requested => { if (!requested) OnSandboxCrashed(host); };
-
-        try
-        {
-            // Bounded by the host (15 s connect + 10 s ping) and again here; a
-            // timeout throws into the catch, which kills the half-started child.
-            await host.StartAsync(sr, blk).WaitAsync(VstSandboxCalls.StartBound).ConfigureAwait(false);
-        }
-        catch
-        {
-            try { host.Dispose(); } catch { /* ignored */ }
-            throw;
-        }
-
-        if (!engine.SetRemoteBridge(host.ShmName, host.RequestEventName, host.ResponseEventName, true))
-        {
-            try { host.Dispose(); } catch { /* ignored */ }
-            throw new InvalidOperationException("Failed to arm the native shared-memory bridge.");
-        }
-
-        lock (_sandboxGate)
-        {
-            _sandbox = host;
-            _sandboxSlots.Clear();
-            _sandboxInstrumentLoaded = false;
-            _sandboxHeartbeatPrimed = false;
-        }
-        EnsureSandboxHealthTimer();
-        _logger?.Info(AppLogCategory.Audio,
-            $"VST sandbox running (pid={host.ChildProcessId?.ToString() ?? "?"}).");
-        return host;
-    }
-
-    /// <summary>Caller holds _vstGate.</summary>
-    private async Task ShutdownSandboxLockedAsync(bool disarmBridge)
-    {
-        // The health timer monitors THIS sandbox; without stopping it here,
-        // switching back to in-process VST hosting (or exhausting the crash
-        // budget) left a 3 s no-op timer ticking for the rest of the session —
-        // SandboxHealthTick early-returns on !_outOfProcessVst, so it did
-        // nothing except wake a pool thread twenty times a minute forever.
-        // EnsureSandboxLockedAsync re-arms it whenever a fresh host is spawned.
-        StopSandboxHealthTimer();
-        VstSandboxHost? host;
-        lock (_sandboxGate)
-        {
-            host = _sandbox;
-            _sandbox = null;
-            _sandboxSlots.Clear();
-            _sandboxInstrumentLoaded = false;
-        }
-        if (disarmBridge)
-        {
-            try { _engine?.SetRemoteBridge(null, null, null, false); } catch { /* ignored */ }
-        }
-        if (host != null)
-        {
-            await VstSandboxCalls.StopAsync(host).ConfigureAwait(false); // bounded; kills on overrun
-            try { host.Dispose(); } catch { /* ignored */ }
-        }
-    }
-
-    /// <summary>
-    /// Called from ReplaceEngineGated after a fresh engine is up: the child
-    /// (and its loaded plugins) survives the swap — re-arm the new engine's
-    /// bridge against the existing kernel object names and re-prepare the
-    /// child for the (possibly new) sample rate / block size.
-    /// Caller holds _vstGate — and, through ReplaceEngineCore, the
-    /// _engineConfigGate Monitor, so this stays SYNCHRONOUS: the bridge re-arm
-    /// is one native call. The "prepare" round trip (up to 30 s against a busy
-    /// child) is queued behind the gate the caller holds rather than run here,
-    /// so a slow child cannot stretch the device change that the UI is
-    /// waiting on. It is the same worker the in-place reconfigure uses.
-    /// </summary>
-    private void RearmSandboxAfterEngineSwapLocked(JuceAudioEngine engine)
-    {
-        VstSandboxHost? host;
-        lock (_sandboxGate) host = _sandbox;
-        if (host is not { IsRunning: true }) return;
-        try
-        {
-            if (!engine.SetRemoteBridge(host.ShmName, host.RequestEventName, host.ResponseEventName, true))
-                throw new InvalidOperationException("SetRemoteBridge returned false");
-            NotifySandboxEngineReconfigured();
-            if (_sandboxInstrumentLoaded) RebindSandboxInstrumentMidi(engine);
-            _logger?.Info(AppLogCategory.Audio, "VST sandbox bridge re-armed after engine swap.");
-        }
-        catch (Exception ex)
-        {
-            _logger?.Warning(AppLogCategory.Audio, $"Failed to re-arm sandbox bridge after engine swap: {ex.Message}");
-        }
+        foreach (var seat in _sandboxSeats) seat.Rearm(engine);
+        NotifySandboxEngineReconfigured();
+        if (SandboxInstrumentLoaded && engine is JuceAudioEngine native) RebindSandboxInstrumentMidi(native);
     }
 
     private async Task SendSandboxPrepareAsync(IVstSandboxChannel host)
     {
-        var sr = SafeRead(e => e.SampleRate);
-        var blk = SafeRead(e => e.BufferFrames);
+        var sr = _sandboxEngine()?.SampleRate ?? 0;
+        var blk = _sandboxEngine()?.BufferFrames ?? 0;
         if (sr <= 0 || blk <= 0) return;
         await VstSandboxCalls.TrySendAsync(host,
             new VstSandboxRequest { Op = "prepare", Sr = sr, Block = blk }, TimeSpan.FromSeconds(30),
-            ex => _logger?.Warning(AppLogCategory.Audio, $"Sandbox prepare({sr}/{blk}) failed: {ex.Message}"))
+            ex => _logger?.Warning(AppLogCategory.Audio, $"Sandbox prepare({sr}/{blk}) failed", ex))
             .ConfigureAwait(false);
     }
 
@@ -301,15 +219,18 @@ public sealed partial class JuceAudioPlaybackService
         if (!_outOfProcessVst) return;
         _ = Task.Run(async () =>
         {
-            await _vstGate.WaitAsync().ConfigureAwait(false);
+            if (!await _vstGate.TryEnterAsync().ConfigureAwait(false)) return;
             try
             {
-                VstSandboxHost? host;
-                lock (_sandboxGate) host = _sandbox;
-                if (host is { IsRunning: true } && _engine != null)
-                    await SendSandboxPrepareAsync(host).ConfigureAwait(false);
+                foreach (var seat in _sandboxSeats)
+                {
+                    IVstSandboxHost? host;
+                    lock (_sandboxGate) host = seat.Host;
+                    if (host is { IsRunning: true } && _sandboxEngine() != null)
+                        await SendSandboxPrepareAsync(host).ConfigureAwait(false);
+                }
             }
-            catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, $"Sandbox prepare after a device change failed: {ex.Message}"); }
+            catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, "Sandbox prepare after a device change failed", ex); }
             finally { _vstGate.Release(); }
         });
     }
@@ -336,46 +257,52 @@ public sealed partial class JuceAudioPlaybackService
     /// <summary>Sandbox counterpart of ApplyGuitarVstChainCore. Caller holds _vstGate.</summary>
     private async Task ApplySandboxGuitarChainCoreAsync(IReadOnlyList<VstChainEntry> entries)
     {
-        var engine = _engine;
+        var engine = _sandboxEngine();
         if (engine == null) return;
-        var host = await EnsureSandboxLockedAsync(engine).ConfigureAwait(false);
+        if (entries.Any(e => e.Player < 0 || e.Player >= _sandboxSeats.Length))
+            throw new ArgumentOutOfRangeException(nameof(entries));
 
-        // Phase 1: drop slots that are gone or whose plugin path changed.
-        List<Guid> toRemove;
+        await VstSandboxChainEdit.ApplyAsync(_sandboxGate, _sandboxSeats, entries,
+            UnloadSandboxSlotAsync, ApplySandboxSeatChainCoreAsync, _logger).ConfigureAwait(false);
+    }
+
+    private async Task UnloadSandboxSlotAsync(VstSandboxSeat seat, Guid id, bool removedEntirely)
+    {
+        if (seat.Host is { IsRunning: true } host)
+        {
+            var reply = await VstSandboxCalls.TrySendAsync(host,
+                new VstSandboxRequest { Op = "unload", Slot = id.ToString() }, TimeSpan.FromSeconds(30),
+                ex => _logger?.Warning(AppLogCategory.Audio, $"Sandbox unload({id}) failed", ex)).ConfigureAwait(false);
+            if (reply is not { Ok: true })
+                throw new IOException($"Sandbox unload({id}) was not acknowledged: {reply?.Error ?? "no reply"}.");
+        }
         lock (_sandboxGate)
         {
-            toRemove = _sandboxSlots.Keys
-                .Where(id =>
-                {
-                    var desired = entries.FirstOrDefault(e => e.Id == id);
-                    return desired == null
-                        || !string.Equals(desired.PluginPath, _sandboxSlots[id].Path, StringComparison.OrdinalIgnoreCase);
-                })
-                .ToList();
+            seat.Slots.Remove(id);
+            seat.Desired.PluginStates.Remove(id.ToString());
         }
-        foreach (var id in toRemove)
+        if (removedEntirely)
+            lock (_gate) _guitarPendingEditorOpen.Remove(id);
+        try { GuitarVstSlotLoadChanged?.Invoke(this, (id, false)); } catch { /* ignored */ }
+    }
+
+    private async Task ApplySandboxSeatChainCoreAsync(VstSandboxSeat seat, IReadOnlyList<VstChainEntry> entries)
+    {
+        if (entries.Count == 0)
         {
-            await VstSandboxCalls.TrySendAsync(host,
-                new VstSandboxRequest { Op = "unload", Slot = id.ToString() }, TimeSpan.FromSeconds(30),
-                ex => _logger?.Warning(AppLogCategory.Audio, $"Sandbox unload({id}) failed: {ex.Message}"))
-                .ConfigureAwait(false);
-            bool removedEntirely;
-            lock (_sandboxGate)
-            {
-                _sandboxSlots.Remove(id);
-                removedEntirely = entries.All(e => e.Id != id);
-            }
-            if (removedEntirely)
-                lock (_gate) _guitarPendingEditorOpen.Remove(id);
-            try { GuitarVstSlotLoadChanged?.Invoke(this, (id, false)); } catch { /* ignored */ }
+            await seat.StopIfEmptyAsync().ConfigureAwait(false);
+            return;
         }
+        var engine = _sandboxEngine();
+        if (engine == null) return;
+        var host = await seat.EnsureAsync(engine).ConfigureAwait(false);
 
         // Phase 2: load new slots / sync bypass on surviving ones.
         foreach (var entry in entries)
         {
-            (string Path, bool Bypass)? existing;
+            (string Path, bool Bypass, int Player)? existing;
             lock (_sandboxGate)
-                existing = _sandboxSlots.TryGetValue(entry.Id, out var e) ? e : null;
+                existing = seat.Slots.TryGetValue(entry.Id, out var e) ? e : null;
 
             if (existing is { } live)
             {
@@ -384,39 +311,35 @@ public sealed partial class JuceAudioPlaybackService
                     var ack = await VstSandboxCalls.TrySendAsync(host,
                         new VstSandboxRequest { Op = "bypass", Slot = entry.Id.ToString(), Value = entry.Bypass },
                         TimeSpan.FromSeconds(10),
-                        ex => _logger?.Warning(AppLogCategory.Audio, $"Sandbox bypass({entry.Id}) failed: {ex.Message}"))
+                        ex => _logger?.Warning(AppLogCategory.Audio, $"Sandbox bypass({entry.Id}) failed", ex))
                         .ConfigureAwait(false);
                     if (ack != null)
-                        lock (_sandboxGate) _sandboxSlots[entry.Id] = (live.Path, entry.Bypass);
+                        lock (_sandboxGate) seat.Slots[entry.Id] = (live.Path, entry.Bypass, live.Player);
                 }
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(entry.PluginPath)
-                || (!File.Exists(entry.PluginPath) && !Directory.Exists(entry.PluginPath)))
-            {
-                _logger?.Warning(AppLogCategory.Audio, $"VST3 chain (sandbox): missing plugin '{entry.PluginPath}'.");
-                continue;
-            }
+            if (seat.RejectedLoads.ShouldSkip(entry, _logger)) continue;
 
             // 180 s: a cold first-run scan of a big amp sim (BIAS FX, Helix)
             // takes tens of seconds. Awaited — no thread waits for it.
-            var response = await VstSandboxCalls.TrySendAsync(host, new VstSandboxRequest
-            {
-                Op = "load", Slot = entry.Id.ToString(), Path = entry.PluginPath, Bypass = entry.Bypass,
-            }, TimeSpan.FromSeconds(180),
-                ex => _logger?.Error(AppLogCategory.Audio, $"VST3 chain (sandbox): failed to load '{entry.PluginPath}': {ex.Message}"))
+            var response = await VstSandboxCalls.TrySendAsync(host, VstSandboxChainPlan.LoadRequest(entry),
+                TimeSpan.FromSeconds(180),
+                ex => _logger?.Error(AppLogCategory.Audio, $"VST3 chain (sandbox): failed to load '{entry.PluginPath}'", ex))
                 .ConfigureAwait(false);
             if (response == null) continue;
             if (response is not { Ok: true })
             {
+                seat.RejectedLoads.Remember(entry, response);
                 _logger?.Error(AppLogCategory.Audio,
                     $"VST3 chain (sandbox): child rejected '{entry.PluginPath}': {response.Error ?? "unknown error"}");
                 continue;
             }
 
             bool pendingEditorOpen;
-            lock (_sandboxGate) _sandboxSlots[entry.Id] = (entry.PluginPath, entry.Bypass);
+            lock (_sandboxGate) seat.Slots[entry.Id] = (entry.PluginPath, entry.Bypass, entry.Player);
+            if (!seat.IsReplaying)
+                await seat.Recovery.ReplayStateAsync(host, SnapshotSandboxSlotState(seat, entry.Id)).ConfigureAwait(false);
             lock (_gate) pendingEditorOpen = _guitarPendingEditorOpen.Remove(entry.Id);
             _logger?.Info(AppLogCategory.Audio,
                 $"VST3 chain (sandbox): added '{response.Name ?? Path.GetFileName(entry.PluginPath)}' (bypassed={entry.Bypass}).");
@@ -432,20 +355,26 @@ public sealed partial class JuceAudioPlaybackService
             Op = "reorder",
             Slots = entries.Select(e => e.Id.ToString()).ToArray(),
         }, TimeSpan.FromSeconds(10),
-            ex => _logger?.Warning(AppLogCategory.Audio, $"Sandbox reorder failed: {ex.Message}"))
+            ex => _logger?.Warning(AppLogCategory.Audio, "Sandbox reorder failed", ex))
             .ConfigureAwait(false);
 
+        await seat.StopIfEmptyAsync().ConfigureAwait(false);
+    }
+
+    private Dictionary<string, string> SnapshotSandboxSlotState(VstSandboxSeat seat, Guid id)
+    {
         lock (_sandboxGate)
         {
-            _sandboxDesired.Chain = entries.Select(e => new VstChainEntry
-            { Id = e.Id, PluginPath = e.PluginPath, Bypass = e.Bypass, Player = e.Player }).ToList();
+            var slot = id.ToString();
+            return seat.Desired.PluginStates.TryGetValue(slot, out var state)
+                ? new Dictionary<string, string> { [slot] = state } : [];
         }
     }
 
     /// <summary>Sandbox counterpart of the LoadInstrumentVst worker body. Caller holds _vstGate.</summary>
     private async Task LoadInstrumentVstSandboxCoreAsync(string? pluginPath, bool openEditorAfterLoad)
     {
-        var engine = _engine;
+        var engine = _sandboxEngine();
         if (engine == null) return;
 
         if (string.IsNullOrWhiteSpace(pluginPath))
@@ -454,13 +383,14 @@ public sealed partial class JuceAudioPlaybackService
             return;
         }
 
-        var host = await EnsureSandboxLockedAsync(engine).ConfigureAwait(false);
+        var seat = _sandboxSeats[0];
+        var host = await seat.EnsureAsync(engine).ConfigureAwait(false);
 
         bool alreadyLoaded;
         lock (_sandboxGate)
         {
-            alreadyLoaded = _sandboxInstrumentLoaded
-                && string.Equals(_sandboxDesired.InstrumentPath, pluginPath, StringComparison.OrdinalIgnoreCase);
+            alreadyLoaded = SandboxInstrumentLoaded
+                && string.Equals(_sandboxSeats[0].Desired.InstrumentPath, pluginPath, StringComparison.OrdinalIgnoreCase);
         }
 
         if (alreadyLoaded)
@@ -472,20 +402,25 @@ public sealed partial class JuceAudioPlaybackService
 
         var response = await VstSandboxCalls.TrySendAsync(host,
             new VstSandboxRequest { Op = "loadInstrument", Path = pluginPath }, TimeSpan.FromSeconds(180),
-            ex => _logger?.Warning(AppLogCategory.Audio, $"Failed to load instrument VST3 (sandbox) '{pluginPath}': {ex.Message}"))
+            ex => _logger?.Warning(AppLogCategory.Audio, $"Failed to load instrument VST3 (sandbox) '{pluginPath}'", ex))
             .ConfigureAwait(false);
-        if (response == null) return;
+        if (response == null)
+        {
+            await seat.StopIfEmptyAsync().ConfigureAwait(false);
+            return;
+        }
         if (response is not { Ok: true })
         {
             _logger?.Warning(AppLogCategory.Audio,
                 $"Instrument VST3 (sandbox) rejected '{pluginPath}': {response.Error ?? "unknown error"}");
+            await seat.StopIfEmptyAsync().ConfigureAwait(false);
             return;
         }
 
         lock (_sandboxGate)
         {
-            _sandboxInstrumentLoaded = true;
-            _sandboxDesired.InstrumentPath = pluginPath;
+            _sandboxSeats[0].InstrumentLoaded = true;
+            _sandboxSeats[0].Desired.InstrumentPath = pluginPath;
         }
         _instrumentIsAmpleGuitar = IsAmpleGuitarPath(pluginPath);
         _instrumentChannelsSetup = false;
@@ -501,7 +436,7 @@ public sealed partial class JuceAudioPlaybackService
 
         // Route chart MIDI to the internal bus — the native engine forwards
         // it through the shared-memory bridge to the child.
-        RebindSandboxInstrumentMidi(engine);
+        if (engine is JuceAudioEngine native) RebindSandboxInstrumentMidi(native);
 
         if (openEditorAfterLoad || _instrumentPendingEditorOpen)
             await SendSandboxEditorToggleAsync(host, VstSandboxProtocol.InstrumentSlotId, open: true).ConfigureAwait(false);
@@ -511,16 +446,20 @@ public sealed partial class JuceAudioPlaybackService
     /// <summary>Caller holds _vstGate.</summary>
     private async Task UnloadSandboxInstrumentLockedAsync()
     {
-        VstSandboxHost? host;
+        IVstSandboxHost? host;
         bool wasLoaded;
         lock (_sandboxGate)
         {
-            host = _sandbox;
-            wasLoaded = _sandboxInstrumentLoaded;
-            _sandboxInstrumentLoaded = false;
-            _sandboxDesired.InstrumentPath = null;
+            host = _sandboxSeats[0].Host;
+            wasLoaded = SandboxInstrumentLoaded;
+            _sandboxSeats[0].InstrumentLoaded = false;
+            _sandboxSeats[0].Desired.InstrumentPath = null;
         }
-        if (!wasLoaded) return;
+        if (!wasLoaded)
+        {
+            await _sandboxSeats[0].StopIfEmptyAsync().ConfigureAwait(false);
+            return;
+        }
 
         _instrumentIsAmpleGuitar = false;
         _instrumentLatencyMs = 0.0;
@@ -544,12 +483,55 @@ public sealed partial class JuceAudioPlaybackService
         {
             await VstSandboxCalls.TrySendAsync(host,
                 new VstSandboxRequest { Op = "unloadInstrument" }, TimeSpan.FromSeconds(30),
-                ex => _logger?.Warning(AppLogCategory.Audio, $"Sandbox instrument unload failed: {ex.Message}"))
+                ex => _logger?.Warning(AppLogCategory.Audio, "Sandbox instrument unload failed", ex))
                 .ConfigureAwait(false);
         }
 
+        await _sandboxSeats[0].StopIfEmptyAsync().ConfigureAwait(false);
         if (!IsDisposing && _midiDeviceIndex != int.MinValue)
             ApplyMidiDevice(_midiDeviceIndex);
+    }
+
+    private async Task SendSandboxOwnedEditorToggleAsync(string slotId, bool open)
+    {
+        if (!await _vstGate.TryEnterAsync().ConfigureAwait(false)) return;
+        try
+        {
+            IVstSandboxHost? host;
+            lock (_sandboxGate)
+            {
+                host = slotId == VstSandboxProtocol.InstrumentSlotId ? _sandboxSeats[0].Host
+                    : Guid.TryParse(slotId, out var id) ? SandboxSlotOwner(id)?.Host : null;
+            }
+            if (_outOfProcessVst && host is { IsRunning: true })
+                await SendSandboxEditorToggleAsync(host, slotId, open).ConfigureAwait(false);
+        }
+        finally { _vstGate.Release(); }
+    }
+
+    private async Task SendSandboxOwnedBypassAsync(Guid id)
+    {
+        if (!await _vstGate.TryEnterAsync().ConfigureAwait(false)) return;
+        try
+        {
+            IVstSandboxHost? host;
+            bool bypass;
+            lock (_sandboxGate)
+            {
+                var seat = SandboxSlotOwner(id);
+                if (seat == null) return;
+                host = seat.Host;
+                var entry = seat.Slots[id];
+                bypass = entry.Bypass;
+            }
+            if (_outOfProcessVst && host is { IsRunning: true })
+            {
+                await VstSandboxCalls.TrySendAsync(host,
+                    new VstSandboxRequest { Op = "bypass", Slot = id.ToString(), Value = bypass }, TimeSpan.FromSeconds(10),
+                    ex => _logger?.Warning(AppLogCategory.Audio, $"Sandbox bypass({id}) failed", ex)).ConfigureAwait(false);
+            }
+        }
+        finally { _vstGate.Release(); }
     }
 
     /// <summary>Never throws; a failure is logged. Internal for
@@ -563,12 +545,13 @@ public sealed partial class JuceAudioPlaybackService
             try { AllowSetForegroundWindow(pid); } catch { /* ignored */ }
         await VstSandboxCalls.TrySendAsync(host,
             new VstSandboxRequest { Op = open ? "showEditor" : "hideEditor", Slot = slotId }, TimeSpan.FromSeconds(20),
-            ex => _logger?.Warning(AppLogCategory.Audio, $"Sandbox editor {(open ? "show" : "hide")}({slotId}) failed: {ex.Message}"))
+            ex => _logger?.Warning(AppLogCategory.Audio, $"Sandbox editor {(open ? "show" : "hide")}({slotId}) failed", ex))
             .ConfigureAwait(false);
     }
 
-    private void OnSandboxEditorClosed(string slotId)
+    private void OnSandboxEditorClosed(VstSandboxSeat seat, string slotId)
     {
+        if (seat.Host is { } running) seat.Recovery.CaptureStateInBackground(running);
         if (slotId == VstSandboxProtocol.InstrumentSlotId)
         {
             _logger?.Info(AppLogCategory.Audio, "Instrument VST editor (sandbox): closed by user.");
@@ -582,204 +565,45 @@ public sealed partial class JuceAudioPlaybackService
         }
     }
 
-    // ------------------------------------------------------------------
-    //  Crash detection + auto-restart
-    // ------------------------------------------------------------------
-
-    private void OnSandboxCrashed(VstSandboxHost crashed)
+    /// <summary>Clears and reports only the failed child's live slots.</summary>
+    private void NotifySlotsUnloadedAfterCrash(VstSandboxSeat seat)
     {
-        if (IsDisposing || !_outOfProcessVst) return;
-        lock (_sandboxGate)
-        {
-            if (!ReferenceEquals(_sandbox, crashed)) return; // stale instance
-        }
-        if (Interlocked.Exchange(ref _sandboxRestartInFlight, 1) != 0) return;
-
-        var delay = _sandboxRestartPolicy.OnCrash(_sandboxClock.Elapsed);
-        if (delay == null)
-        {
-            Interlocked.Exchange(ref _sandboxRestartInFlight, 0);
-            lock (_sandboxGate) _sandboxGaveUp = true;
-            _logger?.Error(AppLogCategory.Audio, _localization["Vst_SandboxGaveUp"]);
-            _ = Task.Run(async () =>
-            {
-                await _vstGate.WaitAsync().ConfigureAwait(false);
-                try { await ShutdownSandboxLockedAsync(disarmBridge: true).ConfigureAwait(false); }
-                catch (Exception ex) { _logger?.Warning(AppLogCategory.Audio, $"Sandbox shutdown after giving up failed: {ex.Message}"); }
-                finally { _vstGate.Release(); }
-            });
-            return;
-        }
-
-        _logger?.Warning(AppLogCategory.Audio, _localization["Vst_SandboxCrashed"]);
-        NotifySlotsUnloadedAfterCrash();
-        _ = Task.Run(() => RestartSandboxAsync(delay.Value));
-    }
-
-    /// <summary>
-    /// Raises the "slot unloaded" events for everything the dead child was
-    /// hosting — and CLEARS the slot table while doing it.
-    /// <para>
-    /// It must not raise the events and leave `_sandboxSlots` populated: until
-    /// `RestartSandboxAsync` reaches `ShutdownSandboxLockedAsync` (a backoff of up to
-    /// several seconds) `IsGuitarVstSlotLoaded(id)` would report TRUE for
-    /// a plugin whose process is gone, and a chain apply landing in that window
-    /// would see an `existing` entry and SKIP the load. It would converge — the next
-    /// `EnsureSandboxLockedAsync` clears the dictionary when it spawns a fresh host —
-    /// but the intermediate state is a lie, and one the chain apply acts on.
-    /// </para>
-    /// </summary>
-    private void NotifySlotsUnloadedAfterCrash()
-    {
-        List<Guid> slots;
-        bool instrument;
-        lock (_sandboxGate)
-        {
-            slots = _sandboxSlots.Keys.ToList();
-            instrument = _sandboxInstrumentLoaded;
-            _sandboxSlots.Clear();
-            _sandboxInstrumentLoaded = false;
-        }
+        var (slots, instrument) = seat.ClearLive();
         foreach (var id in slots)
             try { GuitarVstSlotLoadChanged?.Invoke(this, (id, false)); } catch { /* ignored */ }
         if (instrument)
             try { InstrumentVstLoadChanged?.Invoke(this, false); } catch { /* ignored */ }
     }
 
-    private async Task RestartSandboxAsync(TimeSpan delay)
+    /// <summary>Rebuilds and replays a single seat. Caller holds _vstGate.</summary>
+    private async Task<(IVstSandboxHost Host, IReadOnlyDictionary<string, string> States)?> RebuildSandboxLockedAsync(VstSandboxSeat seat)
     {
-        const string taskId = "vst-sandbox-restart";
+        await seat.ShutdownAsync(disarmBridge: true).ConfigureAwait(false);
+        var engine = _sandboxEngine();
+        if (engine == null) return null;
+        VstSandboxChainState replay;
+        lock (_sandboxGate) replay = seat.Desired.Clone();
+        if (replay.IsEmpty) return null;
+
+        seat.IsReplaying = true;
         try
         {
-            if (delay > TimeSpan.Zero) await Task.Delay(delay).ConfigureAwait(false);
-            if (IsDisposing || !_outOfProcessVst) return;
-
-            _statusBar?.BeginTask(taskId, _localization["Vst_SandboxRestarting"], indeterminate: true);
-            await _vstGate.WaitAsync().ConfigureAwait(false);
-            try
+            var host = await seat.EnsureAsync(engine).ConfigureAwait(false);
+            if (replay.Chain.Count > 0) await ApplySandboxSeatChainCoreAsync(seat, replay.Chain).ConfigureAwait(false);
+            if (seat.Player == 0 && !string.IsNullOrEmpty(replay.InstrumentPath))
             {
-                if (IsDisposing || !_outOfProcessVst) return;
-                // Drop the dead instance + bridge, then bring everything back.
-                await ShutdownSandboxLockedAsync(disarmBridge: true).ConfigureAwait(false);
-                var engine = _engine;
-                if (engine == null) return; // engine down; chain re-applies when it returns
-
-                VstSandboxChainState replay;
-                lock (_sandboxGate) replay = _sandboxDesired.Clone();
-
-                await EnsureSandboxLockedAsync(engine).ConfigureAwait(false);
-                if (replay.Chain.Count > 0) await ApplySandboxGuitarChainCoreAsync(replay.Chain).ConfigureAwait(false);
-                if (!string.IsNullOrEmpty(replay.InstrumentPath))
-                {
-                    await LoadInstrumentVstSandboxCoreAsync(replay.InstrumentPath, openEditorAfterLoad: false).ConfigureAwait(false);
-                    try { InstrumentVstLoadChanged?.Invoke(this, IsInstrumentVstLoaded); } catch { /* ignored */ }
-                }
-                _logger?.Warning(AppLogCategory.Audio, _localization["Vst_SandboxRestored"]);
+                await LoadInstrumentVstSandboxCoreAsync(replay.InstrumentPath, openEditorAfterLoad: false).ConfigureAwait(false);
+                try { InstrumentVstLoadChanged?.Invoke(this, IsInstrumentVstLoaded); } catch { /* ignored */ }
             }
-            finally
-            {
-                _vstGate.Release();
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger?.Error(AppLogCategory.Audio, $"VST sandbox restart failed: {ex.Message}");
-            // The new instance may have crashed during replay; its own
-            // Exited handler re-enters the crash path with backoff.
+            return (host, replay.PluginStates);
         }
         finally
         {
-            _statusBar?.CompleteTask(taskId);
-            Interlocked.Exchange(ref _sandboxRestartInFlight, 0);
+            seat.IsReplaying = false;
+            await seat.StopIfEmptyAsync().ConfigureAwait(false);
         }
     }
 
-    // ------------------------------------------------------------------
-    //  Health monitor (hung-but-alive children)
-    // ------------------------------------------------------------------
-
-    // Both of these run under _vstGate (EnsureSandboxLockedAsync / ShutdownSandboxLockedAsync
-    // / DisposeSandbox are all gated callers), which is what keeps the
-    // null-check-then-assign from racing itself and leaking a live timer.
-    private void EnsureSandboxHealthTimer()
-    {
-        if (_sandboxHealthTimer != null) return;
-        var timer = new Timer(3000) { AutoReset = true };
-        timer.Elapsed += (_, _) => SandboxHealthTick();
-        timer.Start();
-        _sandboxHealthTimer = timer;
-    }
-
-    private void StopSandboxHealthTimer()
-    {
-        var timer = _sandboxHealthTimer;
-        _sandboxHealthTimer = null;
-        if (timer == null) return;
-        try { timer.Stop(); timer.Dispose(); } catch { /* ignored */ }
-    }
-
-    private void SandboxHealthTick()
-    {
-        if (IsDisposing || !_outOfProcessVst) return;
-        VstSandboxHost? host;
-        lock (_sandboxGate) host = _sandbox;
-        if (host is not { IsRunning: true }) return;
-
-        var engine = _engine;
-        if (engine == null) return;
-        try
-        {
-            if (!engine.TryGetRemoteBridgeStats(out _, out _, out var heartbeat) || heartbeat == 0)
-                return; // bridge disarmed / not yet beating
-
-            if (!_sandboxHeartbeatPrimed)
-            {
-                _sandboxHeartbeatPrimed = true;
-                _sandboxLastHeartbeat = heartbeat;
-                return;
-            }
-            if (heartbeat != _sandboxLastHeartbeat)
-            {
-                _sandboxLastHeartbeat = heartbeat;
-                _sandboxRestartPolicy.OnHealthy(_sandboxClock.Elapsed);
-                return;
-            }
-            // The worker beats ~10x/s even when idle; two identical readings
-            // 3 s apart mean the child is alive but wedged. Kill it — the
-            // Exited handler takes the normal crash/restart path.
-            _logger?.Warning(AppLogCategory.Audio,
-                "VST sandbox heartbeat stalled — terminating the wedged child for restart.");
-            _sandboxHeartbeatPrimed = false;
-            try { host.Kill(); } catch { /* ignored */ }
-            OnSandboxCrashed(host);
-        }
-        catch { /* stats are best-effort */ }
-    }
-
-    // ------------------------------------------------------------------
-    //  Dispose hook
-    // ------------------------------------------------------------------
-
-    /// <summary>
-    /// Called from <c>Dispose()</c>, which is synchronous — so this is the one
-    /// sandbox path that WAITS for the child. It is bounded: the host's stop is
-    /// 3 s for "quit" plus a 5 s grace before it kills, and
-    /// <see cref="VstSandboxCalls.StopForDispose"/> kills outright at 10 s. Not
-    /// fire-and-forget on purpose: the app may be exiting, and an un-awaited
-    /// stop would leave the child to its own parent-death watchdog.
-    /// </summary>
-    private void DisposeSandbox()
-    {
-        StopSandboxHealthTimer();
-        VstSandboxHost? host;
-        lock (_sandboxGate)
-        {
-            host = _sandbox;
-            _sandbox = null;
-        }
-        if (host == null) return;
-        try { _engine?.SetRemoteBridge(null, null, null, false); } catch { /* ignored */ }
-        VstSandboxCalls.StopForDispose(host, gracePeriod: TimeSpan.FromSeconds(5), bound: TimeSpan.FromSeconds(10));
-        try { host.Dispose(); } catch { /* ignored */ }
-    }
+    /// <summary>Synchronous, bounded teardown of every seat before the engine is destroyed.</summary>
+    private void DisposeSandbox() => VstSandboxShutdown.Dispose(_sandboxSeats, _sandboxStopWait);
 }

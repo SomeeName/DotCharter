@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using DotCharter.Rendering.Data;
 
 namespace DotCharter.UI.Controls;
@@ -7,8 +8,13 @@ namespace DotCharter.UI.Controls;
 ///     preview's show-light chip prints. Names come from
 ///     <see cref="ShowlightCatalog" /> (a plus beam is its colour plus "+"); each
 ///     colour has one resx key, listed here so a grep finds every use.
+///     <para>
+///         The localization service outlives every preview, so the owner disposes
+///         a source it replaces or detaches: the subscription would otherwise keep
+///         each discarded source alive for the process lifetime.
+///     </para>
 /// </summary>
-public sealed class ShowlightChipLabelSource
+public sealed class ShowlightChipLabelSource : IDisposable
 {
     /// <summary>Catalogue colour name (without the plus) → its resx key.</summary>
     public static readonly IReadOnlyDictionary<string, string> ColourKeys = new Dictionary<string, string>
@@ -34,8 +40,14 @@ public sealed class ShowlightChipLabelSource
     {
         _localization = localization;
         // A language switch raises PropertyChanged; the next frame rebuilds the labels.
-        localization.PropertyChanged += (_, _) => _cached = null;
+        localization.PropertyChanged += OnLocalizationChanged;
     }
+
+    /// <summary>Stops following the language; <see cref="Current" /> keeps answering
+    /// with the labels it last built.</summary>
+    public void Dispose() => _localization.PropertyChanged -= OnLocalizationChanged;
+
+    private void OnLocalizationChanged(object? sender, PropertyChangedEventArgs e) => _cached = null;
 
     /// <summary>The labels for the current UI language, rebuilt only after it
     /// changes. Called from the render thread once per staged frame.</summary>
