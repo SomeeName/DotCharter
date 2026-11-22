@@ -119,6 +119,13 @@ public sealed record RocksmithBuildOptions
     /// </summary>
     public DlcBuilderSteps? DlcBuilderSteps { get; init; }
 
+    /// <summary>
+    ///     Write each stock bass whose lowest string is below C1 an octave up at A220
+    ///     (<see cref="LowBassTuningFix" />), on the package's copy only. Off unless asked: the app
+    ///     passes the export dialog's checkbox or <c>AppConfig.ExportFixLowBassTuning</c>.
+    /// </summary>
+    public bool FixLowBassTuning { get; init; }
+
     /// <summary>The double-stop naming policy for both the build steps and SNG.</summary>
     public DoubleStopNameOptions ChordNameOptions { get; init; } = DoubleStopNameOptions.Default;
 
@@ -586,6 +593,8 @@ public sealed partial class RocksmithPackageBuilder
                     arrangement = DlcBuilderBuildSteps.ApplyOrKeep(project, arrangement, songLengthMs > 0 ? songLengthMs : null,
                         steps with { ChordNameOptions = options.ChordNameOptions }, _logger, warnings);
                 }
+
+                arrangement = LowBassTuningFix.ForPackage(arrangement, options.FixLowBassTuning);
 
                 // Resolve the slot table BEFORE the SNG: a tone-change event in
                 // the SNG is an INDEX into the very list the manifest declares as

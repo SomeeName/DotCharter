@@ -157,6 +157,11 @@ public sealed class FakeRocksmithExportScreen : FakeDialog<bool>, IRocksmithExpo
     public bool HasPlatformNote => PlatformNote.Length > 0;
     public bool OffersStandardPackage { get; init; }
     public bool WriteStandardPackage { get; set; } = true;
+    public bool OffersLowBassTuningFix => LowBassTuningReason.Length > 0;
+    public bool FixLowBassTuning { get; set; } = true;
+    public string LowBassTuningReason { get; init; } = "";
+    public string LowBassTuningWarning { get; init; } = "";
+    public bool HasLowBassTuningWarning => LowBassTuningWarning.Length > 0;
     public IReadOnlyList<IExportArrangementRow> Arrangements { get; }
     public bool IncludeVocals { get; set; }
     public bool VocalsTicked { get => IncludeVocals && HasVocals; set => IncludeVocals = value; }

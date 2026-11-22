@@ -85,24 +85,27 @@ internal static class RocksmithExportSupport
     public static string MacBlockText(ILocalizationService loc, RocksmithMacBlock block) => loc["Dialog_Export_MacNeedsEncryption"];
 
     /// <summary>
-    ///     What the platform choice will write, under the picker: both file names for PC + Mac, and, when the Mac package
-    ///     is ruled out, why. Empty for PC. The Mac name carries the RS Extended Range tag when <paramref name="psxr" />.
+    ///     Every file the export writes, under the picker: the extended-range (or stock) package per platform, then
+    ///     the standard package beside it when <paramref name="withStandard" />, and, when the Mac package is ruled
+    ///     out, why. Empty when there is a single file. Names come from the builder's own helpers.
     /// </summary>
     public static string PlatformNote(ILocalizationService loc, ExportTargetViewModel target, RocksmithMacBlock? block,
-        string outputPath, ExportPlatform platform, bool psxr)
+        string outputPath, ExportPlatform platform, bool psxr, bool withStandard = false)
     {
-        if (!target.IncludesMac) return "";
-        if (block is { } blocked)
-        {
-            return target.IsMacOnly
-                ? MacBlockText(loc, blocked)
-                : loc.Format("Dialog_Export_PcOnlyBecause", MacBlockText(loc, blocked));
-        }
-
-        if (target.IsMacOnly || string.IsNullOrWhiteSpace(outputPath)) return "";
-        var mac = ExtendedRangePackageName.ApplyMac(RocksmithPlatformTargets.OutputPathFor(outputPath, platform, true), psxr);
-        return loc.Format("Dialog_Export_WritesBoth", Path.GetFileName(RocksmithPlatformTargets.OutputPathFor(outputPath, platform, false)),
-            Path.GetFileName(mac));
+        if (block is { } blocked && target.IsMacOnly) return MacBlockText(loc, blocked);
+        var reason = block is { } b && target.IncludesMac ? loc.Format("Dialog_Export_PcOnlyBecause", MacBlockText(loc, b)) : "";
+        if (string.IsNullOrWhiteSpace(outputPath)) return reason;
+        var files = new List<string>();
+        if (!target.IsMacOnly) files.Add(RocksmithPlatformTargets.OutputPathFor(outputPath, platform, false));
+        if (target.IncludesMac && block is null)
+            files.Add(ExtendedRangePackageName.ApplyMac(RocksmithPlatformTargets.OutputPathFor(outputPath, platform, true), psxr));
+        if (withStandard) files.AddRange(files.Select(ExtendedRangePackageName.Untag).ToList());
+        if (files.Count < 2) return reason;
+        var names = files.Select(f => Path.GetFileName(f)).ToArray();
+        var writes = names.Length == 2
+            ? loc.Format("Dialog_Export_WritesBoth", names[0], names[1])
+            : loc.Format("Dialog_Export_WritesFour", names[0], names[1], names[2], names[3]);
+        return reason.Length == 0 ? writes : reason + " " + writes;
     }
 
     /// <summary>Measures export gain for <paramref name="path" /> off the UI thread.</summary>
@@ -321,6 +324,7 @@ internal static class RocksmithExportSupport
         screen.AlbumArtPath = draft?.AlbumArtPath ?? "";
         screen.AppId = draft?.AppId ?? (string.IsNullOrWhiteSpace(config.LastExportAppId) ? "248750" : config.LastExportAppId);
         screen.IncludeVocals = draft?.IncludeVocals ?? config.ExportIncludeVocals;
+        screen.FixLowBassTuning = draft?.FixLowBassTuning ?? config.ExportFixLowBassTuning;
 
         var targetLufs = config.ExportAutoVolumeTargetLufs;
         var audio = draft?.AudioAutoTargetLufs is null || draft.AudioAutoTargetLufs == targetLufs ? draft?.AudioVolume : null;
@@ -347,12 +351,14 @@ internal static class RocksmithExportSupport
             PreviewVolume = screen.PreviewAutoTargetLufs is not null || screen.PreviewVolume != ProjectVolumes.PreviewOrDefault(project.Chart) ? screen.PreviewVolume : null,
             AudioAutoTargetLufs = screen.AudioAutoTargetLufs, PreviewAutoTargetLufs = screen.PreviewAutoTargetLufs,
             IncludeVocals = screen.IncludeVocals,
+            FixLowBassTuning = screen.FixLowBassTuning,
             Ticks = screen.Arrangements.GroupBy(a => a.Name).ToDictionary(g => g.Key, g => g.Last().IsSelected, StringComparer.Ordinal)
         };
     }
 
     /// <summary>Remembering the folder must never fail an export that already landed.</summary>
-    public static void Remember(ChartEditDialogServices edit, string psarcPath, bool test, string appId, bool includeVocals)
+    public static void Remember(ChartEditDialogServices edit, string psarcPath, bool test, string appId, bool includeVocals,
+        bool fixLowBassTuning)
     {
         try
         {
@@ -361,6 +367,7 @@ internal static class RocksmithExportSupport
             if (!test && Path.GetDirectoryName(psarcPath) is { Length: > 0 } dir) config.LastExportDir = dir;
             config.LastExportAppId = string.IsNullOrWhiteSpace(appId) ? "248750" : appId.Trim();
             config.ExportIncludeVocals = includeVocals;
+            config.ExportFixLowBassTuning = fixLowBassTuning;
             edit.Config.SaveAppConfig(config);
         }
         catch (Exception ex)

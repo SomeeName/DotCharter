@@ -81,7 +81,8 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
     [ObservableProperty][NotifyPropertyChangedFor(nameof(VocalsTicked))] private bool _includeVocals = true;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(VocalsTicked))] private bool _hasVocals;
     [ObservableProperty] private string _dlcKeyWatermark = "";
-    [ObservableProperty] private bool _writeStandardPackage = true;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(PlatformNote))][NotifyPropertyChangedFor(nameof(HasPlatformNote))] private bool _writeStandardPackage = true;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(LowBassTuningWarning))][NotifyPropertyChangedFor(nameof(HasLowBassTuningWarning))] private bool _fixLowBassTuning = true;
 
     public RocksmithExportViewModel(ChartEditDialogServices edit, RocksmithExportServices io, IDialogs dialogs, DialogMemory memory,
         IChartMaintenanceService maintenance, IDlcBuilderProjectWriter dlcBuilderWriter, ChartIssuesDoor issuesDoor)
@@ -191,13 +192,18 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
 
     /// <summary>What the platform choice will write, under the picker, or why the Mac package is ruled out.</summary>
     public string PlatformNote =>
-        RocksmithExportSupport.PlatformNote(_edit.Localization, Target, MacBlock, OutputPath, BuildPlatform, HasPsxrSelection);
+        RocksmithExportSupport.PlatformNote(_edit.Localization, Target, MacBlock, OutputPath, BuildPlatform, HasPsxrSelection, WriteStandardPackage && OffersStandardPackage);
 
     public bool HasPlatformNote => PlatformNote.Length > 0;
 
     /// <summary>The ticked arrangements mix RS Extended Range and stock ones, so a standard package can go beside.</summary>
     public bool OffersStandardPackage => HasPsxrSelection && RocksmithExportSupport.HasStockSelection(_project, Arrangements);
 
+    private RocksmithExportLowBass LowBass => new(_project, Arrangements, FixLowBassTuning, _edit.Localization);
+    public bool OffersLowBassTuningFix => LowBass.Offers;
+    public string LowBassTuningReason => LowBass.Reason;
+    public string LowBassTuningWarning => LowBass.Warning;
+    public bool HasLowBassTuningWarning => LowBassTuningWarning.Length > 0;
     public ICommand OpenToneDesignerCommand { get; }
     public ICommand ShowInIssuesCommand { get; }
     public ICommand BrowseAudioCommand { get; }
@@ -318,14 +324,7 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
     private void OnGateChanged()
     {
         Target.SetExtendedContent(HasPsxrSelection);
-        OnPropertyChanged(nameof(HasBlockingErrors));
-        OnPropertyChanged(nameof(NothingSelectedToExport));
-        OnPropertyChanged(nameof(MissingPaths));
-        OnPropertyChanged(nameof(HasInvalidDlcKey));
-        OnPropertyChanged(nameof(MacBlock));
-        OnPropertyChanged(nameof(PlatformNote));
-        OnPropertyChanged(nameof(HasPlatformNote));
-        OnPropertyChanged(nameof(OffersStandardPackage));
+        foreach (var name in RocksmithExportGate.Properties) OnPropertyChanged(name);
         foreach (var command in new[] { _export, _testExport, _autoVolume, _autoPreviewVolume }) command.NotifyCanExecuteChanged();
         RaiseExportBlocked();
     }

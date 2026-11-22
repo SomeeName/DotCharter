@@ -351,6 +351,7 @@ public sealed class SaveCompanionService : ISaveCompanionService
                 SongLengthMs = audioLengthMs is { } length && length > 0 ? length : 0,
                 AlbumArtPath = ResolveCoverArt(directory, snapshot.Chart.CoverArtPath),
                 AudioCodec = ParseCodec(config.SaveCompanionPsarcCodec),
+                FixLowBassTuning = config.ExportFixLowBassTuning,
                 AppId = string.IsNullOrWhiteSpace(config.LastExportAppId) ? "248750" : config.LastExportAppId,
                 FallbackCharter = config.DefaultCharterName,
                 AudioVolume = audioVolume,

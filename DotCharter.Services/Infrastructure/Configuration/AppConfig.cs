@@ -927,16 +927,14 @@ public class AppConfig : FolderConfig
     /// </summary>
     public bool GpImportTimeSignatures { get; set; } = true;
 
-    /// <summary>
-    ///     Ported EOF setting: discard tempo changes that do not fall on a beat
-    ///     when building the beat map. Default OFF (EOF default).
-    /// </summary>
+    /// <summary>Ported EOF setting: drop tempo changes off a beat when building the beat map (EOF default off).</summary>
     public bool GpImportDropMidBeatTempoChanges { get; set; }
 
     // ------ Rocksmith package export -----------------------------------------
-    // Last-used export dialog values (the 0.9.0 export presets).
+    // Last-used export dialog values.
     public string LastExportAppId { get; set; } = "248750";
     public bool ExportIncludeVocals { get; set; } = true;
+    public bool ExportFixLowBassTuning { get; set; } = true;
 
     // ------ Save companions --------------------------------------------------
     // Artifacts written alongside the .dcproj on every save, so a project is

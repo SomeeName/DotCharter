@@ -2465,6 +2465,9 @@
     <data name="Dialog_Export_ExtendedRangePackage" xml:space="preserve"><value>Arrangements mit erweitertem Tonumfang werden als RS Extended Range-Paket geschrieben: unverschlüsselt und mit der RS Extended Range-Mod lesbar.</value></data>
     <data name="Dialog_Export_StandardPackageHint" xml:space="preserve"><value>Beide Pakete sind derselbe Song: Installiere das eine oder das andere.</value></data>
     <data name="Dialog_Export_StandardPackage" xml:space="preserve"><value>Zusätzlich ein Standardpaket mit den übrigen Arrangements schreiben</value></data>
+    <data name="Dialog_Export_LowBassTuning" xml:space="preserve"><value>Tiefe Bass-Stimmung korrigieren</value></data>
+    <data name="Dialog_Export_LowBassTuningReason" xml:space="preserve"><value>Rocksmith erkennt keine Bassnoten unter C1. Schreibt {0} im Paket eine Oktave höher bei A220; das Projekt bleibt unverändert.</value></data>
+    <data name="Dialog_Export_LowBassTuningWarning" xml:space="preserve"><value>Ohne die Korrektur erkennt Rocksmith die Noten unter C1 in {0} nicht.</value></data>
     <data name="Dialog_Export_PlainPackageWarning" xml:space="preserve"><value>Rocksmith 2014 kann dieses Paket nur öffnen, wenn die rs7string-Mod installiert ist. Exportiere für ein normales 6-Saiten-Chart ein DLC-Builder-Projekt (.rs2dlc) und baue das Paket dort.</value></data>
     <data name="Dialog_Export_DlcBuilderProject" xml:space="preserve"><value>DLC-Builder-Projekt exportieren…</value></data>
     <data name="Dialog_Export_DlcBuilderProjectTip" xml:space="preserve"><value>Schreibt das Chart als DLC-Builder-Projekt (.rs2dlc) samt Rocksmith-XML in einen Ordner deiner Wahl. Im DLC Builder öffnen, um das verschlüsselte Paket zu erstellen.</value></data>
@@ -2511,6 +2514,7 @@
     <data name="Dialog_Export_MacUnavailable" xml:space="preserve"><value>Es kann kein Mac-Paket geschrieben werden. {0}</value></data>
     <data name="Dialog_Export_PcOnlyBecause" xml:space="preserve"><value>Nur das PC-Paket wird geschrieben. {0}</value></data>
     <data name="Dialog_Export_WritesBoth" xml:space="preserve"><value>Schreibt {0} und {1}.</value></data>
+    <data name="Dialog_Export_WritesFour" xml:space="preserve"><value>Schreibt {0}, {1}, {2} und {3}.</value></data>
     <data name="Menu_ToneDesigner" xml:space="preserve"><value>Sound-Designer…</value></data>
     <data name="Menu_ToneDesigner_Tip" xml:space="preserve"><value>Bearbeite die eigenen Sounds dieses Songs: welchen Verstärker und welche Pedale jeder Sound nutzt. Das Spiel und „Sounds vorhören“ spielen diese.</value></data>
     <data name="Menu_Pedalboard" xml:space="preserve"><value>Rig…</value></data>

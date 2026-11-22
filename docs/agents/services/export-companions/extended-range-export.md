@@ -43,6 +43,10 @@ bytes, including inside a package with an extended arrangement.
   an extended arrangement's `Tuning`, in its manifest and `.hsan` entry. The
   tuning keys are `string0` through `stringN-1`, with offsets from positional
   standard open notes. Stock entries have neither the marker nor extra keys.
+- **The low bass tuning fix (#906) never touches an extended bass.** The format spells the
+  five-/six-string bass's low B0 string itself (`Rs7StringLayout.BassOpenMidi`), and nothing in
+  the repo says how the mod's note detection treats it, so its SNXR record and manifest stay
+  as they were; `LowBassTuningFixTests` pins them byte-equal with the fix on and off.
 - `RocksmithSngWriter` rejects an extension model. Its stock output stays pinned.
   `Rs7ChordSidecar.RemoveStale` removes exact stale sidecar names at the requested
   and published package paths, leaving unrelated files alone.

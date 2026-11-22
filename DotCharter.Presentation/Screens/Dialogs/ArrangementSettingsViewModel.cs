@@ -124,6 +124,10 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
         get => _tuningPreset;
         set
         {
+            // A picker re-bound to a new dialog (the host reuses an idle view) clears its
+            // selection and writes null back before it re-reads the key: that is not a pick.
+            // Taken as one, it ran the E Standard rule over a Custom row and zeroed it.
+            if (!ArrangementSettingsEdit.TuningPresets.Contains(value)) return;
             if (!SetProperty(ref _tuningPreset, value) || _seedingTuningPreset) return;
             _tuningPresetTouched = true;
             ApplyPresetOffsets();

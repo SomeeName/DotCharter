@@ -76,5 +76,8 @@ public sealed class ExportDraft
     public int? AudioAutoTargetLufs { get; init; }
     public int? PreviewAutoTargetLufs { get; init; }
     public required bool IncludeVocals { get; init; }
+
+    /// <summary>The low bass tuning box; null follows <c>AppConfig.ExportFixLowBassTuning</c>.</summary>
+    public bool? FixLowBassTuning { get; init; }
     public required IReadOnlyDictionary<string, bool> Ticks { get; init; }
 }

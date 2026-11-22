@@ -161,12 +161,14 @@ public static class ArrangementSettingsEdit
 
     private static (int Shift, int Drop)? PresetRule(string preset) => preset switch
     {
-        CustomPreset or "" => null,
+        "E Standard" => (0, 0),
         "Drop D" => (0, -2),
         "Eb Standard" => (-1, 0),
         "D Standard" => (-2, 0),
         "Drop C" => (-2, -2),
-        _ => (0, 0)
+        // Custom, and anything that is not a preset key (a null from a cleared picker): no
+        // rule, so the offsets stay as typed. Falling through to E Standard zeroed them.
+        _ => null
     };
 
     /// <summary>The route mask an arrangement has AUTHORED (0 when it derives it).</summary>

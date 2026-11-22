@@ -2462,6 +2462,9 @@
     <data name="Dialog_Export_ExtendedRangePackage" xml:space="preserve"><value>拡張弦数のアレンジは RS Extended Range パッケージとして出力されます。暗号化されておらず、RS Extended Range Mod で読み込めます。</value></data>
     <data name="Dialog_Export_StandardPackageHint" xml:space="preserve"><value>2 つのパッケージは同じ曲です。どちらか一方をインストールしてください。</value></data>
     <data name="Dialog_Export_StandardPackage" xml:space="preserve"><value>ほかのアレンジだけの標準パッケージも出力する</value></data>
+    <data name="Dialog_Export_LowBassTuning" xml:space="preserve"><value>低音ベースのチューニングを修正</value></data>
+    <data name="Dialog_Export_LowBassTuningReason" xml:space="preserve"><value>Rocksmith は C1 より低いベースの音を認識しません。パッケージ内の {0} を A220 で 1 オクターブ上に書き出します。プロジェクトは変更されません。</value></data>
+    <data name="Dialog_Export_LowBassTuningWarning" xml:space="preserve"><value>修正しない場合、Rocksmith は {0} の C1 より低い音を認識しません。</value></data>
     <data name="Dialog_Export_PlainPackageWarning" xml:space="preserve"><value>rs7string MOD がインストールされていない限り、Rocksmith 2014 はこのパッケージを開けません。通常の6弦チャートでは、DLC Builder プロジェクト（.rs2dlc）を書き出し、そこでパッケージを作成してください。</value></data>
     <data name="Dialog_Export_DlcBuilderProject" xml:space="preserve"><value>DLC Builder プロジェクトを書き出す…</value></data>
     <data name="Dialog_Export_DlcBuilderProjectTip" xml:space="preserve"><value>チャートを DLC Builder プロジェクト（.rs2dlc）と Rocksmith XML として、選んだフォルダーに書き出します。DLC Builder で開いて、暗号化されたパッケージを作成します。</value></data>
@@ -2508,6 +2511,7 @@
     <data name="Dialog_Export_MacUnavailable" xml:space="preserve"><value>Mac 用パッケージは書き出せません。{0}</value></data>
     <data name="Dialog_Export_PcOnlyBecause" xml:space="preserve"><value>PC 用パッケージだけを書き出します。{0}</value></data>
     <data name="Dialog_Export_WritesBoth" xml:space="preserve"><value>{0} と {1} を書き出します。</value></data>
+    <data name="Dialog_Export_WritesFour" xml:space="preserve"><value>{0}、{1}、{2}、{3} を書き出します。</value></data>
     <data name="Menu_ToneDesigner" xml:space="preserve"><value>トーンデザイナー…</value></data>
     <data name="Menu_ToneDesigner_Tip" xml:space="preserve"><value>この曲専用のトーンを編集します。各トーンが使うアンプとペダルを決めます。ゲームと「トーンをプレビュー」はこれを再生します。</value></data>
     <data name="Menu_Pedalboard" xml:space="preserve"><value>リグ…</value></data>

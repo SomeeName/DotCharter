@@ -135,7 +135,12 @@ public sealed class RocksmithExportPlatformUiPerfSmokeTests
             WithView(vm, view =>
             {
                 Assert.Null(vm.MacBlock);
-                AssertNote(view, Loc.Format("Dialog_Export_WritesBoth", "seven_rsxr_p.psarc", "seven_rsxr_m.psarc"));
+                var note = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "PlatformNoteHint");
+                note.BringIntoView();
+                var window = (Window)TopLevel.GetTopLevel(view)!;
+                NarrowWidthLayout.Settle(window);
+                NarrowWidthLayout.Capture(window, "export-file-note");
+                AssertNote(view, Loc.Format("Dialog_Export_WritesFour", "seven_rsxr_p.psarc", "seven_rsxr_m.psarc", "seven_p.psarc", "seven_m.psarc"));
             });
         }, CancellationToken.None);
     }
@@ -167,6 +172,66 @@ public sealed class RocksmithExportPlatformUiPerfSmokeTests
                 Assert.False(option.IsEffectivelyVisible);
             });
         }, CancellationToken.None);
+    }
+
+    /// <summary>#906: a ticked B-standard bass shows the low bass tuning box, checked, with its reason;
+    /// clearing it shows the warning; an E-standard bass never shows it.</summary>
+    [Fact]
+    public async Task TheLowBassTuningOption_IsLaidOut_ForALowBass()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            using var keys = TestRocksmithKeys.UseNoKeys();
+            using var plain = Open(BassProject(0));
+            WithView(plain, view =>
+            {
+                var option = view.GetVisualDescendants().OfType<StackPanel>().Single(p => p.Name == "LowBassTuningOption");
+                Assert.False(option.IsEffectivelyVisible);
+                if (UiSweepRunner.CaptureEnabled)
+                    NarrowWidthLayout.Capture((Window)TopLevel.GetTopLevel(view)!, "export-low-bass-none");
+            });
+
+            using var vm = Open(BassProject(-5));
+            WithView(vm, view =>
+            {
+                var option = view.GetVisualDescendants().OfType<StackPanel>().Single(p => p.Name == "LowBassTuningOption");
+                var check = view.GetVisualDescendants().OfType<CheckBox>().Single(c => c.Name == "LowBassTuningCheck");
+                var reason = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "LowBassTuningReason");
+                var warning = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "LowBassTuningWarning");
+                Assert.True(option.IsEffectivelyVisible);
+                Assert.True(check.IsChecked);
+                Assert.True(check.Bounds is { Width: > 1, Height: > 1 }, $"check laid out as {check.Bounds}");
+                Assert.True(reason.Bounds is { Width: > 1, Height: > 1 }, $"reason laid out as {reason.Bounds}");
+                Assert.Equal(Loc.Format("Dialog_Export_LowBassTuningReason", "Low Bass"), vm.LowBassTuningReason);
+                Assert.False(warning.IsEffectivelyVisible);
+                option.BringIntoView();
+                Settle(view);
+                if (UiSweepRunner.CaptureEnabled)
+                    NarrowWidthLayout.Capture((Window)TopLevel.GetTopLevel(view)!, "export-low-bass-on");
+
+                check.IsChecked = false;
+                Settle(view);
+                Assert.False(vm.FixLowBassTuning);
+                Assert.True(warning.IsEffectivelyVisible);
+                Assert.True(warning.Bounds is { Width: > 1, Height: > 1 }, $"warning laid out as {warning.Bounds}");
+                if (UiSweepRunner.CaptureEnabled)
+                    NarrowWidthLayout.Capture((Window)TopLevel.GetTopLevel(view)!, "export-low-bass-off");
+            });
+        }, CancellationToken.None);
+    }
+
+    /// <summary>A valid project plus a four-string bass at <paramref name="offset" /> on every string.</summary>
+    private static ChartProject BassProject(int offset)
+    {
+        var project = RocksmithExportDialogViewModelTests.CreateValidProject();
+        var bass = ChartProjectCloner.CloneArrangement(project.Arrangements[0]);
+        bass.Name = "Low Bass";
+        bass.ArrangementType = ArrangementType.Bass;
+        bass.StringCount = 4;
+        bass.TuningPitches.Clear();
+        for (var i = 0; i < 6; i++) bass.TuningPitches.Add(new TuningOffset(offset));
+        project.Arrangements.Add(bass);
+        return project;
     }
 
     /// <summary>A stock guitar plus a playable 7-string one: an RS Extended Range package with a standard sibling.</summary>

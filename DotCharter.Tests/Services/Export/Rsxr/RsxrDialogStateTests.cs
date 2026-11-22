@@ -61,8 +61,14 @@ public sealed class RsxrDialogStateTests : IDisposable
         Assert.True(vm.ExportCommand.CanExecute(null), vm.ExportBlockedReason);
         Assert.Equal(accepted, vm.OutputPath.Contains("_rsxr", StringComparison.Ordinal));
         var tag = accepted ? "_rsxr" : "";
-        var note = platform == ExportPlatform.PcAndMac
-            ? FakeLocalization.English().Format("Dialog_Export_WritesBoth", $"pair{tag}_p.psarc", $"pair{tag}_m.psarc") : "";
+        var loc = FakeLocalization.English();
+        var note = (platform, accepted) switch
+        {
+            (ExportPlatform.PcAndMac, true) => loc.Format("Dialog_Export_WritesFour", "pair_rsxr_p.psarc", "pair_rsxr_m.psarc", "pair_p.psarc", "pair_m.psarc"),
+            (ExportPlatform.PcAndMac, false) => loc.Format("Dialog_Export_WritesBoth", "pair_p.psarc", "pair_m.psarc"),
+            (_, true) => loc.Format("Dialog_Export_WritesBoth", "pair_rsxr_m.psarc", "pair_m.psarc"),
+            _ => ""
+        };
         Assert.Equal(note, vm.PlatformNote);
         Assert.Equal(note.Length > 0, vm.HasPlatformNote);
         await vm.ExportCommand.ExecuteAsync(null);

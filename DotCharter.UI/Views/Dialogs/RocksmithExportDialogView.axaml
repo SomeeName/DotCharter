@@ -208,6 +208,22 @@
                                        Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
                                        Text="{localization:Loc Dialog_Export_StandardPackageHint}" />
                         </StackPanel>
+                        <!-- A ticked stock bass below C1: written an octave up at A220 in the
+                             package, on by default; cleared, a warning says those notes will not register. -->
+                        <StackPanel x:Name="LowBassTuningOption" Spacing="2" Margin="0,0,0,8"
+                                    IsVisible="{Binding OffersLowBassTuningFix}">
+                            <CheckBox x:Name="LowBassTuningCheck" IsChecked="{Binding FixLowBassTuning, Mode=TwoWay}"
+                                      AutomationProperties.Name="{localization:Loc Dialog_Export_LowBassTuning}">
+                                <TextBlock TextWrapping="Wrap" Text="{localization:Loc Dialog_Export_LowBassTuning}" />
+                            </CheckBox>
+                            <TextBlock x:Name="LowBassTuningReason" TextWrapping="Wrap"
+                                       Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
+                                       Text="{Binding LowBassTuningReason}" />
+                            <TextBlock x:Name="LowBassTuningWarning" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource WarningColor}" FontSize="{DynamicResource FontSizeSm}"
+                                       IsVisible="{Binding HasLowBassTuningWarning}"
+                                       Text="{Binding LowBassTuningWarning}" />
+                        </StackPanel>
                         <Border x:Name="PlainPackageWarning" IsVisible="{Binding Target.WritesPlainPackage}"
                                 Background="{DynamicResource WarningFaint}" BorderBrush="{DynamicResource WarningColor}"
                                 BorderThickness="1" CornerRadius="{DynamicResource RadiusSm}"

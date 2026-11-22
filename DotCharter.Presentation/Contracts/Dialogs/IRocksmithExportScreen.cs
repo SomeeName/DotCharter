@@ -79,6 +79,20 @@ public interface IRocksmithExportScreen : IDialogScreen<bool>
     /// <summary>Also write a standard package with the stock arrangements alone (on by default).</summary>
     bool WriteStandardPackage { get; set; }
 
+    /// <summary>A ticked stock bass reaches below C1, so the low bass tuning box shows.</summary>
+    bool OffersLowBassTuningFix { get; }
+
+    /// <summary>Write such a bass an octave up at A220 in the package; the project is unchanged.</summary>
+    bool FixLowBassTuning { get; set; }
+
+    /// <summary>Why the box shows, naming the arrangements.</summary>
+    string LowBassTuningReason { get; }
+
+    /// <summary>The warning while the box is cleared: those notes will not register in the game.</summary>
+    string LowBassTuningWarning { get; }
+
+    bool HasLowBassTuningWarning { get; }
+
     string DlcKey { get; set; }
 
     /// <summary>The song's package version ("1" by default), also followed by an automatically derived

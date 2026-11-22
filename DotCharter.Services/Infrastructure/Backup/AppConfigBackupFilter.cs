@@ -90,7 +90,7 @@ public static class AppConfigBackupFilter
         "GpImportTruncateShortNotes", "GpImportTruncateShortChords", "GpImportPreserveShortRests",
         "OnlineLatinNameLookup", "GpImportBeatTextTechniques", "GpImportMarkersToSections",
         "GpImportSlideInFretDistance", "GpImportTimeSignatures", "GpImportDropMidBeatTempoChanges", "LastExportAppId",
-        "ExportIncludeVocals", nameof(AppConfig.ExportAutoVolumeTargetLufs), "SaveCompanionEof",
+        "ExportIncludeVocals", nameof(AppConfig.ExportFixLowBassTuning), nameof(AppConfig.ExportAutoVolumeTargetLufs), "SaveCompanionEof",
         "SaveCompanionEofAudio", "PsarcOpenHardestLevelOnly", "SaveCompanionPsarc", "SaveCompanionPsarcCodec",
         "SaveCompanionRs2Dlc", "RsXmlSixStringProjection", "RsXmlMoverPhrases", "ExportGenerateDynamicDifficulty",
         "ExportApplyDlcBuilderFixes", "ExportDdLevelCountMode", "RocksmithKeys", "DefaultCharterName",

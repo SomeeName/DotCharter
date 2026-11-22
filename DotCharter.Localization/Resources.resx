@@ -2453,6 +2453,9 @@
     <data name="Dialog_Export_ExtendedRangePackage" xml:space="preserve"><value>Extended-range arrangements are written as an RS Extended Range package: unencrypted, read by the RS Extended Range mod.</value></data>
     <data name="Dialog_Export_StandardPackageHint" xml:space="preserve"><value>Both packages are the same song: install one or the other.</value></data>
     <data name="Dialog_Export_StandardPackage" xml:space="preserve"><value>Also write a standard package with the other arrangements</value></data>
+    <data name="Dialog_Export_LowBassTuning" xml:space="preserve"><value>Fix low bass tuning</value></data>
+    <data name="Dialog_Export_LowBassTuningReason" xml:space="preserve"><value>Rocksmith does not register bass notes below C1. Writes {0} an octave up at A220 in the package; the project is unchanged.</value></data>
+    <data name="Dialog_Export_LowBassTuningWarning" xml:space="preserve"><value>Without the fix, Rocksmith will not register the notes below C1 in {0}.</value></data>
     <data name="Dialog_Export_PlainPackageWarning" xml:space="preserve"><value>Rocksmith 2014 cannot open this package unless the rs7string mod is installed. For a normal 6-string chart, export a DLC Builder project (.rs2dlc) and build the package there.</value></data>
     <data name="Dialog_Export_DlcBuilderProject" xml:space="preserve"><value>Export DLC Builder project…</value></data>
     <data name="Dialog_Export_DlcBuilderProjectTip" xml:space="preserve"><value>Writes the chart as a DLC Builder project (.rs2dlc) with its Rocksmith XML into a folder you pick. Open it in DLC Builder to build the encrypted package.</value></data>
@@ -2499,6 +2502,7 @@
     <data name="Dialog_Export_MacUnavailable" xml:space="preserve"><value>No Mac package can be written. {0}</value></data>
     <data name="Dialog_Export_PcOnlyBecause" xml:space="preserve"><value>Only the PC package is written. {0}</value></data>
     <data name="Dialog_Export_WritesBoth" xml:space="preserve"><value>Writes {0} and {1}.</value></data>
+    <data name="Dialog_Export_WritesFour" xml:space="preserve"><value>Writes {0}, {1}, {2} and {3}.</value></data>
     <data name="Menu_ToneDesigner" xml:space="preserve"><value>Tone designer…</value></data>
     <data name="Menu_ToneDesigner_Tip" xml:space="preserve"><value>Edit this song's own tones: which amp and pedals each tone uses. The game and Preview tones play these.</value></data>
     <data name="Menu_Pedalboard" xml:space="preserve"><value>Rig…</value></data>

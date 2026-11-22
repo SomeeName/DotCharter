@@ -864,7 +864,8 @@ public sealed partial class RocksmithExportDialogViewModelTests : IDisposable
 
         Pick(vm, ExportPlatform.PcAndMac);
         Assert.Null(vm.MacBlock);
-        Assert.Equal(loc.Format("Dialog_Export_WritesBoth", "seven_rsxr_p.psarc", "seven_rsxr_m.psarc"), vm.PlatformNote);
+        Assert.Equal(loc.Format("Dialog_Export_WritesFour", "seven_rsxr_p.psarc", "seven_rsxr_m.psarc",
+            "seven_p.psarc", "seven_m.psarc"), vm.PlatformNote);
         Assert.True(vm.OffersStandardPackage);
 
         seven.IsSelected = false;

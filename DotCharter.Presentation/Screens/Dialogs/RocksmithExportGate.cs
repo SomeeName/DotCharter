@@ -11,6 +11,16 @@ namespace DotCharter.Presentation.Screens.Dialogs;
 internal readonly record struct RocksmithExportGate(bool Building, bool MacOnlyBlocked, bool BlockingErrors, bool InvalidDlcKey,
     bool InvalidPreviewStart, bool MissingPaths, bool NothingSelected)
 {
+    /// <summary>The dialog properties a tick, a path, the key or the platform can change, raised together.</summary>
+    public static readonly string[] Properties =
+    [
+        nameof(RocksmithExportViewModel.HasBlockingErrors), nameof(RocksmithExportViewModel.NothingSelectedToExport),
+        nameof(RocksmithExportViewModel.MissingPaths), nameof(RocksmithExportViewModel.HasInvalidDlcKey),
+        nameof(RocksmithExportViewModel.MacBlock), nameof(RocksmithExportViewModel.PlatformNote),
+        nameof(RocksmithExportViewModel.HasPlatformNote), nameof(RocksmithExportViewModel.OffersStandardPackage),
+        .. RocksmithExportLowBass.PropertyNames
+    ];
+
     private bool Common => !Building && !MacOnlyBlocked && !BlockingErrors && !InvalidDlcKey && !InvalidPreviewStart && !NothingSelected;
 
     public bool CanExport => Common && !MissingPaths;

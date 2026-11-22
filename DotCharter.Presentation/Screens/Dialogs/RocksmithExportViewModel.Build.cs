@@ -162,7 +162,7 @@ public sealed partial class RocksmithExportViewModel
             _edit.State.SetMessage(paths.Count > 1
                 ? loc.Format("Status_Export_SuccessBoth", paths[0], paths[1])
                 : loc.Format("Status_Export_Success", paths[0]), StatusSeverity.Success);
-            RocksmithExportSupport.Remember(_edit, result.PsarcPath, test, AppId, IncludeVocals);
+            RocksmithExportSupport.Remember(_edit, result.PsarcPath, test, AppId, IncludeVocals, FixLowBassTuning);
             if (ReferenceEquals(_edit.State.ActiveProject, project))
             {
                 RocksmithExportSupport.CommitVolumes(_edit.History, project.Chart, AudioVolume, PreviewVolume,
@@ -225,6 +225,7 @@ public sealed partial class RocksmithExportViewModel
             Platform = platform,
             PlainPackage = Target.WritesPlain && !Target.IsMacOnly,
             WriteStandardPackage = WriteStandardPackage && OffersStandardPackage,
+            FixLowBassTuning = FixLowBassTuning,
             StandardPlainPackage = Target.StockWritesPlain,
             AudioPath = AudioPath,
             DlcKey = dlcKey,
