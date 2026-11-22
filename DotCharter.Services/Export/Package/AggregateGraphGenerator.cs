@@ -56,7 +56,9 @@ internal static class AggregateGraphGenerator
 
         if (pinnedIds != null)
         {
-            if (pinnedIds.Count != items.Count)
+            // More ids than items is a pin taken for a larger build of the same song (the standard
+            // package of a mixed export): the graph takes them in order.
+            if (pinnedIds.Count < items.Count)
                 throw new ArgumentException($"{pinnedIds.Count} pinned graph ids for {items.Count} items.", nameof(pinnedIds));
             items = [.. items.Select((item, i) => item with
             {

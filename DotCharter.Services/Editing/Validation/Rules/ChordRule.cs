@@ -40,7 +40,7 @@ public sealed class ChordRule : IArrangementRule
     {
         var arr = context.Arrangement;
         var beats = context.Beats;
-        var isBass = arr.ArrangementType == ArrangementType.Bass;
+        var stringCount = arr.StringCount;
         // I45 needs it: an open string is one AT OR BELOW the capo, not fret 0.
         var capo = Math.Max(0, arr.Capo);
         Dictionary<int, FingeringVerdict>? verdicts = null;
@@ -53,7 +53,7 @@ public sealed class ChordRule : IArrangementRule
                 var timeMs = chord.Position.GetPositionMs(beats);
 
                 CheckPlacement(context, issues, chord, timeMs);
-                var summary = CheckChordNotes(beats, issues, chord, timeMs, isBass);
+                var summary = CheckChordNotes(beats, issues, chord, timeMs, stringCount);
                 CheckLinkAndPullOff(context, issues, level, chord, timeMs, summary);
                 if (!CheckFingering(context, issues, chord, timeMs, capo, ref verdicts) && chord.ChordNotes.Count > 0)
                     untemplated++;
@@ -102,7 +102,7 @@ public sealed class ChordRule : IArrangementRule
     private readonly record struct ChordNoteSummary(bool AnyLinks, bool AnyFrettedPullOff);
 
     private static ChordNoteSummary CheckChordNotes(IList<BeatMarker> beats, ICollection<ArrangementIssue> issues, Chord chord,
-        double timeMs, bool isBass)
+        double timeMs, int stringCount)
     {
         var mutedCount = 0;
         var anyLinks = false;
@@ -122,7 +122,7 @@ public sealed class ChordRule : IArrangementRule
             if (cn.LinkNext) anyLinks = true;
             if (cn.Hopo == HopoType.PullOff && cn.Fret > 0) anyFrettedPullOff = true;
 
-            CheckChordNote(beats, issues, chord, cn, timeMs, isBass);
+            CheckChordNote(beats, issues, chord, cn, timeMs, stringCount);
         }
 
         if (mutedCount > 0 && mutedCount < chordNotes.Count)
@@ -135,7 +135,7 @@ public sealed class ChordRule : IArrangementRule
     }
 
     private static void CheckChordNote(IList<BeatMarker> beats, ICollection<ArrangementIssue> issues, Chord chord, ChordNote cn,
-        double timeMs, bool isBass)
+        double timeMs, int stringCount)
     {
         if (cn.Fret > 24)
         {
@@ -143,10 +143,10 @@ public sealed class ChordRule : IArrangementRule
                 "Validation_ChordFretNumberMoreThan24", cn.StringIndex, [cn.Fret]));
         }
 
-        if (isBass && cn.StringIndex >= 4)
+        if (cn.StringIndex >= stringCount)
         {
             issues.Add(ArrangementIssues.Chord(ArrangementIssueType.InvalidBassArrangementString, chord, timeMs,
-                "Validation_ChordInvalidBassArrangementString", cn.StringIndex, [cn.StringIndex]));
+                "Validation_ChordInvalidBassArrangementString", cn.StringIndex, [cn.StringIndex, stringCount]));
         }
 
         var sustainMs = cn.Sustain == FractionalPosition.Zero

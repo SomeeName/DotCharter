@@ -122,13 +122,13 @@ public sealed partial class RocksmithExportViewModel
             await EnsureProjectVolumesAsync(project, keepAudio, keepPreview, continuation).WaitAsync(continuation.Token);
             if (!continuation.IsCurrent || !ReferenceEquals(_edit.State.ActiveProject, project)) return;
             if (volumeInput != (AudioPath, PreviewAudioPath, PreviewStartText)) return;
-            if (!test) CommitVersion();
+            if (!test) RocksmithExportSupport.CommitVersion(_edit.History, _project?.Chart, PackageVersion, PreviewStartText);
             var buildProject = ChartProjectCloner.Clone(project);
             var testBuild = test ? _pickers.PlanTestBuild(this, project, buildProject, _names.Key) : null;
             RocksmithExportSupport.PrepareOutputName(this, HasPsxrSelection);
             options = testBuild is null
                 ? BuildOptions(project)
-                : BuildOptions(project, RocksmithTestBuild.Prepare(buildProject, testBuild.Plan, testBuild.Folder, Target.IsMacOnly, RocksmithExportSupport.FileNameTag(Target, HasPsxrSelection)),
+                : BuildOptions(project, RocksmithTestBuild.Prepare(buildProject, testBuild.Plan, testBuild.Folder, Target.IsMacOnly, HasPsxrSelection),
                     Target.IsMacOnly ? ExportPlatform.Mac : ExportPlatform.Pc, testBuild.Plan.DlcKey, RocksmithTestExport.Version, test: true);
             ClearResult();
             ProgressFraction = 0;
@@ -147,7 +147,7 @@ public sealed partial class RocksmithExportViewModel
 
             // A deep snapshot: the build runs on a worker and the live project stays editable.
             var beforePublish = testBuild is null
-                ? _pickers.BeforePublish(false) : testBuild.Ownership.BeforePublishAsync;
+                ? _pickers.BeforePublish(false, options.WriteStandardPackage) : testBuild.Ownership.BeforePublishAsync;
             Task<RocksmithBuildResult> Build() => new RocksmithPackageBuilder(_edit.Logger)
                 .BuildPsarcAsync(buildProject, options, progress, continuation.Token, beforePublish);
             var result = testBuild is null ? await CompanionOwnership.BuildAndRecordReleaseAsync(Build, options.ProjectDirectory, buildProject)
@@ -224,6 +224,8 @@ public sealed partial class RocksmithExportViewModel
                 ? null : ProjectFolderLayout.ProjectDirectory(_edit.State.CurrentProjectPath),
             Platform = platform,
             PlainPackage = Target.WritesPlain && !Target.IsMacOnly,
+            WriteStandardPackage = WriteStandardPackage && OffersStandardPackage,
+            StandardPlainPackage = Target.StockWritesPlain,
             AudioPath = AudioPath,
             DlcKey = dlcKey,
             Version = version,

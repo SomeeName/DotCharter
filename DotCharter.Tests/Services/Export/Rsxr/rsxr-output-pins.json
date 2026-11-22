@@ -647,7 +647,7 @@
   "multi_5_arrangements": {
     "FileName": "multi_5_arrangements_rsxr_p.psarc",
     "MagicHex": "50535852",
-    "PackageHash": "ad2e44a67e8c4a0ff4ddced90bd245fa4d035cbd107ca1068f7bacbc5a533302",
+    "PackageHash": "0f834479deff160382872d1ea95d295290431641587d3c9a4c77113183527f8f",
     "ChartBodies": {
       "songs/bin/generic/rs7tmulti5arrangements_lead.sng": "a92cf0093ed19e0015b96a8c0a9d2f748676540d859813627c9800f0d696d07e",
       "songs/bin/generic/rs7tmulti5arrangements_rhythm.sng": "481e21af508fb222a7a885d2bf1848408a90a5f1091d003941a92b395dd0a441",
@@ -656,12 +656,12 @@
       "songs/bin/generic/rs7tmulti5arrangements_lead2.sng": "ef7f90cc0399e4f8e80a0eaa8541ca6b5aa69ec98ef202e3aa9c31b28183fd93"
     },
     "Manifests": {
-      "manifests/songs_dlc_rs7tmulti5arrangements/songs_dlc_rs7tmulti5arrangements.hsan": "6307171b107064605e6675aa50264fea0bb22654e6679eca832fd93ba2666cfc",
+      "manifests/songs_dlc_rs7tmulti5arrangements/songs_dlc_rs7tmulti5arrangements.hsan": "5f579ebb90a1ca3ff0e3d2bac6fc41a47599cfc4271d5fc6074168eb46464323",
       "manifests/songs_dlc_rs7tmulti5arrangements/rs7tmulti5arrangements_lead.json": "c7dd54146ef6b18a04252af0f98c6a46983ca08045fe6722ea985600f0469092",
       "manifests/songs_dlc_rs7tmulti5arrangements/rs7tmulti5arrangements_rhythm.json": "5ce5f2b10f7a67d066ca897e263b92fe3ad157f84150f3a49aa6527354ad41d7",
       "manifests/songs_dlc_rs7tmulti5arrangements/rs7tmulti5arrangements_bass.json": "26aed4c770a39c5298646ec11ee8fc1467ccbe5ced4df9be8492d68ae77b40f7",
       "manifests/songs_dlc_rs7tmulti5arrangements/rs7tmulti5arrangements_bass2.json": "726dd691284e5d479c473a939ae2047e526ef8cc54b73d4c61ee4b71b57f8669",
-      "manifests/songs_dlc_rs7tmulti5arrangements/rs7tmulti5arrangements_lead2.json": "9bc21e6dda20c2ad723599ccbf9fb495ae67c0bbe2fdedf040de77a5f60b8b45"
+      "manifests/songs_dlc_rs7tmulti5arrangements/rs7tmulti5arrangements_lead2.json": "f57d1b9ad2dd897c745ed00956062377b538af4d96d30f71aea8ad775876059a"
     },
     "ArrangementXml": {
       "Lead g8": "56f629561d590bd12acb40cb790b4ceca02feb20f5040267a3012051169460de",
@@ -674,7 +674,7 @@
   "multi_8_arrangements": {
     "FileName": "multi_8_arrangements_rsxr_p.psarc",
     "MagicHex": "50535852",
-    "PackageHash": "1b197e8fe0f6022af049c35b3f4a8b1a1f8c8a72094645e69af0b9466bdd6d89",
+    "PackageHash": "058e140685349993c4233cd0a356890b781475972c1e0aa495199ee0c259083d",
     "ChartBodies": {
       "songs/bin/generic/rs7tmulti8arrangements_lead.sng": "481e21af508fb222a7a885d2bf1848408a90a5f1091d003941a92b395dd0a441",
       "songs/bin/generic/rs7tmulti8arrangements_lead2.sng": "a92cf0093ed19e0015b96a8c0a9d2f748676540d859813627c9800f0d696d07e",
@@ -686,15 +686,15 @@
       "songs/bin/generic/rs7tmulti8arrangements_bass3.sng": "ffb23cca60cb82946a761c876a4f28fb3642b603f2e3bfc0fe7af97370ad2ef7"
     },
     "Manifests": {
-      "manifests/songs_dlc_rs7tmulti8arrangements/songs_dlc_rs7tmulti8arrangements.hsan": "8350adc2194266999bc3ffa6567eb89eab53247c3e45602957c595df0e36c6cc",
+      "manifests/songs_dlc_rs7tmulti8arrangements/songs_dlc_rs7tmulti8arrangements.hsan": "d80f8337b7437fa5aa12906e493b51558cb48074c50225cd93c401ed5de3387e",
       "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_lead.json": "24deedf5cb7d799ca269e932fe32976e6e708d3da9949262ac7c71d5d86f4229",
       "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_lead2.json": "85d8361b0ea10826d532a8e3d15b51add19250ea757b26b1fec2ded3d83afbdb",
       "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_rhythm.json": "4aa5d9e37f6bb1a0022d5ab0332e7d4cd55ce8eef5fd038d3ce2281a41ff20e5",
       "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_rhythm2.json": "837726abb81487747d1dc0c60d31eaf8640a385653b869e1efcf375dea3198f3",
       "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_bass.json": "50e45dcca16876c89784fc2123ed4e541a5e5045c2390644cd6290ae1458610b",
       "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_bass2.json": "93005b659c6a202d5267baf8542f7b5be1bf0c868fcf52fb6faa9ab43d104e9d",
-      "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_lead3.json": "322830883bddc5b9ca86c4821cc34343557de2408c3b4f79d0f6ca7691042ead",
-      "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_bass3.json": "932303e3e6cdb237a8aef882abc861da1dcbb38c4e38c2cf37c0bf4af944c01f"
+      "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_lead3.json": "4bc107ecf7fa9abc5619239f4c536609244149cc86bf29c50896ff18b4ee385f",
+      "manifests/songs_dlc_rs7tmulti8arrangements/rs7tmulti8arrangements_bass3.json": "bf1da9fa3794c4aab31929a5e7894980c1c4338c1a2b0a092ee9ec89279b0632"
     },
     "ArrangementXml": {
       "Lead g7": "4654c18a745a90a1408f7e56bd373263e3881668d47e1bdeab2af91ae0b5c554",
@@ -710,7 +710,7 @@
   "multi_10_arrangements": {
     "FileName": "multi_10_arrangements_rsxr_p.psarc",
     "MagicHex": "50535852",
-    "PackageHash": "3e4ec394a62ec996acda2f6afe4567db59457c99f268bd126e61b988c5ef3100",
+    "PackageHash": "0b2fc2da12dfa662ab59b868337167b17a8bd6705ffc2e4d94974c148db967a7",
     "ChartBodies": {
       "songs/bin/generic/rs7tmulti10arrangements_lead.sng": "481e21af508fb222a7a885d2bf1848408a90a5f1091d003941a92b395dd0a441",
       "songs/bin/generic/rs7tmulti10arrangements_lead2.sng": "a92cf0093ed19e0015b96a8c0a9d2f748676540d859813627c9800f0d696d07e",
@@ -724,15 +724,15 @@
       "songs/bin/generic/rs7tmulti10arrangements_rhythm3.sng": "7ae814f4e441944f144058958ebd85d2834bf07efdfab1c243527a36d8404eae"
     },
     "Manifests": {
-      "manifests/songs_dlc_rs7tmulti10arrangements/songs_dlc_rs7tmulti10arrangements.hsan": "674395b034b4e370f9b93525be739f073ca079a8ff3059e9c54bc8aab852f2e5",
+      "manifests/songs_dlc_rs7tmulti10arrangements/songs_dlc_rs7tmulti10arrangements.hsan": "f08312f491143ac9aafbeff430c4aab864562a3cc15a04f054ab80ed0174602b",
       "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_lead.json": "e939e0c77fa5431b40b277859bc2661a105be65fe9f661aa45996619d3c9b3f7",
       "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_lead2.json": "c9ef23756736361a6b83d34de65f56eec720b7d948de512ebaed36fa8c9bddf8",
       "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_rhythm.json": "f65c1ae5f3b5dbd44d737a2da55bc8a317ff7b2e4569e34b8cf37d33d53dae6a",
       "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_rhythm2.json": "82eb374d812ffddea68fedcb1c5bdfa5a062c1d6d6d4ddb120ecb0c3b890330a",
       "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_bass.json": "4974279780e1d7ecfd4244c1ecd8559be8feb2ef5af24b6ddc03e255a01c3d72",
       "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_bass2.json": "fd0f8111cdf75228a6359b4852fbefb687413e788bdcf23002de7dcee37da8d0",
-      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_lead3.json": "7319f5016e2c86670bcd3e1840b177c7fcd4c7fdc402e15ed5b1688dca661400",
-      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_bass3.json": "a6a4bd2dee2cce07c65e01e36e296c81c658e88df68cbcd4004878aa88c135f2",
+      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_lead3.json": "f705eaba8ba94372e41f303669f7b21616d5baf3766145b5e68239a34d87ab8d",
+      "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_bass3.json": "1df746fd4c27c7bf1b695ae54d41b4e9319573f294acfa9a6382c4516305a5d5",
       "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_lead4.json": "fa1b8dde179536eaead78e9d00883e8d4126b793c23831443330e2fd1a7da288",
       "manifests/songs_dlc_rs7tmulti10arrangements/rs7tmulti10arrangements_rhythm3.json": "a05cebc6e6161181494e13ff9478978146117468feb877635ad20573012ad47b"
     },

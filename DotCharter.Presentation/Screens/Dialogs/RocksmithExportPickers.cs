@@ -93,16 +93,23 @@ internal sealed class RocksmithExportPickers(ChartEditDialogServices edit, Rocks
         _confirmedOutput = screen.OutputPath;
     }
 
-    public async Task ConfirmOutputAsync(string path, CancellationToken cancellationToken)
+    public async Task ConfirmOutputAsync(string path, bool standardSibling, CancellationToken cancellationToken)
     {
-        if (_confirmedOutput == null || string.Equals(path, _confirmedOutput, StringComparison.OrdinalIgnoreCase) || !io.Files.FileExists(path)) return;
+        if (_confirmedOutput is not { } confirmed || IsConfirmed(path, confirmed, standardSibling) || !io.Files.FileExists(path)) return;
         var replace = await io.Prompt.ShowAsync(edit.Localization["Dialog_Export_Title"],
             edit.Localization.Format("Dialog_Export_OverwritePackage", path), MessageDialogKind.Warning, confirmation: true)
             .WaitAsync(cancellationToken).ConfigureAwait(false);
         if (!replace) throw new OperationCanceledException(cancellationToken);
     }
 
-    public Func<string, CancellationToken, Task>? BeforePublish(bool test) => test ? null : ConfirmOutputAsync;
+    /// <summary>The confirmed path, or, when the export writes a standard package beside the RS
+    /// Extended Range one, that package's untagged name.</summary>
+    private static bool IsConfirmed(string path, string confirmed, bool standardSibling) =>
+        string.Equals(path, confirmed, StringComparison.OrdinalIgnoreCase) ||
+        (standardSibling && string.Equals(path, ExtendedRangePackageName.Untag(confirmed), StringComparison.OrdinalIgnoreCase));
+
+    public Func<string, CancellationToken, Task>? BeforePublish(bool test, bool standardSibling) =>
+        test ? null : (path, cancellationToken) => ConfirmOutputAsync(path, standardSibling, cancellationToken);
 
     public void PublishedOutput(string path, bool test, ExportPlatform platform)
     {

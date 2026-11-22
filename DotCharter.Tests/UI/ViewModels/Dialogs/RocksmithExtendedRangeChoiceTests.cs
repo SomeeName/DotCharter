@@ -70,13 +70,14 @@ public sealed class RocksmithExtendedRangeChoiceTests
     }
 
     [Fact]
-    public void Extended_range_blocks_mac_and_reduces_a_combined_target_then_encrypted_restores_it()
+    public void Extended_range_keeps_mac_and_a_combined_target_then_encrypted_restores_it()
     {
         using var keys = TestRocksmithKeys.UseSynthetic();
         var project = RocksmithExportDialogViewModelTests.CreateValidProject();
         project.Arrangements[0].StringCount = 7;
         project.Arrangements[0].TuningPitches.Add(new TuningOffset(0));
         var vm = new RocksmithExportDialogViewModelTests.Harness(project).Open();
+        vm.AudioPath = @"E:\charts\song.wem";
         vm.Target.SelectedPlatformOption = vm.Target.PlatformOptions.Single(o => o.Value == ExportPlatform.PcAndMac);
         var changed = new List<string?>();
         vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
@@ -84,14 +85,15 @@ public sealed class RocksmithExtendedRangeChoiceTests
         vm.Arrangements[0].IsSelected = true;
         Assert.Contains(nameof(RocksmithExportViewModel.MacBlock), changed);
         Assert.Contains(nameof(RocksmithExportViewModel.PlatformNote), changed);
-        Assert.NotNull(vm.MacBlock);
+        // #898: the RS Extended Range package has a plain Mac form, so Mac stays available.
+        Assert.Null(vm.MacBlock);
         Assert.True(vm.HasPlatformNote);
-        Assert.Equal(ExportPlatform.Pc, vm.BuildOptions(project).Platform);
+        Assert.Equal(ExportPlatform.PcAndMac, vm.BuildOptions(project).Platform);
         Assert.False(vm.Target.WritesPlainPackage);
 
         vm.Target.SelectedPlatformOption = vm.Target.PlatformOptions.Single(o => o.Value == ExportPlatform.Mac);
-        Assert.False(vm.ExportCommand.CanExecute(null));
-        Assert.Contains(FakeLocalization.English()["Dialog_Export_RsxrWindowsOnly"], vm.ExportBlockedReason);
+        Assert.True(vm.ExportCommand.CanExecute(null), vm.ExportBlockedReason);
+        Assert.EndsWith("_rsxr_m.psarc", vm.OutputPath, StringComparison.Ordinal);
 
         vm.Arrangements[0].IsSelected = false;
         Assert.Null(vm.MacBlock);
@@ -135,12 +137,10 @@ public sealed class RocksmithExtendedRangeChoiceTests
             ? new ExportPackageChoice(false, loc["Dialog_Export_PackageEncrypted"])
             : vm.Target.PackageOptions.Single(o => o.Plain == (choice != 0 || !keysAvailable));
         vm.Target.SelectedPlatformOption = vm.Target.PlatformOptions.Single(o => o.Value == platform);
-        var reason = extended ? loc["Dialog_Export_RsxrWindowsOnly"]
-            : !keysAvailable ? loc["Dialog_Export_MacNeedsEncryption"] : null;
+        var reason = !extended && !keysAvailable ? loc["Dialog_Export_MacNeedsEncryption"] : null;
         var options = vm.BuildOptions(project);
 
-        Assert.Equal(extended ? RocksmithMacBlock.RsxrWindowsOnly
-            : !keysAvailable ? RocksmithMacBlock.NoEncryption : null, vm.MacBlock);
+        Assert.Equal(!extended && !keysAvailable ? RocksmithMacBlock.NoEncryption : null, vm.MacBlock);
         Assert.Equal(platform == ExportPlatform.PcAndMac && reason != null ? ExportPlatform.Pc : platform, options.Platform);
         Assert.Equal((extended || choice == 1 || !keysAvailable) && platform != ExportPlatform.Mac, options.PlainPackage);
         Assert.Equal(extended, vm.Target.WritesExtendedRange);
@@ -158,7 +158,7 @@ public sealed class RocksmithExtendedRangeChoiceTests
         }
         else
         {
-            Assert.Equal(platform == ExportPlatform.Mac ? "" : loc.Format("Dialog_Export_WritesBoth", "song_p.psarc", "song_m.psarc"), vm.PlatformNote);
+            Assert.Equal(platform == ExportPlatform.Mac ? "" : (extended ? loc.Format("Dialog_Export_WritesBoth", "song_rsxr_p.psarc", "song_rsxr_m.psarc") : loc.Format("Dialog_Export_WritesBoth", "song_p.psarc", "song_m.psarc")), vm.PlatformNote);
         }
     }
 }

@@ -252,9 +252,38 @@ public sealed class ArrangementValidationServiceTests
     public void Detects_InvalidBassArrangementString()
     {
         var arr = NewArr(ArrangementType.Bass);
+        arr.StringCount = 4;
         arr.Levels[0].Notes.Add(Note(1, 5, 4));
         var issues = NewService().Validate(arr, Beats());
         Assert.Contains(issues, i => i.Type == ArrangementIssueType.InvalidBassArrangementString);
+    }
+
+    // #894: I39 follows the arrangement's own string count, not a fixed four for bass.
+    [Theory]
+    [InlineData(ArrangementType.Bass, 5, 4, false)]
+    [InlineData(ArrangementType.Bass, 5, 5, true)]
+    [InlineData(ArrangementType.Bass, 4, 4, true)]
+    [InlineData(ArrangementType.Lead, 7, 6, false)]
+    [InlineData(ArrangementType.Lead, 6, 6, true)]
+    public void StringBeyondStringCount_FlagsNoteAndChordNote(ArrangementType type, int stringCount, int stringIndex,
+        bool expected)
+    {
+        var noteArr = NewArr(type);
+        noteArr.StringCount = stringCount;
+        noteArr.Levels[0].Notes.Add(Note(1, 5, stringIndex));
+
+        var chordArr = NewArr(type);
+        chordArr.StringCount = stringCount;
+        var chord = new Chord { Position = new FractionalPosition(1) };
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 0, Fret = 5 });
+        chord.ChordNotes.Add(new ChordNote { StringIndex = stringIndex, Fret = 5 });
+        chordArr.Levels[0].Chords.Add(chord);
+
+        var noteIssues = NewService().Validate(noteArr, Beats());
+        var chordIssues = NewService().Validate(chordArr, Beats());
+
+        Assert.Equal(expected, noteIssues.Any(i => i.Type == ArrangementIssueType.InvalidBassArrangementString));
+        Assert.Equal(expected, chordIssues.Any(i => i.Type == ArrangementIssueType.InvalidBassArrangementString));
     }
 
     [Fact]

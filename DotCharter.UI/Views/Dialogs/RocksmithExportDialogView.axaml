@@ -166,8 +166,8 @@
                             </ComboBox>
                         </Grid>
                         <!-- What the platform writes (#782): both file names for PC + Mac, or
-                             why there is no Mac package (a ticked 7-/8-string guitar, no Mac
-                             encryption) — PC + Mac then writes the PC package alone. -->
+                             why there is no Mac package (no Mac encryption) — PC + Mac then
+                             writes the PC package alone. -->
                         <TextBlock Theme="{DynamicResource DlgHintText}" x:Name="PlatformNoteHint" Classes="DlgHint"
                                    Margin="0,0,0,8" TextWrapping="Wrap" IsVisible="{Binding HasPlatformNote}"
                                    Text="{Binding PlatformNote}" />
@@ -196,6 +196,18 @@
                                    Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
                                    IsVisible="{Binding Target.WritesExtendedRange}"
                                    Text="{localization:Loc Dialog_Export_ExtendedRangePackage}" />
+                        <!-- Mixed RS Extended Range and stock arrangements (#898): also write a
+                             standard package with the stock ones alone, on by default. -->
+                        <StackPanel x:Name="StandardPackageOption" Spacing="2" Margin="0,0,0,8"
+                                    IsVisible="{Binding OffersStandardPackage}">
+                            <CheckBox x:Name="StandardPackageCheck" IsChecked="{Binding WriteStandardPackage, Mode=TwoWay}"
+                                      AutomationProperties.Name="{localization:Loc Dialog_Export_StandardPackage}">
+                                <TextBlock TextWrapping="Wrap" Text="{localization:Loc Dialog_Export_StandardPackage}" />
+                            </CheckBox>
+                            <TextBlock x:Name="StandardPackageHint" TextWrapping="Wrap"
+                                       Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
+                                       Text="{localization:Loc Dialog_Export_StandardPackageHint}" />
+                        </StackPanel>
                         <Border x:Name="PlainPackageWarning" IsVisible="{Binding Target.WritesPlainPackage}"
                                 Background="{DynamicResource WarningFaint}" BorderBrush="{DynamicResource WarningColor}"
                                 BorderThickness="1" CornerRadius="{DynamicResource RadiusSm}"

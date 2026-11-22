@@ -10,15 +10,15 @@ public sealed class RocksmithPackageNameTests
     [InlineData(false, false, false, "", "Example-Band-The_A-Bright-Song_v2_3_p.psarc")]
     [InlineData(false, true, false, "", "Example-Band-The_A-Bright-Song_v2_3_rsxr_p.psarc")]
     [InlineData(true, false, false, "", "Example-Band-The_A-Bright-Song_v2_3_m.psarc")]
-    [InlineData(true, true, false, "", "Example-Band-The_A-Bright-Song_v2_3_m.psarc")]
+    [InlineData(true, true, false, "", "Example-Band-The_A-Bright-Song_v2_3_rsxr_m.psarc")]
     [InlineData(false, false, true, "", "Example-Band-The_A-Bright-Song_test_p.psarc")]
     [InlineData(false, true, true, "", "Example-Band-The_A-Bright-Song_test_rsxr_p.psarc")]
     [InlineData(true, false, true, "", "Example-Band-The_A-Bright-Song_test_m.psarc")]
-    [InlineData(true, true, true, "", "Example-Band-The_A-Bright-Song_test_m.psarc")]
+    [InlineData(true, true, true, "", "Example-Band-The_A-Bright-Song_test_rsxr_m.psarc")]
     [InlineData(false, false, true, "v4", "Example-Band-The_A-Bright-Song_test_v4_p.psarc")]
     [InlineData(false, true, true, "v4", "Example-Band-The_A-Bright-Song_test_v4_rsxr_p.psarc")]
     [InlineData(true, false, true, "v4", "Example-Band-The_A-Bright-Song_test_v4_m.psarc")]
-    [InlineData(true, true, true, "v4", "Example-Band-The_A-Bright-Song_test_v4_m.psarc")]
+    [InlineData(true, true, true, "v4", "Example-Band-The_A-Bright-Song_test_v4_rsxr_m.psarc")]
     public void Release_and_test_names_follow_the_artist_title_version_and_platform_order(
         bool mac, bool extended, bool test, string tag, string expected) =>
         Assert.Equal(expected, RocksmithPackageName.For(Project(), "2.3", mac, extended, test, tag));
@@ -40,7 +40,7 @@ public sealed class RocksmithPackageNameTests
     [InlineData("Example-Band-The_A-Bright-Song_test_v2_rsxr_p.psarc", false)]
     [InlineData("syntheticsong_p.psarc", false)]
     [InlineData("Example-Band-The_A-Bright-Song_v_p.psarc", false)]
-    [InlineData("Example-Band-The_A-Bright-Song_v1_rsxr_m.psarc", false)]
+    [InlineData("Example-Band-The_A-Bright-Song_v1_rsxr_m.psarc", true)]
     [InlineData("Example-Band-The_A-Bright-Song_v1_rsxr_rsxr_p.psarc", false)]
     [InlineData("Example-Band-The_A-Bright-Song_v1_p.psarc.bak", false)]
     [InlineData("Example-Band-The_A-Bright-Song_v1$_p.psarc", false)]
@@ -55,12 +55,13 @@ public sealed class RocksmithPackageNameTests
         var ours = new[]
         {
             ArtistTitle + "_test_p.psarc", ArtistTitle + "_test_v2_rsxr_p.psarc", ArtistTitle + "_test_v4_m.psarc",
+            ArtistTitle + "_test_rsxr_m.psarc",
             "syntheticsong.psarc", "syntheticsong_v5_p.psarc"
         };
         var foreign = new[]
         {
             ArtistTitle + "_v9_p.psarc", ArtistTitle + "_test_v99_notes.txt", ArtistTitle + "_test_extra_p.psarc",
-            ArtistTitle + "_test_rsxr_m.psarc", ArtistTitle + "_test.psarc", "syntheticsong2_p.psarc"
+            ArtistTitle + "_test.psarc", "syntheticsong2_p.psarc"
         };
 
         var plan = RocksmithTestExport.Plan(Project(), "SyntheticSong", ours.Concat(foreign), false);
@@ -144,18 +145,20 @@ public sealed class RocksmithPackageNameTests
     [InlineData(false, false, "_v1_p.psarc")]
     [InlineData(false, true, "_v1_rsxr_p.psarc")]
     [InlineData(true, false, "_v1_m.psarc")]
-    [InlineData(true, true, "_v1_m.psarc")]
+    [InlineData(true, true, "_v1_rsxr_m.psarc")]
     public void The_reserved_range_tag_is_normalized_even_when_a_version_ends_with_it(bool mac, bool extended, string suffix) =>
         Assert.Equal(ArtistTitle + suffix, RocksmithPackageName.For(Project(), "1.rsxr", mac, extended));
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Version_renaming_recognizes_the_canonical_old_name_after_range_tag_normalization(bool mac)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Version_renaming_recognizes_the_canonical_old_name_after_range_tag_normalization(bool mac, bool extended)
     {
         var project = Project();
-        var previous = RocksmithPackageName.For(project, "1.rsxr", mac);
-        Assert.Equal(RocksmithPackageName.For(project, "2", mac),
+        var previous = RocksmithPackageName.For(project, "1.rsxr", mac, extended);
+        Assert.Equal(RocksmithPackageName.For(project, "2", mac, extended),
             RocksmithReleaseName.Rename(previous, project, "1.rsxr", "2", mac));
     }
 

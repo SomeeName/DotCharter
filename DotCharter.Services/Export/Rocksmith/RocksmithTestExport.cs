@@ -112,7 +112,7 @@ public static partial class RocksmithTestExport
         return PackageSuffix().IsMatch(name[dlcKey.Length..]);
     }
 
-    [GeneratedRegex(@"\A(?:_v[0-9]+)?(?:_rsxr_p|_[pm])\.psarc\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\A(?:_v[0-9]+)?(?:_rsxr_[pm]|_[pm])\.psarc\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex CurrentPackageSuffix();
 
     [GeneratedRegex(@"\A(?:_v[0-9]+)?(?:_rsxr_p|_[pm])?\.psarc\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

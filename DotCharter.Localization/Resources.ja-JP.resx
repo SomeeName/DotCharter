@@ -2459,7 +2459,9 @@
     <data name="Dialog_Export_PreviewStartInvalid" xml:space="preserve"><value>プレビュー開始位置は 1:30.000 (分:秒.ミリ秒) の形式で入力するか、空欄にしてください。</value></data>
     <data name="Dialog_Export_Volume" xml:space="preserve"><value>音量（dB）</value></data>
     <data name="Dialog_Export_PreviewVolume" xml:space="preserve"><value>プレビュー音量（dB）</value></data>
-    <data name="Dialog_Export_ExtendedRangePackage" xml:space="preserve"><value>拡張弦数のアレンジは RS Extended Range パッケージとして出力されます。暗号化されておらず、Windows 専用で、RS Extended Range Mod で読み込めます。</value></data>
+    <data name="Dialog_Export_ExtendedRangePackage" xml:space="preserve"><value>拡張弦数のアレンジは RS Extended Range パッケージとして出力されます。暗号化されておらず、RS Extended Range Mod で読み込めます。</value></data>
+    <data name="Dialog_Export_StandardPackageHint" xml:space="preserve"><value>2 つのパッケージは同じ曲です。どちらか一方をインストールしてください。</value></data>
+    <data name="Dialog_Export_StandardPackage" xml:space="preserve"><value>ほかのアレンジだけの標準パッケージも出力する</value></data>
     <data name="Dialog_Export_PlainPackageWarning" xml:space="preserve"><value>rs7string MOD がインストールされていない限り、Rocksmith 2014 はこのパッケージを開けません。通常の6弦チャートでは、DLC Builder プロジェクト（.rs2dlc）を書き出し、そこでパッケージを作成してください。</value></data>
     <data name="Dialog_Export_DlcBuilderProject" xml:space="preserve"><value>DLC Builder プロジェクトを書き出す…</value></data>
     <data name="Dialog_Export_DlcBuilderProjectTip" xml:space="preserve"><value>チャートを DLC Builder プロジェクト（.rs2dlc）と Rocksmith XML として、選んだフォルダーに書き出します。DLC Builder で開いて、暗号化されたパッケージを作成します。</value></data>
@@ -2503,7 +2505,6 @@
     <data name="Dialog_Export_PackageEncrypted" xml:space="preserve"><value>暗号化（既定）</value></data>
     <data name="Dialog_Export_PackagePlain" xml:space="preserve"><value>暗号化なし</value></data>
     <data name="Dialog_Export_MacNeedsEncryption" xml:space="preserve"><value>Mac には暗号化されたパッケージが必要ですが、このビルドは暗号化なしで書き出します。代わりに DLC Builder プロジェクトを書き出してください。</value></data>
-    <data name="Dialog_Export_RsxrWindowsOnly" xml:space="preserve"><value>RS Extended Range 形式は Windows 専用です。</value></data>
     <data name="Dialog_Export_MacUnavailable" xml:space="preserve"><value>Mac 用パッケージは書き出せません。{0}</value></data>
     <data name="Dialog_Export_PcOnlyBecause" xml:space="preserve"><value>PC 用パッケージだけを書き出します。{0}</value></data>
     <data name="Dialog_Export_WritesBoth" xml:space="preserve"><value>{0} と {1} を書き出します。</value></data>
@@ -2753,8 +2754,8 @@
     <data name="Export.Validation.FretOutOfRange" xml:space="preserve"><value>フレット {0} は演奏可能範囲（0–24）外です。</value></data>
     <data name="Export.Validation.StringOutOfRange" xml:space="preserve"><value>ノートが弦 {0} を使っていますが、このアレンジにはその弦がありません。ノートを移動するか、アレンジ設定で弦の数を変更してください。</value></data>
     <data name="Export.Validation.ExtendedRangeTuning" xml:space="preserve"><value>このアレンジメントはスキップされます。チューニングを RS Extended Range で表現できません: {0}</value></data>
-    <data name="Export.Validation.ExtendedRangeGuitar" xml:space="preserve"><value>{0} 弦ギター: RS Extended Range Mod 向けに、暗号化されていない Windows 専用の RS Extended Range パッケージとして出力されます。</value></data>
-    <data name="Export.Validation.ExtendedRangeBass" xml:space="preserve"><value>{0} 弦ベース: RS Extended Range Mod 向けに、暗号化されていない Windows 専用の RS Extended Range パッケージとして出力されます。</value></data>
+    <data name="Export.Validation.ExtendedRangeGuitar" xml:space="preserve"><value>{0} 弦ギター: RS Extended Range Mod 向けに、暗号化されていない RS Extended Range パッケージとして出力されます。</value></data>
+    <data name="Export.Validation.ExtendedRangeBass" xml:space="preserve"><value>{0} 弦ベース: RS Extended Range Mod 向けに、暗号化されていない RS Extended Range パッケージとして出力されます。</value></data>
     <data name="Export.Validation.SixStringDrop" xml:space="preserve"><value>{0} 弦ギター: 6 弦への射影（設定、ファイル）で、追加弦の {1} 個のノートと、そこでしか鳴らない {2} 個のコードが省かれ、さらに {3} 個のコードが追加弦のノートを失います。拡張レンジ形式を保つには射影をオフにし、省略を受け入れるにはオンのままにしてください。</value></data>
     <data name="Export.Validation.AudioShorterThanChart" xml:space="preserve"><value>オーディオ ({0}) が譜面より短いです。ゲームはオーディオの終了とともに曲を終えるため、それ以降のノーツは演奏されません。</value></data>
     <data name="Export.Validation.NoteBelowCapo" xml:space="preserve"><value>フレット {0} のノートがカポより下にあります。</value></data>
@@ -6425,7 +6426,7 @@
   <data name="Validation_ToneChangeOnChord" xml:space="preserve"><value>このコードと同時にトーンチェンジが発生します。</value></data>
   <data name="Validation_MutedStringInNonMutedChord" xml:space="preserve"><value>コードの一部の弦だけ（全部ではなく）がフレットハンドでミュートされています。</value></data>
   <data name="Validation_ChordFretNumberMoreThan24" xml:space="preserve"><value>コードノートの{0}フレットが上限の24を超えています。</value></data>
-  <data name="Validation_ChordInvalidBassArrangementString" xml:space="preserve"><value>ベースのアレンジは4弦のみです（コードが弦{0}を使用しています）。</value></data>
+  <data name="Validation_ChordInvalidBassArrangementString" xml:space="preserve"><value>このアレンジは{1}弦です（コードが弦インデックス{0}を使用しています）。</value></data>
   <data name="Validation_ChordNaturalHarmonicWithBend" xml:space="preserve"><value>コードノートにナチュラルハーモニクスとベンドが同時に指定されています。</value></data>
   <data name="Validation_ChordSeventhFretHarmonicWithSustain" xml:space="preserve"><value>コードの7フレット・ナチュラルハーモニクスにサステインが付いています。</value></data>
   <data name="Validation_ChordMissingBendValue" xml:space="preserve"><value>コードノートはベンドに設定されていますが、すべてのステップが0です。</value></data>
@@ -6456,7 +6457,7 @@
   <data name="Validation_LinkNextFretMismatch" xml:space="preserve"><value>Link-Nextの対象フレット（{0}）が元のフレット（{1}）と一致しません。</value></data>
   <data name="Validation_LinkNextBendMismatch" xml:space="preserve"><value>Link-Nextのベンドが一致しません。元は{0}ステップで終わり、対象は{1}ステップから始まります。</value></data>
   <data name="Validation_NoteFretNumberMoreThan24" xml:space="preserve"><value>フレット番号{0}がゲーム内の上限24を超えています。</value></data>
-  <data name="Validation_NoteInvalidBassArrangementString" xml:space="preserve"><value>ベースのアレンジは4弦のみです（弦インデックス{0}が指定されています）。</value></data>
+  <data name="Validation_NoteInvalidBassArrangementString" xml:space="preserve"><value>このアレンジは{1}弦です（弦インデックス{0}が指定されています）。</value></data>
   <data name="Validation_NoteAfterSongEnd" xml:space="preserve"><value>ノートが曲のオーディオの終了後に置かれています。</value></data>
   <data name="Validation_NoteInsideNoguitarSection" xml:space="preserve"><value>ノートがノーギターセクション内に置かれています。</value></data>
   <data name="Validation_ToneChangeOnNote" xml:space="preserve"><value>このノートと同時にトーンチェンジが発生します。直前または直後に移動してください。</value></data>

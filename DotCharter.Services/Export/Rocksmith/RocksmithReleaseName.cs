@@ -61,11 +61,13 @@ public static class RocksmithReleaseName
     {
         if (string.IsNullOrWhiteSpace(outputPath) || oldPcName.Length == 0 || oldPcName == newPcName) return null;
         var file = Path.GetFileName(outputPath);
-        var untagged = ExtendedRangePackageName.Apply(file, false);
+        var untagged = ExtendedRangePackageName.Untag(file);
         var tagged = file != untagged;
         var mac = untagged.Equals(MacName(oldPcName), StringComparison.OrdinalIgnoreCase);
         if (!mac && !untagged.Equals(oldPcName, StringComparison.OrdinalIgnoreCase)) return null;
-        var renamed = ExtendedRangePackageName.Apply(mac ? MacName(newPcName) : newPcName, tagged && !mac);
+        var renamed = mac
+            ? ExtendedRangePackageName.ApplyMac(MacName(newPcName), tagged)
+            : ExtendedRangePackageName.Apply(newPcName, tagged);
         return Path.Combine(Path.GetDirectoryName(outputPath) ?? "", renamed);
     }
 
@@ -80,10 +82,10 @@ public static class RocksmithReleaseName
     {
         if (string.IsNullOrWhiteSpace(outputPath)) return null;
         var file = Path.GetFileName(outputPath);
-        var untagged = ExtendedRangePackageName.Apply(file, false);
+        var untagged = ExtendedRangePackageName.Untag(file);
         var tagged = file != untagged;
         if (!untagged.Equals(RocksmithPackageName.For(project, oldVersion), StringComparison.OrdinalIgnoreCase) &&
-            !file.Equals(RocksmithPackageName.For(project, oldVersion, mac: true), StringComparison.OrdinalIgnoreCase))
+            !untagged.Equals(RocksmithPackageName.For(project, oldVersion, mac: true), StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }

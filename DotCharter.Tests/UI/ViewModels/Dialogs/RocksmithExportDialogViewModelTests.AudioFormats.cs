@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.Input;
+using DotCharter.Presentation.Screens.Dialogs;
 using DotCharter.Services.Export.Audio;
 
 namespace DotCharter.Tests.UI.ViewModels.Dialogs;
@@ -51,6 +52,7 @@ public sealed partial class RocksmithExportDialogViewModelTests
         using var keys = TestRocksmithKeys.UseNoKeys();
         var harness = AudioFormatHarness(".ogg");
         using var vm = harness.Open();
+        await SettleOpenTimeVolumes(vm);
         var notifications = new List<string?>();
         vm.PropertyChanged += (_, e) => notifications.Add(e.PropertyName);
         var localization = (FakeLocalization)harness.Edit.Localization;
@@ -62,6 +64,51 @@ public sealed partial class RocksmithExportDialogViewModelTests
         Assert.Contains(ExportAudioFormats.DisplayText, Assert.Single(harness.Storage.RequestedTitles));
         Assert.Equal(localization.Format("Dialog_Export_MainAudioRequired", ExportAudioFormats.DisplayText), vm.MainAudioWatermark);
         Assert.Equal(localization.Format("Picker_SelectExportAudio", ExportAudioFormats.DisplayText), Assert.Single(harness.Storage.RequestedTitles));
+    }
+
+    /// <summary>
+    ///     #896: opening the dialog measures the song's volumes on the pool, and that measurement sets
+    ///     <c>AudioVolume</c> when it ends. Outside the app's UI context its continuation runs on the
+    ///     pool, so a test recording notifications must settle it first or it races the recorder.
+    /// </summary>
+    [Fact]
+    public async Task Open_time_volume_measurement_notifies_before_it_settles()
+    {
+        using var keys = TestRocksmithKeys.UseNoKeys();
+        using var release = new ManualResetEventSlim();
+        var harness = AudioFormatHarness(".ogg");
+        harness.VolumeDecoder = _ =>
+        {
+            BoundedWait.For(release, "the test to release the held volume decode");
+            return AudibleTone();
+        };
+        using var vm = harness.Open();
+        var notifications = new System.Collections.Concurrent.ConcurrentQueue<string?>();
+        vm.PropertyChanged += (_, e) => notifications.Enqueue(e.PropertyName);
+        Task settled;
+        try
+        {
+            settled = SettleOpenTimeVolumes(vm);
+            Assert.False(settled.IsCompleted, "the settle returned while the open-time volume measurement was still held");
+        }
+        finally
+        {
+            release.Set();
+        }
+
+        await settled;
+
+        Assert.Contains(nameof(vm.AudioVolume), notifications);
+    }
+
+    private static Task SettleOpenTimeVolumes(RocksmithExportViewModel vm) =>
+        SettleVolumeTask(VolumeTask(vm), "the open-time volume measurement");
+
+    private static PcmAudio AudibleTone()
+    {
+        var samples = new short[48000];
+        for (var i = 0; i < samples.Length; i++) samples[i] = (short)(8000 * Math.Sin(2 * Math.PI * 440 * i / 48000.0));
+        return new PcmAudio(samples, 1, 48000);
     }
 
     private Harness AudioFormatHarness(string extension)

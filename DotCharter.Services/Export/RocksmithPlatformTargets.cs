@@ -6,9 +6,9 @@ namespace DotCharter.Services.Export;
 /// <summary>
 /// Which packages one export writes, and where. The Mac package has three rules
 ///     the PC one does not: it is always ENCRYPTED (a plain package loads only through the
-///     Windows CDLC enabler's patch), so it needs the TOC key and the Mac SNG key; it has no
-///     extended-range form (the RS Extended Range mod is Windows-only); and it is never written plain on
-///     request. A Mac-only export that breaks a rule fails with the reason; PC + Mac writes
+///     Windows CDLC enabler's patch), so it needs the TOC key and the Mac SNG key, and it is never
+///     written plain on request. The RS Extended Range package is the exception: it is plain on
+///     both platforms, so its Mac form needs no key. A Mac-only export that breaks a rule fails with the reason; PC + Mac writes
 ///     the PC package alone and says why. The export dialog asks the same questions first
 ///     (<see cref="MacUnavailableReason" />) so the user sees the reason before exporting.
 /// </summary>
@@ -38,8 +38,9 @@ public static class RocksmithPlatformTargets
     {
         if (options.Platform == ExportPlatform.Pc) return [RsPlatformLayout.Pc];
 
+        // The RS Extended Range package is plain on Mac too, so neither key rule applies to it.
         var reason = arrangements.Any(a => a.Sng.Extension != null)
-            ? "the RS Extended Range format is available only on Windows."
+            ? null
             : MacUnavailableReason() switch
             {
                 RocksmithMacBlock.NoEncryption => "a Mac package is always encrypted, and packages are written unencrypted here.",
@@ -60,8 +61,5 @@ public static class RocksmithPlatformTargets
 public enum RocksmithMacBlock
 {
     /// <summary>No Mac encryption available: the package would be plain.</summary>
-    NoEncryption,
-
-    /// <summary>The RS Extended Range format is Windows-only.</summary>
-    RsxrWindowsOnly
+    NoEncryption
 }

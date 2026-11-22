@@ -81,6 +81,7 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
     [ObservableProperty][NotifyPropertyChangedFor(nameof(VocalsTicked))] private bool _includeVocals = true;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(VocalsTicked))] private bool _hasVocals;
     [ObservableProperty] private string _dlcKeyWatermark = "";
+    [ObservableProperty] private bool _writeStandardPackage = true;
 
     public RocksmithExportViewModel(ChartEditDialogServices edit, RocksmithExportServices io, IDialogs dialogs, DialogMemory memory,
         IChartMaintenanceService maintenance, IDlcBuilderProjectWriter dlcBuilderWriter, ChartIssuesDoor issuesDoor)
@@ -185,14 +186,17 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
         return new DlcBuilderProjectInput(ChartProjectCloner.Clone(project), AudioPath, AlbumArtPath, OutputPath);
     }
 
-    /// <summary>Why Mac is unavailable for accepted content: missing encryption or a Windows-only format.</summary>
+    /// <summary>Why Mac is unavailable for accepted content: missing encryption.</summary>
     public RocksmithMacBlock? MacBlock => Target.MacUnavailableReason(HasPsxrSelection);
 
     /// <summary>What the platform choice will write, under the picker, or why the Mac package is ruled out.</summary>
     public string PlatformNote =>
-        RocksmithExportSupport.PlatformNote(_edit.Localization, Target, MacBlock, OutputPath, PackagePath);
+        RocksmithExportSupport.PlatformNote(_edit.Localization, Target, MacBlock, OutputPath, BuildPlatform, HasPsxrSelection);
 
     public bool HasPlatformNote => PlatformNote.Length > 0;
+
+    /// <summary>The ticked arrangements mix RS Extended Range and stock ones, so a standard package can go beside.</summary>
+    public bool OffersStandardPackage => HasPsxrSelection && RocksmithExportSupport.HasStockSelection(_project, Arrangements);
 
     public ICommand OpenToneDesignerCommand { get; }
     public ICommand ShowInIssuesCommand { get; }
@@ -221,7 +225,7 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
             return false;
         }
 
-        CommitVersion();
+        RocksmithExportSupport.CommitVersion(_edit.History, _project?.Chart, PackageVersion, PreviewStartText);
         SaveDraft();
         Close(HasResult);
         return true;
@@ -232,7 +236,7 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
         IsDisposed = true;
         _buildCts?.Cancel();
         EndOpenWork();
-        CommitVersion();
+        RocksmithExportSupport.CommitVersion(_edit.History, _project?.Chart, PackageVersion, PreviewStartText);
         SaveDraft();
     }
 
@@ -252,17 +256,11 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
     private RocksmithExportGate Gate => new(IsBuilding, MacOnlyBlocked, HasBlockingErrors, HasInvalidDlcKey, HasInvalidPreviewStart, MissingPaths,
         NothingSelectedToExport);
 
-    /// <summary>The version and the preview start typed in the dialog become the song's, as one undo step each.</summary>
-    private void CommitVersion() => RocksmithExportSupport.CommitVersion(_edit.History, _project?.Chart, PackageVersion, PreviewStartText);
-
     /// <summary>The target is Mac alone and no Mac package can be written.</summary>
     private bool MacOnlyBlocked => Target.IsMacOnly && MacBlock is not null;
 
     /// <summary>The platform the build is asked for; PC + Mac falls back to PC when the Mac package is ruled out.</summary>
     private ExportPlatform BuildPlatform => RocksmithExportSupport.BuildPlatform(Target, MacBlock);
-
-    /// <summary>One platform's package path for the current output field.</summary>
-    private string PackagePath(bool mac) => RocksmithPlatformTargets.OutputPathFor(OutputPath, BuildPlatform, mac);
 
     /// <summary>The save's own assembly step, so the export sees the current lyrics, BPM and audio metadata.</summary>
     private void Assemble(ChartProject project) =>
@@ -327,6 +325,7 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
         OnPropertyChanged(nameof(MacBlock));
         OnPropertyChanged(nameof(PlatformNote));
         OnPropertyChanged(nameof(HasPlatformNote));
+        OnPropertyChanged(nameof(OffersStandardPackage));
         foreach (var command in new[] { _export, _testExport, _autoVolume, _autoPreviewVolume }) command.NotifyCanExecuteChanged();
         RaiseExportBlocked();
     }

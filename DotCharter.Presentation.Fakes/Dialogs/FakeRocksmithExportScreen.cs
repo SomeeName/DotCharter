@@ -155,6 +155,8 @@ public sealed class FakeRocksmithExportScreen : FakeDialog<bool>, IRocksmithExpo
     public IExportTarget Target { get; }
     public string PlatformNote { get; }
     public bool HasPlatformNote => PlatformNote.Length > 0;
+    public bool OffersStandardPackage { get; init; }
+    public bool WriteStandardPackage { get; set; } = true;
     public IReadOnlyList<IExportArrangementRow> Arrangements { get; }
     public bool IncludeVocals { get; set; }
     public bool VocalsTicked { get => IncludeVocals && HasVocals; set => IncludeVocals = value; }

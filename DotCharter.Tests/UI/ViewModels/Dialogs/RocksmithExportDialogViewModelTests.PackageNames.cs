@@ -45,7 +45,7 @@ public sealed partial class RocksmithExportDialogViewModelTests
     [InlineData(false, false, "_p.psarc")]
     [InlineData(true, false, "_rsxr_p.psarc")]
     [InlineData(false, true, "_m.psarc")]
-    [InlineData(true, true, "_m.psarc")]
+    [InlineData(true, true, "_rsxr_m.psarc")]
     public void Release_names_keep_sanitization_and_follow_versions_for_each_platform(bool extended, bool mac, string suffix)
     {
         using var keys = TestRocksmithKeys.UseNoKeys();
@@ -74,8 +74,8 @@ public sealed partial class RocksmithExportDialogViewModelTests
     [InlineData(true, true, false, "_test_v1_rsxr_p.psarc")]
     [InlineData(false, false, true, "_test_m.psarc")]
     [InlineData(true, false, true, "_test_v1_m.psarc")]
-    [InlineData(false, true, true, "_test_m.psarc")]
-    [InlineData(true, true, true, "_test_v1_m.psarc")]
+    [InlineData(false, true, true, "_test_rsxr_m.psarc")]
+    [InlineData(true, true, true, "_test_v1_rsxr_m.psarc")]
     public void Test_names_use_snapshot_identity_without_changing_key_title_or_internal_version_rules(
         bool running, bool extended, bool mac, string suffix)
     {

@@ -92,8 +92,13 @@ public sealed partial class ExportTargetViewModel : ObservableObject, IExportTar
     /// <summary>The PC package is written plain, so the dialog warns: a Mac-only target writes no PC package.</summary>
     public bool WritesPlainPackage => WritesPlain && !IsMacOnly && !_extendedRange;
 
+    /// <summary>The stock package's form, which the RS Extended Range package overrides: the standard
+    /// package beside it is written so.</summary>
+    internal bool StockWritesPlain => (_extendedRange ? _stockPackage ?? PackageOptions[0] : _selectedPackage).Plain || !RocksmithKeys.CanWriteEncrypted;
+
+    /// <summary>The RS Extended Range package is plain on Mac too, so only stock content can be blocked.</summary>
     internal RocksmithMacBlock? MacUnavailableReason(bool extendedStrings) =>
-        extendedStrings ? RocksmithMacBlock.RsxrWindowsOnly : RocksmithPlatformTargets.MacUnavailableReason();
+        extendedStrings ? null : RocksmithPlatformTargets.MacUnavailableReason();
 
     /// <summary>The target writes a Mac package (Mac or PC + Mac).</summary>
     public bool IncludesMac => SelectedPlatformOption.Value != ExportPlatform.Pc;

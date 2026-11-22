@@ -1,7 +1,7 @@
 namespace DotCharter.Services.Editing.Validation.Rules;
 
 /// <summary>
-///     Per-note checks: fret range, bass string range, song-end boundary,
+///     Per-note checks: fret range, string range (the arrangement's own string count), song-end boundary,
 ///     noguitar section, tone-change collision, harmonic quirks, bend sanity,
 ///     technique-needs-sustain, HOPO-same-fret, position shift into pull-off,
 ///     finger change during slide. Link-Next specifics live in
@@ -16,7 +16,7 @@ public sealed class NoteRule : IArrangementRule
     public void Validate(ArrangementValidationContext context, ICollection<ArrangementIssue> issues)
     {
         var beats = context.Beats;
-        var isBass = context.Arrangement.ArrangementType == ArrangementType.Bass;
+        var stringCount = context.Arrangement.StringCount;
 
         foreach (var level in context.Arrangement.Levels)
         {
@@ -29,7 +29,7 @@ public sealed class NoteRule : IArrangementRule
                     ? 0.0
                     : note.EndPosition.GetPositionMs(beats) - timeMs;
 
-                CheckPlacement(context, issues, note, timeMs, isBass);
+                CheckPlacement(context, issues, note, timeMs, stringCount);
                 CheckHarmonicAndBend(beats, issues, note, timeMs, sustainMs);
                 CheckTechniques(context, issues, note, timeMs, sustainMs);
                 CheckHopo(context, issues, level, i, timeMs);
@@ -39,7 +39,7 @@ public sealed class NoteRule : IArrangementRule
     }
 
     private static void CheckPlacement(ArrangementValidationContext context, ICollection<ArrangementIssue> issues, GuitarNote note,
-        double timeMs, bool isBass)
+        double timeMs, int stringCount)
     {
         if (note.Fret > 24)
         {
@@ -47,10 +47,12 @@ public sealed class NoteRule : IArrangementRule
                 "Validation_NoteFretNumberMoreThan24", args: [note.Fret]));
         }
 
-        if (isBass && note.StringIndex >= 4)
+        // The arrangement's own string count (4-9), bass and guitar alike: a 5-string bass is legal
+        // here; whether an export target can carry it is the export gate's call.
+        if (note.StringIndex >= stringCount)
         {
             issues.Add(ArrangementIssues.Note(ArrangementIssueType.InvalidBassArrangementString, note, timeMs,
-                "Validation_NoteInvalidBassArrangementString", args: [note.StringIndex]));
+                "Validation_NoteInvalidBassArrangementString", args: [note.StringIndex, stringCount]));
         }
 
         if (context.TotalAudioLengthMs is { } endMs && timeMs >= endMs)

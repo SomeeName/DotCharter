@@ -98,19 +98,22 @@ public sealed class RsxrPackageNameTests : IDisposable
     }
 
     [Theory]
-    [InlineData("song_rsxr_m.psarc")]
-    [InlineData("song_rsxr_p.psarc")]
-    public async Task Mac_only_stock_content_writes_the_requested_path(string name)
+    [InlineData("song_rsxr_m.psarc", "song_m.psarc")]
+    [InlineData("song_rsxr_p.psarc", "song_rsxr_p.psarc")]
+    public async Task Mac_only_stock_content_drops_only_the_mac_tag(string name, string written)
     {
         using var keys = TestRocksmithKeys.UseSynthetic();
         var built = RsxrTestSupport.Chart(false, 6);
-        var requested = Path.Combine(_directory, name);
+        var path = Path.Combine(_directory, name);
         var audio = Path.Combine(_directory, "audio.wem");
         File.WriteAllBytes(audio, new byte[4000]);
 
-        var result = await RsxrTestSupport.Build(built.Project, built.SongLengthMs, audio, requested,
+        var result = await RsxrTestSupport.Build(built.Project, built.SongLengthMs, audio, path,
             ExportPlatform.Mac, plain: false);
 
+        // The Mac package carries the RS Extended Range tag only for an extended package,
+        // like the PC one; a name without the Mac suffix is written as requested.
+        var requested = Path.Combine(_directory, written);
         Assert.Equal(requested, result.PsarcPath);
         Assert.Equal(requested, Assert.Single(result.PackagePaths));
         Assert.Equal(requested, Assert.Single(Directory.GetFiles(_directory, "*.psarc")));

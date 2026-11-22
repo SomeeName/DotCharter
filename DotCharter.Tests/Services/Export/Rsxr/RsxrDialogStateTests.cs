@@ -53,26 +53,29 @@ public sealed class RsxrDialogStateTests : IDisposable
         }
         Assert.True(gateChanges > 0);
         Assert.Equal(!accepted, vm.Target.CanChoosePackage);
-        Assert.Equal(accepted ? RocksmithMacBlock.RsxrWindowsOnly : null, vm.MacBlock);
-        if (accepted)
-        {
-            Assert.Contains(FakeLocalization.English()["Dialog_Export_RsxrWindowsOnly"], vm.PlatformNote, StringComparison.Ordinal);
-            Assert.Equal(platform != ExportPlatform.Mac, vm.ExportCommand.CanExecute(null));
-            Assert.Equal(platform == ExportPlatform.PcAndMac ? ExportPlatform.Pc : platform, vm.BuildOptions(project).Platform);
-            return;
-        }
-
+        // #898: the RS Extended Range package has a plain Mac form, so nothing blocks Mac.
+        Assert.Null(vm.MacBlock);
+        Assert.Equal(accepted, vm.OffersStandardPackage);
         Assert.Equal(platform, vm.BuildOptions(project).Platform);
+        Assert.Equal(accepted, vm.BuildOptions(project).WriteStandardPackage);
         Assert.True(vm.ExportCommand.CanExecute(null), vm.ExportBlockedReason);
-        Assert.DoesNotContain("_rsxr", vm.OutputPath, StringComparison.Ordinal);
+        Assert.Equal(accepted, vm.OutputPath.Contains("_rsxr", StringComparison.Ordinal));
+        var tag = accepted ? "_rsxr" : "";
         var note = platform == ExportPlatform.PcAndMac
-            ? FakeLocalization.English().Format("Dialog_Export_WritesBoth", "pair_p.psarc", "pair_m.psarc") : "";
+            ? FakeLocalization.English().Format("Dialog_Export_WritesBoth", $"pair{tag}_p.psarc", $"pair{tag}_m.psarc") : "";
         Assert.Equal(note, vm.PlatformNote);
         Assert.Equal(note.Length > 0, vm.HasPlatformNote);
         await vm.ExportCommand.ExecuteAsync(null);
-        Assert.True(vm.HasResult, string.Join("\n", harness.Logger.Snapshot().Select(e => e.Message)));
-        var names = Directory.GetFiles(_directory, "*.psarc").Select(Path.GetFileName).Order().ToArray();
-        Assert.Equal(platform == ExportPlatform.PcAndMac ? ["pair_m.psarc", "pair_p.psarc"] : new[] { "pair_m.psarc" }, names);
+        Assert.True(vm.HasResult, string.Join('|', harness.Logger.Snapshot().Select(e => e.Message)));
+        var names = Directory.GetFiles(_directory, "*.psarc").Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
+        string[] expected = (platform, accepted) switch
+        {
+            (ExportPlatform.PcAndMac, true) => ["pair_m.psarc", "pair_p.psarc", "pair_rsxr_m.psarc", "pair_rsxr_p.psarc"],
+            (ExportPlatform.PcAndMac, false) => ["pair_m.psarc", "pair_p.psarc"],
+            (_, true) => ["pair_m.psarc", "pair_rsxr_m.psarc"],
+            _ => ["pair_m.psarc"]
+        };
+        Assert.Equal(expected, names);
     }
 
     [Theory]

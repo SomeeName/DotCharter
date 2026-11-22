@@ -87,7 +87,13 @@ public sealed class RsxrPickedOutputTests : IDisposable
 
         var asks = source == "picked" && exists;
         Assert.Equal(asks ? 1 : 0, prompt.Calls.Count);
-        Assert.Equal("confirmed package", File.ReadAllText(confirmed));
+        // Ticking the extended row makes the stock name the standard package's path: an export
+        // that goes ahead writes it beside the RS Extended Range package.
+        var writesStandard = !initiallyExtended && !(asks && !accept);
+        if (writesStandard)
+            Assert.Equal(RsxrTestSupport.PackageMagic(false), File.ReadAllBytes(confirmed)[..4]);
+        else
+            Assert.Equal("confirmed package", File.ReadAllText(confirmed));
         if (asks)
         {
             var call = Assert.Single(prompt.Calls);
@@ -105,8 +111,10 @@ public sealed class RsxrPickedOutputTests : IDisposable
             return;
         }
         Assert.True(vm.HasResult, string.Join("\n", harness.Logger.Snapshot().Select(e => e.Message)));
-        Assert.Equal(final, vm.ResultPath);
+        Assert.Equal(writesStandard ? final + "\n" + confirmed : final, vm.ResultPath);
         Assert.Equal(RsxrTestSupport.PackageMagic(!initiallyExtended), File.ReadAllBytes(final)[..4]);
+        // The repeat export replaces both packages without asking again: the standard package
+        // is the untagged sibling of the confirmed RS Extended Range path.
         await vm.ExportCommand.ExecuteAsync(null);
         Assert.Equal(asks ? 1 : 0, prompt.Calls.Count);
     }
@@ -147,8 +155,18 @@ public sealed class RsxrPickedOutputTests : IDisposable
 
         Assert.Empty(prompt.Calls);
         Assert.True(vm.HasResult);
-        Assert.Equal(RsxrTestSupport.PackageMagic(test), File.ReadAllBytes(vm.ResultPath)[..4]);
-        if (test) Assert.Equal("release package", File.ReadAllText(vm.OutputPath));
+        var written = vm.ResultPath.Split('\n');
+        Assert.Equal(RsxrTestSupport.PackageMagic(test), File.ReadAllBytes(written[0])[..4]);
+        if (!test)
+        {
+            Assert.Single(written);
+            return;
+        }
+        Assert.Equal("release package", File.ReadAllText(vm.OutputPath));
+        // A mixed test export writes the standard test package beside the RS Extended Range one.
+        Assert.Equal(2, written.Length);
+        Assert.Equal(ExtendedRangePackageName.Untag(written[0]), written[1]);
+        Assert.Equal(RsxrTestSupport.PackageMagic(false), File.ReadAllBytes(written[1])[..4]);
     }
 
     [Theory]
@@ -201,8 +219,11 @@ public sealed class RsxrPickedOutputTests : IDisposable
             Assert.Equal(2, Directory.GetFiles(_directory, "*.psarc").Length);
             return;
         }
-        Assert.Equal(final, vm.ResultPath);
+        var standard = Path.Combine(_directory, "song_p.psarc");
+        Assert.Equal(final + "\n" + standard, vm.ResultPath);
         Assert.Equal(RsxrTestSupport.PackageMagic(true), File.ReadAllBytes(final)[..4]);
+        Assert.Equal(RsxrTestSupport.PackageMagic(false), File.ReadAllBytes(standard)[..4]);
+        // The repeat export finds both packages in place and asks nothing more.
         await vm.ExportCommand.ExecuteAsync(null);
         Assert.Single(prompt.Calls);
     }

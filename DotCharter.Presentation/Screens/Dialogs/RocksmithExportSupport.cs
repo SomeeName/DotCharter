@@ -36,7 +36,9 @@ internal static class RocksmithExportSupport
 
     public static void UpdateOutputName(RocksmithExportViewModel screen, bool psxr, Action gateChanged)
     {
-        screen.SetOutputName(ExtendedRangePackageName.Apply(screen.OutputPath, psxr && !screen.Target.IsMacOnly));
+        screen.SetOutputName(screen.Target.IsMacOnly
+            ? ExtendedRangePackageName.ApplyMac(screen.OutputPath, psxr)
+            : ExtendedRangePackageName.Apply(screen.OutputPath, psxr));
         gateChanged();
     }
 
@@ -55,6 +57,10 @@ internal static class RocksmithExportSupport
     public static bool IsPsxr(ChartProject? project, IEnumerable<ExportArrangementRow> rows) =>
         project != null && ExtendedRangePackageName.IsPsxr(
             project.Arrangements.Where(a => rows.Any(row => row.IsSelected && row.Name == a.Name)));
+
+    public static bool HasStockSelection(ChartProject? project, IEnumerable<ExportArrangementRow> rows) =>
+        project != null && project.Arrangements.Any(a => a.ArrangementType != ArrangementType.Vocal &&
+            !RocksmithPackageBuilder.IsExtendedStringArrangement(a) && rows.Any(row => row.IsSelected && row.Name == a.Name));
 
     public static ExportPlatform BuildPlatform(ExportTargetViewModel target, RocksmithMacBlock? macBlock) =>
         target.SelectedPlatformOption.Value == ExportPlatform.PcAndMac && macBlock is not null ? ExportPlatform.Pc : target.SelectedPlatformOption.Value;
@@ -76,18 +82,14 @@ internal static class RocksmithExportSupport
         gateChanged();
     }
 
-    public static string MacBlockText(ILocalizationService loc, RocksmithMacBlock block) => loc[block switch
-    {
-        RocksmithMacBlock.RsxrWindowsOnly => "Dialog_Export_RsxrWindowsOnly",
-        _ => "Dialog_Export_MacNeedsEncryption"
-    }];
+    public static string MacBlockText(ILocalizationService loc, RocksmithMacBlock block) => loc["Dialog_Export_MacNeedsEncryption"];
 
     /// <summary>
     ///     What the platform choice will write, under the picker: both file names for PC + Mac, and, when the Mac package
-    ///     is ruled out, why. Empty for PC. <paramref name="packagePath" /> answers one platform's path (<c>mac</c>).
+    ///     is ruled out, why. Empty for PC. The Mac name carries the RS Extended Range tag when <paramref name="psxr" />.
     /// </summary>
     public static string PlatformNote(ILocalizationService loc, ExportTargetViewModel target, RocksmithMacBlock? block,
-        string outputPath, Func<bool, string> packagePath)
+        string outputPath, ExportPlatform platform, bool psxr)
     {
         if (!target.IncludesMac) return "";
         if (block is { } blocked)
@@ -98,7 +100,9 @@ internal static class RocksmithExportSupport
         }
 
         if (target.IsMacOnly || string.IsNullOrWhiteSpace(outputPath)) return "";
-        return loc.Format("Dialog_Export_WritesBoth", Path.GetFileName(packagePath(false)), Path.GetFileName(packagePath(true)));
+        var mac = ExtendedRangePackageName.ApplyMac(RocksmithPlatformTargets.OutputPathFor(outputPath, platform, true), psxr);
+        return loc.Format("Dialog_Export_WritesBoth", Path.GetFileName(RocksmithPlatformTargets.OutputPathFor(outputPath, platform, false)),
+            Path.GetFileName(mac));
     }
 
     /// <summary>Measures export gain for <paramref name="path" /> off the UI thread.</summary>

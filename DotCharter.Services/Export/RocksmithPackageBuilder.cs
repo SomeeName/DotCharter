@@ -15,7 +15,7 @@ using SkiaSharp;
 namespace DotCharter.Services.Export;
 
 /// <summary>Options for building a Rocksmith 2014 package: PC, Mac or both.</summary>
-public sealed class RocksmithBuildOptions
+public sealed record RocksmithBuildOptions
 {
     /// <summary>Full path of the .psarc to create (conventionally ending in "_p.psarc", or
     /// "_m.psarc" for a Mac-only build). For <see cref="ExportPlatform.PcAndMac" /> it names the
@@ -27,10 +27,10 @@ public sealed class RocksmithBuildOptions
     public string? ProjectDirectory { get; init; }
 
     /// <summary>
-    /// The platform(s) to write. The Mac package is always encrypted, never for a
-    ///     extended arrangement (the RS Extended Range mod is Windows-only) and needs the Mac SNG key:
+    /// The platform(s) to write. A stock Mac package is always encrypted and needs the Mac SNG key:
     ///     a Mac-only build that cannot have it fails, PC + Mac writes the PC package alone
-    ///     and says why (<see cref="RocksmithPlatformTargets" />).
+    ///     and says why (<see cref="RocksmithPlatformTargets" />). An RS Extended Range package
+    ///     is plain on both platforms (<c>_rsxr_p.psarc</c>, <c>_rsxr_m.psarc</c>).
     /// </summary>
     public ExportPlatform Platform { get; init; } = ExportPlatform.Pc;
 
@@ -79,6 +79,25 @@ public sealed class RocksmithBuildOptions
     ///     is never plain.
     /// </summary>
     public bool? PlainPackage { get; init; }
+
+    /// <summary>
+    ///     With both RS Extended Range and stock arrangements, also write a standard package
+    ///     holding only the stock ones, beside the RS Extended Range package. Both share the
+    ///     song's identity: they are two versions of one song.
+    /// </summary>
+    public bool WriteStandardPackage { get; init; }
+
+    /// <summary>The standard package's path; defaults to <see cref="OutputPath" /> without the
+    /// RS Extended Range tag. The save companion builds it to a staging name.</summary>
+    public string? StandardOutputPath { get; init; }
+
+    /// <summary>The <see cref="PlainPackage" /> of the standard package: the stock choice the
+    /// RS Extended Range package overrides.</summary>
+    public bool? StandardPlainPackage { get; init; }
+
+    /// <summary>The persistent and master ids drawn per arrangement, shared by the two packages
+    /// of one export. Filled by the first build and read by the second.</summary>
+    internal Dictionary<string, RsArrangementIdentity>? SharedArrangementIds { get; init; }
 
 
     /// <summary>
@@ -201,6 +220,13 @@ public sealed record RocksmithBuildResult(
 
     /// <summary>The archive carries the PSXR magic and extended arrangements.</summary>
     public bool IsPsxr { get; init; }
+
+    /// <summary>The standard packages written beside the RS Extended Range package, PC first
+    /// (<see cref="RocksmithBuildOptions.WriteStandardPackage" />); also in <see cref="PackagePaths" />.</summary>
+    public IReadOnlyList<string> StandardPackagePaths { get; init; } = [];
+
+    /// <summary>The chart names of the stock arrangements this build wrote.</summary>
+    internal IReadOnlyList<string> StockArrangements { get; init; } = [];
 }
 
 /// <summary>
@@ -208,7 +234,7 @@ public sealed record RocksmithBuildResult(
 /// Flat-file layout, entry set and asset naming ported from
 /// Rocksmith2014.NET PackageBuilder.fs.
 /// </summary>
-public sealed class RocksmithPackageBuilder
+public sealed partial class RocksmithPackageBuilder
 {
     private readonly IAppLogger _logger;
 
@@ -227,7 +253,7 @@ public sealed class RocksmithPackageBuilder
     {
         // Play-only content is never exported; refused before any work starts.
         PlayOnlyExportGuard.ThrowIfPlayOnly(project, "Rocksmith package");
-        return Task.Run(() => BuildAsync(project, options, progress, cancellationToken, beforePublish), cancellationToken);
+        return Task.Run(() => BuildPackagesAsync(project, options, progress, cancellationToken, beforePublish), cancellationToken);
     }
 
     private async Task<RocksmithBuildResult> BuildAsync(
@@ -263,7 +289,7 @@ public sealed class RocksmithPackageBuilder
         cancellationToken.ThrowIfCancellationRequested();
 
         var songLengthMs = options.SongLengthMs;
-        var arrangements = ConvertArrangements(project, options, songLengthMs, warnings);
+        var arrangements = DemoteStockDuplicateMains(ConvertArrangements(project, options, songLengthMs, warnings));
         if (arrangements.Count == 0)
         {
             // Say WHY (an 8-string guitar is refused).
@@ -277,7 +303,8 @@ public sealed class RocksmithPackageBuilder
         // PC, Mac or both; a Mac package the content or the keys rule out is
         // refused when it was the only target and dropped with a warning otherwise.
         var platforms = RocksmithPlatformTargets.Resolve(options, arrangements, warnings);
-        var plain = platforms.Contains(RsPlatformLayout.Pc) && ResolvePcPlain(options, arrangements, warnings);
+        var psxr = arrangements.Any(a => a.Sng.Extension != null);
+        var plain = (psxr || platforms.Contains(RsPlatformLayout.Pc)) && ResolvePcPlain(options, arrangements, warnings);
 
         // Everything but the SNGs, the graph and the entry folders is the same bytes on
         // both platforms, so it is built once.
@@ -310,14 +337,13 @@ public sealed class RocksmithPackageBuilder
             Encoding.UTF8.GetBytes(ToolkitVersionText(meta.Charter, options)),
             Encoding.ASCII.GetBytes(options.AppId));
         var paths = new List<string>(platforms.Count);
-        var psxr = arrangements.Any(a => a.Sng.Extension != null);
         using var publication = new PackagePublication(logger: _logger);
         foreach (var platform in platforms)
         {
             var path = RocksmithPlatformTargets.OutputPathFor(options, platform);
-            if (!platform.IsMac) path = ExtendedRangePackageName.Apply(path, psxr);
+            path = platform.IsMac ? ExtendedRangePackageName.ApplyMac(path, psxr) : ExtendedRangePackageName.Apply(path, psxr);
             cancellationToken.ThrowIfCancellationRequested();
-            WritePackage(publication.Stage(path), platform, plain && !platform.IsMac, meta, arrangements, shared, options, psxr);
+            WritePackage(publication.Stage(path), platform, plain && (psxr || !platform.IsMac), meta, arrangements, shared, options, psxr);
             paths.Add(path);
         }
         if (beforePublish != null)
@@ -344,7 +370,8 @@ public sealed class RocksmithPackageBuilder
             arrangements.Select(a => a.ArrangementName).ToList(),
             warnings)
         {
-            PackagePaths = paths, IsPsxr = psxr
+            PackagePaths = paths, IsPsxr = psxr,
+            StockArrangements = [.. arrangements.Where(a => a.Domain != null && a.Sng.Extension == null).Select(a => a.ChartName)]
         };
     }
 
@@ -420,7 +447,8 @@ public sealed class RocksmithPackageBuilder
             foreach (var arrangement in arrangements)
             {
                 var sngData = new MemoryStream();
-                if (platform.IsMac)
+                // The RS Extended Range package carries the same plain charts on both platforms.
+                if (platform.IsMac && !psxr)
                     RocksmithSngWriter.WritePackedMac(arrangement.Sng, sngData, options.Identity?.SngIv);
                 else if (arrangement.Sng.Extension != null)
                     RsxrSngWriter.WritePlain(arrangement.Sng, sngData);
@@ -584,11 +612,12 @@ public sealed class RocksmithPackageBuilder
                 var declaresTone = !string.IsNullOrWhiteSpace(toneBase) || slots.Any(s => !string.IsNullOrWhiteSpace(s));
                 if (string.IsNullOrWhiteSpace(toneBase)) toneBase = $"{partitionName}_base";
 
-                var ids = ArrangementIds(options, result.Count);
+                var ids = ArrangementIds(options, result.Count, chartArrangement.Name);
                 result.Add(new RsPackageArrangement
                 {
                     ArrangementName = typeName,
                     PartitionName = partitionName,
+                    ChartName = chartArrangement.Name,
                     SongPartition = partition,
                     PersistentId = ids.PersistentId,
                     MasterId = ids.MasterId,
@@ -611,7 +640,7 @@ public sealed class RocksmithPackageBuilder
 
         if (VocalsExportPolicy.PackageTrack(project, options.IncludeVocals) is { Track: var vocalTrack })
         {
-            var ids = ArrangementIds(options, result.Count);
+            var ids = ArrangementIds(options, result.Count, VocalsIdentityKey);
             result.Add(new RsPackageArrangement
             {
                 ArrangementName = "Vocals",
@@ -640,10 +669,15 @@ public sealed class RocksmithPackageBuilder
     private static string ToolkitVersion(string version) =>
         string.IsNullOrWhiteSpace(version) ? "1" : string.Join(' ', version.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).Trim();
 
-    private static RsArrangementIdentity ArrangementIds(RocksmithBuildOptions options, int index) =>
-        options.Identity is { } identity
+    private static RsArrangementIdentity ArrangementIds(RocksmithBuildOptions options, int index, string name)
+    {
+        if (options.SharedArrangementIds?.TryGetValue(name, out var shared) == true) return shared;
+        var ids = options.Identity is { } identity
             ? identity.Arrangements[index]
             : new RsArrangementIdentity(Guid.NewGuid(), RandomNumberGenerator.GetInt32(RsMasterIds.CustomMasterIdFloor, int.MaxValue));
+        options.SharedArrangementIds?.TryAdd(name, ids);
+        return ids;
+    }
 
     /// <summary>
     ///     The effective tone-definition set for a build: the imported

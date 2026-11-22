@@ -368,9 +368,11 @@
 ## Extended arrangements use RS Extended Range
 
 Seven-/eight-string guitar and five-/six-string bass are written as RS Extended
-Range packages. The package is plain, Windows only, starts with `PSXR`, and uses
-`<name>_rsxr_p.psarc`. A Mac-only export is refused; PC + Mac writes PC with its
-reason. Six-string guitar and four-string bass keep stock bytes and names.
+Range packages. The package is plain on both platforms, starts with `PSXR`, and uses
+`<name>_rsxr_p.psarc` (PC) or `<name>_rsxr_m.psarc` (Mac). Six-string guitar and
+four-string bass keep stock bytes and names. When stock and extended arrangements
+are ticked together, the export also writes a standard package with the stock ones
+alone (on by default; the dialog's standard package option, #898).
 
 `Rs7Projection` and `SngFromDomainMapper` retain the internal slot-order model.
 The six stock chord columns, extra template columns and per-string techniques
@@ -403,7 +405,7 @@ unrepresentable tuning. Other fixed limits stay at 36 levels and 32,767 sounds
 per level, with signed-byte template frets/fingers (`SngFormatLimits`).
 
 The export dialog fixes the package picker to Plain for accepted extended
-content and shows its unencrypted/Windows/mod reason. The stock plain warning
+content and shows its unencrypted/mod reason. The stock plain warning
 is hidden there. The picker offers only Encrypted and Plain for stock content,
 and Plain alone without keys. Names follow the accepted selection. Package,
 manifest, chart and XML bytes are frozen by `RsxrOutputPinTests`; stock package,

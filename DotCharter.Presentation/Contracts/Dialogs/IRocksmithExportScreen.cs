@@ -73,6 +73,12 @@ public interface IRocksmithExportScreen : IDialogScreen<bool>
 
     bool HasPlatformNote { get; }
 
+    /// <summary>The ticked arrangements mix RS Extended Range and stock ones; the standard-package box shows.</summary>
+    bool OffersStandardPackage { get; }
+
+    /// <summary>Also write a standard package with the stock arrangements alone (on by default).</summary>
+    bool WriteStandardPackage { get; set; }
+
     string DlcKey { get; set; }
 
     /// <summary>The song's package version ("1" by default), also followed by an automatically derived

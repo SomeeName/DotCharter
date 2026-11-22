@@ -847,10 +847,10 @@ public sealed partial class RocksmithExportDialogViewModelTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_tempDir, "nokeys_m.psarc")));
     }
 
-    /// <summary>#782: a TICKED 7-string guitar rules the Mac package out (rs7string is
-    /// Windows-only); unticking it brings PC + Mac back.</summary>
+    /// <summary>#898: a TICKED 7-string guitar no longer rules the Mac package out: PC + Mac names
+    /// both RS Extended Range packages, and unticking it brings the stock names back.</summary>
     [Fact]
-    public void A_ticked_seven_string_guitar_rules_the_mac_package_out()
+    public void A_ticked_seven_string_guitar_keeps_the_mac_package()
     {
         var loc = FakeLocalization.English();
         var project = CreateValidProject();
@@ -862,18 +862,13 @@ public sealed partial class RocksmithExportDialogViewModelTests : IDisposable
         var seven = vm.Arrangements.Single(a => a.Name == "Seven");
         Assert.True(seven.IsExtendedString);
 
-        Assert.Equal(RocksmithMacBlock.RsxrWindowsOnly, vm.MacBlock);
-        Assert.Equal(loc.Format("Dialog_Export_PcOnlyBecause", loc["Dialog_Export_RsxrWindowsOnly"]), vm.PlatformNote);
-
-        Pick(vm, ExportPlatform.Mac);
-        Assert.Contains(loc.Format("Dialog_Export_MacUnavailable", loc["Dialog_Export_RsxrWindowsOnly"]),
-            vm.ExportBlockedReason.Split('\n'));
+        Pick(vm, ExportPlatform.PcAndMac);
+        Assert.Null(vm.MacBlock);
+        Assert.Equal(loc.Format("Dialog_Export_WritesBoth", "seven_rsxr_p.psarc", "seven_rsxr_m.psarc"), vm.PlatformNote);
+        Assert.True(vm.OffersStandardPackage);
 
         seven.IsSelected = false;
-        Assert.Null(vm.MacBlock);
-        Assert.DoesNotContain(loc.Format("Dialog_Export_MacUnavailable", loc["Dialog_Export_RsxrWindowsOnly"]),
-            vm.ExportBlockedReason.Split('\n'));
-        Pick(vm, ExportPlatform.PcAndMac);
+        Assert.False(vm.OffersStandardPackage);
         Assert.Equal(loc.Format("Dialog_Export_WritesBoth", "seven_p.psarc", "seven_m.psarc"), vm.PlatformNote);
     }
 

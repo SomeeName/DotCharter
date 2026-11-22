@@ -61,11 +61,11 @@ public sealed partial class RocksmithPlatformPackageTests
         Assert.Equal([Path.Combine(_tempDir, "plain_p.psarc")], result.PackagePaths);
     }
 
-    /// <summary>rs7string is Windows-only: a 7-string guitar exports PC only.</summary>
+    /// <summary>A 7-string guitar writes the RS Extended Range package for Mac as well, plain.</summary>
     [Fact]
-    public async Task A_seven_string_guitar_writes_no_mac_package()
+    public async Task A_seven_string_guitar_writes_a_plain_mac_extended_package()
     {
-        using var keys = TestRocksmithKeys.UseSynthetic();
+        using var keys = TestRocksmithKeys.UseNoKeys();
         var builder = new RocksmithPackageBuilder(new FakeAppLogger());
         Task<RocksmithBuildResult> Build(string name, ExportPlatform platform) => builder.BuildPsarcAsync(
             Rs7PackageExportTests.CreateProject(7), new RocksmithBuildOptions
@@ -74,12 +74,14 @@ public sealed partial class RocksmithPlatformPackageTests
                 SongLengthMs = 60_000
             }, cancellationToken: TestContext.Current.CancellationToken);
 
-        var error = await Assert.ThrowsAsync<InvalidDataException>(() => Build("seven_m.psarc", ExportPlatform.Mac));
-        Assert.Contains("RS Extended Range", error.Message, StringComparison.Ordinal);
+        // The RS Extended Range package is plain on Mac too, so it needs no Mac key.
+        var mac = await Build("seven_m.psarc", ExportPlatform.Mac);
+        Assert.Equal([Path.Combine(_tempDir, "seven_rsxr_m.psarc")], mac.PackagePaths);
+        Assert.Equal("PSXR"u8.ToArray(), File.ReadAllBytes(mac.PsarcPath)[..4]);
 
-        var result = await Build("seven_p.psarc", ExportPlatform.PcAndMac);
-        Assert.Equal([Path.Combine(_tempDir, "seven_rsxr_p.psarc")], result.PackagePaths);
-        Assert.Contains(result.Warnings, w => w.Contains("RS Extended Range", StringComparison.Ordinal));
+        var both = await Build("seven_p.psarc", ExportPlatform.PcAndMac);
+        Assert.Equal([Path.Combine(_tempDir, "seven_rsxr_p.psarc"), Path.Combine(_tempDir, "seven_rsxr_m.psarc")], both.PackagePaths);
+        Assert.DoesNotContain(both.Warnings, w => w.Contains("Mac", StringComparison.Ordinal));
         Assert.False(File.Exists(Path.Combine(_tempDir, "seven_m.psarc")));
     }
 

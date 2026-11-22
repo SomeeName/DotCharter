@@ -3,7 +3,7 @@ namespace DotCharter.Services.Export.Rocksmith;
 /// <summary>The shared file-name policy for release and test packages.</summary>
 public static class RocksmithPackageName
 {
-    /// <summary>Artist/title, release or test version, optional PC extended-range tag, then platform suffix.</summary>
+    /// <summary>Artist/title, release or test version, optional extended-range tag, then platform suffix.</summary>
     public static string For(ChartProject project, string version, bool mac = false, bool extended = false,
         bool test = false, string testVersionTag = "")
     {
@@ -11,7 +11,7 @@ public static class RocksmithPackageName
             ? ArtistTitle(project) + "_" + RocksmithTestExport.Version
                 + (testVersionTag.Length == 0 ? "" : "_" + testVersionTag)
             : RocksmithReleaseName.For(project, version);
-        var pc = ExtendedRangePackageName.Apply(stem + "_p.psarc", extended && !mac);
+        var pc = ExtendedRangePackageName.Apply(stem + "_p.psarc", extended);
         return mac ? pc[..^"_p.psarc".Length] + "_m.psarc" : pc;
     }
 
@@ -28,11 +28,7 @@ public static class RocksmithPackageName
         var mac = name.EndsWith("_m.psarc", StringComparison.OrdinalIgnoreCase);
         if (!mac && !name.EndsWith("_p.psarc", StringComparison.OrdinalIgnoreCase)) return false;
         var version = name[prefix.Length..^"_p.psarc".Length];
-        if (version.EndsWith("_rsxr", StringComparison.OrdinalIgnoreCase))
-        {
-            if (mac) return false;
-            version = version[..^"_rsxr".Length];
-        }
+        if (version.EndsWith("_rsxr", StringComparison.OrdinalIgnoreCase)) version = version[..^"_rsxr".Length];
         return version.Length > 0 && !version.EndsWith("_rsxr", StringComparison.OrdinalIgnoreCase) &&
             version.All(character => char.IsAsciiLetterOrDigit(character) || character is '_' or '-');
     }

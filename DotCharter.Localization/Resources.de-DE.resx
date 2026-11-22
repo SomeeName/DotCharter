@@ -2462,7 +2462,9 @@
     <data name="Dialog_Export_PreviewStartInvalid" xml:space="preserve"><value>Der Vorschau-Start muss wie 1:30.000 aussehen (Minuten:Sekunden.Millisekunden) oder leer bleiben.</value></data>
     <data name="Dialog_Export_Volume" xml:space="preserve"><value>Lautstärke (dB)</value></data>
     <data name="Dialog_Export_PreviewVolume" xml:space="preserve"><value>Vorschau-Lautstärke (dB)</value></data>
-    <data name="Dialog_Export_ExtendedRangePackage" xml:space="preserve"><value>Arrangements mit erweitertem Tonumfang werden als RS Extended Range-Paket geschrieben: unverschlüsselt, nur für Windows und mit der RS Extended Range-Mod lesbar.</value></data>
+    <data name="Dialog_Export_ExtendedRangePackage" xml:space="preserve"><value>Arrangements mit erweitertem Tonumfang werden als RS Extended Range-Paket geschrieben: unverschlüsselt und mit der RS Extended Range-Mod lesbar.</value></data>
+    <data name="Dialog_Export_StandardPackageHint" xml:space="preserve"><value>Beide Pakete sind derselbe Song: Installiere das eine oder das andere.</value></data>
+    <data name="Dialog_Export_StandardPackage" xml:space="preserve"><value>Zusätzlich ein Standardpaket mit den übrigen Arrangements schreiben</value></data>
     <data name="Dialog_Export_PlainPackageWarning" xml:space="preserve"><value>Rocksmith 2014 kann dieses Paket nur öffnen, wenn die rs7string-Mod installiert ist. Exportiere für ein normales 6-Saiten-Chart ein DLC-Builder-Projekt (.rs2dlc) und baue das Paket dort.</value></data>
     <data name="Dialog_Export_DlcBuilderProject" xml:space="preserve"><value>DLC-Builder-Projekt exportieren…</value></data>
     <data name="Dialog_Export_DlcBuilderProjectTip" xml:space="preserve"><value>Schreibt das Chart als DLC-Builder-Projekt (.rs2dlc) samt Rocksmith-XML in einen Ordner deiner Wahl. Im DLC Builder öffnen, um das verschlüsselte Paket zu erstellen.</value></data>
@@ -2506,7 +2508,6 @@
     <data name="Dialog_Export_PackageEncrypted" xml:space="preserve"><value>Verschlüsselt (Standard)</value></data>
     <data name="Dialog_Export_PackagePlain" xml:space="preserve"><value>Unverschlüsselt</value></data>
     <data name="Dialog_Export_MacNeedsEncryption" xml:space="preserve"><value>Mac braucht ein verschlüsseltes Paket, diese Version schreibt aber unverschlüsselte. Exportiere stattdessen ein DLC-Builder-Projekt.</value></data>
-    <data name="Dialog_Export_RsxrWindowsOnly" xml:space="preserve"><value>Das Format RS Extended Range ist nur für Windows verfügbar.</value></data>
     <data name="Dialog_Export_MacUnavailable" xml:space="preserve"><value>Es kann kein Mac-Paket geschrieben werden. {0}</value></data>
     <data name="Dialog_Export_PcOnlyBecause" xml:space="preserve"><value>Nur das PC-Paket wird geschrieben. {0}</value></data>
     <data name="Dialog_Export_WritesBoth" xml:space="preserve"><value>Schreibt {0} und {1}.</value></data>
@@ -2757,8 +2758,8 @@
     <data name="Export.Validation.FretOutOfRange" xml:space="preserve"><value>Bund {0} liegt außerhalb des spielbaren Bereichs (0–24).</value></data>
     <data name="Export.Validation.StringOutOfRange" xml:space="preserve"><value>Eine Note nutzt Saite {0}, die dieses Arrangement nicht hat. Verschiebe die Note oder ändere die Saitenzahl in den Arrangement-Einstellungen.</value></data>
     <data name="Export.Validation.ExtendedRangeTuning" xml:space="preserve"><value>Das Arrangement wird ausgelassen, weil sich seine Stimmung mit RS Extended Range nicht darstellen lässt: {0}</value></data>
-    <data name="Export.Validation.ExtendedRangeGuitar" xml:space="preserve"><value>Gitarre mit {0} Saiten: Ausgabe als unverschlüsseltes RS Extended Range-Paket für Windows und die RS Extended Range-Mod.</value></data>
-    <data name="Export.Validation.ExtendedRangeBass" xml:space="preserve"><value>Bass mit {0} Saiten: Ausgabe als unverschlüsseltes RS Extended Range-Paket für Windows und die RS Extended Range-Mod.</value></data>
+    <data name="Export.Validation.ExtendedRangeGuitar" xml:space="preserve"><value>Gitarre mit {0} Saiten: Ausgabe als unverschlüsseltes RS Extended Range-Paket für die RS Extended Range-Mod.</value></data>
+    <data name="Export.Validation.ExtendedRangeBass" xml:space="preserve"><value>Bass mit {0} Saiten: Ausgabe als unverschlüsseltes RS Extended Range-Paket für die RS Extended Range-Mod.</value></data>
     <data name="Export.Validation.SixStringDrop" xml:space="preserve"><value>Gitarre mit {0} Saiten: Die Sechssaiten-Projektion (Einstellungen, Dateien) lässt {1} Noten auf den zusätzlichen Saiten und {2} Akkorde weg, die nur dort klingen; {3} weitere Akkorde verlieren ihre Noten auf den zusätzlichen Saiten. Schalte die Projektion aus, um das Extended-Range-Format zu behalten, oder lass sie an, um den Verlust zu akzeptieren.</value></data>
     <data name="Export.Validation.AudioShorterThanChart" xml:space="preserve"><value>Das Audio ({0}) ist kürzer als die Notenspur: Das Spiel beendet den Song, wenn das Audio endet, deshalb werden die Noten danach nie gespielt.</value></data>
     <data name="Export.Validation.NoteBelowCapo" xml:space="preserve"><value>Note am Bund {0} liegt unterhalb des Kapodasters.</value></data>
@@ -6461,7 +6462,7 @@
   <data name="Validation_ToneChangeOnChord" xml:space="preserve"><value>Zeitgleich mit diesem Akkord findet ein Soundwechsel statt.</value></data>
   <data name="Validation_MutedStringInNonMutedChord" xml:space="preserve"><value>Beim Akkord sind einige — aber nicht alle — Saiten mit der Griffhand gedämpft.</value></data>
   <data name="Validation_ChordFretNumberMoreThan24" xml:space="preserve"><value>Der Bund {0} des Akkordtons überschreitet das Maximum von 24.</value></data>
-  <data name="Validation_ChordInvalidBassArrangementString" xml:space="preserve"><value>Bass-Spuren haben nur 4 Saiten (der Akkord nutzt Saite {0}).</value></data>
+  <data name="Validation_ChordInvalidBassArrangementString" xml:space="preserve"><value>Diese Spur hat {1} Saiten (der Akkord nutzt Saitenindex {0}).</value></data>
   <data name="Validation_ChordNaturalHarmonicWithBend" xml:space="preserve"><value>Der Akkordton hat ein natürliches Flageolett + Bending.</value></data>
   <data name="Validation_ChordSeventhFretHarmonicWithSustain" xml:space="preserve"><value>Natürliches Flageolett am 7. Bund im Akkord mit Sustain.</value></data>
   <data name="Validation_ChordMissingBendValue" xml:space="preserve"><value>Der Akkordton ist als Bending markiert, aber alle Stufen sind 0.</value></data>
@@ -6492,7 +6493,7 @@
   <data name="Validation_LinkNextFretMismatch" xml:space="preserve"><value>Der Zielbund von Link-Next ({0}) stimmt nicht mit dem Bund der Quelle ({1}) überein.</value></data>
   <data name="Validation_LinkNextBendMismatch" xml:space="preserve"><value>Link-Next-Bending passt nicht: Die Quelle endet bei {0} Stufen, das Ziel beginnt bei {1}.</value></data>
   <data name="Validation_NoteFretNumberMoreThan24" xml:space="preserve"><value>Bundnummer {0} überschreitet das Spielmaximum von 24.</value></data>
-  <data name="Validation_NoteInvalidBassArrangementString" xml:space="preserve"><value>Bass-Spuren haben nur 4 Saiten (Saitenindex {0} erhalten).</value></data>
+  <data name="Validation_NoteInvalidBassArrangementString" xml:space="preserve"><value>Diese Spur hat {1} Saiten (Saitenindex {0} erhalten).</value></data>
   <data name="Validation_NoteAfterSongEnd" xml:space="preserve"><value>Die Note liegt nach dem Ende des Song-Audios.</value></data>
   <data name="Validation_NoteInsideNoguitarSection" xml:space="preserve"><value>Die Note liegt in einem Noguitar-Abschnitt.</value></data>
   <data name="Validation_ToneChangeOnNote" xml:space="preserve"><value>Zeitgleich mit dieser Note findet ein Soundwechsel statt. Verschiebe ihn knapp davor oder danach.</value></data>

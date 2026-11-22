@@ -331,12 +331,16 @@ public sealed class SaveCompanionService : ISaveCompanionService
         // Build to a temp file and swap, so a cancelled or failed build never
         // replaces a good psarc with a truncated one.
         var staging = output + ".building";
+        var standardStaging = output + ".standard.building";
 
         try
         {
             var result = await _builder.BuildPsarcAsync(snapshot, new RocksmithBuildOptions
             {
                 OutputPath = staging,
+                // Mixed RS Extended Range and stock content also publishes the standard package.
+                WriteStandardPackage = true,
+                StandardOutputPath = standardStaging,
                 ProjectDirectory = directory,
                 // A stale 7-string chord sidecar is looked for beside the FINAL package.
                 ChordSidecarPackagePath = output,
@@ -375,7 +379,19 @@ public sealed class SaveCompanionService : ISaveCompanionService
                 _logger.Warning(AppLogCategory.Project, $"Companion psarc was left in place: {reason}.");
                 return null;
             }
-            RemovePublishedSiblings(output, snapshot);
+            var kept = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { output };
+            if (result.StandardPackagePaths.Count > 0)
+            {
+                var standard = Path.Combine(Path.GetDirectoryName(output)!,
+                    RocksmithPackageName.For(snapshot, snapshot.Chart.Version, extended: false));
+                kept.Add(standard);
+                if (!CompanionOwnership.WriteIfUnmodified(standard,
+                        destination => AtomicFile.ReplaceWithRetry(result.StandardPackagePaths[0], destination), out var standardReason))
+                {
+                    _logger.Warning(AppLogCategory.Project, $"Companion standard psarc was left in place: {standardReason}.");
+                }
+            }
+            RemovePublishedSiblings(output, kept, snapshot);
 
             _logger.Info(AppLogCategory.Project,
                 $"Companion psarc built. Path='{output}', warnings={result.Warnings.Count}.");
@@ -385,10 +401,11 @@ public sealed class SaveCompanionService : ISaveCompanionService
         {
             // best-effort cleanup; the real error propagates
             if (File.Exists(staging)) _recycle(staging);
+            if (File.Exists(standardStaging)) _recycle(standardStaging);
         }
     }
 
-    private void RemovePublishedSiblings(string output, ChartProject snapshot)
+    private void RemovePublishedSiblings(string output, IReadOnlySet<string> kept, ChartProject snapshot)
     {
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -398,7 +415,7 @@ public sealed class SaveCompanionService : ISaveCompanionService
             keys.Add(new string(snapshot.Chart.DlcKey.Where(char.IsAsciiLetterOrDigit).ToArray()));
         foreach (var sibling in Directory.EnumerateFiles(Path.GetDirectoryName(output)!, "*.psarc"))
         {
-            if (sibling.Equals(output, StringComparison.OrdinalIgnoreCase) ||
+            if (kept.Contains(sibling) ||
                 !sibling.EndsWith("_p.psarc", StringComparison.OrdinalIgnoreCase))
             {
                 continue;

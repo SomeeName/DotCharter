@@ -2450,7 +2450,9 @@
     <data name="Dialog_Export_PreviewStartInvalid" xml:space="preserve"><value>The preview start must look like 1:30.000 (minutes:seconds.milliseconds), or be left blank.</value></data>
     <data name="Dialog_Export_Volume" xml:space="preserve"><value>Volume (dB)</value></data>
     <data name="Dialog_Export_PreviewVolume" xml:space="preserve"><value>Preview volume (dB)</value></data>
-    <data name="Dialog_Export_ExtendedRangePackage" xml:space="preserve"><value>Extended-range arrangements are written as an RS Extended Range package: unencrypted, Windows only, read by the RS Extended Range mod.</value></data>
+    <data name="Dialog_Export_ExtendedRangePackage" xml:space="preserve"><value>Extended-range arrangements are written as an RS Extended Range package: unencrypted, read by the RS Extended Range mod.</value></data>
+    <data name="Dialog_Export_StandardPackageHint" xml:space="preserve"><value>Both packages are the same song: install one or the other.</value></data>
+    <data name="Dialog_Export_StandardPackage" xml:space="preserve"><value>Also write a standard package with the other arrangements</value></data>
     <data name="Dialog_Export_PlainPackageWarning" xml:space="preserve"><value>Rocksmith 2014 cannot open this package unless the rs7string mod is installed. For a normal 6-string chart, export a DLC Builder project (.rs2dlc) and build the package there.</value></data>
     <data name="Dialog_Export_DlcBuilderProject" xml:space="preserve"><value>Export DLC Builder project…</value></data>
     <data name="Dialog_Export_DlcBuilderProjectTip" xml:space="preserve"><value>Writes the chart as a DLC Builder project (.rs2dlc) with its Rocksmith XML into a folder you pick. Open it in DLC Builder to build the encrypted package.</value></data>
@@ -2494,7 +2496,6 @@
     <data name="Dialog_Export_PackageEncrypted" xml:space="preserve"><value>Encrypted (default)</value></data>
     <data name="Dialog_Export_PackagePlain" xml:space="preserve"><value>Plain (unencrypted)</value></data>
     <data name="Dialog_Export_MacNeedsEncryption" xml:space="preserve"><value>Mac needs an encrypted package, but this build writes unencrypted ones. Export a DLC Builder project instead.</value></data>
-    <data name="Dialog_Export_RsxrWindowsOnly" xml:space="preserve"><value>The RS Extended Range format is Windows-only.</value></data>
     <data name="Dialog_Export_MacUnavailable" xml:space="preserve"><value>No Mac package can be written. {0}</value></data>
     <data name="Dialog_Export_PcOnlyBecause" xml:space="preserve"><value>Only the PC package is written. {0}</value></data>
     <data name="Dialog_Export_WritesBoth" xml:space="preserve"><value>Writes {0} and {1}.</value></data>
@@ -2745,8 +2746,8 @@
     <data name="Export.Validation.FretOutOfRange" xml:space="preserve"><value>Fret {0} is outside the playable range (0–24).</value></data>
     <data name="Export.Validation.StringOutOfRange" xml:space="preserve"><value>A note uses string {0}, which this arrangement does not have. Move the note, or change the string count in Arrangement settings.</value></data>
     <data name="Export.Validation.ExtendedRangeTuning" xml:space="preserve"><value>The arrangement is skipped because its tuning cannot be represented by RS Extended Range: {0}</value></data>
-    <data name="Export.Validation.ExtendedRangeGuitar" xml:space="preserve"><value>{0}-string guitar: written as an unencrypted, Windows-only RS Extended Range package for the RS Extended Range mod.</value></data>
-    <data name="Export.Validation.ExtendedRangeBass" xml:space="preserve"><value>{0}-string bass: written as an unencrypted, Windows-only RS Extended Range package for the RS Extended Range mod.</value></data>
+    <data name="Export.Validation.ExtendedRangeGuitar" xml:space="preserve"><value>{0}-string guitar: written as an unencrypted RS Extended Range package for the RS Extended Range mod.</value></data>
+    <data name="Export.Validation.ExtendedRangeBass" xml:space="preserve"><value>{0}-string bass: written as an unencrypted RS Extended Range package for the RS Extended Range mod.</value></data>
     <data name="Export.Validation.SixStringDrop" xml:space="preserve"><value>{0}-string guitar: the six-string projection (Settings, Files) drops {1} notes on the extra strings and {2} chords that sound only there; {3} more chords lose their extra-string notes. Turn the projection off to keep the extended-range format, or leave it on to accept the drop.</value></data>
     <data name="Export.Validation.AudioShorterThanChart" xml:space="preserve"><value>The audio ({0}) is shorter than the chart: the game ends the song when the audio ends, so the notes after it are never played.</value></data>
     <data name="Export.Validation.NoteBelowCapo" xml:space="preserve"><value>Note at fret {0} lies below the capo.</value></data>
@@ -6467,7 +6468,7 @@
   <data name="Validation_ToneChangeOnChord" xml:space="preserve"><value>A tone change happens at the same time as this chord.</value></data>
   <data name="Validation_MutedStringInNonMutedChord" xml:space="preserve"><value>Chord has some — but not all — strings fret-hand muted.</value></data>
   <data name="Validation_ChordFretNumberMoreThan24" xml:space="preserve"><value>Chord note fret {0} exceeds the maximum of 24.</value></data>
-  <data name="Validation_ChordInvalidBassArrangementString" xml:space="preserve"><value>Bass arrangements only have 4 strings (chord uses string {0}).</value></data>
+  <data name="Validation_ChordInvalidBassArrangementString" xml:space="preserve"><value>This arrangement has {1} strings (chord uses string index {0}).</value></data>
   <data name="Validation_ChordNaturalHarmonicWithBend" xml:space="preserve"><value>Chord note has natural harmonic + bend.</value></data>
   <data name="Validation_ChordSeventhFretHarmonicWithSustain" xml:space="preserve"><value>Chord 7th-fret natural harmonic with sustain.</value></data>
   <data name="Validation_ChordMissingBendValue" xml:space="preserve"><value>Chord note marked as bend but all steps are 0.</value></data>
@@ -6498,7 +6499,7 @@
   <data name="Validation_LinkNextFretMismatch" xml:space="preserve"><value>Link-Next target fret ({0}) doesn't match the source's fret ({1}).</value></data>
   <data name="Validation_LinkNextBendMismatch" xml:space="preserve"><value>Link-Next bend mismatch: source ends at {0} steps, target starts at {1}.</value></data>
   <data name="Validation_NoteFretNumberMoreThan24" xml:space="preserve"><value>Fret number {0} exceeds the in-game maximum of 24.</value></data>
-  <data name="Validation_NoteInvalidBassArrangementString" xml:space="preserve"><value>Bass arrangements only have 4 strings (got string index {0}).</value></data>
+  <data name="Validation_NoteInvalidBassArrangementString" xml:space="preserve"><value>This arrangement has {1} strings (got string index {0}).</value></data>
   <data name="Validation_NoteAfterSongEnd" xml:space="preserve"><value>Note is placed after the end of the song audio.</value></data>
   <data name="Validation_NoteInsideNoguitarSection" xml:space="preserve"><value>Note is placed inside a no-guitar section.</value></data>
   <data name="Validation_ToneChangeOnNote" xml:space="preserve"><value>A tone change happens at the same time as this note. Move it just before or after.</value></data>

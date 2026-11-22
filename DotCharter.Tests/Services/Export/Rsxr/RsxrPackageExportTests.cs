@@ -131,20 +131,14 @@ public sealed class RsxrPackageExportTests : IDisposable
     }
 
     [Fact]
-    public async Task The_target_refuses_mac_and_warns_when_only_pc_is_written()
+    public async Task Pc_and_mac_write_both_plain_extended_packages_without_keys()
     {
-        using var keys = TestRocksmithKeys.UseSynthetic();
+        using var keys = TestRocksmithKeys.UseNoKeys();
         var built = RsxrTestSupport.Chart(false, 7);
-        var audio = Audio();
-        var error = await Assert.ThrowsAsync<InvalidDataException>(() => RsxrTestSupport.Build(built.Project, built.SongLengthMs,
-            audio, Path.Combine(_directory, "only_m.psarc"), ExportPlatform.Mac));
-        Assert.StartsWith("No Mac package can be written:", error.Message, StringComparison.Ordinal);
-        Assert.Contains("RS Extended Range", error.Message, StringComparison.Ordinal);
-        Assert.False(File.Exists(Path.Combine(_directory, "only_m.psarc")));
-        var result = await RsxrTestSupport.Build(built.Project, built.SongLengthMs, audio,
+        var result = await RsxrTestSupport.Build(built.Project, built.SongLengthMs, Audio(),
             Path.Combine(_directory, "pair_p.psarc"), ExportPlatform.PcAndMac);
-        Assert.Single(result.PackagePaths);
-        Assert.Contains(result.Warnings, w => w.StartsWith("Only the PC package was written:", StringComparison.Ordinal) && w.Contains("RS Extended Range", StringComparison.Ordinal));
+        Assert.Equal([Path.Combine(_directory, "pair_rsxr_p.psarc"), Path.Combine(_directory, "pair_rsxr_m.psarc")], result.PackagePaths);
+        Assert.DoesNotContain(result.Warnings, w => w.StartsWith("Only the PC package was written:", StringComparison.Ordinal));
         Assert.False(File.Exists(Path.Combine(_directory, "pair_m.psarc")));
     }
 

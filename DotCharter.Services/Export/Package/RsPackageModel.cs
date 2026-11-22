@@ -72,6 +72,9 @@ internal sealed class RsPackageArrangement
     /// <summary>Partition file name: "lead", "lead2", "rhythm", "bass", "vocals"...</summary>
     public required string PartitionName { get; init; }
 
+    /// <summary>The chart arrangement's name; empty for vocals.</summary>
+    public string ChartName { get; init; } = "";
+
     /// <summary>1-based partition number within arrangements of the same name.</summary>
     public int SongPartition { get; init; } = 1;
 
@@ -120,8 +123,21 @@ internal sealed class RsPackageArrangement
     ///     object.
     ///     </para>
     /// </summary>
-    public ArrangementProperties? Properties =>
-        _properties ??= Domain == null ? null : ArrangementPropertiesDeriver.Derive(Domain);
+    public ArrangementProperties? Properties => _properties ??= Domain == null ? null : Resolve(Domain);
+
+    /// <summary>
+    ///     Ships a Main arrangement as Alternate in this package alone (the RS Extended Range
+    ///     package's stock duplicate of an extended Main on the same path). The project is untouched;
+    ///     set before <see cref="Properties" /> is first read.
+    /// </summary>
+    public bool DemotedToAlternate { get; set; }
+
+    private ArrangementProperties Resolve(Arrangement domain)
+    {
+        var properties = ArrangementPropertiesDeriver.Derive(domain);
+        if (DemotedToAlternate) properties.Represent = 0;
+        return properties;
+    }
 
     private ArrangementProperties? _properties;
 
@@ -158,5 +174,5 @@ internal sealed class RsPackageArrangement
     }
 
     public bool IsRepresentative =>
-        Domain is { Subtype: ArrangementSubtype.Main };
+        Domain is { Subtype: ArrangementSubtype.Main } && !DemotedToAlternate;
 }

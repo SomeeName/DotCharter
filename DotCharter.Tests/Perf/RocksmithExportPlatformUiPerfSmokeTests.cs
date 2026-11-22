@@ -14,7 +14,8 @@ namespace DotCharter.Tests.Perf;
 ///     #782 on the REAL export view model in the real view: PC + Mac names both packages under
 ///     the platform picker; without Mac encryption Mac alone is greyed with its reason in the
 ///     blocked strip and PC + Mac says it writes the PC package alone; a ticked 7-string guitar
-///     rules the Mac package out the same way. Each note is laid out with a size.
+///     keeps the plain Mac RS Extended Range package, and beside a stock arrangement offers the
+///     standard package option (#898). Each note is laid out with a size.
 /// </summary>
 [Collection("HeadlessUI")]
 public sealed class RocksmithExportPlatformUiPerfSmokeTests
@@ -123,18 +124,61 @@ public sealed class RocksmithExportPlatformUiPerfSmokeTests
     }
 
     [Fact]
-    public async Task ATickedSevenStringGuitar_RulesTheMacPackageOut()
+    public async Task ATickedSevenStringGuitar_KeepsThePlainMacPackage()
     {
         await HeadlessSessionFixture.Dispatch(() =>
         {
-            var project = RocksmithExportDialogViewModelTests.CreateValidProject();
-            project.Arrangements.Add(new Arrangement { ArrangementType = ArrangementType.Lead, Name = "Seven", StringCount = 7 });
-            using var keys = TestRocksmithKeys.UseSynthetic();
-            var vm = Open(project);
+            using var keys = TestRocksmithKeys.UseNoKeys();
+            using var vm = Open(MixedProject());
+            Pick(vm, ExportPlatform.PcAndMac);
             vm.OutputPath = @"E:\Rocksmith\dlc\seven_p.psarc";
             WithView(vm, view =>
-                AssertNote(view, Loc.Format("Dialog_Export_PcOnlyBecause", Loc["Dialog_Export_RsxrWindowsOnly"])));
+            {
+                Assert.Null(vm.MacBlock);
+                AssertNote(view, Loc.Format("Dialog_Export_WritesBoth", "seven_rsxr_p.psarc", "seven_rsxr_m.psarc"));
+            });
         }, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task TheStandardPackageOption_IsLaidOut_OnlyForAMixedSelection()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            using var keys = TestRocksmithKeys.UseNoKeys();
+            using var vm = Open(MixedProject());
+            WithView(vm, view =>
+            {
+                var option = view.GetVisualDescendants().OfType<StackPanel>().Single(p => p.Name == "StandardPackageOption");
+                var check = view.GetVisualDescendants().OfType<CheckBox>().Single(c => c.Name == "StandardPackageCheck");
+                var hint = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "StandardPackageHint");
+                Assert.True(option.IsEffectivelyVisible);
+                Assert.True(check.IsChecked);
+                Assert.True(check.Bounds is { Width: > 1, Height: > 1 }, $"check laid out as {check.Bounds}");
+                Assert.True(hint.Bounds is { Width: > 1, Height: > 1 }, $"hint laid out as {hint.Bounds}");
+                Assert.Equal(ViewCulture["Dialog_Export_StandardPackageHint"], hint.Text);
+                if (UiSweepRunner.CaptureEnabled)
+                    NarrowWidthLayout.Capture((Window)TopLevel.GetTopLevel(view)!, "rsxr-export-standard-package");
+
+                check.IsChecked = false;
+                Assert.False(vm.WriteStandardPackage);
+                vm.Arrangements.Single(a => a.Name == "Seven").IsSelected = false;
+                Settle(view);
+                Assert.False(option.IsEffectivelyVisible);
+            });
+        }, CancellationToken.None);
+    }
+
+    /// <summary>A stock guitar plus a playable 7-string one: an RS Extended Range package with a standard sibling.</summary>
+    private static ChartProject MixedProject()
+    {
+        var project = RocksmithExportDialogViewModelTests.CreateValidProject();
+        var seven = ChartProjectCloner.CloneArrangement(project.Arrangements[0]);
+        seven.Name = "Seven";
+        seven.StringCount = 7;
+        seven.TuningPitches.Add(new TuningOffset(0));
+        project.Arrangements.Add(seven);
+        return project;
     }
 
     [Fact]

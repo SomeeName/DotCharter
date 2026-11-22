@@ -29,7 +29,7 @@ public sealed class RsxrUiPathTests : IDisposable
     public void Dispose() => BestEffortDelete.Directory(_directory);
 
     [Fact]
-    public async Task Mac_only_typed_path_agrees_with_the_field_platform_path_and_written_package()
+    public async Task Mac_only_typed_stock_path_drops_the_tag_in_the_field_platform_path_and_written_package()
     {
         using var keys = TestRocksmithKeys.UseSynthetic();
         var project = DotCharter.Tests.UI.ViewModels.Dialogs.RocksmithExportDialogViewModelTests.CreateValidProject();
@@ -40,8 +40,9 @@ public sealed class RsxrUiPathTests : IDisposable
         vm.IncludeVocals = false;
         vm.Target.SelectedPackageOption = vm.Target.PackageOptions.Single(p => !p.Plain);
         vm.Target.SelectedPlatformOption = vm.Target.PlatformOptions.Single(p => p.Value == ExportPlatform.Mac);
-        var typed = Path.Combine(_directory, "typed_rsxr_m.psarc");
-        vm.OutputPath = typed;
+        // A stock Mac package carries no RS Extended Range tag, like the PC one: the field drops it.
+        vm.OutputPath = Path.Combine(_directory, "typed_rsxr_m.psarc");
+        var typed = Path.Combine(_directory, "typed_m.psarc");
         vm.AudioPath = Path.Combine(_directory, "audio.wem");
         File.WriteAllBytes(vm.AudioPath, new byte[4000]);
         vm.PreviewAudioPath = vm.AudioPath;
@@ -150,10 +151,14 @@ public sealed class RsxrUiPathTests : IDisposable
         await vm.ExportCommand.ExecuteAsync(null);
 
         Assert.True(vm.HasResult, string.Join("\n", harness.Logger.Snapshot().Select(e => e.Message)));
-        Assert.Equal(expected, vm.ResultPath);
+        // A mixed extended export writes the standard package of the stock arrangement beside it.
+        var standard = Path.Combine(_directory, "song_p.psarc");
+        var writesStandard = extended && mixed;
+        Assert.Equal(writesStandard ? expected + "\n" + standard : expected, vm.ResultPath);
         Assert.True(File.Exists(expected));
         Assert.Equal(RsxrTestSupport.PackageMagic(extended), File.ReadAllBytes(expected)[..4]);
-        if (extended) Assert.False(File.Exists(Path.Combine(_directory, "song_p.psarc")));
+        if (writesStandard) Assert.Equal(RsxrTestSupport.PackageMagic(false), File.ReadAllBytes(standard)[..4]);
+        else if (extended) Assert.False(File.Exists(standard));
         AssertManifests(expected, extended, type);
         await SaveProject(harness, documents);
         Assert.True(File.Exists(harness.State.CurrentProjectPath));
@@ -237,8 +242,8 @@ public sealed class RsxrUiPathTests : IDisposable
         }
 
         vm.Target.SelectedPlatformOption = vm.Target.PlatformOptions.Single(p => p.Value == ExportPlatform.Mac);
-        Assert.DoesNotContain("_rsxr", vm.OutputPath, StringComparison.Ordinal);
-        Assert.EndsWith("_m.psarc", vm.OutputPath);
+        // The RS Extended Range package has a Mac form too, tagged like the PC one.
+        Assert.EndsWith("_rsxr_m.psarc", vm.OutputPath);
         vm.Target.SelectedPlatformOption = vm.Target.PlatformOptions.Single(p => p.Value == ExportPlatform.Pc);
         Assert.EndsWith("_rsxr_p.psarc", vm.OutputPath);
         vm.Version = "2.1";

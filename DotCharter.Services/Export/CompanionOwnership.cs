@@ -84,10 +84,15 @@ public static class CompanionOwnership
     {
         var result = await build().ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(projectDirectory)) return result;
-        var name = RocksmithPackageName.For(snapshot, snapshot.Chart.Version, extended: result.IsPsxr);
-        var expected = Path.Combine(projectDirectory, ProjectFolderLayout.ExportFolderName, name);
-        if (result.PackagePaths.Any(path => Path.GetFullPath(path).Equals(expected, StringComparison.OrdinalIgnoreCase)))
-            RecordStampBestEffort(expected, KeyFor(expected));
+        // A mixed export also publishes the standard package beside the RS Extended Range one.
+        bool[] kinds = result.StandardPackagePaths.Count > 0 ? [true, false] : [result.IsPsxr];
+        foreach (var extended in kinds)
+        {
+            var name = RocksmithPackageName.For(snapshot, snapshot.Chart.Version, extended: extended);
+            var expected = Path.Combine(projectDirectory, ProjectFolderLayout.ExportFolderName, name);
+            if (result.PackagePaths.Any(path => Path.GetFullPath(path).Equals(expected, StringComparison.OrdinalIgnoreCase)))
+                RecordStampBestEffort(expected, KeyFor(expected));
+        }
         return result;
     }
 
