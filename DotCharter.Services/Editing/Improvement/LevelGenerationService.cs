@@ -1,3 +1,5 @@
+using DotCharter.Services.Editing.Fingering;
+
 namespace DotCharter.Services.Editing.Improvement;
 
 /// <summary>
@@ -62,7 +64,7 @@ public sealed class LevelGenerationService : ILevelGenerationService
     private const double SimplifyBelowRatio = 0.5;
 
     public bool TryGenerate(Arrangement arrangement, int levelCount, IList<BeatMarker>? beats = null,
-        IProgress<int>? levelProgress = null)
+        IProgress<int>? levelProgress = null, ArrangementFingeringStyle? songStyle = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         if (levelCount < 2) return false;
@@ -73,7 +75,7 @@ public sealed class LevelGenerationService : ILevelGenerationService
 
         var sounds = RankSounds(source, arrangement, beats);
         var newLevels = new List<ChartLevel>(levelCount);
-        var chords = new ChordReductionPlanner(arrangement);
+        var chords = new ChordReductionPlanner(arrangement, songStyle);
 
         for (var k = 0; k < levelCount; k++)
         {

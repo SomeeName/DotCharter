@@ -15,6 +15,12 @@ public static class ExportFindingFormatter
             ? localization.Format(finding.MessageKey, [.. finding.Detail.Split('|')])
             : localization.Format(finding.MessageKey, finding.Detail);
 
+    /// <summary>The findings whose repair is typing in Song metadata: the glyph warning and the title-case and missing-field notes.</summary>
+    public static bool OpensSongMetadata(string messageKey) =>
+        messageKey is ChartExportValidator.KeyDisplayNameGlyphs or ChartExportValidator.KeyMetadataTitleCase
+            or ChartExportValidator.KeyMetadataMissingTitle or ChartExportValidator.KeyMetadataMissingArtist
+            or ChartExportValidator.KeyMetadataMissingAlbum or ChartExportValidator.KeyMetadataMissingAlbumYear;
+
     /// <summary>"Rhythm · 1:23.456", the arrangement or the time alone, or empty.</summary>
     public static string FormatLocation(ExportValidationFinding finding)
     {

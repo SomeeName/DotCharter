@@ -196,6 +196,7 @@ public sealed class PluralStringTests
         ("PlayMode_GetReady_Path_NotesOne", "PlayMode_GetReady_Path_Notes"),
         // 2026-09-25: the guitar VST chain's status pill, a hand-rolled English "slot{s}" until then.
         ("Progress_LoadingGuitarVstChainOne", "Progress_LoadingGuitarVstChain"),
+        ("Progress_LyricHomoglyphsFolded_One", "Progress_LyricHomoglyphsFolded_Many"),
         // #483: what the chord panel's scope switch reaches — "1 chord · 1 hand shape" is the common case.
         ("ChordTemplate_Reach_ChordsOne", "ChordTemplate_Reach_Chords"),
         ("Inspector_Staged_ApplyOne", "Inspector_Staged_Apply"),

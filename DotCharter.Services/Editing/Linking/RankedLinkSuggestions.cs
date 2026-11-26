@@ -5,6 +5,7 @@ namespace DotCharter.Services.Editing.Linking;
 internal sealed class RankedLinkSuggestions
 {
     private const int MinimumWholeSectionLength = 4;
+    private const int MaxSplitRounds = 6;
 
     private readonly IReadOnlyList<MeasureSpan> _measures;
     private readonly IReadOnlyList<int>? _source;
@@ -14,6 +15,9 @@ internal sealed class RankedLinkSuggestions
     private readonly RepeatWindowIndex _windows;
     private readonly RepeatWindowIndex _exactWindows;
     private readonly Dictionary<int, List<Copy>> _exactStarts;
+    private readonly int[] _repeatBars;
+    private readonly ChartProject _project;
+    private readonly LinkDetectionScope _scope;
     private readonly RepeatWindowIndex? _writtenWindows;
     private readonly HashSet<int> _replayedWrittenBars;
     private readonly Dictionary<int, Dictionary<Copy, (MeasureContentKey Rule, MeasureContentKey Exact)>> _runKeys = [];
@@ -26,6 +30,8 @@ internal sealed class RankedLinkSuggestions
         MeasureContentOptions rule, LinkDetectionScope scope)
     {
         _measures = measures;
+        _project = project;
+        _scope = scope;
         _source = source;
         _provenance = provenance;
         _distinctSourceRun = SourceRunLengths(measures.Count, source);
@@ -33,6 +39,7 @@ internal sealed class RankedLinkSuggestions
         _windows = new RepeatWindowIndex(BarIds(p => p.BarKeys));
         var exactIds = BarIds(p => p.ExactBarKeys);
         _exactWindows = new RepeatWindowIndex(exactIds);
+        _repeatBars = [.. exactIds.Select((id, at) => _parts[at / measures.Count].BarKeys[at % measures.Count].IsEmpty ? -1 - at : id)];
         _exactStarts = Enumerable.Range(0, _parts.Length)
             .SelectMany(p => Enumerable.Range(0, _measures.Count).Select(m => new Copy(p, m)))
             .GroupBy(c => exactIds[Flat(c)]).ToDictionary(g => g.Key, g => g.ToList());
@@ -40,12 +47,127 @@ internal sealed class RankedLinkSuggestions
             .Select(g => g.Key).ToHashSet() ?? [];
         if (_replayedWrittenBars.Count > 0)
             _writtenWindows = new RepeatWindowIndex([.. source!.Select((bar, i) => bar >= 0 ? bar : -i - 1)]);
-        if (scope == LinkDetectionScope.UnlinkedOnly) ClaimExisting(project);
     }
 
+    /// <summary>
+    ///     The ranked proposals. The longest runs are taken first; a run that holds a shorter
+    ///     repeat found elsewhere too is then cut where that repeat starts and ends and the search
+    ///     runs again, and short repeats inside the groups are linked nested. When the work
+    ///     limit is reached, the last complete search is returned and the limit is rethrown.
+    /// </summary>
     public IEnumerable<LinkSuggestion> Find(LinkDetectionWork? work = null)
     {
         if (work != null) _work = work;
+        var proposals = new List<Proposal>();
+        var limited = !TryPass(proposals);
+        for (var round = 0; !limited && round < MaxSplitRounds && AddCuts(proposals); round++)
+        {
+            var next = new List<Proposal>();
+            if (!TryPass(next)) limited = true;
+            else proposals = next;
+        }
+
+        if (!limited) limited = !TryNest(proposals);
+        foreach (var proposal in proposals) yield return Propose(proposal.Copies, proposal.Length, proposal.Review);
+        if (limited) throw new LinkDetectionWork.LimitReached();
+    }
+
+    private bool TryPass(List<Proposal> proposals)
+    {
+        foreach (var part in _parts) part.Reset();
+        try
+        {
+            if (_scope == LinkDetectionScope.UnlinkedOnly) ClaimExisting(_project);
+            Pass(proposals);
+            return true;
+        }
+        catch (LinkDetectionWork.LimitReached)
+        {
+            return false;
+        }
+    }
+
+    private bool AddCuts(List<Proposal> proposals)
+    {
+        var groups = proposals.Where(p => !p.Review)
+            .Select(p => ((IReadOnlyList<(int, int)>)[.. p.Copies.Select(c => (c.Part, c.First))], p.Length));
+        try
+        {
+            var added = false;
+            foreach (var (part, boundary) in RepeatSplits.Find(_repeatBars, _measures.Count, groups, _work.Charge))
+                added |= _parts[part].Cut(boundary);
+            return added;
+        }
+        catch (LinkDetectionWork.LimitReached)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Adds the nested one-bar groups; a plain one-bar group they hold whole is folded into them.</summary>
+    private bool TryNest(List<Proposal> proposals)
+    {
+        var count = _measures.Count;
+        var groups = proposals.Where(p => !p.Review)
+            .Select(p => ((IReadOnlyList<int>)[.. p.Copies.Select(Flat)], p.Length)).ToList();
+        var proposed = groups.Count;
+        var exactSingles = new HashSet<int>();
+        var byArrangement = Enumerable.Range(0, _parts.Length).ToDictionary(i => _parts[i].Arrangement);
+        foreach (var group in _project.LinkGroups)
+        {
+            var firsts = new List<int>();
+            var length = 0;
+            foreach (var placement in group.Placements)
+            {
+                if (placement.Arrangement is not { } a || !byArrangement.TryGetValue(a, out var part) ||
+                    !LinkRuns.TryResolve(_measures, placement, out var first, out var span))
+                {
+                    continue;
+                }
+
+                firsts.Add(part * count + first);
+                length = span;
+                if (span == 1) exactSingles.Add(part * count + first);
+            }
+
+            if (firsts.Count > 1) groups.Add((firsts, length));
+        }
+
+        try
+        {
+            var nested = NestedRepeats.Find(_repeatBars, groups,
+                at => !exactSingles.Contains(at) && _parts[at / count].CanNest(at % count),
+                at => RunKey(new Copy(at / count, at % count), 1));
+            var merged = NestedRepeats.Merge(nested, count, groups, proposed, (members, length) =>
+                members.Select(at => RunKey(new Copy(at / count, at % count), length).Rule).Distinct().Count() == 1);
+            foreach (var (members, length) in merged)
+            {
+                var copies = members.Select(at => new Copy(at / count, at % count)).ToList();
+                proposals.RemoveAll(p => !p.Review && p.Length <= length && Inside(p.Copies, p.Length, copies, length));
+                proposals.Add(new Proposal(copies, length, false));
+            }
+
+            return true;
+        }
+        catch (LinkDetectionWork.LimitReached)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Whether every copy of a group sits at one offset inside a copy of the nested run, so the run makes it redundant.</summary>
+    private static bool Inside(List<Copy> copies, int length, List<Copy> runs, int runLength)
+    {
+        for (var offset = 0; offset + length <= runLength; offset++)
+        {
+            if (copies.All(c => runs.Contains(c with { First = c.First - offset }))) return true;
+        }
+
+        return false;
+    }
+
+    private void Pass(List<Proposal> proposals)
+    {
         var maxLength = _distinctSourceRun.Max();
         if (_parts.Length == 1) maxLength = Math.Min(maxLength, _measures.Count / 2);
         for (var length = maxLength; length > 0; length--)
@@ -71,10 +193,10 @@ internal sealed class RankedLinkSuggestions
                     else part.Claim(copy.First, selectedLength);
                 }
 
-                yield return Propose(free, selectedLength, candidate.RequiresReview);
+                proposals.Add(new Proposal(free, selectedLength, candidate.RequiresReview));
             }
 
-            _runKeys.Remove(length);
+            if (length > 1) _runKeys.Remove(length);
         }
     }
 
@@ -307,6 +429,8 @@ internal sealed class RankedLinkSuggestions
 
     private readonly record struct Copy(int Part, int First);
 
+    private sealed record Proposal(List<Copy> Copies, int Length, bool Review);
+
     private sealed record Candidate(List<Copy> Copies, bool FromRepeats, int AlignedEnds, bool RequiresReview);
 
     private sealed class Part
@@ -315,6 +439,7 @@ internal sealed class RankedLinkSuggestions
         private readonly AutoLinkEdges _edges;
         private readonly HashSet<FractionalPosition> _markers;
         private readonly bool[] _claimed;
+        private readonly bool[] _cut;
         private readonly int[] _unreviewed;
         private readonly int[] _free;
         private readonly int[] _soundCounts;
@@ -336,9 +461,31 @@ internal sealed class RankedLinkSuggestions
             _markers = arrangement.EventPoints.Where(p => p.Section.Length > 0 || p.Phrase.Length > 0)
                 .Select(p => p.Position).Concat(arrangement.PhraseIterations.Select(p => p.Position)).Concat(preferred).ToHashSet();
             _claimed = new bool[measures.Count];
-            _free = [.. Enumerable.Range(1, measures.Count).Reverse(), 0];
-            _unreviewed = (int[])_free.Clone();
+            _cut = new bool[measures.Count + 1];
+            _free = new int[measures.Count + 1];
+            _unreviewed = new int[measures.Count + 1];
+            Reset();
         }
+
+        /// <summary>Frees every measure again (a new search round), keeping the cuts.</summary>
+        public void Reset()
+        {
+            Array.Clear(_claimed);
+            for (var m = _measures.Count - 1; m >= 0; m--) _free[m] = _unreviewed[m] = Next(_free, m);
+        }
+
+        /// <summary>No run may cross <paramref name="boundary" /> from now on; false when it already was a cut.</summary>
+        public bool Cut(int boundary)
+        {
+            if (boundary <= 0 || boundary >= _measures.Count || _cut[boundary]) return false;
+            return _cut[boundary] = true;
+        }
+
+        /// <summary>Whether the bar may be a one-bar placement nested inside a longer one.</summary>
+        public bool CanNest(int measure) =>
+            !BarKeys[measure].IsEmpty && _edges.IsSafe(_measures[measure].Start) && _edges.IsSafe(_measures[measure].End);
+
+        private int Next(int[] run, int m) => _cut[m + 1] ? 1 : run[m + 1] + 1;
 
         public Arrangement Arrangement { get; }
         public AutoLinkVerification Verification { get; }
@@ -363,7 +510,7 @@ internal sealed class RankedLinkSuggestions
         {
             Array.Clear(_unreviewed, first, length);
             for (var m = first - 1; m >= 0 && _unreviewed[m] != 0; m--)
-                _unreviewed[m] = _unreviewed[m + 1] + 1;
+                _unreviewed[m] = Next(_unreviewed, m);
         }
 
         public void Claim(int first, int length)
@@ -371,7 +518,7 @@ internal sealed class RankedLinkSuggestions
             Array.Fill(_claimed, true, first, length);
             for (var m = first + length - 1; m >= 0; m--)
             {
-                var free = _claimed[m] ? 0 : _free[m + 1] + 1;
+                var free = _claimed[m] ? 0 : Next(_free, m);
                 if (free == _free[m] && m < first) break;
                 _free[m] = free;
             }

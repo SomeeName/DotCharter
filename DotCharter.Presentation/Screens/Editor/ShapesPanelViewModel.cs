@@ -51,6 +51,7 @@ public sealed partial class ShapesPanelViewModel : ObservableObject, IShapePanel
     private readonly ShapesDragVerbs _drag;
     private readonly ShapeUsesList _usesList;
     private readonly RelayCommand _splitUses;
+    private readonly ShapePins _pins;
 
     private List<ShapePanelRowViewModel> _allRows = [];
     private ChordShapeIssues _issues = new([]);
@@ -83,6 +84,9 @@ public sealed partial class ShapesPanelViewModel : ObservableObject, IShapePanel
     [ObservableProperty] private bool _hasUses;
     [ObservableProperty] private string _usesSummary = "";
     [ObservableProperty] private bool _canSplitUses;
+    [ObservableProperty] private bool _hasPinAll;
+    [ObservableProperty] private string _pinAllLabel = "";
+    [ObservableProperty] private string _pinAllTip = "";
 
     /// <summary>True while the Uses page is changing the editor's selection: the host stays on this tab for it.</summary>
     public bool IsDrivingSelection => _usesList.IsDriving;
@@ -111,6 +115,8 @@ public sealed partial class ShapesPanelViewModel : ObservableObject, IShapePanel
         SplitUsesCommand = _splitUses;
         _cleanUp = new RelayCommand(CleanUp, () => HasCleanUp);
         CleanUpCommand = _cleanUp;
+        _pins = new ShapePins(editor, history, localization);
+        PinAllCommand = new RelayCommand(PinAll);
         RepeatPreviousChordCommand = new RelayCommand(RepeatPreviousChord);
         ConfirmPendingCommand = new RelayCommand(ConfirmPending);
         CancelPendingCommand = new RelayCommand(CancelPending);
@@ -124,6 +130,8 @@ public sealed partial class ShapesPanelViewModel : ObservableObject, IShapePanel
     public ICommand CleanUpCommand { get; }
 
     public ICommand RepeatPreviousChordCommand { get; }
+
+    public ICommand PinAllCommand { get; }
 
     public ICommand ConfirmPendingCommand { get; }
 
@@ -213,6 +221,7 @@ public sealed partial class ShapesPanelViewModel : ObservableObject, IShapePanel
                 : _localization.Format("Shapes_Summary",
                     _localization.Plural("ChordShapes_ShapeCountOne", "ChordShapes_ShapeCount", shapes), attention);
         EmptyText = _localization[emptyKey];
+        (HasPinAll, PinAllLabel, PinAllTip) = _pins.Read();
         if (shapes == 0)
         {
             HasCleanUp = false;

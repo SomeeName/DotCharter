@@ -86,6 +86,10 @@ public class ChartProject
     /// <summary>Written Guitar Pro bars on the imported beat grid, saved as <c>dcGpSource</c>.</summary>
     public ObservableCollection<GpSourceBar> GpSourceBars { get; set; } = [];
 
+    /// <summary>The chart-check warnings the charter ignored in the Issues tab, saved as
+    /// <c>dcIgnoredFindings</c> only when non-empty. See <see cref="Validation.IgnoredFinding" />.</summary>
+    public ObservableCollection<Validation.IgnoredFinding> IgnoredFindings { get; set; } = [];
+
     /// <summary>
     ///     Top-level project nodes a NEWER build wrote that this build does not
     ///     understand, each as one normalized XML fragment, in the order they

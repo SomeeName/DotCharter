@@ -45,7 +45,12 @@ internal sealed class FhpGenerationCommands(
         // keep the hand where it is and the chord's fingering follows.
         // Its variant is its own template, minted in THIS undo node with the
         // anchors; the shared template is never touched.
-        var freeGrip = ChordFingeringFollower.FreeGripResolver(arrangement);
+        // A power chord or octave the arrangement has no majority for follows the
+        // song's other arrangements.
+        var song = _projectState.ActiveProject?.Arrangements ?? [];
+        var freeGrip = ChordFingeringFollower.FreeGripResolver(arrangement, null,
+            ArrangementFingeringStyle.HintsFromOthers(arrangement,
+                ArrangementFingeringStyle.OfOtherArrangements(song, arrangement)));
         var fingering = new FingeringGenerationService();
         var minted = new List<ChordTemplate>();
         var chordRepoints = new List<(Chord, int, int)>();

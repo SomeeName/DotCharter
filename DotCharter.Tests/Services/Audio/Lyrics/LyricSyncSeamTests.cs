@@ -187,6 +187,24 @@ public sealed class LyricSyncSeamTests : IDisposable
     }
 
     /// <summary>
+    ///     #921: a Cyrillic look-alike inside a Latin word (lyric sites add them) is aligned AND
+    ///     written as the Latin letter, and the run says so.
+    /// </summary>
+    [Fact]
+    public async Task ALookAlikeCyrillicLetterIsAlignedAndWrittenAsLatinWithANotice()
+    {
+        var roots = InstallModel();
+
+        var result = await Core(roots, Spell("bc"))
+            .AlignAsync("b-\u0441", Touch("song.wav"), Exact(), cancellationToken: Ct);
+
+        Assert.True(result.Ran, result.Error);
+        Assert.Equal(["b", "c"], result.Syllables.Select(s => s.Text));
+        Assert.Equal(0.10, result.Syllables[1].StartSeconds, 3);
+        Assert.Contains(FakeLocalization.English().Plural("Progress_LyricHomoglyphsFolded_One", "Progress_LyricHomoglyphsFolded_Many", 1), result.Warnings);
+    }
+
+    /// <summary>
     ///     <see cref="LyricSyncResult.Aligned" /> is index-parallel to the sheet and
     ///     is what the app's own fold consumes, so a projection that quietly
     ///     reordered or dropped a syllable would mistime a chart while this file's

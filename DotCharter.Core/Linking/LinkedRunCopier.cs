@@ -254,6 +254,48 @@ public static class LinkedRunCopier
         return copy;
     }
 
+    /// <summary>
+    ///     The anchor on the downbeat right after a run that belongs to it: one stored exactly at
+    ///     <paramref name="end" /> that is the first anchor the next sounds use (a sound starts at or
+    ///     after <paramref name="end" /> before any later anchor). Null when there is none.
+    /// </summary>
+    public static FretAnchor? EndAnchor(ChartLevel level, FractionalPosition end)
+    {
+        ArgumentNullException.ThrowIfNull(level);
+        var anchor = level.Anchors.FirstOrDefault(a => a.Position == end);
+        return anchor != null && UsedFirstAfter(level, end) ? anchor : null;
+    }
+
+    /// <summary>
+    ///     <paramref name="hand" /> stored at <paramref name="end" /> as the anchor that belongs to
+    ///     the run ending there (<see cref="EndAnchor" />), planned as a copy step of its own: it
+    ///     replaces the anchor stored there. Null when the level already stores that hand there, or
+    ///     when the next sounds would not use an anchor at <paramref name="end" /> first.
+    /// </summary>
+    public static LinkedRunCopy? PlanEndAnchor(Arrangement target, ChartLevel targetLevel, FractionalPosition end,
+        FretAnchor hand)
+    {
+        ArgumentNullException.ThrowIfNull(targetLevel);
+        ArgumentNullException.ThrowIfNull(hand);
+        var stored = targetLevel.Anchors.Where(a => a.Position == end).ToList();
+        if (stored.Any(a => a.Fret == hand.Fret && a.Width == hand.Width) || !UsedFirstAfter(targetLevel, end)) return null;
+        var copy = new LinkedRunCopy(target, targetLevel);
+        copy.Anchors.Removed.AddRange(stored);
+        copy.Anchors.Added.Add(new FretAnchor(end, hand.Fret, hand.Width));
+        return copy;
+    }
+
+    /// <summary>Whether a sound starts at or after <paramref name="end" /> before any anchor after <paramref name="end" />.</summary>
+    private static bool UsedFirstAfter(ChartLevel level, FractionalPosition end)
+    {
+        var notes = level.Notes.Where(n => n.Position >= end).Select(n => n.Position);
+        var chords = level.Chords.Where(c => c.Position >= end).Select(c => c.Position);
+        var sounds = notes.Concat(chords).ToList();
+        if (sounds.Count == 0) return false;
+        var first = sounds.Min();
+        return !level.Anchors.Any(a => a.Position > end && a.Position <= first);
+    }
+
     private static bool Inside(FractionalPosition position, FractionalPosition start, FractionalPosition end) =>
         position >= start && position < end;
 

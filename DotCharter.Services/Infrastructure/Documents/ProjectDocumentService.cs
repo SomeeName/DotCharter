@@ -19,9 +19,17 @@ public class ProjectDocumentService : IProjectDocumentService
 {
     private const string ShowlightsFileName = DlcBuilderBundle.ShowlightsFileName;
     private readonly IAppLogger _logger;
+    private readonly IConfigurationService? _config;
     private readonly IServiceProvider _serviceProvider;
     private readonly Action<string> _recycle;
 
+    /// <summary>
+    ///     The config is resolved ONCE here, while the provider is alive, never later:
+    ///     a save companion can outlive the container (shutdown drain), and a disposed
+    ///     provider made the XML bundle silently fall back to default settings. Null =
+    ///     composed without one (the headless/test container). The provider is kept ONLY
+    ///     to create the transient keyed chart serializers per call.
+    /// </summary>
     public ProjectDocumentService(IServiceProvider serviceProvider, IAppLogger logger)
         : this(serviceProvider, logger, RecycleBin.Remove) { }
 
@@ -29,6 +37,7 @@ public class ProjectDocumentService : IProjectDocumentService
     {
         _recycle = recycle;
         _serviceProvider = serviceProvider;
+        _config = serviceProvider.GetService<IConfigurationService>();
         _logger = logger;
     }
 
@@ -141,9 +150,20 @@ public class ProjectDocumentService : IProjectDocumentService
 
     /// <inheritdoc />
     public void SaveDlcBuilderXmlBundle(string projectPath, ChartProject project, double? audioLengthMs = null) =>
-        SaveDlcBuilderXmlBundleToDirectory(GetDlcBuilderXmlDirectory(projectPath), project, audioLengthMs);
+        WriteDlcBuilderXmlBundle(GetDlcBuilderXmlDirectory(projectPath), project, audioLengthMs, null);
 
-    public void SaveDlcBuilderXmlBundleToDirectory(string exportDirectory, ChartProject project, double? audioLengthMs = null)
+    /// <inheritdoc />
+    public void SaveDlcBuilderXmlBundleToDirectory(string exportDirectory, ChartProject project, double? audioLengthMs,
+        bool fixLowBassTuning) =>
+        WriteDlcBuilderXmlBundle(exportDirectory, project, audioLengthMs, fixLowBassTuning);
+
+    /// <summary>
+    ///     The bundle: every arrangement with the package export's fixes and levels and the low bass tuning fix
+    ///     (<paramref name="fixLowBassTuning" />, else <c>AppConfig.ExportFixLowBassTuning</c>), plus the other form
+    ///     of a 7-/8-string guitar a standard or RS Extended Range project reads (<see cref="Rs2DlcEditions" />).
+    /// </summary>
+    private void WriteDlcBuilderXmlBundle(string exportDirectory, ChartProject project, double? audioLengthMs,
+        bool? fixLowBassTuning)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(exportDirectory);
         ArgumentNullException.ThrowIfNull(project);
@@ -173,6 +193,13 @@ public class ProjectDocumentService : IProjectDocumentService
             Warning = message => _logger.Warning(AppLogCategory.Project, message),
             ChordNameOptions = NewChordNames.OptionsFor(config)
         };
+        var otherFormWriter = new RsXmlSongWriter
+        {
+            SixStringProjection = !config.RsXmlSixStringProjection, MoverPhrases = config.RsXmlMoverPhrases,
+            Warning = message => _logger.Warning(AppLogCategory.Project, message),
+            ChordNameOptions = NewChordNames.OptionsFor(config)
+        };
+        var fixLowBass = fixLowBassTuning ?? config.ExportFixLowBassTuning;
         var vocalsWriter = new RsXmlVocalsWriter();
         var showlightsWriter = new RsXmlShowlightsWriter();
 
@@ -196,16 +223,22 @@ public class ProjectDocumentService : IProjectDocumentService
                 // content, and callers may pass a live (non-snapshot) project.
                 var stage = timer.ElapsedTicks;
                 var arrangement = ChartProjectCloner.CloneArrangement(project.Arrangements[i], retainIdentities: true);
-                if (RsxrStringLayout.XmlExportRefusal(arrangement, config.RsXmlSixStringProjection) is { } refusal)
+                var otherForms = Rs2DlcEditions.SiblingFiles(project, i, config.RsXmlSixStringProjection).ToList();
+                var refusal = RsxrStringLayout.XmlExportRefusal(arrangement, config.RsXmlSixStringProjection);
+                if (refusal is not null)
                 {
                     _logger.Warning(AppLogCategory.Project, refusal);
-                    continue;
+                    if (otherForms.Count == 0) continue;
                 }
                 PhraseSectionGenerator.GenerateIfAbsent(arrangement, project.Beats, songLengthMs);
                 cloneTicks += timer.ElapsedTicks - stage;
                 stage = timer.ElapsedTicks;
                 arrangement = DlcBuilderBuildSteps.ApplyOrKeep(project, arrangement, audioLengthMs, steps, _logger);
+                // The package's own copy rule (RocksmithPackageBuilder): DLC Builder builds from this XML.
+                arrangement = LowBassTuningFix.ForPackage(arrangement, fixLowBass);
                 stepsTicks += timer.ElapsedTicks - stage;
+                WriteOtherForms(stagingDirectory, project, arrangement, otherForms, otherFormWriter, audioLengthMs);
+                if (refusal is not null) continue;
                 stage = timer.ElapsedTicks;
                 // songLength is EOF's min(chart, audio) - 1 ms: when the audio
                 // is SHORTER than the chart it must win, or the exported
@@ -259,6 +292,23 @@ public class ProjectDocumentService : IProjectDocumentService
             try { OwnedDlcBuilderBundle.Recycle(stagingDirectory, _recycle); }
             catch (IOException) { /* A locked or unrecorded stage is left for the next open. */ }
             throw;
+        }
+    }
+
+    /// <summary>
+    ///     The sibling files a standard or RS Extended Range project reads for a 7-/8-string guitar: the six-string
+    ///     projection or the full width, whichever the bundle's own file is not. What a projection drops is
+    ///     logged as information: the RS Extended Range project keeps every string.
+    /// </summary>
+    private void WriteOtherForms(string stagingDirectory, ChartProject project, Arrangement arrangement,
+        IReadOnlyList<Rs2DlcEntry> otherForms, RsXmlSongWriter writer, double? audioLengthMs)
+    {
+        foreach (var form in otherForms)
+        {
+            WriteOwnedBundleFile(Path.Combine(stagingDirectory, form.Xml),
+                target => writer.WriteTo(CreateArrangementExportProject(project, arrangement), target, audioLengthMs));
+            if (writer.LastLoss is { IsEmpty: false } loss)
+                _logger.Info(AppLogCategory.Project, $"Standard DLC Builder project: {loss.Describe(arrangement)}");
         }
     }
 
@@ -430,7 +480,7 @@ public class ProjectDocumentService : IProjectDocumentService
     {
         try
         {
-            return _serviceProvider.GetService<IConfigurationService>()?.LoadAppConfig();
+            return _config?.LoadAppConfig();
         }
         catch (Exception ex)
         {

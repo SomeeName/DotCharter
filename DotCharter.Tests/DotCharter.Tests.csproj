@@ -100,6 +100,9 @@
              so it cannot be a ProjectReference here; its pure decisions are compiled
              in by link and pinned by InstallLocationTests. -->
         <Compile Include="..\DotCharter.Launcher\LaunchCommandLine.cs" Link="Launcher\LaunchCommandLine.cs" />
+        <!-- tools/edit-replay (#944) is a file-based program; its pure diff and counting
+             half is compiled in by link and pinned by EditReplayCoreTests. -->
+        <Compile Include="..\tools\edit-replay\EditReplayCore.cs" Link="Tools\EditReplay\EditReplayCore.cs" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(IncludeLocalOnlyHarnesses)' != 'true'">

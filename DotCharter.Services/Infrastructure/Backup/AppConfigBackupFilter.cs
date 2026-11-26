@@ -67,7 +67,7 @@ public static class AppConfigBackupFilter
         "SongTonePreferences", "DropTunerSongs", "LivePlayTakeRecorderEnabled", "LivePlayTakeMaxMinutes",
         "LivePlayTakeCacheMaxMB", "StreamingMirrorDevice", "AutoFollowDeviceAudioSettings", "MidiOutputDeviceName",
         "ChartSynthPlaysOwnRig", "ChartSoundUsesInstrument", "InstrumentThroughRig", "ChartSoundSeatRoute", "UseFastChartingInput", "SyncHandShapeToChordTemplate", "TappedHarmonicFretOffset",
-        "SyncAnchorToChordFingering", "InspectorApplyStep", "SuppressDoubleStopChordNames", "AutoNameNewChords", "KeepPowerChordNames", "ChordNamingStyle",
+        "SyncAnchorToChordFingering", "InspectorApplyStep", "SuppressDoubleStopChordNames", "AutoNameNewChords", "KeepPowerChordNames", "NameOnlyFirstChordInHandShape", "ChordNamingStyle",
         "AiFingeringJobGuitar", "AiFingeringJobBass", "LyricSpanWordGap", "LyricSpanPhraseGap", "MinNoteDistanceMode",
         "MinNoteDistanceMs", "MinNoteDistanceDivisor", "AutoBackupEnabled", "AutoBackupIntervalMinutes",
         "AutoBackupKeepCount", "RecoveryEnabled", "RecoveryAutosaveSeconds", "PadSilenceOnNewProject",

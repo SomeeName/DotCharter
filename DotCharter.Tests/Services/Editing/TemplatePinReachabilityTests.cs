@@ -28,6 +28,7 @@ public sealed class TemplatePinReachabilityTests
         ("DotCharter.Core/Utilities/HandShapeAutoTemplate.cs", nameof(TemplatePinTests.HandShapeAutoTemplate_NeverRebuildsAPinnedGrip)),
         ("DotCharter.UI/Input/TimelineWheelAdjuster.cs", nameof(TemplatePinTests.HandShapeAutoTemplate_NeverRebuildsAPinnedGrip)),
         ("DotCharter.UI/ViewModels/Panels/ChordTemplateFingeringBackfill.cs", "AutoFill_LeavesAPinnedTemplateAsItIs"),
+        ("DotCharter.Services/Editing/Sync/ArrangementRuleSync.cs", nameof(ArrangementRuleSyncTests.APinnedTargetOccurrence_IsNeverOverwritten_AnUnpinnedControlIs)),
         ("DotCharter.Services/Ai/Chart/AiChartApplier.cs", "An_AI_fingering_never_moves_a_chord_off_a_pinned_template")
     ];
 

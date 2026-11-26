@@ -1,4 +1,6 @@
-﻿namespace DotCharter.Services.Parsing.GuitarPro;
+﻿using DotCharter.Services.Export.Rocksmith;
+
+namespace DotCharter.Services.Parsing.GuitarPro;
 
 /// <summary>
 ///     Shared helpers for the two Editor-on-Fire text/marker import settings:
@@ -62,9 +64,12 @@ public static class GpMarkerImport
     }
 
     /// <summary>Builds the phrase/section EventPoint for a marker at
-    /// <paramref name="position"/>. The phrase name is always the trimmed marker
-    /// text; the section is set only when the name is a valid RS section
-    /// (else phrase-only). Returns null for a blank name.</summary>
+    /// <paramref name="position"/>. Nothing is taken unchecked: the phrase name is
+    /// the trimmed marker text in the spelling Rocksmith accepts
+    /// (<see cref="RsPhraseName.Sanitize"/>), and the section is the catalog name the
+    /// marker reads as once its numbering and punctuation are set aside
+    /// (<see cref="SectionFor"/>), else none (phrase-only). Returns null for a blank
+    /// name.</summary>
     public static EventPoint? CreateMarkerEvent(FractionalPosition position, string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
@@ -72,8 +77,34 @@ public static class GpMarkerImport
         return new EventPoint
         {
             Position = position,
-            Phrase = trimmed,
-            Section = IsRsSectionName(trimmed) ? trimmed.ToLowerInvariant() : ""
+            Phrase = RsPhraseName.Sanitize(trimmed, 0),
+            Section = SectionFor(trimmed) ?? ""
         };
+    }
+
+    /// <summary>The <see cref="RsSectionCatalog"/> name a marker reads as: "Verse 2",
+    /// "Pre-Chorus" and "CHORUS #3" are verse, prechorus and chorus. Only digits,
+    /// spaces and punctuation are set aside, never a word, so "Guitar Solo" stays
+    /// phrase-only. Null when no section matches.</summary>
+    public static string? SectionFor(string? marker)
+    {
+        if (string.IsNullOrWhiteSpace(marker)) return null;
+        if (RsSectionCatalog.Normalize(marker) is { } exact) return exact;
+        var letters = new string(marker.Where(char.IsLetter).ToArray());
+        return RsSectionCatalog.Normalize(letters);
+    }
+
+    /// <summary>Adds a marker's EventPoint and phrase name. A position that already
+    /// carries a phrase keeps it: a GP bar can hold a section marker and a beat text
+    /// at once, and one position holds one phrase.</summary>
+    public static void AddMarker(Arrangement arrangement, EventPoint? ev)
+    {
+        ArgumentNullException.ThrowIfNull(arrangement);
+        if (ev == null) return;
+        if (arrangement.EventPoints.Any(e => e.Position.CompareTo(ev.Position) == 0 && !string.IsNullOrEmpty(e.Phrase)))
+            return;
+
+        arrangement.EventPoints.Add(ev);
+        if (!arrangement.Phrases.Contains(ev.Phrase)) arrangement.Phrases.Add(ev.Phrase);
     }
 }

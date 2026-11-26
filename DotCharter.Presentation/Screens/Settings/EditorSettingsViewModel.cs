@@ -36,6 +36,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
             new("autoNameChords", "Settings_AutoNameNewChords", "Settings_Tip_AutoNameNewChords"),
             new("suppressDoubleStop", "Settings_SuppressDoubleStopNames", "Settings_Tip_SuppressDoubleStopNames"),
             new("keepPowerChords", "Settings_KeepPowerChordNames", "Settings_Tip_KeepPowerChordNames"),
+            new("nameOnlyFirstChord", "Settings_NameOnlyFirstChordInHandShape", "Settings_Tip_NameOnlyFirstChordInHandShape"),
             new("musicalChordNames", "Settings_MusicalChordNames", "Settings_Tip_MusicalChordNames"),
             new("tappedHarmonicOffset", "Settings_TappedHarmonicFretOffset", "Settings_Tip_TappedHarmonicFretOffset"),
             new("lyricWordGap", "Settings_LyricSpanWordGap", "Settings_Tip_LyricSpanWordGap"),
@@ -59,6 +60,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         nameof(UseFastChartingInput), nameof(SyncHandShapeToChordTemplate), nameof(SyncAnchorToChordFingering),
         nameof(InspectorApplyStep),
         nameof(AutoNameNewChords), nameof(SuppressDoubleStopChordNames), nameof(KeepPowerChordNames),
+        nameof(NameOnlyFirstChordInHandShape),
         nameof(MusicalChordNames), nameof(TappedHarmonicFretOffset),
         nameof(LyricSpanWordGap),
         nameof(LyricSpanPhraseGap), nameof(MinNoteDistanceModeIndex), nameof(MinNoteDistanceMs),
@@ -85,6 +87,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
     [ObservableProperty] private bool _autoNameNewChords = true;
     [ObservableProperty] private bool _suppressDoubleStopChordNames = true;
     [ObservableProperty] private bool _keepPowerChordNames;
+    [ObservableProperty] private bool _nameOnlyFirstChordInHandShape = true;
     [ObservableProperty] private bool _musicalChordNames;
     [ObservableProperty] private int _tappedHarmonicFretOffset = 12;
     [ObservableProperty] private bool _lyricSpanWordGap = true;
@@ -155,6 +158,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         AutoNameNewChords = config.AutoNameNewChords;
         SuppressDoubleStopChordNames = config.SuppressDoubleStopChordNames;
         KeepPowerChordNames = config.KeepPowerChordNames;
+        NameOnlyFirstChordInHandShape = config.NameOnlyFirstChordInHandShape;
         MusicalChordNames = config.ChordNamingStyle == ChordNamingStyle.Musical;
         TappedHarmonicFretOffset = Math.Clamp(config.TappedHarmonicFretOffset, 0, FretLimits.MaxFret);
         LyricSpanWordGap = config.LyricSpanWordGap;
@@ -197,6 +201,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         config.AutoNameNewChords = AutoNameNewChords;
         config.SuppressDoubleStopChordNames = SuppressDoubleStopChordNames;
         config.KeepPowerChordNames = KeepPowerChordNames;
+        config.NameOnlyFirstChordInHandShape = NameOnlyFirstChordInHandShape;
         config.ChordNamingStyle = MusicalChordNames ? ChordNamingStyle.Musical : ChordNamingStyle.Eof;
         config.TappedHarmonicFretOffset = Math.Clamp(TappedHarmonicFretOffset, 0, FretLimits.MaxFret);
         config.LyricSpanWordGap = LyricSpanWordGap;

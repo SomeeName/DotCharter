@@ -671,7 +671,7 @@ public sealed class SongLibrarySearchProfileUiPerfSmokeTests
                 new FakeFileStorageService(), config, new StubLibraryService(library), logger,
                 new StubProjectSession(), state, editor, transport,
                 new DotCharter.Presentation.Dialogs.DialogsSlot(), DotCharter.Localization.LocalizationService.Instance,
-                filterPassScheduler);
+                new DotCharter.Tests.UI.ViewModels.Panels.StubPackageFileReader(), filterPassScheduler);
         }
 
         public SongBrowserViewModel Vm { get; }

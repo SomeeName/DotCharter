@@ -13,20 +13,106 @@ validation on the inspector's 150 ms debounce after every history step, auto-fix
 on demand and inside `BatchChartLintService`.
 
 **I30 (`ToneChangeOnNote`, `NoteRule` / `ChordRule`) has a one-click fix** (#759):
-`Editing/Tones/ToneChangeNudge` moves the tone change ONE 16th note earlier, measured on
-the beat grid (`NoteDenominator/16` of a beat; reaching back over a beat line, the rest is
+`Editing/Tones/ToneChangeNudge` moves the tone change ONE 32nd note earlier (the charting conventions' offset; a 16th before #978), measured on
+the beat grid (`NoteDenominator/32` of a beat; reaching back over a beat line, the rest is
 measured on the previous beat's meter; before the first beat, on the lead-in the timeline
 extrapolates from the first interval), as one undo step (`MoveToneChangeAction`). It moves
-exactly a 16th or not at all: it is offered DISABLED with the reason
+exactly a 32nd or not at all: it is offered DISABLED with the reason
 (`ToneChangeNudgeBlock`) when more than one tone change sits on the note, the move would reach
 before 0 ms, reach another tone change (never two on one time), cross a phrase or section start
-lying strictly inside the 16th, or land on another note's onset on any level. A change sitting
+lying strictly inside the 32nd, or land on another note's onset on any level. A change sitting
 ON a phrase start may move before it. "Same time" is I30's own comparison,
 `Editing/Validation/ValidationTimeMatch` (whole ms, 1 ms slop), for both matching the finding's
 change and the landing-spot guards. The press recomputes the nudge on the live arrangement, so
 an undo between the offer and the re-validation cannot stack two changes. The Issues tab offers
 it through `IssueFixViewModel` (no Fix all: the fix menu has none).
 Tests: `ToneChangeNudgeTests`, `IssueFixViewModelTests`, `InspectorIssuesViewModelTests`.
+
+**D50-D56 (`Rules/FretHandPositionRule`)**: where an FHP sits and what it asks of the hand. D50 before
+the level's first sound (inside COUNT too), D51 between sounds or after the last, D52 inside a ringing
+sustain, D53 a hand move ON a hammer-on target that could have come one note earlier, D54 an anchor on
+fret 22-24, D55 above 24 (Important), D56 a bend on finger 4 (the stated finger, else fret = FHP + 3).
+Placement is `Editing/Validation/FhpPlacement.Classify`: a sound, a playable phrase start, a mover phrase,
+a pitched slide landing and a HAND-SHAPE START are all good spots (the generator anchors every shape
+start on purpose; the hand forms the grip there, even half a beat before the strum). Times compare
+through `ValidationTimeMatch`. `FhpPlacement.MoveToNextSound` is the D50-D52 fix (one undo step through
+`IssueFixViewModel` and Fix all): the anchor moves onto the next sound, or is removed when that sound
+already has one or none follows; withheld when the next sound is a hammer-on / pull-off target or sits
+inside a hand shape. The generator itself trips none of D50-D56 on the chart-style fixture
+(`FhpGeneratorFindingsTests`), and its last pass, `Editing/FretAnchors/BendFingerShift`, moves an anchor up
+one fret when an unfingered bend would fall to the pinky and every fretted sound and pitched slide
+landing it governs still fits the four-fret box there (above the capo, on the neck); otherwise D56 is a
+real finding. Tests: `FretHandPositionRuleTests`, `FhpGeneratorFindingsTests`, `IssueFixFhpMoveTests`.
+
+**D17/D18 (`SustainCrossesBoundary`, `HandShapeCrossesBoundary`, `Rules/BoundaryCrossingRule`)**: a
+sustain, a Link-Next chain or a hand shape across a phrase start, a section start or past END. The
+boundary list and "crossed" (strictly inside; a Link-Next sound ending ON a boundary counts) live in
+`Editing/Validation/BoundaryCrossing`, shared with its fix. A Link-Next note across a non-mover phrase
+stays I10's finding. `BoundaryCrossing.Trim` ends the element on the first boundary it crosses, one
+`Mutate*Action` undo step, offered through `IssueFixViewModel` (and Fix all) only when unambiguous: no
+Link-Next, no slide, no bend point at or past the boundary, and for a shape no note or chord of its
+level starting between the boundary and its end. Tests: `BoundaryCrossingRuleTests`,
+`IssueFixBoundaryTrimTests`.
+
+**D40/D41 (`NoteNearlyOnGrid`, `NoteOffGrid`, `Rules/OffGridRule`)**: a note or chord off the beat
+grid, one finding per position and level. The grid (`Editing/Validation/BeatGridSnap`) is every
+multiple of 1/16 of a beat (straight) or 1/24 (triplets), so triplet-feel swing (off-beats at 2/3,
+sixteenths at 1/6 and 5/6) is ON the grid; quintuplets and finer tuplets are not. Distance is in ms
+through the beat map: under 1 ms counts as on the grid (timestamp rounding), 1 to 3 ms is a D40,
+beyond is a D41 with no fix. `BeatGridSnap.Snap` moves a D40's note or chord with the hand shapes and
+anchors that start with it onto the nearest line (a sustain keeps its end), one undo step, through
+`IssueFixViewModel` and Fix all; none for a bend, a Link-Next or sustain ending on it, or an occupied
+line. **D42-D44 (`LeadInShort`, `TailShort`, `NoCountMeasure`, `Rules/LeadInRule`)** are Warning
+suggestions: first note under 10 s (from 1 s; below that D02 and the export gate's unchanged 1 s check
+speak), under 2 s from the last sound to the end of the audio (only with a known audio length), and no
+empty measure before the first note. Nothing touches the beat map; the messages point at Tempo map ▸
+Add silence / Add measures at start. Tests: `OffGridRuleTests`, `LeadInRuleTests`,
+`IssueFixGridSnapTests`.
+
+**D60-D67 (`Rules/TempoMapRule`)** are Warnings on the beat map; nothing edits it. D60/D61
+(`TempoLooksDoubled`/`Halved`, within 3% of 2x or 0.5x) and D65 (`TempoOffAudio`, more than 1%) compare the
+charted part's average tempo with a whole-song estimate in `Tempo/Estimate/AudioTempoEstimateStore`, matched
+by audio file name. Only Tempo map ▸ Estimate BPM fills the store (`TempoEstimateService`, whole song only,
+this session); without an estimate the three stay silent, so validation never decodes audio. D62
+(`TempoOutOfRange`, below 40 or above 300 BPM, once per run) and D63 (`TempoSpike`, a beat at least 1.4x
+faster than both neighbours) look only at beats from the first to the last note start. A slow beat is never a
+spike (held fermatas are), and swing or triplet feel moves subdivisions, never beat lines. D64
+(`TempoAnchorSpam`): 16 or more anchors that keep the previous beat's tempo (within 0.005 BPM). D66/D67
+(`MeterMissingOnFirstMeasure`, `MeterChangeUnmarked`): the map must open on a measure whose time signature
+matches its beat count, and a later measure whose beat count disagrees with its own signature is reported
+once where such a run starts (the last measure is never judged). The thresholds come from
+`TempoMapRuleCorpusTests` over the local `TestData/` corpus (269 charts: the fastest pushed beat is 1.13x,
+the most redundant anchors 3). That run also lists D62 and D66/D67 findings: a 411 BPM reference
+chart and RS XML exports whose `TS:` events disagree with their own measure lines (the Editor on Fire
+projects of the same songs draw none). After an add-new Guitar Pro import the status line ends with
+`Import/GuitarPro/GpImportChecklist`: time signature changes, slides and ties kept as Link-Next to check
+by hand. Tests: `TempoMapRuleTests`, `TempoMapRuleCorpusTests`, `GpImportChecklistTests`.
+
+**D80, D81, D83, D84 (`Rules/PhraseStructureRule`)**: the shape charters give phrases and sections,
+findings only (nothing is moved or renamed). D80 a phrase over 16 measures (`MaxMeasures`), D81 one
+under 2, D83 a section with no phrase at its position, D84 one silence split into several noguitar
+sections. A phrase or section off the bar line is NOT a finding (D82 is gone: EOF's moveR places one
+there on purpose, and neither EOF, DLC Builder nor Charter flags it). Measures are the beat map's bar
+lines; a map with none is not judged on D80/D81. The AI structure gate judges them like every other
+finding, so an AI phrase must sit at least two measures from its neighbours. The export's `Export/PhraseSectionGenerator` (only for a chart with
+no authored structure) produces no D80-D84 finding: an `intro` section at the first note, body phrases
+on bar lines about every 4 measures (moved a measure either way onto a bar whose content differs from
+the bar before, never on a bar inside a sustain, Link-Next chain or hand shape, never shorter than 2
+measures), up to 8 before a held bar forces a later cut. GP/Songsterr markers go through
+`GpMarkerImport`: the phrase name is `RsPhraseName.Sanitize`d, "Verse 2" or "Pre-Chorus" find their
+catalog section, and a second phrase at one position is dropped. Tests: `PhraseStructureRuleTests`,
+`PhraseSectionGeneratorTests`, `GpMarkerImportSanitizeTests`.
+
+**D110 (`Rules/AudioCheckRule`)**: an import is a draft. The spots it GUESSED live on
+`Arrangement.AudioCheckSpots` (position + `AudioCheckReason`; saved per arrangement as a trailing
+`<dcAudioCheck>`, absent when empty, moved with the grid by `ChartProjectPositions`, `BeatScaleService`
+and `TempoMapBeats.RemoveContentAtBeat`). Marked today: a Guitar Pro dead-note slide-out's landing
+(`Parsing/GuitarPro/GpAudioCheck`, both readers) and, when an add-new GP import replaced the beat map,
+the tab's tempo map at each new arrangement's first sound (`GpImportApplier`). ONE Warning per
+arrangement with the count, at the first spot, never one per spot. The Issues fix menu clears them
+(`AudioCheckMarks`, `SetAudioCheckSpotsAction`): "Checked" the first spot (the finding moves on),
+"All checked" every one, one undo step each; Fix all never applies them. Tests: `AudioCheckRuleTests`,
+`GpImportCharterTests`.
 
 Phrase boundary times, mover times, sustain-crossing queries and noguitar phrase
 intervals all use the context's shared `PhraseMarkers.All` result. An imported
@@ -244,3 +330,25 @@ sources and the finding's chord/hand-shape backreference.
   (`EveryCorpusChart_ReportsTheSameOverARestoredSpare`, env-gated).
 
 A finding's sentence is a `Validation_*` resx key plus arguments (`ArrangementIssue.MessageKey`/`MessageArgs`, built by `ArrangementIssues.Make`); `Message` stays the English text read from the same resource. Surfaces that show it call `ArrangementIssueText.Of(issue, localization)`; logs, reports and AI prompts keep `Message`.
+
+## Chord fingering conventions
+
+No rule judges a grip's fingering. A still-guessed fingering is NOT a finding (D100 is gone), and the
+same frets fingered differently by two templates is NOT a finding (D101 is gone, #1023): a hand that
+sits differently fingers the same shape differently; EOF, DLC Builder and Charter flag neither.
+Pinning a grip (`SetTemplatePinnedAction`, undoable: "Pin grip" on its Chord shapes card, or "Pin all
+grips", `ChordShapes/GripPins`, one undo step) only keeps automatic fingering off it; the Issues tab
+offers no Fix for it. Generated chord names spell a major seventh `Maj7` in BOTH
+naming styles, and an ESTIMATED key in a down-tuned arrangement takes the flat enharmonic
+(`ChordKeyEstimator.FlatSpelling`: G#m becomes Abm); authored names and authored keys never change.
+"Name only the first chord of a hand shape" (`AppConfig.NameOnlyFirstChordInHandShape`, on;
+`Editing/ChordShapes/RepeatedChordNames`): Guitar Pro import (`GpPostProcessor.Run`) and Generate hand
+shapes (`ArrangementHandShapeGenerator.BuildActions`) point a later chord that repeats the same NAMED
+grip inside one hand shape at an unnamed twin (empty name, `Unnamed`, reused when the arrangement
+holds one). Only chords the flow itself assigns move; loading never runs it. TWINS (`Editing/ChordShapes/ChordTemplateTwins.AreTwins`): two template
+objects, exactly one with an empty name, otherwise the same grip (frets, fingers, ghost mask, arpeggio,
+Nop and Fingerless flags), judged BEFORE an edit. An in-place fret or fingering edit to either one
+(the chord card's `ChordTemplateEditPlanner.EditInPlace`, the Chord shapes panel's Suggest fingering)
+carries onto the other through an `EditTemplateGlobalAction` in the same undo node
+(`ChordTemplateTwins.Follow`), so the pair never drifts. A pitched slide on the second half of a tie merges into the tied note
+(`GpPostProcessor.TieSlidesCompatible`), so a slide tied across a bar line imports as one slide.

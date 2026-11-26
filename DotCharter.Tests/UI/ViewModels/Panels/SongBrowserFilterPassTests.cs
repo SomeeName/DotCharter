@@ -912,7 +912,7 @@ public sealed class SongBrowserFilterPassTests
             Vm = new SongBrowserViewModel(
                 new FakeFileStorageService(), config, Library, logger,
                 new StubProjectSession(), state, editor, transport,
-                new DotCharter.Presentation.Dialogs.DialogsSlot(), FakeLocalization.English(),
+                new DotCharter.Presentation.Dialogs.DialogsSlot(), FakeLocalization.English(), new DotCharter.Tests.UI.ViewModels.Panels.StubPackageFileReader(),
                 eager ? action => action() : _queue.Add);
         }
 

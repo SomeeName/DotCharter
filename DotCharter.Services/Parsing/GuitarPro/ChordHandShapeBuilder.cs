@@ -44,10 +44,13 @@ public static class ChordHandShapeBuilder
     /// this parameter defaults OFF so a direct caller keeps the historical
     /// merge.</param>
     /// <param name="naming">The chord naming style and the imported score key.</param>
+    /// <param name="bars">The track's swing timeline: a strum's written length ends on the
+    /// swung grid (<see cref="GpBarTimeline.PlacedEnd" />), so swing alone never opens a rest.
+    /// Null ⇒ no swing (position plus written length).</param>
     public static void BuildAndTrim(ChartLevel level, Arrangement arrangement,
         GpAuthoredFingering? authoredFingers = null,
         GpAuthoredChordNames? authoredChordNames = null,
-        bool splitRunsOnRests = false, ChordNamingOptions? naming = null)
+        bool splitRunsOnRests = false, ChordNamingOptions? naming = null, GpBarTimeline? bars = null)
     {
         // The grouping is the shared planner's — the editor's "Generate hand
         // shapes" runs the same one, so the two can never drift apart. What stays
@@ -56,7 +59,8 @@ public static class ChordHandShapeBuilder
         var grips = new ImportGripSource(arrangement, authoredFingers, authoredChordNames, naming ?? NewChordNames.NamingFor(arrangement));
         var minted = new List<ChordTemplate>();
         var plan = ChordHandShapePlanner.Plan(level, grips, minted,
-            new ChordHandShapePlanOptions(SplitRunsOnRests: splitRunsOnRests));
+            new ChordHandShapePlanOptions(SplitRunsOnRests: splitRunsOnRests, EndRunsAtStaccatoStrike: true,
+                PlacedEnd: (bars ?? GpBarTimeline.None).PlacedEnd));
 
         foreach (var template in minted) arrangement.ChordTemplates.Add(template);
 
@@ -75,8 +79,10 @@ public static class ChordHandShapeBuilder
             foreach (var chord in bar.Chords)
             {
                 // A merged follower can supply the run's first explicit fingers.
-                grips.RememberAuthored(bar.Template, chord);
-                chord.TemplateId = bar.Template.Id;
+                // A full mute that joined the bar keeps its own grip.
+                var grip = bar.GripOf(chord);
+                grips.RememberAuthored(grip, chord);
+                chord.TemplateId = grip.Id;
             }
 
             // The hand shape now carries the duration; the chords become short
@@ -148,6 +154,11 @@ public static class ChordHandShapeBuilder
 
             return true;
         }
+
+        // EOF joins a full mute to the bar before it only when the mute has no
+        // fingering of its own (rs.c, eof_note_has_high_chord_density).
+        public bool MayJoinAsFullMute(Chord chord) =>
+            authoredFingers == null || !chord.ChordNotes.Any(n => authoredFingers.TryGet(n.StringIndex, chord.Position, out _));
 
         public ChordTemplate GripFor(Chord chord, IList<ChordTemplate> minted)
         {

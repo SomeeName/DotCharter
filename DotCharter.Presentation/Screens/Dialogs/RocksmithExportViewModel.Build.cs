@@ -2,7 +2,6 @@
 using DotCharter.Services.Export.Audio;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using DotCharter.Core.Domain.Project;
 using DotCharter.Core.Utilities;
 using DotCharter.Presentation.Contracts.Dialogs;
@@ -39,21 +38,20 @@ public sealed partial class RocksmithExportViewModel
     public ObservableCollection<string> ResultWarnings { get; } = [];
     IReadOnlyList<string> IRocksmithExportScreen.ResultWarnings => ResultWarnings;
 
-    /// <summary>Runs the validator into the list: on open, and again right before a build, so the user never presses "re-check".</summary>
-    private void Revalidate()
+    /// <summary>Re-checks the chart off the UI thread; Export stays greyed with the "checking" reason while it runs.</summary>
+    internal void Revalidate() => _check.Start(ValidationWork, ApplyFindings);
+
+    /// <summary>The same check on the calling thread: the Export click only, so the gate decides on current findings.</summary>
+    private void RevalidateNow() => _check.RunNow(ValidationWork, ApplyFindings);
+
+    private Func<IReadOnlyList<ExportValidationFinding>>? ValidationWork() => _project is not { } project ? null : RocksmithExportFindingsCheck.Work(
+        project, _edit.Config.LoadAppConfig(), _io.Library, RocksmithExportOwnPackages.For(OutputPath, BuildPlatform, HasPsxrSelection), _edit.State.TotalAudioLengthMs);
+
+    private void ApplyFindings(IReadOnlyList<ExportValidationFinding> found)
     {
-        if (_project is null) return;
-        _findings = new ChartExportValidator { SixStringProjection = _edit.Config.LoadAppConfig().RsXmlSixStringProjection }.Validate(_project, _edit.State.TotalAudioLengthMs);
+        _findings = found;
         ValidationItems.Clear();
-        foreach (var finding in _findings.OrderByDescending(f => f.Severity).ThenBy(f => f.TimeMs ?? double.MaxValue))
-        {
-            var time = finding.TimeMs;
-            ValidationItems.Add(new ExportFindingRow(finding.Severity == ExportFindingSeverity.Error,
-                ExportFindingFormatter.FormatLocation(finding), ExportFindingFormatter.FormatMessage(finding, _edit.Localization),
-                time.HasValue, new RelayCommand(() => _edit.Editor.ExecuteSeek(time!.Value), () => time.HasValue),
-                new ExportFindingFix(_fixes.CanFix(finding), _fixes.Describe(finding), new AsyncRelayCommand(() => FixAsync(finding))),
-                new ExportFindingLink(finding.MessageKey == ChartExportValidator.KeyDisplayNameGlyphs, OpenSongMetadataCommand)));
-        }
+        foreach (var row in RocksmithExportFindingsCheck.Rows(found, _edit, _fixes, FixAsync, OpenSongMetadataCommand)) ValidationItems.Add(row);
 
         OnPropertyChanged(nameof(ValidationItems));
         OnPropertyChanged(nameof(ErrorCount));
@@ -63,10 +61,7 @@ public sealed partial class RocksmithExportViewModel
         OnGateChanged();
     }
 
-    /// <summary>
-    ///     Opens Song metadata over the export (where the title and the original-script field live), then
-    ///     re-checks: a title typed there clears the warning and the derived file name follows it.
-    /// </summary>
+    /// <summary>Opens Song metadata over the export (title and original-script field), then re-checks: a typed title clears the warning and the file name follows.</summary>
     private async Task OpenSongMetadataAsync()
     {
         if (IsBuilding) return;
@@ -81,11 +76,7 @@ public sealed partial class RocksmithExportViewModel
         Revalidate();
     }
 
-    /// <summary>
-    ///     Closes the export, then opens the Inspector's Issues tab: the whole-project report with every
-    ///     finding. The dialog closes FIRST, so the tab is not hidden behind the overlay; the findings list
-    ///     here still answers what blocks the export.
-    /// </summary>
+    /// <summary>Closes the export FIRST (so the tab is not hidden behind the overlay), then opens the Inspector's Issues tab: the whole-project report.</summary>
     private void ShowInIssues()
     {
         if (IsBuilding || !_issuesDoor.CanOpen) return;
@@ -196,7 +187,7 @@ public sealed partial class RocksmithExportViewModel
         Assemble(project);
         RefreshArrangements(project, Arrangements.GroupBy(a => a.Name).ToDictionary(g => g.Key, g => g.Last().IsSelected));
         UpdateOutputName();
-        Revalidate();
+        RevalidateNow();
         if (test ? !Gate.CanTestExport(AudioPath) : !Gate.CanExport)
         {
             // The button was live, which is how this ran: say what the re-check just found.

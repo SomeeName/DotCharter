@@ -34,14 +34,25 @@ namespace DotCharter.Tone.Audio;
 internal static class StemSetOpener
 {
     /// <summary>
-    ///     How many native opens may run at once. Each one holds its decode buffer and
-    ///     the resampler's output side by side for a moment (~130 MB for a 3-minute
-    ///     stereo stem), and the resampler already spreads ONE open across several
-    ///     cores, so three buys almost all of the win (six 64 MB stems, warm: 840 ms
-    ///     sequential, ~390 ms at three, ~330 ms at six) for half the extra peak memory
-    ///     (+110 MB at three against +230 MB at six).
+    ///     The most native opens that run at once: six, the largest stem set the
+    ///     separator writes (htdemucs_6s), so a full set opens in ONE wave instead of
+    ///     two. Each open holds its float decode and the resampler's output
+    ///     side by side for a moment, so the price is transient memory. Six 260 s
+    ///     stems (the owner's ~90 MB WAVs), warm: playable at ~440 ms with three in
+    ///     flight against ~320 ms with six, peak working set +700 MB against +1,085 MB
+    ///     (settled +350 MB either way); six 30 s stems: ~71 ms against ~56 ms,
+    ///     +90 MB against +125 MB. Four buys nothing: 4 + 2 is still two waves.
     /// </summary>
-    internal static int DefaultMaxOpensInFlight => Math.Clamp(Environment.ProcessorCount / 2, 1, 3);
+    internal const int MaxOpensInFlightCap = 6;
+
+    /// <summary>
+    ///     How many native opens may run at once: one per two hardware threads (the
+    ///     resampler already spreads ONE open across several cores), at most
+    ///     <see cref="MaxOpensInFlightCap" />.
+    /// </summary>
+    internal static int DefaultMaxOpensInFlight => OpensInFlightFor(Environment.ProcessorCount);
+
+    internal static int OpensInFlightFor(int processorCount) => Math.Clamp(processorCount / 2, 1, MaxOpensInFlightCap);
 
     private const int PrefetchChunkBytes = 1 << 20;
 

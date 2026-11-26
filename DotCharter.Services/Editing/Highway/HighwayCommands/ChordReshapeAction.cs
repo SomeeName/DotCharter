@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.HandShapes;
 using DotCharter.Services.State;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
@@ -36,11 +37,13 @@ internal static class ChordReshapeAction
     /// <summary>
     ///     <paramref name="newState" />'s <c>TemplateId</c> is REWRITTEN in place
     ///     when a template has to be resolved — pass the clone the caller
-    ///     intends to commit, not a live chord.
+    ///     intends to commit, not a live chord. A minted power chord or two-fret octave
+    ///     follows <paramref name="project" />'s song-wide style where the arrangement has none.
     /// </summary>
     public static IChartAction Build(
         ObservableCollection<Chord> placedChords,
         Arrangement? arrangement,
+        ChartProject? project,
         Chord target,
         Chord oldState,
         Chord newState,
@@ -53,7 +56,8 @@ internal static class ChordReshapeAction
         if (arrangement == null || target.TemplateId < 0) return mutate;
 
         var created = new List<ChordTemplate>();
-        newState.TemplateId = ChordTemplateResolver.ResolveForChord(arrangement, newState, created).Id;
+        newState.TemplateId = ChordTemplateResolver.ResolveForChord(arrangement, newState, created,
+            ArrangementFingeringStyle.OfSong(project, arrangement)).Id;
 
         // The hand shape over the chord follows it onto the new template, in the same undo node.
         var follow = syncedHandShapes == null

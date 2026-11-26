@@ -79,14 +79,22 @@ public sealed partial class JuceAudioPlaybackService
         var src = _source;
         try { src?.Pause(); } catch { /* ignored */ }
         foreach (var s in SnapshotStems()) { try { s.Source?.Pause(); } catch { /* ignored */ } }
-        IsPlaying = false;
-        StopPositionTimer();
-        _playhead.Reset();
+        StopTransportClock();
         // The render clock keeps running while the transport does not, so any
         // click still queued for a future frame would fire into the silence
         // after the pause. Drop them.
         ClearScheduledClicks();
         FlushMidiActiveNotes();
+    }
+
+    // Stops the managed transport and its playhead without touching the native
+    // sources. The device-loss path runs this first: pausing a source whose
+    // device has stopped calling back can take seconds (see DeclareDeviceLost).
+    private void StopTransportClock()
+    {
+        IsPlaying = false;
+        StopPositionTimer();
+        _playhead.Reset();
     }
 
     public void Stop()

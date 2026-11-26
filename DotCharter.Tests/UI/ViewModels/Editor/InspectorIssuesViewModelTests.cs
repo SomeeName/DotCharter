@@ -265,7 +265,7 @@ public sealed class InspectorIssuesViewModelTests
     }
 
     [Fact]
-    public void AToneChangeOnANote_OffersTheSixteenthEarlierFix_WhichClearsTheFinding()
+    public void AToneChangeOnANote_OffersTheThirtySecondEarlierFix_WhichClearsTheFinding()
     {
         var (harness, _, vm) = Create(validation: new ArrangementValidationService(new FakeAppLogger()));
         var arrangement = harness.Project.Arrangements[0];
@@ -286,7 +286,7 @@ public sealed class InspectorIssuesViewModelTests
         vm.IssueFix.ApplyDefaultCommand.Execute(null);
         vm.RecomputeIssues();
 
-        Assert.Equal(new FractionalPosition(1, new Fraction(3, 4)), arrangement.ToneChanges[0].Position);
+        Assert.Equal(new FractionalPosition(1, new Fraction(7, 8)), arrangement.ToneChanges[0].Position);
         Assert.DoesNotContain(vm.IssueGroups.SelectMany(group => group.Issues),
             issue => issue.Type == ArrangementIssueType.ToneChangeOnNote);
         Assert.False(vm.IssueFix.HasFix);
@@ -294,7 +294,7 @@ public sealed class InspectorIssuesViewModelTests
 
     /// <summary>
     ///     Inspector design D puts a Fix on every finding row a rule can repair: one click jumps to the finding and
-    ///     applies its default fix (one undo step), here the tone change "a 16th note earlier".
+    ///     applies its default fix (one undo step), here the tone change "a 32nd note earlier".
     /// </summary>
     [Fact]
     public void ARowsFix_JumpsToTheFinding_AndAppliesItsDefaultFix()
@@ -313,7 +313,7 @@ public sealed class InspectorIssuesViewModelTests
         vm.FixIssueCommand.Execute(finding);
 
         Assert.Same(finding, vm.IssueAi.Issue);
-        Assert.Equal(new FractionalPosition(1, new Fraction(3, 4)), arrangement.ToneChanges[0].Position);
+        Assert.Equal(new FractionalPosition(1, new Fraction(7, 8)), arrangement.ToneChanges[0].Position);
         vm.FixIssueCommand.Execute(null);
     }
 

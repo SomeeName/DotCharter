@@ -68,7 +68,9 @@ public sealed class RsXmlSixStringProjectionTests : IDisposable
         config.ExportApplyDlcBuilderFixes = false;
         config.ExportGenerateDynamicDifficulty = false;
         Service(config).SaveDlcBuilderXmlBundle(Path.Combine(_dir, "project.rscp"), Chart(strings));
-        var file = Directory.GetFiles(Path.Combine(_dir, "export", DlcBuilderBundle.DirectoryName), "*_Lead_*.xml").Single();
+        // The bundle's own file: the other form a standard or RS Extended Range project reads is a sibling (#1036).
+        var file = Directory.GetFiles(Path.Combine(_dir, "export", DlcBuilderBundle.DirectoryName), "*_Lead_*.xml")
+            .Single(f => !f.Contains("_6String_", StringComparison.Ordinal) && !f.Contains("_RSXR_", StringComparison.Ordinal));
         return XDocument.Load(file).Root!;
     }
 

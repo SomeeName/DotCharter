@@ -9,7 +9,10 @@ using DotCharter.Services.Editing.Phrases;
 using DotCharter.Services.Editing.Refret;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.Services.Editing.Tracks;
+using DotCharter.Services.Export;
 using DotCharter.Services.Export.Validation;
+using DotCharter.Services.Library.Index;
+using DotCharter.Tests.Services.Export;
 using DotCharter.Tests.Presentation.Dialogs;
 using DotCharter.Tone.Audio.Dsp.Tones;
 using DotCharter.UI.ViewModels.Editor;
@@ -57,6 +60,82 @@ public sealed class ExportOneClickFixesTests
         Assert.Equal(0, h.Maintenance.GenerateShowlights());
         Assert.False(h.History.CanUndo);
         await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task StrayMetadataSpaces_FixTrimsTitleArtistAlbum_AsOneUndoStep_AndNothingElseChanges()
+    {
+        var h = new Harness(Project(withTones: true));
+        h.Project.Chart.SongName = "  Harbour   Lights ";
+        h.Project.Chart.Artist = "The  Testers";
+        h.Project.Chart.AlbumName = "First Light";
+        h.Project.Chart.Genre = "  keep  me ";
+        var findings = h.Findings().Where(f => f.MessageKey == ChartExportValidator.KeyMetadataStraySpaces).ToList();
+        Assert.Equal(2, findings.Count);
+        Assert.True(h.Fixes.CanFix(findings[0]));
+        Assert.Contains("spaces", h.Fixes.Describe(findings[0]), StringComparison.OrdinalIgnoreCase);
+
+        await h.Fixes.FixAsync(findings[0]);
+
+        Assert.Equal("Harbour Lights", h.Project.Chart.SongName);
+        Assert.Equal("The Testers", h.Project.Chart.Artist);
+        Assert.Equal("  keep  me ", h.Project.Chart.Genre);
+        Assert.DoesNotContain(h.Findings(), f => f.MessageKey == ChartExportValidator.KeyMetadataStraySpaces);
+        h.History.Undo();
+        Assert.Equal("  Harbour   Lights ", h.Project.Chart.SongName);
+        Assert.False(h.History.CanUndo, "the fix must be ONE undo step");
+    }
+
+    [Fact]
+    public async Task StrayMetadataSpaces_ArrangementOverrides_AreFoundAndTrimmedInTheSameUndoStep()
+    {
+        var h = new Harness(Project(withTones: true));
+        var lead = h.Project.Arrangements[0];
+        lead.ArtistName = " The  Overrides ";
+        lead.ArtistNameSort = "Overrides,  The";
+        lead.AlbumName = "Second  Light ";
+        h.Project.Chart.SongName = "Tidy Title";
+        var findings = h.Findings().Where(f => f.MessageKey == ChartExportValidator.KeyMetadataStraySpaces).ToList();
+        Assert.Equal(3, findings.Count);
+
+        await h.Fixes.FixAsync(findings[0]);
+
+        Assert.Equal("The Overrides", lead.ArtistName);
+        Assert.Equal("Overrides, The", lead.ArtistNameSort);
+        Assert.Equal("Second Light", lead.AlbumName);
+        Assert.DoesNotContain(h.Findings(), f => f.MessageKey == ChartExportValidator.KeyMetadataStraySpaces);
+        h.History.Undo();
+        Assert.Equal(" The  Overrides ", lead.ArtistName);
+        Assert.Equal("Overrides,  The", lead.ArtistNameSort);
+        Assert.Equal("Second  Light ", lead.AlbumName);
+        Assert.False(h.History.CanUndo, "the whole trim must be ONE undo step");
+    }
+
+    [Fact]
+    public async Task ClashingDlcKey_FixAssignsAKeyOfItsOwn_AsOneUndoStep_AndNothingElseChanges()
+    {
+        var h = new Harness(Project(withTones: true));
+        var chart = h.Project.Chart;
+        chart.SongName = "Harbour Lights";
+        chart.Artist = "The Testers";
+        chart.AlbumName = "First Light";
+        chart.AlbumYear = "1999";
+        chart.DlcKey = "";
+        var packageKey = RocksmithDlcKey.Create(chart.Artist, chart.SongName);
+        h.Library = new PackageKeyIndex(packageKey);
+        var finding = Assert.Single(h.Findings(), f => f.MessageKey == ChartExportValidator.KeyPackageKeyClash);
+        Assert.True(h.Fixes.CanFix(finding));
+        Assert.False(string.IsNullOrWhiteSpace(h.Fixes.Describe(finding)));
+
+        await h.Fixes.FixAsync(finding);
+
+        Assert.StartsWith(packageKey, chart.DlcKey, StringComparison.Ordinal);
+        Assert.NotEqual(packageKey, chart.DlcKey, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("Harbour Lights", chart.SongName);
+        Assert.DoesNotContain(h.Findings(), f => f.MessageKey == ChartExportValidator.KeyPackageKeyClash);
+        h.History.Undo();
+        Assert.Equal("", chart.DlcKey);
+        Assert.False(h.History.CanUndo, "the fix must be ONE undo step");
     }
 
     [Fact]
@@ -151,6 +230,8 @@ public sealed class ExportOneClickFixesTests
         public RecordingProxy Dialogs { get; }
         public ChartProject Project => State.ActiveProject!;
 
-        public IReadOnlyList<ExportValidationFinding> Findings() => new ChartExportValidator().Validate(Project);
+        public ILibraryIndex? Library { get; set; }
+
+        public IReadOnlyList<ExportValidationFinding> Findings() => new ChartExportValidator { LibraryIndex = Library }.Validate(Project);
     }
 }

@@ -53,12 +53,19 @@ public sealed partial class JuceAudioPlaybackService : IAudioPlaybackService, Ab
 
     private readonly object _gate = new();
 
-    // Serializes the media-OPEN work that deliberately runs OUTSIDE _gate
-    // (SwapMasterSource, LoadStemsCore). Only background load paths take it, so
-    // it never blocks a UI-thread member the way _gate does — its whole job is
-    // to stop two loads interleaving their publish steps now that the slow
-    // native part between them is unlocked.
+    // Serializes the MASTER media-OPEN work that deliberately runs OUTSIDE _gate
+    // (SwapMasterSource, the rebuild's song re-open). Only background load paths
+    // take it, so it never blocks a UI-thread member the way _gate does — its
+    // whole job is to stop two loads interleaving their publish steps now that
+    // the slow native part between them is unlocked.
     private readonly object _mediaLoadGate = new();
+
+    // The same for a STEM set (LoadStemsCore), kept apart from _mediaLoadGate so a
+    // project's stems open WHILE its song decodes instead of after it: the two
+    // publish into different fields under _gate, and sharing one gate made every
+    // project open wait out the master decode first (450-820 ms of a 1-1.9 s
+    // time-to-playable). ReplaceEngine takes both, media first.
+    private readonly object _stemLoadGate = new();
 
     // Serializes every engine-CONFIG change against every other one:
     // ApplyEngineConfig's in-place reconfigure, the full ReplaceEngine cycle,
@@ -282,6 +289,7 @@ public sealed partial class JuceAudioPlaybackService : IAudioPlaybackService, Ab
         // Device disconnect/reconnect watchdog. Cheap probe (device
         // enumeration + a couple of int reads) every few seconds; no-ops
         // until the first ApplyAudioConfiguration provides a config to watch.
+        _probe = new AudioDeviceProbeBuilder(logger, DeviceWatchdogIntervalMs);
         _watchdogTimer = new Timer(DeviceWatchdogIntervalMs) { AutoReset = true };
         _watchdogTimer.Elapsed += (_, _) => WatchdogTick();
         _watchdogTimer.Start();
@@ -289,7 +297,7 @@ public sealed partial class JuceAudioPlaybackService : IAudioPlaybackService, Ab
         // Audio health logging (dropouts / stutter / device config). Cheap
         // render-clock poll on a background thread; gated on the Audio log
         // category so the logging switch turns it on and off.
-        _health = new AudioHealthMonitor(logger, () => _engine, () => IsDisposing);
+        _health = new AudioHealthMonitor(logger, () => _engine, () => IsDisposing, OnEngineReportedDeviceClosed);
         _health.Start();
 
         // Rocksmith's own amp chains: handed to the engine when the

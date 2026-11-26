@@ -489,7 +489,7 @@ where inside their window they were sung. Two spreads were measured and NOT ship
 
 `Lyrics/Syllables/`: `LyricSyllabifier` (one word -> syllables: LibreOffice/TeX hyphenation patterns read by
 `HyphenationPatterns` from gzip resources for en/de/fr/es, then no-vowelless-syllable, silent final e/ed/es and
-opening-vowel rules), `LyricSheetSyllabifier` (splits a sheet ONLY when it has no hand-hyphenated word at all: any word the parser
+opening-vowel rules; a `y` directly before a vowel is a consonant glide, not a nucleus, so the patterns' `y-ou` of "you"/"your"/"young" merges back into one syllable while "hap-py" and "be-yond" keep theirs, #921), `LyricSheetSyllabifier` (splits a sheet ONLY when it has no hand-hyphenated word at all: any word the parser
 returns as 2+ syllables (`HasHandHyphenation`) means the charter split by sung notes, so nothing is auto-split, EN/DE/FR/ES
 and romaji/kana alike; a lone dash is no syllable and does not count; function-word
 language detection first; a romaji sheet (no l/q/v/x, 95 % of words valid, 12+ words) or a kana word goes to
@@ -497,7 +497,7 @@ language detection first; a romaji sheet (no l/q/v/x, 95 % of words valid, 12+ w
 first letter of a doubled consonant = one, every vowel one, macron vowels stay whole; null for non-romaji) and
 `KanaMoraSplitter` (kana morae). A kana sheet is only split: the aligner still has no kana path.
 `LyricSyncOptions.SplitUnhyphenatedWords` (default on) applies it in `LyricAutoSyncService.Align`. Pieces carry
-`LyricSyllable.SplitByRules`; `LyricSyllableVowelSnap` moves the start of such a piece that continues a word from its
+`LyricSyllable.SplitByRules`, and only a word's LAST piece keeps `EndsLine` (a line-final "together" is `to- geth- er+`, never `+` on every piece, #921); `LyricSyllableVowelSnap` moves the start of such a piece that continues a word from its
 first letter's frame to the first frame of its vowel token on the CTC path (no vowel, vowel-initial, or a word's first
 syllable = the path's start stands; starts stay monotonic and inside the word). Today's behaviour was no splitting at
 all. The eval corpora are word-level, so they cannot judge syllable counts: word-onset numbers are identical or within
@@ -574,3 +574,6 @@ Romaji is skipped (`LyricOnsetSnap.AppliesTo`). `LyricSyncOptions.OnsetSnap = nu
 voiced and vowel syllables (PCO50 68.9%, ≤100 ms 90.2%; German and English lose); 5x and 8x
 everywhere (67.4% and 66.8%, French gains least); a distance penalty (no change); a larger
 voicing weight (no change).
+
+- **One apostrophe, every form (#916).** `Lyrics/LyricApostrophes` folds U+2019, U+2018, U+02BC, grave, U+00B4, U+FF07 and U+2032 to ASCII `'` for every decision (tokenizer fold, syllabifier, romaji splitter, function-word detection). The folded copy keeps length and offsets, so syllables are sliced from the ORIGINAL text and the charter's own character is written back. New lyric text paths call it; do not compare against `'` directly.
+- **Look-alike letters fold to Latin (#921).** `Lyrics/LyricHomoglyphs` folds Cyrillic and Greek letters that look Latin (е а о р с у х і …) inside a whitespace word that also holds a Basic Latin letter and no genuinely Cyrillic/Greek letter; `LyricSheetParser.Parse` applies it, so the aligner AND the chart get Latin. `LyricAutoSyncService.Align` counts the folded words and reports `Progress_LyricHomoglyphsFolded_One/_Many` as a warning and progress line. A Russian or Greek word is never touched.

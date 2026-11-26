@@ -156,6 +156,10 @@ public sealed partial class ShapesPanelViewModel
                 : _localization.Format("Shapes_Status_NameFree", row.Title));
     }
 
+    void IShapeRowOwner.SetPinned(ShapePanelRowViewModel row, bool value) => _pins.SetPinned(row, value);
+
+    private void PinAll() => _pins.PinAll(text => Say(text));
+
     void IShapeRowOwner.Fix(ShapePanelRowViewModel row)
     {
         switch (row.Issue.Kind)

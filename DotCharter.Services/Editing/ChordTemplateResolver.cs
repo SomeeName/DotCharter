@@ -71,13 +71,20 @@ public static class ChordTemplateResolver
     ///         SOURCE template's name on a cross-arrangement paste, so a
     ///         deliberate "Dmin" is not re-derived. Null/blank ⇒ suggest one.
     ///     </para>
+    ///     <para>
+    ///         <paramref name="songStyle" /> is the song-wide 1·3 / 1·4 style
+    ///         (<see cref="ArrangementFingeringStyle.OfSong" />), from a caller that holds the
+    ///         project: a minted power chord or two-fret octave whose pair the arrangement states
+    ///         no majority for follows it. The arrangement's own majority always wins.
+    ///     </para>
     /// </summary>
     public static ChordTemplate Resolve(
         Arrangement arrangement,
         IReadOnlyDictionary<int, int> frets,
         ArpeggioFlavour arpeggio,
         string? preferredName,
-        IList<ChordTemplate> created)
+        IList<ChordTemplate> created,
+        ArrangementFingeringStyle? songStyle = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         ArgumentNullException.ThrowIfNull(frets);
@@ -93,7 +100,7 @@ public static class ChordTemplateResolver
                 return pending;
         }
 
-        var template = SuggestGrip(arrangement, frets, arpeggio, preferredName);
+        var template = SuggestGrip(arrangement, frets, arpeggio, preferredName, songStyle);
         template.Id = NextId(arrangement, created);
 
         created.Add(template);
@@ -101,14 +108,14 @@ public static class ChordTemplateResolver
     }
 
     internal static ChordTemplate SuggestGrip(Arrangement arrangement, IReadOnlyDictionary<int, int> frets,
-        ArpeggioFlavour arpeggio = default, string? preferredName = null)
+        ArpeggioFlavour arpeggio = default, string? preferredName = null, ArrangementFingeringStyle? songStyle = null)
     {
         var template = new ChordTemplate();
         arpeggio.ApplyTo(template);
         foreach (var (stringIndex, fret) in frets) template.Frets[stringIndex] = fret;
 
-        // The arrangement's own 1·3 / 1·4 for a power chord or an octave.
-        ArrangementFingeringStyle.SetSuggestedFingers(arrangement, template, arrangement.StringCount);
+        // The arrangement's own 1·3 / 1·4 for a power chord or an octave, else the song's.
+        ArrangementFingeringStyle.SetSuggestedFingers(arrangement, template, arrangement.StringCount, songStyle);
         template.Name = string.IsNullOrWhiteSpace(preferredName)
             ? NewChordNames.For(arrangement, template.Frets)
             : preferredName;
@@ -140,7 +147,8 @@ public static class ChordTemplateResolver
         Arrangement arrangement,
         ChordTemplate? source,
         IReadOnlyDictionary<int, int> frets,
-        IList<ChordTemplate> created)
+        IList<ChordTemplate> created,
+        ArrangementFingeringStyle? songStyle = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         ArgumentNullException.ThrowIfNull(frets);
@@ -148,7 +156,7 @@ public static class ChordTemplateResolver
 
         var flavour = ArpeggioFlavour.Of(source);
         if (source == null || frets.Any(f => source.GetFret(f.Key) != f.Value))
-            return Resolve(arrangement, frets, flavour, null, created);
+            return Resolve(arrangement, frets, flavour, null, created, songStyle);
 
         var fingers = new Dictionary<int, int>(frets.Count);
         foreach (var stringIndex in frets.Keys)
@@ -170,8 +178,12 @@ public static class ChordTemplateResolver
         return template;
     }
 
-    /// <summary>Resolve-or-create for the shape a chord's notes currently play.</summary>
-    public static ChordTemplate ResolveForChord(Arrangement arrangement, Chord chord, IList<ChordTemplate> created)
+    /// <summary>
+    ///     Resolve-or-create for the shape a chord's notes currently play; a mint follows
+    ///     <paramref name="songStyle" /> like <see cref="Resolve" />'s.
+    /// </summary>
+    public static ChordTemplate ResolveForChord(Arrangement arrangement, Chord chord, IList<ChordTemplate> created,
+        ArrangementFingeringStyle? songStyle = null)
     {
         ArgumentNullException.ThrowIfNull(chord);
         // Keep the arpeggio flavour of whatever the chord pointed at, so
@@ -183,7 +195,7 @@ public static class ChordTemplateResolver
         // authored fingering would be replaced by whichever template came earlier.
         var frets = FretsOf(chord);
         if (current is { IsPinned: true } && current.HasFrets(frets)) return current;
-        return Resolve(arrangement, frets, ArpeggioFlavour.Of(current), null, created);
+        return Resolve(arrangement, frets, ArpeggioFlavour.Of(current), null, created, songStyle);
     }
 
     public static Dictionary<int, int> FretsOf(Chord chord)

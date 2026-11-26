@@ -1,6 +1,9 @@
 using ChartLevel = DotCharter.Core.Domain.Project.ChartLevel;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
 using ChordNote = DotCharter.Core.Domain.Guitar.ChordNote;
+using DotCharter.Core.Linking;
+using DotCharter.Services.Editing.ChordShapes;
+using DotCharter.Services.Editing.HandShapes;
 using GuitarNote = DotCharter.Core.Domain.Guitar.GuitarNote;
 
 namespace DotCharter.Services.Parsing.GuitarPro;
@@ -56,6 +59,9 @@ public static class GpPostProcessor
     /// <param name="lastFret">The track neck ceiling for dead-note slide-outs.</param>
     /// <param name="deadSlideSounds">Receives placed dead-slide sounds for the import-only gap pass.</param>
     /// <param name="naming">The chord naming style and the imported score key.</param>
+    /// <param name="bars">The track's barlines and swung onsets; chord hand shapes end on the swung grid.</param>
+    /// <param name="assumedGraces">The grace notes of a pre-GP5 file, whose placement the tab does not state.</param>
+    /// <param name="graceTimingGuesses">Receives the targets a placed, assumed grace moved (D110).</param>
     /// <returns>The slide-in ornaments materialized (<see cref="MaterializeSlideIns"/>).</returns>
     public static int Run(ChartLevel level, Arrangement arrangement,
         GpImportSettings? settings = null, IReadOnlySet<GuitarNote>? onBeatGraces = null,
@@ -63,7 +69,9 @@ public static class GpPostProcessor
         GpAuthoredFingering? authoredFingers = null,
         GpAuthoredChordNames? authoredChordNames = null,
         IReadOnlySet<IGuitarSound>? graceTargets = null,
-        int lastFret = GpCapoFrets.MaxAbsoluteFret, ISet<IGuitarSound>? deadSlideSounds = null, ChordNamingOptions? naming = null)
+        int lastFret = GpCapoFrets.MaxAbsoluteFret, ISet<IGuitarSound>? deadSlideSounds = null, ChordNamingOptions? naming = null,
+        GpBarTimeline? bars = null, IReadOnlySet<GuitarNote>? assumedGraces = null,
+        ISet<IGuitarSound>? graceTimingGuesses = null)
     {
         settings ??= GpImportSettings.Default;
         var stringCount = arrangement.StringCount;
@@ -75,7 +83,7 @@ public static class GpPostProcessor
         // FIRST, so every later pass (merge, link, handshape, sustain) sees them
         // as ordinary sounds — and so no slide-in sentinel can leak downstream.
         var slideIns = MaterializeSlideIns(level, settings.SlideInFretDistance, arrangement.Capo);
-        MaterializeGraceSlides(level, onBeatGraces);
+        MaterializeGraceSlides(level, onBeatGraces, assumedGraces, graceTimingGuesses);
         // Materialization inserts sounds; a same-string/same-instant collision
         // (authored or inserted) is physically impossible and poisons every
         // downstream pass, so it is resolved before anything reads pairs.
@@ -85,8 +93,10 @@ public static class GpPostProcessor
         LinkSlides(level, stringCount);
         CleanDeadChordNotes(level);
         ChordHandShapeBuilder.BuildAndTrim(level, arrangement, authoredFingers, authoredChordNames,
-            settings.PreserveShortRests, naming);
+            settings.PreserveShortRests, naming, bars);
         ClampHandShapes(level);
+        // Only the first chord of a hand shape shows its name; repeats play an unnamed twin.
+        if (RepeatedChordNames.Enabled) RepeatedChordNames.ApplyInPlace(arrangement, level);
         // AdjustSustains IS the sub-quarter-note truncation (EOF
         // truncate_short_notes/chords): it drops sustains authored shorter than a
         // quarter note. The two EOF toggles gate that drop — a sound needing its
@@ -452,7 +462,17 @@ public static class GpPostProcessor
             }
             else
             {
-                var origin = new Chord { Position = place.GracePosition, NotationDuration = SlideInLeadIn };
+                // The origin is a lead-in, not a grip: it ships as linked single notes
+                // with no chord frame and no hand shape of its own, so the bar starts on
+                // the TARGET, which EOF (rs.c, a chord after a chord slide is low density)
+                // and Charter both give its own shape. Each origin note stays on its
+                // target note's string, as in EOF's gp_import.c.
+                var origin = new Chord
+                {
+                    Position = place.GracePosition,
+                    NotationDuration = SlideInLeadIn,
+                    SplitIntoNotes = true
+                };
                 foreach (var (target, originFret) in pairs)
                 {
                     origin.ChordNotes.Add(new ChordNote
@@ -516,7 +536,10 @@ public static class GpPostProcessor
     /// <param name="level">The level whose grace hints are materialized in place.</param>
     /// <param name="onBeatGraces">The notes whose grace ornament was authored
     /// ON-beat, by reference identity. Null (or a note not in it) ⇒ before-beat.</param>
-    public static void MaterializeGraceSlides(ChartLevel level, IReadOnlySet<GuitarNote>? onBeatGraces = null)
+    /// <param name="assumedGraces">The grace notes of a pre-GP5 file, whose placement the tab does not state.</param>
+    /// <param name="graceTimingGuesses">Receives the targets a placed, assumed grace moved (D110).</param>
+    public static void MaterializeGraceSlides(ChartLevel level, IReadOnlySet<GuitarNote>? onBeatGraces = null,
+        IReadOnlySet<GuitarNote>? assumedGraces = null, ISet<IGuitarSound>? graceTimingGuesses = null)
     {
         var prevEndByString = new Dictionary<int, FractionalPosition>();
         var added = new List<GuitarNote>();
@@ -553,6 +576,7 @@ public static class GpPostProcessor
                         LinkNext = true,
                         NotationDuration = GraceLeadIn
                     });
+                    GpAudioCheck.NoteGraceTiming(graceTimingGuesses, assumedGraces?.Contains(target) != true, target);
                     target.Position += place.TargetShift;
                     target.Sustain = ShortenSustain(target.Sustain, place.TargetShift);
                     target.GraceFret = null; // consumed — it's a real landing note now
@@ -788,6 +812,36 @@ public static class GpPostProcessor
     }
 
     /// <summary>
+    ///     The last hand-shape pass of a Guitar Pro import, once the beat grid is final:
+    ///     every shape ends the D15 gap (a 32nd note) before the next attack
+    ///     (<see cref="HandShapeGap.TrimToGap" />, the D15 check's own gap), where the clamp left it
+    ///     ending ON that attack, so a fresh import opens without a D15 finding per shape. Every
+    ///     sustain D90 would report ends a 32nd note before the next sound the same way
+    ///     (<see cref="ChartSpacingFix.TrimSustainsToGap" />, the D90 fix's own trim). Also
+    ///     counts the shapes wider than <see cref="GpHandShapeBuilder.ReportedFretSpan" /> frets
+    ///     into <see cref="GpImportResult.WideHandShapes" />.
+    /// </summary>
+    public static void FinishHandShapes(GpImportResult result)
+    {
+        var meta = result.Metadata;
+        var beats = GpBeatMapBuilder.Build(meta, GpBeatMapBuilder.InitialBpm(meta, 120), 0);
+        foreach (var arrangement in result.Arrangements)
+        {
+            var wide = 0;
+            foreach (var level in arrangement.Levels)
+            {
+                ClampHandShapes(level);
+                ChartSpacingFix.TrimSustainsToGap(level, beats);
+                var gaps = HandShapeGap.For(level, beats, SpacingGap.AppDefault);
+                foreach (var shape in level.HandShapes) gaps.TrimToGap(shape);
+                wide += GpHandShapeBuilder.CountWideShapes(level, arrangement);
+            }
+
+            result.WideHandShapes[arrangement] = wide;
+        }
+    }
+
+    /// <summary>
     ///     Clips each hand shape's end to the next hand shape's start so
     ///     consecutive shapes never overlap (inspector L17) — the convention
     ///     mature charters enforce as a post-import fix. Shapes are clamped in
@@ -1008,9 +1062,10 @@ public static class GpPostProcessor
     ///     measures 100–101: the two halves were byte-identical and
     ///     came in as two chords, two hand shapes and a visible break at the
     ///     barline).</item>
-    ///     <item>The first half has no slide and the tail carries an UNPITCHED
-    ///     one — the slide-off belongs to the END of the held sound, so it moves
-    ///     onto the merged sound rather than splitting it.</item>
+    ///     <item>The first half has no slide and the tail carries one, PITCHED or
+    ///     unpitched — the slide belongs to the END of the held sound, so it moves
+    ///     onto the merged sound rather than splitting one slide into a plain
+    ///     strike plus a sliding strike at the tie (a slide tied across a bar line).</item>
     ///     </list>
     ///     Anything else — most importantly a PITCHED slide on the first half,
     ///     which travels to a landing the second half IS — keeps its own sound.
@@ -1023,7 +1078,7 @@ public static class GpPostProcessor
         if (!currentSlides && !nextSlides) return true;
         if (current.SlideTo == next.SlideTo && current.UnpitchedSlide == next.UnpitchedSlide) return true;
         if (GpDeadNoteSlide.IsPending(current) && !nextSlides) return true;
-        return !currentSlides && next.UnpitchedSlide;
+        return !currentSlides;
     }
 
     /// <summary>Moves a tie tail's slide-off onto the merged sound. Only fires

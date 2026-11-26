@@ -101,6 +101,9 @@ public static class ChartProjectPositions
 
             foreach (var iteration in arrangement.PhraseIterations)
                 iteration.Position = map(iteration.Position);
+
+            for (var i = 0; i < arrangement.AudioCheckSpots.Count; i++)
+                arrangement.AudioCheckSpots[i] = arrangement.AudioCheckSpots[i] with { Position = map(arrangement.AudioCheckSpots[i].Position) };
         }
 
         // Linked runs: both barlines move with the grid, so a beat inserted INSIDE a run

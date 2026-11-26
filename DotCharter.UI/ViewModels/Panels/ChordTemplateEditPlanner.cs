@@ -145,6 +145,8 @@ internal sealed class ChordTemplateEditPlanner
             new EditTemplateGlobalAction(loaded, oldState, newState, targetChords, globalChords, _editor,
                 nameOnly ? EditTemplateGlobalAction.NameMergeVerb : "")
         };
+        // A blank-name twin (the repeat of this grip inside a hand shape) follows a fret or fingering edit.
+        actions.AddRange(ChordTemplateTwins.Follow(_editor.ActiveArrangement!, loaded, newState, _editor, targets.GripTemplates));
 
         // Sounds that carry the shape but are not bound to it — selected
         // chords at TemplateId -1, the unbound strums under a selected hand

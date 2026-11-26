@@ -1,3 +1,4 @@
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.State;
 using HandShape = DotCharter.Core.Domain.Guitar.HandShape;
 using DotCharter.Services.Editing.ChordShapes;
@@ -46,7 +47,8 @@ public sealed class HandShapeSuggestionAcceptor(IHistoryService history, IAppLog
     ///     the bar is the grip, the chord is what it strikes.
     /// </summary>
     public static ArrangementHandShapePlan Plan(
-        Arrangement arrangement, ChartLevel level, IEnumerable<SuggestedHandShape> picks, bool arpeggio)
+        Arrangement arrangement, ChartLevel level, IEnumerable<SuggestedHandShape> picks, bool arpeggio,
+        ArrangementFingeringStyle? songStyle = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         ArgumentNullException.ThrowIfNull(level);
@@ -58,9 +60,9 @@ public sealed class HandShapeSuggestionAcceptor(IHistoryService history, IAppLog
         {
             var frets = pick.Existing?.Frets ?? pick.Frets;
             var template = arpeggio
-                ? HandShapeFromSelectionGenerator.ResolveArpeggio(arrangement, frets, minted)
-                : pick.Existing ?? ChordTemplateResolver.Resolve(arrangement, frets, ArpeggioFlavour.Plain, null, minted);
-            bars.Add(new PlannedHandShape(pick.Position, pick.EndPosition, template, [], []));
+                ? HandShapeFromSelectionGenerator.ResolveArpeggio(arrangement, frets, minted, songStyle)
+                : pick.Existing ?? ChordTemplateResolver.Resolve(arrangement, frets, ArpeggioFlavour.Plain, null, minted, songStyle);
+            bars.Add(new PlannedHandShape(pick.Position, pick.EndPosition, template, [], [], null));
         }
 
         return new ArrangementHandShapePlan(minted, bars.Count == 0 ? [] : [new LevelHandShapePlan(level, bars)]);
@@ -68,9 +70,10 @@ public sealed class HandShapeSuggestionAcceptor(IHistoryService history, IAppLog
 
     /// <summary>Accepts <paramref name="picks" /> as ONE undo node and returns the number of bars
     /// added (0 when there was nothing to accept or the history refused the step).</summary>
-    public int Accept(Arrangement arrangement, ChartLevel level, IReadOnlyList<SuggestedHandShape> picks, bool arpeggio)
+    public int Accept(Arrangement arrangement, ChartLevel level, IReadOnlyList<SuggestedHandShape> picks, bool arpeggio,
+        ArrangementFingeringStyle? songStyle = null)
     {
-        var plan = Plan(arrangement, level, picks, arpeggio);
+        var plan = Plan(arrangement, level, picks, arpeggio, songStyle);
         if (plan.IsEmpty) return 0;
 
         var actions = ArrangementHandShapeGenerator.BuildActions(arrangement, plan);

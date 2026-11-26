@@ -113,6 +113,13 @@ earlier copy.
   from shorter review proposals. Differences are
   shown for review. Link All rechecks the current chart and creates groups
   without normalising edges or writing chart content.
+- An unlinked run that plays the same as an existing group's copies under that
+  group's rule (`LinkRelinkSuggestions`) is never proposed as a new group: `Find`
+  returns one "join" suggestion per group (`LinkSuggestion.Join`, shown as
+  "Join link X" in the manager) and drops those runs from new-group proposals.
+  Link All adds each still-qualifying run with safe edges to that group in the
+  same undo step (`LinkGroupEdits.AddPlacementWithoutEdgeEdits`), so a run a
+  longer group took first is skipped (#1029).
 
 ## Group edits, Only here, Link identical measures
 
@@ -158,7 +165,12 @@ All under `DotCharter.UI`; nothing changes in 3D or Play Mode.
   menu and the palette's `view.toggleRowLinks`.
 - **Drawing**: `Controls/Layers/LinkLayer` (chip + `×N` + span line; for the
   emphasised group an outline over its measures; a fading flash on the targets of
-  the last propagation). Spans come from the pure `Editing/Linking/LinkLaneModel`.
+  the last propagation). Spans come from the pure `Editing/Linking/LinkLaneModel`;
+  the pure `Editing/Linking/LinkRowLayout` keeps groups apart: a label that would
+  overlap the previous one moves right (chip only when the count does not fit before
+  its span ends), and overlapping spans get their own sub-lines inside the bar.
+  Sub-lines are computed per span list, labels per zoom, so a frame allocates nothing
+  (`UI/Linking/LinkRowLayoutTests`, `LinkLayerTests`).
   `Editing/Linking/LinkHighlight` (on `ChartEditorViewModel.LinkHighlight`) holds
   hovered / selected / flashing group for every timeline and the song map.
 - **Song map**: `MinimapOverviewControl` draws `Controls/SongMapLinkMarks` (pure) for the

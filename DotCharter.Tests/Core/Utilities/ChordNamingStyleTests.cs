@@ -45,12 +45,12 @@ public class ChordNamingStyleTests
         Assert.Equal(expected, First(Standard, frets, ChordNamingOptions.Default));
 
     [Theory]
-    [InlineData("x,9,11,10,9,x", "Gbmaj7sus2")]
+    [InlineData("x,9,11,10,9,x", "GbMaj7sus2")]
     [InlineData("x,11,13,11,11,x", "Ab7sus2")]
     [InlineData("x,9,8,9,9,x", "Gb9")]
     [InlineData("x,11,9,11,11,x", "Abm9")]
     [InlineData("x,7,x,7,7,x", "E7sus2")]
-    [InlineData("x,9,8,6,6,x", "Gbmaj7")]
+    [InlineData("x,9,8,6,6,x", "GbMaj7")]
     public void Musical_RanksTheNewVocabularyWithTheRest(string frets, string expected) =>
         Assert.Equal(expected, First(Standard, frets, Musical(GbMajor)));
 
@@ -58,7 +58,7 @@ public class ChordNamingStyleTests
     public void Musical_SpellsTheSuffixesTheMusicalWay()
     {
         Assert.Equal("Bbm7b5", First(Standard, "6,x,6,6,5,x", Musical(EbMajor)));
-        Assert.Equal("Cmaj9", First(Standard, "x,3,2,4,3,x", Musical(null)));
+        Assert.Equal("CMaj9", First(Standard, "x,3,2,4,3,x", Musical(null)));
         Assert.Equal("Cm6(#5)", First(Standard, "8,x,7,8,9,x", Musical(EbMajor)));
         Assert.Equal("Bb(b9)", First(Standard, "6,x,9,7,6,x", Musical(EbMajor)));
         Assert.Equal("G5(b5)", First(Standard, "3,4,5,x,x,x", Musical(null)));

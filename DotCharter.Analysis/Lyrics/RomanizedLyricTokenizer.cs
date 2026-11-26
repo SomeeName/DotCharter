@@ -122,7 +122,7 @@ public static class RomanizedLyricTokenizer
     /// </summary>
     private static string Fold(string text)
     {
-        var decomposed = text.Normalize(NormalizationForm.FormD);
+        var decomposed = LyricApostrophes.Normalize(text).Normalize(NormalizationForm.FormD);
         var sb = new StringBuilder(decomposed.Length);
 
         foreach (var c in decomposed)

@@ -25,8 +25,9 @@ namespace DotCharter.Tests.Services.Editing.FretAnchors;
 /// </summary>
 public sealed class ChartStyleFloorTests(ITestOutputHelper output)
 {
-    // Measured 2026-10-09 on the #502 tree (fixture of the same commit); fingering raised by #511's style, 571 -> 581.
-    private const int GuitarFhpFloor = 998;
+    // Measured 2026-10-09 on the #502 tree (fixture of the same commit); fingering raised by #511's style, 571 -> 581;
+    // guitar FHP raised when a slide into a shape began starting on the finger that lands, 998 -> 1004.
+    private const int GuitarFhpFloor = 1004;
     private const int BassFhpFloor = 992;
     private const int GuitarFingeringFloor = 581;
 
@@ -71,14 +72,20 @@ public sealed class ChartStyleFloorTests(ITestOutputHelper output)
 
     private sealed record Totals(int GuitarSounds, int GuitarSame, int BassSounds, int BassSame, int Chords, int FingeringExact);
 
-    private static Totals Measure()
+    /// <summary>Every fixture window rebuilt and run through the production pipeline: the arrangement,
+    /// its level and the anchors the generator placed on it (other tests judge that output).</summary>
+    internal static List<Window.Result> RunAll()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Services", "Editing", "FretAnchors", "Fixtures", "chart-style-floor.json");
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        return [.. doc.RootElement.GetProperty("windows").EnumerateArray().Select(Window.Run)];
+    }
+
+    private static Totals Measure()
+    {
         int gs = 0, gSame = 0, bs = 0, bSame = 0, chords = 0, exact = 0;
-        foreach (var w in doc.RootElement.GetProperty("windows").EnumerateArray())
+        foreach (var r in RunAll())
         {
-            var r = Window.Run(w);
             if (r.Bass) { bs += r.Sounds; bSame += r.Same; }
             else { gs += r.Sounds; gSame += r.Same; }
             chords += r.Chords;
@@ -89,9 +96,12 @@ public sealed class ChartStyleFloorTests(ITestOutputHelper output)
     }
 
     /// <summary>One fixture window rebuilt as a level and scored the way <c>tools/chart-eval</c> scores a chart.</summary>
-    private static class Window
+    internal static class Window
     {
-        public static (bool Bass, int Sounds, int Same, int Chords, int Exact) Run(JsonElement w)
+        internal sealed record Result(bool Bass, int Sounds, int Same, int Chords, int Exact, Arrangement Arrangement,
+            ChartLevel Level, IReadOnlyList<FretAnchor> Anchors);
+
+        public static Result Run(JsonElement w)
         {
             var bass = w.GetProperty("kind").GetString() == "bass";
             var strings = w.GetProperty("strings").GetInt32();
@@ -189,7 +199,7 @@ public sealed class ChartStyleFloorTests(ITestOutputHelper output)
                 var t = byId[finalId.TryGetValue(cf.Chord, out var id) ? id : cf.Chord.TemplateId];
                 return cf.Fingers.All(kv => t.Fingers.TryGetValue(kv.Key, out var g) && g == kv.Value);
             });
-            return (bass, expected.Count, same, chordFingers.Count, exact);
+            return new Result(bass, expected.Count, same, chordFingers.Count, exact, arr, level, anchors);
         }
 
         private static FractionalPosition At(int ordinal) => new(ordinal);

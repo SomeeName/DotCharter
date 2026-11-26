@@ -93,6 +93,11 @@ internal static class DomainFieldProbe
 
         if (type == typeof(Fraction)) return new Fraction(3, 7);
         if (type == typeof(FractionalPosition)) return new FractionalPosition(5, new Fraction(1, 3));
+        // An immutable positional record: no parameterless constructor to populate.
+        if (type == typeof(AudioCheckSpot))
+            return new AudioCheckSpot(new FractionalPosition(5, new Fraction(1, 3)), AudioCheckReason.TempoFromTab);
+        // An immutable positional record: no parameterless constructor to populate.
+        if (type == typeof(IgnoredFinding)) return new IgnoredFinding("D13", "dc-probe", "dc-probe-subject");
 
         if (type.IsArray)
         {

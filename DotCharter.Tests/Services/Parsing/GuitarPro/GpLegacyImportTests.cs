@@ -85,7 +85,8 @@ public sealed class GpLegacyImportTests
         var notes = level.Notes.OrderBy(n => n.Position).ToList();
         Assert.Equal(2, notes.Count);
         Assert.Equal(5, notes[0].Fret);
-        Assert.Equal(new FractionalPosition(2), notes[0].Position + notes[0].Sustain);
+        // The merged note rings to the unrelated one, less the D90 gap (a 32nd note).
+        Assert.Equal(new FractionalPosition(2) - new FractionalPosition(0, new Fraction(1, 8)), notes[0].Position + notes[0].Sustain);
         Assert.False(notes[0].LinkNext);
         Assert.Equal(7, notes[1].Fret);
     }
@@ -529,40 +530,35 @@ public sealed class GpLegacyImportTests
     [Theory]
     [InlineData("4.06")]
     [InlineData("5.10")]
-    public void StaccatoBit_BecomesAnAccent(string version)
+    public void StaccatoBit_IsAStrike_NotAnAccent(string version)
     {
-        // Note-effects fx2 bit 0x01 is GP's authored staccato. It was parsed and
-        // DISCARDED (`if ((fx2 & 0x01) != 0) { /* staccato */ }`), so the
-        // shortening the arranger wrote reached nothing at all. Rocksmith has no
-        // staccato mark, so the charting convention is the ACCENT — playback is
-        // already built on that equivalence (JuceAudioPlaybackService shortens
-        // exactly the accented notes). It is ungated because every other accent on
-        // both readers is: the note header's 0x40/0x02 bits here and gpif's
-        // <Accent> element have no setting in front of them, and a rule applied on
-        // one tab path only is what the legacy-vs-gpif parity rule forbids.
+        // Note-effects fx2 bit 0x01 is GP's authored staccato. It used to import as an
+        // ACCENT with the written length kept; now it is a strike: sustain 0, no
+        // accent (GpStaccatoImportTests holds the full rule, both readers). The control
+        // note WITHOUT the bit keeps its length — the flag is read per note, never
+        // stamped onto the beat or leaked to the next one.
         var staccato = FxBeat.Note(0, stringIndex: 0, fret: 5);
         staccato.Notes[0] = new FxNote(0, 5, Staccato: true);
-        var plain = FxBeat.Note(0, stringIndex: 0, fret: 7);
+        var plain = FxBeat.Note(-1, stringIndex: 0, fret: 7);
         var staccatoChord = FxBeat.Chord(0,
             new FxNote(0, 3, Staccato: true), new FxNote(1, 3, Staccato: true));
 
-        var measure = new FxMeasure().AddVoice(staccato, plain, staccatoChord, FxBeat.RestBeat(0));
+        var measure = new FxMeasure().AddVoice(staccato, plain, staccatoChord);
 
         var arr = ImportSingle(LegacyGpFixtureBuilder.WriteFile(version, new[] { measure }));
         var level = Assert.Single(arr.Levels);
         var notes = level.Notes.OrderBy(n => n.Position).ToList();
         Assert.Equal(2, notes.Count);
 
-        Assert.True(notes[0].Accent, "the staccato bit must reach the note");
-        // The control: a note WITHOUT the bit is not accented — the flag has to be
-        // read per note, not stamped onto the beat or leaked to the next one.
+        Assert.False(notes[0].Accent, "staccato is not an accent");
+        Assert.Equal(FractionalPosition.Zero, notes[0].Sustain);
         Assert.False(notes[1].Accent);
+        Assert.True(notes[1].Sustain > FractionalPosition.Zero, "the plain half keeps its length");
 
-        // ...and it must reach a STRUM's notes, which is how the chord-level
-        // accent is rolled up.
         var chord = Assert.Single(level.Chords);
-        Assert.All(chord.ChordNotes, cn => Assert.True(cn.Accent));
-        Assert.True(chord.Accent);
+        Assert.All(chord.ChordNotes, cn => Assert.False(cn.Accent));
+        Assert.All(chord.ChordNotes, cn => Assert.Equal(FractionalPosition.Zero, cn.Sustain));
+        Assert.False(chord.Accent);
     }
 
     // ---- Chord diagrams: the 107-byte new-format block (v0.33 fix) ----

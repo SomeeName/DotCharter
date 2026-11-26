@@ -122,10 +122,30 @@ public sealed class ArrangementSyncViewModel : DialogViewModel<bool>, IArrangeme
 
         var summary = ArrangementSoundSync.Preview(source, target);
         CanApply = summary.WouldChangeAnything;
-        Preview = summary.SharedSounds == 0
+        Preview = summary.ByPitch ? DescribeByPitch(summary)
+            : summary.SharedSounds == 0
             ? _localization["ArrangementSync_NothingShared"]
             : _localization.Format("ArrangementSync_Preview", summary.SharedSounds, summary.SoundsChanged,
                 summary.HandShapes, summary.Anchors);
+    }
+
+    /// <summary>
+    ///     Different strings or tuning: say what carries over AND what stays behind,
+    ///     because only the hand travels and re-voiced parts are left alone — except what
+    ///     the rule pass carries between occurrences of one re-voiced chord.
+    /// </summary>
+    private string DescribeByPitch(ArrangementSyncSummary summary)
+    {
+        var rule = summary.RuleMappings == 0
+            ? null
+            : _localization.Format("ArrangementSync_PreviewByRule", summary.RuleMappings, summary.RuleFingerings,
+                summary.RuleHandShapes, summary.RuleAnchors, summary.RuleConflicts);
+        if (summary.SharedSounds == 0) return rule ?? _localization["ArrangementSync_NothingSharedByPitch"];
+
+        var pitch = _localization.Format("ArrangementSync_PreviewByPitch", summary.SharedSounds,
+            summary.UnmatchedSounds, summary.SoundsChanged, summary.HandShapes, summary.Anchors,
+            summary.HandShapesLeft, summary.AnchorsLeft);
+        return rule == null ? pitch : pitch + "\n" + rule;
     }
 
     private Arrangement? At(int index) => index >= 0 && index < _arrangements.Count ? _arrangements[index] : null;

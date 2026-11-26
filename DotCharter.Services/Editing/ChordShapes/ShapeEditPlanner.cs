@@ -217,11 +217,13 @@ public static class ShapeEditPlanner
 
     /// <summary>
     ///     Rewrites <paramref name="shape" /> into <paramref name="candidate" /> for every use it has. Hand shapes that
-    ///     must not follow (<paramref name="syncHandShapes" /> off) keep the old grip on a copy of it.
+    ///     must not follow (<paramref name="syncHandShapes" /> off) keep the old grip on a copy of it. A twin not in
+    ///     <paramref name="covered" /> follows the grip change.
     /// </summary>
     internal static List<IChartAction> RewriteInPlace(
         Arrangement arrangement, ChordTemplate shape, ChordTemplate candidate,
-        List<Chord> chords, List<HandShape> handShapes, bool syncHandShapes, IChartEditorSurface editor)
+        List<Chord> chords, List<HandShape> handShapes, bool syncHandShapes, IChartEditorSurface editor,
+        IReadOnlyCollection<ChordTemplate>? covered = null)
     {
         var oldState = shape.Clone();
         var actions = new List<IChartAction>
@@ -229,6 +231,8 @@ public static class ShapeEditPlanner
             new EditTemplateGlobalAction(shape, oldState, candidate, [.. chords],
                 [.. chords.Select(c => Projected(c, candidate))], editor)
         };
+        // A blank-name twin of this grip follows the fret or fingering rewrite in the same undo step.
+        actions.AddRange(ChordTemplateTwins.Follow(arrangement, shape, candidate, editor, covered ?? []));
         var keepers = syncHandShapes ? [] : handShapes;
         if (keepers.Count > 0)
         {

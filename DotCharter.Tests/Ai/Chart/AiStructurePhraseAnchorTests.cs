@@ -14,14 +14,15 @@ namespace DotCharter.Tests.Ai.Chart;
 ///     where none is in force — judges the change WITH it and the write adds both in ONE undo step.
 ///     On a FAKE model — no network, no provider.
 ///     <para>
-///         The fixture (<see cref="AiChartFixture" />): 8 bars of 4 beats, phrases "intro" at beat 0
-///         and "verse" at beat 16, anchors on beats 0 (fret 5), 8 (fret 3), 16 (fret 3) and 24
-///         (fret 1), a C5 hand shape over beats 8-13, single notes on beats 0-7 (frets 5/7).
+///         The fixture (<see cref="AiChartFixture" />): 16 bars of 2 beats, so a phrase at beat 4 or 20
+///         still spans the two measures a phrase needs (D81); phrases "intro" at beat 0 and "verse" at
+///         beat 16, anchors on beats 0 (fret 5), 8 (fret 3), 16 (fret 3) and 24 (fret 1), a C5 hand
+///         shape over beats 8-13, single notes on beats 0-7 (frets 5/7).
 ///     </para>
 /// </summary>
 public sealed class AiStructurePhraseAnchorTests
 {
-    private readonly AiChartFixture _f = new();
+    private readonly AiChartFixture _f = new(beatsPerBar: 2);
     private readonly ProjectState _state = new();
     private readonly HistoryService _history = new(new FakeAppLogger());
     private readonly RigConfig _config = new() { Ai = new AiProviderSettings(AiProviderKind.ClaudeCli, "fake-model", null) };
@@ -63,8 +64,8 @@ public sealed class AiStructurePhraseAnchorTests
     {
         var before = ChartProjectCloner.Clone(_f.Project);
         var findings = Findings();
-        // Bar 2 (beat 4) plays notes and has no anchor of its own: the anchor in force is fret 5 from beat 0.
-        var run = Run(new FakeChartModel((_, _) => Reply(Phrase(2, 1, "riff"))));
+        // Bar 3 (beat 4) plays notes and has no anchor of its own: the anchor in force is fret 5 from beat 0.
+        var run = Run(new FakeChartModel((_, _) => Reply(Phrase(3, 1, "riff"))));
 
         var outcome = await Ask(run);
 
@@ -124,7 +125,7 @@ public sealed class AiStructurePhraseAnchorTests
     {
         var live = _f.Level.Anchors.ToList();
         var values = Anchors(_f.Level);
-        var run = Run(new FakeChartModel((_, _) => Reply(Phrase(2, 1, "riff"), Phrase(6, 1, "bridge"))));
+        var run = Run(new FakeChartModel((_, _) => Reply(Phrase(3, 1, "riff"), Phrase(11, 1, "bridge"))));
         await Ask(run);
         var review = run.Review!;
         Assert.Equal(2, review.Items.Count);
@@ -136,7 +137,7 @@ public sealed class AiStructurePhraseAnchorTests
         Assert.True(run.ApplyReview());
 
         // Every anchor that was there is still there, the same object with the same values; the charter's
-        // beat-4 anchor is neither replaced nor doubled. Bar 6 (beat 20) gets the fret-3 anchor in force.
+        // beat-4 anchor is neither replaced nor doubled. Bar 11 (beat 20) gets the fret-3 anchor in force.
         Assert.All(live, a => Assert.Contains(a, _f.Level.Anchors));
         Assert.Same(theirs, Assert.Single(_f.Level.Anchors, a => a.Position == new FractionalPosition(4)));
         Assert.Equal("0:5/4;4:7/4;8:3/4;16:3/4;20:3/4;24:1/4", Anchors(_f.Level));
@@ -151,9 +152,9 @@ public sealed class AiStructurePhraseAnchorTests
     public async Task A_phrase_that_still_adds_a_finding_with_its_anchor_is_refused()
     {
         var before = ChartProjectCloner.Clone(_f.Project);
-        // Bar 3 beat 2 (beat 9) is inside the C5 hand shape (beats 8-13): the anchor it needs would sit in
+        // Bar 5 beat 2 (beat 9) is inside the C5 hand shape (beats 8-13): the anchor it needs would sit in
         // the shape at a phrase boundary (I21).
-        var run = Run(new FakeChartModel((_, _) => Reply(Phrase(3, 2, "inside"))));
+        var run = Run(new FakeChartModel((_, _) => Reply(Phrase(5, 2, "inside"))));
 
         var outcome = await Ask(run);
 
@@ -170,7 +171,7 @@ public sealed class AiStructurePhraseAnchorTests
     [Fact]
     public void With_no_anchor_in_force_the_phrase_takes_the_fhp_generators_hand_position()
     {
-        // No anchor before beat 8 any more: the bar-2 phrase has nothing to restate.
+        // No anchor before beat 8 any more: the beat-4 phrase has nothing to restate.
         _f.Level.Anchors.RemoveAt(0);
         var expected = new FretAnchorGenerationService()
             .GenerateAnchors(_f.Level, chordTemplates: _f.Arrangement.ChordTemplates, tuning: _f.Arrangement)

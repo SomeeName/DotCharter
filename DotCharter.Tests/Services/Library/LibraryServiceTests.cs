@@ -51,6 +51,37 @@ public sealed class LibraryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task The_index_answers_whether_a_song_key_is_indexed_ignoring_case_and_never_throws_without_a_store()
+    {
+        var packages = new FakeSource(".psarc");
+        var a = Touch("one.psarc");
+        packages.Rows[a] = [Row(a, "HarbourLights", "Artist")];
+        var path = Path.Combine(_dir, "library-index.db");
+        var index = new SqliteLibraryIndex(_logger, path);
+        await new LibraryService(_logger, [packages], index).ScanAsync(Library);
+
+        Assert.True(index.HasSongKey("harbourlights"));
+        Assert.False(index.HasSongKey("OtherSong"));
+        Assert.False(index.HasSongKey(""));
+        Assert.False(new SqliteLibraryIndex(_logger, Path.Combine(_dir, "absent.db")).HasSongKey("HarbourLights"));
+    }
+
+    [Fact]
+    public async Task The_index_names_the_packages_holding_a_song_key_ignoring_case_and_is_empty_without_a_store()
+    {
+        var packages = new FakeSource(".psarc");
+        var a = Touch("one.psarc");
+        packages.Rows[a] = [Row(a, "HarbourLights", "Artist")];
+        var index = new SqliteLibraryIndex(_logger, Path.Combine(_dir, "library-index.db"));
+        await new LibraryService(_logger, [packages], index).ScanAsync(Library);
+
+        Assert.Equal([a], index.PackagePathsForSongKey("harbourlights"));
+        Assert.Empty(index.PackagePathsForSongKey("OtherSong"));
+        Assert.Empty(index.PackagePathsForSongKey(""));
+        Assert.Empty(new SqliteLibraryIndex(_logger, Path.Combine(_dir, "absent.db")).PackagePathsForSongKey("HarbourLights"));
+    }
+
+    [Fact]
     public async Task A_second_scan_serves_unchanged_files_from_the_index_without_asking_their_source()
     {
         var archives = new FakeSource(".psarc");

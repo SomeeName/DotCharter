@@ -39,6 +39,8 @@ public sealed class GpImportViewModel : DialogViewModel<bool>, IGpImportScreen, 
     private string _oldFilePath = "";
     private string _errorMessage = "";
     private bool _isBusy;
+    private bool _replaceTempoMap = true;
+    private bool _isTempoMapLocked;
     private CancellationTokenSource? _cts;
 
     /// <summary>The <c>parse</c> is replaceable so a test can hold a parse in flight or make one throw.</summary>
@@ -87,6 +89,20 @@ public sealed class GpImportViewModel : DialogViewModel<bool>, IGpImportScreen, 
 
     public bool RequiresTargetSelection => _mode != GpImportMode.AddNew;
 
+    public bool ShowsTempoMapChoice => _mode == GpImportMode.AddNew;
+
+    public bool ReplaceTempoMap
+    {
+        get => _replaceTempoMap;
+        set => SetProperty(ref _replaceTempoMap, value);
+    }
+
+    public bool IsTempoMapLocked
+    {
+        get => _isTempoMapLocked;
+        private set => SetProperty(ref _isTempoMapLocked, value);
+    }
+
     public bool HasTracks => _tracks.Count > 0;
 
     public IReadOnlyList<IGpTrackRow> Tracks => _tracks;
@@ -116,6 +132,8 @@ public sealed class GpImportViewModel : DialogViewModel<bool>, IGpImportScreen, 
     {
         _filePath = request.FilePath;
         _arrangements = [.. _state.ActiveProject?.Arrangements ?? []];
+        ReplaceTempoMap = GpImportApplier.DefaultReplacesTempoMap(_state.ActiveProject);
+        IsTempoMapLocked = _state.ActiveProject?.IsBeatMapLocked == true;
         var names = _arrangements.Select(a => a.Name).ToList();
         _tracks = [.. request.Tracks.Select(t => new TrackRow(t.Id, t.Name, names, OnTrackChanged))];
         OnPropertyChanged(nameof(Tracks));
@@ -149,6 +167,7 @@ public sealed class GpImportViewModel : DialogViewModel<bool>, IGpImportScreen, 
         OnPropertyChanged(nameof(IsDiffCompareMode));
         OnPropertyChanged(nameof(RequiresOldFile));
         OnPropertyChanged(nameof(RequiresTargetSelection));
+        OnPropertyChanged(nameof(ShowsTempoMapChoice));
     }
 
     private void OnTrackChanged() => _import.NotifyCanExecuteChanged();
@@ -168,9 +187,9 @@ public sealed class GpImportViewModel : DialogViewModel<bool>, IGpImportScreen, 
         ErrorMessage = "";
         var selected = _tracks.Where(t => t.IsSelected).ToList();
         var ids = selected.Select(t => t.Id).ToList();
-        var (mode, filePath, oldFilePath) = (_mode, _filePath, _oldFilePath);
+        var (mode, filePath, oldFilePath, replaceTempoMap) = (_mode, _filePath, _oldFilePath, _replaceTempoMap);
         _logger.Info(AppLogCategory.Import,
-            $"Guitar Pro import requested. Mode={mode}, file='{filePath}', oldFile='{oldFilePath}', selectedTrackIds={string.Join(",", ids)}.");
+            $"Guitar Pro import requested. Mode={mode}, file='{filePath}', oldFile='{oldFilePath}', selectedTrackIds={string.Join(",", ids)}, replaceTempoMap={replaceTempoMap}.");
         if (mode == GpImportMode.DiffCompare && string.IsNullOrEmpty(oldFilePath))
         {
             ErrorMessage = _localization["Status_GpImport_DiffNeedsOldFile"];
@@ -196,7 +215,7 @@ public sealed class GpImportViewModel : DialogViewModel<bool>, IGpImportScreen, 
             cts.Token.ThrowIfCancellationRequested();
 
             _applier.Apply(mode, filePath, [.. selected.Select(t => new GpTrackTarget(t.Id, t.Name, TargetOf(t)))],
-                parsed.Newer, parsed.Older);
+                parsed.Newer, parsed.Older, replaceTempoMap);
         }
         catch (OperationCanceledException)
         {

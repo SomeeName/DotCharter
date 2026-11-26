@@ -41,6 +41,23 @@ public readonly record struct SpacingGap(SpacingGapMode Mode, int Divisor, doubl
         };
     }
 
+    /// <summary>
+    ///     The community charting floor: a 32nd note at <paramref name="position" />, in beats (1/8 beat
+    ///     under a quarter-note beat, 1/4 beat under an eighth-note beat). The validator's sustain and
+    ///     hand-shape gap checks never ask for less, whatever the minimum note distance setting says;
+    ///     the spacing clean-up itself keeps the setting, since Rocksmith needs no more than that.
+    /// </summary>
+    public static FractionalPosition ThirtySecondNote(FractionalPosition position, IList<BeatMarker> beats)
+    {
+        var denominator = beats.Count == 0 ? 4 : beats[Math.Clamp(position.BeatId, 0, beats.Count - 1)].NoteDenominator;
+        return new FractionalPosition(new Fraction(Math.Max(1, denominator), 32));
+    }
+
+    /// <summary>The larger of <see cref="At" /> and <see cref="ThirtySecondNote" />: the gap the
+    /// validator asks a sustain or hand shape to leave before the next attack.</summary>
+    public FractionalPosition AtLeastThirtySecondNote(FractionalPosition position, IList<BeatMarker> beats) =>
+        FractionalPosition.Max(At(position, beats), ThirtySecondNote(position, beats));
+
     /// <summary>A short, stable spelling for key headers: <c>ms10</c>, <c>mf64</c>, <c>bf64</c>.</summary>
     public string Describe() => Mode switch
     {

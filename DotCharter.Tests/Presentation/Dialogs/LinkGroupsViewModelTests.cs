@@ -136,6 +136,23 @@ public sealed class LinkGroupsViewModelTests
     }
 
     [Fact]
+    public void A_join_suggestion_names_its_group_and_links_into_it()
+    {
+        var h = new Harness();
+        var group = h.Link.Link((h.Link.Lead, 1), (h.Link.Lead, 4));
+        var vm = new LinkGroupsViewModel(h.Services);
+        vm.Configure(new LinkGroupsRequest(h.Suggestions()));
+        var join = Assert.Single(vm.Suggestions, s => s.Title == "Join link A · 1 measure" && !s.Detail.Contains("near match", StringComparison.Ordinal));
+        foreach (var row in vm.Suggestions) row.IsSelected = ReferenceEquals(row, join);
+
+        vm.LinkSelectedCommand.Execute(null);
+
+        Assert.Same(group, Assert.Single(h.Link.Project.LinkGroups));
+        Assert.True(group.Placements.Count > 2, $"the group holds {group.Placements.Count} placements");
+        LinkHarness.AssertLinkedAndEqual(h.Link, group, group.Placements.Count);
+    }
+
+    [Fact]
     public void The_summary_says_what_the_parts_share()
     {
         var h = new Harness();
@@ -147,10 +164,9 @@ public sealed class LinkGroupsViewModelTests
 
         var placements = suggestions.Sum(s => s.Runs.Count);
         Assert.Equal($"{suggestions.Count} groups to link, {placements} placements.", vm.Headline);
-        var shared = suggestions
-            .Where(s => s.Runs.Any(r => ReferenceEquals(r.Arrangement, h.Link.Rhythm)))
-            .Sum(s => s.MeasureCount * s.Runs.Count(r => ReferenceEquals(r.Arrangement, h.Link.Lead)));
-        Assert.Equal([$"Lead and Rhythm share {shared} of 9 measures."], vm.Details);
+        // M1-M4, M5-M7 and the chorus bar M5 nested again with M8 sum to 9 runs of Lead; the nested M5 counts once.
+        Assert.Equal(9, suggestions.Sum(s => s.MeasureCount * s.Runs.Count(r => ReferenceEquals(r.Arrangement, h.Link.Lead))));
+        Assert.Equal(["Lead and Rhythm share 8 of 9 measures.", "chorus repeats 2× in each."], vm.Details);
 
         vm.ReviewCommand.Execute(null);
         Assert.Equal(LinkSuggestionsChoice.Review, ChartEditHarness.Answer(vm.Result));

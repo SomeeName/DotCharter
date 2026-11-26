@@ -27,6 +27,9 @@ public interface IEditorSettingsScreen : INotifyPropertyChanged
 
     bool KeepPowerChordNames { get; set; }
 
+    /// <summary>Only the first chord of a hand shape shows its name (import and Generate hand shapes). On by default.</summary>
+    bool NameOnlyFirstChordInHandShape { get; set; }
+
     /// <summary>
     ///     Spell suggested chord names in the song's key with slash chords
     ///     (<c>Bbm7</c>, <c>Cm7/Bb</c>) instead of Editor on Fire's spelling

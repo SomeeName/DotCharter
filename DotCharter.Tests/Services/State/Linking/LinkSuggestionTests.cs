@@ -92,7 +92,8 @@ public sealed class LinkSuggestionTests
         var suggestions = LinkSuggestionFinder.Find(h.Project, [h.Lead, h.Rhythm], null, h.Rule);
 
         // Rhythm is a copy of Lead, so the longest shared run spans the pattern measures in both.
-        var found = Assert.Single(suggestions, s => RunsOf(s).Any(r =>
+        // The pattern bars are also linked nested inside that run, one bar long.
+        var found = Assert.Single(suggestions, s => s.MeasureCount > 1 && RunsOf(s).Any(r =>
             ReferenceEquals(r.Arrangement, h.Lead) && r.First <= 4 && 4 < r.First + s.MeasureCount));
         Assert.False(found.FromRepeats);
         Assert.Contains(found.Runs, r => ReferenceEquals(r.Arrangement, h.Rhythm));
@@ -176,7 +177,7 @@ public sealed class LinkSuggestionTests
         Assert.NotEmpty(suggestions);
         var steps = h.History.GetUndoSteps().Count;
 
-        var action = LinkSuggestionFinder.LinkAll(h.Project, suggestions, h.Rule);
+        var action = LinkSuggestionFinder.LinkAll(h.Project, suggestions, h.Rule).Action;
 
         Assert.Empty(h.Project.LinkGroups); // building it changes nothing; the history runs it
         Assert.True(h.History.Do(action!));
@@ -199,9 +200,69 @@ public sealed class LinkSuggestionTests
     {
         var h = LinkHarness.WithRhythm();
         var suggestions = LinkSuggestionFinder.Find(h.Project, [h.Lead, h.Rhythm], PatternRepeats, h.Rule);
-        Assert.True(h.History.Do(LinkSuggestionFinder.LinkAll(h.Project, suggestions, h.Rule)!));
+        Assert.True(h.History.Do(LinkSuggestionFinder.LinkAll(h.Project, suggestions, h.Rule).Action!));
 
-        Assert.Null(LinkSuggestionFinder.LinkAll(h.Project, suggestions, h.Rule));
+        Assert.Null(LinkSuggestionFinder.LinkAll(h.Project, suggestions, h.Rule).Action);
+    }
+
+    [Fact]
+    public void A_lone_run_equal_to_an_existing_group_is_suggested_to_join_it_and_link_all_adds_it()
+    {
+        var h = StandaloneRepeats();
+        var group = h.Link((h.Lead, 1), (h.Lead, 4));
+        var steps = h.History.GetUndoSteps().Count;
+
+        var suggestions = LinkSuggestionFinder.Find(h.Project, [h.Lead], null, h.Rule);
+
+        var join = Assert.Single(suggestions);
+        Assert.Equal(new LinkJoinTarget(group.Id, group.Letter), join.Join);
+        Assert.Equal([(h.Lead, 7)], RunsOf(join));
+        Assert.True(h.History.Do(LinkSuggestionFinder.LinkAll(h.Project, suggestions, h.Rule).Action!));
+        Assert.Equal(steps + 1, h.History.GetUndoSteps().Count);
+        Assert.Same(group, Assert.Single(h.Project.LinkGroups));
+        LinkHarness.AssertLinkedAndEqual(h, group, 3);
+        var hash = h.Keys(group)[0]!.Hash;
+        Assert.Empty(LinkGroupVerifier.Verify(h.Project, new Dictionary<LinkGroup, string> { [group] = hash }));
+        Assert.Equal(3, group.Placements.Count);
+        Assert.Empty(LinkSuggestionFinder.Find(h.Project, [h.Lead], null, h.Rule));
+
+        h.History.Undo();
+        Assert.Equal(2, Assert.Single(h.Project.LinkGroups).Placements.Count);
+    }
+
+    [Fact]
+    public void Unlinked_runs_equal_to_an_existing_group_never_become_a_second_group()
+    {
+        var h = StandaloneRepeats();
+        LinkHarness.Hardest(h.Lead).Notes.Add(new GuitarNote { Position = LinkFixture.At(2, 0), Fret = 5 });
+        h.Lead.MarkEdited();
+        var group = h.Link((h.Lead, 1), (h.Lead, 4));
+
+        var suggestions = LinkSuggestionFinder.Find(h.Project, [h.Lead], null, h.Rule);
+
+        var join = Assert.Single(suggestions);
+        Assert.Equal(group.Id, join.Join?.GroupId);
+        Assert.Equal([(h.Lead, 2), (h.Lead, 7)], RunsOf(join));
+        Assert.True(h.History.Do(LinkSuggestionFinder.LinkAll(h.Project, suggestions, h.Rule).Action!));
+        Assert.Same(group, Assert.Single(h.Project.LinkGroups));
+        LinkHarness.AssertLinkedAndEqual(h, group, 4);
+    }
+
+    [Fact]
+    public void Link_all_does_not_join_a_run_another_group_took_since()
+    {
+        var h = StandaloneRepeats();
+        LinkHarness.Hardest(h.Lead).Notes.Add(new GuitarNote { Position = LinkFixture.At(2, 0), Fret = 5 });
+        h.Lead.MarkEdited();
+        var group = h.Link((h.Lead, 1), (h.Lead, 4));
+        var run = new LinkRunRequest(h.Lead, LinkFixture.At(7, 0), LinkFixture.At(8, 0));
+        var joining = new LinkSuggestion(group.Name, 1, [run], [7], FromRepeats: false)
+        {
+            Join = new LinkJoinTarget(group.Id, group.Letter)
+        };
+        h.Link((h.Lead, 2), (h.Lead, 7));
+
+        Assert.Null(LinkSuggestionFinder.LinkAll(h.Project, [joining], h.Rule).Action);
     }
 
     [Fact]

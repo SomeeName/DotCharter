@@ -213,6 +213,18 @@ public class ChordTemplateFingerSetterTests
         // finger at a higher fret between two at a lower fret is no crossing.
         AssertFingers(Fingered((2, 0), (3, 2), (4, 3), (5, 2)), (3, 1), (4, 3), (5, 2));
 
+    [Fact]
+    public void OpenDGripHighOnTheNeck_IndexBarresTheOuterPair() =>
+        // xx0 14 15 14 (#1010): the 1-3-2 grip belongs to the open position.
+        // High on the neck the index barres both 14s and the middle takes the 15.
+        AssertFingers(Fingered((2, 0), (3, 14), (4, 15), (5, 14)), (3, 1), (4, 2), (5, 1));
+
+    [Fact]
+    public void OpenDGripAtTheTwelfth_KeepsTheRingBetweenIndexAndMiddle() =>
+        // xxx(12)(13)(12): the reference corpus still plays the moved D grip
+        // 1-3-2 up to the 13th fret; only past it does the barre take over.
+        AssertFingers(Fingered((3, 12), (4, 13), (5, 12)), (3, 1), (4, 3), (5, 2));
+
     // ── The index barre across a muted string (#488) ───────────────────────
 
     [Fact]

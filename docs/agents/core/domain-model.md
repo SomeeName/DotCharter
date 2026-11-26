@@ -155,7 +155,10 @@ tuning, naming).
   includes the four authored `Properties` flags (`FingerPicking`, `TwoFingerPicking`,
   `PickDirection`, `Syncopation`), excluding derived summaries. Phrase metadata
   rows retain their phrase name and have no timestamp in `ChartDiffViewModel`.
-- `Linking/` — the linked-measures foundation (#76). **`MeasureContentIndex` is
+- `Linking/` — the linked-measures foundation (#76). `MeasureContentDifference.Between(a, b)`
+  names where two keys first differ (measure, beat, kind: sustain with its change in whole
+  notes, FHP with both frets, sound, hand shape, mute) for link near matches (#1034); it is
+  the only reader of the canonical text and changes with `MeasureContentIndex`. **`MeasureContentIndex` is
   THE measure-content comparison — detection, link verification, the load check
   and the stored hash all go through it; never write a second one.** Content is
   in beats, exact (relative `FractionalPosition`s, no rounding); time signatures

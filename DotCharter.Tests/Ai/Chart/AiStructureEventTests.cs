@@ -28,10 +28,15 @@ public sealed class AiStructureEventTests
         _rhythm = ChartProjectCloner.CloneArrangement(_f.Arrangement);
         _rhythm.Name = "Rhythm";
         _f.Project.Arrangements.Add(_rhythm);
-        // A tone the chart declares and defines: the checks refuse a tone change to one it does not.
-        _f.Arrangement.ToneBase = "clean";
-        _f.Arrangement.ToneA = "clean";
-        _f.Project.ToneDefinitions.Add(new ToneDefinition { Key = "clean", Name = "Clean", Json = "{}" });
+        // A tone the chart declares and defines: the checks refuse a tone change to one it does not. The chart
+        // starts on "lead" and already switches back to it at beat 18, so a change to "clean" is neither a change
+        // to the tone already on (D25) nor the arrangement's only change (D21).
+        _f.Arrangement.ToneBase = "lead";
+        _f.Arrangement.ToneA = "lead";
+        _f.Arrangement.ToneB = "clean";
+        _f.Arrangement.ToneChanges.Add(new ToneChange { Position = AiChartFixture.At(18), ToneName = "lead" });
+        _f.Project.ToneDefinitions.Add(new ToneDefinition { Key = "lead", Name = "lead", Json = "{}" });
+        _f.Project.ToneDefinitions.Add(new ToneDefinition { Key = "clean", Name = "clean", Json = "{}" });
         _state.ActiveProject = _f.Project;
         _state.ActiveArrangement = _f.Arrangement;
         _state.ActiveLevel = _f.Level;
@@ -95,8 +100,7 @@ public sealed class AiStructureEventTests
 
         Assert.True(Accept(run));
 
-        var change = Assert.Single(_f.Arrangement.ToneChanges);
-        Assert.Equal("clean", change.ToneName);
+        var change = Assert.Single(_f.Arrangement.ToneChanges, c => c.ToneName == "clean");
         Assert.Equal(9, change.Position.BeatId);
         Assert.Null(At(_f.Arrangement, 9));
     }
@@ -109,7 +113,7 @@ public sealed class AiStructureEventTests
         var outcome = await run.RunInstructionAsync(Instruct(_f.Arrangement), TestContext.Current.CancellationToken);
 
         Assert.NotEqual(AiChartRunStatus.Held, outcome.Status);
-        Assert.Empty(_f.Arrangement.ToneChanges);
+        Assert.DoesNotContain(_f.Arrangement.ToneChanges, c => c.ToneName == "clean");
     }
 
     [Fact]
@@ -119,6 +123,9 @@ public sealed class AiStructureEventTests
         {
             Position = new FractionalPosition(8), Section = "verse", Phrase = "riff", Events = "B0,X9", Status = SectionStatus.Todo
         });
+        // The phrase store keeps a phrase on beat 8, so clearing the marker's phrase leaves the section one.
+        _f.Arrangement.Phrases.Add("riff");
+        _f.Arrangement.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(8), _f.Arrangement.Phrases.Count - 1));
         var model = new FakeChartModel((_, _) => Event(3, 1, Fields(status: "done", events: ["e0"], phrase: "")));
         var run = Run(model);
         await run.RunInstructionAsync(Instruct(_f.Arrangement), TestContext.Current.CancellationToken);
@@ -155,7 +162,7 @@ public sealed class AiStructureEventTests
     [Fact]
     public async Task The_model_may_narrow_the_set_to_the_arrangements_it_names()
     {
-        var model = new FakeChartModel((_, _) => Event(3, 1, Fields("chorus", arrangements: ["Rhythm"])));
+        var model = new FakeChartModel((_, _) => Event(3, 1, Fields("chorus", phrase: "riff", arrangements: ["Rhythm"])));
         var run = Run(model);
         await run.RunInstructionAsync(Instruct(_f.Arrangement, _rhythm), TestContext.Current.CancellationToken);
 

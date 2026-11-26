@@ -34,8 +34,13 @@
       "license": "MIT"
     },
     {
+      "id": "Avalonia.BuildServices",
+      "version": "12.0.0",
+      "license": "MIT"
+    },
+    {
       "id": "Avalonia.Controls.ColorPicker",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -45,7 +50,7 @@
     },
     {
       "id": "Avalonia.Desktop",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -55,7 +60,7 @@
     },
     {
       "id": "Avalonia.Fonts.Inter",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -65,7 +70,7 @@
     },
     {
       "id": "Avalonia.FreeDesktop.AtSpi",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -75,7 +80,7 @@
     },
     {
       "id": "Avalonia.FreeDesktop",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -85,12 +90,12 @@
     },
     {
       "id": "Avalonia.HarfBuzz",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
       "id": "Avalonia.Headless",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -100,7 +105,7 @@
     },
     {
       "id": "Avalonia.Native",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -110,7 +115,7 @@
     },
     {
       "id": "Avalonia.Remote.Protocol",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -120,7 +125,7 @@
     },
     {
       "id": "Avalonia.Skia",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -130,7 +135,7 @@
     },
     {
       "id": "Avalonia.Themes.Fluent",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -140,7 +145,7 @@
     },
     {
       "id": "Avalonia.Win32",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -150,7 +155,7 @@
     },
     {
       "id": "Avalonia.X11",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -160,7 +165,7 @@
     },
     {
       "id": "Avalonia",
-      "version": "12.1.6",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -195,57 +200,57 @@
     },
     {
       "id": "Dock.Avalonia.Themes.Fluent",
-      "version": "12.1.5",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
       "id": "Dock.Avalonia",
-      "version": "12.1.5",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
       "id": "Dock.Controls.DeferredContentControl",
-      "version": "12.1.5",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
       "id": "Dock.Controls.ProportionalStackPanel",
-      "version": "12.1.5",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
       "id": "Dock.Controls.Recycling.Model",
-      "version": "12.1.5",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
       "id": "Dock.Controls.Recycling",
-      "version": "12.1.5",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
       "id": "Dock.MarkupExtension",
-      "version": "12.1.5",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
       "id": "Dock.Model.Avalonia",
-      "version": "12.1.5",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
       "id": "Dock.Model.Mvvm",
-      "version": "12.1.5",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
       "id": "Dock.Model",
-      "version": "12.1.5",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
       "id": "Dock.Settings",
-      "version": "12.1.5",
+      "version": "12.2.0",
       "license": "MIT"
     },
     {
@@ -276,6 +281,11 @@
     {
       "id": "MicroCom.Runtime",
       "version": "0.11.6",
+      "license": "MIT"
+    },
+    {
+      "id": "MicroCom.Runtime",
+      "version": "0.11.7",
       "license": "MIT"
     },
     {

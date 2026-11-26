@@ -32,9 +32,8 @@ namespace DotCharter.Tests.Services.Parsing.GuitarPro;
 // bit 0x20 and writes the trill's upper fret + period. Both are GP4+ only, like
 // every other fx2 effect.
 // Staccato sets NOTE-effects fx2 bit 0x01 — a FLAG-only bit (no payload byte
-// follows it, unlike 0x04/0x08/0x10/0x20), which the reader turns into the chart
-// model's Accent because Rocksmith has no staccato mark. GP4+ only, like the rest
-// of fx2. Accent (the record's own flag) is a different bit entirely: the note
+// follows it, unlike 0x04/0x08/0x10/0x20), which the reader imports as a strike:
+// sustain 0, no accent. GP4+ only, like the rest of fx2. Accent (the record's own flag) is a different bit entirely: the note
 // HEADER's 0x40.
 // Dead writes note type 3, the "x" note the reader imports as MuteType.Full.
 // HammerOrigin sets NOTE-effects fx1 bit 0x02 — the slur's ORIGIN note (flag-only);

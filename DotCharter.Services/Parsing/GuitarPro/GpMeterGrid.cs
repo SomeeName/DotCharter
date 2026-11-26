@@ -1,3 +1,4 @@
+using DotCharter.Core.Linking;
 using Arrangement = DotCharter.Core.Domain.Project.Arrangement;
 using ChartProject = DotCharter.Core.Domain.Project.ChartProject;
 
@@ -61,6 +62,57 @@ internal static class GpMeterGrid
             var q = position.BeatId + position.Fraction;
             var bar = BarAt(quarterStarts, q);
             return new FractionalPosition(beatStarts[bar], (q - quarterStarts[bar]) * rates[bar]);
+        };
+    }
+
+    /// <summary>
+    ///     Puts an import onto a beat map it did NOT build (the tempo map was kept, or is
+    ///     locked): bar <c>i</c> of the score lands on measure <c>i</c> of <paramref name="beats" />.
+    ///     <para>
+    ///     Inside a bar a position keeps its FRACTION OF THE BAR, so when the score's beats per bar
+    ///     differ from the map's (a 6/8 score on a 3/4 map, a 4/4 bar the user re-barred to 3/4) the
+    ///     bar's notes are scaled into the map's bar instead of spilling over its barline, and every
+    ///     later bar still starts on its own downbeat. A map's last measure, which the grid may cut
+    ///     short, counts at its signature's length. Score bars past the map's last measure continue
+    ///     beat for beat after it. The identity when the score's bars match the map's measures.
+    ///     </para>
+    ///     <paramref name="importTimeSignatures" /> is the flag the score was parsed with: off, its
+    ///     positions are still quarter notes (see <see cref="ToBeatGrid" />).
+    /// </summary>
+    public static void OntoMeasures(IEnumerable<Arrangement> arrangements, IReadOnlyList<GpBarInfo> bars,
+        IList<BeatMarker> beats, bool importTimeSignatures)
+    {
+        var measures = MeasureGrid.Build(beats);
+        if (bars.Count == 0 || measures.Count == 0) return;
+        var map = BarToMeasure(bars, measures, importTimeSignatures);
+        foreach (var arrangement in arrangements) Remap(arrangement, map);
+    }
+
+    /// <summary>The piecewise-linear map of <see cref="OntoMeasures" />.</summary>
+    internal static Func<FractionalPosition, FractionalPosition> BarToMeasure(IReadOnlyList<GpBarInfo> bars,
+        IReadOnlyList<MeasureSpan> measures, bool importTimeSignatures)
+    {
+        var starts = new Fraction[bars.Count];
+        var lengths = new Fraction[bars.Count];
+        var start = Fraction.Zero;
+        for (var i = 0; i < bars.Count; i++)
+        {
+            var beats = bars[i].BeatsInMeasure > 0 ? bars[i].BeatsInMeasure : 4;
+            starts[i] = start;
+            lengths[i] = importTimeSignatures ? new Fraction(beats, 1) : new Fraction(beats * 4, Denominator(bars[i]));
+            start += lengths[i];
+        }
+
+        var last = measures[^1];
+        return position =>
+        {
+            var q = position.BeatId + position.Fraction;
+            var bar = BarAt(starts, q);
+            if (bar >= measures.Count)
+                return new FractionalPosition(Math.Max(last.EndBeat, last.StartBeat + last.BeatsInMeasure), q - starts[measures.Count]);
+            var measure = measures[bar];
+            var measureBeats = bar == measures.Count - 1 ? Math.Max(measure.BeatCount, measure.BeatsInMeasure) : measure.BeatCount;
+            return new FractionalPosition(measure.StartBeat, (q - starts[bar]) * new Fraction(measureBeats, 1) / lengths[bar]);
         };
     }
 

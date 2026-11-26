@@ -73,7 +73,9 @@ public sealed class RsxrSaveTests : IDisposable
         if (bundle)
         {
             service.SaveDlcBuilderXmlBundle(Path.Combine(_dir, "song.dcproj"), Project());
-            path = Directory.GetFiles(DlcBuilderBundle.DirectoryFor(Path.Combine(_dir, "song.dcproj")), "*.xml").Single();
+            // The bundle's own file; the standard DLC Builder project's six-string projection is a sibling (#1036).
+            path = Directory.GetFiles(DlcBuilderBundle.DirectoryFor(Path.Combine(_dir, "song.dcproj")), "*.xml")
+                .Single(f => !f.Contains("_6String_", StringComparison.Ordinal));
         }
         else
         {

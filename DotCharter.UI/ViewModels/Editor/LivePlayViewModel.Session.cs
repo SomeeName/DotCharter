@@ -198,7 +198,7 @@ public partial class LivePlayViewModel
 
         _sessionHadLadder = options.Ladder != null;
         // A one-level chart rides a ladder generated for this run; the chart is untouched.
-        var judged = IsDynamicDifficultyOn ? DynamicDifficultyLadder.For(arrangement, _projectState.Beats) : arrangement;
+        var judged = IsDynamicDifficultyOn ? DynamicDifficultyLadder.For(arrangement, _projectState) : arrangement;
         _session.Start(judged, level, _projectState.Beats, options);
         _stringConfidence.Clear();
         _judgedArrangement = IsDynamicDifficultyOn ? judged : null;

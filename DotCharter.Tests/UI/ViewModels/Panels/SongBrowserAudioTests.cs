@@ -322,7 +322,7 @@ public sealed class SongBrowserAudioTests
 
             Vm = new SongBrowserViewModel(
                 new FakeFileStorageService(), Config, Library, logger, Session, State, editor, transport,
-                new DotCharter.Presentation.Dialogs.DialogsSlot(), DotCharter.Localization.LocalizationService.Instance);
+                new DotCharter.Presentation.Dialogs.DialogsSlot(), DotCharter.Localization.LocalizationService.Instance, new DotCharter.Tests.UI.ViewModels.Panels.StubPackageFileReader());
         }
 
         public ProjectState State { get; } = new();

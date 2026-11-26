@@ -30,7 +30,7 @@ public sealed partial class JuceAudioPlaybackService
     private volatile bool _neuralRateAttempted;
 
     public void ApplyAudioConfiguration(RigConfig config)
-        => ApplyAudioConfiguration(config, forceEngineReplace: false);
+        => ApplyAudioConfiguration(config, forceEngineReplace: false, reuseRememberedChannelCounts: false);
 
     /// <summary>
     /// Core apply path. <paramref name="forceEngineReplace"/> is used by the
@@ -39,7 +39,7 @@ public sealed partial class JuceAudioPlaybackService
     /// sees no setup delta), so recovery always tears the engine down and
     /// rebuilds it from scratch.
     /// </summary>
-    private void ApplyAudioConfiguration(RigConfig config, bool forceEngineReplace)
+    private void ApplyAudioConfiguration(RigConfig config, bool forceEngineReplace, bool reuseRememberedChannelCounts)
     {
         // Nothing may open a device once dispose has started — not a settings
         // apply racing window close, not the watchdog's recovery. The deeper
@@ -51,7 +51,7 @@ public sealed partial class JuceAudioPlaybackService
         Interlocked.Increment(ref _configApplyDepth);
         try
         {
-            ApplyAudioConfigurationCore(config, forceEngineReplace);
+            ApplyAudioConfigurationCore(config, forceEngineReplace, reuseRememberedChannelCounts);
         }
         finally
         {
@@ -62,17 +62,16 @@ public sealed partial class JuceAudioPlaybackService
                 // knew (new device, new driver, ...). Start observing fresh.
                 _recovery.Reset();
                 _deviceLost = false;
-                _outputTopologySignature = null;
                 // Re-scan on the very next tick: a manual apply just changed the
                 // device world we are watching, so the thinned healthy-tick
                 // enumeration must not skip past it.
-                _healthyTickIndex = 0;
+                _probe.Reset();
             }
             Interlocked.Decrement(ref _configApplyDepth);
         }
     }
 
-    private void ApplyAudioConfigurationCore(RigConfig config, bool forceEngineReplace)
+    private void ApplyAudioConfigurationCore(RigConfig config, bool forceEngineReplace, bool reuseRememberedChannelCounts)
     {
         // Out-of-process VST hosting toggle FIRST: the engine bring-up below
         // drains any queued plugin loads (startup restore), and those must
@@ -125,11 +124,11 @@ public sealed partial class JuceAudioPlaybackService
             inputDeviceId = outputDeviceId;
         }
 
-        var inputCount = GetInputDeviceChannelCount(config.AudioDriver, inputDeviceId);
+        var inputCount = ChannelCountForApply(config.AudioDriver, inputDeviceId, input: true, reuseRememberedChannelCounts);
         if (GuitarInputChannels.JackPastDevice(config, inputCount))
             _logger?.Warning(AppLogCategory.Audio, GuitarInputChannels.PastDeviceMessage(config, inputDeviceId, inputCount));
 
-        var outputCount = GetOutputDeviceChannelCount(config.AudioDriver, outputDeviceId);
+        var outputCount = ChannelCountForApply(config.AudioDriver, outputDeviceId, input: false, reuseRememberedChannelCounts);
         if (OutputChannelPairs.PairPastDevice(config, outputCount))
             _logger?.Warning(AppLogCategory.Audio, OutputChannelPairs.PastDeviceMessage(config, outputDeviceId, outputCount));
 

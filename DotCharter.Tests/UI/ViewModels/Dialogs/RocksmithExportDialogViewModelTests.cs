@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.Input;
 using DotCharter.Services.Export.Audio;
 using DotCharter.Services.Export;
 using DotCharter.Services.Export.Rocksmith;
+using DotCharter.Services.Export.Validation;
 using DotCharter.Core.Domain.Vocals;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.Services.Infrastructure.Documents;
@@ -119,7 +120,8 @@ public sealed partial class RocksmithExportDialogViewModelTests : IDisposable
             _io = new RocksmithExportServices(transport, Documents, Storage,
                 new DotCharter.Tone.Infrastructure.Storage.ExportTargetWriter(),
                 DotCharter.Tests.Presentation.Dialogs.RecordingProxy.Create<DotCharter.Tone.Infrastructure.Shell.IShellLauncher>().Proxy,
-                _prompt, Game);
+                _prompt, Game)
+            { Library = new DotCharter.Tests.Services.Export.PackageKeyIndex(), RunValidation = work => Task.FromResult(work()) };
         }
 
         /// <summary>Records the folder and chart the dialog asked a DLC Builder project for; writes nothing unless a test swaps it.</summary>
@@ -155,15 +157,24 @@ public sealed partial class RocksmithExportDialogViewModelTests : IDisposable
         /// <summary>The dialog of the current open; an open is a fresh view model, as the host builds one.</summary>
         public RocksmithExportViewModel Vm => _vm ?? throw new InvalidOperationException("open the dialog first");
 
+        /// <summary>The Library the dialog's key check reads; empty unless a test names package keys.</summary>
+        public DotCharter.Services.Library.Index.ILibraryIndex LibraryIndex { get; set; } = new DotCharter.Tests.Services.Export.PackageKeyIndex();
+
         public Func<string, PcmAudio>? VolumeDecoder { get; set; }
         public Func<string, string>? VolumeSignature { get; set; }
         public Func<string?, string, string, RocksmithTestPackageOwnership>? TestOwnershipFactory { get; set; }
+
+        /// <summary>How the findings check runs; the default completes inline so a test reads the findings right after Open.</summary>
+        public Func<Func<IReadOnlyList<ExportValidationFinding>>, Task<IReadOnlyList<ExportValidationFinding>>> RunValidation { get; set; } =
+            work => Task.FromResult(work());
 
         public RocksmithExportViewModel Open()
         {
             var io = _io with
             {
                 Documents = ExportDocuments ?? Documents,
+                Library = LibraryIndex,
+                RunValidation = RunValidation,
                 VolumeSignature = VolumeSignature,
                 TestOwnershipFactory = TestOwnershipFactory,
                 VolumeMeasure = VolumeDecoder is null ? null : (chart, audio, preview, start, warn, targetLufs) =>
@@ -201,7 +212,7 @@ public sealed partial class RocksmithExportDialogViewModelTests : IDisposable
         var project = new ChartProject
         {
             Bpm = 120,
-            Chart = { SongName = "Dialog Song", Artist = "DotCharter" }
+            Chart = { SongName = "Dialog Song", Artist = "DotCharter", AlbumName = "Dialog Album", AlbumYear = "2001" }
         };
         project.Showlights.Add(new Showlight { Position = new FractionalPosition(0), Type = "FOG_BLUE", Note = 28 });
         for (var i = 0; i < 64; i++)

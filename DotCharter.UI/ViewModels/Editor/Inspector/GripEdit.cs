@@ -23,13 +23,14 @@ internal static class GripEdit
     internal static bool MissingFingering(ChordTemplate grip, int capo) =>
         !grip.Fingerless && grip.Frets.Any(f => f.Value > capo && grip.GetFinger(f.Key) is < 0 or > 4);
 
-    internal static ChordTemplate? AutoFill(Arrangement arrangement, ChordTemplate grip, int ghostMask)
+    internal static ChordTemplate? AutoFill(Arrangement arrangement, ChordTemplate grip, int ghostMask,
+        ArrangementFingeringStyle songStyle)
     {
         if (grip.IsPinned || ghostMask != 0) return null;
         var next = grip.Clone();
         if (MissingFingering(grip, arrangement.Capo))
         {
-            ArrangementFingeringStyle.SetSuggestedFingers(arrangement, next, arrangement.StringCount);
+            ArrangementFingeringStyle.SetSuggestedFingers(arrangement, next, arrangement.StringCount, songStyle);
             foreach (var (index, finger) in grip.Fingers)
                 if (finger is >= 0 and <= 4) next.Fingers[index] = finger;
         }

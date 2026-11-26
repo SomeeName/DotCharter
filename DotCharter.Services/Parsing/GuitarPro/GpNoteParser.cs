@@ -30,9 +30,13 @@ public sealed class GpNoteParser
     ///     only leaves a phantom sound on the level that nothing can edit, render
     ///     or export. Callers must drop such a note, exactly as the GP3-5 binary
     ///     reader has always done (<c>GpLegacyImporter.ReadBeat</c>'s
-    ///     <c>stringNo &lt;= track.StringCount</c> guard).
+    ///     <c>stringNo &lt;= track.StringCount</c> guard). A NEGATIVE source fret is no
+    ///     note either: it is dropped and counted in the import report like the bad string,
+    ///     never imported as an open string.
     /// </summary>
-    public bool LastStringValid { get; private set; }
+    public bool LastNoteValid { get; private set; }
+
+    private bool _lastFretNegative;
 
     /// <summary>
     ///     Whether the most recently parsed note carried GP's <c>LeftHandTapped</c>
@@ -151,12 +155,14 @@ public sealed class GpNoteParser
         LastTrill = null;
         LastLeftHandTapped = false;
         LastLeftFingering = null;
+        _lastFretNegative = false;
         var note = new GuitarNote
         { Position = pos, Sustain = sustain, StringIndex = 0, Fret = 0, Tremolo = hasTremolo };
         ApplyNoteAttributes(noteNode, note, pos, isGrace);
         TryCaptureTrill(noteNode, note.Fret);
-        LastStringValid = (uint)note.StringIndex < (uint)stringCount;
-        if (LastLeftHandTapped && LastStringValid) LeftHandTappedNotes.Add(note);
+        StrikeIfStaccato(noteNode, note);
+        LastNoteValid = (uint)note.StringIndex < (uint)stringCount && !_lastFretNegative;
+        if (LastLeftHandTapped && LastNoteValid) LeftHandTappedNotes.Add(note);
         return note;
     }
 
@@ -166,11 +172,13 @@ public sealed class GpNoteParser
         LastTrill = null;
         LastLeftHandTapped = false;
         LastLeftFingering = null;
+        _lastFretNegative = false;
         var note = new ChordNote { Sustain = sustain, StringIndex = 0, Fret = 0, Tremolo = hasTremolo };
         ApplyNoteAttributes(noteNode, note, absolutePos);
         TryCaptureTrill(noteNode, note.Fret);
-        LastStringValid = (uint)note.StringIndex < (uint)stringCount;
-        if (LastLeftHandTapped && LastStringValid) LeftHandTappedNotes.Add(note);
+        StrikeIfStaccato(noteNode, note);
+        LastNoteValid = (uint)note.StringIndex < (uint)stringCount && !_lastFretNegative;
+        if (LastLeftHandTapped && LastNoteValid) LeftHandTappedNotes.Add(note);
         return note;
     }
 
@@ -290,9 +298,40 @@ public sealed class GpNoteParser
 
         // GP exposes Accent as a direct child element (not Properties). It must
         // land on chord notes too — accents on strummed beats otherwise vanish.
+        // Only the accent bits accent: staccato is a strike (StrikeIfStaccato).
         // Trill is handled separately via TryCaptureTrill (Rocksmith has no
         // native trill so we expand it into alternating HO/PO notes upstream).
-        if (noteNode.Element("Accent") != null) note.Accent = true;
+        if (AccentFlags(noteNode) is { } flags && (flags & AccentBits) != 0) note.Accent = true;
+    }
+
+    /// <summary>
+    ///     gpif's <c>&lt;Accent&gt;</c> is a BIT FIELD, not a flag (alphaTab's GpifParser
+    ///     reads it and GpifWriter writes it so; <c>GpStaccatoImportTests</c> pins the
+    ///     shipped writer): 0x01 staccato, 0x04 heavy accent, 0x08 accent, 0x10 tenuto.
+    ///     Null when the element is absent. A value that is not a number keeps the old
+    ///     reading, an accent.
+    /// </summary>
+    private static int? AccentFlags(XElement noteNode)
+    {
+        if (noteNode.Element("Accent") is not { } accent) return null;
+        return int.TryParse(accent.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var flags)
+            ? flags
+            : AccentBits;
+    }
+
+    private const int StaccatoBit = 0x01;
+    private const int AccentBits = 0x04 | 0x08;
+
+    /// <summary>Whether the note is written STACCATO (gpif <c>&lt;Accent&gt;</c> bit 0x01).</summary>
+    internal static bool IsStaccato(XElement noteNode) => (AccentFlags(noteNode) & StaccatoBit) is > 0;
+
+    /// <summary>
+    ///     A staccato note imports as a strike — sustain 0, no accent. Applied
+    ///     after every attribute (a bend is placed along the WRITTEN length first).
+    /// </summary>
+    private static void StrikeIfStaccato(XElement noteNode, IGuitarSound note)
+    {
+        if (IsStaccato(noteNode)) note.Sustain = FractionalPosition.Zero;
     }
 
     private void ApplyStringAndFret(NoteProperties found, IGuitarSound note)
@@ -309,7 +348,10 @@ public sealed class GpNoteParser
         // at the read so everything below (slide targets, trill, graces) and
         // every downstream pass sees an absolute fret. Capo 0 ⇒ identity.
         if (found.Fret != null && int.TryParse(found.Fret.Element("Fret")?.Value, CultureInfo.InvariantCulture, out var f))
+        {
             note.Fret = GpCapoFrets.ToAbsolute(f, Capo);
+            _lastFretNegative = f < 0;
+        }
     }
 
     private void ApplyTechniques(NoteProperties found, IGuitarSound note)

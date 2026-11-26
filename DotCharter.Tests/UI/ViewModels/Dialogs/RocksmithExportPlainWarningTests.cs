@@ -161,9 +161,39 @@ public sealed class RocksmithExportPlainWarningTests : IDisposable
         return new DlcBuilderProjectWriter(new ProjectDocumentService(services.BuildServiceProvider(), logger), harness.Config, logger);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TheButton_PassesTheLowBassTuningBox_AndNamesBothProjectsOfAnExtendedRangeChart(bool fix)
+    {
+        var harness = new RocksmithExportDialogViewModelTests.Harness(RocksmithExportDialogViewModelTests.CreateValidProject());
+        harness.Storage.NextFolder = _dir;
+        var writer = new SplitWriter();
+        harness.DlcBuilderWriter = writer;
+        var vm = harness.Open();
+        vm.FixLowBassTuning = fix;
+
+        await ((IAsyncRelayCommand)vm.ExportDlcBuilderProjectCommand).ExecuteAsync(null);
+
+        Assert.Equal(fix, writer.Sources!.FixLowBassTuning);
+        Assert.Contains("song.rs2dlc", vm.DlcBuilderProjectMessage);
+        Assert.Contains("song_rsxr.rs2dlc", vm.DlcBuilderProjectMessage);
+    }
+
+    private sealed class SplitWriter : IDlcBuilderProjectWriter
+    {
+        public DlcBuilderProjectSources? Sources { get; private set; }
+
+        public DlcBuilderProjectPaths Write(string folder, ChartProject snapshot, DlcBuilderProjectSources sources)
+        {
+            Sources = sources;
+            return new DlcBuilderProjectPaths(Path.Combine(folder, "song.rs2dlc"), Path.Combine(folder, "song_rsxr.rs2dlc"));
+        }
+    }
+
     private sealed class ThrowingWriter : IDlcBuilderProjectWriter
     {
-        public string Write(string folder, ChartProject snapshot, DlcBuilderProjectSources sources) =>
+        public DlcBuilderProjectPaths Write(string folder, ChartProject snapshot, DlcBuilderProjectSources sources) =>
             throw new IOException("disk full");
     }
 }

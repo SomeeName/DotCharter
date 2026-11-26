@@ -15,6 +15,7 @@ public sealed class LinkSuggestionsViewModel : DialogViewModel<LinkSuggestionsCh
     IDialogSetup<LinkSuggestionsRequest>
 {
     private const int MaxSharedLines = 3;
+    private const int MaxNearMatchLines = 4;
     private readonly ChartEditDialogServices _edit;
     private string _headline = "";
     private IReadOnlyList<string> _details = [];
@@ -53,11 +54,23 @@ public sealed class LinkSuggestionsViewModel : DialogViewModel<LinkSuggestionsCh
         Headline = l.Plural("LinkSuggest_GroupsOne", "LinkSuggest_Groups", suggestions.Count, suggestions.Sum(s => s.Runs.Count));
         var details = new List<string>(SharedLines(suggestions));
         if (RepeatLine(suggestions) is { } repeat) details.Add(repeat);
-        if (request.Suggestions.Any(s => s.RequiresReview)) details.Add(l["LinkSuggest_ReviewDifferences"]);
+        var near = LinkSuggestionFinder.NearMatches(request.Suggestions).ToList();
+        if (near.Count > 0)
+        {
+            details.Add(l.Plural("LinkSuggest_NearMatchesOne", "LinkSuggest_NearMatches", near.Count));
+            details.AddRange(near.Take(MaxNearMatchLines).Select(s => s.Mismatch is { } m
+                ? $"  {LinkGroupText.Mismatch(l, m)}"
+                : $"  {LinkGroupText.Bars(s.FirstMeasures.FirstOrDefault(), s.MeasureCount)}: {l["LinkGroups_DifferentContent"]}"));
+            if (near.Count > MaxNearMatchLines) details.Add(l.Format("LinkSuggest_NearMatchesMore", near.Count - MaxNearMatchLines));
+        }
+
         Details = details;
     }
 
-    /// <summary>"Rhythm and Lead share 48 of 60 measures." for each pair of parts some suggestion links together.</summary>
+    /// <summary>
+    ///     "Rhythm and Lead share 48 of 60 measures." for each pair of parts some suggestion links together; a
+    ///     measure inside two nested groups counts once.
+    /// </summary>
     private IEnumerable<string> SharedLines(IReadOnlyList<LinkSuggestion> suggestions)
     {
         var project = _edit.State.ActiveProject;
@@ -72,7 +85,10 @@ public sealed class LinkSuggestionsViewModel : DialogViewModel<LinkSuggestionsCh
                 var (a, b) = (parts[i], parts[j]);
                 var shared = suggestions
                     .Where(s => s.Runs.Any(r => ReferenceEquals(r.Arrangement, a)) && s.Runs.Any(r => ReferenceEquals(r.Arrangement, b)))
-                    .Sum(s => s.MeasureCount * s.Runs.Count(r => ReferenceEquals(r.Arrangement, a)));
+                    .SelectMany(s => s.Runs.Select((r, i) => (r.Arrangement, First: s.FirstMeasures[i], s.MeasureCount)))
+                    .Where(r => ReferenceEquals(r.Arrangement, a))
+                    .SelectMany(r => Enumerable.Range(r.First, r.MeasureCount))
+                    .Distinct().Count();
                 if (shared == 0) continue;
                 if (lines++ == MaxSharedLines) yield break;
                 yield return _edit.Localization.Format("LinkSuggest_Shared", a.Name, b.Name, shared, total);

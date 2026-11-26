@@ -139,7 +139,7 @@ public static class ShapeBulkEdits
         if (rewrite)
         {
             var (primaryChords, primaryShapes) = ChordShapeEdits.UsesOf(arrangement, primary);
-            actions.AddRange(ShapeEditPlanner.RewriteInPlace(arrangement, primary, candidate, primaryChords, primaryShapes, syncHandShapes, editor));
+            actions.AddRange(ShapeEditPlanner.RewriteInPlace(arrangement, primary, candidate, primaryChords, primaryShapes, syncHandShapes, editor, group));
         }
         else if (ReferenceEquals(keeper, primary) && (candidate.Name != primary.Name || candidate.Unnamed != primary.Unnamed))
         {

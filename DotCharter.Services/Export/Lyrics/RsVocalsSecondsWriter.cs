@@ -30,7 +30,10 @@ namespace DotCharter.Services.Export.Lyrics;
 ///         parses it properly but needs <c>time</c>/<c>length</c> at EXACTLY three
 ///         decimals — its converter parses the string with the dot deleted, so
 ///         <c>"12.34"</c> would read as 1,234 ms. <see cref="Fmt.Time" /> is
-///         already that format.
+///         already that format. Every entry also passes
+///         <see cref="VocalTiming.Normalize" />: EOF merges a zero-length piece into
+///         the next one when both start at the same millisecond, across a line end
+///         too, and then refuses the file.
 ///     </para>
 /// </summary>
 public static class RsVocalsSecondsWriter
@@ -59,22 +62,31 @@ public static class RsVocalsSecondsWriter
     {
         ArgumentNullException.ThrowIfNull(syllables);
 
-        var elements = new List<XElement>(syllables.Count);
+        var timesMs = new int[syllables.Count];
+        var lengthsMs = new int[syllables.Count];
         for (var i = 0; i < syllables.Count; i++)
         {
-            var s = syllables[i];
-            var timeMs = ToMs(s.StartSeconds);
+            var timeMs = ToMs(syllables[i].StartSeconds);
 
             // Never negative and never overlapping the next onset: the aligner's
             // spans are non-overlapping in FRAMES, but the onset bias moves starts
             // and not ends, so a large bias can cross them.
-            var endMs = ToMs(s.EndSeconds);
+            var endMs = ToMs(syllables[i].EndSeconds);
             if (i + 1 < syllables.Count) endMs = Math.Min(endMs, ToMs(syllables[i + 1].StartSeconds));
+            timesMs[i] = timeMs;
+            lengthsMs[i] = Math.Max(0, endMs - timeMs);
+        }
 
+        VocalTiming.Normalize(timesMs, lengthsMs);
+
+        var elements = new List<XElement>(syllables.Count);
+        for (var i = 0; i < syllables.Count; i++)
+        {
+            var s = syllables[i];
             elements.Add(new XElement("vocal",
-                new XAttribute("time", Fmt.Time(timeMs)),
+                new XAttribute("time", Fmt.Time(timesMs[i])),
                 new XAttribute("note", note),
-                new XAttribute("length", Fmt.Time(Math.Max(0, endMs - timeMs))),
+                new XAttribute("length", Fmt.Time(lengthsMs[i])),
                 new XAttribute("lyric", RsVocalLyricEncoding.Encode(s.Text, s.ContinuesWord, s.EndsLine))));
         }
 

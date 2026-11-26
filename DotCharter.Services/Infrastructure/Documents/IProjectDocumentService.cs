@@ -32,8 +32,11 @@ public interface IProjectDocumentService
     /// </param>
     void SaveDlcBuilderXmlBundle(string projectPath, ChartProject project, double? audioLengthMs = null);
 
-    /// <summary>Writes a bundle to the exact directory selected for an explicit export.</summary>
-    void SaveDlcBuilderXmlBundleToDirectory(string directory, ChartProject project, double? audioLengthMs = null) =>
+    /// <summary>
+    ///     Writes a bundle to the exact directory selected for an explicit export. <paramref name="fixLowBassTuning" />
+    ///     is the export dialog's low bass tuning box; a save's bundle follows <c>AppConfig.ExportFixLowBassTuning</c>.
+    /// </summary>
+    void SaveDlcBuilderXmlBundleToDirectory(string directory, ChartProject project, double? audioLengthMs, bool fixLowBassTuning) =>
         throw new NotSupportedException("This document host does not export XML bundles to a selected directory.");
 
     ChartProject AssembleProject(ChartProject? baseProject, double bpm, string audioFileName,

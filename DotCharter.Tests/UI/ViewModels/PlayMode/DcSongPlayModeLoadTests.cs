@@ -150,7 +150,7 @@ public sealed class DcSongPlayModeLoadTests : IDisposable
             state, transport, new HistoryService(logger), selection, new TempoService(logger), new TrackContextRegistry(state, selection), FakeLocalization.KeysOnly());
         return new SongBrowserViewModel(
             new FakeFileStorageService(), config, library, logger, session, state, editor, transport,
-            new DotCharter.Presentation.Dialogs.DialogsSlot(), FakeLocalization.English(), playability: playability);
+            new DotCharter.Presentation.Dialogs.DialogsSlot(), FakeLocalization.English(), new DotCharter.Tests.UI.ViewModels.Panels.StubPackageFileReader(), playability: playability);
     }
 
     private PlayModeViewModel PlayMode(ProjectState state, SongBrowserViewModel browser, IProjectSessionService session)

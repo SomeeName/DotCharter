@@ -46,6 +46,23 @@ touched. Settings ▸ Files: `AppConfig.ExportApplyDlcBuilderFixes`,
 `ExportGenerateDynamicDifficulty` (both on), `ExportDdLevelCountMode` (Simple; MLModel
 selectable). A step that throws ships the arrangement as charted, with a warning.
 
+**The DLC Builder project export mirrors the packages (#1036).** The DTRS XML bundle and
+the `.rs2dlc` apply `LowBassTuningFix.ForPackage` like the `.psarc` (the dialog's box, or
+`AppConfig.ExportFixLowBassTuning` on save), and a chart with RS Extended Range paths gets a
+standard project DLC Builder builds plus an `_rsxr` one. `Export/DlcBuilder/Rs2DlcEdition.cs`
+(`Rs2DlcEditions.Entry`, `SiblingFiles`) is the ONE place that decides which arrangement goes in
+which project and which bundle file it reads; the bundle writer writes exactly those files.
+A 7-/8-string guitar's STOCK TWIN (`Rs2DlcEditions.HasStockTwin`) is a stock arrangement of the
+same type whose name starts with its own ("Doloris" -> "Doloris (6 String)", trimmed,
+case-insensitive), each stock arrangement pairing once; a twin replaces the projection in the
+standard project, any other extended guitar is projected there. In the standard project a path
+left without a Main (an Alternate twin, say) ships its first arrangement as Main, as the standard
+`.psarc` does (`Rs2DlcProjectBuilder.PromoteLonePathMains`, #1043); the chart never changes. When the chart loses its extended
+paths, save and export remove the old `_rsxr.rs2dlc` only if `CompanionOwnership` says we wrote it
+unchanged (`RemoveStaleExtendedRangeProject`).
+`Rs2DlcLowBassAndExtendedRangeTests` checks the standard project against DLC Builder's I41 and
+I36 rules.
+
 - **Golden parity is against the REAL F#** (`DdGoldenParityTests`, fixtures in
   `DotCharter.Tests/Services/Export/DynamicDifficulty/Fixtures/`): both level-count
   modes, the fixes, and fixes-then-DD; `DdLevelCountModelTests` holds the tree

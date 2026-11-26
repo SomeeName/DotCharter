@@ -33,9 +33,8 @@ public enum DroppedFileRoute
     RocksmithXmlImport,
 
     /// <summary>
-    ///     A Rocksmith <c>.psarc</c> package. There is no single-file load seam —
-    ///     <c>SongBrowserViewModel.LoadSongItem</c> takes a scanned entry, not a path
-    ///     — so this route only says so instead of failing as a corrupt project.
+    ///     A Rocksmith <c>.psarc</c> package: opened in place as a project through
+    ///     <see cref="IPackageFileOpener" />, the Library row's own load path.
     /// </summary>
     RocksmithPackage,
 

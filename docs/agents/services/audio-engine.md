@@ -109,9 +109,9 @@ device channel count as the engine mask, so a discarded mask keeps default order
   requested order through `Vst/VstInputOrder`, retaining plugin instances and state.
   Rebuild snapshots preserve that order separately from dictionary insertion order.
 
-- Lock order is `_engineConfigGate` -> `_vstGate` -> `_mediaLoadGate` ->
-  `_mediaOperationGate` -> playback `_gate` -> `_midiGate`. Decoding holds only the
-  media-load gate. Ownership changes and publication take the operation lock before
+- Lock order is `_engineConfigGate` -> `_vstGate` -> `_mediaLoadGate` -> `_stemLoadGate` ->
+  `_mediaOperationGate` -> playback `_gate` -> `_midiGate`. Decoding holds only its
+  load gate (song or stem set). Ownership changes and publication take the operation lock before
   the playback gate, including cancellation, hand-back, rebuild and teardown.
   `RunIfOwned` checks ownership briefly under `_gate`, then runs synchronous transport
   and mix actions holding only the operation lock. Owned native seek/play/stop waits do not
@@ -640,6 +640,40 @@ generic `cmake -G "Visual Studio 17 2022"` line does not work there.
   goes through a coalescing `Dispatcher.UIThread.Post` (see `AudioPlaybackCoordinator`).
 - **Any master-bus or per-seat state must be replayed on engine REBUILD** (device
   change, NAM 48 kHz request, watchdog recovery), or it is dropped silently.
+- **Device watchdog (unplug/replug).** `JuceAudioPlaybackService.DeviceWatchdog.cs`
+  probes every 3 s; `AudioDeviceProbeBuilder` builds each probe (liveness, presence,
+  device-list changes, the thinned healthy-tick scan). An unplugged ASIO interface stays listed (registry) and its
+  driver's reset request makes JUCE re-open and restart the absent device: the
+  sample rate stays published but the render clock reads "no block yet" forever.
+  `AudioCallbackStallDetector` therefore counts an unreadable clock on an OPEN
+  device as frozen (two ticks = lost, `DeviceLost`, status-bar error). A recovery
+  rebuild only counts once the new engine's clock moves
+  (`WaitForCallbackProgress`, 2 s budget); after a failed attempt
+  `AudioDeviceRecoveryStateMachine` retries on a topology change, or every 30
+  probes while the engine is dead (no audio to glitch). `DeviceReconnected`
+  shows "audio device recovered".
+- **Fast unplug handling (#1053).** The stall heartbeat above is only the
+  fallback. At the moment of an unplug the engine publishes a sample rate of 0
+  for a short while (JUCE stopped the device) before the driver's reset re-opens
+  it; the 3 s tick misses that, the health monitor's 20 ms poll does not.
+  `AudioDeviceClosedDetector` turns "closed, and no callback for 750 ms" into a
+  report (a driver reset that starts calling back again is not one), and
+  `OnEngineReportedDeviceClosed` runs a watchdog check right away, so the loss
+  is declared within about a second. The check runs whether or not audio
+  logging is on, and is ignored during a settings apply or rebuild.
+  `DeclareDeviceLost` stops the managed transport clock (playhead and position
+  timer) BEFORE it raises `DeviceLost` and pauses the native sources: pausing a
+  source whose device no longer calls back waits up to a second per source in
+  JUCE's transport stop, and until then the playhead lagged and jittered.
+  While the device is lost the watchdog checks once a second
+  (`WatchdogIntervalFor`); rebuild attempts stay rare (15 s back-off after a
+  failed one, 30 s blind retry), but a topology change during the back-off (the
+  interface coming back) starts the next attempt at once. The recovery rebuild
+  reuses the channel counts the last healthy apply read
+  (`DeviceChannelCountMemory`) instead of two full live rescans of every driver
+  through the dead engine, and logs how long the rebuild took. In the owner's
+  log the dead engine's own destroy and the new engine's create took about
+  225 ms together, so the time before them is the part to watch.
 - **The live seat count follows the input configuration, and exactly one place
   writes it**: `LiveInputSeatLayout.FromInputConfig` (recorded from
   `ApplyAudioConfigurationCore`). A temporary override (the latency wizard's

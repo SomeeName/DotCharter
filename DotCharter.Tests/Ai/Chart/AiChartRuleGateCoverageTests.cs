@@ -39,7 +39,19 @@ public sealed class AiChartRuleGateCoverageTests
         [typeof(DifficultyLevelRule)] =
             "compares a phrase across difficulty levels; the gate's scratch copy holds the one level the job edits",
         [typeof(SectionNameVarietyRule)] = "the job cannot add, rename or move a section",
+        [typeof(ToneConventionRule)] = "the job cannot add, move or rename a tone change, a tone slot or a tone body",
+        [typeof(CustomTuningRule)] = "the job cannot change the arrangement's tuning",
+        [typeof(PhraseStructureRule)] = "the job cannot add, move or remove a phrase or a section",
+        [typeof(TechniqueCombinationRule)] = "reads harmonic, vibrato and slide flags; no chunked job changes them",
+        [typeof(TempoMapRule)] = "the beat map and positions only; a reply never changes the beat map or moves a note or a chord",
+        [typeof(SustainSpacingRule)] = "positions and sustains only; a reply never moves or lengthens a note or a chord",
+        [typeof(AudioCheckRule)] = "reads the import's unchecked spots; no chunked job adds or clears one",
         [typeof(ChordOutsideHandShapeRule)] = "positions only; a chord or a hand shape is never moved in time",
+        [typeof(BoundaryCrossingRule)] = "positions and sustains only; a reply never moves or lengthens a note, a chord or a hand shape",
+        [typeof(FretHandPositionRule)] =
+            "FHP style warnings with their own one-step fix; Fix with AI does not offer them, so the gate guards none",
+        [typeof(OffGridRule)] = "positions only; a reply never moves a note or a chord",
+        [typeof(LeadInRule)] = "positions and the beat map only; a reply never moves a note or a chord and never changes the beat map",
         [typeof(HandShapeGapRule)] = "positions only; a hand shape's end and every note or chord stay where they are",
         [typeof(HandShapeContentRule)] =
             "compares FRETS under a shape with the shape's template frets; a reply echoes every fret unchanged",

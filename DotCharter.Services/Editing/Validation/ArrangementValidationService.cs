@@ -1,4 +1,5 @@
-﻿using DotCharter.Services.Editing.Validation.Rules;
+﻿using DotCharter.Services.Editing.Tempo.Estimate;
+using DotCharter.Services.Editing.Validation.Rules;
 
 namespace DotCharter.Services.Editing.Validation;
 
@@ -60,6 +61,18 @@ public sealed class ArrangementValidationService : IArrangementValidationService
         new DifficultyLevelRule(),
         config == null ? new HandShapeGapRule() : new HandShapeGapRule(config),
         new SectionNameVarietyRule(),
+        new BoundaryCrossingRule(),
+        new ToneConventionRule(),
+        new CustomTuningRule(),
+        new FretHandPositionRule(),
+        new OffGridRule(),
+        new LeadInRule(),
+        new TechniqueCombinationRule(),
+        // No estimate store is shared here, so the audio comparisons stay silent on this path.
+        new TempoMapRule(new AudioTempoEstimateStore()),
+        new PhraseStructureRule(),
+        new SustainSpacingRule(),
+        new AudioCheckRule(),
     };
 
     /// <summary><paramref name="project" /> lets rules see PROJECT-level facts the

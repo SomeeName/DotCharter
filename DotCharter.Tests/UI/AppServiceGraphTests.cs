@@ -1,4 +1,4 @@
-﻿using DotCharter.UI;
+using DotCharter.UI;
 using DotCharter.UI.ViewModels.Shell;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -36,6 +36,18 @@ public sealed class AppServiceGraphTests
         using var provider = BuildProvider();
 
         Assert.NotNull(provider);
+    }
+
+    /// <summary>The export dialog's DLC-key check reads the registered Library index; a dropped registration fails here, not silently.</summary>
+    [Fact]
+    public void The_export_dialog_services_carry_the_registered_library_index()
+    {
+        using var provider = BuildProvider();
+        using var scope = provider.CreateScope();
+
+        var io = scope.ServiceProvider.GetRequiredService<DotCharter.Presentation.Screens.Dialogs.RocksmithExportServices>();
+
+        Assert.Same(scope.ServiceProvider.GetRequiredService<DotCharter.Services.Library.Index.ILibraryIndex>(), io.Library);
     }
 
     [Fact]
@@ -221,7 +233,7 @@ public sealed class AppServiceGraphTests
     [
         "DotCharter.Presentation.Screens.Settings.ISettingsChangeSource x13",
         "DotCharter.Presentation.Screens.Settings.ISettingsTab x13",
-        "DotCharter.Services.Editing.Validation.IArrangementRule x20",
+        "DotCharter.Services.Editing.Validation.IArrangementRule x31",
         .. DotCharter.Services.Plugins.PluginLoader.Declared(typeof(DotCharter.UI.App).Assembly).Count == 0
             ? Array.Empty<string>()
             : ["DotCharter.Services.Library.ILibraryPackageSource x2"],

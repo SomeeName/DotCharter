@@ -35,6 +35,10 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase, IDisposabl
     private readonly IUiDispatcher _ui;
     private readonly IAppLogger _logger;
     private readonly QualityReportCopies _copies = new();
+    private readonly IHistoryService _history;
+    // The last pass's findings after the easier-level filter, in order, and which of them are ignored.
+    private IReadOnlyList<ArrangementIssue> _listed = [];
+    private HashSet<ArrangementIssue> _ignored = [];
     private int _generation;
     private bool _running;
     private bool _disposed;
@@ -71,6 +75,12 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase, IDisposabl
     /// <summary>Issues on easier levels other than the one on screen; the toggle hides or shows them.</summary>
     [ObservableProperty] private int _easierLevelIssueCount;
 
+    /// <summary>Also list the warnings the charter ignored, each with Stop ignoring.</summary>
+    [ObservableProperty] private bool _showIgnoredIssues;
+
+    /// <summary>Findings of the last pass the charter ignored: out of the count and, unless shown, the list.</summary>
+    [ObservableProperty] private int _ignoredIssueCount;
+
     public InspectorIssuesViewModel(
         ProjectState projectState,
         ChartEditorViewModel chartEditor,
@@ -91,6 +101,7 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase, IDisposabl
         _chartMaintenance = chartMaintenance;
         _exportReadiness = exportReadiness;
         _localization = localization;
+        _history = historyService;
         WeakLanguageSubscription.Subscribe(localization, this, static vm => vm.OnLanguageChanged());
         // the fix menu for the finding last jumped to (E04 / I46).
         IssueFix = new IssueFixViewModel(historyService, localization);
@@ -99,7 +110,12 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase, IDisposabl
         AutoFixConfirm = new InspectorPendingAction().ClearOn(projectState, historyService);
         // design D's flat, virtualized finding rows follow the groups and the finding on the Fixes card
         FixIssueCommand = new RelayCommand<ArrangementIssue?>(FixIssue);
-        Rows = new InspectorIssueRows(localization, JumpToIssueCommand, FixIssueCommand);
+        Ignore = new IssueIgnoreCommands(
+            new RelayCommand<ArrangementIssue?>(IgnoreIssue),
+            new RelayCommand<ArrangementIssue?>(IgnoreAllLike),
+            new RelayCommand<ArrangementIssue?>(StopIgnoring),
+            new RelayCommand<ArrangementIssue?>(StopIgnoringAllLike));
+        Rows = new InspectorIssueRows(localization, JumpToIssueCommand, FixIssueCommand, () => _projectState.ActiveProject, Ignore);
         IssueGroups.CollectionChanged += (_, _) => Rows.Rebuild(IssueGroups, _projectState.ActiveArrangement, _projectState.Beats);
         IssueAi.PropertyChanged += (_, _) =>
         {
@@ -242,7 +258,7 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase, IDisposabl
         var owner = LevelOwning(_projectState.ActiveArrangement, issue);
         if (owner != null && !ReferenceEquals(owner, _projectState.ActiveLevel))
             _projectState.ActiveLevel = owner;
-        IssueFix.Offer(issue, _projectState.ActiveArrangement, owner, _projectState.Beats);
+        IssueFix.Offer(issue, _projectState.ActiveArrangement, owner, _projectState.Beats, _projectState.ActiveProject);
         IssueAi.Offer(issue, _projectState.ActiveArrangement, owner, Items);
 
         if (issue.HasTime)
@@ -361,6 +377,9 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase, IDisposabl
 
     private void ShowNoIssues()
     {
+        _listed = [];
+        _ignored = [];
+        IgnoredIssueCount = 0;
         Items.ResetWith([]);
         IssueCount = 0;
         IssueFix.Offer(null, null, null);
@@ -424,7 +443,7 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase, IDisposabl
         IReadOnlyList<ArrangementIssue> issues = [];
         var check = snapshot.CheckIssues(copy =>
         {
-            var lyrics = LyricStyleRule.Check(copy, beats);
+            var lyrics = LyricStyleRule.CheckAll(copy, beats);
             if (arrangementIndex < 0) return issues = lyrics;
             var arrangement = copy.Arrangements[arrangementIndex];
             // The project too: the tone BODIES a tone change needs live there, not on
@@ -482,6 +501,12 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase, IDisposabl
         var easierCount = onEasier.Count(e => e);
         EasierLevelIssueCount = easierCount;
         if (!ShowEasierLevelIssues && easierCount > 0) results = [.. results.Where((_, i) => !onEasier[i])];
+        // The warnings the charter ignored leave the count and the list; errors never match.
+        var (shown, ignored) = FindingIgnores.Partition(results, _projectState.ActiveProject);
+        _listed = results;
+        _ignored = new HashSet<ArrangementIssue>(ignored, ReferenceEqualityComparer.Instance);
+        IgnoredIssueCount = ignored.Count;
+        results = shown;
         // One Reset, not Clear + N Adds:
         // this runs on the 150 ms debounce after every edit and the list is
         // bound in nested non-virtualizing ItemsControls.
@@ -527,7 +552,9 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase, IDisposabl
 
     private void OnLanguageChanged()
     {
-        if (!_disposed) RebuildIssueGroups();
+        if (_disposed) return;
+        OnPropertyChanged(nameof(ShowIgnoredLabel));
+        RebuildIssueGroups();
     }
 
     private void RebuildIssueGroups()
@@ -553,6 +580,56 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase, IDisposabl
     }
 
     partial void OnShowEasierLevelIssuesChanged(bool value) => RecomputeIssues();
+
+    partial void OnShowIgnoredIssuesChanged(bool value) => RebuildIssueGroups();
+
+    partial void OnIgnoredIssueCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasIgnoredIssues));
+        OnPropertyChanged(nameof(ShowIgnoredLabel));
+    }
+
+    /// <summary>The Show ignored toggle shows only when something is ignored.</summary>
+    public bool HasIgnoredIssues => IgnoredIssueCount > 0;
+
+    /// <summary>"Show ignored (75)".</summary>
+    public string ShowIgnoredLabel => _localization.Format("Inspector_Issues_ShowIgnored", IgnoredIssueCount);
+
+    /// <summary>Every row's Ignore / Ignore all / Stop ignoring.</summary>
+    public IssueIgnoreCommands Ignore { get; }
+
+    /// <summary>Ignores one warning: it leaves the count and the list until its subject changes. One undo step.</summary>
+    public void IgnoreIssue(ArrangementIssue? issue)
+    {
+        if (issue != null) ChangeIgnores([issue], []);
+    }
+
+    /// <summary>Ignores every listed warning like <paramref name="issue" /> (same rule, same sentence). One undo step.</summary>
+    public void IgnoreAllLike(ArrangementIssue? issue)
+    {
+        if (issue != null) ChangeIgnores([.. Items.Where(i => FindingIgnores.LikeKey(i) == FindingIgnores.LikeKey(issue))], []);
+    }
+
+    /// <summary>Lists an ignored warning again. One undo step.</summary>
+    public void StopIgnoring(ArrangementIssue? issue)
+    {
+        if (issue != null) ChangeIgnores([], [issue]);
+    }
+
+    /// <summary>Lists every ignored warning like <paramref name="issue" /> again. One undo step.</summary>
+    public void StopIgnoringAllLike(ArrangementIssue? issue)
+    {
+        if (issue != null) ChangeIgnores([], [.. _ignored.Where(i => FindingIgnores.LikeKey(i) == FindingIgnores.LikeKey(issue))]);
+    }
+
+    private void ChangeIgnores(IReadOnlyList<ArrangementIssue> ignore, IReadOnlyList<ArrangementIssue> restore)
+    {
+        if (_projectState.ActiveProject is not { } project) return;
+        // An error is never ignored, whichever door asks.
+        var add = ignore.Where(FindingIgnores.IsIgnorable).Select(i => FindingIgnores.EntryFor(i, project)).ToList();
+        var remove = restore.Select(i => FindingIgnores.EntryFor(i, project)).ToList();
+        if (_history.Do(new SetIgnoredFindingsAction(project.IgnoredFindings, add, remove))) RecomputeIssues();
+    }
 
     partial void OnEasierLevelIssueCountChanged(int value)
     {
@@ -600,7 +677,8 @@ public sealed partial class InspectorIssuesViewModel : ViewModelBase, IDisposabl
 
     private void SyncIssueGroups()
     {
-        IssueGroups.ResetWith(IssueGrouping.Build(Items));
+        Rows.SetIgnored(_ignored);
+        IssueGroups.ResetWith(IssueGrouping.Build(ShowIgnoredIssues && _ignored.Count > 0 ? _listed : Items));
         _issueGroupsStale = false;
     }
 

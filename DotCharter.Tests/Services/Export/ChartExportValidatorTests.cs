@@ -1,5 +1,8 @@
 ﻿using DotCharter.Core.Domain.Vocals;
+using DotCharter.Services.Export;
+using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Services.Export.Validation;
+using DotCharter.Services.Library.Index;
 
 namespace DotCharter.Tests.Services.Export;
 
@@ -18,6 +21,10 @@ public sealed class ChartExportValidatorTests
     private static ChartProject CreateValidProject()
     {
         var project = new ChartProject();
+        project.Chart.SongName = "Harbour Lights";
+        project.Chart.Artist = "The Testers";
+        project.Chart.AlbumName = "First Light";
+        project.Chart.AlbumYear = "1999";
         foreach (var beat in CreateBeats()) project.Beats.Add(beat);
         var beats = project.Beats;
 
@@ -73,6 +80,141 @@ public sealed class ChartExportValidatorTests
 
         Assert.DoesNotContain(Validate(project), f => f.MessageKey == ChartExportValidator.KeyDisplayNameGlyphs);
     }
+
+    private static List<ExportValidationFinding> Metadata(ChartProject project) =>
+        [.. Validate(project).Where(f => f.MessageKey.StartsWith("Export.Validation.Metadata", StringComparison.Ordinal))];
+
+    [Theory]
+    [InlineData("Walking in the rain tonight")]
+    [InlineData("Dancing under silver moonlight")]
+    public void A_sentence_cased_latin_title_gets_a_gentle_title_case_warning(string title)
+    {
+        var project = CreateValidProject();
+        project.Chart.SongName = title;
+
+        var finding = Assert.Single(Metadata(project));
+        Assert.Equal(ChartExportValidator.KeyMetadataTitleCase, finding.MessageKey);
+        Assert.Equal(ExportFindingSeverity.Warning, finding.Severity);
+        Assert.Equal(title, finding.Detail);
+        Assert.Equal(ExportFixKind.None, finding.Fix);
+    }
+
+    [Theory]
+    [InlineData("Walking In The Rain Tonight")]
+    [InlineData("WALKING IN THE RAIN TONIGHT")]
+    [InlineData("walking in the rain tonight")]
+    [InlineData("Songs about my iPhone")]
+    [InlineData("Love me do")]
+    [InlineData("ザ ホール ブルー ワールド")]
+    [InlineData("Ünder the moon")]
+    public void Title_case_never_flags_title_case_all_caps_all_lowercase_brand_casing_short_or_non_latin_titles(string title)
+    {
+        var project = CreateValidProject();
+        project.Chart.SongName = title;
+        project.Chart.Artist = title;
+        project.Chart.AlbumName = title;
+
+        Assert.DoesNotContain(Metadata(project), f => f.MessageKey == ChartExportValidator.KeyMetadataTitleCase);
+    }
+
+    [Fact]
+    public void Stray_leading_trailing_and_double_spaces_are_reported_per_field_with_a_fix()
+    {
+        var project = CreateValidProject();
+        project.Chart.SongName = " Harbour  Lights";
+        project.Chart.Artist = "The Testers ";
+        project.Chart.AlbumName = "First Light";
+
+        var findings = Metadata(project).Where(f => f.MessageKey == ChartExportValidator.KeyMetadataStraySpaces).ToList();
+        Assert.Equal([" Harbour  Lights", "The Testers "], findings.Select(f => f.Detail));
+        Assert.All(findings, f => Assert.Equal(ExportFixKind.TrimMetadataSpaces, f.Fix));
+    }
+
+    [Fact]
+    public void Blank_title_artist_album_and_a_missing_year_each_get_one_warning()
+    {
+        var project = CreateValidProject();
+        project.Chart.SongName = "";
+        project.Chart.Artist = " ";
+        project.Chart.AlbumName = "";
+        project.Chart.AlbumYear = "";
+
+        Assert.Equal(
+            [ChartExportValidator.KeyMetadataMissingTitle, ChartExportValidator.KeyMetadataMissingArtist,
+                ChartExportValidator.KeyMetadataMissingAlbum, ChartExportValidator.KeyMetadataMissingAlbumYear],
+            Metadata(project).Select(f => f.MessageKey));
+    }
+
+    [Fact]
+    public void An_arrangement_level_album_year_satisfies_the_year_check()
+    {
+        var project = CreateValidProject();
+        project.Chart.AlbumYear = "";
+        project.Arrangements[0].AlbumYear = 2004;
+
+        Assert.DoesNotContain(Metadata(project), f => f.MessageKey == ChartExportValidator.KeyMetadataMissingAlbumYear);
+    }
+
+    [Fact]
+    public void A_dlc_key_a_library_package_already_uses_is_a_warning_with_a_fix_and_a_key_of_its_own()
+    {
+        var project = CreateValidProject();
+        var key = RocksmithDlcKey.Create("The Testers", "Harbour Lights");
+        project.Chart.DlcKey = "";
+
+        var finding = Assert.Single(KeyClashes(project, new PackageKeyIndex(key.ToUpperInvariant())));
+
+        Assert.Equal(ExportFindingSeverity.Warning, finding.Severity);
+        Assert.Equal(ExportFixKind.AssignUniqueDlcKey, finding.Fix);
+        var parts = finding.Detail.Split('|');
+        Assert.Equal(key, parts[0]);
+        Assert.NotEqual(key, parts[1], StringComparer.OrdinalIgnoreCase);
+        Assert.StartsWith(key, parts[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_project_key_that_no_library_package_uses_gets_no_key_finding()
+    {
+        var project = CreateValidProject();
+
+        Assert.Empty(KeyClashes(project, new PackageKeyIndex("SomeOtherSong")));
+    }
+
+    [Fact]
+    public void Without_a_library_index_or_with_one_that_knows_nothing_the_key_check_stays_silent()
+    {
+        var project = CreateValidProject();
+
+        Assert.Empty(KeyClashes(project, null));
+        Assert.Empty(KeyClashes(project, new PackageKeyIndex()));
+    }
+
+    [Fact]
+    public void A_library_package_that_is_the_projects_own_earlier_export_is_no_clash()
+    {
+        var project = CreateValidProject();
+        var key = RsPackageMetadataFactory.Create(project, new RocksmithBuildOptions { OutputPath = "", AudioPath = "" }).DlcKey;
+        var own = Path.Combine(Path.GetTempPath(), "export", "Song_v1_p.psarc");
+        var index = new PackageKeyIndex().WithPackage(key, own.ToUpperInvariant());
+
+        Assert.Empty(KeyClashes(project, index, own));
+    }
+
+    [Fact]
+    public void Another_package_with_the_key_still_clashes_even_beside_the_projects_own_export()
+    {
+        var project = CreateValidProject();
+        var key = RsPackageMetadataFactory.Create(project, new RocksmithBuildOptions { OutputPath = "", AudioPath = "" }).DlcKey;
+        var own = Path.Combine(Path.GetTempPath(), "export", "Song_v1_p.psarc");
+        var other = Path.Combine(Path.GetTempPath(), "dlc", "Other_p.psarc");
+
+        Assert.Single(KeyClashes(project, new PackageKeyIndex().WithPackage(key, other), own));
+        Assert.Single(KeyClashes(project, new PackageKeyIndex().WithPackage(key, own).WithPackage(key, other), own));
+    }
+
+    private static List<ExportValidationFinding> KeyClashes(ChartProject project, ILibraryIndex? index, params string[] ownPaths) =>
+        [.. new ChartExportValidator { LibraryIndex = index, OwnPackagePaths = ownPaths }.Validate(project)
+            .Where(f => f.MessageKey == ChartExportValidator.KeyPackageKeyClash)];
 
     [Fact]
     public void Valid_project_produces_no_findings()

@@ -82,12 +82,12 @@ public static class ChordNameSuggester
         new([3, 7, 9], Min + "6"),
         new([3, 7, 9, 10], Min + "13"),
         new([3, 7, 10], Min + "7"),
-        new([3, 7, 11], Min + Maj + "7", "m(maj7)"),
+        new([3, 7, 11], Min + Maj + "7", "m(Maj7)"),
         new([3, 8, 10], Min + "7(b13)"),
         new([3, 9], Min + "6"),
         new([3, 9, 10], Min + "13"),
         new([3, 10], Min + "7"),
-        new([3, 11], Min + Maj + "7", "m(maj7)"),
+        new([3, 11], Min + Maj + "7", "m(Maj7)"),
 
         // EOF writes a bare major third as "X3"; that is not a chord name, so
         // the musical spelling says what the shape is.
@@ -588,9 +588,9 @@ public static class ChordNameSuggester
             return true;
         }
 
-        // "min" → "m" and "Maj" → "maj": Cmin7 → Cm7, CMaj7 → Cmaj7,
-        // Cminadd9 → Cmadd9; everything else is spelled the same in both styles.
-        private static string MusicalSpelling(string suffix) =>
-            suffix.Replace(Min, "m", StringComparison.Ordinal).Replace(Maj, "maj", StringComparison.Ordinal);
+        // "min" → "m": Cmin7 → Cm7, Cminadd9 → Cmadd9. "Maj" keeps its capital M in both
+        // styles (CMaj7, never Cmaj7): charters spell a major seventh so it cannot be misread
+        // as the minor "m". Everything else is spelled the same in both styles.
+        private static string MusicalSpelling(string suffix) => suffix.Replace(Min, "m", StringComparison.Ordinal);
     }
 }

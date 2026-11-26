@@ -203,3 +203,8 @@ FHP, train / holdout): `none` 81.4 / 85.7 %, `prefix` 83.8 / 88.6 %, `halves`
 81.8 / 88.1 %, `loto` 84.4 / 89.7 %, `oracle` 84.5 / 91.4 %; FHP unchanged; the answer key 87.8 %
 FHP / 73.7 % fingering of 10,006 chords with and without it. `AiChartEval.cs` still scores the
 algorithm as `--style none`.
+
+`--song-style others|none` (default `others`): a pair the arrangement has no majority for follows the song's
+other arrangements on the same instrument (`ArrangementFingeringStyle.OfOtherArrangements`; another export of
+the same chart never votes). Chord fingering train / holdout 83.4 / 88.4 % → 83.7 / 91.4 %, after FHP
+83.8 / 88.6 % → 84.1 / 91.6 %; guitar FHP 84.88 / 91.02 % → 84.91 / 91.02 %; bass unchanged.

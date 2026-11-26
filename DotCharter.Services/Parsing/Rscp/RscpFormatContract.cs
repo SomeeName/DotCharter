@@ -77,7 +77,8 @@ public static class RscpFormatContract
         "dcAudioVolume", "dcPreviewVolume", "dcAudioVolumeSig", "dcPreviewVolumeSig", "dcAudioVolumeManual", "dcPreviewVolumeManual",
         "dcKeyAccidentals", "dcKeyIsMinor", "dcKeyLocked",
         "dcAnnotations", "dcToneDefinitions", "dcNotationVoices", "dcSynthPlayStyle",
-        RscpProvenance.ProjectElement, RscpLinkGroups.RootElement, RscpGpSource.RootElement
+        RscpProvenance.ProjectElement, RscpLinkGroups.RootElement, RscpGpSource.RootElement,
+        RscpIgnoredFindings.RootElement
     };
 
     /// <summary>

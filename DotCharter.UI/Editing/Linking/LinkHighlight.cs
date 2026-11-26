@@ -17,6 +17,7 @@ public sealed class LinkHighlight
     public const double FlashDurationMs = 700;
 
     private readonly Func<long> _now;
+    private readonly Dictionary<Arrangement, LinkRowLabels> _rowLabels = new(ReferenceEqualityComparer.Instance);
     private long _flashStartedMs = long.MinValue;
 
     public LinkHighlight(Func<long>? now = null) => _now = now ?? (() => Environment.TickCount64);
@@ -88,11 +89,31 @@ public sealed class LinkHighlight
         }
     }
 
+    /// <summary>A timeline placed its LINKS-row labels again (see <see cref="RowSpanAt" />).</summary>
+    public void PublishRowLabels(LinkRowLabels labels)
+    {
+        if (labels.Arrangement != null) _rowLabels[labels.Arrangement] = labels;
+    }
+
+    /// <summary>
+    ///     The LINKS-row span under <paramref name="timeMs" /> in <paramref name="arrangement" />:
+    ///     the one whose label (chip and count) the row last drew there, else the one whose time
+    ///     holds it (the line area). A label moved past a neighbour can sit inside another group's
+    ///     span, so the label wins.
+    /// </summary>
+    public LinkSpan? RowSpanAt(Arrangement? arrangement, IReadOnlyList<LinkSpan> spans, double timeMs)
+    {
+        var labels = arrangement != null && _rowLabels.TryGetValue(arrangement, out var found) &&
+                     ReferenceEquals(found.Arrangement, arrangement) ? found : null;
+        return labels?.LabelAt(timeMs) ?? LinkLaneModel.HitTest(spans, timeMs);
+    }
+
     /// <summary>Forgets everything (a project switch).</summary>
     public void Clear()
     {
         HoveredGroupId = SelectedGroupId = FlashGroupId = null;
         FlashTargets = [];
+        _rowLabels.Clear();
         Changed?.Invoke();
     }
 }

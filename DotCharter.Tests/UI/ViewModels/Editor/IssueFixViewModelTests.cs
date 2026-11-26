@@ -1,3 +1,4 @@
+using DotCharter.Core.Domain.Vocals;
 using DotCharter.UI.ViewModels.Editor.Inspector;
 
 namespace DotCharter.Tests.UI.ViewModels.Editor;
@@ -143,7 +144,7 @@ public sealed class IssueFixViewModelTests
     }
 
     [Fact]
-    public void AToneChangeOnANote_OffersOneMoveASixteenthEarlier_AsOneUndoStep()
+    public void AToneChangeOnANote_OffersOneMoveAThirtySecondEarlier_AsOneUndoStep()
     {
         var (arr, beats, i30) = ToneOnNote(new FractionalPosition(2));
         var history = new HistoryService(new FakeAppLogger());
@@ -160,7 +161,7 @@ public sealed class IssueFixViewModelTests
 
         vm.ApplyDefaultCommand.Execute(null);
 
-        Assert.Equal(new FractionalPosition(1, new Fraction(3, 4)), arr.ToneChanges[0].Position);
+        Assert.Equal(new FractionalPosition(1, new Fraction(7, 8)), arr.ToneChanges[0].Position);
         Assert.False(vm.HasFix);
         history.Undo();
         Assert.False(history.CanUndo);
@@ -170,7 +171,7 @@ public sealed class IssueFixViewModelTests
     [Fact]
     public void ABlockedToneMove_IsShownDisabled_WithItsReason()
     {
-        var (arr, beats, i30) = ToneOnNote(new FractionalPosition(0, new Fraction(1, 8)));
+        var (arr, beats, i30) = ToneOnNote(new FractionalPosition(0, new Fraction(1, 16)));
         var history = new HistoryService(new FakeAppLogger());
         var vm = new IssueFixViewModel(history, FakeLocalization.English());
 
@@ -206,7 +207,7 @@ public sealed class IssueFixViewModelTests
         vm.Offer(i30, arr, arr.Levels[0], beats);
         Assert.True(vm.ApplyDefaultCommand.CanExecute(null));
 
-        arr.ToneChanges.Insert(0, new ToneChange { Position = new FractionalPosition(1, new Fraction(3, 4)), ToneName = "clean" });
+        arr.ToneChanges.Insert(0, new ToneChange { Position = new FractionalPosition(1, new Fraction(7, 8)), ToneName = "clean" });
         vm.ApplyDefaultCommand.Execute(null);
 
         Assert.False(history.CanUndo);
@@ -226,5 +227,56 @@ public sealed class IssueFixViewModelTests
 
         Assert.True(vm.IsBlocked);
         Assert.Equal(FakeLocalization.English()["Inspector_IssueFix_ToneBlockedSeveralChanges"], vm.BlockedReason);
+    }
+
+    [Fact]
+    public void ALyricFinding_OffersItsTextFix_AsOneUndoStep()
+    {
+        var project = new ChartProject();
+        for (var i = 0; i < 8; i++) project.Beats.Add(new BeatMarker { Time = i * 500 });
+        var phrase = new LyricPhrase();
+        foreach (var (text, beat) in new[] { ("Run…", 0), ("and", 1), ("go", 2) })
+            phrase.Lyrics.Add(new LyricEvent { Text = text, Position = new FractionalPosition(beat) });
+        phrase.Lyrics[^1].IsPhraseEnd = true;
+        project.VocalTracks.Add(new VocalTrack { Phrases = [phrase] });
+        var issue = Assert.Single(DotCharter.Services.Editing.Validation.Rules.LyricTextRule.Check(project, project.Beats));
+        var history = new HistoryService(new FakeAppLogger());
+        var vm = new IssueFixViewModel(history, FakeLocalization.KeysOnly());
+
+        Assert.False(IssueFixViewModel.CanOffer(issue, null, null, project.Beats));
+        Assert.True(IssueFixViewModel.CanOffer(issue, null, null, project.Beats, project));
+        vm.Offer(issue, null, null, project.Beats, project);
+        Assert.True(vm.HasFix);
+        Assert.Equal("Inspector_IssueFix_LyricText(Run...)", vm.DefaultLabel);
+
+        vm.ApplyDefaultCommand.Execute(null);
+
+        Assert.Equal("Run...", phrase.Lyrics[0].Text);
+        Assert.False(vm.HasFix);
+        history.Undo();
+        Assert.Equal("Run…", phrase.Lyrics[0].Text);
+    }
+
+    [Fact]
+    public void AHarmonicVibratoFinding_OffersToRemoveTheVibrato_AsOneUndoStep()
+    {
+        var arr = new Arrangement();
+        var level = new ChartLevel();
+        arr.Levels.Add(level);
+        var note = new GuitarNote { Fret = 12, Harmonic = HarmonicType.Normal, Vibrato = true, VibratoStrength = 2 };
+        level.Notes.Add(note);
+        var issue = new ArrangementIssue(ArrangementIssueType.HarmonicVibrato, "", 0, note, null, null, null, 0, null,
+            "Validation_HarmonicVibrato", null);
+        var history = new HistoryService(new FakeAppLogger());
+        var vm = new IssueFixViewModel(history, FakeLocalization.KeysOnly());
+
+        Assert.True(IssueFixViewModel.CanOffer(issue, arr, level, null));
+        vm.Offer(issue, arr, level);
+        Assert.Equal("Inspector_IssueFix_RemoveVibrato", vm.DefaultLabel);
+        vm.ApplyDefaultCommand.Execute(null);
+
+        Assert.False(note.Vibrato);
+        history.Undo();
+        Assert.True(note.Vibrato);
     }
 }

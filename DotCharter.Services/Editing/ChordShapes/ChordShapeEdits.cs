@@ -251,7 +251,9 @@ public static class ChordShapeEdits
 
     /// <summary>
     ///     Gives the template the fingering the suggester proposes for this arrangement, as one
-    ///     undo node. A pinned template is left as it is, like every automatic fingering.
+    ///     undo node. A pinned template is left as it is, like every automatic fingering. A power
+    ///     chord or two-fret octave the arrangement states no majority for follows the song's other
+    ///     arrangements (<see cref="ArrangementFingeringStyle.OfSong" /> over the editor's project).
     /// </summary>
     public static ChordShapeEditPlan PlanSuggestFingers(
         Arrangement arrangement, ChordTemplate template, IChartEditorSurface editor)
@@ -264,12 +266,18 @@ public static class ChordShapeEdits
             return ChordShapeEditPlan.Refused(ChordShapeEditRefusal.NotInArrangement);
         if (template.IsPinned) return ChordShapeEditPlan.Refused(ChordShapeEditRefusal.Pinned);
 
-        var suggested = Fingering.SuggestFingeringFor(arrangement, template);
+        var suggested = Fingering.SuggestFingeringFor(arrangement, template,
+            ArrangementFingeringStyle.OfSong(editor.ActiveProject, arrangement));
         if (suggested is null) return ChordShapeEditPlan.Refused(ChordShapeEditRefusal.NoSuggestion);
 
         var action = new SetTemplateFingersAction(
             template, new Dictionary<int, int>(template.Fingers), new Dictionary<int, int>(suggested.Fingers), editor);
-        return new ChordShapeEditPlan(Composite(action, FingerLabelKey), ChordShapeEditRefusal.None);
+        var next = template.Clone();
+        next.Fingers = new Dictionary<int, int>(suggested.Fingers);
+        next.FollowedFingering = false;
+        // A blank-name twin of the grip takes the same fingering in the same undo node.
+        IChartAction[] actions = [action, .. ChordTemplateTwins.Follow(arrangement, template, next, editor, [])];
+        return new ChordShapeEditPlan(new CompositeAction(actions) { LabelKey = FingerLabelKey }, ChordShapeEditRefusal.None);
     }
 
     /// <summary>Every chord and hand shape of every level whose id resolves to <paramref name="template" />.</summary>

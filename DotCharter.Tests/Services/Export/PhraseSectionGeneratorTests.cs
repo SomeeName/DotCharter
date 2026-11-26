@@ -30,17 +30,17 @@ public sealed partial class PhraseSectionGeneratorTests
         Assert.Equal("COUNT", iterations[0].Phrase);
         Assert.Equal("END", iterations[^1].Phrase);
 
-        // Sections use only the fixed riff/noguitar whitelist, and the trailing
-        // section is the noguitar at the END time.
+        // Sections use only the fixed intro/riff/noguitar whitelist: the intro at the
+        // first note, and the trailing section is the noguitar at the END time.
         var sections = Sections(arrangement, beats);
-        Assert.All(sections, s => Assert.Contains(s.Section, new[] { "riff", "noguitar" }));
-        Assert.Equal("riff", sections[0].Section);
+        Assert.All(sections, s => Assert.Contains(s.Section, new[] { "intro", "riff", "noguitar" }));
+        Assert.Equal("intro", sections[0].Section);
         Assert.Equal("noguitar", sections[^1].Section);
         Assert.Equal(iterations[^1].TimeMs, sections[^1].TimeMs, Tolerance);
 
         // Content phrases carry a riff section at their iteration start.
         foreach (var (phrase, timeMs) in iterations.Where(i => i.Phrase is "p0" or "p1"))
-            Assert.Contains(sections, s => s.Section == "riff" && Math.Abs(s.TimeMs - timeMs) <= Tolerance);
+            Assert.Contains(sections, s => s.Section is "intro" or "riff" && Math.Abs(s.TimeMs - timeMs) <= Tolerance);
 
         // Structural phrases pinned to difficulty 0; body phrases carry no entry.
         Assert.Equal(0, arrangement.PhraseInfos["COUNT"].MaxDifficulty);
@@ -108,10 +108,10 @@ public sealed partial class PhraseSectionGeneratorTests
     {
         var beats = CreateBeats();
         var arrangement = NewArrangement();
-        // Continuous staccato content from 500 ms so the 9th measure boundary
-        // lands at 18000 ms, plus one long sustain (17500..19500) crossing it.
+        // Continuous staccato content from 500 ms, plus one long sustain
+        // (7500..9500) across the bar line at 8000 ms, four measures in.
         for (var ms = 500.0; ms <= 20500.0; ms += 1000.0) AddNote(arrangement, beats, ms);
-        AddNote(arrangement, beats, 17500, stringIndex: 1, fret: 5, sustainMs: 2000);
+        AddNote(arrangement, beats, 7500, stringIndex: 1, fret: 5, sustainMs: 2000);
 
         Assert.True(PhraseSectionGenerator.GenerateIfAbsent(arrangement, beats, 32000));
 
@@ -121,13 +121,13 @@ public sealed partial class PhraseSectionGeneratorTests
             .ToList();
 
         // No phrase cut sits strictly inside the sustain span.
-        Assert.DoesNotContain(contentStarts, t => t is > (17500 + Tolerance) and < (19500 - Tolerance));
+        Assert.DoesNotContain(contentStarts, t => t is > (7500 + Tolerance) and < (9500 - Tolerance));
 
-        // The 9-measure boundary at 18000 ms was nudged forward to the sustain
-        // end (19500 ms) rather than cutting through it.
+        // The cut moved off the held bar at 8000 ms onto a free bar line: three
+        // measures in (6000 ms) wins over five, and it stays on a bar line.
         var body = contentStarts.Where(t => t > 500 + Tolerance).ToList();
         Assert.NotEmpty(body);
-        Assert.Equal(19500, body[0], Tolerance);
+        Assert.Equal(6000, body[0], Tolerance);
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public sealed partial class PhraseSectionGeneratorTests
 
         // The TS marker survives; new section markers were added around it.
         Assert.Contains(arrangement.EventPoints, ep => ep.Events == "TS:4/4" && string.IsNullOrEmpty(ep.Section));
-        Assert.Contains(arrangement.EventPoints, ep => ep.Section == "riff");
+        Assert.Contains(arrangement.EventPoints, ep => ep.Section == "intro");
     }
 
     [Fact]

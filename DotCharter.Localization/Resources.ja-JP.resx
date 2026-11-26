@@ -179,6 +179,9 @@
     <data name="Dialog_GpImport_Mode_TechniqueOnly" xml:space="preserve"><value>奏法のみ（既存に統合）</value></data>
     <data name="Dialog_GpImport_Mode_DiffCompare" xml:space="preserve"><value>以前のバージョンと差分比較</value></data>
     <data name="Dialog_GpImport_PickOldFile" xml:space="preserve"><value>以前のGPファイルを選択…</value></data>
+    <data name="Dialog_GpImport_ReplaceTempoMap" xml:space="preserve"><value>テンポマップをタブのもので置き換える</value></data>
+    <data name="Dialog_GpImport_ReplaceTempoMap_Desc" xml:space="preserve"><value>オフ：新しいアレンジは小節ごとにプロジェクトのビートに配置され、ビートは変更されません。</value></data>
+    <data name="Dialog_GpImport_ReplaceTempoMap_Locked" xml:space="preserve"><value>ビートマップがロックされているため、タブのテンポマップは適用されません。</value></data>
     <data name="Dialog_GpImport_OldFileNone" xml:space="preserve"><value>比較するファイルが未選択です。</value></data>
     <data name="Dialog_GpImport_TargetArrangement" xml:space="preserve"><value>対象アレンジメント</value></data>
     <data name="Dialog_GpImport_Busy" xml:space="preserve"><value>Guitar Proのスコアを読み込み中…</value></data>
@@ -1194,6 +1197,8 @@
     <data name="Progress_ListeningVocal" xml:space="preserve"><value>ボーカルを聴き取っています…</value></data>
     <data name="Progress_ListeningAgain" xml:space="preserve"><value>2 つ目のモデルでもう一度聴き取っています…</value></data>
     <data name="Progress_LyricGpuFailedCpu" xml:space="preserve"><value>GPU で歌詞モデルを実行できませんでした。このセッションの残りは CPU を使用します。</value></data>
+    <data name="Progress_LyricHomoglyphsFolded_One" xml:space="preserve"><value>歌詞の {0} 語で、ラテン文字に似たキリル文字・ギリシャ文字をラテン文字に置き換えました。</value></data>
+    <data name="Progress_LyricHomoglyphsFolded_Many" xml:space="preserve"><value>歌詞の {0} 語で、ラテン文字に似たキリル文字・ギリシャ文字をラテン文字に置き換えました。</value></data>
     <data name="Progress_AligningLyrics" xml:space="preserve"><value>歌詞を合わせています…</value></data>
     <data name="Progress_DownloadingLyricModel" xml:space="preserve"><value>歌詞モデルをダウンロードしています（{0} MB）…</value></data>
     <data name="Progress_UnpackingLyricModel" xml:space="preserve"><value>歌詞モデルを展開しています…</value></data>
@@ -1422,12 +1427,16 @@
     <data name="Inspector_IssueFix_UseShapeFingering" xml:space="preserve"><value>ハンドシェイプの運指を使う（{0}）</value></data>
     <data name="Inspector_IssueFix_MoveAnchor" xml:space="preserve"><value>左手ポジションをフレット {0} へ移動</value></data>
     <data name="Inspector_IssueFix_MoveAnchorTip" xml:space="preserve"><value>左手ポジション（FHP）をフレット {0} から、この運指で人差し指が来るフレット {1} へ移動します。このアンカーの下の音はすべて新しいポジションから演奏されます。元に戻す 1 回で戻せます。</value></data>
-    <data name="Inspector_IssueFix_ToneEarlier" xml:space="preserve"><value>トーン切り替えを16分音符ぶん前へ移動</value></data>
-    <data name="Inspector_IssueFix_ToneEarlierTip" xml:space="preserve"><value>トーン切り替えをビートグリッド上で16分音符1つぶん前へ移動し、このノートが鳴る時には新しいトーンに切り替わっているようにします。元に戻す 1 回で戻せます。</value></data>
-    <data name="Inspector_IssueFix_ToneBlockedChartStart" xml:space="preserve"><value>移動できません：曲の開始（0:00）からこのトーン切り替えまでが16分音符1つぶんより短いです。</value></data>
-    <data name="Inspector_IssueFix_ToneBlockedToneChange" xml:space="preserve"><value>移動できません：直前の16分音符の範囲に別のトーン切り替えがあります。</value></data>
-    <data name="Inspector_IssueFix_ToneBlockedPhraseStart" xml:space="preserve"><value>移動できません：直前の16分音符の範囲でフレーズまたはセクションが始まります。手動で移動してください。</value></data>
-    <data name="Inspector_IssueFix_ToneBlockedNote" xml:space="preserve"><value>移動できません：16分音符1つぶん前に別のノートが始まるため、トーン切り替えがそのノートに重なります。</value></data>
+    <data name="Inspector_IssueFix_ToneEarlier" xml:space="preserve"><value>トーン切り替えを32分音符ぶん前へ移動</value></data>
+    <data name="Inspector_IssueFix_ToneEarlierTip" xml:space="preserve"><value>トーン切り替えをビートグリッド上で32分音符1つぶん前へ移動し、このノートが鳴る時には新しいトーンに切り替わっているようにします。元に戻す 1 回で戻せます。</value></data>
+    <data name="Inspector_IssueFix_LyricText" xml:space="preserve"><value>歌詞を「{0}」に変更</value></data>
+    <data name="Inspector_IssueFix_LyricTextTip" xml:space="preserve"><value>この音節のテキストだけを書き換えます。タイミングは変わりません。元に戻す 1 回で戻せます。</value></data>
+    <data name="Inspector_IssueFix_LyricSplit" xml:space="preserve"><value>「{0}」の後で行を分割</value></data>
+    <data name="Inspector_IssueFix_LyricSplitTip" xml:space="preserve"><value>行を最もよく二分する単語で行を終えます。音節のタイミングは変わりません。元に戻す 1 回で戻せます。</value></data>
+    <data name="Inspector_IssueFix_ToneBlockedChartStart" xml:space="preserve"><value>移動できません：曲の開始（0:00）からこのトーン切り替えまでが32分音符1つぶんより短いです。</value></data>
+    <data name="Inspector_IssueFix_ToneBlockedToneChange" xml:space="preserve"><value>移動できません：直前の32分音符の範囲に別のトーン切り替えがあります。</value></data>
+    <data name="Inspector_IssueFix_ToneBlockedPhraseStart" xml:space="preserve"><value>移動できません：直前の32分音符の範囲でフレーズまたはセクションが始まります。手動で移動してください。</value></data>
+    <data name="Inspector_IssueFix_ToneBlockedNote" xml:space="preserve"><value>移動できません：32分音符1つぶん前に別のノートが始まるため、トーン切り替えがそのノートに重なります。</value></data>
     <data name="Inspector_IssueFix_ToneBlockedSeveralChanges" xml:space="preserve"><value>移動できません：このノートに複数のトーン切り替えがあります。先に余分なものを削除してください。</value></data>
     <data name="Inspector_Issues_CountOne" xml:space="preserve"><value>{0}件の問題</value></data>
     <data name="Inspector_Issues_Count" xml:space="preserve"><value>{0}件の問題</value></data>
@@ -1469,6 +1478,9 @@
     <data name="ArrangementSync_PickTwo" xml:space="preserve"><value>異なる 2 つのアレンジを選んでください。</value></data>
     <data name="ArrangementSync_NothingShared" xml:space="preserve"><value>この 2 つのアレンジに共通する音はありません — コピーされるものはありません。</value></data>
     <data name="ArrangementSync_Preview" xml:space="preserve"><value>共通する音 {0} 個: {1} 個が変更され、さらにハンドシェイプ {2} 個と運指ポジション {3} 個が適用されます。</value></data>
+    <data name="ArrangementSync_NothingSharedByPitch" xml:space="preserve"><value>この 2 つのアレンジは弦数またはチューニングが異なり、同じフレットで同じ音高を鳴らす箇所がありません — コピーされるものはありません。</value></data>
+    <data name="ArrangementSync_PreviewByPitch" xml:space="preserve"><value>弦数またはチューニングが異なるため、音高とフレットで照合します。同じ演奏: {0} 個、異なる演奏 (変更しません): {1} 個。コピー: コードのフィンガリング {2} 個、ハンドシェイプ {3} 個、運指ポジション {4} 個。そのまま: ボイシングが異なる箇所のハンドシェイプ {5} 個と運指ポジション {6} 個。ノート編集はチューニング間でコピーされません。</value></data>
+    <data name="ArrangementSync_PreviewByRule" xml:space="preserve"><value>ボイシング変更コードをルールで処理: コードの対応を {0} 個検出しました (同じ元のコードはここで同じように弾かれています)。編集済みの 1 箇所から他の箇所へコピー: コードのフィンガリング {1} 個、ハンドシェイプ {2} 個、運指ポジション {3} 個。編集済みの箇所同士が食い違うためそのまま: {4} 個。</value></data>
     <data name="Status_ArrangementSyncApplied" xml:space="preserve"><value>{3} に適用しました: 音 {0} 個、ハンドシェイプ {1} 個、運指ポジション {2} 個。</value></data>
     <data name="Status_ArrangementSyncNothingToDo" xml:space="preserve"><value>適用するものはありません — 共通する音はすでに一致しています。</value></data>
     <data name="Status_ArrangementSyncNoPair" xml:space="preserve"><value>異なる 2 つのアレンジを選んでください。</value></data>
@@ -1509,7 +1521,7 @@
     <data name="Status_DroppedMultipleFiles" xml:space="preserve"><value>ドロップされた{0}個のファイルのうち、最初の1つを読み込みました。</value></data>
     <data name="Status_DroppedUnsupportedFileType" xml:space="preserve"><value>「{1}」を開けません — ここでは{0}ファイルに対応していません。</value></data>
     <data name="Status_DroppedUnknownFileType" xml:space="preserve"><value>「{0}」を開けません — このファイル形式はここでは対応していません。</value></data>
-    <data name="Status_DroppedPsarcNotSupported" xml:space="preserve"><value>パッケージは曲ブラウザーから開きます。「{0}」は読み込まれませんでした。</value></data>
+    <data name="Status_DroppedPackageHasNoSongs" xml:space="preserve"><value>「{0}」には開ける曲がありません。</value></data>
     <data name="Plugin_Outdated" xml:space="preserve"><value>プラグイン「{0}」は古くなっています。プラグイン API {1} 用にビルドされていますが、この DotCharter には {2} が必要です。プラグインなしで起動しました。プラグインを更新してください。</value></data>
     <data name="Plugin_Failed" xml:space="preserve"><value>プラグイン「{0}」を読み込めませんでした（{1}）。プラグインなしで起動しました。</value></data>
     <data name="Empty_Editor_Hint" xml:space="preserve"><value>プロジェクトを開くか、オーディオファイルをここにドロップして開始します</value></data>
@@ -2308,6 +2320,8 @@
     <data name="Settings_Tip_AutoNameNewChords" xml:space="preserve"><value>エディターが作成するすべてのコードフォーム（新しいコード、形の変更、採用したハンドシェイプ候補、運指の生成、名前のない Guitar Pro のコード）に候補の名前を付けます。オフにすると新しいコードは名前なしのままになります。ファイルにある名前はどちらの場合も保持されます。</value></data>
     <data name="Settings_KeepPowerChordNames" xml:space="preserve"><value>…ただしパワーコードの名前は残す</value></data>
     <data name="Settings_Tip_KeepPowerChordNames" xml:space="preserve"><value>ルートと5度のシェイプを対象外にし、G5 は名前を保持したまま、あいまいな2音シェイプの名前だけを削除します。オフにすると、パワーコードも抑制する Editor on Fire と同じ動作になります。</value></data>
+    <data name="Settings_NameOnlyFirstChordInHandShape" xml:space="preserve"><value>ハンドシェイプの最初のコードだけに名前を付ける</value></data>
+    <data name="Settings_Tip_NameOnlyFirstChordInHandShape" xml:space="preserve"><value>Guitar Proのインポートと「ハンドシェイプを生成」は、1つのハンドシェイプ内で繰り返されるコードに名前のないシェイプのコピーを割り当てるため、名前はシェイプの最初のコードにだけ表示されます。すでにテンプレートを持つコードの名前は変更されません。</value></data>
     <data name="Settings_MusicalChordNames" xml:space="preserve"><value>音楽的なコード名</value></data>
     <data name="Settings_Tip_MusicalChordNames" xml:space="preserve"><value>提案するコード名を曲のキーで表記し（フラット系のキーでは Bbm7、シャープ系では A#m7）、m と maj7 を使い、転回形はベース音付き（Cm7/Bb）で表します。オフにすると、完成した Rocksmith チャートで一般的な Editor on Fire の表記（A#min7、シャープ優先）を使います。</value></data>
     <data name="Settings_LyricSpanWordGap" xml:space="preserve"><value>歌詞の単語を次の単語まで伸ばす</value></data>
@@ -2469,6 +2483,7 @@
     <data name="Dialog_Export_DlcBuilderProject" xml:space="preserve"><value>DLC Builder プロジェクトを書き出す…</value></data>
     <data name="Dialog_Export_DlcBuilderProjectTip" xml:space="preserve"><value>チャートを DLC Builder プロジェクト（.rs2dlc）と Rocksmith XML として、選んだフォルダーに書き出します。DLC Builder で開いて、暗号化されたパッケージを作成します。</value></data>
     <data name="Dialog_Export_DlcBuilderProjectWritten" xml:space="preserve"><value>DLC Builder プロジェクトを書き出しました: {0}</value></data>
+    <data name="Dialog_Export_DlcBuilderProjectsWritten" xml:space="preserve"><value>DLC Builder プロジェクトを書き出しました: {0}（DLC Builder でビルド可能）と {1}（RS Extended Range）</value></data>
     <data name="Dialog_Export_DlcBuilderProjectFailed" xml:space="preserve"><value>DLC Builder プロジェクトを書き出せませんでした: {0}</value></data>
     <data name="Dialog_Export_AlbumArt" xml:space="preserve"><value>アルバムアート</value></data>
     <data name="Dialog_Export_AlbumArtHint" xml:space="preserve"><value>任意。空の場合はプレースホルダーを生成します。</value></data>
@@ -2493,6 +2508,7 @@
     <data name="Dialog_Export_ErrorsBlockExport" xml:space="preserve"><value>エクスポートの前に、含めるアレンジメントのエラーを修正してください。</value></data>
     <data name="Dialog_Export_MissingPathsHint" xml:space="preserve"><value>メインオーディオファイルと出力ファイルを選んでください。</value></data>
     <data name="Dialog_Export_NothingSelectedHint" xml:space="preserve"><value>書き出す前に、アレンジメントを 1 つ以上選択するか、ボーカルを含めてください。</value></data>
+    <data name="Dialog_Export_CheckingFindings" xml:space="preserve"><value>チャートの問題を確認しています…</value></data>
     <data name="Dialog_Export_NoArrangements" xml:space="preserve"><value>このプロジェクトには書き出せるギターまたはベースのアレンジメントがありません。</value></data>
     <data name="Dialog_Export_MainAudioRequired" xml:space="preserve"><value>必須：{0}</value></data>
     <data name="Dialog_Export_Export" xml:space="preserve"><value>エクスポート</value></data>
@@ -3176,6 +3192,8 @@
     <data name="History_LinkFollowUp" xml:space="preserve"><value>リンクされたコピー</value></data>
     <data name="History_OnlyHere" xml:space="preserve"><value>ここだけ</value></data>
     <data name="History_SetLinkGroups" xml:space="preserve"><value>リンクグループを編集</value></data>
+    <data name="History_SetAudioCheckSpots" xml:space="preserve"><value>音声チェックを記録</value></data>
+    <data name="History_SetIgnoredFindings" xml:space="preserve"><value>無視する警告を変更</value></data>
     <data name="History_AddLinkPlacement" xml:space="preserve"><value>小節を再リンク</value></data>
     <data name="History_LyricTap" xml:space="preserve"><value>歌詞をタップ</value></data>
     <data name="History_MergeIntoChords" xml:space="preserve"><value>コードにまとめる</value></data>
@@ -3228,8 +3246,10 @@
     <data name="History_SetHandShapeTemplateIds" xml:space="preserve"><value>ハンドシェイプのコードを設定</value></data>
     <data name="History_SetKeySignature" xml:space="preserve"><value>調号を設定</value></data>
     <data name="History_SetLyricNote" xml:space="preserve"><value>歌詞の音程を設定</value></data>
+    <data name="History_SetLyricText" xml:space="preserve"><value>歌詞のテキストを変更</value></data>
     <data name="History_SetPhraseSolo" xml:space="preserve"><value>フレーズのソロのオン/オフ</value></data>
     <data name="History_SetSongMetadata" xml:space="preserve"><value>曲情報を編集</value></data>
+    <data name="History_SetArrangementMetadataText" xml:space="preserve"><value>アレンジのメタデータを編集</value></data>
     <data name="History_SetBookmark" xml:space="preserve"><value>ブックマークを編集</value></data>
     <data name="History_SetAnnotationResolved" xml:space="preserve"><value>注釈を解決または再開</value></data>
     <data name="History_SetProjectVolumes" xml:space="preserve"><value>曲のエクスポート音量を設定</value></data>
@@ -3514,6 +3534,8 @@
     <data name="Inspector_Staged_Imported" xml:space="preserve"><value>インポートされた値</value></data>
     <data name="Inspector_Staged_NothingImported" xml:space="preserve"><value>このノートには、アプリで編集できないインポート値はありません。</value></data>
     <data name="Inspector_Staged_NoteTechniques" xml:space="preserve"><value>ノートのテクニック</value></data>
+    <data name="Inspector_Staged_ChordTechniques" xml:space="preserve"><value>コードのテクニック</value></data>
+    <data name="Inspector_Staged_ChordTechniquesHint" xml:space="preserve"><value>コードのすべての弦に一度に適用します。どのオプションも点灯していない行は、弦ごとに値が異なります。個別の弦は「弦」で選んでください。</value></data>
     <data name="Inspector_Staged_NoteDetail" xml:space="preserve"><value>ノートの詳細</value></data>
     <data name="Inspector_Staged_ResetTip" xml:space="preserve"><value>すべてのテクニックを既定に戻すよう保留します。適用で書き込みます</value></data>
     <data name="Inspector_Staged_Reset" xml:space="preserve"><value>リセット</value></data>
@@ -3528,10 +3550,10 @@
     <data name="Inspector_Staged_CopyTip" xml:space="preserve"><value>この弦のテクニック、無視、スライド（音程差として）を、マスク内のほかの弾かれている弦すべてに保留します</value></data>
     <data name="Inspector_Staged_ChordsHint" xml:space="preserve"><value>ノートのカードは選択したノートを編集します。コードのテクニックを編集するにはコードだけを選択してください。</value></data>
     <data name="Inspector_Staged_EditChords" xml:space="preserve"><value>選択したコードを編集</value></data>
-    <data name="Inspector_Staged_NoMute" xml:space="preserve"><value>ミュート</value></data>
-    <data name="Inspector_Staged_NoHarmonic" xml:space="preserve"><value>ハーモニクス</value></data>
-    <data name="Inspector_Staged_NoPopSlap" xml:space="preserve"><value>ポップ／スラップ</value></data>
-    <data name="Inspector_Staged_NoLegato" xml:space="preserve"><value>レガート</value></data>
+    <data name="Inspector_Staged_NoMute" xml:space="preserve"><value>ミュートなし</value></data>
+    <data name="Inspector_Staged_NoHarmonic" xml:space="preserve"><value>ハーモニクスなし</value></data>
+    <data name="Inspector_Staged_NoPopSlap" xml:space="preserve"><value>ポップ／スラップなし</value></data>
+    <data name="Inspector_Staged_NoLegato" xml:space="preserve"><value>レガートなし</value></data>
     <data name="Inspector_Staged_MoveTitle" xml:space="preserve"><value>{0} 個のサウンドを今すぐ移動</value></data>
     <data name="Inspector_Staged_MoveSummary" xml:space="preserve"><value>ノート {0} / コード {1} · コードは押さえた弦をすべて移動</value></data>
     <data name="Inspector_Staged_FirstSoundLabel" xml:space="preserve"><value>最初のサウンド</value></data>
@@ -5810,6 +5832,19 @@
     <data name="Status_ToneKeyRepaired" xml:space="preserve"><value>トーン「{0}」を、チャートが使うキー「{1}」に名前変更しました。1 回の元に戻す操作です。</value></data>
     <data name="Export.Validation.NoShowlights" xml:space="preserve"><value>プロジェクトにショーライトがありません。パッケージにはセクションとノートから生成したショーライトが入ります。</value></data>
     <data name="Export_FixTip_Showlights" xml:space="preserve"><value>ショーライトを生成: セクションとノートから作成してプロジェクトに保存します。1 回の元に戻す操作です。</value></data>
+    <data name="Export.Validation.MetadataTitleCase" xml:space="preserve"><value>「{0}」は文頭のみ大文字の表記のようです。Rocksmith の曲リストは通常タイトルケースです。意図的な小文字表記であれば無視してください。</value></data>
+    <data name="Export.Validation.MetadataStraySpaces" xml:space="preserve"><value>「{0}」の先頭・末尾または連続した空白があります。曲リストに表示され、並び順にも影響します。</value></data>
+    <data name="Export.Validation.MetadataMissingTitle" xml:space="preserve"><value>曲にタイトルがありません。パッケージ名は「Untitled」になります。曲のメタデータで設定してください。</value></data>
+    <data name="Export.Validation.MetadataMissingArtist" xml:space="preserve"><value>曲にアーティストがありません。パッケージには「Unknown Artist」と表示されます。曲のメタデータで設定してください。</value></data>
+    <data name="Export.Validation.MetadataMissingAlbum" xml:space="preserve"><value>曲にアルバム名がありません。曲のメタデータで設定してください(シングルなら曲名で構いません)。</value></data>
+    <data name="Export.Validation.MetadataMissingAlbumYear" xml:space="preserve"><value>曲にアルバムの発売年がありません。曲のメタデータで設定してください。</value></data>
+    <data name="Export_FixTip_MetadataSpaces" xml:space="preserve"><value>空白を整える: タイトル・アーティスト・アルバムの先頭と末尾の空白を削除し、連続した空白を 1 つにします。1 回の元に戻す操作です。</value></data>
+    <data name="Status_MetadataSpacesTrimmed" xml:space="preserve"><value>タイトル・アーティスト・アルバムの余分な空白を削除しました。1 回の元に戻す操作です。</value></data>
+    <data name="History_TrimMetadataSpaces" xml:space="preserve"><value>メタデータの空白を整える</value></data>
+    <data name="Export.Validation.PackageKeyClash" xml:space="preserve"><value>ライブラリ内のパッケージがすでに DLC キー「{0}」を使っています。Rocksmith はキーごとに 1 曲しか表示しないため、このエクスポートはそのパッケージを隠すか、そのパッケージに隠されます。</value></data>
+    <data name="Export_FixTip_UniqueDlcKey" xml:space="preserve"><value>ライブラリのパッケージと重複しないよう、曲に専用の DLC キー「{0}」を設定します。1 回の元に戻す操作です。</value></data>
+    <data name="Status_DlcKeyAssigned" xml:space="preserve"><value>DLC キーを「{0}」に設定しました。1 回の元に戻す操作です。</value></data>
+    <data name="History_AssignDlcKey" xml:space="preserve"><value>一意の DLC キーを割り当てる</value></data>
     <data name="Export_FixTip_DefineTones" xml:space="preserve"><value>{0} の不足しているトーン定義を作成: アレンジが使う各名前に既定のトーンを作ります。1 回の元に戻す操作です。</value></data>
     <data name="Status_ShowlightsGenerated" xml:space="preserve"><value>セクションとノートからショーライトを生成しました。1 回の元に戻す操作です。</value></data>
     <data name="Status_ToneDefinitionsNoChange" xml:space="preserve"><value>{0} には既定の定義を作れるトーン名がありません。</value></data>
@@ -6419,10 +6454,40 @@
   <data name="Validation_LyricLineStartsLowercase" xml:space="preserve"><value>「{0}」で始まる歌詞の行が小文字で始まっています。各行は大文字で始めてください。</value></data>
   <data name="Validation_LyricStrayPunctuation" xml:space="preserve"><value>歌詞「{0}」に不要なピリオドまたはコンマがあります。削除してください。S.O.S. などの略語や三点リーダーはそのままで構いません。</value></data>
   <data name="Validation_LyricUnsplitSyllable" xml:space="preserve"><value>歌詞「{0}」は 1 つの音節に複数の単語を含んでいます。単語ごとに歌われるように分割してください。</value></data>
+  <data name="Validation_LyricPlainCharacters" xml:space="preserve"><value>歌詞「{0}」には Rocksmith で表示されない可能性のある文字（カーリークォート、長いダッシュ、三点リーダー、絵文字などの記号）が含まれています。通常の文字を使ってください。</value></data>
+  <data name="Validation_LyricLineTooLong" xml:space="preserve"><value>行「{0}」が長すぎます（{1} 単語、{2} 文字）。1 行は 3～7 単語、40 文字以内にしてください。行を分割してください。</value></data>
+  <data name="Validation_LyricLineTooShort" xml:space="preserve"><value>行「{0}」は {1} 単語しかありません。1 行は 3～7 単語が読みやすいので、曲が許す場合は隣の行とつなげてください。</value></data>
+  <data name="Validation_LyricSeveralSyllablesOnOneNote" xml:space="preserve"><value>単語「{0}」は 1 つのノートに {1} 音節をのせています。1 ノートに 1 音節とし、ハイフンでつないでください（{2}）。</value></data>
+  <data name="Validation_LyricBackingVocalInLead" xml:space="preserve"><value>歌詞「{0}」はリードボーカルトラック内のバックボーカル（括弧書き）のようです。リードトラックはリードシンガーだけにしてください。</value></data>
   <data name="Validation_PhraseLevelsTooFew" xml:space="preserve"><value>フレーズ「{0}」の難易度レベル数: {1}。演奏するフレーズには少なくとも 2 つのレベルを付けてください。</value></data>
   <data name="Validation_PhraseLevelsTooMany" xml:space="preserve"><value>フレーズ「{0}」の難易度レベル数: {1}。Rocksmith が表示できるのは 1 フレーズにつき 30 レベル（0〜29）までです。レベルを統合するか削除してください。</value></data>
   <data name="Validation_PhraseLevelsMismatch" xml:space="preserve"><value>フレーズ「{0}」のこの繰り返しの難易度レベル数: {1}、ほかの繰り返し: {2}。同じフレーズの繰り返しはすべて同じレベル数にしてください。</value></data>
   <data name="Validation_SectionNamesNotVaried" xml:space="preserve"><value>{1} 個のセクションのうち {0} 個が「{2}」という名前です。Rocksmith のおすすめ機能はセクション名を使うので、この名前がそれぞれのパートに合っているか確認してください。有節歌曲のように本当に同じパートを繰り返す曲なら問題ありません。</value></data>
+  <data name="Validation_ToneChangeBeforeFirstNote" xml:space="preserve"><value>「{0}」へのトーン切り替えが最初のノートより前にあります。まだ何も鳴っていないので、「{0}」を開始トーンにしてこの切り替えを削除してください。</value></data>
+  <data name="Validation_SingleToneChange" xml:space="preserve"><value>このアレンジメントのトーン切り替えは 1 回だけです（「{0}」へ）。意図したものか確認してください。1 回だけの切り替えは消し忘れか、開始トーンが違うことの表れであることがよくあります。</value></data>
+  <data name="Validation_ToneNameKeyMismatch" xml:space="preserve"><value>トーン「{0}」の名前が「{1}」になっています。チャートはキーでトーンを切り替え、Rocksmith は名前を表示するので、両方を同じにしてください。</value></data>
+  <data name="Validation_ToneWithoutAmpOrCabinet" xml:space="preserve"><value>トーン「{0}」にアンプまたはキャビネットがありません。Rocksmith のトーンには両方が必要です。</value></data>
+  <data name="Validation_ToneTooManyEffects" xml:space="preserve"><value>トーン「{0}」にはペダルとラックが {1} 個あります。1 つのトーンのエフェクトは {2} 個までにしてください。</value></data>
+  <data name="Validation_DuplicateToneName" xml:space="preserve"><value>「{0}」という名前のトーンが複数あります。区別できるよう、トーンごとに別の名前を付けてください。</value></data>
+  <data name="Validation_RepeatedTone" xml:space="preserve"><value>「{0}」へのトーン切り替えは、すでに鳴っているトーンへの切り替えです。削除してください。</value></data>
+  <data name="Validation_CustomTuning" xml:space="preserve"><value>カスタムチューニング（{0}）：どのプリセットチューニングでもありません。正しいか確認してください。Rocksmith ではカスタムチューニングとして表示されます。</value></data>
+  <data name="Validation_PhraseTooLong" xml:space="preserve"><value>フレーズ「{0}」は {1} 小節あります。チャーターはパターンが変わる所で、およそ 4 小節ごとにフレーズを区切ります。{2} 小節を超えると、Rocksmith で次の難易度に上がるまで長く待つことになります。</value></data>
+  <data name="Validation_PhraseTooShort" xml:space="preserve"><value>フレーズ「{0}」は {1} 小節未満です。これほど短いフレーズは Rocksmith で難易度を上げにくいので、ここで曲が本当に変わるのでなければ隣のフレーズとつなげてください。</value></data>
+  <data name="Validation_SectionWithoutPhrase" xml:space="preserve"><value>セクション「{0}」の位置にフレーズがありません。Rocksmith はセクションをフレーズから始めるので、ここにもフレーズを置いてください。</value></data>
+  <data name="Validation_NoGuitarSectionSplit" xml:space="preserve"><value>この無音の区間は複数の noguitar セクションに分かれています。1 つの noguitar セクションでまとめてください。</value></data>
+  <data name="Validation_TempoLooksDoubled" xml:space="preserve"><value>チャートの平均テンポは {0:F1} BPM で、オーディオから読み取った {1:F1} BPM の約 2 倍です。ビートマップが 8 分音符をビートとして数えている可能性があります。テンポマップでテンポを半分にしてください。</value></data>
+  <data name="Validation_TempoLooksHalved" xml:space="preserve"><value>チャートの平均テンポは {0:F1} BPM で、オーディオから読み取った {1:F1} BPM の約半分です。各ビート線が 2 拍分にまたがっている可能性があります。テンポマップでテンポを 2 倍にしてください。</value></data>
+  <data name="Validation_TempoOutOfRange" xml:space="preserve"><value>このビートは {0:F1} BPM で、{1:F0}～{2:F0} BPM の範囲外です。ここのビート線を確認してください。ここまで外れたテンポは、たいていビートが 2 倍か半分になっています。</value></data>
+  <data name="Validation_TempoSpike" xml:space="preserve"><value>このビートは {0:F1} BPM で、直前のビートは {1:F1} BPM、次のビートで元に戻っています。テンポ変更ではなくビート線のずれです。ビート上に戻してください。</value></data>
+  <data name="Validation_TempoAnchorSpam" xml:space="preserve"><value>{0} 個のテンポアンカーがテンポを変えていません。何も変えないアンカーを削除し、テンポが本当に変わる位置にだけ残してください。</value></data>
+  <data name="Validation_TempoOffAudio" xml:space="preserve"><value>チャートの平均テンポは {0:F1} BPM ですが、オーディオは {1:F1} BPM で、1% 以上ずれています。ノートが音楽からずれていきます。テンポマップでテンポを確認してください。</value></data>
+  <data name="Validation_MeterMissingOnFirstMeasure" xml:space="preserve"><value>最初の小節には {0} 拍ありますが、拍子記号が一致していません。小節 1 に拍子記号を設定してください。</value></data>
+  <data name="Validation_MeterChangeUnmarked" xml:space="preserve"><value>小節 {0} には {1} 拍ありますが、拍子記号は {2}/{3} です。拍子が変わる位置に新しい拍子記号を設定してください。</value></data>
+  <data name="Status_GpImport_Checklist" xml:space="preserve"><value>Guitar Pro のインポート後に確認してください：拍子（拍子の変更: {0}）、スライド（{1}）、Link-Next として残したタイ（{2}）。</value></data>
+  <data name="Validation_HarmonicVibrato" xml:space="preserve"><value>このハーモニクスにはビブラートが付いています。ハーモニクスは澄んだ1つの音で鳴り、ビブラートは聞こえません。外してください。</value></data>
+  <data name="Validation_UnpitchedSlideOneFret" xml:space="preserve"><value>この音程なしスライドは1フレット分しかありません(フレット{0}からフレット{1})。スライドとして聞こえるには短すぎます。長くするか、スライドを外してください。</value></data>
+  <data name="Validation_SustainTooCloseToNext" xml:space="preserve"><value>サステインが次のノートまたはコードの直前で終わっています。チャーターは次のノートの前に少なくとも 32 分音符の間隔を空けます。少なくとも {0} 拍早く終わらせてください。</value></data>
+  <data name="Validation_SustainUnderFiveMs" xml:space="preserve"><value>このノートのサステインは 5 ms より短く、見ることも聞くこともできません。削除するか、実際のサステインにしてください。</value></data>
   <data name="Validation_ChordWithoutTemplate_One" xml:space="preserve"><value>コード{0}個がコードテンプレートを指定しておらず、このアレンジ内にも演奏ノートに一致するテンプレートがないため、コードフィンガリングのチェック（I44/I45、L06～L08）では判定できません。保存すると、推測したフィンガリングのテンプレートが作成されます。</value></data>
   <data name="Validation_ChordWithoutTemplate_Many" xml:space="preserve"><value>コード{0}個がコードテンプレートを指定しておらず、このアレンジ内にも演奏ノートに一致するテンプレートがないため、コードフィンガリングのチェック（I44/I45、L06～L08）では判定できません。保存すると、それぞれに推測したフィンガリングのテンプレートが作成されます。</value></data>
   <data name="Validation_ChordAfterSongEnd" xml:space="preserve"><value>コードが曲のオーディオの終了後に置かれています。</value></data>
@@ -6514,6 +6579,39 @@
   <data name="Validation_FirstNoteTooEarly" xml:space="preserve"><value>最初のノートは{0:F0} ms から始まります。ゲーム内のカウントインに余裕を持たせるため、少なくとも{1:F0} ms の無音を残してください。</value></data>
   <data name="Validation_EmptyPhrase" xml:space="preserve"><value>フレーズ「{0}」にはノートもコードもありません。無音の区間はnoguitarフレーズにするか、空のフレーズを削除してください。</value></data>
   <data name="Accessibility_SpinnerIncrease" xml:space="preserve"><value>増やす</value></data>
+  <data name="Validation_SustainCrossesPhrase" xml:space="preserve"><value>サステインがフレーズ「{0}」の開始をまたいでいます。Rocksmith は各フレーズを個別に構築するため、サステインはそこで切れます。フレーズの開始で終わらせてください。</value></data>
+  <data name="Validation_SustainCrossesSection" xml:space="preserve"><value>サステインがセクション「{0}」の開始をまたいでいます。セクションの開始で終わらせてください。</value></data>
+  <data name="Validation_SustainPastEnd" xml:space="preserve"><value>サステインが END を越えています。END 以降は演奏されません。END で終わらせてください。</value></data>
+  <data name="Validation_LinkNextCrossesPhrase" xml:space="preserve"><value>Link-Next のつながりがフレーズ「{0}」の開始をまたいで続いています。Rocksmith は各フレーズを個別に構築するため、つながりはそこで切れます。</value></data>
+  <data name="Validation_LinkNextCrossesSection" xml:space="preserve"><value>Link-Next のつながりがセクション「{0}」の開始をまたいで続いています。</value></data>
+  <data name="Validation_LinkNextPastEnd" xml:space="preserve"><value>Link-Next のつながりが END を越えて続いています。END 以降は演奏されません。</value></data>
+  <data name="Validation_HandShapeCrossesPhrase" xml:space="preserve"><value>ハンドシェイプがフレーズ「{0}」の開始をまたいでいます。Rocksmith は各フレーズを個別に構築します。フレーズの開始でシェイプを終わらせるか、そこで分割してください。</value></data>
+  <data name="Validation_HandShapeCrossesSection" xml:space="preserve"><value>ハンドシェイプがセクション「{0}」の開始をまたいでいます。セクションの開始でシェイプを終わらせるか、そこで分割してください。</value></data>
+  <data name="Validation_HandShapePastEnd" xml:space="preserve"><value>ハンドシェイプが END を越えています。END で終わらせてください。</value></data>
+  <data name="Inspector_IssueFix_TrimToBoundary" xml:space="preserve"><value>境界で終わらせる</value></data>
+  <data name="Inspector_IssueFix_TrimToBoundaryTip" xml:space="preserve"><value>サステインまたはハンドシェイプを短くし、フレーズ、セクション、または END の開始位置でちょうど終わるようにします。元に戻す操作 1 回分です。</value></data>
+  <data name="Inspector_IssueFix_RemoveVibrato" xml:space="preserve"><value>ビブラートを外す</value></data>
+  <data name="Inspector_IssueFix_RemoveVibratoTip" xml:space="preserve"><value>ハーモニクスのビブラートを外します。ハーモニクス自体は残ります。元に戻すのは1回です。</value></data>
+  <data name="Validation_NoteNearlyOnGrid" xml:space="preserve"><value>このノートはビートグリッドから {0:F1} ms ずれています（タイミングのずれ）。最も近いグリッド線にスナップしてください。</value></data>
+  <data name="Validation_NoteOffGrid" xml:space="preserve"><value>このノートはビートグリッドから {0:F1} ms ずれています（通常の分割は 1 拍の 1/16 まで、3 連符は 1/24 まで）。グリッドに合わせるか、タイミングを確認してください。</value></data>
+  <data name="Validation_LeadInShort" xml:space="preserve"><value>最初のノートは曲の開始から {0:F1} 秒で始まります。約 {1:F0} 秒のリードインがあるとプレイヤーが準備できます：テンポマップ ▸ 先頭に無音を追加。</value></data>
+  <data name="Validation_TailShort" xml:space="preserve"><value>オーディオは最後のノートの {0:F1} 秒後に終わります。曲が余韻を残せるよう約 {1:F0} 秒空けてください：テンポマップ ▸ 末尾に無音を追加。</value></data>
+  <data name="Validation_NoCountMeasure" xml:space="preserve"><value>最初のノートの前に空の小節がありません。テンポマップ ▸ 先頭に小節を追加 でカウント小節を追加してください（元に戻す操作 1 回分）。ビートマップが自動で変更されることはありません。</value></data>
+  <data name="Inspector_IssueFix_SnapToGrid" xml:space="preserve"><value>グリッドにスナップ</value></data>
+  <data name="Inspector_IssueFix_SnapToGridTip" xml:space="preserve"><value>ノートまたはコードを、同じ位置で始まるハンドシェイプとアンカーとともに、最も近いビート分割へ移動します。元に戻す操作 1 回分です。</value></data>
+  <data name="Inspector_IssueFix_TrimToGap" xml:space="preserve"><value>次のノートの 32 分音符前で終わらせる</value></data>
+  <data name="Inspector_IssueFix_TrimToGapTip" xml:space="preserve"><value>サステインまたはハンドシェイプを短くし、次のノートまたはコードの 32 分音符前で終わるようにします。元に戻す操作 1 回分です。</value></data>
+  <data name="Inspector_IssueFix_ClearSustain" xml:space="preserve"><value>サステインを削除</value></data>
+  <data name="Inspector_IssueFix_ClearSustainTip" xml:space="preserve"><value>サステインを 0 にし、ノートを単純なピッキングにします。元に戻す操作 1 回分です。</value></data>
+  <data name="Validation_NeedsAudioCheck_One" xml:space="preserve"><value>インポートで、タブ譜に書かれていない箇所を 1 つ推定しました：{1}。音源と聴き比べてから確認済みにしてください。</value></data>
+  <data name="Validation_NeedsAudioCheck_Many" xml:space="preserve"><value>インポートで、タブ譜に書かれていない箇所を {0} か所推定しました。最初の箇所：{1}。それぞれ音源と聴き比べてから確認済みにしてください。</value></data>
+  <data name="Validation_AudioCheckReason_DeadNoteSlideLanding" xml:space="preserve"><value>フルミュートのスライドの着地フレット</value></data>
+  <data name="Validation_AudioCheckReason_TempoFromTab" xml:space="preserve"><value>タブ譜から取り込んだ、音源と同期していないテンポマップ</value></data>
+  <data name="Validation_AudioCheckReason_GraceTiming" xml:space="preserve"><value>タブ譜に明記されていない装飾音の位置(拍の前か拍上か)</value></data>
+  <data name="Inspector_IssueFix_AudioChecked" xml:space="preserve"><value>確認済み</value></data>
+  <data name="Inspector_IssueFix_AudioCheckedTip" xml:space="preserve"><value>この箇所を音源で確認済みにします。指摘は次の箇所に移ります。元に戻す操作 1 回分です。</value></data>
+  <data name="Inspector_IssueFix_AudioAllChecked" xml:space="preserve"><value>すべて確認済み</value></data>
+  <data name="Inspector_IssueFix_AudioAllCheckedTip" xml:space="preserve"><value>このアレンジメントで推定されたすべての箇所を音源で確認済みにします。元に戻す操作 1 回分です。</value></data>
   <data name="Accessibility_SpinnerDecrease" xml:space="preserve"><value>減らす</value></data>
   <data name="Menu_LinkedMeasures" xml:space="preserve"><value>リンクされた小節…</value></data>
   <data name="Menu_LinkedMeasures_Tip" xml:space="preserve"><value>曲のリンクグループを一覧表示します。名前の変更、リンク解除、配置への移動ができます。</value></data>
@@ -6534,11 +6632,30 @@
   <data name="LinkGroups_DetectionFailed" xml:space="preserve"><value>検出に失敗しました：{0}</value></data>
   <data name="LinkGroups_DetectionRetry" xml:space="preserve"><value>検出を再試行</value></data>
   <data name="LinkGroups_SuggestionTitle" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="LinkGroups_SuggestionJoinTitle" xml:space="preserve"><value>リンク {0} に追加 · {1}</value></data>
   <data name="LinkGroups_MeasuresOne" xml:space="preserve"><value>{0} 小節</value></data>
   <data name="LinkGroups_Measures" xml:space="preserve"><value>{0} 小節</value></data>
   <data name="LinkGroups_FromRepeats" xml:space="preserve"><value>譜面の反復記号から</value></data>
   <data name="LinkGroups_DifferentContent" xml:space="preserve"><value>コピーに差異があります。リンク前に譜面を確認してください</value></data>
-  <data name="LinkSuggest_ReviewDifferences" xml:space="preserve"><value>一部のコピーに差異があります。確認画面で該当の小節範囲を表示します。一括リンクでは一致するコピーだけをリンクします。</value></data>
+  <data name="LinkSuggest_NearMatchesOne" xml:space="preserve"><value>{0} 件の近似一致はリンクされません。コピーが次の箇所で異なります。</value></data>
+  <data name="LinkSuggest_NearMatches" xml:space="preserve"><value>{0} 件の近似一致はリンクされません。コピーが次の箇所で異なります。</value></data>
+  <data name="LinkSuggest_NearMatchesMore" xml:space="preserve"><value>…ほか {0} 件。確認画面にすべて表示されます。</value></data>
+  <data name="LinkGroups_NearMatch" xml:space="preserve"><value>近似一致</value></data>
+  <data name="LinkNear_SustainShorter" xml:space="preserve"><value>{0}、{1} 拍目: サステインが {2} 短い</value></data>
+  <data name="LinkNear_SustainLonger" xml:space="preserve"><value>{0}、{1} 拍目: サステインが {2} 長い</value></data>
+  <data name="LinkNear_SustainHeld" xml:space="preserve"><value>{0}、{1} 拍目: 一方のコピーだけ次のノートまでサステインを保持</value></data>
+  <data name="LinkNear_Fhp" xml:space="preserve"><value>{0}、{1} 拍目: FHP {2} と {3}</value></data>
+  <data name="LinkNear_None" xml:space="preserve"><value>なし</value></data>
+  <data name="LinkNear_Sound" xml:space="preserve"><value>{0}、{1} 拍目: ノートが異なる</value></data>
+  <data name="LinkNear_Measures" xml:space="preserve"><value>{0}: 拍子が異なる</value></data>
+  <data name="LinkNear_HandShape" xml:space="preserve"><value>{0}、{1} 拍目: ハンドシェイプが異なる</value></data>
+  <data name="LinkNear_Mute" xml:space="preserve"><value>{0}、{1} 拍目: 左手ミュートが異なる</value></data>
+  <data name="LinkNear_Other" xml:space="preserve"><value>{0}: 記譜の詳細が異なる（記譜、保存されたアンカー、名前）</value></data>
+  <data name="LinkNear_Edge" xml:space="preserve"><value>{0}: コピーの端の小節線をノートかハンドシェイプがまたいでいる</value></data>
+  <data name="LinkNear_Join" xml:space="preserve"><value>{0}: 参加先のグループと一致しなくなりました</value></data>
+  <data name="LinkNear_Refused" xml:space="preserve"><value>{0}: リンクできなくなりました（重なり、または小節が変更されています）</value></data>
+  <data name="Status_LinkSuggestionsSkippedOne" xml:space="preserve"><value>{0} 件の近似一致はリンクされませんでした。確認画面で差異を表示します。</value></data>
+  <data name="Status_LinkSuggestionsSkipped" xml:space="preserve"><value>{0} 件の近似一致はリンクされませんでした。確認画面で差異を表示します。</value></data>
   <data name="LinkSuggest_Title" xml:space="preserve"><value>繰り返しの小節が見つかりました</value></data>
   <data name="LinkSuggest_Subtitle" xml:space="preserve"><value>リンクすると、1か所での編集がすべてのコピーに適用されます。</value></data>
   <data name="LinkSuggest_GroupsOne" xml:space="preserve"><value>リンクできるグループ {0} 件、配置 {1} 件。</value></data>
@@ -6704,6 +6821,13 @@
   <data name="Shapes_NoSuggestion" xml:space="preserve"><value>候補なし</value></data>
   <data name="Shapes_FretsLabel" xml:space="preserve"><value>フレット</value></data>
   <data name="Shapes_CleanUpNone" xml:space="preserve"><value>整理</value></data>
+  <data name="Shapes_PinAll" xml:space="preserve"><value>すべてのグリップを固定（{0}）</value></data>
+  <data name="Shapes_PinAllNone" xml:space="preserve"><value>すべてのグリップを固定</value></data>
+  <data name="Shapes_PinAll_Tip" xml:space="preserve"><value>このアレンジメントで運指があり、まだ固定されていないコードシェイプをすべて固定し、自動運指で変更されないようにします。元に戻す操作は1回です。</value></data>
+  <data name="Shapes_PinAll_NoneTip" xml:space="preserve"><value>このアレンジメントの運指のあるコードシェイプはすべて固定済みです。</value></data>
+  <data name="Shapes_Status_PinnedAllOne" xml:space="preserve"><value>{0}個のグリップを固定しました。</value></data>
+  <data name="Shapes_Status_PinnedAll" xml:space="preserve"><value>{0}個のグリップを固定しました。</value></data>
+  <data name="History_PinAllGrips" xml:space="preserve"><value>すべてのグリップを固定</value></data>
   <data name="GripStudy_PartOfShape" xml:space="preserve"><value>既存のシェイプの一部</value></data>
   <data name="GripStudy_OtherTemplates" xml:space="preserve"><value>その他のテンプレート</value></data>
   <data name="GripStudy_Save" xml:space="preserve"><value>運指を保存</value></data>
@@ -6908,6 +7032,16 @@
   <data name="Issues_Findings_Title" xml:space="preserve"><value>アレンジの指摘</value></data>
   <data name="Issues_Row_Fix" xml:space="preserve"><value>直す</value></data>
   <data name="Issues_Row_FixTip" xml:space="preserve"><value>この指摘へ移動して既定の修正を適用</value></data>
+  <data name="Issues_Row_Ignore" xml:space="preserve"><value>無視</value></data>
+  <data name="Issues_Row_IgnoreTip" xml:space="preserve"><value>この警告を非表示にします（確認済みで意図どおり）。対象を編集すると再表示されます。</value></data>
+  <data name="Issues_Row_IgnoreAll" xml:space="preserve"><value>すべて無視</value></data>
+  <data name="Issues_Row_IgnoreAllTip" xml:space="preserve"><value>同じ警告（同じルール・同じ文）をすべて非表示にします。対象を編集するとそれぞれ再表示されます。</value></data>
+  <data name="Issues_Row_StopIgnoring" xml:space="preserve"><value>無視を解除</value></data>
+  <data name="Issues_Row_StopIgnoringTip" xml:space="preserve"><value>この警告を再び一覧に表示</value></data>
+  <data name="Issues_Row_GroupCount" xml:space="preserve"><value>×{0}</value></data>
+  <data name="Issues_Row_GroupTip" xml:space="preserve"><value>同じ指摘：クリックで各箇所を展開・折りたたみ</value></data>
+  <data name="Inspector_Issues_ShowIgnored" xml:space="preserve"><value>無視した警告を表示 ({0})</value></data>
+  <data name="Inspector_Issues_ShowIgnoredTip" xml:space="preserve"><value>無視した警告を「無視を解除」付きで一覧表示します。エラーは無視できません。</value></data>
   <data name="Issues_Detail_Title" xml:space="preserve"><value>指摘の詳細</value></data>
   <data name="Issues_Detail_None" xml:space="preserve"><value>一覧から指摘を選ぶと修正候補が表示されます。</value></data>
   <data name="Issues_Detail_Jump" xml:space="preserve"><value>移動</value></data>
@@ -6982,4 +7116,17 @@
   <data name="Dialog_ReferencePitch_Applied" xml:space="preserve"><value>セントオフセットを {0} にしました。保存すると確定します。</value></data>
   <data name="Status_ReferencePitchOffer" xml:space="preserve"><value>基準ピッチ: {0}</value></data>
   <data name="Action_ReferencePitchCorrect" xml:space="preserve"><value>{0} セントに設定</value></data>
+  <data name="PackageSongPicker_Title" xml:space="preserve"><value>曲を選択</value></data>
+  <data name="PackageSongPicker_Subtitle" xml:space="preserve"><value>このパッケージには複数の曲が入っています。開く曲を選んでください。</value></data>
+  <data name="PackageSongPicker_Open" xml:space="preserve"><value>開く</value></data>
+  <data name="Status_PackageSongPickCancelled" xml:space="preserve"><value>「{0}」から曲が選ばれなかったため、何も開きませんでした。</value></data>
+  <data name="Validation_AnchorBeforeFirstNote" xml:space="preserve"><value>フレットハンドポジション (フレット {0}) が最初のノートより前にあり、何も演奏されていません。最初のノートに置いてください。</value></data>
+  <data name="Validation_AnchorBetweenNotes" xml:space="preserve"><value>フレットハンドポジション (フレット {0}) がノートの間にあり、ノート、コード、フレーズ開始のどれにも乗っていません。手は次のノートを弾くときに動くので、そこに置いてください。</value></data>
+  <data name="Validation_AnchorInsideSustain" xml:space="preserve"><value>フレットハンドポジション (フレット {0}) が鳴っているサステインの途中にあり、ノートが鳴っている間に手が動いてしまいます。次のノートに置いてください。</value></data>
+  <data name="Validation_AnchorOnHammerOnTarget" xml:space="preserve"><value>フレットハンドポジション (フレット {0}) がハンマリングの着地ノートで手を移動させています。ピッキングしたノートとハンマリングの間では手を移動できません。ピッキングしたノートに移してください。</value></data>
+  <data name="Validation_AnchorFretAbove21" xml:space="preserve"><value>フレットハンドポジションがフレット {0} にあります。21 フレットより上は多くのネックで余裕がありません。フレーズが収まるか確認してください。</value></data>
+  <data name="Validation_AnchorFretAbove24" xml:space="preserve"><value>フレットハンドポジションがフレット {0} にあり、フレット {1} を超えています。そのフレットを持つ Rocksmith のネックはありません。</value></data>
+  <data name="Validation_BendNeedsPinky" xml:space="preserve"><value>フレット {0} のベンドが小指に当たります。ベンドは薬指で弾きます。フレットハンドポジションを 1 フレット上げてください。</value></data>
+  <data name="Inspector_IssueFix_MoveAnchorToNextNote" xml:space="preserve"><value>次のノートに移動</value></data>
+  <data name="Inspector_IssueFix_MoveAnchorToNextNoteTip" xml:space="preserve"><value>フレットハンドポジションを次のノートまたはコードに移動します。そこに既にある場合は削除します。元に戻す操作 1 回分です。</value></data>
 </root>

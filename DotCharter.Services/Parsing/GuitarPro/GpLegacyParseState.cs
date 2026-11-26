@@ -70,6 +70,10 @@ internal sealed class GpLegacyParseState
     /// <summary>Notes with the ghost-note bit (note header 0x04), consumed when the note is emitted.</summary>
     public HashSet<GuitarNote> GhostNotes { get; } = [];
 
+    /// <summary>Notes with the staccato bit (note-effects-2 0x01), consumed when the
+    /// note is placed: a staccato imports as a strike, sustain 0.</summary>
+    public HashSet<GuitarNote> StaccatoNotes { get; } = [];
+
     private readonly Dictionary<(int TrackId, int Voice), GpBendContinuation> _bendContinuations = [];
 
     /// <summary>The untied bend-continuation tracker of one (track, voice lane), the slot gpif keeps one per.</summary>
@@ -120,6 +124,19 @@ internal sealed class GpLegacyParseState
         return GpLegacyNoteEffectsHelpers.ApplySlide(flags, note, version5, capo);
     }
 
+    private readonly Dictionary<int, int> _droppedByTrack = [];
+
+    /// <summary>Whether a note the reader cannot place (a string the track lacks, or a negative
+    /// fret) is dropped; each drop is counted for the import report.</summary>
+    public bool DropsNote(int trackId, bool unplaceable)
+    {
+        if (unplaceable) _droppedByTrack[trackId] = DroppedNotes(trackId) + 1;
+        return unplaceable;
+    }
+
+    /// <summary>The notes <see cref="DropsNote" /> dropped from track <paramref name="trackId" />.</summary>
+    public int DroppedNotes(int trackId) => _droppedByTrack.GetValueOrDefault(trackId);
+
     public void TrackReadNote(int trackId, int voice, GuitarNote note)
     {
         var key = (trackId, voice, note.StringIndex);
@@ -153,6 +170,7 @@ internal sealed class GpLegacyParseState
         LastSoundOnString.Clear();
         RawDeadNotes.Clear();
         GhostNotes.Clear();
+        StaccatoNotes.Clear();
         _bendContinuations.Clear();
         _tieSlides.Clear();
         _tieChains.Clear();

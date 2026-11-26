@@ -11,7 +11,8 @@ using DotCharter.Tone.Infrastructure.Configuration;
 namespace DotCharter.Presentation.Screens.Dialogs;
 
 /// <summary>What the export dialog holds that a DLC Builder project is written from, read at the moment of the click.</summary>
-internal sealed record DlcBuilderProjectInput(ChartProject Snapshot, string AudioPath, string AlbumArtPath, string OutputPath);
+internal sealed record DlcBuilderProjectInput(ChartProject Snapshot, string AudioPath, string AlbumArtPath, string OutputPath,
+    bool FixLowBassTuning);
 
 /// <summary>
 ///     The export dialog's "Export DLC Builder project": asks for a folder, writes the chart there as a DLC
@@ -52,9 +53,12 @@ internal sealed partial class RocksmithExportDlcBuilder : ObservableObject
         Message = "";
         try
         {
-            var sources = new DlcBuilderProjectSources(input.AudioPath.Trim(), input.AlbumArtPath.Trim(), _edit.State.TotalAudioLengthMs);
-            var path = await Task.Run(() => _writer.Write(folder, input.Snapshot, sources));
-            Message = loc.Format("Dialog_Export_DlcBuilderProjectWritten", path);
+            var sources = new DlcBuilderProjectSources(input.AudioPath.Trim(), input.AlbumArtPath.Trim(), _edit.State.TotalAudioLengthMs,
+                input.FixLowBassTuning);
+            var paths = await Task.Run(() => _writer.Write(folder, input.Snapshot, sources));
+            Message = paths.ExtendedRangeProject is { } extended
+                ? loc.Format("Dialog_Export_DlcBuilderProjectsWritten", paths.Project, extended)
+                : loc.Format("Dialog_Export_DlcBuilderProjectWritten", paths.Project);
             _edit.State.SetMessage(Message, StatusSeverity.Success);
         }
         catch (PlayOnlyContentException ex)

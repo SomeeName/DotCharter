@@ -74,7 +74,7 @@ internal sealed class NoOpAnchorGenerationService : IFretAnchorGenerationService
 
 internal sealed class NoOpAutoFixService : IArrangementAutoFixService
 {
-    public void Fix(Arrangement arrangement, ArrangementFixResult result) { }
+    public void Fix(Arrangement arrangement, ArrangementFixResult result, ChartProject? project = null) { }
 }
 
 internal sealed class NoOpProjectSessionService : IProjectSessionService

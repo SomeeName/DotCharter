@@ -58,6 +58,27 @@ public class HeadlessLinkTimelineTests
         Assert.Equal(0, Count(hovered, LinkLaneModel.ColorOf(h.Project, b), X(rc, 7) - 1, X(rc, 7) + 2, lanes.Item1, lanes.Item2));
     }
 
+    [Fact]
+    public void Crowded_groups_draw_every_chip_in_its_own_colour()
+    {
+        Assert.SkipWhen(!GoldenFrame.GpuTestsEnabled, "GPU headless test — set DOTCHARTER_GPU_TESTS=1 to run.");
+
+        var t = LinkedMeasuresHarness.WithRhythm();
+        var (a, b, c) = LinkLayerTests.Crowd(t);
+
+        using var r = new HeadlessVulkanTimelineRenderer(Width, Height);
+        var frame = r.Render(Context(t), Layers());
+        GoldenFrame.Dump(frame, Width, Height, "tl_links_crowded");
+
+        var rc = Context(t);
+        var top = (int)rc.Ribbon.BarTop(rc.Ribbon.LinkY);
+        foreach (var group in new[] { a, b, c })
+        {
+            Assert.True(Count(frame, LinkLaneModel.ColorOf(t.Links.Project, group), X(rc, 1), X(rc, 3), top, top + 3) > 4,
+                $"group {group.Letter} has no visible chip");
+        }
+    }
+
     private static ITimelineRenderLayer[] Layers() =>
         [new BackgroundLayer { IncludeBeatGrid = false }, new BeatGridLayer(), new LaneLayer(), new NoteLayer(), new LinkLayer()];
 

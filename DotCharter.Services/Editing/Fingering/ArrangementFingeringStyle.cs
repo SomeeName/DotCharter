@@ -53,18 +53,25 @@ public sealed record ArrangementFingeringStyle(PairFingering? PowerChord, PairFi
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         ArgumentNullException.ThrowIfNull(fingered);
-        Span<int> votes = stackalloc int[4]; // [pair * 2 + fingering]
+        var votes = new int[4]; // [pair * 2 + fingering]
+        Count(arrangement, fingered, votes);
+        return FromVotes(votes);
+    }
+
+    private static void Count(Arrangement arrangement, IEnumerable<ChordTemplate> fingered, int[] votes)
+    {
         foreach (var template in fingered)
         {
             if (TwoFretPairFingering.Classify(arrangement, template, out var low, out var high) is not { } pair) continue;
             if (TwoFretPairFingering.Current(template, low, high) is not { } fingering) continue;
             votes[(int)pair * 2 + (int)fingering]++;
         }
+    }
 
-        return new ArrangementFingeringStyle(
+    private static ArrangementFingeringStyle FromVotes(int[] votes) =>
+        new(
             Majority(votes[(int)TwoFretPair.PowerChord * 2], votes[(int)TwoFretPair.PowerChord * 2 + 1]),
             Majority(votes[(int)TwoFretPair.TwoFretOctave * 2], votes[(int)TwoFretPair.TwoFretOctave * 2 + 1]));
-    }
 
     /// <summary>
     ///     The clear majority of two vote counts, or null on a tie (none at all
@@ -74,6 +81,42 @@ public sealed record ArrangementFingeringStyle(PairFingering? PowerChord, PairFi
         indexPinky > indexRing ? PairFingering.IndexPinky
         : indexRing > indexPinky ? PairFingering.IndexRing
         : null;
+
+    /// <summary>
+    ///     The style the song's OTHER arrangements on the same instrument state
+    ///     (a bass part never votes for a guitar part, nor the reverse), each
+    ///     template classified in its own arrangement's tuning. The fallback for an
+    ///     arrangement with no clear majority of its own: the charter of a song
+    ///     fingers its lead and rhythm parts alike.
+    /// </summary>
+    public static ArrangementFingeringStyle OfOtherArrangements(IEnumerable<Arrangement> song, Arrangement arrangement)
+    {
+        ArgumentNullException.ThrowIfNull(song);
+        ArgumentNullException.ThrowIfNull(arrangement);
+        var bass = arrangement.ArrangementType == ArrangementType.Bass;
+        var votes = new int[4]; // [pair * 2 + fingering]
+        foreach (var other in song)
+        {
+            if (ReferenceEquals(other, arrangement) || (other.ArrangementType == ArrangementType.Bass) != bass) continue;
+            Count(other, other.ChordTemplates, votes);
+        }
+
+        return FromVotes(votes);
+    }
+
+    /// <summary>
+    ///     <see cref="OfOtherArrangements" /> over <paramref name="project" />'s
+    ///     arrangements; <see cref="None" /> with no project open.
+    /// </summary>
+    public static ArrangementFingeringStyle OfSong(ChartProject? project, Arrangement arrangement) =>
+        project == null ? None : OfOtherArrangements(project.Arrangements, arrangement);
+
+    /// <summary>
+    ///     This style, each pair it leaves open (null) taken from
+    ///     <paramref name="fallback" />.
+    /// </summary>
+    public ArrangementFingeringStyle Or(ArrangementFingeringStyle? fallback) =>
+        fallback == null ? this : new(PowerChord ?? fallback.PowerChord, TwoFretOctave ?? fallback.TwoFretOctave);
 
     /// <summary>The style's fingering for <paramref name="pair" />, or null.</summary>
     public PairFingering? For(TwoFretPair pair) => pair == TwoFretPair.PowerChord ? PowerChord : TwoFretOctave;
@@ -94,8 +137,11 @@ public sealed record ArrangementFingeringStyle(PairFingering? PowerChord, PairFi
     ///     read as the suggestion and lose its "authored" pin in the FHP walk. The
     ///     votes are counted once; a template outside the arrangement sees them
     ///     all. Reads the templates as they are now (callers memoise per pass).
+    ///     A pair with no clear majority takes <paramref name="fallback" />'s
+    ///     fingering (<see cref="OfOtherArrangements" />), when given.
     /// </summary>
-    public static Func<ChordTemplate, PairFingering?> HintsFromOthers(Arrangement arrangement)
+    public static Func<ChordTemplate, PairFingering?> HintsFromOthers(
+        Arrangement arrangement, ArrangementFingeringStyle? fallback = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         var votes = new int[4]; // [pair * 2 + fingering]
@@ -120,7 +166,7 @@ public sealed record ArrangementFingeringStyle(PairFingering? PowerChord, PairFi
                 else if (own == PairFingering.IndexRing) ring--;
             }
 
-            return Majority(pinky, ring);
+            return Majority(pinky, ring) ?? fallback?.For(pair);
         };
     }
 
@@ -130,12 +176,16 @@ public sealed record ArrangementFingeringStyle(PairFingering? PowerChord, PairFi
     ///     marks) is applied to every other power chord and two-fret octave that
     ///     still carries the suggester's plain fingering. Nothing authored, or no
     ///     clear majority: nothing changes. Returns how many templates changed.
+    ///     A pair the authored templates state no majority for follows
+    ///     <paramref name="songStyle" /> (<see cref="OfOtherArrangements" />), when
+    ///     given: the file's other tracks on the same instrument.
     /// </summary>
-    public static int FollowAuthored(Arrangement arrangement, Func<ChordTemplate, bool> isAuthored)
+    public static int FollowAuthored(Arrangement arrangement, Func<ChordTemplate, bool> isAuthored,
+        ArrangementFingeringStyle? songStyle = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         ArgumentNullException.ThrowIfNull(isAuthored);
-        var style = From(arrangement, arrangement.ChordTemplates.Where(isAuthored));
+        var style = From(arrangement, arrangement.ChordTemplates.Where(isAuthored)).Or(songStyle);
         if (style == None) return 0;
 
         var changed = 0;
@@ -158,16 +208,18 @@ public sealed record ArrangementFingeringStyle(PairFingering? PowerChord, PairFi
     ///     Fingers <paramref name="template" /> as the suggester would, following
     ///     <paramref name="arrangement" />'s own style for a power chord or a
     ///     two-fret octave. The style is only read when the template IS one of
-    ///     them, so minting any other shape costs nothing extra.
+    ///     them, so minting any other shape costs nothing extra. A pair the
+    ///     arrangement has no majority for takes <paramref name="fallback" />'s.
     /// </summary>
-    public static void SetSuggestedFingers(Arrangement arrangement, ChordTemplate template, int stringCount)
+    public static void SetSuggestedFingers(Arrangement arrangement, ChordTemplate template, int stringCount,
+        ArrangementFingeringStyle? fallback = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         ArgumentNullException.ThrowIfNull(template);
         // A pinned grip keeps the fingers it was authored with.
         if (template.IsPinned) return;
         var hint = TwoFretPairFingering.Classify(arrangement, template, out _, out _) != null
-            ? HintsFromOthers(arrangement)(template)
+            ? HintsFromOthers(arrangement, fallback)(template)
             : null;
         ChordTemplateFingerSetter.SetSuggestedFingers(template, Math.Max(1, stringCount), hint);
     }

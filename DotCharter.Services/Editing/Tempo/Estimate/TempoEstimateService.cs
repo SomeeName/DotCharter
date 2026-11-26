@@ -15,7 +15,8 @@ public interface ITempoEstimateService
 }
 
 /// <inheritdoc cref="ITempoEstimateService" />
-public sealed class TempoEstimateService(IAppLogger? logger = null) : ITempoEstimateService
+/// <remarks>A whole-song estimate is also handed to <paramref name="store" />, where validation reads it.</remarks>
+public sealed class TempoEstimateService(IAudioTempoEstimateStore store, IAppLogger? logger = null) : ITempoEstimateService
 {
     /// <summary>A part shorter than this holds too few beats to tell a tempo from noise.</summary>
     public const double MinSeconds = 4.0;
@@ -48,6 +49,7 @@ public sealed class TempoEstimateService(IAppLogger? logger = null) : ITempoEsti
         logger?.Info(AppLogCategory.Audio,
             $"Estimate BPM: {(estimate == null ? "none" : $"{estimate.Bpm:0.00}")} from {startMs ?? 0:0}-{endMs?.ToString("0") ?? "end"} ms, " +
             $"took={Stopwatch.GetElapsedTime(started).TotalMilliseconds:0}ms.");
+        if (estimate != null && startMs == null && endMs == null) store.Remember(audioPath, estimate);
         return estimate == null
             ? new TempoEstimateOutcome(null, TempoEstimateFailure.NoTempoFound)
             : new TempoEstimateOutcome(estimate, TempoEstimateFailure.None);

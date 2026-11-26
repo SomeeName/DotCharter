@@ -59,17 +59,27 @@ public enum AudioDeviceRecoveryAction
 ///    <see cref="AudioDeviceRecoveryState.ReappearDebounce"/> consecutive
 ///    "present" probes and the machine parks in RecoveryPending until the
 ///    caller reports the outcome.
+///  - A topology change during the back-off after a failed attempt (the
+///    interface coming back) starts the next attempt without waiting the
+///    back-off out.
 ///  - After a FAILED attempt, further attempts are gated on a topology
 ///    change (some hardware — notably ASIO registry entries — never leaves
-///    the enumeration, so presence alone must not retrigger restarts).
+///    the enumeration, so presence alone must not retrigger restarts) —
+///    unless the engine is DEAD: with no audio at all a restart cannot
+///    glitch anything, and an ASIO interface replugged without any
+///    enumeration change would otherwise never come back, so a dead
+///    engine re-arms one attempt every <c>deadRetryTicks</c> probes.
 /// </summary>
 public sealed class AudioDeviceRecoveryStateMachine
 {
     private readonly int _debounceTicks;
     private readonly int _cooldownTicks;
+    private readonly int _deadRetryTicks;
 
     private int _debounce;
     private int _cooldown;
+    // Consecutive dead-engine probes while missing or cooling down.
+    private int _deadTicks;
     // True when the machine is allowed to launch the next recovery attempt.
     // Set on a fresh loss and on every topology change; cleared when an
     // attempt starts so a failed attempt can't loop without new evidence.
@@ -81,10 +91,13 @@ public sealed class AudioDeviceRecoveryStateMachine
     /// before a recovery attempt is issued (≥ 1).</param>
     /// <param name="cooldownTicks">Probes to skip after a failed recovery
     /// attempt before the machine returns to watching (≥ 1).</param>
-    public AudioDeviceRecoveryStateMachine(int debounceTicks = 2, int cooldownTicks = 5)
+    /// <param name="deadRetryTicks">Consecutive dead-engine probes after which a
+    /// missing device re-arms a recovery attempt without a topology change (≥ 1).</param>
+    public AudioDeviceRecoveryStateMachine(int debounceTicks = 2, int cooldownTicks = 5, int deadRetryTicks = 10)
     {
         _debounceTicks = Math.Max(1, debounceTicks);
         _cooldownTicks = Math.Max(1, cooldownTicks);
+        _deadRetryTicks = Math.Max(1, deadRetryTicks);
     }
 
     public AudioDeviceRecoveryAction Tick(AudioDeviceProbe probe)
@@ -117,6 +130,7 @@ public sealed class AudioDeviceRecoveryStateMachine
 
             case AudioDeviceRecoveryState.DeviceMissing:
                 if (probe.TopologyChanged) _armed = true;
+                CountDeadProbe(probe);
                 if (probe.DesiredDevicePresent && _armed)
                 {
                     State = AudioDeviceRecoveryState.ReappearDebounce;
@@ -145,10 +159,7 @@ public sealed class AudioDeviceRecoveryStateMachine
                 return AudioDeviceRecoveryAction.None;
 
             case AudioDeviceRecoveryState.Cooldown:
-                if (probe.TopologyChanged) _armed = true;
-                if (--_cooldown <= 0)
-                    State = AudioDeviceRecoveryState.DeviceMissing;
-                return AudioDeviceRecoveryAction.None;
+                return TickCooldown(probe);
 
             default:
                 return AudioDeviceRecoveryAction.None;
@@ -162,6 +173,7 @@ public sealed class AudioDeviceRecoveryStateMachine
         State = AudioDeviceRecoveryState.Healthy;
         _debounce = 0;
         _cooldown = 0;
+        _deadTicks = 0;
         _armed = false;
     }
 
@@ -174,7 +186,10 @@ public sealed class AudioDeviceRecoveryStateMachine
     {
         if (State != AudioDeviceRecoveryState.RecoveryPending) return;
         State = AudioDeviceRecoveryState.Cooldown;
-        _cooldown = _cooldownTicks;
+        // A topology change seen while the attempt ran (the interface was
+        // replugged during it) is the evidence the back-off waits for, so the
+        // back-off shrinks to a single probe instead of losing that replug.
+        _cooldown = _armed ? 1 : _cooldownTicks;
         _debounce = 0;
     }
 
@@ -187,7 +202,39 @@ public sealed class AudioDeviceRecoveryStateMachine
         State = AudioDeviceRecoveryState.Healthy;
         _debounce = 0;
         _cooldown = 0;
+        _deadTicks = 0;
         _armed = false;
+    }
+
+    private AudioDeviceRecoveryAction TickCooldown(AudioDeviceProbe probe)
+    {
+        if (probe.TopologyChanged && probe.DesiredDevicePresent)
+        {
+            // Fresh hot-plug evidence (the interface's endpoints came back)
+            // ends the back-off at once, so a replugged interface is not left
+            // silent until the back-off runs out.
+            State = AudioDeviceRecoveryState.ReappearDebounce;
+            _armed = true;
+            _debounce = 1;
+            return _debounce >= _debounceTicks ? StartAttempt() : AudioDeviceRecoveryAction.None;
+        }
+        if (probe.TopologyChanged) _armed = true;
+        CountDeadProbe(probe);
+        if (--_cooldown <= 0)
+            State = AudioDeviceRecoveryState.DeviceMissing;
+        return AudioDeviceRecoveryAction.None;
+    }
+
+    private void CountDeadProbe(AudioDeviceProbe probe)
+    {
+        if (probe.EngineAlive)
+        {
+            _deadTicks = 0;
+            return;
+        }
+        if (++_deadTicks < _deadRetryTicks) return;
+        _deadTicks = 0;
+        _armed = true;
     }
 
     private AudioDeviceRecoveryAction StartAttempt()
@@ -195,6 +242,7 @@ public sealed class AudioDeviceRecoveryStateMachine
         State = AudioDeviceRecoveryState.RecoveryPending;
         _armed = false;
         _debounce = 0;
+        _deadTicks = 0;
         return AudioDeviceRecoveryAction.AttemptRecovery;
     }
 }

@@ -52,8 +52,23 @@ public sealed class VocalsWriterTokenParityTests
         Assert.Equal(expected, SngTokens(project).Select(t => t.Lyric));
     }
 
+    /// <summary>#921: both files give the game characters its font can show; the chart keeps the charter's own.</summary>
+    [Fact]
+    public void Typographic_characters_go_out_as_ascii_in_both_files_and_the_chart_keeps_them()
+    {
+        var project = Project(ChartsByName["typographic characters"]());
+        string[] expected = ["didn't", "S", "ao-", "end...+"];
+
+        Assert.Equal(expected, XmlTokens(project).Select(t => t.Lyric));
+        Assert.Equal(expected, SngTokens(project).Select(t => t.Lyric));
+        var phrase = project.VocalTracks[0].Phrases[0];
+        Assert.Equal("didn’t", phrase.Lyrics[0].Text);
+        Assert.All(Enumerable.Range(0, phrase.Lyrics.Count), i => Assert.False(RsVocalLyricEncoding.LosesText(phrase, i)));
+    }
+
     private static readonly Dictionary<string, Func<LyricPhrase[]>> ChartsByName = new()
     {
+        ["typographic characters"] = () => [Line(Syllable(1, "didn’t"), Syllable(2, "S"), Syllable(3, "ão", wordPart: true), Syllable(4, "end…"))],
         ["last ends in plus, no flag"] = () => [Unflagged(Line(Syllable(1, "x"), Syllable(2, "a+"))), Line(Syllable(6, "y"))],
         ["last ends in hyphen, no flag"] = () => [Unflagged(Line(Syllable(1, "x"), Syllable(2, "go-"))), Line(Syllable(6, "y"))],
         ["blank last syllable"] = () => [Line(Syllable(2, "a"), Syllable(4, " ")), Line(Syllable(6, "y"))],

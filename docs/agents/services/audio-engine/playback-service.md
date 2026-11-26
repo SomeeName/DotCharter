@@ -70,8 +70,10 @@ before, twice the size. Consequences that bite the SERVICE layer:
   (#203).** One after another, six 64 MB stems kept the mixer silent for 3.6 s after the
   project opened (read + decode + 44.1→48 kHz resample, ~600 ms a stem on a cold
   spinning disk). The opener READS the files in order on the calling thread (1 MB
-  sequential reads into the OS cache) and runs up to three native opens at once behind
-  the reader. **Never make the reads parallel too:** the native WAV reader pulls a few KB
+  sequential reads into the OS cache) and runs up to six native opens at once behind
+  the reader (`MaxOpensInFlightCap`, one per two hardware threads below that): a
+  six-stem set opens in ONE wave (#962; ~440 → ~320 ms for 260 s stems, at +385 MB
+  transient peak). **Never make the reads parallel too:** the native WAV reader pulls a few KB
   per read, and three cold 105 MB stems opened concurrently on a 7200 rpm disk took
   10.4 s against 2.1 s pipelined. Concurrent `dca_source_open_file` calls on ONE engine
   are safe — the preload budget is a CAS, the polyphase kernel cache and the source lists

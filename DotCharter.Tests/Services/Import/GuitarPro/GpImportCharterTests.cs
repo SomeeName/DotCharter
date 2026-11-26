@@ -49,7 +49,9 @@ public sealed class GpImportCharterTests : IDisposable
         return path;
     }
 
-    private async Task<string> ImportAsync(string charter)
+    private async Task<string> ImportAsync(string charter) => (await ImportProjectAsync(charter)).Chart.Charter;
+
+    private async Task<ChartProject> ImportProjectAsync(string charter)
     {
         var edit = new ChartEditHarness();
         var project = new ChartProject { Bpm = 120, Chart = { SongName = "Fixture", Artist = "DotCharter", Charter = charter } };
@@ -64,7 +66,16 @@ public sealed class GpImportCharterTests : IDisposable
         await ((IAsyncRelayCommand)vm.ImportCommand).ExecuteAsync(null);
         Assert.True(ChartEditHarness.Answer(vm.Result));
         Assert.Equal("Fixture Artist", project.Chart.Artist);
-        return project.Chart.Charter;
+        return project;
+    }
+
+    /// <summary>The score's tempo map replaces the beat map unsynced: D110 marks it at the first note.</summary>
+    [Fact]
+    public async Task The_tab_tempo_map_is_marked_for_an_audio_check()
+    {
+        var arrangement = Assert.Single((await ImportProjectAsync("Default Charter")).Arrangements);
+        var spot = Assert.Single(arrangement.AudioCheckSpots);
+        Assert.Equal(new AudioCheckSpot(arrangement.Levels[0].Notes[0].Position, AudioCheckReason.TempoFromTab), spot);
     }
 
     [Fact]

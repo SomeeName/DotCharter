@@ -1,0 +1,69 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.PackageSongPickerDialogView"
+             x:DataType="contracts:IPackageSongPickerScreen"
+             x:CompileBindings="True">
+
+    <!-- Which song of a multi-song package to open. Grammar: Views/Dialogs/DialogStyles.axaml.
+         A list of the package's songs, the first selected; Open (Enter) answers the
+         selected one, Cancel (Esc) answers nothing. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconMusicNote}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc PackageSongPicker_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc PackageSongPicker_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock x:Name="PackageNameText" Grid.Row="1" Text="{Binding PackageName}"
+                           Margin="{DynamicResource FireGapRowMd}"
+                           FontFamily="{DynamicResource FireFontMono}"
+                           FontSize="{DynamicResource FireSizeMeta}"
+                           Foreground="{DynamicResource FireTextDim}"
+                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+
+                <Border Theme="{DynamicResource DlgListFrameBorder}" Grid.Row="2" Classes="DlgListFrame">
+                    <ListBox x:Name="SongRows" Classes="DlgList" MaxHeight="330" DoubleTapped="OnRowsDoubleTapped"
+                             Focusable="True" dlgv:FocusOnOpen.IsTarget="True"
+                             AutomationProperties.Name="{localization:Loc PackageSongPicker_Title}"
+                             ItemsSource="{Binding Songs}"
+                             SelectedItem="{Binding Selected, Mode=TwoWay}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="contracts:IPackageSongRow">
+                                <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{Binding Title}"
+                                                   TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding Detail}"
+                                                   TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="3" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc PackageSongPicker_Open}"
+                                Command="{Binding OpenCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

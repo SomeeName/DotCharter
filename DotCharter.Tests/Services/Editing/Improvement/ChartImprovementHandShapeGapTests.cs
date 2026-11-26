@@ -60,10 +60,10 @@ public sealed class ChartImprovementHandShapeGapTests
         Assert.Empty(Check(arr, beats));
     }
 
-    /// <summary>#817: a shape over a held chord that touches the next note is trimmed to the same
-    /// minimum gap as any other shape.</summary>
+    /// <summary>A shape over a held chord that touches the next note is trimmed to the same gap as
+    /// any other shape: a 32nd note, 1/8 beat.</summary>
     [Fact]
-    public void AHeldChordTouchingTheNextNote_IsTrimmedToTheMinimumGap()
+    public void AHeldChordTouchingTheNextNote_IsTrimmedToA32ndNote()
     {
         var arr = ChordHandShapePlannerTests.Arr();
         var level = arr.Levels[0];
@@ -77,7 +77,7 @@ public sealed class ChartImprovementHandShapeGapTests
 
         Improve(level, beats);
 
-        Assert.Equal(At(31), shape.EndPosition);
+        Assert.Equal(At(30), shape.EndPosition);
         Assert.Empty(Check(arr, beats));
     }
 

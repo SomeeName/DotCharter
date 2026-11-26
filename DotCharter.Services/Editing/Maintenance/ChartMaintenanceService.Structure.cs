@@ -1,6 +1,7 @@
 // ChartMaintenanceService: copying a song's STRUCTURE — its section and phrase
 // markers — from the arrangement being charted onto the others.
 
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.Structure;
 using DotCharter.Services.Editing.Sync;
 using DotCharter.Services.State;
@@ -154,7 +155,8 @@ public sealed partial class ChartMaintenanceService
             // derived from it and is now stale, so rebuild them from it. Without a
             // generator result the stale levels stay as they were, which is logged.
             if (targetLevelCount > 1 &&
-                !_levelGenerationService.TryGenerate(afterTarget, targetLevelCount, after.Beats))
+                !_levelGenerationService.TryGenerate(afterTarget, targetLevelCount, after.Beats,
+                    songStyle: ArrangementFingeringStyle.OfSong(project, target)))
             {
                 _logger.Warning(AppLogCategory.Editing,
                     $"Synced '{source.Name}' -> '{target.Name}', but its {targetLevelCount - 1} easier level(s) " +

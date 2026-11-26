@@ -73,7 +73,17 @@ public static class LinkGroupEdits
     ///     against the chart as it is now. Like creating a group, the run's edges are normalised in the
     ///     same step (hand shapes split at its edges, the hand position pinned at its start).
     /// </summary>
-    public static IChartAction? AddPlacement(ChartProject project, string groupId, LinkRunRequest run)
+    public static IChartAction? AddPlacement(ChartProject project, string groupId, LinkRunRequest run) =>
+        AddPlacement(project, groupId, run, normaliseEdges: true);
+
+    /// <summary>
+    ///     <see cref="AddPlacement(ChartProject, string, LinkRunRequest)" /> for Link all, which writes no chart
+    ///     content: the run must already have safe edges.
+    /// </summary>
+    internal static IChartAction? AddPlacementWithoutEdgeEdits(ChartProject project, string groupId, LinkRunRequest run) =>
+        AddPlacement(project, groupId, run, normaliseEdges: false);
+
+    private static IChartAction? AddPlacement(ChartProject project, string groupId, LinkRunRequest run, bool normaliseEdges)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(run);
@@ -84,7 +94,8 @@ public static class LinkGroupEdits
         var before = LinkFollowUpAction.Capture(project);
         var after = LinkFollowUpAction.Capture(project);
         after.First(g => g.Id == groupId).Placements.Add(placement);
-        return new AddLinkPlacementAction(project, before, after, LinkRunEdges.Plan([placement]), run.Arrangement);
+        return new AddLinkPlacementAction(project, before, after, normaliseEdges ? LinkRunEdges.Plan([placement]) : [],
+            run.Arrangement);
     }
 
     /// <summary>Unlinks every placement of the group.</summary>

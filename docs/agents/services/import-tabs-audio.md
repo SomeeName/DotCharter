@@ -136,6 +136,21 @@ share one bounded denominator. Ordinary exact fractions remain exact.
   eight bars short and every later note landed early by that much — the gpif
   twin of the same score was correct, which is what made it read as "GP5 import
   is off" rather than as a dropped repeat.
+- **Add-new keeps the project's tempo map unless told otherwise** (#1025).
+  The dialog's "replace the tempo map" box (`IGpImportScreen.ReplaceTempoMap`)
+  starts ticked only when no arrangement has content
+  (`GpImportApplier.DefaultReplacesTempoMap`), because a charted project's map
+  is usually synced to the recording by hand. Unticked, or with the map locked
+  (`IsBeatMapLocked`, shown as a disabled box with the reason), `project.Beats`
+  stays bit-identical, there is no D110 "tempo from tab" spot and `GpSourceBars`
+  is left alone; key and score metadata are still copied.
+  `GpMeterGrid.OntoMeasures` then puts score bar `i` on the map's measure `i`
+  (`MeasureGrid`), keeping each position's FRACTION OF THE BAR: where the beats
+  per bar differ (6/8 score on a 3/4 map, a bar the user re-barred) the bar's
+  notes scale into the map's bar rather than spill over its barline, so every
+  later bar still starts on its own downbeat. The map's last measure counts at
+  its signature's length; score bars past it continue beat for beat. Spacing is
+  enforced after the fit, against the kept map. Pinned by `GpImportTempoMapTests`.
 - Add-new Guitar Pro imports on the score's beat grid save `dcGpSource` v1
   with written bar IDs, repeat passes, alternate-ending masks, playback block
   edges, and rehearsal marks. `GpDirections` reads GPIF names such as `DaSegno`
@@ -165,6 +180,24 @@ share one bounded denominator. Ordinary exact fractions remain exact.
     across 5.10/5.00/4.06/3.00 (bar count AND note positions), the volta
     bitmask, and a gpif twin asserting both paths agree on the bar count.
     `LegacyGpFixtureBuilder`'s `FxMeasure` can author all three header bits.
+
+- **Repeated measures import with ONE anchor pattern (#1027).** The FHP walk reads
+  context, so two measures that play the same notes could carry different anchors
+  IN EFFECT (an open downbeat still under the previous measure's position, an
+  extra mid-measure anchor), and a link demands they match. After generation,
+  `ImportFhpPass.Run` hands the anchors to `RepeatedMeasureAnchors.Harmonize` with
+  the score's barlines (`ImportFhpJob.Barlines`: gpif from `GpBarTimeline.Barlines`,
+  binary from the unfolded bar starts plus the last bar's end). Measures with the
+  same sounds and hand shapes form a group; each member's pattern is its anchors
+  led by the position in effect at its downbeat, and the group takes the most
+  common one (ties: fewest moves, then earliest). The measure after a rewritten
+  one gets its old position restated at its downbeat; a member stays as it was
+  when a note held across its barline would land outside a changed position.
+  Suggested chord fingerings then follow the new anchors. The link rule itself is
+  unchanged. A repeat that still does not link because a note rings across its
+  END barline into measures that differ (the edge is unsafe in `AutoLinkEdges`:
+  a link would cut the note) is correct, not a miss. Pinned by
+  `GpRepeatAnchorConsistencyTests`.
 
 - **The parsers count in QUARTER notes; the chart counts BEATS
   (`GpMeterGrid`).** Both readers advance a bar by `numerator × 4 / denominator`
@@ -540,8 +573,26 @@ share one bounded denominator. Ordinary exact fractions remain exact.
   note, start within the last let-ring beat's authored ring-out, sit on a string
   the run does not hold and fit the grip (`Editing/HandShapes/HandShapeGripFit`,
   the same fit the hand-shape resize uses to grow a shared grip into a new
-  template); its own sustain is not trimmed. A beat of the OTHER run set (roll
-  vs authored let ring) is never a tail. Pinned by `GpLetRingTrailingGripToneTests`.
+  template), or re-strike a held string at its held fret. When its sustain
+  reaches no further than the shape's end the shape carries it and the note
+  becomes a strike (`ZeroCarriedTail`); a tail held past the shape (tied over
+  the barline) keeps its sustain. A beat of the OTHER run set (roll vs authored
+  let ring) is never a tail. Pinned by `GpLetRingTrailingGripToneTests`.
+  **Barlines (`GpBarTimeline`, #940):** a let-ring run, and its tail, never
+  cross a barline, so a bar that restarts the same arpeggio gets its own shape;
+  the bar END is the last beat's written end mapped onto the swung grid
+  (`GpBarTimeline.PlacedEnd`: written onset + written length, moved to where the
+  beat WRITTEN there was placed) and is clipped to the next barline,
+  even when only a rest bar follows. The gpif parser and the GP3-5 reader
+  (`GpLegacySwingOnsets`, one timeline per track, replayed on repeat passes; #947)
+  record barlines and the swung onset of every playable beat, rests included. Pinned by
+  `GpLetRingBarlineHandShapeTests`.
+  **Chord shapes use the same rule (#985):** `GpPostProcessor.Run` hands the
+  timeline to `ChordHandShapeBuilder`, whose planner option
+  `ChordHandShapePlanOptions.PlacedEnd` ends each strum on the swung grid, so the
+  1/6-beat hole swing leaves after a downbeat eighth is never read as a rest
+  (`SplitRunsOnRests`) and repeated strums stay one shape; a written rest still
+  splits. Pinned by `GpSwungStrumHandShapeTests` (gpif + GP5).
   **Two more rules, both from defects that FIRST cut introduced (2026-08-22,
   found by an independent re-import check, not by the gate):**
   (a) **A run also breaks where a NEW string would stretch the grip past a hand**
@@ -726,16 +777,19 @@ share one bounded denominator. Ordinary exact fractions remain exact.
   DESCENDING tapped note into a `PullOff`. `Tap` needs no `tapOriginated`
   exemption for that last one — only a `HammerOn` is ever re-derived, which is
   why gpif passes that set solely for the LEFT-hand taps it normalises to
-  hammer-ons on purpose. Note fx2 bit `0x01` is GP's authored staccato and was
-  parsed into an empty block; Rocksmith has no staccato mark, so the charting
-  convention is the ACCENT (playback already shortens exactly the accented notes
-  — `JuceAudioPlaybackService`'s note-end rule), and it is read UNGATED like
-  every other accent on both paths (the note header's `0x40`/GP5 `0x02` here,
-  gpif's `<Accent>` element there). **There is no staccato SETTING and no
-  staccato inference on any path** — do not add one to a single importer. Both
-  pinned by `GpLegacyImportTests` (`BeatTap_ImportsAsTapNotHammerOn` covers the
-  descending flip case too; `LegacyGpFixtureBuilder`'s `FxNote.Staccato` writes
-  the flag-only bit).
+  hammer-ons on purpose. **An authored STACCATO imports as a STRIKE: sustain 0,
+  NO accent** (owner spec). GP3-5: note fx2 bit `0x01` (alphaTab
+  `Gp3To5Importer.readNoteEffects`); the accents are the note header's `0x40` and
+  GP5 `0x02`. gpif: `<Accent>` is a BIT FIELD (alphaTab `GpifParser`/`GpifWriter`):
+  `0x01` staccato, `0x04` heavy accent, `0x08` accent, `0x10` tenuto; only
+  `0x04`/`0x08` accent. Both read UNGATED. A staccato note never takes the
+  short-rest accent below, and a strum run ending on a staccato ends its bar half
+  the strum's written value after it (`ChordHandShapePlanOptions.EndRunsAtStaccatoStrike`,
+  import only). **There is no staccato SETTING** — do not add one to a single
+  importer. Pinned by `GpStaccatoImportTests` (both readers, and the bit values
+  read off the shipped alphaTab writer) and `GpLegacyImportTests`
+  (`BeatTap_ImportsAsTapNotHammerOn` covers the descending flip case too;
+  `LegacyGpFixtureBuilder`'s `FxNote.Staccato` writes the flag-only bit).
   **AUTHORED left-hand fingering is read by BOTH importers and BEATS the
   suggester.** Guitar Pro stores a per-note left-hand finger and neither reader
   looked: the binary path `Skip(2)`'d the fingering bytes, the gpif path never
@@ -862,7 +916,12 @@ share one bounded denominator. Ordinary exact fractions remain exact.
   BEFORE `AdjustSustains`.** For each imported chord it find-or-creates a
   `ChordTemplate`, lays a `HandShape` over the chord's authored
   duration, then TRIMS the chord's sustain to a short strike (RS convention: the
-  handshape bar carries the duration). **Since 0.26 new templates arrive
+  handshape bar carries the duration) with ZERO sustain; only a technique,
+  slide, link-next or tie keeps one (a short strike tail, #986, was reverted at
+  the owner's request in #1009). The last pass (`GpPostProcessor.FinishHandShapes`, on
+  the final beat grid) ends every sustain D90 would report a 32nd note before the
+  next sound with `ChartSpacingFix.TrimSustainsToGap`, the D90 fix's own trim, so
+  a fresh import opens without D90 findings. **Since 0.26 new templates arrive
   charting-ready**: suggested fingering (`ChordTemplateFingerSetter`) + a
   suggested name (`ChordNameSuggester`, tuning-aware) — which is why all three
   tab importers now sync `Arrangement.Tuning` (names) from the file's tuning

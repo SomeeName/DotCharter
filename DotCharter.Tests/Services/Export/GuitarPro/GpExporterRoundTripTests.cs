@@ -145,7 +145,7 @@ public sealed class GpExporterRoundTripTests
 
         Assert.Equal((0, 3), (notes[0].StringIndex, notes[0].Fret));
         Assert.Equal(Pos(0.0), notes[0].Position);
-        Assert.Equal(Pos(1.0), notes[0].Sustain); // quarter-note rhythm kept
+        Assert.Equal(new FractionalPosition(0, new Fraction(7, 8)), notes[0].Sustain); // quarter-note rhythm kept, less the D90 gap (a 32nd note)
 
         Assert.Equal((1, 5), (notes[1].StringIndex, notes[1].Fret));
         Assert.Equal(Pos(1.0), notes[1].Position);

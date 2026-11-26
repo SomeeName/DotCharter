@@ -179,6 +179,9 @@
     <data name="Dialog_GpImport_Mode_TechniqueOnly" xml:space="preserve"><value>Nur Techniken (in vorhandene einfügen)</value></data>
     <data name="Dialog_GpImport_Mode_DiffCompare" xml:space="preserve"><value>Mit vorheriger Version vergleichen</value></data>
     <data name="Dialog_GpImport_PickOldFile" xml:space="preserve"><value>Vorherige GP-Datei wählen…</value></data>
+    <data name="Dialog_GpImport_ReplaceTempoMap" xml:space="preserve"><value>Tempokarte durch die der Tabulatur ersetzen</value></data>
+    <data name="Dialog_GpImport_ReplaceTempoMap_Desc" xml:space="preserve"><value>Aus: Die neuen Arrangements werden Takt für Takt auf die Beats des Projekts gelegt, die unverändert bleiben.</value></data>
+    <data name="Dialog_GpImport_ReplaceTempoMap_Locked" xml:space="preserve"><value>Die Beat-Map ist gesperrt, daher wird die Tempokarte der Tabulatur nicht übernommen.</value></data>
     <data name="Dialog_GpImport_TargetArrangement" xml:space="preserve"><value>Ziel-Arrangement</value></data>
     <data name="Dialog_GpImport_Busy" xml:space="preserve"><value>Guitar-Pro-Datei wird gelesen…</value></data>
     <data name="Dialog_GpImport_OldFileNone" xml:space="preserve"><value>Noch keine Vergleichsdatei gewählt.</value></data>
@@ -1196,6 +1199,8 @@
     <data name="Progress_ListeningVocal" xml:space="preserve"><value>Gesang wird abgehört…</value></data>
     <data name="Progress_ListeningAgain" xml:space="preserve"><value>Zweiter Durchgang mit dem zweiten Modell…</value></data>
     <data name="Progress_LyricGpuFailedCpu" xml:space="preserve"><value>Die GPU konnte das Textmodell nicht ausführen; für den Rest dieser Sitzung wird die CPU verwendet.</value></data>
+    <data name="Progress_LyricHomoglyphsFolded_One" xml:space="preserve"><value>In {0} Wort des Liedtexts wurden kyrillische oder griechische Doppelgänger-Buchstaben durch lateinische ersetzt.</value></data>
+    <data name="Progress_LyricHomoglyphsFolded_Many" xml:space="preserve"><value>In {0} Wörtern des Liedtexts wurden kyrillische oder griechische Doppelgänger-Buchstaben durch lateinische ersetzt.</value></data>
     <data name="Progress_AligningLyrics" xml:space="preserve"><value>Lyrics werden ausgerichtet…</value></data>
     <data name="Progress_DownloadingLyricModel" xml:space="preserve"><value>Lyrics-Modell wird heruntergeladen ({0} MB)…</value></data>
     <data name="Progress_UnpackingLyricModel" xml:space="preserve"><value>Lyrics-Modell wird entpackt…</value></data>
@@ -1424,12 +1429,16 @@
  <data name="Inspector_IssueFix_UseShapeFingering" xml:space="preserve"><value>Fingersatz des Griffbilds übernehmen ({0})</value></data>
  <data name="Inspector_IssueFix_MoveAnchor" xml:space="preserve"><value>Greifhandposition auf Bund {0} verschieben</value></data>
  <data name="Inspector_IssueFix_MoveAnchorTip" xml:space="preserve"><value>Verschiebt die Greifhandposition von Bund {0} auf Bund {1}, wo dieser Fingersatz den Zeigefinger hat. Alle Töne unter diesem Anker werden danach aus der neuen Position gespielt. Ein Rückgängig-Schritt.</value></data>
- <data name="Inspector_IssueFix_ToneEarlier" xml:space="preserve"><value>Sound-Wechsel eine Sechzehntel früher setzen</value></data>
- <data name="Inspector_IssueFix_ToneEarlierTip" xml:space="preserve"><value>Verschiebt den Sound-Wechsel um eine Sechzehntelnote im Beat-Raster nach vorn, damit der neue Sound schon klingt, wenn diese Note gespielt wird. Ein Rückgängig-Schritt.</value></data>
- <data name="Inspector_IssueFix_ToneBlockedChartStart" xml:space="preserve"><value>Nicht möglich: Der Song beginnt (0:00) weniger als eine Sechzehntel vor diesem Sound-Wechsel.</value></data>
- <data name="Inspector_IssueFix_ToneBlockedToneChange" xml:space="preserve"><value>Nicht möglich: In der Sechzehntel davor liegt bereits ein anderer Sound-Wechsel.</value></data>
- <data name="Inspector_IssueFix_ToneBlockedPhraseStart" xml:space="preserve"><value>Nicht möglich: In der Sechzehntel davor beginnt eine Phrase oder ein Abschnitt. Bitte von Hand verschieben.</value></data>
- <data name="Inspector_IssueFix_ToneBlockedNote" xml:space="preserve"><value>Nicht möglich: Eine Sechzehntel früher beginnt eine andere Note, der Sound-Wechsel läge dann auf dieser Note.</value></data>
+ <data name="Inspector_IssueFix_ToneEarlier" xml:space="preserve"><value>Sound-Wechsel eine Zweiunddreißigstel früher setzen</value></data>
+ <data name="Inspector_IssueFix_ToneEarlierTip" xml:space="preserve"><value>Verschiebt den Sound-Wechsel um eine Zweiunddreißigstelnote im Beat-Raster nach vorn, damit der neue Sound schon klingt, wenn diese Note gespielt wird. Ein Rückgängig-Schritt.</value></data>
+ <data name="Inspector_IssueFix_LyricText" xml:space="preserve"><value>Liedtext zu „{0}“ ändern</value></data>
+ <data name="Inspector_IssueFix_LyricTextTip" xml:space="preserve"><value>Ändert nur den Text dieser Silbe; ihr Timing bleibt. Ein Rückgängig-Schritt.</value></data>
+ <data name="Inspector_IssueFix_LyricSplit" xml:space="preserve"><value>Zeile nach „{0}“ teilen</value></data>
+ <data name="Inspector_IssueFix_LyricSplitTip" xml:space="preserve"><value>Beendet die Zeile an dem Wort, das sie am besten halbiert; die Silben behalten ihr Timing. Ein Rückgängig-Schritt.</value></data>
+ <data name="Inspector_IssueFix_ToneBlockedChartStart" xml:space="preserve"><value>Nicht möglich: Der Song beginnt (0:00) weniger als eine Zweiunddreißigstel vor diesem Sound-Wechsel.</value></data>
+ <data name="Inspector_IssueFix_ToneBlockedToneChange" xml:space="preserve"><value>Nicht möglich: In der Zweiunddreißigstel davor liegt bereits ein anderer Sound-Wechsel.</value></data>
+ <data name="Inspector_IssueFix_ToneBlockedPhraseStart" xml:space="preserve"><value>Nicht möglich: In der Zweiunddreißigstel davor beginnt eine Phrase oder ein Abschnitt. Bitte von Hand verschieben.</value></data>
+ <data name="Inspector_IssueFix_ToneBlockedNote" xml:space="preserve"><value>Nicht möglich: Eine Zweiunddreißigstel früher beginnt eine andere Note, der Sound-Wechsel läge dann auf dieser Note.</value></data>
  <data name="Inspector_IssueFix_ToneBlockedSeveralChanges" xml:space="preserve"><value>Nicht möglich: Auf dieser Note liegt mehr als ein Sound-Wechsel. Bitte zuerst den überzähligen entfernen.</value></data>
     <data name="Inspector_Issues_CountOne" xml:space="preserve"><value>{0} Problem gefunden</value></data>
     <data name="Inspector_Issues_Count" xml:space="preserve"><value>{0} Probleme gefunden</value></data>
@@ -1471,6 +1480,9 @@
     <data name="ArrangementSync_PickTwo" xml:space="preserve"><value>Zwei verschiedene Arrangements auswählen.</value></data>
     <data name="ArrangementSync_NothingShared" xml:space="preserve"><value>Diese beiden Arrangements haben keine gemeinsamen Klänge — es würde nichts kopiert.</value></data>
     <data name="ArrangementSync_Preview" xml:space="preserve"><value>Gemeinsame Klänge: {0}, davon würden {1} geändert. Griffbilder: {2}. Greifhandpositionen: {3}.</value></data>
+    <data name="ArrangementSync_NothingSharedByPitch" xml:space="preserve"><value>Diese Arrangements unterscheiden sich in Saiten oder Stimmung und spielen nichts in derselben Tonhöhe auf demselben Bund — es würde nichts kopiert.</value></data>
+    <data name="ArrangementSync_PreviewByPitch" xml:space="preserve"><value>Andere Saiten oder Stimmung: abgeglichen nach Tonhöhe und Bund. Gleich gespielt: {0}; anders gespielt und unverändert: {1}. Übernommen werden: {2} Akkord-Fingersätze, {3} Griffbilder, {4} Greifhandpositionen. Unverändert bleiben: {5} Griffbilder und {6} Greifhandpositionen über umgegriffenen Stellen. Notenbearbeitungen werden zwischen Stimmungen nicht kopiert.</value></data>
+    <data name="ArrangementSync_PreviewByRule" xml:space="preserve"><value>Umgegriffene Akkorde nach Regel: {0} Akkordzuordnungen erkannt (derselbe Quellakkord wird hier gleich gespielt). Vom einen bearbeiteten Vorkommen auf die übrigen übertragen: {1} Akkord-Fingersätze, {2} Griffbilder, {3} Greifhandpositionen. Unverändert, weil sich bearbeitete Vorkommen widersprechen: {4}.</value></data>
     <data name="Status_ArrangementSyncApplied" xml:space="preserve"><value>Auf {3} angewendet — Klänge: {0}, Griffbilder: {1}, Greifhandpositionen: {2}.</value></data>
     <data name="Status_ArrangementSyncNothingToDo" xml:space="preserve"><value>Nichts anzuwenden — die gemeinsamen Klänge stimmen bereits überein.</value></data>
     <data name="Status_ArrangementSyncNoPair" xml:space="preserve"><value>Zwei verschiedene Arrangements auswählen.</value></data>
@@ -1511,7 +1523,7 @@
     <data name="Status_DroppedMultipleFiles" xml:space="preserve"><value>Erste von {0} abgelegten Dateien geladen.</value></data>
     <data name="Status_DroppedUnsupportedFileType" xml:space="preserve"><value>'{1}' kann nicht geöffnet werden — {0}-Dateien werden hier nicht unterstützt.</value></data>
     <data name="Status_DroppedUnknownFileType" xml:space="preserve"><value>'{0}' kann nicht geöffnet werden — dieser Dateityp wird hier nicht unterstützt.</value></data>
-    <data name="Status_DroppedPsarcNotSupported" xml:space="preserve"><value>Pakete werden über die Bibliothek geöffnet — '{0}' wurde nicht geladen.</value></data>
+    <data name="Status_DroppedPackageHasNoSongs" xml:space="preserve"><value>'{0}' enthält keine Songs, die geöffnet werden können.</value></data>
     <data name="Plugin_Outdated" xml:space="preserve"><value>Das Plugin '{0}' ist veraltet: Es wurde für die Plugin-API {1} gebaut, dieses DotCharter braucht {2}. DotCharter wurde ohne es gestartet; aktualisiere das Plugin.</value></data>
     <data name="Plugin_Failed" xml:space="preserve"><value>Das Plugin '{0}' konnte nicht geladen werden ({1}). DotCharter wurde ohne es gestartet.</value></data>
     <data name="Empty_Editor_Hint" xml:space="preserve"><value>Projekt öffnen oder Audiodatei hierher ziehen, um zu beginnen</value></data>
@@ -2309,6 +2321,8 @@
     <data name="Settings_Tip_AutoNameNewChords" xml:space="preserve"><value>Jede Akkordform, die der Editor anlegt, erhält einen vorgeschlagenen Namen (neue Akkorde, Umformungen, übernommene Griffbild-Vorschläge, Fingersätze erzeugen, Guitar-Pro-Akkorde ohne Namen). Aus lässt neue Akkorde unbenannt; ein Name aus der Datei bleibt in beiden Fällen erhalten.</value></data>
     <data name="Settings_KeepPowerChordNames" xml:space="preserve"><value>…aber Power-Chord-Namen behalten</value></data>
     <data name="Settings_Tip_KeepPowerChordNames" xml:space="preserve"><value>Nimmt Grundton-Quinte-Formen aus, sodass G5 seinen Namen behält, eine mehrdeutige zweitönige Form aber nicht. Aus entspricht Editor on Fire, das auch Power Chords unterdrückt.</value></data>
+    <data name="Settings_NameOnlyFirstChordInHandShape" xml:space="preserve"><value>Nur den ersten Akkord eines Griffbilds benennen</value></data>
+    <data name="Settings_Tip_NameOnlyFirstChordInHandShape" xml:space="preserve"><value>Guitar-Pro-Import und „Griffbilder erzeugen“ geben einem wiederholten Akkord innerhalb eines Griffbilds eine unbenannte Kopie seines Griffs, sodass der Name nur einmal erscheint, beim ersten Akkord des Griffbilds. Ein Akkord, der schon eine Vorlage hat, wird nie umbenannt.</value></data>
     <data name="Settings_MusicalChordNames" xml:space="preserve"><value>Musikalische Akkordnamen</value></data>
     <data name="Settings_Tip_MusicalChordNames" xml:space="preserve"><value>Schreibt vorgeschlagene Akkordnamen in der Tonart des Songs (Bbm7 in einer B-Tonart, A#m7 in einer Kreuz-Tonart), mit m und maj7, und benennt eine Umkehrung über ihrem Bass (Cm7/Bb). Aus verwendet die Schreibweise von Editor on Fire (A#min7, Kreuze zuerst), die fertige Rocksmith-Charts meist tragen.</value></data>
     <data name="Settings_LyricSpanWordGap" xml:space="preserve"><value>Gesangs-Wörter bis zum nächsten Wort ziehen</value></data>
@@ -2472,6 +2486,7 @@
     <data name="Dialog_Export_DlcBuilderProject" xml:space="preserve"><value>DLC-Builder-Projekt exportieren…</value></data>
     <data name="Dialog_Export_DlcBuilderProjectTip" xml:space="preserve"><value>Schreibt das Chart als DLC-Builder-Projekt (.rs2dlc) samt Rocksmith-XML in einen Ordner deiner Wahl. Im DLC Builder öffnen, um das verschlüsselte Paket zu erstellen.</value></data>
     <data name="Dialog_Export_DlcBuilderProjectWritten" xml:space="preserve"><value>DLC-Builder-Projekt geschrieben: {0}</value></data>
+    <data name="Dialog_Export_DlcBuilderProjectsWritten" xml:space="preserve"><value>DLC-Builder-Projekte geschrieben: {0} (für DLC Builder) und {1} (RS Extended Range)</value></data>
     <data name="Dialog_Export_DlcBuilderProjectFailed" xml:space="preserve"><value>Das DLC-Builder-Projekt konnte nicht geschrieben werden: {0}</value></data>
     <data name="Dialog_Export_AlbumArt" xml:space="preserve"><value>Albumcover</value></data>
     <data name="Dialog_Export_AlbumArtHint" xml:space="preserve"><value>Optional — ohne Auswahl wird ein Platzhalter erzeugt.</value></data>
@@ -2496,6 +2511,7 @@
     <data name="Dialog_Export_ErrorsBlockExport" xml:space="preserve"><value>Behebe die Fehler in den ausgewählten Arrangements vor dem Export.</value></data>
     <data name="Dialog_Export_MissingPathsHint" xml:space="preserve"><value>Wähle eine Hauptaudiodatei und eine Ausgabedatei.</value></data>
     <data name="Dialog_Export_NothingSelectedHint" xml:space="preserve"><value>Wähle mindestens ein Arrangement aus oder nimm den Gesang mit auf, bevor du exportierst.</value></data>
+    <data name="Dialog_Export_CheckingFindings" xml:space="preserve"><value>Chart wird auf Probleme geprüft…</value></data>
     <data name="Dialog_Export_NoArrangements" xml:space="preserve"><value>Dieses Projekt hat kein Gitarren- oder Bass-Arrangement zum Exportieren.</value></data>
     <data name="Dialog_Export_MainAudioRequired" xml:space="preserve"><value>Erforderlich: {0}</value></data>
     <data name="Dialog_Export_Export" xml:space="preserve"><value>Exportieren</value></data>
@@ -3180,6 +3196,8 @@
     <data name="History_LinkFollowUp" xml:space="preserve"><value>Verknüpfte Kopien</value></data>
     <data name="History_OnlyHere" xml:space="preserve"><value>Nur hier</value></data>
     <data name="History_SetLinkGroups" xml:space="preserve"><value>Verknüpfungen bearbeiten</value></data>
+    <data name="History_SetAudioCheckSpots" xml:space="preserve"><value>Hörprüfung markieren</value></data>
+    <data name="History_SetIgnoredFindings" xml:space="preserve"><value>Ignorierte Warnungen ändern</value></data>
     <data name="History_AddLinkPlacement" xml:space="preserve"><value>Takte wieder verknüpfen</value></data>
     <data name="History_LyricTap" xml:space="preserve"><value>Liedtext tippen</value></data>
     <data name="History_MergeIntoChords" xml:space="preserve"><value>Zu Akkorden zusammenfassen</value></data>
@@ -3231,8 +3249,10 @@
     <data name="History_SetHandShapeTemplateIds" xml:space="preserve"><value>Griffbild-Akkorde setzen</value></data>
     <data name="History_SetKeySignature" xml:space="preserve"><value>Tonart setzen</value></data>
     <data name="History_SetLyricNote" xml:space="preserve"><value>Liedtext-Tonhöhe setzen</value></data>
+    <data name="History_SetLyricText" xml:space="preserve"><value>Liedtext ändern</value></data>
     <data name="History_SetPhraseSolo" xml:space="preserve"><value>Phrasen-Solo ein/aus</value></data>
     <data name="History_SetSongMetadata" xml:space="preserve"><value>Songinfos bearbeiten</value></data>
+    <data name="History_SetArrangementMetadataText" xml:space="preserve"><value>Arrangement-Metadaten bearbeiten</value></data>
     <data name="History_SetBookmark" xml:space="preserve"><value>Lesezeichen bearbeiten</value></data>
     <data name="History_SetAnnotationResolved" xml:space="preserve"><value>Notiz erledigen oder wieder öffnen</value></data>
     <data name="History_SetProjectVolumes" xml:space="preserve"><value>Exportlautstärken des Songs festlegen</value></data>
@@ -3521,6 +3541,8 @@
     <data name="Inspector_Staged_Imported" xml:space="preserve"><value>Importierte Werte</value></data>
     <data name="Inspector_Staged_NothingImported" xml:space="preserve"><value>Diese Note trägt keine importierten Werte, die die App nicht bearbeiten kann.</value></data>
     <data name="Inspector_Staged_NoteTechniques" xml:space="preserve"><value>Notentechniken</value></data>
+    <data name="Inspector_Staged_ChordTechniques" xml:space="preserve"><value>Akkordtechniken</value></data>
+    <data name="Inspector_Staged_ChordTechniquesHint" xml:space="preserve"><value>Alle Saiten des Akkords auf einmal. Eine Zeile ohne markierte Option: Die Saiten unterscheiden sich. Für eine einzelne Saite wähle sie unter „Saiten“ aus.</value></data>
     <data name="Inspector_Staged_NoteDetail" xml:space="preserve"><value>Notendetails</value></data>
     <data name="Inspector_Staged_ResetTip" xml:space="preserve"><value>Alle Techniken auf den Standard zurück vormerken; Anwenden schreibt es</value></data>
     <data name="Inspector_Staged_Reset" xml:space="preserve"><value>Rücksetzen</value></data>
@@ -3535,10 +3557,10 @@
     <data name="Inspector_Staged_CopyTip" xml:space="preserve"><value>Die Techniken dieser Saite, ihr Ignorieren und ihr Slide (als Intervall) auf jeder anderen gespielten Saite in der Maske vormerken</value></data>
     <data name="Inspector_Staged_ChordsHint" xml:space="preserve"><value>Die Notenkarten bearbeiten die ausgewählten Noten. Wähle nur die Akkorde, um ihre Techniken zu bearbeiten.</value></data>
     <data name="Inspector_Staged_EditChords" xml:space="preserve"><value>Ausgewählte Akkorde bearbeiten</value></data>
-    <data name="Inspector_Staged_NoMute" xml:space="preserve"><value>Dämpfung</value></data>
-    <data name="Inspector_Staged_NoHarmonic" xml:space="preserve"><value>Flageolett</value></data>
-    <data name="Inspector_Staged_NoPopSlap" xml:space="preserve"><value>Pop/Slap</value></data>
-    <data name="Inspector_Staged_NoLegato" xml:space="preserve"><value>Legato</value></data>
+    <data name="Inspector_Staged_NoMute" xml:space="preserve"><value>Keine Dämpfung</value></data>
+    <data name="Inspector_Staged_NoHarmonic" xml:space="preserve"><value>Kein Flageolett</value></data>
+    <data name="Inspector_Staged_NoPopSlap" xml:space="preserve"><value>Kein Pop/Slap</value></data>
+    <data name="Inspector_Staged_NoLegato" xml:space="preserve"><value>Kein Legato</value></data>
     <data name="Inspector_Staged_MoveTitle" xml:space="preserve"><value>{0} Noten und Akkorde jetzt verschieben</value></data>
     <data name="Inspector_Staged_MoveSummary" xml:space="preserve"><value>{0} Noten / {1} Akkorde · Akkorde verschieben jede gegriffene Saite</value></data>
     <data name="Inspector_Staged_FirstSoundLabel" xml:space="preserve"><value>Erster Klang</value></data>
@@ -5846,6 +5868,19 @@
     <data name="Status_ToneKeyRepaired" xml:space="preserve"><value>Sound „{0}“ in „{1}“ umbenannt, den Key, den das Chart nutzt. Ein Rückgängig-Schritt.</value></data>
     <data name="Export.Validation.NoShowlights" xml:space="preserve"><value>Das Projekt hat keine Lichtshow; das Paket bekommt eine aus Abschnitten und Noten erzeugte Lichtshow.</value></data>
     <data name="Export_FixTip_Showlights" xml:space="preserve"><value>Lichtshow erzeugen: aus Abschnitten und Noten aufbauen und im Projekt speichern. Ein Rückgängig-Schritt.</value></data>
+    <data name="Export.Validation.MetadataTitleCase" xml:space="preserve"><value>„{0}“ ist im Satzstil geschrieben. Die Rocksmith-Songliste nutzt meist Title Case; ist die Kleinschreibung Absicht, ignoriere den Hinweis.</value></data>
+    <data name="Export.Validation.MetadataStraySpaces" xml:space="preserve"><value>„{0}“ enthält Leerzeichen am Anfang, am Ende oder doppelte Leerzeichen. Das fällt in der Songliste auf und stört die Sortierung.</value></data>
+    <data name="Export.Validation.MetadataMissingTitle" xml:space="preserve"><value>Der Song hat keinen Titel; das Paket hieße „Untitled“. Lege ihn unter Song-Metadaten fest.</value></data>
+    <data name="Export.Validation.MetadataMissingArtist" xml:space="preserve"><value>Der Song hat keinen Interpreten; das Paket zeigte „Unknown Artist“. Lege ihn unter Song-Metadaten fest.</value></data>
+    <data name="Export.Validation.MetadataMissingAlbum" xml:space="preserve"><value>Der Song hat keinen Albumnamen. Lege ihn unter Song-Metadaten fest (bei einer Single genügt der Songtitel).</value></data>
+    <data name="Export.Validation.MetadataMissingAlbumYear" xml:space="preserve"><value>Der Song hat kein Albumjahr. Lege es unter Song-Metadaten fest.</value></data>
+    <data name="Export_FixTip_MetadataSpaces" xml:space="preserve"><value>Leerzeichen bereinigen: entfernt Leerzeichen am Anfang und Ende und reduziert doppelte in Titel, Interpret und Album. Ein Rückgängig-Schritt.</value></data>
+    <data name="Status_MetadataSpacesTrimmed" xml:space="preserve"><value>Überzählige Leerzeichen in Titel, Interpret und Album entfernt. Ein Rückgängig-Schritt.</value></data>
+    <data name="History_TrimMetadataSpaces" xml:space="preserve"><value>Metadaten-Leerzeichen bereinigen</value></data>
+    <data name="Export.Validation.PackageKeyClash" xml:space="preserve"><value>Ein Paket in deiner Bibliothek verwendet den DLC-Schlüssel „{0}“ bereits. Rocksmith listet pro Schlüssel nur einen Song, deshalb würde dieser Export das Paket verdecken oder von ihm verdeckt werden.</value></data>
+    <data name="Export_FixTip_UniqueDlcKey" xml:space="preserve"><value>Gibt dem Song einen eigenen DLC-Schlüssel, „{0}“, damit er nicht mehr mit dem Paket aus der Bibliothek kollidiert. Ein Rückgängig-Schritt.</value></data>
+    <data name="Status_DlcKeyAssigned" xml:space="preserve"><value>DLC-Schlüssel auf „{0}“ gesetzt. Ein Rückgängig-Schritt.</value></data>
+    <data name="History_AssignDlcKey" xml:space="preserve"><value>Eindeutigen DLC-Schlüssel zuweisen</value></data>
     <data name="Export_FixTip_DefineTones" xml:space="preserve"><value>Fehlende Sound-Definitionen für {0} anlegen: ein Standardsound unter jedem Namen, den das Arrangement nutzt. Ein Rückgängig-Schritt.</value></data>
     <data name="Status_ShowlightsGenerated" xml:space="preserve"><value>Lichtshow aus Abschnitten und Noten erzeugt. Ein Rückgängig-Schritt.</value></data>
     <data name="Status_ToneDefinitionsNoChange" xml:space="preserve"><value>{0} hat keinen Soundnamen, der eine Standarddefinition bekommen kann.</value></data>
@@ -6455,10 +6490,40 @@
   <data name="Validation_LyricLineStartsLowercase" xml:space="preserve"><value>Die Liedtextzeile, die mit „{0}“ beginnt, fängt mit einem Kleinbuchstaben an. Beginne jede Zeile mit einem Großbuchstaben.</value></data>
   <data name="Validation_LyricStrayPunctuation" xml:space="preserve"><value>Der Liedtext „{0}“ enthält einen überzähligen Punkt oder ein Komma. Entferne ihn; Abkürzungen wie S.O.S. und Auslassungspunkte dürfen bleiben.</value></data>
   <data name="Validation_LyricUnsplitSyllable" xml:space="preserve"><value>Der Liedtext „{0}“ enthält mehrere Wörter in einer Silbe. Teile ihn auf, damit jedes Wort einzeln gesungen wird.</value></data>
+  <data name="Validation_LyricPlainCharacters" xml:space="preserve"><value>Der Liedtext „{0}“ enthält ein Zeichen, das Rocksmith womöglich nicht anzeigt: ein typografisches Anführungszeichen, einen langen Strich, ein Auslassungszeichen, ein Emoji oder ein anderes Symbol. Verwende einfache Zeichen.</value></data>
+  <data name="Validation_LyricLineTooLong" xml:space="preserve"><value>Die Zeile „{0}“ ist zu lang ({1} Wörter, {2} Zeichen). Halte eine Zeile bei 3–7 Wörtern und höchstens 40 Zeichen; teile sie.</value></data>
+  <data name="Validation_LyricLineTooShort" xml:space="preserve"><value>Die Zeile „{0}“ hat nur {1} Wort/Wörter. Eine Zeile liest sich am besten mit 3–7 Wörtern; verbinde sie, wo der Song es erlaubt, mit einer Nachbarzeile.</value></data>
+  <data name="Validation_LyricSeveralSyllablesOnOneNote" xml:space="preserve"><value>Das Wort „{0}“ legt {1} Silben auf eine Note. Setze eine Silbe pro Note, mit Bindestrichen verbunden ({2}).</value></data>
+  <data name="Validation_LyricBackingVocalInLead" xml:space="preserve"><value>Der Liedtext „{0}“ sieht nach Hintergrundgesang (in Klammern) in der Lead-Gesangsspur aus. Die Lead-Spur gehört dem Leadsänger.</value></data>
   <data name="Validation_PhraseLevelsTooFew" xml:space="preserve"><value>Schwierigkeitsstufen in der Phrase „{0}“: {1}. Gib jeder spielbaren Phrase mindestens zwei.</value></data>
   <data name="Validation_PhraseLevelsTooMany" xml:space="preserve"><value>Schwierigkeitsstufen in der Phrase „{0}“: {1}. Rocksmith zeigt höchstens 30 pro Phrase (Stufen 0 bis 29); fasse Stufen zusammen oder entferne welche.</value></data>
   <data name="Validation_PhraseLevelsMismatch" xml:space="preserve"><value>Schwierigkeitsstufen in dieser Wiederholung der Phrase „{0}“: {1}; in ihren anderen Wiederholungen: {2}. Gib jeder Wiederholung einer Phrase gleich viele Stufen.</value></data>
   <data name="Validation_SectionNamesNotVaried" xml:space="preserve"><value>{0} von {1} Abschnitten heißen „{2}“. Die Empfehlungen von Rocksmith nutzen die Abschnittsnamen, also prüfe, ob diese Bezeichnung zu jedem dieser Teile passt; ein Song, der wirklich einen Teil wiederholt, etwa ein Strophenlied, ist in Ordnung.</value></data>
+  <data name="Validation_ToneChangeBeforeFirstNote" xml:space="preserve"><value>Der Sound-Wechsel zu „{0}“ liegt vor der ersten Note. Noch klingt nichts, also mach „{0}“ zum Start-Sound und entferne diesen Wechsel.</value></data>
+  <data name="Validation_SingleToneChange" xml:space="preserve"><value>Dieses Arrangement wechselt den Sound nur einmal (zu „{0}“). Prüfe, ob das gewollt ist: Ein einzelner Wechsel ist oft ein Überbleibsel oder ein Zeichen, dass der Start-Sound der falsche ist.</value></data>
+  <data name="Validation_ToneNameKeyMismatch" xml:space="preserve"><value>Der Sound „{0}“ heißt „{1}“. Das Chart wechselt Sounds über den Schlüssel, Rocksmith zeigt den Namen, also halte beide gleich.</value></data>
+  <data name="Validation_ToneWithoutAmpOrCabinet" xml:space="preserve"><value>Der Sound „{0}“ hat keinen Verstärker oder keine Box. Jeder Rocksmith-Sound braucht beides.</value></data>
+  <data name="Validation_ToneTooManyEffects" xml:space="preserve"><value>Der Sound „{0}“ hat {1} Pedale und Racks. Ein Sound sollte höchstens {2} Effekte haben.</value></data>
+  <data name="Validation_DuplicateToneName" xml:space="preserve"><value>Mehr als ein Sound heißt „{0}“. Gib jedem Sound einen eigenen Namen, damit man sie unterscheiden kann.</value></data>
+  <data name="Validation_RepeatedTone" xml:space="preserve"><value>Der Sound-Wechsel zu „{0}“ wechselt zu dem Sound, der schon klingt. Entferne ihn.</value></data>
+  <data name="Validation_CustomTuning" xml:space="preserve"><value>Eigene Stimmung ({0}): keine der vorgegebenen Stimmungen. Prüfe, ob sie stimmt; Rocksmith zeigt sie als eigene Stimmung an.</value></data>
+  <data name="Validation_PhraseTooLong" xml:space="preserve"><value>Phrase „{0}“ umfasst {1} Takte. Charter setzen etwa alle 4 Takte eine Phrase, dort wo sich das Muster ändert; über {2} Takte wartet man in Rocksmith lange auf die nächste Schwierigkeitsstufe.</value></data>
+  <data name="Validation_PhraseTooShort" xml:space="preserve"><value>Phrase „{0}“ umfasst weniger als {1} Takte. So eine kurze Phrase lässt sich in Rocksmith schlecht steigern; verbinde sie mit ihrer Nachbarin, wenn sich die Musik hier nicht wirklich ändert.</value></data>
+  <data name="Validation_SectionWithoutPhrase" xml:space="preserve"><value>Abschnitt „{0}“ hat an seiner Position keine Phrase. Rocksmith beginnt einen Abschnitt an einer Phrase, also setze auch hier eine Phrase.</value></data>
+  <data name="Validation_NoGuitarSectionSplit" xml:space="preserve"><value>Diese stille Strecke ist in mehrere noguitar-Abschnitte geteilt. Ein noguitar-Abschnitt deckt sie ab.</value></data>
+  <data name="Validation_TempoLooksDoubled" xml:space="preserve"><value>Das Chart läuft im Schnitt mit {0:F1} BPM, etwa doppelt so schnell wie die {1:F1} BPM aus dem Audio: Die Beat-Map zählt vermutlich Achtel als Beats. Halbiere das Tempo in der Tempo-Map.</value></data>
+  <data name="Validation_TempoLooksHalved" xml:space="preserve"><value>Das Chart läuft im Schnitt mit {0:F1} BPM, etwa halb so schnell wie die {1:F1} BPM aus dem Audio: Jede Beat-Linie umfasst vermutlich zwei Beats. Verdopple das Tempo in der Tempo-Map.</value></data>
+  <data name="Validation_TempoOutOfRange" xml:space="preserve"><value>Dieser Beat läuft mit {0:F1} BPM, außerhalb von {1:F0} bis {2:F0} BPM. Prüfe die Beat-Linien hier: Ein so abweichendes Tempo ist meist ein verdoppelter oder halbierter Beat.</value></data>
+  <data name="Validation_TempoSpike" xml:space="preserve"><value>Dieser Beat läuft mit {0:F1} BPM gegenüber {1:F1} BPM beim Beat davor, und der nächste Beat schwingt zurück: eher eine verrutschte Beat-Linie als ein Tempowechsel. Rücke sie zurück auf den Beat.</value></data>
+  <data name="Validation_TempoAnchorSpam" xml:space="preserve"><value>{0} Tempo-Anker lassen das Tempo unverändert. Entferne die Anker, die nichts ändern; behalte einen dort, wo sich das Tempo wirklich ändert.</value></data>
+  <data name="Validation_TempoOffAudio" xml:space="preserve"><value>Das Chart läuft im Schnitt mit {0:F1} BPM, das Audio aber mit {1:F1} BPM, mehr als 1 % Abstand. Die Noten laufen der Musik davon: Prüfe das Tempo in der Tempo-Map.</value></data>
+  <data name="Validation_MeterMissingOnFirstMeasure" xml:space="preserve"><value>Der erste Takt hat {0} Beats, seine Taktart sagt aber etwas anderes. Setze die Taktart auf Takt 1.</value></data>
+  <data name="Validation_MeterChangeUnmarked" xml:space="preserve"><value>Takt {0} hat {1} Beats, seine Taktart ist aber {2}/{3}. Setze eine neue Taktart dort, wo sich das Metrum ändert.</value></data>
+  <data name="Status_GpImport_Checklist" xml:space="preserve"><value>Nach einem Guitar-Pro-Import prüfen: das Metrum (Taktartwechsel: {0}), die Slides ({1}) und die als Link-Next erhaltenen Haltebögen ({2}).</value></data>
+  <data name="Validation_HarmonicVibrato" xml:space="preserve"><value>Dieses Flageolett hat Vibrato. Ein Flageolett klingt als ein reiner Ton und nimmt kein Vibrato an, man hört es nie; entferne es.</value></data>
+  <data name="Validation_UnpitchedSlideOneFret" xml:space="preserve"><value>Dieses Slide ohne Tonhöhe überbrückt nur einen Bund (Bund {0} bis Bund {1}). Das ist zu kurz, um als Slide zu klingen; verlängere ihn oder entferne den Slide.</value></data>
+  <data name="Validation_SustainTooCloseToNext" xml:space="preserve"><value>Der Sustain endet direkt vor der nächsten Note oder dem nächsten Akkord. Charter lassen vor der nächsten Note mindestens eine Zweiunddreißigstelnote frei: Lass ihn mindestens {0} Schlag früher enden.</value></data>
+  <data name="Validation_SustainUnderFiveMs" xml:space="preserve"><value>Diese Note hat einen Sustain unter 5 ms, zu kurz, um ihn zu sehen oder zu hören. Entferne ihn oder mache daraus einen echten Sustain.</value></data>
   <data name="Validation_ChordWithoutTemplate_One" xml:space="preserve"><value>{0} Akkord nennt keine Akkordvorlage, und keine Vorlage dieser Spur passt zu den gespielten Noten, daher können die Griffprüfungen (I44/I45, L06–L08) ihn nicht beurteilen. Beim Speichern wird für ihn eine Vorlage mit GERATENEM Griff erzeugt.</value></data>
   <data name="Validation_ChordWithoutTemplate_Many" xml:space="preserve"><value>{0} Akkorde nennen keine Akkordvorlage, und keine Vorlage dieser Spur passt zu den gespielten Noten, daher können die Griffprüfungen (I44/I45, L06–L08) sie nicht beurteilen. Beim Speichern wird für jeden eine Vorlage mit GERATENEM Griff erzeugt.</value></data>
   <data name="Validation_ChordAfterSongEnd" xml:space="preserve"><value>Der Akkord liegt nach dem Ende des Song-Audios.</value></data>
@@ -6550,6 +6615,39 @@
   <data name="Validation_FirstNoteTooEarly" xml:space="preserve"><value>Die erste Note beginnt bei {0:F0} ms; lasse mindestens {1:F0} ms Vorlauf-Stille, damit der Einzähler im Spiel Platz hat.</value></data>
   <data name="Validation_EmptyPhrase" xml:space="preserve"><value>Die Phrase '{0}' enthält keine Noten oder Akkorde — kennzeichne stille Lücken als Noguitar-Phrase oder entferne die leere Phrase.</value></data>
   <data name="Accessibility_SpinnerIncrease" xml:space="preserve"><value>Erhöhen</value></data>
+  <data name="Validation_SustainCrossesPhrase" xml:space="preserve"><value>Der Sustain reicht über den Beginn der Phrase „{0}“. Rocksmith baut jede Phrase einzeln auf und schneidet den Sustain dort ab: Lass ihn am Phrasenbeginn enden.</value></data>
+  <data name="Validation_SustainCrossesSection" xml:space="preserve"><value>Der Sustain reicht über den Beginn des Abschnitts „{0}“. Lass ihn am Abschnittsbeginn enden.</value></data>
+  <data name="Validation_SustainPastEnd" xml:space="preserve"><value>Der Sustain reicht über END hinaus. Nach END wird nichts gespielt: Lass ihn an END enden.</value></data>
+  <data name="Validation_LinkNextCrossesPhrase" xml:space="preserve"><value>Die Link-Next-Kette läuft über den Beginn der Phrase „{0}“ weiter. Rocksmith baut jede Phrase einzeln auf, daher reißt die Kette dort ab.</value></data>
+  <data name="Validation_LinkNextCrossesSection" xml:space="preserve"><value>Die Link-Next-Kette läuft über den Beginn des Abschnitts „{0}“ weiter.</value></data>
+  <data name="Validation_LinkNextPastEnd" xml:space="preserve"><value>Die Link-Next-Kette läuft über END hinaus. Nach END wird nichts gespielt.</value></data>
+  <data name="Validation_HandShapeCrossesPhrase" xml:space="preserve"><value>Das Griffbild reicht über den Beginn der Phrase „{0}“. Rocksmith baut jede Phrase einzeln auf: Lass die Form am Phrasenbeginn enden oder teile sie dort.</value></data>
+  <data name="Validation_HandShapeCrossesSection" xml:space="preserve"><value>Das Griffbild reicht über den Beginn des Abschnitts „{0}“. Lass die Form am Abschnittsbeginn enden oder teile sie dort.</value></data>
+  <data name="Validation_HandShapePastEnd" xml:space="preserve"><value>Das Griffbild reicht über END hinaus. Lass es an END enden.</value></data>
+  <data name="Inspector_IssueFix_TrimToBoundary" xml:space="preserve"><value>An der Grenze enden lassen</value></data>
+  <data name="Inspector_IssueFix_TrimToBoundaryTip" xml:space="preserve"><value>Kürzt den Sustain oder das Griffbild, sodass es genau dort endet, wo die Phrase, der Abschnitt oder END beginnt. Ein Rückgängig-Schritt.</value></data>
+  <data name="Inspector_IssueFix_RemoveVibrato" xml:space="preserve"><value>Vibrato entfernen</value></data>
+  <data name="Inspector_IssueFix_RemoveVibratoTip" xml:space="preserve"><value>Entfernt das Vibrato vom Flageolett; das Flageolett selbst bleibt. Ein Rückgängig-Schritt.</value></data>
+  <data name="Validation_NoteNearlyOnGrid" xml:space="preserve"><value>Die Note liegt {0:F1} ms neben dem Beat-Raster, ein Timing-Ausrutscher: rücke sie auf die nächste Rasterlinie.</value></data>
+  <data name="Validation_NoteOffGrid" xml:space="preserve"><value>Die Note liegt {0:F1} ms neben dem Beat-Raster (gerade Unterteilungen bis 1/16 eines Beats, Triolen bis 1/24). Setze sie aufs Raster oder prüfe ihr Timing.</value></data>
+  <data name="Validation_LeadInShort" xml:space="preserve"><value>Die erste Note beginnt {0:F1} s nach Songbeginn. Etwa {1:F0} s Vorlauf geben dem Spieler Zeit, sich bereitzumachen: Tempo-Map ▸ Stille am Anfang hinzufügen.</value></data>
+  <data name="Validation_TailShort" xml:space="preserve"><value>Das Audio endet {0:F1} s nach der letzten Note. Lass etwa {1:F0} s, damit der Song ausklingen kann: Tempo-Map ▸ Stille am Ende hinzufügen.</value></data>
+  <data name="Validation_NoCountMeasure" xml:space="preserve"><value>Vor der ersten Note liegt kein leerer Takt. Füge mit Tempo-Map ▸ Takte am Anfang hinzufügen einen Einzähltakt hinzu (ein Rückgängig-Schritt); die Beat-Map wird nie von selbst geändert.</value></data>
+  <data name="Inspector_IssueFix_SnapToGrid" xml:space="preserve"><value>Aufs Raster rücken</value></data>
+  <data name="Inspector_IssueFix_SnapToGridTip" xml:space="preserve"><value>Rückt die Note oder den Akkord samt dort beginnendem Griffbild und Anker auf die nächste Beat-Unterteilung. Ein Rückgängig-Schritt.</value></data>
+  <data name="Inspector_IssueFix_TrimToGap" xml:space="preserve"><value>Eine Zweiunddreißigstel vor der nächsten Note enden lassen</value></data>
+  <data name="Inspector_IssueFix_TrimToGapTip" xml:space="preserve"><value>Kürzt den Sustain oder das Griffbild, sodass es eine Zweiunddreißigstelnote vor der nächsten Note oder dem nächsten Akkord endet. Ein Rückgängig-Schritt.</value></data>
+  <data name="Inspector_IssueFix_ClearSustain" xml:space="preserve"><value>Sustain entfernen</value></data>
+  <data name="Inspector_IssueFix_ClearSustainTip" xml:space="preserve"><value>Setzt den Sustain auf null, sodass die Note nur angeschlagen wird. Ein Rückgängig-Schritt.</value></data>
+  <data name="Validation_NeedsAudioCheck_One" xml:space="preserve"><value>Der Import hat eine Stelle geraten, die die Tabulatur nicht angibt: {1}. Hör sie mit dem Audio ab und markiere sie dann als geprüft.</value></data>
+  <data name="Validation_NeedsAudioCheck_Many" xml:space="preserve"><value>Der Import hat {0} Stellen geraten, die die Tabulatur nicht angibt; die erste ist {1}. Hör jede mit dem Audio ab und markiere sie dann als geprüft.</value></data>
+  <data name="Validation_AudioCheckReason_DeadNoteSlideLanding" xml:space="preserve"><value>der Zielbund eines voll gedämpften Slides</value></data>
+  <data name="Validation_AudioCheckReason_TempoFromTab" xml:space="preserve"><value>die Tempo-Map aus der Tabulatur, nicht mit dem Audio synchronisiert</value></data>
+  <data name="Validation_AudioCheckReason_GraceTiming" xml:space="preserve"><value>die Platzierung einer Vorschlagsnote, die die Tabulatur nicht angibt (vor oder auf dem Schlag)</value></data>
+  <data name="Inspector_IssueFix_AudioChecked" xml:space="preserve"><value>Geprüft</value></data>
+  <data name="Inspector_IssueFix_AudioCheckedTip" xml:space="preserve"><value>Markiert diese Stelle als mit dem Audio geprüft; der Befund springt zur nächsten. Ein Rückgängig-Schritt.</value></data>
+  <data name="Inspector_IssueFix_AudioAllChecked" xml:space="preserve"><value>Alle geprüft</value></data>
+  <data name="Inspector_IssueFix_AudioAllCheckedTip" xml:space="preserve"><value>Markiert alle geratenen Stellen dieses Arrangements als mit dem Audio geprüft. Ein Rückgängig-Schritt.</value></data>
   <data name="Accessibility_SpinnerDecrease" xml:space="preserve"><value>Verringern</value></data>
   <data name="Menu_LinkedMeasures" xml:space="preserve"><value>Verknüpfte Takte…</value></data>
   <data name="Menu_LinkedMeasures_Tip" xml:space="preserve"><value>Listet die Verknüpfungsgruppen des Songs: umbenennen, aufheben oder zu einer Stelle springen.</value></data>
@@ -6570,11 +6668,30 @@
   <data name="LinkGroups_DetectionFailed" xml:space="preserve"><value>Suche fehlgeschlagen: {0}</value></data>
   <data name="LinkGroups_DetectionRetry" xml:space="preserve"><value>Suche wiederholen</value></data>
   <data name="LinkGroups_SuggestionTitle" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="LinkGroups_SuggestionJoinTitle" xml:space="preserve"><value>Zu Verknüpfung {0} hinzufügen · {1}</value></data>
   <data name="LinkGroups_MeasuresOne" xml:space="preserve"><value>{0} Takt</value></data>
   <data name="LinkGroups_Measures" xml:space="preserve"><value>{0} Takte</value></data>
   <data name="LinkGroups_FromRepeats" xml:space="preserve"><value>aus den Wiederholungen der Partitur</value></data>
   <data name="LinkGroups_DifferentContent" xml:space="preserve"><value>Kopien weichen ab — Chart vor dem Verknüpfen prüfen</value></data>
-  <data name="LinkSuggest_ReviewDifferences" xml:space="preserve"><value>Einige Kopien weichen ab. Unter Prüfen stehen ihre Taktbereiche. Alle verknüpfen übernimmt nur übereinstimmende Kopien.</value></data>
+  <data name="LinkSuggest_NearMatchesOne" xml:space="preserve"><value>{0} Beinahe-Treffer wird nicht verknüpft, weil die Kopien hier abweichen.</value></data>
+  <data name="LinkSuggest_NearMatches" xml:space="preserve"><value>{0} Beinahe-Treffer werden nicht verknüpft, weil die Kopien hier abweichen.</value></data>
+  <data name="LinkSuggest_NearMatchesMore" xml:space="preserve"><value>…und {0} weitere. Prüfen listet alle auf.</value></data>
+  <data name="LinkGroups_NearMatch" xml:space="preserve"><value>Beinahe-Treffer</value></data>
+  <data name="LinkNear_SustainShorter" xml:space="preserve"><value>{0}, Schlag {1}: Haltedauer {2} kürzer</value></data>
+  <data name="LinkNear_SustainLonger" xml:space="preserve"><value>{0}, Schlag {1}: Haltedauer {2} länger</value></data>
+  <data name="LinkNear_SustainHeld" xml:space="preserve"><value>{0}, Schlag {1}: Haltedauer nur in einer Kopie bis zur nächsten Note gehalten</value></data>
+  <data name="LinkNear_Fhp" xml:space="preserve"><value>{0}, Schlag {1}: FHP {2} statt {3}</value></data>
+  <data name="LinkNear_None" xml:space="preserve"><value>keine</value></data>
+  <data name="LinkNear_Sound" xml:space="preserve"><value>{0}, Schlag {1}: Noten weichen ab</value></data>
+  <data name="LinkNear_Measures" xml:space="preserve"><value>{0}: Taktart weicht ab</value></data>
+  <data name="LinkNear_HandShape" xml:space="preserve"><value>{0}, Schlag {1}: Handshape weicht ab</value></data>
+  <data name="LinkNear_Mute" xml:space="preserve"><value>{0}, Schlag {1}: Greifhand-Dämpfung weicht ab</value></data>
+  <data name="LinkNear_Other" xml:space="preserve"><value>{0}: Notierte Details weichen ab (Notation, gespeicherte Anker oder Namen)</value></data>
+  <data name="LinkNear_Edge" xml:space="preserve"><value>{0}: Eine Note oder ein Handshape überquert den Taktstrich am Rand der Kopie</value></data>
+  <data name="LinkNear_Join" xml:space="preserve"><value>{0}: Passt nicht mehr zur Gruppe, der es beitreten würde</value></data>
+  <data name="LinkNear_Refused" xml:space="preserve"><value>{0}: Lässt sich nicht mehr verknüpfen (Überlappung oder geänderte Takte)</value></data>
+  <data name="Status_LinkSuggestionsSkippedOne" xml:space="preserve"><value>{0} Beinahe-Treffer nicht verknüpft; Prüfen zeigt, wo er abweicht.</value></data>
+  <data name="Status_LinkSuggestionsSkipped" xml:space="preserve"><value>{0} Beinahe-Treffer nicht verknüpft; Prüfen zeigt, wo sie abweichen.</value></data>
   <data name="LinkSuggest_Title" xml:space="preserve"><value>Wiederholte Takte gefunden</value></data>
   <data name="LinkSuggest_Subtitle" xml:space="preserve"><value>Verknüpfe sie, damit eine Änderung an einer Stelle für jede Kopie gilt.</value></data>
   <data name="LinkSuggest_GroupsOne" xml:space="preserve"><value>{0} Gruppe zum Verknüpfen, {1} Stellen.</value></data>
@@ -6740,6 +6857,13 @@
   <data name="Shapes_NoSuggestion" xml:space="preserve"><value>Kein Vorschlag</value></data>
   <data name="Shapes_FretsLabel" xml:space="preserve"><value>Bünde</value></data>
   <data name="Shapes_CleanUpNone" xml:space="preserve"><value>Aufräumen</value></data>
+  <data name="Shapes_PinAll" xml:space="preserve"><value>Alle Griffe fixieren ({0})</value></data>
+  <data name="Shapes_PinAllNone" xml:space="preserve"><value>Alle Griffe fixieren</value></data>
+  <data name="Shapes_PinAll_Tip" xml:space="preserve"><value>Fixiert jede Akkordform mit Fingersatz in dieser Spur, die noch nicht fixiert ist, damit der automatische Fingersatz sie nicht ändert. Ein Rückgängig-Schritt.</value></data>
+  <data name="Shapes_PinAll_NoneTip" xml:space="preserve"><value>Jede Akkordform mit Fingersatz in dieser Spur ist bereits fixiert.</value></data>
+  <data name="Shapes_Status_PinnedAllOne" xml:space="preserve"><value>{0} Griff fixiert.</value></data>
+  <data name="Shapes_Status_PinnedAll" xml:space="preserve"><value>{0} Griffe fixiert.</value></data>
+  <data name="History_PinAllGrips" xml:space="preserve"><value>Alle Griffe fixieren</value></data>
   <data name="GripStudy_PartOfShape" xml:space="preserve"><value>Teil einer vorhandenen Griffform</value></data>
   <data name="GripStudy_OtherTemplates" xml:space="preserve"><value>Andere Vorlagen</value></data>
   <data name="GripStudy_Save" xml:space="preserve"><value>Fingersatz speichern</value></data>
@@ -6944,6 +7068,16 @@
   <data name="Issues_Findings_Title" xml:space="preserve"><value>Befunde im Arrangement</value></data>
   <data name="Issues_Row_Fix" xml:space="preserve"><value>Beheben</value></data>
   <data name="Issues_Row_FixTip" xml:space="preserve"><value>Zu diesem Befund springen und die Standardkorrektur anwenden</value></data>
+  <data name="Issues_Row_Ignore" xml:space="preserve"><value>Ignorieren</value></data>
+  <data name="Issues_Row_IgnoreTip" xml:space="preserve"><value>Diese Warnung ausblenden, weil du sie geprüft hast und sie gewollt ist. Bearbeitest du, worauf sie sich bezieht, kehrt sie zurück.</value></data>
+  <data name="Issues_Row_IgnoreAll" xml:space="preserve"><value>Alle ignorieren</value></data>
+  <data name="Issues_Row_IgnoreAllTip" xml:space="preserve"><value>Jede gleiche Warnung ausblenden (gleiche Regel, gleicher Text). Jede kehrt zurück, sobald du bearbeitest, worauf sie sich bezieht.</value></data>
+  <data name="Issues_Row_StopIgnoring" xml:space="preserve"><value>Nicht mehr ignorieren</value></data>
+  <data name="Issues_Row_StopIgnoringTip" xml:space="preserve"><value>Diese Warnung wieder auflisten</value></data>
+  <data name="Issues_Row_GroupCount" xml:space="preserve"><value>×{0}</value></data>
+  <data name="Issues_Row_GroupTip" xml:space="preserve"><value>Gleiche Befunde: Klicken, um jedes Vorkommen auf- oder zuzuklappen</value></data>
+  <data name="Inspector_Issues_ShowIgnored" xml:space="preserve"><value>Ignorierte anzeigen ({0})</value></data>
+  <data name="Inspector_Issues_ShowIgnoredTip" xml:space="preserve"><value>Die ignorierten Warnungen auflisten, jede mit „Nicht mehr ignorieren“. Fehler lassen sich nie ignorieren.</value></data>
   <data name="Issues_Detail_Title" xml:space="preserve"><value>Befunddetails</value></data>
   <data name="Issues_Detail_None" xml:space="preserve"><value>Wähle einen Befund in der Liste, um seine Korrekturen zu sehen.</value></data>
   <data name="Issues_Detail_Jump" xml:space="preserve"><value>Springen</value></data>
@@ -7018,4 +7152,17 @@
   <data name="Dialog_ReferencePitch_Applied" xml:space="preserve"><value>Cent-Versatz auf {0} gesetzt. Zum Behalten speichern.</value></data>
   <data name="Status_ReferencePitchOffer" xml:space="preserve"><value>Referenzton: {0}</value></data>
   <data name="Action_ReferencePitchCorrect" xml:space="preserve"><value>{0} Cent setzen</value></data>
+  <data name="PackageSongPicker_Title" xml:space="preserve"><value>Song auswählen</value></data>
+  <data name="PackageSongPicker_Subtitle" xml:space="preserve"><value>Dieses Paket enthält mehrere Songs. Wähle den Song, den du öffnen möchtest.</value></data>
+  <data name="PackageSongPicker_Open" xml:space="preserve"><value>Öffnen</value></data>
+  <data name="Status_PackageSongPickCancelled" xml:space="preserve"><value>Aus '{0}' wurde kein Song gewählt, daher wurde nichts geöffnet.</value></data>
+  <data name="Validation_AnchorBeforeFirstNote" xml:space="preserve"><value>Die Greifhandposition (Bund {0}) liegt vor der ersten Note, wo nichts gespielt wird. Setze sie auf die erste Note.</value></data>
+  <data name="Validation_AnchorBetweenNotes" xml:space="preserve"><value>Die Greifhandposition (Bund {0}) liegt zwischen Noten, auf keiner Note, keinem Akkord und keinem Phrasenstart. Die Hand bewegt sich beim Anschlag der nächsten Note: Setze sie dorthin.</value></data>
+  <data name="Validation_AnchorInsideSustain" xml:space="preserve"><value>Die Greifhandposition (Bund {0}) liegt in einem klingenden Sustain, die Hand würde sich also bewegen, während die Note noch klingt. Setze sie auf die nächste Note.</value></data>
+  <data name="Validation_AnchorOnHammerOnTarget" xml:space="preserve"><value>Die Greifhandposition (Bund {0}) versetzt die Hand auf dem Ziel eines Hammer-ons. Zwischen angeschlagener Note und Hammer-on kann die Hand nicht wandern: Verschiebe sie auf die angeschlagene Note.</value></data>
+  <data name="Validation_AnchorFretAbove21" xml:space="preserve"><value>Die Greifhandposition liegt auf Bund {0}. Über Bund 21 wird es auf vielen Hälsen eng: Prüfe, ob die Passage passt.</value></data>
+  <data name="Validation_AnchorFretAbove24" xml:space="preserve"><value>Die Greifhandposition liegt auf Bund {0}, über Bund {1}. Kein Rocksmith-Hals hat diesen Bund.</value></data>
+  <data name="Validation_BendNeedsPinky" xml:space="preserve"><value>Das Bending auf Bund {0} fällt auf den kleinen Finger. Bendings spielt man mit dem Ringfinger: Verschiebe die Greifhandposition einen Bund nach oben.</value></data>
+  <data name="Inspector_IssueFix_MoveAnchorToNextNote" xml:space="preserve"><value>Auf die nächste Note verschieben</value></data>
+  <data name="Inspector_IssueFix_MoveAnchorToNextNoteTip" xml:space="preserve"><value>Verschiebt die Greifhandposition auf die nächste Note oder den nächsten Akkord oder entfernt sie, wenn dort schon eine eigene liegt. Ein Rückgängig-Schritt.</value></data>
 </root>

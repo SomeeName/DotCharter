@@ -50,6 +50,9 @@ internal static class DefaultVocalSymbols
 
     public static IReadOnlyList<RsSymbolDefinition> Load() => Cached.Value;
 
+    /// <summary>True when the game's default lyric font draws <paramref name="c" /> (<c>RsLyricText</c> reads it).</summary>
+    public static bool HasGlyph(char c) => c != '\uFFFF' && Glyphs.Contains(c);
+
     private static IReadOnlyList<RsSymbolDefinition> Build()
     {
         var result = new List<RsSymbolDefinition>(Glyphs.Length);

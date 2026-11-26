@@ -186,6 +186,94 @@ public sealed class GpAuthoredFingeringTests
         Assert.Null(parser.LastLeftFingering);
     }
 
+    // A track with no power-chord style of its own (here the rhythm part's only
+    // power chord, unfingered) plays it the way the file's other guitar track
+    // fingers it, whichever track comes first in the file.
+    [Fact]
+    public void Gpif_ARhythmPartFollowsTheLeadPartsPowerChordFingering()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"dotcharter-gpsong-{Guid.NewGuid():N}.gp");
+        try
+        {
+            using (var archive = ZipFile.Open(path, ZipArchiveMode.Create))
+            {
+                using var writer = new StreamWriter(archive.CreateEntry("Content/score.gpif").Open());
+                writer.Write(TwoTrackPowerChordScore());
+            }
+
+            var importer = new GpImporter();
+            var tracks = importer.GetAvailableTracks(path);
+            var arrangements = importer.ImportTracks(path, tracks.Select(t => t.Id).ToList());
+            var rhythm = Assert.Single(arrangements, a => a.Name == "Rhythm");
+            var chord = Assert.Single(rhythm.Levels[0].Chords);
+            var template = rhythm.ChordTemplates.Single(t => t.Id == chord.TemplateId);
+
+            Assert.Equal(1, template.Fingers[0]);
+            Assert.Equal(4, template.Fingers[1]);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    private static string TwoTrackPowerChordScore() => """
+        <GPIF>
+          <Score><Title>Song Style Fixture</Title></Score>
+          <MasterTrack><Tracks>0 1</Tracks></MasterTrack>
+          <Tracks>
+            <Track id="0">
+              <Name>Rhythm</Name>
+              <Staves><Staff><Properties>
+                <Property name="Tuning"><Pitches>40 45 50 55 59 64</Pitches></Property>
+                <Property name="CapoFret"><Fret>0</Fret></Property>
+              </Properties></Staff></Staves>
+            </Track>
+            <Track id="1">
+              <Name>Lead</Name>
+              <Staves><Staff><Properties>
+                <Property name="Tuning"><Pitches>40 45 50 55 59 64</Pitches></Property>
+                <Property name="CapoFret"><Fret>0</Fret></Property>
+              </Properties></Staff></Staves>
+            </Track>
+          </Tracks>
+          <MasterBars><MasterBar><Time>4/4</Time><Bars>0 1</Bars></MasterBar></MasterBars>
+          <Bars>
+            <Bar id="0"><Voices>0 -1 -1 -1</Voices></Bar>
+            <Bar id="1"><Voices>1 -1 -1 -1</Voices></Bar>
+          </Bars>
+          <Voices>
+            <Voice id="0"><Beats>0</Beats></Voice>
+            <Voice id="1"><Beats>1</Beats></Voice>
+          </Voices>
+          <Beats>
+            <Beat id="0"><Rhythm ref="0" /><Notes>0 1</Notes></Beat>
+            <Beat id="1"><Rhythm ref="0" /><Notes>2 3</Notes></Beat>
+          </Beats>
+          <Notes>
+            <Note id="0"><Properties>
+              <Property name="String"><String>0</String></Property>
+              <Property name="Fret"><Fret>3</Fret></Property>
+            </Properties></Note>
+            <Note id="1"><Properties>
+              <Property name="String"><String>1</String></Property>
+              <Property name="Fret"><Fret>5</Fret></Property>
+            </Properties></Note>
+            <Note id="2"><Properties>
+              <Property name="String"><String>0</String></Property>
+              <Property name="Fret"><Fret>5</Fret></Property>
+              <Property name="LeftFingering"><Fingering>I</Fingering></Property>
+            </Properties></Note>
+            <Note id="3"><Properties>
+              <Property name="String"><String>1</String></Property>
+              <Property name="Fret"><Fret>7</Fret></Property>
+              <Property name="LeftFingering"><Fingering>C</Fingering></Property>
+            </Properties></Note>
+          </Notes>
+          <Rhythms><Rhythm id="0"><NoteValue>Quarter</NoteValue></Rhythm></Rhythms>
+        </GPIF>
+        """;
+
     // ---- helpers ------------------------------------------------------------
 
     private static Arrangement ImportLegacy(string path)

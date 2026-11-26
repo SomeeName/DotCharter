@@ -80,7 +80,7 @@ public sealed class SongBrowserEmptyStateTests
             Vm = new SongBrowserViewModel(
                 new FakeFileStorageService(), config, new NoOpLibraryService(), logger,
                 new StubSession(), state, editor, transport,
-                new DotCharter.Presentation.Dialogs.DialogsSlot(), DotCharter.Localization.LocalizationService.Instance);
+                new DotCharter.Presentation.Dialogs.DialogsSlot(), DotCharter.Localization.LocalizationService.Instance, new DotCharter.Tests.UI.ViewModels.Panels.StubPackageFileReader());
         }
 
         public SongBrowserViewModel Vm { get; }

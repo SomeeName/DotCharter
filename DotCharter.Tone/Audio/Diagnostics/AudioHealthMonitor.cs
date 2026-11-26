@@ -49,6 +49,10 @@ internal sealed class AudioHealthMonitor
     private readonly IAppLogger? _logger;
     private readonly Func<JuceAudioEngine?> _engine;
     private readonly Func<bool> _isDisposing;
+    // The device-loss half: the 20 ms poll is the only reader fast
+    // enough to see the engine's short "sample rate 0" when a device closes.
+    private readonly AudioDeviceClosedDetector _closedDetector = new();
+    private readonly Action<JuceAudioEngine> _onDeviceClosed;
 
     private int _healthLastSampleRate;
     private int _healthLastBlockFrames;
@@ -76,16 +80,21 @@ internal sealed class AudioHealthMonitor
     private XrunStats _hbLastXrun;
     private bool _hbHaveXrun;
 
-    public AudioHealthMonitor(IAppLogger? logger, Func<JuceAudioEngine?> engine, Func<bool> isDisposing)
+    // onDeviceClosed is called on the monitor's thread when the engine's device
+    // closed and stayed silent (see AudioDeviceClosedDetector). It runs whether
+    // or not audio logging is on.
+    public AudioHealthMonitor(IAppLogger? logger, Func<JuceAudioEngine?> engine, Func<bool> isDisposing,
+        Action<JuceAudioEngine> onDeviceClosed)
     {
         _logger = logger;
         _engine = engine;
         _isDisposing = isDisposing;
+        _onDeviceClosed = onDeviceClosed;
     }
 
     public void Start()
     {
-        if (_logger == null) return; // nothing to log to
+        // Runs even with no logger: the device-loss check needs the poll too.
         _healthThread = new Thread(HealthLoop)
         {
             IsBackground = true,
@@ -189,6 +198,7 @@ internal sealed class AudioHealthMonitor
     private void HealthPoll()
     {
         if (_isDisposing()) return;
+        WatchForClosedDevice();
         // Feature switch = the Audio log category. Off ⇒ do nothing but sleep, and
         // forget any in-progress gap so re-enabling starts clean.
         if (_logger == null || !_logger.IsEnabled(AppLogCategory.Audio))
@@ -259,6 +269,26 @@ internal sealed class AudioHealthMonitor
         }
 
         MaybeHeartbeat(nowTicks, clockValid, sampleRate);
+    }
+
+    // Feeds the closed-device detector, independent of the logging switch.
+    private void WatchForClosedDevice()
+    {
+        var engine = _engine();
+        int sampleRate;
+        bool clockValid;
+        long frames = 0;
+        try
+        {
+            clockValid = engine is not null && engine.TryGetRenderClock(out frames, out _);
+            sampleRate = engine?.SampleRate ?? 0;
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+        if (_closedDetector.Observe(engine, sampleRate, clockValid, frames, Environment.TickCount64) && engine is not null)
+            _onDeviceClosed(engine);
     }
 
     private void LogConfigIfChanged(int sampleRate, int blockFrames, int latencySamples)

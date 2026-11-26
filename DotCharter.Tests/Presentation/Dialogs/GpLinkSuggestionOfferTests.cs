@@ -77,7 +77,7 @@ public sealed class GpLinkSuggestionOfferTests : IDisposable
     }
 
     [Fact]
-    public async Task Link_all_links_the_longer_shared_run_and_the_leftover_bar_in_one_undo_step()
+    public async Task Link_all_links_the_longer_shared_run_and_every_pass_of_the_repeated_bar_in_one_undo_step()
     {
         var h = new Harness(screen => Choose(screen, LinkSuggestionsChoice.LinkAll));
         await h.ImportAsync(WriteScore());
@@ -89,11 +89,12 @@ public sealed class GpLinkSuggestionOfferTests : IDisposable
 
         Assert.Equal(2, linked);
         var summary = Assert.IsType<LinkSuggestionsViewModel>(Assert.Single(h.Dialogs.Opened));
-        Assert.Equal("2 groups to link, 4 placements.", summary.Headline);
+        Assert.Equal("2 groups to link, 6 placements.", summary.Headline);
         Assert.Equal(steps + 1, h.Edit.History.GetUndoSteps().Count);
         Assert.Equal(["A", "B"], project.LinkGroups.Select(g => g.Letter));
         Assert.Equal(2, project.LinkGroups[0].Placements.Count);
-        Assert.Equal(2, project.LinkGroups[1].Placements.Count);
+        // The leftover first pass joins the second pass inside the longer run: an edit in either reaches both parts.
+        Assert.Equal(4, project.LinkGroups[1].Placements.Count);
         Assert.All(project.LinkGroups[0].Placements, p => Assert.Equal(8, p.EndPosition.BeatId - p.Position.BeatId));
         Assert.All(project.LinkGroups[1].Placements, p => Assert.Equal(4, p.EndPosition.BeatId - p.Position.BeatId));
         Assert.Equal([0, 0, 1], project.GpSourceBars.Select(b => b.WrittenBar));

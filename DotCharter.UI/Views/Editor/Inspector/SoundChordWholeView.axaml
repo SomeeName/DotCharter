@@ -4,7 +4,7 @@
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              x:Class="DotCharter.UI.Views.Editor.Inspector.SoundChordWholeView"
              x:DataType="viewModels:InspectorViewModel">
-    <!-- The Technique page of a chord, its WHOLE CHORD card (#751 P4, design D): strum, accent, ignore, pass other,
+    <!-- The Technique page of a chord, its WHOLE CHORD card (#751 P4, design D): strum, ignore, pass other,
          split notes / no notes (never both) and Reset, STAGED (Staged.ChordTechnique) on every chord the footer's
          "Apply to" ladder reaches. A mixed selection's note card edits its notes; the chords are edited alone. -->
     <StackPanel Spacing="{StaticResource SpaceXs}">
@@ -31,11 +31,6 @@
                 </ComboBox>
             </Grid>
             <UniformGrid Columns="3" ColumnSpacing="{StaticResource SpaceXs}" RowSpacing="3">
-                <ToggleButton x:Name="ChordAccentChip" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
-                              HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_Accent}"
-                              IsChecked="{Binding Staged.ChordTechnique.Accent}"
-                              AutomationProperties.Name="{localization:Loc Inspector_Accent}"
-                              ToolTip.Tip="{localization:Loc Inspector_Chord_AccentTip}" />
                 <ToggleButton x:Name="ChordIgnoreChip" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
                               HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_Ignore}"
                               IsChecked="{Binding Staged.ChordTechnique.ChordIgnore}"

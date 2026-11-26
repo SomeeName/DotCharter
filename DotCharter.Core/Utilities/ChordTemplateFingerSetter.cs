@@ -35,6 +35,9 @@ public class ChordTemplateFingerSetter
     /// <summary>Highest fret at which the neck is "wide" — see <see cref="ApplyLowPositionSpread" />.</summary>
     private const int WideFretSpacingLimit = 5;
 
+    /// <summary>Highest lowest-fret at which the open-D grip is still played as one — see <see cref="BuildRecognizedShapes" />.</summary>
+    private const int OpenDGripFretLimit = 13;
+
     private static readonly List<List<Shape>> RecognizedShapes = BuildRecognizedShapes();
 
     private static List<List<Shape>> BuildRecognizedShapes()
@@ -61,7 +64,14 @@ public class ChordTemplateFingerSetter
             shapes.Add(new Shape([0, 0, i], [1, 1, Math.Min(4, i + 1)]));
         }
 
-        shapes.Add(new Shape([0, 1, 0], [1, 3, 2]));
+        // The open-D grip (xx0232 as 1-3-2) is the one entry tied to WHERE the
+        // shape sits: the ring finger reaching over the middle is how the
+        // grip is learned at the nut and moved up the neck, and the reference
+        // corpus keeps it through the 13th fret. Past that the frets are narrow
+        // enough for the index to barre the outer pair with the middle on the
+        // fret above (1-2-1, the corpus at the 17th), which the heuristic gives.
+        // Every other entry is a movable barre form, right at any position.
+        shapes.Add(new Shape([0, 1, 0], [1, 3, 2], OpenDGripFretLimit));
         shapes.Add(new Shape([0, 2, 2], [1, 3, 4]));
 
         // 4-String
@@ -230,7 +240,7 @@ public class ChordTemplateFingerSetter
         }
 
         var matchingShape = frets.Length < RecognizedShapes.Count
-            ? RecognizedShapes[frets.Length].FirstOrDefault(s => s.Matches(frets))
+            ? RecognizedShapes[frets.Length].FirstOrDefault(s => s.Matches(frets, lowestNonzeroFret))
             : null;
         if (matchingShape != null)
         {
@@ -567,18 +577,22 @@ public class ChordTemplateFingerSetter
 
     private class Shape
     {
-        public Shape(int[] requiredFrets, int?[] fingers)
+        public Shape(int[] requiredFrets, int?[] fingers, int maxLowestFret = int.MaxValue)
         {
             RequiredFrets = requiredFrets;
             Fingers = fingers;
+            MaxLowestFret = maxLowestFret;
         }
 
         public int[] RequiredFrets { get; }
         public int?[] Fingers { get; }
 
-        public bool Matches(int[] shape)
+        /// <summary>Highest lowest-fretted fret the grip is played at; above it the heuristic decides.</summary>
+        public int MaxLowestFret { get; }
+
+        public bool Matches(int[] shape, int lowestFret)
         {
-            if (shape.Length > RequiredFrets.Length) return false;
+            if (shape.Length > RequiredFrets.Length || lowestFret > MaxLowestFret) return false;
             for (var i = 0; i < shape.Length; i++)
             {
                 if (shape[i] != RequiredFrets[i])

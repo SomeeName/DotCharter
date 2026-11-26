@@ -1,11 +1,13 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Media.TextFormatting;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using DotCharter.Localization;
@@ -728,8 +730,19 @@ public sealed class NoteSectionStripUiPerfSmokeTests
             var sound = Sound(pane);
             var list = Named<ItemsControl>(sound, "SoundFindingsList");
             Assert.True(list.IsEffectivelyVisible);
-            Assert.Equal(pane.Vm.SelectionIssueCount,
-                list.GetVisualDescendants().OfType<Border>().Count(b => b.Classes.Contains("FieldIssue")));
+            var scroller = list.GetVisualDescendants().OfType<ScrollViewer>().First();
+            var rows = new HashSet<InspectorFieldIssue>();
+            for (var y = 0.0; ; y += Math.Max(1, scroller.Viewport.Height / 2))
+            {
+                scroller.Offset = new Vector(0, y);
+                Settle(pane.Window);
+                foreach (var border in list.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("FieldIssue")))
+                    rows.Add((InspectorFieldIssue)border.DataContext!);
+                if (y >= scroller.Extent.Height - scroller.Viewport.Height) break;
+            }
+
+            scroller.Offset = default;
+            Assert.Equal(pane.Vm.SelectionIssueCount, rows.Count);
 
             pane.Selection.ClearSelections();
             Settle(pane.Window);
@@ -790,11 +803,23 @@ public sealed class NoteSectionStripUiPerfSmokeTests
         foreach (var text in sound.GetVisualDescendants().OfType<TextBlock>())
         {
             if (string.IsNullOrEmpty(text.Text) || !text.IsEffectivelyVisible) continue;
-            if (text.TextWrapping != TextWrapping.NoWrap || text.TextTrimming != TextTrimming.None) continue;
-            if (text.Bounds.Width <= 1) continue;
+            if (text.TextTrimming != TextTrimming.None || text.Bounds.Width <= 1) continue;
             var slot = text.Bounds.Width - text.Padding.Left - text.Padding.Right;
-            var needed = text.TextLayout.WidthIncludingTrailingWhitespace;
-            if (needed > slot + 1.0) clipped.Add($"{name}: \"{text.Text}\" needs {needed:0.#} px in a {slot:0.#} px slot");
+            if (text.TextWrapping == TextWrapping.NoWrap)
+            {
+                var needed = text.TextLayout.WidthIncludingTrailingWhitespace;
+                if (needed > slot + 1.0) clipped.Add($"{name}: \"{text.Text}\" needs {needed:0.#} px in a {slot:0.#} px slot");
+            }
+            else if (text.MaxLines > 0)
+            {
+                // A capped wrap (a picker's closed choice, #1047) clips when the text needs more lines than it may show.
+                // A capped block shrinks to the lines it shows, so measure against the room its host gives it.
+                var room = text.GetVisualParent() is ContentPresenter host ? host.Bounds.Width - host.Padding.Left - host.Padding.Right : slot;
+                var typeface = new Typeface(text.FontFamily, text.FontStyle, text.FontWeight, text.FontStretch);
+                var uncapped = new TextLayout(text.Text, typeface, text.FontSize, null, text.TextAlignment, text.TextWrapping, maxWidth: room);
+                var lines = uncapped.TextLines.Count;
+                if (lines > text.MaxLines) clipped.Add($"{name}: \"{text.Text}\" needs {lines} lines of {room:0.#} px, has {text.MaxLines}");
+            }
         }
     }
 

@@ -52,6 +52,30 @@ public sealed class ChordTemplatePairFingeringStyleTests
         Assert.Equal("", template.Name);
     }
 
+    /// <summary>#943: Auto-fill fingers a grip that is part of the next one
+    /// (<c>14 16 x 16</c> before <c>14 16 16 16</c>) with that grip's ring barre,
+    /// not the ring + pinky it gets alone.</summary>
+    [Fact]
+    public void AutoFill_FingersASubsetGripLikeItsNeighbour()
+    {
+        var h = new Harness();
+        var small = new ChordTemplate { Id = 2, Name = "", Frets = { [1] = 14, [2] = 16, [4] = 16 } };
+        var big = new ChordTemplate { Id = 3, Name = "", Frets = { [1] = 14, [2] = 16, [3] = 16, [4] = 16 } };
+        h.Arrangement.ChordTemplates.Add(small);
+        h.Arrangement.ChordTemplates.Add(big);
+        foreach (var (template, beat) in new[] { (small, 0), (big, 4) })
+        {
+            var chord = new Chord { Position = new FractionalPosition(beat), TemplateId = template.Id };
+            foreach (var (s, f) in template.Frets) chord.ChordNotes.Add(new ChordNote { StringIndex = s, Fret = f });
+            h.Arrangement.Levels[0].Chords.Add(chord);
+        }
+
+        h.Panel().GenerateAllFingeringsCommand.Execute(null);
+
+        Assert.Equal(new Dictionary<int, int> { [1] = 1, [2] = 3, [3] = 3, [4] = 3 }, big.Fingers);
+        Assert.Equal(new Dictionary<int, int> { [1] = 1, [2] = 3, [4] = 3 }, small.Fingers);
+    }
+
     [Fact]
     public void TheSeedOfAnUntemplatedChord_FollowsTheArrangement()
     {

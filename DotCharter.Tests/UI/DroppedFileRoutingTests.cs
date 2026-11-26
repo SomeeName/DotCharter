@@ -212,7 +212,7 @@ public class DroppedFileRoutingTests
     [Theory]
     [InlineData("Status_DroppedUnsupportedFileType")]
     [InlineData("Status_DroppedUnknownFileType")]
-    [InlineData("Status_DroppedPsarcNotSupported")]
+    [InlineData("Status_DroppedPackageHasNoSongs")]
     public void EveryRoutingMessage_ExistsInBothResx(string key)
     {
         Assert.Contains(key, ReadResxKeys("Resources.resx"));

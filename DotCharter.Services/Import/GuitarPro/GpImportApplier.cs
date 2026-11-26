@@ -10,7 +10,8 @@ namespace DotCharter.Services.Import.GuitarPro;
 /// <summary>How a Guitar Pro score lands on the open project.</summary>
 public enum GpImportMode
 {
-    /// <summary>Each chosen track becomes a new arrangement, on the score's own tempo map.</summary>
+    /// <summary>Each chosen track becomes a new arrangement: on the project's tempo map, or on the score's
+    /// when the import is told to replace it.</summary>
     AddNew,
 
     /// <summary>Only techniques (bends, slides, flags) fold onto arrangements the project already has.</summary>
@@ -30,7 +31,7 @@ public sealed record GpImportedScore(IReadOnlyList<Arrangement> Arrangements, IR
 /// <summary>
 ///     The apply half of a Guitar Pro import, run on the UI thread against the
 ///     LIVE project after the score was parsed off it — and always as ONE undo
-///     step. Add-new replaces the beat map, which moves every already-charted
+///     step. Add-new may replace the beat map, which moves every already-charted
 ///     element in wall-clock time; technique-only overwrites flags in place.
 ///     Both are destructive, so neither may happen outside the history.
 /// </summary>
@@ -53,8 +54,19 @@ public sealed class GpImportApplier(
         return last;
     }
 
+    /// <summary>
+    ///     What the import dialog's "replace the tempo map" box starts as: ticked only when no
+    ///     arrangement has content yet, because a charted project's beat map is usually synced to its
+    ///     recording by hand, and a tab's map would throw that away.
+    /// </summary>
+    public static bool DefaultReplacesTempoMap(ChartProject? project) =>
+        project == null || !project.Arrangements.Any(HasContent);
+
+    /// <summary>Applies the parsed score. <paramref name="replaceTempoMap" /> is read by add-new only: the
+    ///     score's tempo map replaces the project's (unless it is locked); otherwise the new arrangements are
+    ///     placed bar by bar on the project's map.</summary>
     public void Apply(GpImportMode mode, string filePath, IReadOnlyList<GpTrackTarget> tracks, GpImportResult parsed,
-        GpImportResult? older)
+        GpImportResult? older, bool replaceTempoMap)
     {
         var appConfig = config.LoadAppConfig();
         _lastImport = null;
@@ -64,7 +76,7 @@ public sealed class GpImportApplier(
             switch (mode)
             {
                 case GpImportMode.AddNew:
-                    ApplyAsNewArrangements(filePath, parsed, appConfig);
+                    ApplyAsNewArrangements(filePath, parsed, appConfig, replaceTempoMap);
                     break;
                 case GpImportMode.TechniqueOnly:
                     ApplyMerge(tracks, parsed, null, diff: false);
@@ -88,7 +100,19 @@ public sealed class GpImportApplier(
         }
     }
 
-    private void ApplyAsNewArrangements(string filePath, GpImportResult result, AppConfig appConfig)
+    /// <summary>The score's tempo map replaced the beat map unsynced to any recording: a D110 spot at each new
+    /// arrangement's first sound (or the chart start).</summary>
+    private static void MarkTempoGuessed(IEnumerable<Arrangement> imported)
+    {
+        foreach (var arrangement in imported)
+        {
+            var first = arrangement.Levels.SelectMany(l => l.Notes.Select(n => n.Position).Concat(l.Chords.Select(c => c.Position)))
+                .DefaultIfEmpty(FractionalPosition.Zero).Min();
+            arrangement.AudioCheckSpots.Add(new AudioCheckSpot(first, AudioCheckReason.TempoFromTab));
+        }
+    }
+
+    private void ApplyAsNewArrangements(string filePath, GpImportResult result, AppConfig appConfig, bool replaceTempoMap)
     {
         var imported = result.Arrangements;
 
@@ -98,7 +122,12 @@ public sealed class GpImportApplier(
         // enforcing first measured the chart against a grid thrown away one call
         // later. ApplyTempoAndKey still reads the OLD first beat for its start
         // offset, so this is a resequence, never a clear-first.
-        var gridReplaced = ApplyTempoAndKey(result.Metadata);
+        var gridReplaced = ApplyTempoAndKey(result.Metadata, replaceTempoMap);
+
+        // A kept (or locked) map is not the score's: its bars are the user's, so each score bar
+        // goes onto the map's bar of the same number, whatever either side's beats per bar.
+        if (!gridReplaced)
+            GpMeterGrid.OntoMeasures(imported, result.Metadata.Bars, state.Beats, appConfig.GpImportTimeSignatures);
 
         foreach (var arrangement in imported)
             ChartSpacingEnforcer.EnforceArrangement(arrangement, state.Beats, appConfig);
@@ -108,6 +137,7 @@ public sealed class GpImportApplier(
         var project = state.ActiveProject;
         if (project == null) return;
         if (gridReplaced) project.GpSourceBars = [.. GpSourceMap.Capture(result.Metadata, project.Beats)];
+        if (gridReplaced) MarkTempoGuessed(imported);
         RemoveDefaultEmptyArrangement(project);
         foreach (var arrangement in imported) project.Arrangements.Add(arrangement);
         _lastImport = new GpImportedScore([.. imported],
@@ -118,8 +148,8 @@ public sealed class GpImportApplier(
         editor.RequestRedraw();
         logger.Info(AppLogCategory.Import,
             $"Guitar Pro arrangements added to project. Total arrangements={project.Arrangements.Count}, tempoPoints={result.Metadata.TempoPoints.Count}, bars={result.Metadata.Bars.Count}, keyAccidentals={result.Metadata.KeyAccidentals}, keyIsMinor={result.Metadata.KeyIsMinor}.");
-        state.SetMessage(localization.Format("Status_GpImport_AddNewApplied", string.Join(", ", imported.Select(a => a.Name))),
-            StatusSeverity.Success);
+        state.SetMessage(localization.Format("Status_GpImport_AddNewApplied", string.Join(", ", imported.Select(a => a.Name))) + " " +
+            GpImportChecklist.Count(result.Metadata, imported).Text(localization), StatusSeverity.Success);
     }
 
     private void ApplyMerge(IReadOnlyList<GpTrackTarget> tracks, GpImportResult newer, GpImportResult? older, bool diff)
@@ -176,21 +206,23 @@ public sealed class GpImportApplier(
     {
         if (project.Arrangements.Count != 1) return;
         var only = project.Arrangements[0];
-        if (only.Levels.Any(l => l.Notes.Count > 0 || l.Chords.Count > 0 || l.HandShapes.Count > 0 || l.Anchors.Count > 0))
-            return;
+        if (HasContent(only)) return;
 
         logger.Info(AppLogCategory.Import, $"Removing default empty arrangement '{only.Name}' before adding GP imports.");
         if (ReferenceEquals(state.ActiveArrangement, only)) state.ActiveArrangement = null;
         project.Arrangements.Remove(only);
     }
 
+    private static bool HasContent(Arrangement arrangement) =>
+        arrangement.Levels.Any(l => l.Notes.Count > 0 || l.Chords.Count > 0 || l.HandShapes.Count > 0 || l.Anchors.Count > 0);
+
     /// <summary>
-    ///     Replaces the beat map with the score's tempo/time-signature map (unless
-    ///     it is locked) and copies the key and the song metadata over. Never
+    ///     Replaces the beat map with the score's tempo/time-signature map (when
+    ///     asked to and it is not locked) and copies the key and the song metadata over. Never
     ///     touches the arrangements, which is why it can run before they are
     ///     enforced and added. True when the beat map is now the score's.
     /// </summary>
-    private bool ApplyTempoAndKey(GpImportMetadata meta)
+    private bool ApplyTempoAndKey(GpImportMetadata meta, bool replaceTempoMap)
     {
         var project = state.ActiveProject;
         if (project == null) return false;
@@ -199,6 +231,11 @@ public sealed class GpImportApplier(
         if (project.IsBeatMapLocked)
         {
             logger.Info(AppLogCategory.Import, "Beat map is locked — tempo/time-signature import skipped.");
+        }
+        else if (!replaceTempoMap)
+        {
+            logger.Info(AppLogCategory.Import,
+                $"Kept the project's tempo map; the score's {meta.Bars.Count} bars go onto its measures.");
         }
         else if (meta.Bars.Count > 0)
         {

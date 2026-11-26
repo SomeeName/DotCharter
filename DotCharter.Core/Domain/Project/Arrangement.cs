@@ -116,6 +116,12 @@ public class Arrangement
     public Dictionary<string, PhraseInfo> PhraseInfos { get; set; } = [];
 
     /// <summary>
+    ///     The spots an import guessed and the charter has not yet checked against the audio (D110). Saved as
+    ///     <c>&lt;dcAudioCheck&gt;</c>, absent when empty; a spot leaves the list when it is marked checked.
+    /// </summary>
+    public List<AudioCheckSpot> AudioCheckSpots { get; set; } = [];
+
+    /// <summary>
     /// Sidecar of RS-XML technique/path flags. Created lazily so existing
     /// callers that don't care about RS-XML keep behaving as before.
     /// </summary>

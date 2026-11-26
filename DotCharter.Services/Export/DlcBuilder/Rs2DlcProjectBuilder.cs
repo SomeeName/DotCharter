@@ -58,13 +58,21 @@ public static class Rs2DlcProjectBuilder
     ///     7-/8-string guitar's tuning lists every string, as the XML's <c>string0</c>..<c>stringN</c> do,
     ///     so the project and the XML name the same strings; on, it keeps the six stock slots.
     /// </param>
+    /// <param name="FixLowBassTuning">
+    ///     The low bass tuning fix (<see cref="LowBassTuningFix" />), the export dialog's box or
+    ///     <c>AppConfig.ExportFixLowBassTuning</c>: a bass entry takes the octave-up tuning at A220, as the
+    ///     bundle's XML and the package do. Off unless asked, like the package's option.
+    /// </param>
+    /// <param name="Edition">Which project this is when the chart is split into a standard and an RS Extended Range one.</param>
     public readonly record struct Rs2DlcBuildOptions(
         string AudioFileName,
         string CoverArtFileName,
         double? AudioLengthMs,
         string FallbackCharter,
         bool IncludeVocals = true,
-        bool SixStringProjection = true);
+        bool SixStringProjection = true,
+        bool FixLowBassTuning = false,
+        Rs2DlcEdition Edition = Rs2DlcEdition.Single);
 
     /// <summary>
     ///     Projects a saved chart into the <c>.rs2dlc</c> DTO.
@@ -139,7 +147,7 @@ public static class Rs2DlcProjectBuilder
             AudioPreviewFile = new Rs2DlcAudioFile { Path = PreviewPathFor(options.AudioFileName), Volume = ProjectVolumes.PreviewOrDefault(chart) },
             AudioPreviewStartTime = PreviewStartTime.ToRs2DlcSeconds(chart.PreviewStartMs),
             IgnoredIssues = [],
-            Arrangements = BuildArrangements(project, dlcKey, options.IncludeVocals, options.SixStringProjection),
+            Arrangements = BuildArrangements(project, dlcKey, options),
             Tones = BuildTones(project)
         };
     }
@@ -222,23 +230,24 @@ public static class Rs2DlcProjectBuilder
         return Rs2DlcStrings.ProjectFileName(project.Chart.Artist, project.Chart.SongName);
     }
 
-    private static Rs2DlcArrangementDto[] BuildArrangements(ChartProject project, string dlcKey,
-        bool includeVocals, bool sixStringProjection)
+    private static Rs2DlcArrangementDto[] BuildArrangements(ChartProject project, string dlcKey, Rs2DlcBuildOptions options)
     {
         var entries = new List<Rs2DlcArrangementDto>();
 
         for (var i = 0; i < project.Arrangements.Count; i++)
         {
-            var arrangement = project.Arrangements[i];
-
             // A Vocal arrangement has no instrumental XML in the bundle — the
-            // vocals come from ChartProject.VocalTracks below.
-            if (arrangement.ArrangementType == ArrangementType.Vocal) continue;
-            if (RsxrStringLayout.XmlExportRefusal(arrangement, sixStringProjection) != null) continue;
+            // vocals come from ChartProject.VocalTracks below. The edition decides
+            // the rest: which arrangements it carries and which bundle file each reads.
+            if (Rs2DlcEditions.Entry(project, i, options.Edition, options.SixStringProjection) is not { } entry) continue;
 
-            var xml = i < project.ArrangementFiles.Count
-                ? project.ArrangementFiles[i]
-                : DlcBuilderBundle.ArrangementFileName(i + 1, arrangement);
+            var source = project.Arrangements[i];
+            // The tuning the bundle's XML carries: the low bass fix on a copy, never the project.
+            var arrangement = LowBassTuningFix.ForPackage(source, options.FixLowBassTuning);
+            var xml = entry.Xml;
+            var priority = Rs2DlcEditions.DemotedToAlternate(project, source, options.Edition)
+                ? Rs2DlcArrangementPriority.Alternative
+                : MapPriority(arrangement.Subtype);
 
             var tones = ToneSlots(arrangement);
 
@@ -253,12 +262,12 @@ public static class Rs2DlcProjectBuilder
                         Xml = InBundle(xml),
                         Name = MapName(arrangement.ArrangementType),
                         RouteMask = MapRouteMask(arrangement.ArrangementType),
-                        Priority = MapPriority(arrangement.Subtype),
+                        Priority = priority,
                         // Upstream's own default. A null ScrollSpeed here means
                         // "no preference", which is what DLC Builder shows too.
                         ScrollSpeed = arrangement.ScrollSpeed ?? 1.3,
                         BassPicked = arrangement.PickedBass,
-                        Tuning = TuningVector(arrangement, !sixStringProjection),
+                        Tuning = TuningVector(arrangement, !entry.Projected),
                         TuningPitch = PitchFromCents(arrangement.CentOffset),
                         BaseTone = tones.BaseTone,
                         Tones = tones.Slots,
@@ -269,8 +278,10 @@ public static class Rs2DlcProjectBuilder
             });
         }
 
+        if (options.Edition == Rs2DlcEdition.Standard) PromoteLonePathMains(entries);
+
         // One Vocals arrangement, as in the psarc: Rocksmith plays a single one.
-        if (VocalsExportPolicy.PackageTrack(project, includeVocals) is var (track, index))
+        if (VocalsExportPolicy.PackageTrack(project, options.IncludeVocals) is var (track, index))
         {
             var xml = DlcBuilderBundle.VocalTrackFileName(index + 1, track);
             entries.Add(new Rs2DlcArrangementDto
@@ -376,6 +387,20 @@ public static class Rs2DlcProjectBuilder
         ArrangementSubtype.Alternate => Rs2DlcArrangementPriority.Alternative,
         _ => Rs2DlcArrangementPriority.Main
     };
+
+    /// <summary>
+    ///     In the standard project a path left without a Main (its Main was the 7-string, left out for
+    ///     its stock twin or projection) ships its first arrangement as Main, as the standard
+    ///     <c>.psarc</c> does, so every path keeps one. The chart project itself is never changed.
+    /// </summary>
+    private static void PromoteLonePathMains(List<Rs2DlcArrangementDto> entries)
+    {
+        var paths = entries.Select(e => (Rs2DlcInstrumentalDto)e.Fields[0]).GroupBy(i => i.RouteMask);
+        foreach (var path in paths)
+        {
+            if (path.All(i => i.Priority != Rs2DlcArrangementPriority.Main)) path.First().Priority = Rs2DlcArrangementPriority.Main;
+        }
+    }
 
     private static int ParseYear(string? albumYear) =>
         int.TryParse(albumYear, CultureInfo.InvariantCulture, out var year) && year > 0 ? year : 0;

@@ -94,7 +94,7 @@ DotCharter additive extensions, appended after that order:
 `dcNotationVoices`, `dcSynthPlayStyle`, `dcProjectId`, `dcProvenance`, `dcVersion`,
 `dcLinkGroups`, `dcGpSource`, `dcAudioVolume`, `dcPreviewVolume`, `dcAudioVolumeSig`, `dcPreviewVolumeSig`,
 `dcAudioVolumeManual`, `dcPreviewVolumeManual`,
-`dcTitleSort`, `dcAlbumSort`, `dcDlcKey`, `dcPreviewStartMs`.
+`dcTitleSort`, `dcAlbumSort`, `dcDlcKey`, `dcPreviewStartMs`, `dcIgnoredFindings`.
 <!-- frozen-root-elements: end -->
 
 **The `<project>` root carries NO attributes**, and that is frozen too

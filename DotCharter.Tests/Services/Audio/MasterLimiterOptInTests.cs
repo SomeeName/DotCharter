@@ -100,7 +100,7 @@ public sealed class MasterLimiterOptInTests
         // 1. The config-apply path — the ONE place every producer of an engine
         //    config reaches (startup, a settings apply, the watchdog rebuild) —
         //    derives the setting and pushes it.
-        var apply = Body(source, "private void ApplyAudioConfigurationCore(RigConfig config, bool forceEngineReplace)");
+        var apply = Body(source, "private void ApplyAudioConfigurationCore(RigConfig config, bool forceEngineReplace, bool reuseRememberedChannelCounts)");
         Assert.Contains("MasterLimiterSetting.FromConfig(config)", apply, StringComparison.Ordinal);
         Assert.Contains("ApplyMasterLimiter();", apply, StringComparison.Ordinal);
 

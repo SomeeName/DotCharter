@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.LogicalTree;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 
 namespace DotCharter.UI.Views.Shell;
 
@@ -119,14 +120,23 @@ public static class MenuFlyoutPrewarmer
         var rows = 0;
         foreach (var row in item.Items.OfType<MenuItem>())
         {
-            // Measure only ever consults an element's OWN IsVisible, and a row
-            // inside a closed popup is visible — it simply has no visual parent
-            // yet. Styles reach it through the LOGICAL tree, which its parent
-            // item already gave it.
-            row.ApplyTemplate();
-            row.Measure(available);
-            row.Arrange(new Rect(row.DesiredSize));
-            rows++;
+            // A row with a visual parent is hosted by an open dropdown's panel
+            // (the drain is paced to land while the user holds still, so it can
+            // reach a menu the user has open): it is realized already, and its
+            // slot belongs to that panel. Arranging it at (0, 0) here moved every
+            // row onto the first one and nothing arranged them back. Its
+            // own submenu may still be cold, so the walk goes on below it.
+            if (row.GetVisualParent() is null)
+            {
+                // Measure only ever consults an element's OWN IsVisible, and a row
+                // inside a closed popup is visible — it simply has no visual parent
+                // yet. Styles reach it through the LOGICAL tree, which its parent
+                // item already gave it.
+                row.ApplyTemplate();
+                row.Measure(available);
+                row.Arrange(new Rect(row.DesiredSize));
+                rows++;
+            }
 
             // Depth-first: a grouped verb is one hover away, not one click.
             rows += RealizeCore(row, available);

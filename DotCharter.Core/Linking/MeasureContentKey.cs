@@ -20,7 +20,8 @@ public sealed class MeasureContentKey : IEquatable<MeasureContentKey>
     }
 
     /// <summary>The canonical text the key compares. Its format is internal and versioned
-    /// by its first token; compare keys, never parse this.</summary>
+    /// by its first token; compare keys, never parse this (only
+    /// <see cref="MeasureContentDifference" />, beside its writer, reads it to name a difference).</summary>
     public string Canonical { get; }
 
     /// <summary>Notes and chords that start inside the run.</summary>

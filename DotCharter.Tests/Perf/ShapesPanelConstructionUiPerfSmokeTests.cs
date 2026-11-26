@@ -533,7 +533,7 @@ public sealed class ShapesPanelConstructionUiPerfSmokeTests
             $"{what} lies at {top:0}-{bottom:0}, outside its card's {scroller.Viewport.Height:0} px viewport");
     }
 
-    private static void ShowCard(ShapesPanelView view, string name) => view.Cards.ShowPage(view.FindControl<Control>(name)!);
+    internal static void ShowCard(ShapesPanelView view, string name) => view.Cards.ShowPage(view.FindControl<Control>(name)!);
 
     private static void AssertShown(ShapesPanelView view, string name, string what) =>
         Assert.True(view.Cards.ShownCards.Contains(view.FindControl<Control>(name)!), $"{what}: {name} is not on screen");
@@ -651,7 +651,7 @@ public sealed class ShapesPanelConstructionUiPerfSmokeTests
 
     private static T Named<T>(Visual root, string name) where T : Control => NarrowWidthLayout.Named<T>(root, name);
 
-    private static void Click(Window window, Control control)
+    internal static void Click(Window window, Control control)
     {
         var at = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!.Value;
         window.MouseMove(at);
@@ -661,7 +661,7 @@ public sealed class ShapesPanelConstructionUiPerfSmokeTests
     }
 
     // Seven or eight strings: every shape also frets the extra strings at frets 10-18, the widest patterns.
-    private static Arrangement Seed(ProjectState state, int templates, int strings = 6)
+    internal static Arrangement Seed(ProjectState state, int templates, int strings = 6)
     {
         var project = new ChartProject { Chart = { SongName = "Shapes panel fixture" } };
         for (var i = 0; i < 64; i++)
@@ -709,7 +709,7 @@ public sealed class ShapesPanelConstructionUiPerfSmokeTests
         return arrangement;
     }
 
-    private static void Settle(Window window)
+    internal static void Settle(Window window)
     {
         for (var pass = 0; pass < 3; pass++)
         {

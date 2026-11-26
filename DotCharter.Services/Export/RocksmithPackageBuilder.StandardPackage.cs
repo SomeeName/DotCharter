@@ -5,8 +5,9 @@ namespace DotCharter.Services.Export;
 
 /// <summary>
 ///     The standard package of a mixed export: the builder runs a second time on the
-///     stock arrangements alone, so the RS Extended Range package keeps its bytes and the
-///     standard one is exactly what a stock-only export of the same project writes.
+///     stock arrangements alone, so the RS Extended Range package keeps its bytes. Every
+///     arrangement the two packages share keeps its ids AND its partition (its file names), so
+///     a name such as <c>key_lead</c> never means two different arrangements across the pair.
 /// </summary>
 public sealed partial class RocksmithPackageBuilder
 {
@@ -15,16 +16,26 @@ public sealed partial class RocksmithPackageBuilder
     /// <summary>
     ///     In an RS Extended Range package, a stock Main arrangement on the same path as an
     ///     extended Main ships as Alternate, so each path keeps one Main, the extended one. The
-    ///     standard package has no such duplicate and keeps it Main; nothing else changes.
+    ///     standard package has no such duplicate and keeps it Main; there, a path left without a
+    ///     Main (its Main was extended) ships its first stock arrangement as Main.
     /// </summary>
-    private static List<RsPackageArrangement> DemoteStockDuplicateMains(List<RsPackageArrangement> arrangements)
+    private static List<RsPackageArrangement> ResolvePathMains(List<RsPackageArrangement> arrangements, bool standardCompanion)
     {
         var extendedMainPaths = arrangements.Where(a => a.Sng.Extension != null && a.IsRepresentative)
             .Select(a => a.RouteMaskValue).ToHashSet();
         foreach (var stock in arrangements.Where(a => a.Sng.Extension == null && a.IsRepresentative))
             stock.DemotedToAlternate = extendedMainPaths.Contains(stock.RouteMaskValue);
+        if (!standardCompanion) return arrangements;
+        foreach (var path in arrangements.Where(a => !a.IsVocals).GroupBy(a => a.RouteMaskValue))
+        {
+            if (!path.Any(a => a.IsRepresentative)) path.First().PromotedToMain = true;
+        }
         return arrangements;
     }
+
+    /// <summary>The partition the first package of the pair gave <paramref name="name" />, else <paramref name="partition" />.</summary>
+    private static int SharedPartition(RocksmithBuildOptions options, string name, int partition) =>
+        options.SharedArrangementIds?.TryGetValue(name, out var shared) == true ? shared.Partition : partition;
 
     private async Task<RocksmithBuildResult> BuildPackagesAsync(
         ChartProject project,
@@ -47,7 +58,8 @@ public sealed partial class RocksmithPackageBuilder
             PlainPackage = options.StandardPlainPackage ?? options.PlainPackage,
             ArrangementFilter = extended.StockArrangements,
             CleanUpChordSidecars = false,
-            WriteStandardPackage = false
+            WriteStandardPackage = false,
+            StandardCompanion = true
         };
         RocksmithBuildResult standard;
         try
@@ -67,3 +79,6 @@ public sealed partial class RocksmithPackageBuilder
         };
     }
 }
+
+/// <summary>An arrangement's ids and song partition, shared by the two packages of one export.</summary>
+internal readonly record struct RsSharedArrangement(RsArrangementIdentity Ids, int Partition);

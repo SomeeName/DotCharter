@@ -43,7 +43,7 @@ public sealed class GeneralSplitInventoryTests
         "LogExternal", "LogFileMaxMb", "LogFileMaxRollovers", "LogFilePath", "LogHistory", "LogImport",
         "LogInput", "LogProject", "LogRepeatCoalesceWindowMs", "LogRepeatSummaryIntervalMs", "LogSettings",
         "LyricSpanPhraseGap", "LyricSpanWordGap", "MinNoteDistanceDivisor", "MinNoteDistanceModeIndex",
-        "MinNoteDistanceMs", "MinimumLogLevelIndex", "MusicalChordNames", "OnlineLatinNameLookup", "PadSilenceOnNewProject",
+        "MinNoteDistanceMs", "MinimumLogLevelIndex", "MusicalChordNames", "NameOnlyFirstChordInHandShape", "OnlineLatinNameLookup", "PadSilenceOnNewProject",
         "PasteIncludeChords", "PasteIncludeEvents", "PasteIncludeFretAnchors", "PasteIncludeHandShapes",
         "PasteIncludeNotes", "PasteIncludeTones", "PasteReplacesExisting", "LibraryAudioCacheDetail", "LibraryAudioCacheHasEntries",
         "LibraryAudioCacheUsage", "PsarcOpenHardestLevelOnly", "RefreshLibraryAudioCacheCommand", "RotateLogFiles", "RunSetupAgainCommand",
@@ -75,12 +75,13 @@ public sealed class GeneralSplitInventoryTests
     ///     the String order rows on Editor and Play make 65; the 2D timeline's two
     ///     rows, moved over from Graphics, make 67. Guitar Pro import moved from
     ///     Editor to Files without changing the total. The Rocksmith export defaults add two rows. Editor's
-    ///     "Inspector edits wait for Apply" (#805) makes Editor 23.
+    ///     "Inspector edits wait for Apply" (#805) makes Editor 23, and "Name only the first
+    ///     chord of a hand shape" makes it 24.
     /// </summary>
     private static readonly Dictionary<string, int> ExpectedRows = new(StringComparer.Ordinal)
     {
         ["GeneralSettingsView.axaml"] = 19,
-        ["EditorSettingsView.axaml"] = 23,
+        ["EditorSettingsView.axaml"] = 24,
         ["PlaySettingsView.axaml"] = 5,
         ["FilesSettingsView.axaml"] = 25
     };

@@ -14,10 +14,12 @@ namespace DotCharter.Services.Library;
 ///     the song lists. Callers (Song Select, the Library screen, Play Mode,
 ///     onboarding, the convert-on-select prefetch, Library Doctor) see only
 ///     <see cref="ILibraryService" />, <see cref="ILibraryAudioPreparer" />,
-///     <see cref="ILibrarySongPlayability" /> and <see cref="ILibraryPackageProbe" />.
+///     <see cref="ILibrarySongPlayability" />, <see cref="ILibraryPackageProbe" /> and
+///     <see cref="ILibraryPackageFileReader" />.
 ///     Duplicate rows are folded by the song lists through <see cref="LibraryDedupe" />.
 /// </summary>
-public sealed class LibraryService : ILibraryService, ILibraryAudioPreparer, ILibrarySongPlayability, ILibraryPackageProbe
+public sealed class LibraryService : ILibraryService, ILibraryAudioPreparer, ILibrarySongPlayability, ILibraryPackageProbe,
+    ILibraryPackageFileReader
 {
     private readonly IAppLogger _logger;
     private readonly ILibraryIndex? _libraryIndex;
@@ -233,12 +235,18 @@ public sealed class LibraryService : ILibraryService, ILibraryAudioPreparer, ILi
         }, cancellationToken, TaskCreationOptions.DenyChildAttach, ScanSchedulerForTests ?? TaskScheduler.Default);
     }
 
-    /// <summary>Opens a library song through the source that owns its file.</summary>
-    public Task<LibraryLoadedSong> LoadSongAsync(LibrarySongEntry song) =>
-        SourceFor(song.PackagePath) is { } source
-            ? source.LoadSongAsync(song)
-            : Task.FromException<LibraryLoadedSong>(new NotSupportedException(
-                $"No library package source reads '{song.PackagePath}'."));
+    /// <summary>Opens a library song through the source that owns its file. The project gets a
+    /// DLC key of its own (<see cref="OpenedPackageDlcKey" />), so exporting it never clashes
+    /// with the package it came from.</summary>
+    public async Task<LibraryLoadedSong> LoadSongAsync(LibrarySongEntry song)
+    {
+        if (SourceFor(song.PackagePath) is not { } source)
+            throw new NotSupportedException($"No library package source reads '{song.PackagePath}'.");
+
+        var loaded = await source.LoadSongAsync(song);
+        OpenedPackageDlcKey.Apply(loaded.Project, song.SongKey);
+        return loaded;
+    }
 
     /// <summary>The cover PNG, "" or the row's own path when it names no cover entry.</summary>
     public Task<string> LoadCoverImageAsync(LibrarySongEntry song) =>
@@ -260,6 +268,10 @@ public sealed class LibraryService : ILibraryService, ILibraryAudioPreparer, ILi
     public PackageProbeResult Probe(string path) =>
         SourceFor(path)?.Probe(path)
         ?? new PackageProbeResult(false, AudioAvailability.Unknown, "No library package source reads this file.");
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<LibrarySongEntry>> ReadPackageAsync(string path, CancellationToken cancellationToken = default) =>
+        Task.Run(() => ReadSongs(path, cancellationToken), cancellationToken);
 
     /// <summary>The source whose extension <paramref name="path" /> ends in, or null.</summary>
     internal ILibraryPackageSource? SourceFor(string? path)

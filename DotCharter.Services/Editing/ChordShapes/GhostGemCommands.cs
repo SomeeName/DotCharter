@@ -1,4 +1,5 @@
 using DotCharter.Localization;
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.State;
 
 namespace DotCharter.Services.Editing.ChordShapes;
@@ -29,7 +30,8 @@ public static class GhostGemCommands
         var unghost = notes.Count == 0 && chords.Count == 0;
         var plan = unghost
             ? GhostGems.Unghost(arrangement, level, [.. editor.Selection.SelectedHandShapes])
-            : GhostGems.Ghost(arrangement, level, notes, chords, state.StringEditMask.Includes);
+            : GhostGems.Ghost(arrangement, level, notes, chords, state.StringEditMask.Includes,
+                ArrangementFingeringStyle.OfSong(editor.ActiveProject, arrangement));
         if (plan.Action is not { } action)
         {
             state.MainDisplayMessage = localization["Status_GhostGems_None"];

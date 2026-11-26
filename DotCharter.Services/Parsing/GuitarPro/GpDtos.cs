@@ -66,6 +66,9 @@ public class GpImportResult
     public GpImportMetadata Metadata { get; } = new();
     internal HashSet<IGuitarSound> DeadSlideSounds { get; } = [];
 
+    /// <summary>The sounds a grace ornament was placed against without the tab stating before or on the beat (D110).</summary>
+    internal HashSet<IGuitarSound> GraceTimingGuesses { get; } = [];
+
     /// <summary>
     ///     Per arrangement, how many slide-in ornaments became real slides — a short
     ///     origin sound that slides into the authored note
@@ -74,4 +77,12 @@ public class GpImportResult
     ///     the only witness the tab-corpus census has for the ornament.
     /// </summary>
     public Dictionary<Arrangement, int> SlideInsMaterialized { get; } = [];
+
+    /// <summary>Per arrangement, the hand shapes wider than four frets: kept, but named
+    /// in the import report instead of passing silently.</summary>
+    public Dictionary<Arrangement, int> WideHandShapes { get; } = [];
+
+    /// <summary>Per arrangement, the source notes the import could not place and dropped:
+    /// a string the track does not have, or a negative fret.</summary>
+    public Dictionary<Arrangement, int> DroppedNotes { get; } = [];
 }

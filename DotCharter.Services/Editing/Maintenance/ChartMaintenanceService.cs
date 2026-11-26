@@ -70,6 +70,12 @@ public interface IChartMaintenanceService
     /// <summary>Export fix: stores the generated show lights (one undo node); the count added.</summary>
     int GenerateShowlights();
 
+    /// <summary>Export fix: trims and de-doubles the spaces in the song title, artist and album (one undo node); 1 when something changed.</summary>
+    int TrimMetadataSpaces();
+
+    /// <summary>Export fix: sets the song's DLC key (one undo node); 1 when it changed.</summary>
+    int AssignDlcKey(string key);
+
     /// <summary>Export fix: defines the tone names <paramref name="arrangement" /> lacks (one undo node); the count.</summary>
     int CreateMissingToneDefinitions(Arrangement arrangement);
 

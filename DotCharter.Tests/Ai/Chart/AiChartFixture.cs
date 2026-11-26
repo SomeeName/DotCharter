@@ -8,7 +8,9 @@ namespace DotCharter.Tests.Ai.Chart;
 ///     A small hand-built chart for the AI chart pass tests: 8 bars of 4 beats (one beat =
 ///     500 ms, position = beat index), standard tuning, two phrases ("intro" at beat 0,
 ///     "verse" at beat 16), power chords on a SHARED template, an open chord, single notes,
-///     anchors and a hand shape.
+///     anchors and a hand shape. <c>beatsPerBar: 2</c> keeps every sound and marker on its beat and
+///     draws a bar line every two beats, so a phrase can sit at beat 4 or 20 and still span the two
+///     measures a phrase needs (D81).
 /// </summary>
 internal sealed class AiChartFixture
 {
@@ -16,10 +18,16 @@ internal sealed class AiChartFixture
     public const int PowerG = 1;   // 3 5 5 x x x  fingers 1 3 4 x x x
     public const int OpenEm = 2;   // 0 2 2 0 0 0  fingers x 2 3 x x x
 
-    public AiChartFixture(int capo = 0)
+    public AiChartFixture(int capo = 0, int beatsPerBar = 4)
     {
         for (var beat = 0; beat <= 32; beat++)
-            Beats.Add(new BeatMarker { Time = beat * 500.0, IsMeasure = beat % 4 == 0, BeatsInMeasure = 4 });
+        {
+            Beats.Add(new BeatMarker
+            {
+                Time = beat * 500.0, IsMeasure = beat % beatsPerBar == 0, BeatsInMeasure = beatsPerBar
+            });
+        }
+
         foreach (var b in Beats) Project.Beats.Add(b);
 
         Arrangement.Capo = capo;

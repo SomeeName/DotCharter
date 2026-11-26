@@ -154,6 +154,18 @@ public sealed partial class FretAnchorGenerationService
             // range). Already covered by P2 when applicable.
             return;
 
+        // P2: a slide into a shape whose anchor is decided starts on the finger that lands.
+        if (SlideIntoShapeAnchor(position, struck, walk.Current) is { } slideStart)
+        {
+            walk.Hints[position] = slideStart;
+            walk.Pinned.Add(position);
+            RuleTrace?[position] = new AnchorRuleTrace(AnchorRule.P2SlideIntoShape, RootSource.Unknown);
+            walk.Current = slideStart;
+            walk.GroupPos = null;
+            SeedOutboundSlides(position, slideStart, walk.PendingSlides);
+            return;
+        }
+
         var need = ComputeAnchorForStruck(struck, position);
         var needSource = _lastRootSource;
 
@@ -223,4 +235,34 @@ public sealed partial class FretAnchorGenerationService
 
         SeedOutboundSlides(position, walk.Current!.Value, walk.PendingSlides);
     }
+
+    /// <summary>
+    ///     A single-note pitched slide that LANDS in a later hand shape whose anchor is decided. The shape's
+    ///     anchor wins at the landing (P1 over P2), so when the hand in force would start the slide on another finger
+    ///     than the one the shape lands it on (I43), the anchor at the slide START moves so the sliding finger is the
+    ///     one that lands: the landing anchor minus the slide distance, or the start fret when that is lower. Null when
+    ///     the hand in force already does that, or no legal anchor does.
+    /// </summary>
+    private AnchorHint? SlideIntoShapeAnchor(FractionalPosition position, IReadOnlyList<SoundAtPosition> struck,
+        AnchorHint? current)
+    {
+        if (struck.Count != 1) return null;
+        var slide = struck[0];
+        if (slide.SlideTo is not > 0 || slide.UnpitchedSlide || slide.Sustain == FractionalPosition.Zero) return null;
+        if (FindActiveHandShape(position + slide.Sustain) is not { } shape || shape.Start <= position) return null;
+        if (!_handShapeStartRoot.TryGetValue(shape.Start, out var shapeRoot)) return null;
+
+        var landRoot = ClampRoot(shapeRoot, BaseAnchorWidth);
+        var slideTo = slide.SlideTo.Value;
+        var landFinger = FingerOf(slideTo, landRoot, ComputeHandShapeWidth(shape, shapeRoot));
+        if (current is { } held && FingerOf(slide.Fret, held.AnchorFret, held.Width) == landFinger) return null;
+
+        var root = Math.Min(landRoot - (slideTo - slide.Fret), slide.Fret);
+        if (ClampRoot(root, BaseAnchorWidth) != root) return null;
+        var hint = new AnchorHint(root, ComputeBaseWidth(root, position));
+        return FingerOf(slide.Fret, hint.AnchorFret, hint.Width) == landFinger ? hint : null;
+    }
+
+    /// <summary>The finger a fret falls to under an anchor, as the slide-fingering finding (I43) reads it.</summary>
+    private static int FingerOf(int fret, int root, int width) => Math.Clamp(1 + (fret - root) - (width - 4), 1, 4);
 }

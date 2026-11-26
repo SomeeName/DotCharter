@@ -1,4 +1,5 @@
 using System.Globalization;
+using DotCharter.Core.Domain.Primitives;
 using DotCharter.Core.Domain.Project;
 
 namespace DotCharter.Core.Linking;
@@ -182,6 +183,22 @@ public static class LinkRuns
         }
 
         return dropped;
+    }
+
+    /// <summary>
+    ///     Whether two runs of one arrangement may not both be linked: runs of the SAME group never
+    ///     share a measure, and runs of different groups share measures only when one holds the
+    ///     other whole and is longer (a short repeat nested inside a long section). An edit inside the inner
+    ///     run then reaches both groups' copies.
+    /// </summary>
+    public static bool Conflict(FractionalPosition aStart, FractionalPosition aEnd, FractionalPosition bStart,
+        FractionalPosition bEnd, bool sameGroup)
+    {
+        if (aStart >= bEnd || bStart >= aEnd) return false;
+        if (sameGroup || (aStart == bStart && aEnd == bEnd)) return true;
+        var aHoldsB = aStart <= bStart && bEnd <= aEnd;
+        var bHoldsA = bStart <= aStart && aEnd <= bEnd;
+        return !aHoldsB && !bHoldsA;
     }
 
     /// <summary>Removes <paramref name="group" /> when it links nothing (fewer than two placements).</summary>

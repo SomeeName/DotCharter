@@ -18,6 +18,7 @@ public sealed class GpArrangementParser
 {
     public GpNoteParser NoteParser { get; } = new();
     internal HashSet<IGuitarSound> DeadSlideSounds { get; } = [];
+    internal HashSet<IGuitarSound> GraceTimingGuesses { get; } = [];
 
     /// <summary>
     ///     The AUTHORED left-hand fingering of the track currently being parsed,
@@ -37,12 +38,21 @@ public sealed class GpArrangementParser
     private readonly GpAuthoredChordNames _authoredChordNames = new();
     private readonly HashSet<IGuitarSound> _graceTargets = [];
 
+    /// <summary>The current track's barlines and swung onsets, for the let-ring hand shapes.</summary>
+    private readonly GpBarTimeline _bars = new();
+
     /// <summary>The chord diagrams of the track being parsed (re-read per track).</summary>
     private GpChordDiagrams _diagrams = GpChordDiagrams.Empty;
 
     /// <summary>Per parsed arrangement, the slide-in ornaments its import materialized
     /// (<see cref="GpPostProcessor.MaterializeSlideIns"/>).</summary>
     public Dictionary<Arrangement, int> SlideInsMaterialized { get; } = [];
+
+    /// <summary>Per arrangement, the source notes dropped because the import cannot place them
+    /// (<see cref="GpNoteParser.LastNoteValid"/>), for the import report.</summary>
+    public Dictionary<Arrangement, int> DroppedNotes { get; } = [];
+
+    private int _droppedInTrack;
     public Dictionary<int, Arrangement> ArrangementsByTrackId { get; } = [];
 
     /// <summary>Most notes plus chords one voice of a track may emit; a test lowers it.</summary>
@@ -53,6 +63,7 @@ public sealed class GpArrangementParser
     {
         ArrangementsByTrackId.Clear();
         DeadSlideSounds.Clear();
+        GraceTimingGuesses.Clear();
         settings ??= GpImportSettings.Default;
         var arrangements = new List<Arrangement>();
         var root = doc.Root;
@@ -80,6 +91,9 @@ public sealed class GpArrangementParser
         var voiceMap = BuildIdMap(voicesNode, "Voice");
         var barMap = BuildIdMap(barsNode, "Bar");
 
+        // The FHP passes run once every track is built: a track with no power-chord
+        // style of its own follows the file's other tracks on the same instrument.
+        var fhpJobs = new List<GpPickScrape.ImportFhpJob>();
         foreach (var trackNode in tracksNode.Elements("Track"))
         {
             if (!int.TryParse(trackNode.Attribute("id")?.Value, CultureInfo.InvariantCulture, out var trackId) || !trackIds.Contains(trackId))
@@ -111,9 +125,11 @@ public sealed class GpArrangementParser
             // note parser instance is shared across the whole file.
             NoteParser.Capo = arr.Capo;
             NoteParser.ResetLeftHandTappedNotes();
+            _droppedInTrack = 0;
             _authoredFingers.Clear();
             _authoredChordNames.Clear();
             _graceTargets.Clear();
+            _bars.Clear();
             _diagrams = GpChordDiagrams.Read(trackNode, arr.StringCount, arr.Capo);
 
             var level = new ChartLevel { DifficultyIndex = 0 };
@@ -139,7 +155,7 @@ public sealed class GpArrangementParser
                 tapOriginated: NoteParser.LeftHandTappedNotes,
                 authoredFingers: _authoredFingers, authoredChordNames: _authoredChordNames,
                 graceTargets: _graceTargets, lastFret: GpPickScrape.LastFret(ReadFretCount(trackNode)),
-                deadSlideSounds: DeadSlideSounds, naming: naming);
+                deadSlideSounds: DeadSlideSounds, naming: naming, bars: _bars);
             // Sidecar voices get the NOTATION-relevant passes only: tied beats
             // merge (summing their authored NotationDuration) and slide targets
             // resolve. AdjustSustains is deliberately skipped — it is the
@@ -160,9 +176,9 @@ public sealed class GpArrangementParser
             }
 
             GpHandShapeBuilder.BuildLetRingHandShapes(level, arr, tieRollSet, _diagrams, _authoredFingers, naming,
-                otherRunPositions: letRingSet);
+                otherRunPositions: letRingSet, bars: _bars);
             GpHandShapeBuilder.BuildLetRingHandShapes(level, arr, letRingSet, _diagrams, _authoredFingers, naming,
-                otherRunPositions: tieRollSet);
+                otherRunPositions: tieRollSet, bars: _bars);
             // Let-ring shapes join the chord shapes after Run — re-clamp so the
             // combined set stays overlap-free.
             GpPostProcessor.ClampHandShapes(level);
@@ -171,14 +187,16 @@ public sealed class GpArrangementParser
             // a capo'd import lays anchors BELOW the capo (validation rule L02).
             // Suggested chord fingerings follow the anchors; a pick scrape
             // sits on the anchor in force at its time.
-            GpPickScrape.RunImportFhpPass(arr, level, _authoredFingers.IsAuthoredTemplate,
-                GpPickScrape.LastFret(ReadFretCount(trackNode)));
+            fhpJobs.Add(new GpPickScrape.ImportFhpJob(arr, level, _authoredFingers.IsAuthoredTemplate,
+                GpPickScrape.LastFret(ReadFretCount(trackNode)), [.. _bars.Barlines]));
 
+            DroppedNotes[arr] = _droppedInTrack;
             arr.Levels.Add(level);
             arrangements.Add(arr);
             ArrangementsByTrackId[trackId] = arr;
         }
 
+        GpPickScrape.RunImportFhpPasses(fhpJobs);
         return arrangements;
     }
 
@@ -381,6 +399,7 @@ public sealed class GpArrangementParser
             // (e.g. 1/2 -> 2/3 for Triplet8th). We have 1/12, 1/24 etc. grids in
             // the editor so swung positions remain editable.
             var feel = masterBarNode.Element("TripletFeel")?.Value ?? "";
+            _bars.AddBarline(currentPos);
             var barEnd = currentPos +
                          new FractionalPosition(0, new Fraction(beatsInMeasure * 4, noteDenominator));
 
@@ -427,6 +446,8 @@ public sealed class GpArrangementParser
 
             currentPos = barEnd;
         }
+
+        _bars.AddBarline(currentPos);
 
         foreach (var voice in sidecars.Values
                      .Where(v => v.Notes.Count > 0 || v.Chords.Count > 0)
@@ -669,16 +690,22 @@ public sealed class GpArrangementParser
         if (notesList is not { Length: > 0 }) return;
 
         // GP writes "OnBeat" or "BeforeBeat"; anything else (and the
-        // GP6 default) reads as the traditional before-beat grace.
-        var beforeBeat = !string.Equals(entry.Node.Element("GraceNotes")?.Value, "OnBeat",
-            StringComparison.OrdinalIgnoreCase);
-        var grace = new GpBeatCarry.PendingGrace(beforeBeat);
+        // GP6 default) reads as the traditional before-beat grace, but the
+        // tab did not state it: that placement is an audio-check spot.
+        var flavour = entry.Node.Element("GraceNotes")?.Value;
+        var beforeBeat = !string.Equals(flavour, "OnBeat", StringComparison.OrdinalIgnoreCase);
+        var stated = !beforeBeat || string.Equals(flavour, "BeforeBeat", StringComparison.OrdinalIgnoreCase);
+        var grace = new GpBeatCarry.PendingGrace(beforeBeat, stated);
         foreach (var graceIdStr in notesList)
         {
             if (source.Note(graceIdStr) is not { } graceNode) continue;
             var g = NoteParser.ParseNote(graceNode, entry.Onset, FractionalPosition.Zero,
                 source.StringCount, false, isGrace: true);
-            if (!NoteParser.LastStringValid) continue;
+            if (!NoteParser.LastNoteValid)
+            {
+                _droppedInTrack++;
+                continue;
+            }
             // A grace with a slide (shift or legato) parses onto
             // the grace's SlideTo (-1) / LinkNext — capture it so
             // the ornament becomes a real slide-into note, not
@@ -700,7 +727,11 @@ public sealed class GpArrangementParser
         var notesList = ReadBeatNoteIds(beatNode);
         var placementPos = place.Position;
 
-        if (target.LetRingSet != null && BeatHasLetRing(beatNode, source.NoteMap)) target.LetRingSet.Add(placementPos);
+        if (target.LetRingSet != null)
+        {
+            _bars.RecordOnset(placementPos, entry.Onset);
+            if (BeatHasLetRing(beatNode, source.NoteMap)) target.LetRingSet.Add(placementPos);
+        }
 
         // EOF beat-text import (playable voice only): "T"/"S"/"P" → a note
         // technique; any other free text → a section/phrase marker.
@@ -772,8 +803,9 @@ public sealed class GpArrangementParser
         // every post-import pass bounds-checks it away, so it
         // would only ever be a phantom sound on the level. Drop
         // it at the source, as the binary reader always has.
-        if (!NoteParser.LastStringValid)
+        if (!NoteParser.LastNoteValid)
         {
+            _droppedInTrack++;
             slot.PendingGrace = null;
             return;
         }
@@ -783,7 +815,7 @@ public sealed class GpArrangementParser
         // sustains — the sheet view renders it verbatim.
         TrackDeadTie(noteNode, note, slot);
         note.NotationDuration = entry.Rhythm;
-        GpBeatCarry.ApplyPendingGrace(note, ref slot.PendingGrace, target.Notes, target.Chords, _graceTargets);
+        GpBeatCarry.ApplyPendingGrace(note, ref slot.PendingGrace, target.Notes, target.Chords, _graceTargets, GraceTimingGuesses);
         if (technique is { } tech) GpMarkerImport.ApplyTechnique(note, tech);
         if (trill.HasValue && target.ExpandTrills)
         {
@@ -841,13 +873,16 @@ public sealed class GpArrangementParser
             var chordNote = NoteParser.ParseChordNote(noteNode, place.Position, place.Sustain,
                 source.StringCount, hasTremolo);
             RecordAuthoredFinger(target.AuthoredFingers, chordNote, place.Position);
-            if (NoteParser.LastStringValid)
+            if (!NoteParser.LastNoteValid)
             {
-                TrackDeadTie(noteNode, chordNote, slot);
-                chord.ChordNotes.Add(chordNote);
-                struck.Add(new GpBendContinuation.Struck(chordNote, GpBendContinuation.ReadGpifBend(noteNode),
-                    GpNoteParser.IsTieDestination(noteNode), GpBendContinuation.IsGpifGhost(noteNode)));
+                _droppedInTrack++;
+                continue;
             }
+
+            TrackDeadTie(noteNode, chordNote, slot);
+            chord.ChordNotes.Add(chordNote);
+            struck.Add(new GpBendContinuation.Struck(chordNote, GpBendContinuation.ReadGpifBend(noteNode),
+                GpNoteParser.IsTieDestination(noteNode), GpBendContinuation.IsGpifGhost(noteNode)));
         }
 
         GpChordSlideOut.Align(chord.ChordNotes, NoteParser.Capo);
@@ -862,7 +897,7 @@ public sealed class GpArrangementParser
                 GpMarkerImport.ApplyTechnique(cn, tech);
         }
 
-        GpBeatCarry.ApplyPendingGrace(chord, ref slot.PendingGrace, target.Notes, target.Chords, _graceTargets);
+        GpBeatCarry.ApplyPendingGrace(chord, ref slot.PendingGrace, target.Notes, target.Chords, _graceTargets, GraceTimingGuesses);
         // The tab's chord diagram names and fingers the strum —
         // playable voice only, like the per-note fingers above. After
         // the grace: an on-beat grace moves the chord, and the side
@@ -938,23 +973,10 @@ public sealed class GpArrangementParser
     }
 
     /// <summary>Adds a phrase/section marker to the arrangement, keeping the
-    /// phrase list in sync and skipping an exact duplicate at the same position.</summary>
-    /// <summary>Adds a marker event (phrase, plus a section when the name is an
-    /// RS section) without duplicating one already at that position. Shared with
-    /// the Songsterr importer, which reads the same markers out of its own
-    /// payload.</summary>
-    internal static void AddMarker(Arrangement arr, EventPoint? ev)
-    {
-        if (ev == null) return;
-        if (arr.EventPoints.Any(e => e.Position.CompareTo(ev.Position) == 0 &&
-                                     e.Phrase == ev.Phrase && e.Section == ev.Section))
-        {
-            return;
-        }
-
-        arr.EventPoints.Add(ev);
-        if (!arr.Phrases.Contains(ev.Phrase)) arr.Phrases.Add(ev.Phrase);
-    }
+    /// phrase list in sync and skipping a second phrase at the same position.
+    /// Shared with the Songsterr importer, which reads the same markers out of its
+    /// own payload; the rules live in <see cref="GpMarkerImport.AddMarker"/>.</summary>
+    internal static void AddMarker(Arrangement arr, EventPoint? ev) => GpMarkerImport.AddMarker(arr, ev);
 
     /// <summary>
     ///     Records the just-parsed note's AUTHORED left-hand finger against its
@@ -964,7 +986,7 @@ public sealed class GpArrangementParser
     private void RecordAuthoredFinger(GpAuthoredFingering? authoredFingers, IGuitarSound note,
         FractionalPosition position)
     {
-        if (authoredFingers == null || !NoteParser.LastStringValid) return;
+        if (authoredFingers == null || !NoteParser.LastNoteValid) return;
         if (NoteParser.LastLeftFingering is { } finger)
             authoredFingers.Set(note.StringIndex, position, finger);
     }

@@ -552,9 +552,12 @@ public class EventInteractionTool : IEditorTool
         };
     }
 
-    /// <summary>The LINKS-row chip span under the pointer, in this track's arrangement.</summary>
+    /// <summary>
+    ///     The LINKS-row span under the pointer, in this track's arrangement: the drawn label
+    ///     (chip and count) under it first, then the span whose time holds it.
+    /// </summary>
     private static LinkSpan? LinkAt(ToolContext context) =>
-        LinkLaneModel.HitTest(
+        context.ViewModel.ChartEditor.LinkHighlight.RowSpanAt(context.Track.Arrangement,
             LinkLaneModel.Spans(context.ViewModel.ProjectState.ActiveProject, context.Track.Arrangement), context.ExactTimeMs);
 
     private static string FormatPosition(FractionalPosition position, TrackEditorContext track)

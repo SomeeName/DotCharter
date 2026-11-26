@@ -26,11 +26,13 @@ internal sealed class EditChordStringCommand : IHighwayEditCommand
     private readonly ObservableCollection<GuitarNote> _placedNotes;
     private readonly int _stringIndex;
     private readonly ObservableCollection<HandShape>? _syncedHandShapes;
+    private readonly ChartProject? _project;
 
     public EditChordStringCommand(
         ObservableCollection<GuitarNote> placedNotes,
         ObservableCollection<Chord> placedChords,
         Arrangement? arrangement,
+        ChartProject? project,
         Chord chord,
         int stringIndex,
         Action? onPostExecute,
@@ -40,6 +42,7 @@ internal sealed class EditChordStringCommand : IHighwayEditCommand
         _placedNotes = placedNotes;
         _placedChords = placedChords;
         _arrangement = arrangement;
+        _project = project;
         _chord = chord;
         _stringIndex = stringIndex;
         _onPostExecute = onPostExecute;
@@ -142,5 +145,5 @@ internal sealed class EditChordStringCommand : IHighwayEditCommand
     ///     would pin it as template drift). The rule lives in
     ///     <see cref="ChordReshapeAction" />, shared with the placement path.
     /// </summary>
-    private IChartAction BuildReshapeAction(Chord oldState, Chord newState) => ChordReshapeAction.Build(_placedChords, _arrangement, _chord, oldState, newState, _onPostExecute, _syncedHandShapes);
+    private IChartAction BuildReshapeAction(Chord oldState, Chord newState) => ChordReshapeAction.Build(_placedChords, _arrangement, _project, _chord, oldState, newState, _onPostExecute, _syncedHandShapes);
 }

@@ -702,7 +702,8 @@ public sealed class ProjectReplaceGuardWiringTests
 
         public SongBrowserViewModel SongBrowser() => new(
             Storage, Config, Library, _logger, Session, State, Editor, Transport,
-            new DotCharter.Presentation.Dialogs.DialogsSlot(), FakeLocalization.English());
+            new DotCharter.Presentation.Dialogs.DialogsSlot(), FakeLocalization.English(),
+            new DotCharter.Tests.UI.ViewModels.Panels.StubPackageFileReader());
 
         public DotCharter.Presentation.Screens.Dialogs.CheckpointsViewModel Checkpoints() => new(
             Checkpointer, new FakeDocumentService(),

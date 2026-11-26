@@ -10,7 +10,7 @@ namespace DotCharter.Core.Utilities;
 ///         <c>D#Maj7</c>, sharps even in flat keys — and <see cref="Eof" /> reproduces
 ///         them (~91% exact on 1,688 named templates). The chord names typed into
 ///         the owner's Guitar Pro tabs are the MUSICAL reference — <c>Bbm7</c>,
-///         <c>Ebmaj7</c>, <c>Cm7/Bb</c> — and <see cref="Musical" /> is measured
+///         <c>EbMaj7</c>, <c>Cm7/Bb</c> — and <see cref="Musical" /> is measured
 ///         against those. Neither is a bug fix of the other; which one a charter
 ///         wants is a choice, so it is a setting.
 ///     </para>
@@ -25,7 +25,7 @@ public enum ChordNamingStyle
 
     /// <summary>
     ///     Spelled in the song's key (<see cref="ChordKeySignature" />), <c>m</c> /
-    ///     <c>maj7</c> / <c>m7b5</c>, and an inversion written as a slash chord
+    ///     <c>Maj7</c> (a capital M, like <see cref="Eof" />, so it never reads as minor) / <c>m7b5</c>, and an inversion written as a slash chord
     ///     over its bass (<c>Cm7/Bb</c>).
     /// </summary>
     Musical = 1

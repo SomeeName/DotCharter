@@ -153,6 +153,8 @@ public static class InspectorIssueFieldMap
         ArrangementIssueType.LyricStyle => InspectorField.Position,
         ArrangementIssueType.HandShapeGap => InspectorField.Span,
         ArrangementIssueType.SectionNameVariety => InspectorField.Position,
+        ArrangementIssueType.SustainCrossesBoundary => InspectorField.Length,
+        ArrangementIssueType.HandShapeCrossesBoundary => InspectorField.Span,
         // These findings belong to the arrangement card.
         ArrangementIssueType.FirstPhraseNotEmpty => InspectorField.Card,
         ArrangementIssueType.NoEndPhrase => InspectorField.Card,
@@ -181,8 +183,60 @@ public static class InspectorIssueFieldMap
         // owns it; the fix is auto-fix or Generate hand shapes.
         ArrangementIssueType.ChordOutsideHandShape => InspectorField.Card,
 
-        _ => InspectorField.Card
+        _ => MapToneConventions(type)
     };
+
+    // D20, D21 and D25 sit on a tone change's time; the tone-body, slot and tuning
+    // findings (D22-D24, D26) name no sound and fall to the arrangement card.
+    private static InspectorField MapToneConventions(ArrangementIssueType type) => type switch
+    {
+        ArrangementIssueType.ToneChangeBeforeFirstNote => InspectorField.Position,
+        ArrangementIssueType.SingleToneChange => InspectorField.Position,
+        ArrangementIssueType.RepeatedTone => InspectorField.Position,
+        ArrangementIssueType.ToneNameKeyMismatch => InspectorField.Card,
+        ArrangementIssueType.ToneGearContent => InspectorField.Card,
+        ArrangementIssueType.DuplicateToneName => InspectorField.Card,
+        ArrangementIssueType.CustomTuning => InspectorField.Card,
+        _ => MapGridAndLeadIn(type)
+    };
+
+    /// <summary>The beat-grid and lead-in findings (D40-D44), the sustain spacing (D90, D91) and the technique combinations (D70, D71); the rest belong to the arrangement card.</summary>
+    private static InspectorField MapGridAndLeadIn(ArrangementIssueType type) => type switch
+    {
+        ArrangementIssueType.NoteNearlyOnGrid or ArrangementIssueType.NoteOffGrid
+            or ArrangementIssueType.LeadInShort or ArrangementIssueType.NoCountMeasure => InspectorField.Position,
+        ArrangementIssueType.TailShort => InspectorField.Card,
+        ArrangementIssueType.SustainTooCloseToNext => InspectorField.Length,
+        ArrangementIssueType.SustainUnderFiveMs => InspectorField.Length,
+        ArrangementIssueType.HarmonicVibrato => InspectorField.Harmonic,
+        ArrangementIssueType.UnpitchedSlideOneFret => InspectorField.SlideTo,
+        _ => MapTempo(type)
+    };
+
+    /// <summary>
+    ///     The tempo and meter findings (D60-D67) and the phrase-structure findings (D80, D81, D83, D84, a time each). A beat or a measure start is a time on the grid, so those
+    ///     land on Position; the whole-chart comparisons and the anchor count belong to the arrangement card.
+    /// </summary>
+    private static InspectorField MapTempo(ArrangementIssueType type) => type switch
+    {
+        ArrangementIssueType.TempoOutOfRange or ArrangementIssueType.TempoSpike
+            or ArrangementIssueType.MeterMissingOnFirstMeasure or ArrangementIssueType.MeterChangeUnmarked
+            or ArrangementIssueType.PhraseTooLong or ArrangementIssueType.PhraseTooShort
+            or ArrangementIssueType.SectionWithoutPhrase or ArrangementIssueType.NoGuitarSectionSplit => InspectorField.Position,
+        ArrangementIssueType.TempoLooksDoubled or ArrangementIssueType.TempoLooksHalved
+            or ArrangementIssueType.TempoAnchorSpam or ArrangementIssueType.TempoOffAudio => InspectorField.Card,
+        // D110 counts the arrangement's unchecked guesses; its jump finds the first one, no field causes it.
+        ArrangementIssueType.NeedsAudioCheck => InspectorField.Card,
+        _ => FhpFindings.Contains(type) ? InspectorField.Anchor : InspectorField.Card
+    };
+
+    // FHP placement and reach (D50-D56): the anchor is what moves, or what decides the bending finger.
+    private static readonly HashSet<ArrangementIssueType> FhpFindings =
+    [
+        ArrangementIssueType.AnchorBeforeFirstNote, ArrangementIssueType.AnchorBetweenNotes,
+        ArrangementIssueType.AnchorInsideSustain, ArrangementIssueType.AnchorOnHammerOnTarget,
+        ArrangementIssueType.AnchorFretAbove21, ArrangementIssueType.AnchorFretAbove24, ArrangementIssueType.BendNeedsPinky
+    ];
 
     /// <summary>
     ///     True when the export validator would refuse the package over this

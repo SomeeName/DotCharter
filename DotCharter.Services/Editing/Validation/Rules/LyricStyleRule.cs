@@ -34,59 +34,76 @@ public static class LyricStyleRule
     /// <summary>The D13 findings for <paramref name="project" />'s vocal tracks; none for a null project.</summary>
     public static IReadOnlyList<ArrangementIssue> Check(ChartProject? project, IList<BeatMarker> beats)
     {
-        if (project?.VocalTracks is not { Count: > 0 } tracks || beats.Count == 0) return [];
+        if (beats.Count == 0) return [];
 
         var issues = new List<ArrangementIssue>();
-        var line = new List<(LyricEvent Lyric, LyricPlace Place)>();
+        foreach (var (line, previous) in Lines(project)) CheckLine(line, previous, beats, issues);
+        return issues;
+    }
+
+    /// <summary>Every D13 finding: these style checks and the line checks of <see cref="LyricTextRule" />,
+    /// in time order. The Issues tab and the quality report list these.</summary>
+    public static IReadOnlyList<ArrangementIssue> CheckAll(ChartProject? project, IList<BeatMarker> beats) =>
+        [.. Check(project, beats).Concat(LyricTextRule.Check(project, beats)).OrderBy(i => i.TimeMs ?? 0)];
+
+    /// <summary>Each line of <paramref name="project" />'s vocal tracks with the written syllable before it
+    /// on its track (null at a track's start), in track, phrase and syllable order.</summary>
+    internal static IEnumerable<(List<(LyricEvent Lyric, LyricPlace Place)> Line, LyricEvent? Previous)> Lines(
+        ChartProject? project)
+    {
+        if (project?.VocalTracks is not { Count: > 0 } tracks) yield break;
+
         for (var t = 0; t < tracks.Count; t++)
         {
             LyricEvent? previous = null;
             for (var p = 0; p < tracks[t].Phrases.Count; p++)
             {
                 var lyrics = tracks[t].Phrases[p].Lyrics;
+                var line = new List<(LyricEvent Lyric, LyricPlace Place)>();
                 for (var s = 0; s < lyrics.Count; s++)
                 {
                     if (RsVocalLyricEncoding.WrittenText(lyrics[s]).Length > 0) line.Add((lyrics[s], new LyricPlace(t, p, s)));
-                    if (lyrics[s].IsPhraseEnd) previous = Flush(line, previous, beats, issues);
+                    if (!lyrics[s].IsPhraseEnd || line.Count == 0) continue;
+                    yield return (line, previous);
+                    previous = line[^1].Lyric;
+                    line = [];
                 }
 
-                previous = Flush(line, previous, beats, issues);
+                if (line.Count == 0) continue;
+                yield return (line, previous);
+                previous = line[^1].Lyric;
             }
         }
-
-        return issues;
     }
 
-    private static LyricEvent? Flush(List<(LyricEvent Lyric, LyricPlace Place)> line, LyricEvent? previous,
+    /// <summary>The line holding the syllable at <paramref name="place" />, or null when there is none.</summary>
+    internal static List<(LyricEvent Lyric, LyricPlace Place)>? LineAt(ChartProject? project, LyricPlace place) =>
+        Lines(project).Select(l => l.Line).FirstOrDefault(line => line.Any(s => s.Place == place));
+
+    private static void CheckLine(List<(LyricEvent Lyric, LyricPlace Place)> line, LyricEvent? previous,
         IList<BeatMarker> beats, List<ArrangementIssue> issues)
     {
-        if (line.Count == 0) return previous;
-
         if (previous?.IsWordPart != true && FirstLetterSyllable(line) is { } lower)
             issues.Add(Finding("Validation_LyricLineStartsLowercase", line[lower], beats));
 
-        foreach (var index in StrayMarkSyllables(line))
+        foreach (var index in StrayMarks(line).Select(m => m.Syllable).Distinct())
             issues.Add(Finding("Validation_LyricStrayPunctuation", line[index], beats));
 
         foreach (var syllable in line.Where(syllable => syllable.Lyric.Text.Trim().Contains(' ')))
             issues.Add(Finding("Validation_LyricUnsplitSyllable", syllable, beats));
-
-        var last = line[^1].Lyric;
-        line.Clear();
-        return last;
     }
 
-    private static ArrangementIssue Finding(string key, (LyricEvent Lyric, LyricPlace Place) syllable,
-        IList<BeatMarker> beats)
+    internal static ArrangementIssue Finding(string key, (LyricEvent Lyric, LyricPlace Place) syllable,
+        IList<BeatMarker> beats, object[]? args = null)
     {
         var issue = ArrangementIssues.Make(ArrangementIssueType.LyricStyle, key,
-            syllable.Lyric.Position.GetPositionMs(beats), args: [syllable.Lyric.Text.Trim()]);
+            syllable.Lyric.Position.GetPositionMs(beats), args: args ?? [syllable.Lyric.Text.Trim()]);
         return issue with { Lyric = syllable.Place };
     }
 
     /// <summary>The index of the syllable whose first letter or digit starts the line, when that
     /// is a lowercase letter; null otherwise. Punctuation-only syllables are skipped.</summary>
-    private static int? FirstLetterSyllable(List<(LyricEvent Lyric, LyricPlace Place)> line)
+    internal static int? FirstLetterSyllable(List<(LyricEvent Lyric, LyricPlace Place)> line)
     {
         for (var i = 0; i < line.Count; i++)
         {
@@ -101,22 +118,23 @@ public static class LyricStyleRule
     }
 
     /// <summary>The line's words joined across word-part syllables, each character owned by the
-    /// syllable it came from, so every stray mark is reported on the syllable that carries it.</summary>
-    private static IEnumerable<int> StrayMarkSyllables(List<(LyricEvent Lyric, LyricPlace Place)> line)
+    /// syllable it came from, so every stray mark is reported on the syllable that carries it: the
+    /// syllable's index in the line and the mark's offset in its trimmed text.</summary>
+    internal static IReadOnlyList<(int Syllable, int Offset)> StrayMarks(List<(LyricEvent Lyric, LyricPlace Place)> line)
     {
         var text = new StringBuilder();
-        var owners = new List<int>();
+        var owners = new List<(int Syllable, int Offset)>();
         for (var i = 0; i < line.Count; i++)
         {
             var written = line[i].Lyric.Text.Trim();
             var wordPart = line[i].Lyric.IsWordPart;
             text.Append(written);
             if (!wordPart) text.Append(' ');
-            owners.AddRange(Enumerable.Repeat(i, written.Length + (wordPart ? 0 : 1)));
+            for (var c = 0; c < written.Length + (wordPart ? 0 : 1); c++) owners.Add((i, c));
         }
 
         var all = text.ToString();
-        var reported = new SortedSet<int>();
+        var reported = new SortedSet<(int Syllable, int Offset)>();
         var start = 0;
         while (start < all.Length)
         {
@@ -126,7 +144,7 @@ public static class LyricStyleRule
             start = end + 1;
         }
 
-        return reported;
+        return [.. reported];
     }
 
     /// <summary>Every stray period or comma in <paramref name="word" />. The word is read in parts

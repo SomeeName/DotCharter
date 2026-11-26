@@ -83,6 +83,7 @@ public sealed class ChartPenService : IChartPenService
             _scope.Chords,
             _collisions,
             _scope.Arrangement,
+            _scope.Project,
             position,
             decision.StringIndex,
             _projectState.PreviewNoteFret,

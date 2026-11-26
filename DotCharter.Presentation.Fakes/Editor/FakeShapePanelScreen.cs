@@ -38,6 +38,9 @@ public sealed class FakeShapePanelScreen : ObservableObject, IShapePanelScreen
         HasAttentionFilter = attention > 0;
         CleanUpCommand = new RelayCommand(() => { });
         RepeatPreviousChordCommand = new RelayCommand(() => { });
+        PinAllCommand = new RelayCommand(() => { });
+        HasPinAll = _all.Count > 0;
+        PinAllLabel = HasPinAll ? $"Pin all grips ({_all.Count})" : "Pin all grips";
         // One chord of the first used shape without a twin is selected, so its card offers Split off selection alone
         // (beside Merge it reserves a second row, which the default-size card count does not budget for).
         _all.FirstOrDefault(r => !r.IsUnused && !_all.Any(o => !ReferenceEquals(o, r) && o.FretsText == r.FretsText))?.CanSplitSelection = true;
@@ -239,6 +242,14 @@ public sealed class FakeShapePanelScreen : ObservableObject, IShapePanelScreen
     public ICommand CleanUpCommand { get; }
 
     public ICommand RepeatPreviousChordCommand { get; }
+
+    public bool HasPinAll { get; }
+
+    public string PinAllLabel { get; }
+
+    public string PinAllTip => HasPinAll ? "Pins every fingered shape that is not pinned yet. One undo step." : "Every fingered shape is pinned already.";
+
+    public ICommand PinAllCommand { get; }
 
     public bool IsChoosingMergeTarget => _source is not null && !HasPending;
 

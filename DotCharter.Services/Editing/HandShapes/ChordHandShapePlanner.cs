@@ -25,6 +25,14 @@ public interface IHandShapeGripSource
     /// <summary>True when <paramref name="chord" /> is played with
     /// <paramref name="grip" />, so a repeated strum may stay under the same bar.</summary>
     bool Holds(ChordTemplate grip, Chord chord);
+
+    /// <summary>
+    ///     True when a fully fret-hand-muted <paramref name="chord" /> may ride along in the
+    ///     bar of the chord before it although its frets differ. EOF does that only for a
+    ///     mute with no fingering of its own, so a source that knows the file's fingering
+    ///     says no when the file fingered the mute.
+    /// </summary>
+    bool MayJoinAsFullMute(Chord chord) => true;
 }
 
 /// <summary>
@@ -43,8 +51,14 @@ public sealed record PlannedHandShape(
     FractionalPosition EndPosition,
     ChordTemplate Template,
     IReadOnlyList<Chord> Chords,
-    IReadOnlyList<Chord> StrikeChords)
+    IReadOnlyList<Chord> StrikeChords,
+    IReadOnlyDictionary<Chord, ChordTemplate>? OwnGrips)
 {
+    /// <summary>The template <paramref name="chord" /> itself plays: the bar's, except for
+    /// a full mute that joined the bar with frets of its own (<see cref="OwnGrips" />).</summary>
+    public ChordTemplate GripOf(Chord chord) =>
+        OwnGrips != null && OwnGrips.TryGetValue(chord, out var own) ? own : Template;
+
     public HandShape ToHandShape() => new()
     {
         Position = Position,
@@ -78,11 +92,25 @@ public sealed record PlannedHandShape(
 /// other note still breaks the run, and a rest is measured from the last grip tone's
 /// end. Off everywhere: on the tab-vs-chart corpus it moved neither FHP nor measure-link
 /// recall, so no caller turns it on yet.</param>
+/// <param name="EndRunsAtStaccatoStrike">A run whose LAST strum is a STACCATO (a notated
+/// duration but no sustain — the importer's spelling of a tab's staccato before
+/// it trims the strikes) ends its bar with that strum: half its written value after
+/// it, the length a staccato is played, instead of the whole value. The bar cannot
+/// end ON the strum, because the span is half-open and would leave the strum outside.
+/// The run itself still groups on the written values. Import only: in the editor
+/// every imported chord is a sustainless strike.</param>
+/// <param name="PlacedEnd">Where a chord placed at a position and WRITTEN a length long ends
+/// on the placed grid; null is position plus length. The tab importer passes its swing
+/// timeline: a triplet feel moves an off-beat strum but not its written length, so position
+/// plus length leaves a 1/6-beat hole after every swung downbeat that the run-break test read
+/// as a rest.</param>
 public readonly record struct ChordHandShapePlanOptions(
     bool SplitRunsOnRests = false,
     bool CoverEveryChord = false,
     bool KeepAnchorsOutside = false,
-    bool ContinueThroughGripTones = false);
+    bool ContinueThroughGripTones = false,
+    bool EndRunsAtStaccatoStrike = false,
+    Func<FractionalPosition, FractionalPosition, FractionalPosition>? PlacedEnd = null);
 
 /// <summary>Why a repeated-strum run ended before the next chord: the telemetry
 /// <see cref="ChordHandShapePlanner.Plan" /> counts when asked.</summary>
@@ -122,7 +150,10 @@ public enum HandShapeRunBreak
 ///         within <see cref="MaxMergeGap" /> of the previous one's end, nothing else
 ///         sounds in between, and neither carries a technique drawn along its sustain
 ///         (Log Charter's rule — a slide changes pitch mid-shape and keeps its own bar).
-///         A different grip starts a new bar.</item>
+///         A different grip starts a new bar, except a fully fret-hand-muted chord: it
+///         joins the bar of the chord before it and keeps its own frets and template
+///         (EOF's Rocksmith export does the same, so the played grip stays on screen
+///         across a dead strum).</item>
 ///         <item>A bar is clipped at the next SOUND after its run, and at the next hand
 ///         shape that already exists, so it never swallows a following strike and never
 ///         overlaps a bar someone placed.</item>
@@ -139,6 +170,9 @@ public static class ChordHandShapePlanner
     /// <summary>How far a <see cref="ChordHandShapePlanOptions.CoverEveryChord" /> bar
     /// reaches past a tail-less final chord when no later sound bounds it.</summary>
     private static readonly FractionalPosition OneBeat = new(1);
+
+    /// <summary>The share of its written value a staccato strum is held: a half.</summary>
+    private static readonly Fraction StaccatoShare = new(1, 2);
 
     /// <summary>
     ///     Plans the bars for every chord of <paramref name="level" /> that no hand shape
@@ -198,6 +232,7 @@ public static class ChordHandShapePlanner
 
             var template = grips.GripFor(first, minted);
             var run = new List<Chord> { first };
+            Dictionary<Chord, ChordTemplate>? ownGrips = null;
 
             HandShapeRunBreak? reason = null;
             if (HasSustainVisibleTechnique(first))
@@ -210,7 +245,23 @@ public static class ChordHandShapePlanner
                 {
                     reason = NextChordBreak(run[^1], chords[i + 1], template, context);
                     if (reason != null) break;
-                    run.Add(chords[i + 1]);
+                    var next = chords[i + 1];
+                    // A run a dead strum opens never takes a played chord: inside the
+                    // bar the played chord would be a repeat, which Rocksmith draws
+                    // with no frame, so the player never sees the grip.
+                    if (first.IsFullyMuted() && !next.IsFullyMuted())
+                    {
+                        reason = HandShapeRunBreak.OtherGrip;
+                        break;
+                    }
+
+                    if (!grips.Holds(template, next))
+                    {
+                        ownGrips ??= new Dictionary<Chord, ChordTemplate>(ReferenceEqualityComparer.Instance);
+                        ownGrips[next] = grips.GripFor(next, minted);
+                    }
+
+                    run.Add(next);
                     i++;
                 }
             }
@@ -219,7 +270,9 @@ public static class ChordHandShapePlanner
                 breaks[why] = breaks.TryGetValue(why, out var count) ? count + 1 : 1;
 
             var last = run[^1];
-            var end = last.Position + AuthoredSpan(last);
+            var end = options.EndRunsAtStaccatoStrike && IsStaccatoStrike(last)
+                ? last.Position + new FractionalPosition(0, last.NotationDuration!.Value * StaccatoShare)
+                : AuthoredEnd(last, options);
             var nextChord = i + 1 < chords.Count ? chords[i + 1].Position : (FractionalPosition?)null;
             var nextNote = FirstAfter(notePositions, last.Position);
             var nextBar = FirstAfter(existingStarts, first.Position);
@@ -238,7 +291,7 @@ public static class ChordHandShapePlanner
             if (options.CoverEveryChord && end.CompareTo(last.Position) <= 0)
                 end = Earliest(last.Position + OneBeat, FirstAfterAll(last.Position, nextChord, nextNote, nextBar, nextAnchor));
 
-            plan.Add(new PlannedHandShape(first.Position, end, template, run, StrikeChords(run, slideLandings)));
+            plan.Add(new PlannedHandShape(first.Position, end, template, run, StrikeChords(run, slideLandings), ownGrips));
             coverage.Add(first.Position, end);
         }
 
@@ -255,9 +308,13 @@ public static class ChordHandShapePlanner
         if (next.ChordNotes.Count == 0 || next.SplitIntoNotes) return HandShapeRunBreak.Existing;
         if (context.Coverage.Covers(next.Position)) return HandShapeRunBreak.Existing;
         if (HasSustainVisibleTechnique(next)) return HandShapeRunBreak.Technique;
-        if (!context.Grips.Holds(grip, next)) return HandShapeRunBreak.OtherGrip;
+        // A full mute (every string fret-hand muted, no fingering of its own) stays in
+        // the bar of the chord before it, as EOF exports it; a grip only it plays would
+        // put a chord frame at the dead strum's frets over the chord actually held.
+        if (!context.Grips.Holds(grip, next) && !(next.IsFullyMuted() && context.Grips.MayJoinAsFullMute(next)))
+            return HandShapeRunBreak.OtherGrip;
 
-        var prevEnd = prev.Position + AuthoredSpan(prev);
+        var prevEnd = AuthoredEnd(prev, context.Options);
         if (FirstAfter(context.NotePositions, prev.Position) is { } note && note.CompareTo(next.Position) < 0)
         {
             if (!context.Options.ContinueThroughGripTones ||
@@ -351,6 +408,10 @@ public static class ChordHandShapePlanner
         return false;
     }
 
+    /// <summary>A strum written with a value but imported with no sustain: a staccato.</summary>
+    private static bool IsStaccatoStrike(Chord chord) =>
+        chord.NotationDuration is { Numerator: > 0 } && chord.GetMaxSustain() == FractionalPosition.Zero;
+
     /// <summary>
     ///     The chord's authored length: its notated duration (quarter-note units) when
     ///     the source had one, else its longest sustain. On the import path this runs
@@ -362,6 +423,13 @@ public static class ChordHandShapePlanner
             return new FractionalPosition(0, nd);
         return chord.GetMaxSustain();
     }
+
+    /// <summary>Where the chord's <see cref="AuthoredSpan" /> ends, on the placed grid when the
+    /// options carry one (<see cref="ChordHandShapePlanOptions.PlacedEnd" />).</summary>
+    private static FractionalPosition AuthoredEnd(Chord chord, ChordHandShapePlanOptions options)
+        => options.PlacedEnd is { } placedEnd
+            ? placedEnd(chord.Position, AuthoredSpan(chord))
+            : chord.Position + AuthoredSpan(chord);
 
     /// <summary>
     ///     A chord that a slide genuinely LANDS ON keeps ringing after the slide, so —

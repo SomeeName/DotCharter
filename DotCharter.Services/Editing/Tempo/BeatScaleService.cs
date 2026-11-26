@@ -184,6 +184,13 @@ public class BeatScaleService : IBeatScaleService
                 var target = pi;
                 Remap(target.Position, p => target.Position = p);
             }
+
+            var spots = arr.AudioCheckSpots;
+            for (var i = 0; i < spots.Count; i++)
+            {
+                var index = i;
+                Remap(spots[i].Position, p => spots[index] = spots[index] with { Position = p });
+            }
         }
 
         private void WalkLevel(ChartLevel lvl)

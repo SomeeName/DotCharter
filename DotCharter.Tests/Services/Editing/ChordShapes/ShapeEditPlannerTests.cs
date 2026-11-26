@@ -31,6 +31,33 @@ public sealed class ShapeEditPlannerTests
     private ChordTemplate Of(Chord chord) => ChordTemplateResolver.IndexById(_f.Arrangement.ChordTemplates)[chord.TemplateId];
 
     [Fact]
+    public void EveryUse_OnAGripWithABlankNameTwin_ReshapesTheTwinAndItsChordsInTheSameUndoStep()
+    {
+        var named = new ChordTemplate { Id = 0, Name = "A5", Pinned = true, Frets = { [1] = 5, [2] = 7 }, Fingers = { [1] = 1, [2] = 3 } };
+        var twin = new ChordTemplate { Id = 1, Name = "", Unnamed = true, Pinned = true, Frets = { [1] = 5, [2] = 7 }, Fingers = { [1] = 1, [2] = 3 } };
+        var first = new Chord { TemplateId = 0, Position = new FractionalPosition(0), ChordNotes = [new ChordNote { StringIndex = 1, Fret = 5 }, new ChordNote { StringIndex = 2, Fret = 7 }] };
+        var repeat = new Chord { TemplateId = 1, Position = new FractionalPosition(1), ChordNotes = [new ChordNote { StringIndex = 1, Fret = 5 }, new ChordNote { StringIndex = 2, Fret = 7 }] };
+        var arrangement = new Arrangement { Name = "Lead", StringCount = 6, ChordTemplates = { named, twin } };
+        arrangement.Levels.Add(new ChartLevel { Chords = [first, repeat] });
+        var draft = new ShapeEditDraft(new Dictionary<int, int> { [1] = 5, [2] = 9 }, new Dictionary<int, int> { [1] = 1, [2] = 4 }, "A5", false);
+
+        var plan = ShapeEditPlanner.Plan(new ShapeEditInput(arrangement, named, null, [], []), ShapeEditScope.EveryUse, draft, true, _editor);
+        _history.Do(plan.Action!);
+
+        Assert.Equal(9, twin.Frets[2]);
+        Assert.Equal(4, twin.Fingers[2]);
+        Assert.Equal(string.Empty, twin.Name);
+        Assert.True(twin.Unnamed);
+        Assert.Contains(repeat.ChordNotes, n => n is { StringIndex: 2, Fret: 9 });
+
+        _history.Undo();
+        Assert.Equal(7, twin.Frets[2]);
+        Assert.Equal(3, twin.Fingers[2]);
+        Assert.Contains(repeat.ChordNotes, n => n is { StringIndex: 2, Fret: 7 });
+        Assert.False(_history.CanUndo);
+    }
+
+    [Fact]
     public void ThisChord_MakesANewShapeForThatChordOnly_AndTheOthersKeepTheOldGrip()
     {
         var origin = _f.Level1.Chords[0];

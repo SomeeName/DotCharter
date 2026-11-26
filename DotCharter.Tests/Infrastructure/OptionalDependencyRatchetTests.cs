@@ -30,7 +30,7 @@ public sealed partial class OptionalDependencyRatchetTests
         ["DotCharter.Tone"] = 44,
         ["DotCharter.Tone.UI"] = 20,
         ["DotCharter.Presentation"] = 34,
-        ["DotCharter.UI"] = 57,
+        ["DotCharter.UI"] = 56,
     };
 
     private static readonly HashSet<string> ConstructorModifiers = new(StringComparer.Ordinal)

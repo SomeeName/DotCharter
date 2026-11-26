@@ -208,6 +208,8 @@ public sealed class LevelGenerationViewModelTests
         public int FixExportFinding(DotCharter.Services.Export.Validation.ExportFixKind kind, Arrangement arrangement) =>
             throw new NotSupportedException();
         public int GenerateShowlights() => throw new NotSupportedException();
+        public int TrimMetadataSpaces() => throw new NotSupportedException();
+        public int AssignDlcKey(string key) => throw new NotSupportedException();
         public int CreateMissingToneDefinitions(Arrangement arrangement) => throw new NotSupportedException();
         public DotCharter.Services.Editing.Tones.ToneKeyRepairProposal? RepairUndefinedToneKey(string undefinedKey) =>
             throw new NotSupportedException();

@@ -1,3 +1,4 @@
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.UI.ViewModels.Editor.Inspector;
 
 namespace DotCharter.Tests.UI.ViewModels.Editor;
@@ -92,9 +93,9 @@ public sealed class GripEditTests
         var grip = new ChordTemplate { Name = "E5", Frets = { [0] = 0, [1] = 2, [2] = 2 }, Fingers = { [1] = 2 } };
         Assert.True(GripEdit.MissingFingering(grip, 0));
         grip.Pinned = true;
-        Assert.Null(GripEdit.AutoFill(new Arrangement(), grip, 0));
+        Assert.Null(GripEdit.AutoFill(new Arrangement(), grip, 0, ArrangementFingeringStyle.None));
         grip.Pinned = false;
-        Assert.Null(GripEdit.AutoFill(new Arrangement(), grip, ChordTemplate.GhostBit(2)));
+        Assert.Null(GripEdit.AutoFill(new Arrangement(), grip, ChordTemplate.GhostBit(2), ArrangementFingeringStyle.None));
         grip.Fingers[2] = 3;
         Assert.False(GripEdit.MissingFingering(grip, 0));
         grip.Fingers.Clear();

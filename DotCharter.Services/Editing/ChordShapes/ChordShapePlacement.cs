@@ -1,3 +1,4 @@
+using DotCharter.Services.Editing.Fingering;
 using System.Collections.ObjectModel;
 using DotCharter.Services.Editing.HandShapes;
 using DotCharter.Services.State;
@@ -144,7 +145,8 @@ public static class ChordShapePlacement
     ///     the chord's frets; otherwise the resolver's find-or-create in the chord's own arpeggio
     ///     flavour, minted inside the same undo node.
     /// </summary>
-    public static ChordShapePlacementPlan PlanRepeatPrevious(ChordShapePlacementTarget target, FractionalPosition position)
+    public static ChordShapePlacementPlan PlanRepeatPrevious(ChordShapePlacementTarget target, FractionalPosition position,
+        ArrangementFingeringStyle? songStyle = null)
     {
         ArgumentNullException.ThrowIfNull(target);
 
@@ -152,7 +154,7 @@ public static class ChordShapePlacement
             return ChordShapePlacementPlan.Refused(ChordShapePlacementRefusal.NoPreviousChord);
 
         var minted = new List<ChordTemplate>();
-        var grip = new ResolvedGripSource(target.Arrangement).GripFor(previous, minted);
+        var grip = new ResolvedGripSource(target.Arrangement, songStyle).GripFor(previous, minted);
         return Plan(target, grip, [position], minted);
     }
 

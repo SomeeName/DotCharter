@@ -95,7 +95,10 @@ its own copy of this guide for the reader's half.
   `LoadSongAsync`, `PrepareAudio` (convert-on-select), `LoadCover`, `BlockFor` and
   `Probe` (Library Doctor). `LibraryService` asks the source whose extension the path
   ends in and refuses a file no source reads (`NotSupportedException` on load, `NoAudio`,
-  no block, an unreadable probe). The app registers `Package/DcSong/Library/DcSongLibrarySource`
+  no block, an unreadable probe). A loaded song's project gets a DLC key of its own
+  (`Library/OpenedPackageDlcKey`): the derived default, suffixed when it equals the
+  package's key, so re-exporting an opened package never shares its key with the
+  original (the game lists one song per key; `LibraryOpenedPackageKeyTests`). The app registers `Package/DcSong/Library/DcSongLibrarySource`
   (`.dcsong`); a plugin registers its own package source AHEAD of it (`App.Plugins.cs`
   runs first), and the scan lists each source's files in registration order, so the
   file order (and with it the tie order of the sorted result) is stable.

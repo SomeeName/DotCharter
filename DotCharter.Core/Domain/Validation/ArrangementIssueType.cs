@@ -271,7 +271,185 @@ public enum ArrangementIssueType
     ///     One section name covers most of an arrangement's sections (<c>SectionNameVarietyRule</c>).
     ///     Rocksmith's recommendations read section names, so a chart of nothing but intros gets poor ones.
     /// </summary>
-    SectionNameVariety
+    SectionNameVariety,
+
+    /// <summary>
+    ///     A note or chord sustain, or a Link-Next chain, runs across a phrase start, a section start or
+    ///     past END (<c>BoundaryCrossingRule</c>). Rocksmith rebuilds each phrase on its own, so the
+    ///     sustain is cut there in game. A Link-Next note across a non-mover phrase stays I10's finding.
+    /// </summary>
+    SustainCrossesBoundary,
+
+    /// <summary>
+    ///     A hand shape runs across a phrase start, a section start or past END
+    ///     (<c>BoundaryCrossingRule</c>).
+    /// </summary>
+    HandShapeCrossesBoundary,
+
+    /// <summary>A tone change before the arrangement's first note or chord: the starting tone is the
+    ///     place for that tone (<c>ToneConventionRule</c>).</summary>
+    ToneChangeBeforeFirstNote,
+
+    /// <summary>The arrangement switches tone exactly once, which charters double-check
+    ///     (<c>ToneConventionRule</c>).</summary>
+    SingleToneChange,
+
+    /// <summary>A tone the arrangement uses whose display name differs from its key
+    ///     (<c>ToneConventionRule</c>).</summary>
+    ToneNameKeyMismatch,
+
+    /// <summary>A tone the arrangement uses has no amp or no cabinet, or more effects than Rocksmith's
+    ///     four (<c>ToneConventionRule</c>).</summary>
+    ToneGearContent,
+
+    /// <summary>Two different tones the arrangement uses share one name, or one name fills two switchable
+    ///     slots (<c>ToneConventionRule</c>).</summary>
+    DuplicateToneName,
+
+    /// <summary>A tone change switches to the tone that is already on (<c>ToneConventionRule</c>).</summary>
+    RepeatedTone,
+
+    /// <summary>The tuning is none of the arrangement settings' presets (<c>CustomTuningRule</c>).</summary>
+    CustomTuning,
+
+    /// <summary>A phrase runs over sixteen measures (<c>PhraseStructureRule</c>).</summary>
+    PhraseTooLong,
+
+    /// <summary>A phrase runs under two measures (<c>PhraseStructureRule</c>).</summary>
+    PhraseTooShort,
+
+    /// <summary>A section has no phrase at its position (<c>PhraseStructureRule</c>).</summary>
+    SectionWithoutPhrase,
+
+    /// <summary>A silent stretch is split into several noguitar sections (<c>PhraseStructureRule</c>).</summary>
+    NoGuitarSectionSplit,
+
+    /// <summary>
+    ///     A fret hand position sits before the level's first note or chord (inside COUNT, say) and not
+    ///     on a phrase start (<c>FretHandPositionRule</c>): nothing is played under it.
+    /// </summary>
+    AnchorBeforeFirstNote,
+
+    /// <summary>
+    ///     A fret hand position sits between two sounds, on no note, chord or phrase start
+    ///     (<c>FretHandPositionRule</c>). The hand moves when the next sound is struck, so the FHP belongs there.
+    /// </summary>
+    AnchorBetweenNotes,
+
+    /// <summary>
+    ///     A fret hand position sits inside a ringing sustain, on no new note, chord or phrase start
+    ///     (<c>FretHandPositionRule</c>): the hand would move while the note still sounds.
+    /// </summary>
+    AnchorInsideSustain,
+
+    /// <summary>
+    ///     A fret hand position that moves the hand sits on a hammer-on target (<c>FretHandPositionRule</c>):
+    ///     the hand cannot shift between the picked note and the hammer-on. A pull-off target is I42.
+    /// </summary>
+    AnchorOnHammerOnTarget,
+
+    /// <summary>A fret hand position on fret 22 to 24 (<c>FretHandPositionRule</c>): above fret 21 most
+    /// necks run out of room.</summary>
+    AnchorFretAbove21,
+
+    /// <summary>A fret hand position above fret 24 (<c>FretHandPositionRule</c>): no Rocksmith neck has it.</summary>
+    AnchorFretAbove24,
+
+    /// <summary>
+    ///     A bent note falls to the pinky — finger 4, or the fret three above the fret hand position when the
+    ///     finger is not stated (<c>FretHandPositionRule</c>). Bends are played with the ring finger.
+    /// </summary>
+    BendNeedsPinky,
+
+    /// <summary>
+    ///     A note or chord sits 1 to 3 ms off the beat grid (<c>OffGridRule</c>): a rounding slip, offered a
+    ///     snap onto the nearest grid line (<c>BeatGridSnap.Snap</c>).
+    /// </summary>
+    NoteNearlyOnGrid,
+
+    /// <summary>
+    ///     A note or chord sits more than 3 ms off the beat grid (<c>OffGridRule</c>). Too far to be a
+    ///     rounding slip, so there is no automatic snap.
+    /// </summary>
+    NoteOffGrid,
+
+    /// <summary>
+    ///     The first note starts less than about 10 s into the song (<c>LeadInRule</c>). A suggestion: the
+    ///     hard limit stays <see cref="FirstNoteTooEarly" />.
+    /// </summary>
+    LeadInShort,
+
+    /// <summary>The audio ends less than about 2 s after the last note (<c>LeadInRule</c>).</summary>
+    TailShort,
+
+    /// <summary>
+    ///     No empty measure comes before the first note (<c>LeadInRule</c>). The beat map is never changed
+    ///     for it: Tempo map ▸ Add measures at start is the explicit fix.
+    /// </summary>
+    NoCountMeasure,
+
+    /// <summary>
+    ///     A harmonic carries vibrato, which it never sounds (<c>TechniqueCombinationRule</c>).
+    /// </summary>
+    HarmonicVibrato,
+
+    /// <summary>
+    ///     An unpitched slide covers a single fret, too short to hear (<c>TechniqueCombinationRule</c>).
+    /// </summary>
+    UnpitchedSlideOneFret,
+
+    /// <summary>
+    ///     The chart's average tempo is about twice the tempo read off the song audio (<c>TempoMapRule</c>):
+    ///     the beat map probably counts eighth notes as beats.
+    /// </summary>
+    TempoLooksDoubled,
+
+    /// <summary>The chart's average tempo is about half the audio's tempo (<c>TempoMapRule</c>).</summary>
+    TempoLooksHalved,
+
+    /// <summary>A beat of the charted part runs below 40 or above 300 BPM (<c>TempoMapRule</c>).</summary>
+    TempoOutOfRange,
+
+    /// <summary>
+    ///     One beat is far faster or slower than both its neighbours (<c>TempoMapRule</c>): a misplaced beat
+    ///     line rather than a tempo change.
+    /// </summary>
+    TempoSpike,
+
+    /// <summary>Many tempo anchors that do not change the tempo (<c>TempoMapRule</c>).</summary>
+    TempoAnchorSpam,
+
+    /// <summary>The chart's average tempo is more than 1% off the audio's tempo (<c>TempoMapRule</c>).</summary>
+    TempoOffAudio,
+
+    /// <summary>
+    ///     The beat map does not open on a measure whose time signature matches its beats
+    ///     (<c>TempoMapRule</c>).
+    /// </summary>
+    MeterMissingOnFirstMeasure,
+
+    /// <summary>
+    ///     A measure holds a different number of beats than its time signature says: the meter changed
+    ///     without a new time signature (<c>TempoMapRule</c>).
+    /// </summary>
+    MeterChangeUnmarked,
+
+    /// <summary>
+    ///     A note or chord sustain ends closer to the next note or chord than a 32nd note
+    ///     (<c>SustainSpacingRule</c>). The spacing clean-up only keeps the minimum note distance;
+    ///     community charters leave a 32nd note.
+    /// </summary>
+    SustainTooCloseToNext,
+
+    /// <summary>A note sustain shorter than 5 ms: too short to see or hear, so a leftover
+    ///     (<c>SustainSpacingRule</c>).</summary>
+    SustainUnderFiveMs,
+
+    /// <summary>
+    ///     The import guessed spots the tab does not state, and the charter has not checked them against the audio
+    ///     yet (<c>AudioCheckRule</c>): one finding per arrangement with their count, at the first one.
+    /// </summary>
+    NeedsAudioCheck
 }
 
 /// <summary>
@@ -374,7 +552,63 @@ public static class ArrangementIssueTypeExtensions
         ArrangementIssueType.DifficultyLevelCount => "D14",
         ArrangementIssueType.HandShapeGap => "D15",
         ArrangementIssueType.SectionNameVariety => "D16",
-        _ => type.ToString()
+        ArrangementIssueType.SustainCrossesBoundary => "D17",
+        ArrangementIssueType.HandShapeCrossesBoundary => "D18",
+        _ => GetToneAndTuningCode(type)
+    };
+
+    // D20-D26: the tone and tuning conventions (ToneConventionRule, CustomTuningRule).
+    private static string GetToneAndTuningCode(ArrangementIssueType type) => type switch
+    {
+        ArrangementIssueType.ToneChangeBeforeFirstNote => "D20",
+        ArrangementIssueType.SingleToneChange => "D21",
+        ArrangementIssueType.ToneNameKeyMismatch => "D22",
+        ArrangementIssueType.ToneGearContent => "D23",
+        ArrangementIssueType.DuplicateToneName => "D24",
+        ArrangementIssueType.RepeatedTone => "D25",
+        ArrangementIssueType.CustomTuning => "D26",
+        _ => GetGridCode(type)
+    };
+
+    // D40-D44: the beat-grid and lead-in findings.
+    private static string GetGridCode(ArrangementIssueType type) => type switch
+    {
+        ArrangementIssueType.NoteNearlyOnGrid => "D40",
+        ArrangementIssueType.NoteOffGrid => "D41",
+        ArrangementIssueType.LeadInShort => "D42",
+        ArrangementIssueType.TailShort => "D43",
+        ArrangementIssueType.NoCountMeasure => "D44",
+        _ => CodeTable.TryGetValue(type, out var code) ? code : type.ToString()
+    };
+
+    // D50-D56 (FretHandPositionRule), D60-D67 (TempoMapRule) and D70-D71 (TechniqueCombinationRule):
+    // a table, not more switch arms.
+    private static readonly Dictionary<ArrangementIssueType, string> CodeTable = new()
+    {
+        [ArrangementIssueType.AnchorBeforeFirstNote] = "D50",
+        [ArrangementIssueType.AnchorBetweenNotes] = "D51",
+        [ArrangementIssueType.AnchorInsideSustain] = "D52",
+        [ArrangementIssueType.AnchorOnHammerOnTarget] = "D53",
+        [ArrangementIssueType.AnchorFretAbove21] = "D54",
+        [ArrangementIssueType.AnchorFretAbove24] = "D55",
+        [ArrangementIssueType.BendNeedsPinky] = "D56",
+        [ArrangementIssueType.HarmonicVibrato] = "D70",
+        [ArrangementIssueType.UnpitchedSlideOneFret] = "D71",
+        [ArrangementIssueType.TempoLooksDoubled] = "D60",
+        [ArrangementIssueType.TempoLooksHalved] = "D61",
+        [ArrangementIssueType.TempoOutOfRange] = "D62",
+        [ArrangementIssueType.TempoSpike] = "D63",
+        [ArrangementIssueType.TempoAnchorSpam] = "D64",
+        [ArrangementIssueType.TempoOffAudio] = "D65",
+        [ArrangementIssueType.MeterMissingOnFirstMeasure] = "D66",
+        [ArrangementIssueType.MeterChangeUnmarked] = "D67",
+        [ArrangementIssueType.PhraseTooLong] = "D80",
+        [ArrangementIssueType.PhraseTooShort] = "D81",
+        [ArrangementIssueType.SectionWithoutPhrase] = "D83",
+        [ArrangementIssueType.NoGuitarSectionSplit] = "D84",
+        [ArrangementIssueType.SustainTooCloseToNext] = "D90",
+        [ArrangementIssueType.SustainUnderFiveMs] = "D91",
+        [ArrangementIssueType.NeedsAudioCheck] = "D110",
     };
 
     public static ArrangementIssueSeverity GetSeverity(this ArrangementIssueType type)
@@ -421,7 +655,11 @@ public static class ArrangementIssueTypeExtensions
                 or ArrangementIssueType.ValidationRuleCrashed
                 or ArrangementIssueType.ChordWithoutTemplate
                 or ArrangementIssueType.HandShapeWithoutTemplate => ArrangementIssueSeverity.Important,
-            _ => ArrangementIssueSeverity.Warning
+            _ => SeverityOfTheRest(type)
         };
     }
+
+    // D55 is Important: an anchor above fret 24 has no fret to sit on. Everything else left is a Warning.
+    private static ArrangementIssueSeverity SeverityOfTheRest(ArrangementIssueType type) =>
+        type == ArrangementIssueType.AnchorFretAbove24 ? ArrangementIssueSeverity.Important : ArrangementIssueSeverity.Warning;
 }

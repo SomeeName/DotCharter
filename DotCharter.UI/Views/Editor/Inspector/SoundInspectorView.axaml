@@ -502,6 +502,10 @@
                                 ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Staged_PageStrings}">
                 <local:SoundChordTechniqueView x:Name="SoundChordTechniqueCard" />
             </ctl:ColumnFlowCard>
+            <ctl:ColumnFlowCard x:Name="NoteChordAllStringsCard" IsVisible="{Binding Sections.ShowChordStrings}"
+                                ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Staged_ChordTechniques}">
+                <local:SoundChordAllStringsView x:Name="SoundChordAllStrings" />
+            </ctl:ColumnFlowCard>
             <ctl:ColumnFlowCard x:Name="NoteChordWholeCard" IsVisible="{Binding Sections.ShowChordTechnique}"
                                 ctl:ColumnFlowPanel.Title="{localization:Loc Inspector_Staged_PageChord}">
                 <local:SoundChordWholeView x:Name="SoundChordWhole" />

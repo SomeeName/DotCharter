@@ -53,7 +53,7 @@ public sealed class HandShapeSuggestionClickTests
         var cleared = pressed.LastIndexOf("selection.SelectedHandShapes.Clear();", StringComparison.Ordinal);
         Assert.True(hit >= 0 && accept > hit, "the press accepts the suggestion it hit");
         Assert.True(cleared > accept, "a click that hits no suggestion still clears the bar selection");
-        Assert.Contains("[hit.Suggestion], context.Modifiers.HasFlag(KeyModifiers.Alt))", pressed);
+        Assert.Contains("[hit.Suggestion], context.Modifiers.HasFlag(KeyModifiers.Alt),", pressed);
     }
 
     [Fact]

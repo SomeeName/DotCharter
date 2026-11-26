@@ -1,3 +1,5 @@
+using DotCharter.Services.Editing.Fingering;
+
 namespace DotCharter.Services.Editing.Refret;
 
 /// <summary>
@@ -34,6 +36,14 @@ namespace DotCharter.Services.Editing.Refret;
 public sealed class RefretOptions
 {
     public static readonly RefretOptions Default = new();
+
+    /// <summary>
+    ///     The style the song's other arrangements state
+    ///     (<see cref="ArrangementFingeringStyle.OfOtherArrangements" />): a
+    ///     re-fretted power chord or octave the arrangement has no majority for
+    ///     is fingered that way. Null: the arrangement alone decides.
+    /// </summary>
+    public ArrangementFingeringStyle? SongStyle { get; init; }
 
     /// <summary>Hard fret ceiling for any candidate (Rocksmith fretboard).</summary>
     public int MaxFret { get; init; } = FretLimits.MaxFret;

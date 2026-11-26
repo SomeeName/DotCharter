@@ -14,7 +14,7 @@ internal readonly record struct RocksmithExportGate(bool Building, bool MacOnlyB
     /// <summary>The dialog properties a tick, a path, the key or the platform can change, raised together.</summary>
     public static readonly string[] Properties =
     [
-        nameof(RocksmithExportViewModel.HasBlockingErrors), nameof(RocksmithExportViewModel.NothingSelectedToExport),
+        nameof(RocksmithExportViewModel.IsCheckingFindings), nameof(RocksmithExportViewModel.HasBlockingErrors), nameof(RocksmithExportViewModel.NothingSelectedToExport),
         nameof(RocksmithExportViewModel.MissingPaths), nameof(RocksmithExportViewModel.HasInvalidDlcKey),
         nameof(RocksmithExportViewModel.MacBlock), nameof(RocksmithExportViewModel.PlatformNote),
         nameof(RocksmithExportViewModel.HasPlatformNote), nameof(RocksmithExportViewModel.OffersStandardPackage),

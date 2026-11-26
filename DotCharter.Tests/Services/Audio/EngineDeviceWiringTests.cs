@@ -308,7 +308,7 @@ public sealed class EngineDeviceWiringTests
     [Fact]
     public void TheProcessPriorityRow_IsAppliedByTheConfigApply()
     {
-        var body = MethodBody("private void ApplyAudioConfigurationCore(RigConfig config, bool forceEngineReplace)");
+        var body = MethodBody("private void ApplyAudioConfigurationCore(RigConfig config, bool forceEngineReplace, bool reuseRememberedChannelCounts)");
         Assert.Contains("ApplyProcessPriority(config.EnableHighProcessPriority);", body, StringComparison.Ordinal);
         Assert.Contains("ProcessPriorityPolicy.DesiredFor(", ServiceSource(), StringComparison.Ordinal);
     }

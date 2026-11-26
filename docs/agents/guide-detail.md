@@ -71,7 +71,8 @@ algorithms, preset data, the rig view's namescope).
 
 The GP3-5 reader keeps byte-stream walking in `GpLegacyImporter.cs`; buffered beat
 placement and unfolded markers are handled by `GpLegacyBeatTiming.cs` and
-`GpLegacyMarkers.cs`, with scratch DTOs in `GpLegacyParseModels.cs`.
+`GpLegacyMarkers.cs`, chord diagrams by `GpLegacyChordDiagram.cs`, with scratch DTOs in
+`GpLegacyParseModels.cs`.
 
 **Methods have a complexity budget too.** `Infrastructure/MethodComplexityBudgetTests`
 measures every method, accessor and operator (syntax-only Roslyn,

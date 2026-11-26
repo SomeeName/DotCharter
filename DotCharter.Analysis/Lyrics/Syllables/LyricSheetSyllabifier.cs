@@ -27,7 +27,7 @@ public static class LyricSheetSyllabifier
         var counts = FunctionWords.Keys.ToDictionary(k => k, _ => 0);
         foreach (var word in Words(sheet))
         {
-            var text = string.Concat(word.Select(s => s.Text)).Trim().ToLowerInvariant().Trim('\'', ',', '.', '!', '?', ';', ':', '"');
+            var text = LyricApostrophes.Normalize(string.Concat(word.Select(s => s.Text))).Trim().ToLowerInvariant().Trim('\'', ',', '.', '!', '?', ';', ':', '"');
             foreach (var (language, words) in FunctionWords)
             {
                 if (words.Contains(text)) counts[language]++;
@@ -98,7 +98,7 @@ public static class LyricSheetSyllabifier
 
     private static IReadOnlyList<string> RomajiOrKana(string text) => KanaMoraSplitter.IsKana(text) ? KanaMoraSplitter.Split(text) : RomajiMoraSplitter.Split(text) ?? [text];
 
-    private static string Letters(string text) => new([.. text.Where(c => char.IsLetter(c) || c == '\'')]);
+    private static string Letters(string text) => new([.. LyricApostrophes.Normalize(text).Where(c => char.IsLetter(c) || c == '\'')]);
 
     private static IEnumerable<LyricSyllable> SplitSyllable(LyricSyllable syllable, SyllableLanguage language) =>
         SplitSyllable(syllable, text => LyricSyllabifier.Split(text, language));
@@ -122,7 +122,8 @@ public static class LyricSheetSyllabifier
         {
             var last = i == parts.Count - 1;
             var piece = (i == 0 ? text[..from] : "") + parts[i] + (last ? text[to..] : "");
-            yield return syllable with { Text = piece, ContinuesWord = !last || syllable.ContinuesWord, SplitByRules = true };
+            // Only the word's last piece keeps the line end: `to- geth- er+`, never `to+ geth+ er+`.
+            yield return syllable with { Text = piece, ContinuesWord = !last || syllable.ContinuesWord, EndsLine = last && syllable.EndsLine, SplitByRules = true };
         }
     }
 

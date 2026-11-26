@@ -105,6 +105,8 @@ public sealed partial class ChartMaintenanceService
     }
 
     public int GenerateShowlights() => _exportQuickFixes.GenerateShowlights();
+    public int TrimMetadataSpaces() => _exportQuickFixes.TrimMetadataSpaces();
+    public int AssignDlcKey(string key) => _exportQuickFixes.AssignDlcKey(key);
     public int CreateMissingToneDefinitions(Arrangement arrangement) => _exportQuickFixes.CreateMissingToneDefinitions(arrangement);
 
     /// <inheritdoc />

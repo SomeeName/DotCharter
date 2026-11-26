@@ -17,7 +17,7 @@ namespace DotCharter.Tests.UI.ViewModels.Shell;
 /// </summary>
 public sealed class AiChartReviewPhraseAnchorTests
 {
-    private readonly AiChartFixture _f = new();
+    private readonly AiChartFixture _f = new(beatsPerBar: 2);
     private readonly ProjectState _state = new();
     private readonly HistoryService _history = new(new FakeAppLogger());
     private readonly AiChartPassRun _run;
@@ -35,13 +35,14 @@ public sealed class AiChartReviewPhraseAnchorTests
             new TrackContextRegistry(_state, selection), FakeLocalization.KeysOnly());
         var loc = FakeLocalization.KeysOnly();
         var rig = new RigConfig { Ai = new AiProviderSettings(AiProviderKind.ClaudeCli, "fake-model", null) };
-        // Bar 2 (beat 4) has no anchor of its own (the fret-5 one from beat 0 is in force); bar 3 (beat 8) has one.
+        // Bars of 2 beats, so each phrase spans the two measures a phrase needs (D81). Bar 3 (beat 4) has no
+        // anchor of its own (the fret-5 one from beat 0 is in force); bar 5 (beat 8) has one.
         var model = new FakeChartModel((_, _) => JsonSerializer.Serialize(new
         {
             changes = new object[]
             {
-                new { op = "add", kind = "phrase", bar = 2, beat = 1, name = "riff" },
-                new { op = "add", kind = "phrase", bar = 3, beat = 1, name = "chords" }
+                new { op = "add", kind = "phrase", bar = 3, beat = 1, name = "riff" },
+                new { op = "add", kind = "phrase", bar = 5, beat = 1, name = "chords" }
             }
         }));
         _run = new AiChartPassRun(_state, _history, null, loc, logger, new FingeringGenerationService(),

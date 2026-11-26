@@ -14,13 +14,14 @@ public sealed class FingeringGenerationService : IFingeringGenerationService
         return MapEquality.SameEntries(clone.Fingers, template.Fingers) ? null : clone;
     }
 
-    public ChordTemplate? SuggestFingeringFor(Arrangement arrangement, ChordTemplate template)
+    public ChordTemplate? SuggestFingeringFor(Arrangement arrangement, ChordTemplate template,
+        ArrangementFingeringStyle? songStyle = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         if (!HasFrettedStrings(template)) return null;
 
         var clone = template.Clone();
-        ArrangementFingeringStyle.SetSuggestedFingers(arrangement, clone, StringCountOf(arrangement));
+        ArrangementFingeringStyle.SetSuggestedFingers(arrangement, clone, StringCountOf(arrangement), songStyle);
 
         return MapEquality.SameEntries(clone.Fingers, template.Fingers) ? null : clone;
     }

@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -98,6 +99,18 @@ internal static class NarrowWidthLayout
 
     /// <summary>The control's top edge in <paramref name="space" />'s coordinates.</summary>
     public static double TopIn(Visual control, Visual space) => control.TranslatePoint(new Point(0, 0), space)!.Value.Y;
+
+    /// <summary>What <paramref name="text" /> needs on one line in <paramref name="font" />'s typeface. A
+    /// trimmed <c>TextBlock</c>'s own <c>TextLayout</c> reports the TRIMMED width, so the natural one is measured here.</summary>
+    public static double NaturalWidth(string text, Control font, FontFamily family, FontStyle style, FontWeight weight, double size) =>
+        new FormattedText(text, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+            new Typeface(family, style, weight), size, null).Width;
+
+    public static double NaturalWidth(TextBlock block) =>
+        NaturalWidth(block.Text ?? string.Empty, block, block.FontFamily, block.FontStyle, block.FontWeight, block.FontSize);
+
+    public static double NaturalWidth(string text, TemplatedControl control) =>
+        NaturalWidth(text, control, control.FontFamily, control.FontStyle, control.FontWeight, control.FontSize);
 
     public static T Named<T>(Visual root, string name) where T : Control =>
         root.GetVisualDescendants().OfType<T>().FirstOrDefault(c => c.Name == name)

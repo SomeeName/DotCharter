@@ -1,8 +1,12 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.VisualTree;
 using DotCharter.Services.Editing.Selection;
 using DotCharter.UI;
+using DotCharter.UI.Controls;
 using DotCharter.UI.ViewModels.Editor;
+using DotCharter.UI.ViewModels.Editor.Inspector;
+using DotCharter.UI.ViewModels.Panels;
 using DotCharter.UI.Views.Editor;
 using DotCharter.UI.Views.Editor.Inspector;
 using Microsoft.Extensions.DependencyInjection;
@@ -57,6 +61,67 @@ public sealed class InspectorNarrowWidthUiPerfSmokeTests
                     $"at {width} px a navigation-row part ({part.GetType().Name}) spans {left:0.#}..{right:0.#} px in a " +
                     $"{row.Bounds.Width:0.#} px row (#134).");
             });
+        }), CancellationToken.None);
+
+    /// <summary>
+    ///     #964: the Chord techniques card (#957) at the narrowest inspector widths — its four label +
+    ///     segmented rows and the Accent / Tremolo pair stay inside the card, a row's choices clear its
+    ///     label, and no text is cut off. Seeded with a templated chord from the fixture, culture-swept.
+    /// </summary>
+    [Theory]
+    [InlineData(400)]
+    [InlineData(320)]
+    public async Task TheChordTechniquesCard_KeepsEveryControlInsideItsCard(int width) =>
+        await HeadlessSessionFixture.Dispatch(() => NoteSectionStripUiPerfSmokeTests.WithPane(width, 524, pane =>
+        {
+            NoteSectionStripUiPerfSmokeTests.Select(pane, NoteSectionStripUiPerfSmokeTests.MostUsedShapeChord(pane));
+            NoteSectionStripUiPerfSmokeTests.Open(pane, SoundSection.Technique);
+            pane.Vm.ChordTemplateEditor.ChooseApplyRungCommand.Execute(ChordApplyRung.Selected);
+            NarrowWidthLayout.Settle(pane.Window);
+            var sound = NoteSectionStripUiPerfSmokeTests.Sound(pane);
+            var card = NarrowWidthLayout.Named<ColumnFlowCard>(sound, "NoteChordAllStringsCard");
+            NarrowWidthLayout.Named<ColumnFlowPanel>(sound, "NoteCards").ShowPage(card);
+            NarrowWidthLayout.Settle(pane.Window);
+            NarrowWidthLayout.Capture(pane.Window, $"chord-techniques-{width}");
+
+            var group = NarrowWidthLayout.Named<StackPanel>(sound, "ChordAllTechniqueGroup");
+            var (groupLeft, groupRight) = NarrowWidthLayout.Span(group, pane.Window);
+            var offenders = new List<string>();
+            foreach (var row in new[] { "ChordAllMuteRow", "ChordAllHopoRow", "ChordAllHarmonicRow", "ChordAllPickingRow" })
+            {
+                var choices = NarrowWidthLayout.Named<WrapPanel>(sound, row);
+                var label = choices.GetVisualParent()!.GetVisualChildren().OfType<TextBlock>()
+                    .Single(t => Grid.GetRow(t) == Grid.GetRow(choices));
+                var (labelLeft, labelRight) = NarrowWidthLayout.Span(label, pane.Window);
+                NarrowWidthLayout.Report($"[narrow-width] chord card @{width} {row}: label {labelLeft:0.#}..{labelRight:0.#} " +
+                                         $"'{label.Text}' needs {NarrowWidthLayout.NaturalWidth(label):0.#}, group {groupLeft:0.#}..{groupRight:0.#}");
+                if (NarrowWidthLayout.NaturalWidth(label) > label.Bounds.Width + 1)
+                {
+                    offenders.Add($"{row}: label '{label.Text}' needs {NarrowWidthLayout.NaturalWidth(label):0.#} px of {label.Bounds.Width:0.#}");
+                }
+
+                foreach (var choice in choices.Children.OfType<ToggleButton>())
+                {
+                    var (left, right) = NarrowWidthLayout.Span(choice, pane.Window);
+                    if (left < labelRight - 0.5) offenders.Add($"{row}: a choice starts at {left:0.#}, inside its label (ends {labelRight:0.#})");
+                    if (right > groupRight + 0.5) offenders.Add($"{row}: a choice ends at {right:0.#}, past the card edge {groupRight:0.#}");
+                }
+            }
+
+            foreach (var name in new[] { "ChordAccentChip", "ChordAllTremoloToggle" })
+            {
+                var toggle = NarrowWidthLayout.Named<ToggleButton>(sound, name);
+                var (left, right) = NarrowWidthLayout.Span(toggle, pane.Window);
+                var label = toggle.Content as string ?? string.Empty;
+                var needed = NarrowWidthLayout.NaturalWidth(label, toggle);
+                var slot = toggle.Bounds.Width - toggle.Padding.Left - toggle.Padding.Right;
+                NarrowWidthLayout.Report($"[narrow-width] chord card @{width} {name}: {left:0.#}..{right:0.#}, text needs {needed:0.#} of {slot:0.#}");
+                if (left < groupLeft - 0.5 || right > groupRight + 0.5) offenders.Add($"{name} spans {left:0.#}..{right:0.#} outside {groupLeft:0.#}..{groupRight:0.#}");
+                if (needed > slot + 1 && ToolTip.GetTip(toggle) is null) offenders.Add($"{name}: '{label}' is cut ({needed:0.#} > {slot:0.#}) with no tooltip");
+            }
+
+            Assert.True(offenders.Count == 0,
+                $"the Chord techniques card at {width} px ({HeadlessSessionFixture.SweptCulture}): {string.Join("; ", offenders)} (#964).");
         }), CancellationToken.None);
 
     // The tab strip's own cases (#235's one row, #573's all-or-nothing rule, More) are

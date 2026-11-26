@@ -11,7 +11,7 @@ public sealed record GpImportRequest(string FilePath, IReadOnlyList<GpTrackInfo>
 
 /// <summary>
 ///     File ▸ Import ▸ Guitar Pro: choose the tracks and how they land — as new
-///     arrangements on the score's tempo map, as techniques folded onto
+///     arrangements (on the project's tempo map, or on the score's when asked), as techniques folded onto
 ///     arrangements the project has, or as only what changed since an older
 ///     version of the score. The score is parsed off the UI thread and applied
 ///     as ONE undo step; a failure is shown here and leaves the dialog open.
@@ -36,6 +36,19 @@ public interface IGpImportScreen : IDialogScreen<bool>
 
     /// <summary>The merge modes write into an existing arrangement, chosen per track.</summary>
     bool RequiresTargetSelection { get; }
+
+    /// <summary>Only add-new can replace the tempo map, so only it shows the choice.</summary>
+    bool ShowsTempoMapChoice { get; }
+
+    /// <summary>
+    ///     Add-new: the score's tempo map replaces the project's. Starts ticked only when no
+    ///     arrangement has content; unticked, the new arrangements go bar by bar onto the
+    ///     project's map.
+    /// </summary>
+    bool ReplaceTempoMap { get; set; }
+
+    /// <summary>The beat map is locked, so it is never replaced: the choice shows disabled, with why.</summary>
+    bool IsTempoMapLocked { get; }
 
     bool HasTracks { get; }
 

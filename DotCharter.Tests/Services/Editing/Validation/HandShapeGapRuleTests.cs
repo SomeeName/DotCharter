@@ -86,13 +86,13 @@ public sealed class HandShapeGapRuleTests
         Assert.Equal(Short, Assert.Single(Run(arr)).MessageKey);
     }
 
-    /// <summary>The base gap is the app's minimum note distance, 1/64 of a 4/4 measure = 1/16
-    /// beat (#808): a shape ending on the next chord warns, one leaving 1/16 beat passes.</summary>
+    /// <summary>The gap is a 32nd note, 1/8 beat in 4/4, larger than the app's default minimum
+    /// note distance (1/16 beat): a shape leaving only 1/16 beat warns, one leaving 1/8 passes.</summary>
     [Theory]
     [InlineData(32, true)]
-    [InlineData(31, false)]
+    [InlineData(31, true)]
     [InlineData(30, false)]
-    public void TheShortGap_IsTheMinimumNoteDistance(int endSixteenths, bool warns)
+    public void TheShortGap_IsA32ndNote(int endSixteenths, bool warns)
     {
         var (arr, _) = ChordThenChordAtBeat2(endSixteenths);
 
@@ -100,11 +100,11 @@ public sealed class HandShapeGapRuleTests
     }
 
     [Fact]
-    public void TheMessage_NamesTheMinimumNoteDistance()
+    public void TheMessage_NamesA32ndNote()
     {
         var (arr, _) = ChordThenChordAtBeat2(32);
 
-        Assert.Equal(["1/16"], Assert.Single(Run(arr)).MessageArgs);
+        Assert.Equal(["1/8"], Assert.Single(Run(arr)).MessageArgs);
     }
 
     private static List<ArrangementIssue> RunWith(Arrangement arr, AppConfig config)
@@ -115,35 +115,35 @@ public sealed class HandShapeGapRuleTests
         return issues;
     }
 
-    /// <summary>The check reads the setting the spacing clean-up reads: 1/8 beat set, a 1/16
-    /// gap warns and the message names 1/8.</summary>
+    /// <summary>The check reads the setting the spacing clean-up reads when it is larger than a
+    /// 32nd note: 1/4 beat set, a 1/8 gap warns and the message names 1/4.</summary>
     [Fact]
     public void ALargerMinimumNoteDistanceSetting_IsTheGap()
     {
-        var (arr, _) = ChordThenChordAtBeat2(31);
-        var config = new AppConfig { MinNoteDistanceMode = MinNoteDistanceMode.BeatFraction, MinNoteDistanceDivisor = 8 };
+        var (arr, _) = ChordThenChordAtBeat2(30);
+        var config = new AppConfig { MinNoteDistanceMode = MinNoteDistanceMode.BeatFraction, MinNoteDistanceDivisor = 4 };
 
         var finding = Assert.Single(RunWith(arr, config));
 
-        Assert.Equal(["1/8"], finding.MessageArgs);
+        Assert.Equal(["1/4"], finding.MessageArgs);
     }
 
-    /// <summary>A zero minimum note distance leaves no gap to fall short of, but a shape ending ON
-    /// the next chord still touches it.</summary>
+    /// <summary>A zero minimum note distance still leaves the 32nd note to fall short of.</summary>
     [Fact]
-    public void WithNoMinimumNoteDistance_TouchingStillWarns()
+    public void WithNoMinimumNoteDistance_TheGapIsStillA32ndNote()
     {
         var config = new AppConfig { MinNoteDistanceMode = MinNoteDistanceMode.Milliseconds, MinNoteDistanceMs = 0 };
 
         Assert.Single(RunWith(ChordThenChordAtBeat2(32).Arr, config));
-        Assert.Empty(RunWith(ChordThenChordAtBeat2(31).Arr, config));
+        Assert.Single(RunWith(ChordThenChordAtBeat2(31).Arr, config));
+        Assert.Empty(RunWith(ChordThenChordAtBeat2(30).Arr, config));
     }
 
-    /// <summary>#817: a chord held a beat or longer gets no larger gap: leaving the minimum
-    /// (1/16 beat) passes, touching the next chord still warns with the one message.</summary>
+    /// <summary>A chord held a beat or longer gets no larger gap: leaving a 32nd note (1/8 beat)
+    /// passes, anything shorter warns with the one message.</summary>
     [Theory]
     [InlineData(32, true)]
-    [InlineData(31, false)]
+    [InlineData(31, true)]
     [InlineData(30, false)]
     public void AHeldChord_NeedsOnlyTheMinimumGap(int endSixteenths, bool warns)
     {
@@ -272,26 +272,27 @@ public sealed class HandShapeGapRuleTests
     }
 
     /// <summary>
-    ///     #808, the owner's chart at 160 BPM 4/4: a hand shape over a two-note chord ends 7/16 of
-    ///     a beat in, and the next note comes on the half beat. The app's own minimum note distance
-    ///     (1/64 of a 4/4 measure, 1/16 beat) is the gap its spacing clean-up leaves before every
-    ///     next sound, so a shape that leaves it does not touch the next note.
+    ///     A chart at 160 BPM 4/4: a hand shape over a two-note chord, and the next note on the half
+    ///     beat. Ending 7/16 of a beat in leaves the spacing clean-up's 1/16 beat and warns; ending
+    ///     6/16 in leaves a 32nd note and does not touch the next note.
     /// </summary>
-    [Fact]
-    public void AShapeLeavingTheMinimumNoteDistance_DoesNotTouchTheNextNote()
+    [Theory]
+    [InlineData(7, true)]
+    [InlineData(6, false)]
+    public void AShapeLeavingA32ndNote_DoesNotTouchTheNextNote(int endSixteenths, bool warns)
     {
         var arr = ChordHandShapePlannerTests.Arr();
         arr.Levels[0].Chords.Add(ChordHandShapePlannerTests.Chord(0, 0, (1, 5), (2, 7)));
         arr.Levels[0].Notes.Add(new GuitarNote { Position = At(8), StringIndex = 1, Fret = 5 });
         arr.Levels[0].Chords.Add(ChordHandShapePlannerTests.Chord(2, 0, (1, 5), (2, 7)));
-        arr.Levels[0].HandShapes.Add(Shape(0, 7));
+        arr.Levels[0].HandShapes.Add(Shape(0, endSixteenths));
         arr.Levels[0].HandShapes.Add(Shape(32, 40));
         var at160 = Enumerable.Range(0, 32).Select(i => new BeatMarker { Time = i * 375.0, Bpm = 160 }).ToList();
         var issues = new List<ArrangementIssue>();
 
         new HandShapeGapRule().Validate(ArrangementValidationContext.Build(arr, at160, null), issues);
 
-        Assert.Empty(issues);
+        Assert.Equal(warns ? 1 : 0, issues.Count);
     }
 
     [Fact]

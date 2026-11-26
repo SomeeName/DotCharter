@@ -14,6 +14,7 @@ internal static class PlaybackServiceSourceFiles
     /// Add a file here in the same change that moves code out of the service.</summary>
     public static readonly string[] Collaborators =
     [
+        "DotCharter.Tone/Audio/AudioDeviceProbeBuilder.cs",
         "DotCharter.Tone/Audio/ChartSynth/ChartSynthEngineDriver.cs",
         "DotCharter.Tone/Audio/ChartSynth/IChartSynthBackend.cs",
         "DotCharter.Tone/Audio/Diagnostics/AudioHealthMonitor.cs",

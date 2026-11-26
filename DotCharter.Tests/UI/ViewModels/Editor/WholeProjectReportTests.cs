@@ -148,6 +148,11 @@ public sealed class WholeProjectReportTests
         rhythm.Levels.Add(new ChartLevel { DifficultyIndex = 0 });
         // The export gate's "no show lights" warning is song-wide and would add a row: this chart has them.
         h.Project.Showlights.Add(new DotCharter.Core.Domain.Events.Showlight());
+        // Likewise the song-list metadata warnings (missing title, artist, album, year) are song-wide: this chart is filled in.
+        h.Project.Chart.SongName = "Song";
+        h.Project.Chart.Artist = "Artist";
+        h.Project.Chart.AlbumName = "Album";
+        h.Project.Chart.AlbumYear = "1999";
         h.Project.Arrangements.Add(rhythm);
         var rules = new FakeRules();
         var ui = new QueueDispatcher();

@@ -66,6 +66,8 @@ public static class LyricSheetParser
     {
         if (string.IsNullOrWhiteSpace(text)) return LyricSheet.Empty;
 
+        // Look-alike Cyrillic/Greek letters inside Latin words become Latin, for the aligner AND the chart.
+        text = LyricHomoglyphs.Fold(text, out _);
         var syllables = new List<LyricSyllable>();
         var lineIndex = 0;
 

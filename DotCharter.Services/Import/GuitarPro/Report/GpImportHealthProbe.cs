@@ -117,8 +117,10 @@ public static class GpImportHealthProbe
         {
             var within = parts[a].Sounds > 0 ? LinkCandidateDetector.Detect([indexes[a]]) : new LinkDetectionResult([], false);
             truncated |= within.Truncated;
-            results.Add(Describe(a, imported.Arrangements[a], parts[a], indexes[a], within, shared[a], census?[a],
-                imported.SlideInsMaterialized.GetValueOrDefault(imported.Arrangements[a]), file));
+            var arrangement = imported.Arrangements[a];
+            var tallies = new ImportTallies(imported.SlideInsMaterialized.GetValueOrDefault(arrangement),
+                imported.WideHandShapes.GetValueOrDefault(arrangement), imported.DroppedNotes.GetValueOrDefault(arrangement));
+            results.Add(Describe(a, arrangement, parts[a], indexes[a], within, shared[a], census?[a], tallies, file));
         }
 
         return new GpProbeReport
@@ -146,7 +148,7 @@ public static class GpImportHealthProbe
     }
 
     private static GpProbeArrangement Describe(int track, Arrangement arrangement, PartFacts facts, MeasureContentIndex index,
-        LinkDetectionResult within, (bool[] Covered, int SamePosition) shared, Dictionary<string, int>? census, int slideIns,
+        LinkDetectionResult within, (bool[] Covered, int SamePosition) shared, Dictionary<string, int>? census, ImportTallies tallies,
         FileContext file)
     {
         var covered = within.Covered(0, file.Measures);
@@ -158,6 +160,8 @@ public static class GpImportHealthProbe
         if (facts.Sounds == 0) file.Warnings.Add("empty-track");
         if (facts.BadString + facts.FretOver24 + facts.BelowCapo > 0) file.Warnings.Add("out-of-range");
         if (facts.OffGrid > 0) file.Warnings.Add("off-grid");
+        if (tallies.WideHandShapes > 0) file.Warnings.Add("wide-hand-shape");
+        if (tallies.DroppedNotes > 0) file.Warnings.Add("dropped-notes");
         if (roundTrip.StartsWith("error", StringComparison.Ordinal)) file.Warnings.Add("round-trip-" + roundTrip);
         else if (rtMeasures > 0 && rtEqual < rtMeasures) file.Warnings.Add("round-trip-diff");
 
@@ -178,6 +182,8 @@ public static class GpImportHealthProbe
             FretOver24 = facts.FretOver24,
             BelowCapo = facts.BelowCapo,
             OffGrid = facts.OffGrid,
+            WideHandShapes = tallies.WideHandShapes,
+            DroppedNotes = tallies.DroppedNotes,
             Measures = file.Measures,
             ContentMeasures = facts.Content.Count(c => c),
             RepeatedMeasures = Count(covered, facts.Content),
@@ -189,7 +195,7 @@ public static class GpImportHealthProbe
             GpRepeatPairsEqual = equal,
             GpRepeatPairsGrouped = grouped,
             SourceTechniques = census ?? [],
-            ImportedTechniques = GpTechniqueCensus.CountImported(facts.Level, slideIns),
+            ImportedTechniques = GpTechniqueCensus.CountImported(facts.Level, tallies.SlideIns),
             RoundTrip = roundTrip,
             RoundTripMeasures = rtMeasures,
             RoundTripMeasuresEqual = rtEqual,
@@ -368,6 +374,10 @@ public static class GpImportHealthProbe
         /// <summary>Measure <paramref name="m" /> plays a written bar Guitar Pro plays only once.</summary>
         public bool PlayedOnce(int m) => m < Source.Length && Source[m] >= 0 && Plays[Source[m]] == 1;
     }
+
+    /// <summary>What the importer counted per part: materialised slide-ins, hand shapes wider than four
+    /// frets and dropped source notes.</summary>
+    private readonly record struct ImportTallies(int SlideIns, int WideHandShapes, int DroppedNotes);
 
     private sealed record PartFacts(ChartLevel Level, int Sounds, int BadString, int FretOver24, int BelowCapo, int OffGrid,
         bool[] Content);

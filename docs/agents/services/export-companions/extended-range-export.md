@@ -22,17 +22,22 @@ bytes, including inside a package with an extended arrangement.
   default on; the `.psarc` save companion always), `RocksmithPackageBuilder.StandardPackage.cs`
   runs the builder a second time on the stock arrangements alone, to the untagged
   name (`StandardOutputPath` overrides it) with the stock encryption choice
-  (`StandardPlainPackage`). Its bytes equal a stock-only export of the same project;
+  (`StandardPlainPackage`). Its bytes equal a stock-only export of the same project
+  unless a stock arrangement shares its type with an extended one before it;
   the RS Extended Range package is unchanged. Both share the DLC key, song key and
-  each arrangement's persistent and master ids (`SharedArrangementIds`): a player
-  installs one or the other. Its paths follow the extended ones in `PackagePaths`
+  each arrangement's persistent and master ids AND song partition
+  (`SharedArrangementIds`), so an entry name such as `key_lead` is the same arrangement
+  in both packages (#1043: the standard package used to renumber a stock Alternate to
+  `key_lead`, the extended Main's name and files). A player installs one or the other. Its paths follow the extended ones in `PackagePaths`
   and are listed in `StandardPackagePaths`. A stock-only or extended-only selection
   writes one package. `RsxrDualPackageTests` pins it.
 - **One Main per path in the extended package (#898).** When a path (Lead, Rhythm,
   Bass) has a stock Main beside an extended Main, the RS Extended Range package
   ships the stock one as Alternate (`RsPackageArrangement.DemotedToAlternate`, set by
-  `DemoteStockDuplicateMains`): its `.hsan` `Representative` and manifest `represent`
-  are 0. The standard package keeps it Main; the project file never changes.
+  `ResolvePathMains`): its `.hsan` `Representative` and manifest `represent`
+  are 0. The standard package keeps it Main; a path there whose only Main was extended
+  ships its first stock arrangement as Main (`PromotedToMain`, #1043), so no path is left
+  without one; the standard `.rs2dlc` does the same (`PromoteLonePathMains`). The project file never changes. `RsxrFourArrangementExportTests` pins both.
   `RsxrDualPackageTests` covers both packages and a path without a duplicate.
 - `RsxrSngWriter` writes an eight-byte `SNXR` header: version 1, instrument,
   string count, reserved zero. Strings are numbered thickest first. Templates,

@@ -31,5 +31,6 @@ internal static class AppStatics
             () => NewChordNames.OptionsFor(config.LoadAppConfig()),
             () => config.LoadAppConfig().ChordNamingStyle,
             arrangement => state?.ActiveProject is { } project && project.Arrangements.Contains(arrangement) ? project.Chart : null);
+        RepeatedChordNames.Configure(() => config.LoadAppConfig().NameOnlyFirstChordInHandShape);
     }
 }

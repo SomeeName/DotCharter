@@ -53,6 +53,8 @@ public static class DialogsModule
         services.AddScoped<IAlignToRecordingScreen, AlignToRecordingViewModel>();
         services.AddScoped<IEstimateBpmScreen, EstimateBpmViewModel>();
         services.AddSingleton<DotCharter.Services.Editing.Tempo.Estimate.ITempoEstimateService, DotCharter.Services.Editing.Tempo.Estimate.TempoEstimateService>();
+        // Shared with TempoMapRule (registered with the validation rules), which reads what an estimate left behind.
+        services.AddSingleton<DotCharter.Services.Editing.Tempo.Estimate.IAudioTempoEstimateStore, DotCharter.Services.Editing.Tempo.Estimate.AudioTempoEstimateStore>();
         services.AddSingleton<AlignToRecordingOffer>();
         // A factory: its playback transport comes from the app's graph, which a dialog-only container lacks.
         services.AddSingleton<DotCharter.Services.Audio.Tuning.IReferencePitchService>(sp =>
@@ -94,6 +96,7 @@ public static class DialogsModule
         services.AddScoped<IBatchLintScreen, BatchLintViewModel>();
         services.AddScoped<IShowlightsScreen, ShowlightsViewModel>();
         services.AddScoped<ICheckpointsScreen, CheckpointsViewModel>();
+        services.AddScoped<IPackageSongPickerScreen, PackageSongPickerViewModel>();
         services.AddScoped<IBookmarksScreen, BookmarksViewModel>();
         services.AddScoped<IGpImportScreen, GpImportViewModel>();
         services.AddScoped<ILinkSuggestionsScreen, LinkSuggestionsViewModel>();
@@ -145,7 +148,15 @@ public static class DialogsModule
             sp.GetRequiredService<DotCharter.Services.Ai.Match.IStemIsolator>()));
         services.AddScoped<IRocksmithExportScreen, RocksmithExportViewModel>();
         services.AddSingleton<DotCharter.Services.Export.Rocksmith.IRocksmithGameProbe, DotCharter.Services.Export.Rocksmith.RocksmithGameProbe>();
-        services.AddScoped<RocksmithExportServices>();
+        services.AddScoped(sp => new RocksmithExportServices(
+            sp.GetRequiredService<DotCharter.Services.Audio.Coordination.IEditorTransport>(),
+            sp.GetRequiredService<DotCharter.Services.Infrastructure.Documents.IProjectDocumentService>(),
+            sp.GetRequiredService<DotCharter.Tone.Infrastructure.Storage.IFileStorageService>(),
+            sp.GetRequiredService<DotCharter.Tone.Infrastructure.Storage.IExportTargetWriter>(),
+            sp.GetRequiredService<DotCharter.Tone.Infrastructure.Shell.IShellLauncher>(),
+            sp.GetRequiredService<DotCharter.Services.Diagnostics.IMessagePrompt>(),
+            sp.GetRequiredService<DotCharter.Services.Export.Rocksmith.IRocksmithGameProbe>())
+        { Library = sp.GetRequiredService<DotCharter.Services.Library.Index.ILibraryIndex>() });
         services.AddScoped<DcSongExportServices>();
         services.AddScoped<IDcSongExportScreen, DcSongExportViewModel>();
         // The YouTube audio download registers in one place, behind the public-build switch.

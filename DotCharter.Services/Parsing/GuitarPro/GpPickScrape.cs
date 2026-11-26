@@ -1,4 +1,5 @@
 using DotCharter.Services.Editing;
+using DotCharter.Services.Editing.Fingering;
 
 namespace DotCharter.Services.Parsing.GuitarPro;
 
@@ -251,23 +252,52 @@ internal static class GpPickScrape
     }
 
     /// <summary>
+    ///     One import FHP pass the importer queued for an arrangement, run once the
+    ///     file's every track is built (<see cref="RunImportFhpPasses" />), over the
+    ///     score's barlines (the end of the last measure included).
+    /// </summary>
+    public sealed record ImportFhpJob(Arrangement Arrangement, ChartLevel Level,
+        Func<ChordTemplate, bool>? IsAuthored, int LastFret, IReadOnlyList<FractionalPosition> Barlines);
+
+    /// <summary>
+    ///     Runs every queued <see cref="RunImportFhpPass" /> with the song's style: a
+    ///     power chord or octave a track has no majority for follows the file's
+    ///     other tracks on the same instrument (a lead and a rhythm part come from
+    ///     one charter). The styles are read before any pass runs, so the track
+    ///     order does not matter.
+    /// </summary>
+    public static void RunImportFhpPasses(IReadOnlyList<ImportFhpJob> jobs)
+    {
+        ArgumentNullException.ThrowIfNull(jobs);
+        var styles = ImportFhpPass.SongStyles([.. jobs.Select(j => (j.Arrangement, j.IsAuthored))]);
+        for (var i = 0; i < jobs.Count; i++)
+        {
+            var job = jobs[i];
+            RunImportFhpPass(job.Arrangement, job.Level, job.IsAuthored, job.Barlines, job.LastFret, styles[i]);
+        }
+    }
+
+    /// <summary>
     ///     The import's FHP pass with the scrapes set aside: they leave the level,
     ///     <see cref="ImportFhpPass.Run" /> generates the anchors, and each scrape
     ///     comes back placed on the anchor in force at its time (the first anchor
     ///     before any; the capo floor when there is none), on a neck that ends at
     ///     <paramref name="lastFret" /> (see <see cref="LastFret" />). A scrape chord
     ///     then plays a FINGERLESS template of its placed frets (EOF's "fingerless"
-    ///     status: a split scrape is no grip).
+    ///     status: a split scrape is no grip). <paramref name="songStyle" /> is the
+    ///     style the file's other tracks state (<see cref="ImportFhpPass.SongStyles" />).
     /// </summary>
     public static void RunImportFhpPass(Arrangement arrangement, ChartLevel level,
-        Func<ChordTemplate, bool>? isAuthored, int lastFret = GpCapoFrets.MaxAbsoluteFret)
+        Func<ChordTemplate, bool>? isAuthored, IReadOnlyList<FractionalPosition> barlines, int lastFret = GpCapoFrets.MaxAbsoluteFret,
+        ArrangementFingeringStyle? songStyle = null)
     {
         var scrapes = level.Notes.Where(IsScrape).ToList();
         foreach (var scrape in scrapes) level.Notes.Remove(scrape);
         var scrapeChords = level.Chords.Where(IsScrapeChord).ToList();
         foreach (var chord in scrapeChords) level.Chords.Remove(chord);
 
-        ImportFhpPass.Run(arrangement, level, arrangement.ArrangementType == ArrangementType.Bass, isAuthored);
+        ImportFhpPass.Run(arrangement, level, arrangement.ArrangementType == ArrangementType.Bass, barlines,
+            isAuthored, songStyle);
 
         foreach (var scrape in scrapes)
         {

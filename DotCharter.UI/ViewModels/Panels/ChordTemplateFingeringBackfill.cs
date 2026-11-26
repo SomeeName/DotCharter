@@ -80,18 +80,8 @@ internal static class ChordTemplateFingeringBackfill
         // just-built) that still needs one. We can't ask the service to walk
         // the arrangement again because the new templates have not been added
         // yet, so we union them in manually.
-        var existingNeedingFingering = fingeringService.FindTemplatesNeedingFingering(arrangement);
-        foreach (var template in existingNeedingFingering.Concat(newTemplates))
-        {
-            // A pinned grip (authored by hand, or holding ghost gems) is never re-fingered.
-            if (template.IsPinned) continue;
-            var suggestion = fingeringService.SuggestFingeringFor(arrangement, template);
-            if (suggestion == null) continue;
-            actions.Add(new SetTemplateFingersAction(template,
-                new Dictionary<int, int>(template.Fingers),
-                new Dictionary<int, int>(suggestion.Fingers),
-                editor));
-        }
+        actions.AddRange(FingerActions(arrangement, fingeringService, editor, newTemplates, chordIdReassignments,
+            hsIdReassignments));
 
         // Step 3: fill EMPTY names from the pitch-based suggester in the same
         // pass — one click leaves every template fingered AND named. A
@@ -111,5 +101,51 @@ internal static class ChordTemplateFingeringBackfill
             template.Name = NewChordNames.For(arrangement, template.Frets, naming);
 
         return actions;
+    }
+
+    // Step 2's actions: the suggestion for every template that needs one,
+    // or the fingers of the neighbour grip it is part of.
+    private static List<IChartAction> FingerActions(Arrangement arrangement, IFingeringGenerationService fingeringService,
+        ChartEditorViewModel editor, List<ChordTemplate> newTemplates,
+        List<(Chord chord, int oldId, int newId)> chordIdReassignments,
+        List<(HandShape hs, int oldId, int newId)> hsIdReassignments)
+    {
+        var existingNeedingFingering = fingeringService.FindTemplatesNeedingFingering(arrangement);
+        var songStyle = ArrangementFingeringStyle.OfSong(editor.ActiveProject, arrangement);
+        var suggested = new Dictionary<ChordTemplate, IReadOnlyDictionary<int, int>>(ReferenceEqualityComparer.Instance);
+        foreach (var template in existingNeedingFingering.Concat(newTemplates))
+        {
+            // A pinned grip (authored by hand, or holding ghost gems) is never re-fingered.
+            if (template.IsPinned) continue;
+            var suggestion = fingeringService.SuggestFingeringFor(arrangement, template, songStyle);
+            if (suggestion != null) suggested[template] = suggestion.Fingers;
+        }
+
+        // A grip that is part of the grip next to it takes that grip's fingers.
+        var neighbours = NeighbourFingers(arrangement, newTemplates, chordIdReassignments, hsIdReassignments, suggested);
+        return suggested.Select(kv => (IChartAction)new SetTemplateFingersAction(kv.Key,
+            new Dictionary<int, int>(kv.Key.Fingers),
+            new Dictionary<int, int>(neighbours.TryGetValue(kv.Key.Id, out var taken) ? taken : kv.Value),
+            editor)).ToList();
+    }
+
+    // The neighbour fingers (NeighbourGripFingering) for the templates this pass
+    // fingers, read over every level with step 1's repointing already in place.
+    private static Dictionary<int, Dictionary<int, int>> NeighbourFingers(Arrangement arrangement,
+        List<ChordTemplate> newTemplates, List<(Chord chord, int oldId, int newId)> chordIds,
+        List<(HandShape hs, int oldId, int newId)> shapeIds,
+        Dictionary<ChordTemplate, IReadOnlyDictionary<int, int>> suggested)
+    {
+        if (suggested.Count == 0) return [];
+        var chordId = new Dictionary<Chord, int>(ReferenceEqualityComparer.Instance);
+        foreach (var (chord, _, id) in chordIds) chordId[chord] = id;
+        var shapeId = new Dictionary<HandShape, int>(ReferenceEqualityComparer.Instance);
+        foreach (var (shape, _, id) in shapeIds) shapeId[shape] = id;
+        var byId = ChordTemplateResolver.IndexById(arrangement.ChordTemplates.Concat(newTemplates));
+        var sequences = arrangement.Levels.Select(l => (IReadOnlyList<int>)NeighbourGripFingering.GripSequence(l,
+            c => chordId.TryGetValue(c, out var id) ? id : c.TemplateId,
+            h => shapeId.TryGetValue(h, out var id) ? id : h.TemplateId));
+        return NeighbourGripFingering.Plan(sequences, byId, suggested.ContainsKey,
+            t => suggested.TryGetValue(t, out var f) ? f : t.Fingers, Math.Max(0, arrangement.Capo));
     }
 }

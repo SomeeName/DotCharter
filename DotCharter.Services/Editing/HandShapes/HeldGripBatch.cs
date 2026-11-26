@@ -1,8 +1,9 @@
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.State;
 
 namespace DotCharter.Services.Editing.HandShapes;
 
-internal sealed class HeldGripBatch(Arrangement arrangement)
+internal sealed class HeldGripBatch(Arrangement arrangement, ArrangementFingeringStyle? songStyle)
 {
     private readonly List<ChordTemplate> _minted = [];
     private readonly List<ChordTemplate> _resolved = [];
@@ -44,7 +45,7 @@ internal sealed class HeldGripBatch(Arrangement arrangement)
             (t.Fingers.Count > 0 || frets.Values.All(f => f <= arrangement.Capo)));
         if (match == null)
         {
-            var seed = ChordTemplateResolver.SuggestGrip(arrangement, frets);
+            var seed = ChordTemplateResolver.SuggestGrip(arrangement, frets, songStyle: songStyle);
             match = ChordTemplateResolver.ResolveAuthored(arrangement, seed, _minted);
         }
 

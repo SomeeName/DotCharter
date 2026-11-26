@@ -27,6 +27,7 @@ internal sealed class ApplyNotePlacementCommand : IHighwayEditCommand
     private readonly int _previewFret;
     private readonly int _stringIndex;
     private readonly ObservableCollection<HandShape>? _syncedHandShapes;
+    private readonly ChartProject? _project;
     private readonly FractionalPosition _targetPosition;
 
     public ApplyNotePlacementCommand(
@@ -34,6 +35,7 @@ internal sealed class ApplyNotePlacementCommand : IHighwayEditCommand
         ObservableCollection<Chord> placedChords,
         IStrictCollisionService collisionService,
         Arrangement? arrangement,
+        ChartProject? project,
         FractionalPosition targetPosition,
         int stringIndex,
         int previewFret,
@@ -45,6 +47,7 @@ internal sealed class ApplyNotePlacementCommand : IHighwayEditCommand
         _placedChords = placedChords;
         _collisionService = collisionService;
         _arrangement = arrangement;
+        _project = project;
         _targetPosition = targetPosition;
         _stringIndex = stringIndex;
         _previewFret = previewFret;
@@ -171,7 +174,7 @@ internal sealed class ApplyNotePlacementCommand : IHighwayEditCommand
     ///     <c>fret</c> attribute). Both go through
     ///     <see cref="ChordReshapeAction" />.
     /// </summary>
-    private IChartAction BuildReshape(Chord target, Chord oldState, Chord newState) => ChordReshapeAction.Build(_placedChords, _arrangement, target, oldState, newState, _onPostExecute, _syncedHandShapes);
+    private IChartAction BuildReshape(Chord target, Chord oldState, Chord newState) => ChordReshapeAction.Build(_placedChords, _arrangement, _project, target, oldState, newState, _onPostExecute, _syncedHandShapes);
 
     private void AddExistingNotePlacementActions(
         ICollection<IChartAction> actions,

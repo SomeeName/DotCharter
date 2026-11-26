@@ -157,13 +157,13 @@ public sealed class PowerToolReachabilityTests
         Assert.Contains("_chartMaintenance.GenerateHandShapesForArrangement()", vm);
 
         var verb = Read("DotCharter.Services", "Editing", "Maintenance", "ChartMaintenanceService.Generation.cs");
-        Assert.Contains("ArrangementHandShapeGenerator.Plan(arrangement)", verb);
+        Assert.Contains("ArrangementHandShapeGenerator.Plan(arrangement,", verb);
         Assert.Contains("ArrangementHandShapeGenerator.BuildActions(arrangement, plan)", verb);
         Assert.Contains("_historyService.Do(", verb);
 
         // …and the D11 auto-fix drives the same planner.
         var fixer = Read("DotCharter.Services", "Editing", "Fixing", "ArrangementAutoFixService.cs");
-        Assert.Contains("CoverChordsOutsideHandShapes(arrangement)", fixer);
+        Assert.Contains("CoverChordsOutsideHandShapes(arrangement, songStyle)", fixer);
         Assert.Contains("ArrangementHandShapeGenerator.ApplyInPlace(", fixer);
 
         AssertMenuKeyInBothResx("Menu_GenerateHandShapesArrangement");

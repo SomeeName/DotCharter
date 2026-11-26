@@ -1,3 +1,4 @@
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.HandShapes;
 using DotCharter.Services.Parsing.Xml.Song;
 using DotCharter.Services.State;
@@ -54,7 +55,8 @@ public static class GhostGems
         ChartLevel level,
         IReadOnlyCollection<GuitarNote> notes,
         IReadOnlyCollection<Chord> chords,
-        Func<int, bool> inScope)
+        Func<int, bool> inScope,
+        ArrangementFingeringStyle? songStyle = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         ArgumentNullException.ThrowIfNull(level);
@@ -101,7 +103,7 @@ public static class GhostGems
             next.ChordNotes = [.. kept.Select(cn => cn.Clone())];
             var current = arrangement.FindChordTemplate(chord.TemplateId);
             next.TemplateId = ChordTemplateResolver.Resolve(arrangement, ChordTemplateResolver.FretsOf(next),
-                ArpeggioFlavour.Of(current), null, work.Minted).Id;
+                ArpeggioFlavour.Of(current), null, work.Minted, songStyle).Id;
             chordTargets.Add(chord);
             chordNew.Add(next);
         }
@@ -252,7 +254,11 @@ public static class GhostGems
         return opening == null ? AllStrings(template) : OpeningGhostMask(template, opening);
     }
 
-    /// <summary>Indexes pitched onsets for a batch of grip edits.</summary>
+    /// <summary>
+    ///     Indexes pitched onsets for a batch of grip edits: the ghosts a bar without an authored
+    ///     mask shows. A bar covering no pitched onset (only fret-hand-muted strikes, or silence)
+    ///     infers none, the way <see cref="MarkUnplayedHandShapeFrets" /> reads it.
+    /// </summary>
     public static Func<HandShape, ChordTemplate, int> IndexOpeningGhostMasks(ChartLevel level,
         Func<Chord, int, int, int>? projectChordFret = null)
     {
@@ -262,7 +268,7 @@ public static class GhostGems
         {
             var first = Array.BinarySearch(positions, shape.Position);
             if (first < 0) first = ~first;
-            if (first == positions.Length || !shape.Covers(positions[first])) return AllStrings(template);
+            if (first == positions.Length || !shape.Covers(positions[first])) return 0;
             var opening = onsets[positions[first]];
             return OpeningGhostMask(template, projectChordFret == null ? opening : opening.Select(strike =>
                 strike.Source is Chord chord

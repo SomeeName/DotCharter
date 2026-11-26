@@ -97,6 +97,7 @@ public static class ChartProjectRestorer
         // exists to prevent (see ChartProject.UnknownRscpNodes).
         ReconcileValues(live.UnknownRscpNodes, snapshot.UnknownRscpNodes);
         ReconcileValues(live.GpSourceBars, snapshot.GpSourceBars.Select(bar => bar with { }).ToList());
+        ReconcileValues(live.IgnoredFindings, snapshot.IgnoredFindings.Select(finding => finding with { }).ToList());
         RestoreLinkGroups(live, snapshot);
     }
 
@@ -192,6 +193,7 @@ public static class ChartProjectRestorer
         live.PhraseInfos.Clear();
         foreach (var (phraseName, info) in snapshot.PhraseInfos)
             live.PhraseInfos[phraseName] = new PhraseInfo(info.MaxDifficulty, info.Solo);
+        live.AudioCheckSpots = [.. snapshot.AudioCheckSpots];
     }
 
     public static void RestoreLevel(ChartLevel live, ChartLevel snapshot)

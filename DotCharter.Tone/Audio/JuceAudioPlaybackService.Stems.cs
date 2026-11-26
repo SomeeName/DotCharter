@@ -253,7 +253,8 @@ public sealed partial class JuceAudioPlaybackService
         TimeSpan gateHeldAt, releasedAt, openedAt;
         StemSetOpener.Outcome<JuceAudioSource>[] outcomes;
         StemLoadRequest[] candidates;
-        lock (_mediaLoadGate)
+        // The STEM gate, not _mediaLoadGate: the set opens while the song decodes.
+        lock (_stemLoadGate)
         {
             gateHeldAt = total.Elapsed;
             JuceAudioEngine? engine;
@@ -311,110 +312,115 @@ public sealed partial class JuceAudioPlaybackService
                     _logger?.Error(AppLogCategory.Audio, $"Failed to open stem '{req.Name}' from '{req.Path}'.", outcomes[i].Error);
             }
 
-            lock (_gate)
-            {
-                if (!ReferenceEquals(_engine, engine))
+            // The operation gate too: the master's Activate (MediaSourceSwap.Run) runs
+            // under it, not _gate, and also pauses, seeks and plays every source. Now that
+            // no load gate separates the two, without it a set published
+            // mid-activate starts at the position the master just left.
+            lock (_mediaOperationGate)
+                lock (_gate)
                 {
-                    // A device change destroyed the engine we opened against.
-                    // These sources belong to it; publishing them would hand the
-                    // mixer pointers into freed native memory. The OUTGOING set is
-                    // already gone (released above, before the decode) and could not
-                    // have been kept anyway: it belonged to the destroyed engine.
-                    // ReplaceEngineGated's RestoreStemsAfterEngineRebuild is what
-                    // brings the user's stems back on the new engine.
-                    _logger?.Warning(AppLogCategory.Audio,
-                        "Engine was replaced while opening stems; discarding the stale stem sources.");
-                    foreach (var e in opened)
+                    if (!ReferenceEquals(_engine, engine))
                     {
-                        try { e.Source?.Dispose(); } catch { /* ignored */ }
+                        // A device change destroyed the engine we opened against.
+                        // These sources belong to it; publishing them would hand the
+                        // mixer pointers into freed native memory. The OUTGOING set is
+                        // already gone (released above, before the decode) and could not
+                        // have been kept anyway: it belonged to the destroyed engine.
+                        // ReplaceEngineGated's RestoreStemsAfterEngineRebuild is what
+                        // brings the user's stems back on the new engine.
+                        _logger?.Warning(AppLogCategory.Audio,
+                            "Engine was replaced while opening stems; discarding the stale stem sources.");
+                        foreach (var e in opened)
+                        {
+                            try { e.Source?.Dispose(); } catch { /* ignored */ }
+                        }
+                        return;
                     }
-                    return;
-                }
 
-                if (IsStemClearNewerLocked(clearGeneration))
-                {
-                    _logger?.Info(AppLogCategory.Audio, "Stems cleared while opening; discarding the stale set.");
-                    DisposeStemEntries(opened);
-                    return;
-                }
+                    if (IsStemClearNewerLocked(clearGeneration))
+                    {
+                        _logger?.Info(AppLogCategory.Audio, "Stems cleared while opening; discarding the stale set.");
+                        DisposeStemEntries(opened);
+                        return;
+                    }
 
-                // Normally a no-op — the outgoing set was released before the decode.
-                // Kept because _stems is only guaranteed empty on the path THIS call
-                // took: FreeAudioLocked / ClearStems can run against a different
-                // engine while we are unlocked, and publishing over a non-empty
-                // dictionary would drop those sources without un-grouping them.
-                ClearStemsLocked();
+                    // Normally a no-op — the outgoing set was released before the decode.
+                    // Kept because _stems is only guaranteed empty on the path THIS call
+                    // took: FreeAudioLocked / ClearStems can run against a different
+                    // engine while we are unlocked, and publishing over a non-empty
+                    // dictionary would drop those sources without un-grouping them.
+                    ClearStemsLocked();
 
-                // Read at PUBLICATION, not before the decode: the setters skip
-                // the stem group while _stems is empty, so a speed, pitch or pan change
-                // made during the decode would otherwise be overwritten with the old
-                // value. They write the field before taking _gate, so a change racing
-                // this block is either read here or applied by its setter afterwards.
-                var panV = (float)Math.Clamp(_pan, -1.0, 1.0);
-                var pitchV = (float)Math.Clamp(_pitchShift, -24.0, 24.0);
-                var tempoV = (float)(_playbackSpeed <= 0 ? 1.0 : _playbackSpeed);
+                    // Read at PUBLICATION, not before the decode: the setters skip
+                    // the stem group while _stems is empty, so a speed, pitch or pan change
+                    // made during the decode would otherwise be overwritten with the old
+                    // value. They write the field before taking _gate, so a change racing
+                    // this block is either read here or applied by its setter afterwards.
+                    var panV = (float)Math.Clamp(_pan, -1.0, 1.0);
+                    var pitchV = (float)Math.Clamp(_pitchShift, -24.0, 24.0);
+                    var tempoV = (float)(_playbackSpeed <= 0 ? 1.0 : _playbackSpeed);
 
-                foreach (var entry in opened)
-                {
-                    // Route the stem into the engine's shared stem-group bus
-                    // BEFORE setting per-stem tempo/pitch — once grouped, the
-                    // per-source stretcher is bypassed and tempo/pitch flow
-                    // through the shared group stretcher (set below). Both are
-                    // cheap setters, unlike the decode above.
-                    try { entry.Source!.StemGrouped = true; } catch { /* ignored */ }
-                    try { entry.Source!.Pan = panV; } catch { /* ignored */ }
-                    _stems[entry.Name] = entry;
-                }
+                    foreach (var entry in opened)
+                    {
+                        // Route the stem into the engine's shared stem-group bus
+                        // BEFORE setting per-stem tempo/pitch — once grouped, the
+                        // per-source stretcher is bypassed and tempo/pitch flow
+                        // through the shared group stretcher (set below). Both are
+                        // cheap setters, unlike the decode above.
+                        try { entry.Source!.StemGrouped = true; } catch { /* ignored */ }
+                        try { entry.Source!.Pan = panV; } catch { /* ignored */ }
+                        _stems[entry.Name] = entry;
+                    }
 
-                // Apply the current tempo / pitch to the shared stem-group
-                // stretcher so all freshly-loaded stems are in step with the
-                // master playback right away (the stems just joined the bus;
-                // the bus was lazily created on the first StemGrouped=true).
-                if (_stems.Count > 0)
-                {
-                    try { _engine!.StemGroupTempo = tempoV; } catch { /* ignored */ }
-                    try { _engine!.StemGroupPitchSemitones = pitchV; } catch { /* ignored */ }
-                }
+                    // Apply the current tempo / pitch to the shared stem-group
+                    // stretcher so all freshly-loaded stems are in step with the
+                    // master playback right away (the stems just joined the bus;
+                    // the bus was lazily created on the first StemGrouped=true).
+                    if (_stems.Count > 0)
+                    {
+                        try { _engine!.StemGroupTempo = tempoV; } catch { /* ignored */ }
+                        try { _engine!.StemGroupPitchSemitones = pitchV; } catch { /* ignored */ }
+                    }
 
-                // Auto-mute the original mix when stems are present, the stems are
-                // now the user's mix. They can toggle the master back on from the UI.
-                _masterMixMuted = _stems.Count > 0;
-                ApplyGain();
+                    // Auto-mute the original mix when stems are present, the stems are
+                    // now the user's mix. They can toggle the master back on from the UI.
+                    _masterMixMuted = _stems.Count > 0;
+                    ApplyGain();
 
-                // Snap every newly-loaded stem to the current master position
-                // so that when the user starts (or is already) playing, they
-                // are in sample-accurate sync. Stems left at frame 0
-                // until Play() is invoked would hard de-sync if
-                // the transport is paused at e.g. 1:20 or playing mid-song
-                // (the master keeps advancing during the per-stem Seek+Play
-                // loop), and only Stop + Play would recover.
-                var syncPos = _source?.Position ?? TimeSpan.Zero;
-                foreach (var s in _stems.Values)
-                {
-                    try { s.Source?.Seek(syncPos); } catch { /* ignored */ }
-                }
-
-                // If transport is already playing, briefly pause the master so
-                // all sources resume from the same frame, then resume them
-                // together. Without this, the master keeps streaming during
-                // the per-stem Play() loop and the last stem starts measurably
-                // behind the first.
-                if (IsPlaying && _source != null)
-                {
-                    try { _source.Pause(); } catch { /* ignored */ }
-                    var pos = _source.Position;
-                    try { _source.Seek(pos); } catch { /* ignored */ }
+                    // Snap every newly-loaded stem to the current master position
+                    // so that when the user starts (or is already) playing, they
+                    // are in sample-accurate sync. Stems left at frame 0
+                    // until Play() is invoked would hard de-sync if
+                    // the transport is paused at e.g. 1:20 or playing mid-song
+                    // (the master keeps advancing during the per-stem Seek+Play
+                    // loop), and only Stop + Play would recover.
+                    var syncPos = _source?.Position ?? TimeSpan.Zero;
                     foreach (var s in _stems.Values)
                     {
-                        try { s.Source?.Seek(pos); } catch { /* ignored */ }
+                        try { s.Source?.Seek(syncPos); } catch { /* ignored */ }
                     }
-                    try { _source.Play(); } catch { /* ignored */ }
-                    foreach (var s in _stems.Values)
+
+                    // If transport is already playing, briefly pause the master so
+                    // all sources resume from the same frame, then resume them
+                    // together. Without this, the master keeps streaming during
+                    // the per-stem Play() loop and the last stem starts measurably
+                    // behind the first.
+                    if (IsPlaying && _source != null)
                     {
-                        try { s.Source?.Play(); } catch { /* ignored */ }
+                        try { _source.Pause(); } catch { /* ignored */ }
+                        var pos = _source.Position;
+                        try { _source.Seek(pos); } catch { /* ignored */ }
+                        foreach (var s in _stems.Values)
+                        {
+                            try { s.Source?.Seek(pos); } catch { /* ignored */ }
+                        }
+                        try { _source.Play(); } catch { /* ignored */ }
+                        foreach (var s in _stems.Values)
+                        {
+                            try { s.Source?.Play(); } catch { /* ignored */ }
+                        }
                     }
                 }
-            }
         }
         _logger?.Info(AppLogCategory.Audio | AppLogCategory.Performance,
             DescribeStemLoad(candidates, outcomes, engineReadyAt, gateHeldAt, releasedAt, openedAt, total.Elapsed));
@@ -431,7 +437,7 @@ public sealed partial class JuceAudioPlaybackService
     }
 
     /// <summary>
-    ///     The per-step timing line: how long the engine and the media
+    ///     The per-step timing line: how long the engine and the stem
     ///     gate kept the load waiting, then each stem's read and native open, then the
     ///     publish. A slow READ is a cold or slow disk; a slow OPEN is decode + resample.
     /// </summary>
@@ -441,7 +447,7 @@ public sealed partial class JuceAudioPlaybackService
         var perStem = stems.Select((s, i) =>
             $"{s.Name} read {outcomes[i].BytesRead / (1024.0 * 1024.0):0.#} MB in {outcomes[i].ReadTime.TotalMilliseconds:0} ms"
             + $" + open {outcomes[i].OpenTime.TotalMilliseconds:0} ms");
-        return $"Stem load: engine ready at {engineReadyAt.TotalMilliseconds:0} ms, media gate at {gateHeldAt.TotalMilliseconds:0} ms, "
+        return $"Stem load: engine ready at {engineReadyAt.TotalMilliseconds:0} ms, stem gate at {gateHeldAt.TotalMilliseconds:0} ms, "
                + $"outgoing set released at {releasedAt.TotalMilliseconds:0} ms, "
                + $"{stems.Length} stem(s) read + opened in {(openedAt - releasedAt).TotalMilliseconds:0} ms "
                + $"({StemSetOpener.DefaultMaxOpensInFlight} open(s) in flight) [{string.Join("; ", perStem)}], "

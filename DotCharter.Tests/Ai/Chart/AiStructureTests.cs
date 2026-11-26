@@ -111,9 +111,10 @@ public sealed class AiStructureTests
     [Fact]
     public async Task A_section_off_the_bar_line_is_refused_and_asked_once_more_with_the_reason()
     {
+        // Bar 5 (beat 16) carries the "verse" phrase, so the section starts at a phrase (D83).
         var model = new FakeChartModel((_, call) => call == 0
-            ? Reply(Add("section", 2, 3, "chorus"))
-            : Reply(Add("section", 2, null, "chorus")));
+            ? Reply(Add("section", 5, 3, "chorus"))
+            : Reply(Add("section", 5, null, "chorus")));
         var run = Run(model);
 
         var outcome = await Ask(run);
@@ -122,7 +123,7 @@ public sealed class AiStructureTests
         Assert.Contains(AiChartRejectionCodes.OffGrid, model.Prompts[1].Messages[^1].Text);
         Assert.Equal(AiChartRunStatus.Held, outcome.Status);
         var item = Assert.Single(run.Review!.Items);
-        Assert.Equal(new FractionalPosition(4), item.Change.At);
+        Assert.Equal(new FractionalPosition(16), item.Change.At);
     }
 
     [Theory]

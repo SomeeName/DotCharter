@@ -10,6 +10,13 @@
          footer's Apply on the same string of every chord the "Apply to" ladder reaches. A string the chord does
          not play, or one the string-edit mask leaves out, takes no edit. "Copy to N" stages the edited string's
          techniques, its Ignore and its slide (as an interval) on every other played string in the mask. -->
+    <UserControl.Resources>
+        <!-- Closed, a picker shows its choice on up to two lines: two pickers share a row, and a German
+             "Keine Dämpfung" is wider than half a narrow card (#1047). Open, each entry says itself whole. -->
+        <DataTemplate x:Key="WrappedPickerChoice" x:DataType="x:String">
+            <TextBlock Text="{Binding}" TextWrapping="Wrap" MaxLines="2" TextTrimming="None" VerticalAlignment="Center" />
+        </DataTemplate>
+    </UserControl.Resources>
     <StackPanel Spacing="{StaticResource SpaceXs}">
         <TextBlock x:Name="ChordStringHeader" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
                    Text="{Binding Staged.ChordTechnique.Header}" ToolTip.Tip="{Binding Staged.ChordTechnique.Header}" />
@@ -42,25 +49,29 @@
                    FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireWarning}" />
         <StackPanel x:Name="ChordPerStringRows" Spacing="3" IsEnabled="{Binding Staged.ChordTechnique.IsEditable}">
             <UniformGrid Columns="2" ColumnSpacing="{StaticResource SpaceXs}" RowSpacing="3">
-                <ComboBox x:Name="ChordMutePicker" HorizontalAlignment="Stretch" SelectedIndex="{Binding Staged.ChordTechnique.Mute}"
+                <ComboBox x:Name="ChordMutePicker" HorizontalAlignment="Stretch" SelectionBoxItemTemplate="{StaticResource WrappedPickerChoice}"
+                          SelectedIndex="{Binding Staged.ChordTechnique.Mute}"
                           AutomationProperties.Name="{localization:Loc Inspector_Mute}" ToolTip.Tip="{localization:Loc Inspector_Mute}">
                     <ComboBoxItem Content="{localization:Loc Inspector_Staged_NoMute}" />
                     <ComboBoxItem Content="{localization:Loc Inspector_FullMute}" />
                     <ComboBoxItem Content="{localization:Loc Inspector_PalmMute}" />
                 </ComboBox>
-                <ComboBox x:Name="ChordHarmonicPicker" HorizontalAlignment="Stretch" SelectedIndex="{Binding Staged.ChordTechnique.Harmonic}"
+                <ComboBox x:Name="ChordHarmonicPicker" HorizontalAlignment="Stretch" SelectionBoxItemTemplate="{StaticResource WrappedPickerChoice}"
+                          SelectedIndex="{Binding Staged.ChordTechnique.Harmonic}"
                           AutomationProperties.Name="{localization:Loc Inspector_Harmonic}" ToolTip.Tip="{localization:Loc Inspector_Harmonic}">
                     <ComboBoxItem Content="{localization:Loc Inspector_Staged_NoHarmonic}" />
                     <ComboBoxItem Content="{localization:Loc Inspector_Normal}" />
                     <ComboBoxItem Content="{localization:Loc Inspector_Pinch}" />
                 </ComboBox>
-                <ComboBox x:Name="ChordPickingPicker" HorizontalAlignment="Stretch" SelectedIndex="{Binding Staged.ChordTechnique.BassPicking}"
+                <ComboBox x:Name="ChordPickingPicker" HorizontalAlignment="Stretch" SelectionBoxItemTemplate="{StaticResource WrappedPickerChoice}"
+                          SelectedIndex="{Binding Staged.ChordTechnique.BassPicking}"
                           AutomationProperties.Name="{localization:Loc Inspector_Picking}" ToolTip.Tip="{localization:Loc Inspector_Picking}">
                     <ComboBoxItem Content="{localization:Loc Inspector_Staged_NoPopSlap}" />
                     <ComboBoxItem Content="{localization:Loc Inspector_Pop}" />
                     <ComboBoxItem Content="{localization:Loc Inspector_Slap}" />
                 </ComboBox>
-                <ComboBox x:Name="ChordHopoPicker" HorizontalAlignment="Stretch" SelectedIndex="{Binding Staged.ChordTechnique.Hopo}"
+                <ComboBox x:Name="ChordHopoPicker" HorizontalAlignment="Stretch" SelectionBoxItemTemplate="{StaticResource WrappedPickerChoice}"
+                          SelectedIndex="{Binding Staged.ChordTechnique.Hopo}"
                           AutomationProperties.Name="{localization:Loc Inspector_Hopo}" ToolTip.Tip="{localization:Loc Inspector_Hopo}">
                     <ComboBoxItem Content="{localization:Loc Inspector_Staged_NoLegato}" />
                     <ComboBoxItem Content="{localization:Loc Inspector_HammerOn}" />

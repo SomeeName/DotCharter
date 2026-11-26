@@ -1,4 +1,4 @@
-using DotCharter.Services.Editing.ChordShapes;
+﻿using DotCharter.Services.Editing.ChordShapes;
 using ChordNote = DotCharter.Core.Domain.Guitar.ChordNote;
 using DotChord = DotCharter.Core.Domain.Guitar.Chord;
 using GuitarNote = DotCharter.Core.Domain.Guitar.GuitarNote;
@@ -40,9 +40,14 @@ internal sealed class GpLegacyImporter
     /// <inheritdoc cref="_unfolded" />
     private FractionalPosition[] _unfoldedBarStarts = [];
 
+    /// <summary>Every unfolded barline: <see cref="_unfoldedBarStarts" /> and the end of the last bar.</summary>
+    private FractionalPosition[] _unfoldedBarlines = [];
+    private readonly GpLegacySwingOnsets _swing = new();
+
     /// <inheritdoc cref="_unfolded" />
     private List<int>[] _unfoldedByOriginal = [];
     private readonly GpLegacyParseState _state = new();
+    private bool _lastFretNegative;
 
     /// <summary>Most notes plus chords one voice of a track may emit; a test lowers it.</summary>
     internal int MaxNotesPerTrack { get; init; } = GpFormatBounds.MaxNotesPerTrack;
@@ -80,6 +85,10 @@ internal sealed class GpLegacyImporter
     ///     </para>
     /// </summary>
     private readonly HashSet<GuitarNote> _onBeatGraces = [];
+
+    /// <summary>The grace notes of a pre-GP5 file (no flavour byte): their placement is assumed (D110).</summary>
+    private readonly HashSet<GuitarNote> _assumedGraces = [];
+    private readonly HashSet<IGuitarSound> _graceTimingGuesses = [];
 
     /// <summary>
     ///     Import-only side table: note ⇒ the trill's ABSOLUTE upper fret
@@ -126,7 +135,7 @@ internal sealed class GpLegacyImporter
 
     /// <summary>
     ///     The AUTHORED chord NAME of each strum, by position, per TRACK — read
-    ///     off the beat's chord diagram (<see cref="ReadChordDiagram" />) and
+    ///     off the beat's chord diagram (<see cref="GpLegacyChordDiagram.Read" />) and
     ///     handed to <see cref="GpPostProcessor.Run" /> so a new chord template
     ///     keeps the arranger's name instead of <c>ChordNameSuggester</c>'s
     ///     pitch-class guess. Populated from the PLAYABLE voice only.
@@ -176,6 +185,9 @@ internal sealed class GpLegacyImporter
         importResult.Metadata.Tabber = parsed.Tabber;
         var sourceChart = importResult.Metadata.ChordNamingChart();
 
+        // The FHP passes run once every track is built: a track with no power-chord
+        // style of its own follows the file's other tracks on the same instrument.
+        var fhpJobs = new List<GpPickScrape.ImportFhpJob>();
         foreach (var track in _tracks)
         {
             if (!trackIdsToImport.Contains(track.Id)) continue;
@@ -187,12 +199,16 @@ internal sealed class GpLegacyImporter
             if (_settings.PreserveShortRests) GpBeatCarry.MarkStaccatoNotes(level);
             // Preserve GP5's BeforeBeat/OnBeat grace placement in the single-note materializer.
             var naming = NewChordNames.NamingFor(arr, sourceChart);
+            importResult.DroppedNotes[arr] = _state.DroppedNotes(track.Id);
             importResult.SlideInsMaterialized[arr] = GpPostProcessor.Run(level, arr, _settings, _onBeatGraces,
                 authoredFingers: AuthoredFingersFor(track.Id),
                 authoredChordNames: AuthoredChordNamesFor(track.Id), lastFret: GpPickScrape.LastFret(track.Frets),
-                deadSlideSounds: importResult.DeadSlideSounds, naming: naming);
+                deadSlideSounds: importResult.DeadSlideSounds, naming: naming,
+                assumedGraces: _assumedGraces, graceTimingGuesses: _graceTimingGuesses,
+                bars: _swing.TimelineFor(track.Id, _unfoldedBarStarts));
             _state.LetRingByLevel.TryGetValue(level, out var letRingSet);
-            GpHandShapeBuilder.BuildLetRingHandShapes(level, arr, letRingSet, naming: naming);
+            GpHandShapeBuilder.BuildLetRingHandShapes(level, arr, letRingSet, naming: naming,
+                bars: _swing.TimelineFor(track.Id, _unfoldedBarStarts));
             // Clamp the combined chord and let-ring shapes after adding the rings, as gpif does.
             // Otherwise a ring can overlap the next chord shape until save-time spacing repair.
             GpPostProcessor.ClampHandShapes(level);
@@ -203,8 +219,8 @@ internal sealed class GpLegacyImporter
             // 0 — every uncapoed file — is a strict no-op, so this only ever
             // changes output for scores that were already wrong.
             // A pick scrape sits on the anchor in force at its time.
-            GpPickScrape.RunImportFhpPass(arr, level, AuthoredFingersFor(track.Id).IsAuthoredTemplate,
-                GpPickScrape.LastFret(track.Frets));
+            fhpJobs.Add(new GpPickScrape.ImportFhpJob(arr, level, AuthoredFingersFor(track.Id).IsAuthoredTemplate,
+                GpPickScrape.LastFret(track.Frets), _unfoldedBarlines));
             arr.Levels.Add(level);
 
             AttachSidecar(track, arr, importResult.DeadSlideSounds);
@@ -213,6 +229,8 @@ internal sealed class GpLegacyImporter
             importResult.ArrangementsByTrackId[track.Id] = arr;
         }
 
+        GpPickScrape.RunImportFhpPasses(fhpJobs);
+        importResult.GraceTimingGuesses.UnionWith(_graceTimingGuesses);
         return importResult;
     }
 
@@ -222,6 +240,8 @@ internal sealed class GpLegacyImporter
         _measureHeaders.Clear();
         _unfolded = [];
         _unfoldedBarStarts = [];
+        _unfoldedBarlines = [];
+        _swing.Clear();
         _unfoldedByOriginal = [];
         _levelByTrack.Clear();
         _sidecarByTrack.Clear();
@@ -231,6 +251,8 @@ internal sealed class GpLegacyImporter
         _album = "";
         _tabber = "";
         _onBeatGraces.Clear();
+        _assumedGraces.Clear();
+        _graceTimingGuesses.Clear();
         _pendingTrills.Clear();
         _pendingFingers.Clear();
         _authoredFingersByTrack.Clear();
@@ -509,6 +531,7 @@ internal sealed class GpLegacyImporter
             pos += new FractionalPosition(0, new Fraction(mh.Numerator * 4, mh.Denominator));
         }
 
+        _unfoldedBarlines = [.. _unfoldedBarStarts, pos];
         _unfoldedByOriginal = new List<int>[_measureHeaders.Count];
         for (var m = 0; m < _unfoldedByOriginal.Length; m++) _unfoldedByOriginal[m] = [];
         for (var u = 0; u < _unfolded.Count; u++) _unfoldedByOriginal[_unfolded[u].OriginalIndex].Add(u);
@@ -594,6 +617,7 @@ internal sealed class GpLegacyImporter
             // is emitted.)
             var slots = _unfoldedByOriginal[measureIdx];
             var measureStart = slots.Count > 0 ? _unfoldedBarStarts[slots[0]] : FractionalPosition.Zero;
+            _swing.BeginMeasure();
 
             for (var trackIdx = 0; trackIdx < _tracks.Count; trackIdx++)
             {
@@ -624,7 +648,7 @@ internal sealed class GpLegacyImporter
                     }
                     if (pending != null) GpLegacyBeatTiming.Emit(pending, null, mh.TripletFeel, EmitBeat);
 
-                    ReplayMeasureOnLaterPasses(slots, measureStart, beat.Notes, beat.Chords, notesFrom, chordsFrom);
+                    ReplayMeasureOnLaterPasses(track.Id, slots, measureStart, beat.Notes, beat.Chords, notesFrom, chordsFrom);
                 }
 
                 // GP5 sentinel byte after each (measure, track) block, except the very last one in the file.
@@ -647,7 +671,7 @@ internal sealed class GpLegacyImporter
     ///         when a tie crosses a repeat boundary.
     ///     </para>
     /// </summary>
-    private void ReplayMeasureOnLaterPasses(List<int> slots, FractionalPosition measureStart,
+    private void ReplayMeasureOnLaterPasses(int trackId, List<int> slots, FractionalPosition measureStart,
         IList<GuitarNote> notesOut, IList<DotChord> chordsOut, int notesFrom, int chordsFrom)
     {
         if (slots.Count < 2) return;
@@ -664,11 +688,13 @@ internal sealed class GpLegacyImporter
         for (var pass = 1; pass < slots.Count; pass++)
         {
             var delta = _unfoldedBarStarts[slots[pass]] - measureStart;
+            _swing.Replay(trackId, delta, _unfoldedBarStarts);
 
             for (var n = notesFrom; n < notesTo; n++)
             {
                 var copy = notesOut[n].Clone();
                 if (_onBeatGraces.Contains(notesOut[n])) _onBeatGraces.Add(copy);
+                if (_assumedGraces.Contains(notesOut[n])) _assumedGraces.Add(copy);
                 copy.Position += delta;
                 notesOut.Add(copy);
             }
@@ -695,7 +721,7 @@ internal sealed class GpLegacyImporter
         if (isRest) reader.ReadByte(); // rest type
 
         var sustain = ReadBeatDuration(reader, bitmask);
-        var chordDiagramName = (bitmask & 0x02) != 0 ? ReadChordDiagram(reader, beat.Track.StringCount) : null;
+        var chordDiagramName = (bitmask & 0x02) != 0 ? GpLegacyChordDiagram.Read(reader, beat.Track.StringCount) : null;
         var beatText = (bitmask & 0x04) != 0 ? reader.ReadStringInt() : null;
         var effects = (bitmask & 0x08) != 0 ? ReadBeatEffects(reader) : default;
         if ((bitmask & 0x10) != 0) ReadMixTableTempo(reader, beat, result);
@@ -723,6 +749,9 @@ internal sealed class GpLegacyImporter
     {
         var notesOnBeat = timed.Notes;
         var technique = timed.Technique;
+        // Every playable beat, rests too: a strum's written end maps onto the swung onset of
+        // the beat written there, which is often a rest.
+        if (beat.IsPlayable) _swing.Record(beat.Track.Id, beat.Position, timed.Context.Position, _unfoldedBarStarts);
         if (notesOnBeat.Count == 0) return;
 
         foreach (var entry in notesOnBeat) PlaceBeatNote(beat, entry, sustain, timed.Effects);
@@ -733,7 +762,10 @@ internal sealed class GpLegacyImporter
         // voices get no hand shapes, matching the gpif sidecar passes.
         var beatLetRing = notesOnBeat.Any(e => _state.PendingLetRingNotes.Contains(e.Note));
         foreach (var e in notesOnBeat) _state.PendingLetRingNotes.Remove(e.Note);
-        if (beatLetRing && beat.IsPlayable) _state.GetLetRingSet(beat.Level).Add(beat.Position);
+        if (beatLetRing && beat.IsPlayable)
+        {
+            _state.GetLetRingSet(beat.Level).Add(beat.Position);
+        }
 
         if (notesOnBeat.Count == 1)
             EmitBeatNote(beat, notesOnBeat[0].Note, sustain, technique, timed.Duration);
@@ -829,7 +861,7 @@ internal sealed class GpLegacyImporter
             // strings advance the stream without emitting notes.
             var stringIndex = track.StringCount - stringNo;
             var note = ReadNote(reader, stringIndex, track.Capo);
-            if (stringNo <= track.StringCount && keep)
+            if (keep && !_state.DropsNote(track.Id, stringNo > track.StringCount || _lastFretNegative))
             {
                 notesOnBeat.Add((stringIndex, note));
                 _state.TrackReadNote(track.Id, voice, note);
@@ -848,7 +880,8 @@ internal sealed class GpLegacyImporter
         var note = entry.Note;
         note.Position = beat.Position;
         note.StringIndex = entry.StringIndex;
-        note.Sustain = new FractionalPosition(0, sustain);
+        // A staccato is a strike; its written value stays on NotationDuration.
+        note.Sustain = _state.StaccatoNotes.Remove(note) ? FractionalPosition.Zero : new FractionalPosition(0, sustain);
         // GP's beat-level tap (string-effect type 1) is RIGHT-hand
         // tapping — the same technique gpif spells as the note property
         // `Tapped`, which GpNoteParser maps to HopoType.Tap. Importing it
@@ -952,7 +985,7 @@ internal sealed class GpLegacyImporter
         // Grace ornaments must be consumed BEFORE the strum joins the
         // output list — the placement scan below looks for the last sound
         // already emitted on each string and the target itself is not one.
-        ApplyChordGraces(chord, notesOnBeat, beat.Notes, beat.Chords, _onBeatGraces);
+        ApplyChordGraces(chord, notesOnBeat, beat.Notes, beat.Chords, _onBeatGraces, _assumedGraces, _graceTimingGuesses);
         _state.ObserveBendChord(beat.Track.Id, beat.Voice, chord, struck);
         beat.Chords.Add(chord);
 
@@ -1006,12 +1039,16 @@ internal sealed class GpLegacyImporter
     /// chord is appended here. Must NOT yet contain <paramref name="chord"/>.</param>
     /// <param name="onBeatGraces">The notes whose grace ornament was authored
     /// ON-beat (GP5 grace flag bit <c>0x02</c>), by reference identity.</param>
+    /// <param name="assumedGraces">The grace notes of a pre-GP5 file, whose placement the tab does not state.</param>
+    /// <param name="timingGuesses">Receives the chord notes a placed, assumed grace moved (D110).</param>
     private static void ApplyChordGraces(DotChord chord,
         List<(int StringIndex, GuitarNote Note)> notesOnBeat,
         IList<GuitarNote> notesOut, IList<DotChord> chordsOut,
-        IReadOnlySet<GuitarNote> onBeatGraces)
+        IReadOnlySet<GuitarNote> onBeatGraces, IReadOnlySet<GuitarNote> assumedGraces,
+        ISet<IGuitarSound> timingGuesses)
     {
         List<(int Fret, ChordNote Target)>? pairs = null;
+        var assumed = false;
         var beforeBeat = true;
 
         foreach (var entry in notesOnBeat)
@@ -1040,6 +1077,7 @@ internal sealed class GpLegacyImporter
                 // format: any on-beat member makes the whole strum's ornament
                 // on-beat, so the origin chord stays a single sound.
                 if (onBeatGraces.Contains(entry.Note)) beforeBeat = false;
+                assumed |= assumedGraces.Contains(entry.Note);
             }
             else
             {
@@ -1084,7 +1122,10 @@ internal sealed class GpLegacyImporter
         chordsOut.Add(graceChord);
         chord.Position += place.TargetShift;
         foreach (var cn in chord.ChordNotes)
+        {
             cn.Sustain = GpPostProcessor.ShortenSustain(cn.Sustain, place.TargetShift);
+            GpAudioCheck.NoteGraceTiming(timingGuesses, !assumed, cn);
+        }
     }
 
     /// <summary>
@@ -1179,6 +1220,7 @@ internal sealed class GpLegacyImporter
 
         var fret = 0;
         if ((bitmask & 0x20) != 0) fret = reader.ReadSByte();
+        _lastFretNegative = fret < 0;
 
         int? authoredFinger = null;
         if ((bitmask & 0x80) != 0)
@@ -1269,6 +1311,10 @@ internal sealed class GpLegacyImporter
                 var graceFlags = reader.ReadByte();
                 if ((graceFlags & 0x02) != 0) _onBeatGraces.Add(note);
             }
+            else
+            {
+                _assumedGraces.Add(note);
+            }
 
             // A slide grace ("sl.") becomes a real note that slides into the
             // target downstream (EOF gp_import gracetrans==1). Every version
@@ -1307,16 +1353,12 @@ internal sealed class GpLegacyImporter
                 if (trillFret >= 0) _pendingTrills[note] = trillFret;
             }
             if ((fx2 & 0x40) != 0) note.Vibrato = true;
-            // GP's authored STACCATO. Rocksmith has no staccato mark, so the
-            // ACCENT is this codebase's staccato articulation — playback shortens
-            // exactly the accented notes (JuceAudioPlaybackService's note-end
-            // rule) — and the bit was parsed and thrown away, so an arranger's
-            // staccato reached nothing at all. Ungated, like every other accent on
-            // both readers: the note header's own accent bits above and gpif's
-            // <Accent> element are both read with no setting in front of them, and
-            // a rule applied on one tab path only is what the legacy-vs-gpif
-            // parity rule forbids.
-            if ((fx2 & 0x01) != 0) note.Accent = true;
+            // GP's authored STACCATO (alphaTab's Gp3To5Importer.readNoteEffects:
+            // note-effects-2 bit 0x01, flag-only). It imports as a STRIKE — sustain 0
+            // at placement, and NO accent: the accents are the note header's
+            // 0x40 / 0x02 above. Ungated, as gpif's <Accent> staccato bit is: a rule
+            // on one tab path only is what the legacy-vs-gpif parity rule forbids.
+            if ((fx2 & 0x01) != 0) _state.StaccatoNotes.Add(note);
             if ((fx2 & 0x02) != 0 && !pickScrape) note.Mute = MuteType.Palm;
         }
     }
@@ -1434,54 +1476,6 @@ internal sealed class GpLegacyImporter
         return newTempo;
     }
 
-    /// <summary>
-    ///     Consumes the beat's chord diagram block and returns the arranger's
-    ///     chord NAME (null when the diagram carries none).
-    ///     <para>
-    ///     It is not a <c>SkipChordDiagram</c> — a skip would only keep the
-    ///     beat stream in sync, so the name would be read and dropped on
-    ///     the floor and <see cref="ChordHandShapeBuilder" /> would rename every
-    ///     imported chord from <c>ChordNameSuggester</c>'s pitch-class guess. The
-    ///     byte layout is the one whose 5-byte
-    ///     name→base-fret gap, read as 4, desyncs the whole beat stream.
-    ///     </para>
-    /// </summary>
-    private string? ReadChordDiagram(GpLegacyBinaryReader reader, int stringCount)
-    {
-        string? name;
-        var format = reader.ReadByte();
-        if (format == 0)
-        {
-            // Old (GP3-style) diagram: name + base fret, then — only when the
-            // base fret is non-zero — one fret int per TRACK string (EOF's
-            // gp_import.c reads string-count ints, not a fixed 6).
-            name = reader.ReadStringInt();
-            var firstFret = reader.ReadInt32();
-            if (firstFret != 0)
-                for (var s = 0; s < Math.Clamp(stringCount, 1, 7); s++) reader.ReadInt32();
-        }
-        else
-        {
-            // GP4/GP5 "new format": 106 bytes total following the format byte
-            // (107 including it) — the layout EOF's gp_import.c:3071-3181 and
-            // Charter's GP5FileReader.readVersion500Chord both consume. The
-            // 5-byte gap after the name (2 unknown + tonality of the fifth/
-            // ninth/eleventh) must be skipped as 5: skipping it as 4 desyncs the beat
-            // stream by one byte at every chord diagram.
-            reader.Skip(16);                  // sharp flag, root, type, extension, bass, tonality
-            name = reader.ReadStringByte(21); // chord name (1 length byte + 20 chars)
-            reader.Skip(5);                   // 2 unknown + fifth/ninth/eleventh tonality
-            reader.ReadInt32();               // base fret
-            reader.Skip(7 * 4);               // fret per string
-            reader.Skip(16);                  // barre count + 5 barre frets/starts/stops
-            reader.Skip(8);                   // 7 interval/omission bytes + 1 unknown
-            reader.Skip(7);                   // fingering per string
-            reader.ReadByte();                // display-fingering flag
-        }
-
-        return GpAuthoredChordNames.Normalize(name);
-    }
-
     private static int PreviousPowerOfTwo(int n) => GpLegacyNoteEffectsHelpers.PreviousPowerOfTwo(n);
 
     private NotationVoice GetOrCreateSidecar(int trackId, int voiceSlot)
@@ -1491,31 +1485,11 @@ internal sealed class GpLegacyImporter
         return sidecar;
     }
 
-    /// <summary>
-    ///     Attaches the track's collected GP5 second-voice sidecar (if any) to the
-    ///     arrangement. It gets the NOTATION-relevant passes only — tied-beat merge
-    ///     (which sums the authored <see cref="GuitarNote.NotationDuration"/>) and
-    ///     slide linking — but NEVER <see cref="GpPostProcessor.AdjustSustains"/>:
-    ///     the sidecar keeps its authored rhythm verbatim, exactly like the gpif
-    ///     voices-2-4 path.
-    /// </summary>
+    // The second-voice sidecar gets the notation-only passes: see GpSidecarFinish.
     private void AttachSidecar(TrackHeader track, Arrangement arr, ISet<IGuitarSound> deadSlideSounds)
     {
-        if (!_sidecarByTrack.TryGetValue(track.Id, out var sidecar)) return;
-        if (sidecar.Notes.Count == 0 && sidecar.Chords.Count == 0) return;
-
-        var shim = new ChartLevel();
-        foreach (var n in sidecar.Notes) shim.Notes.Add(n);
-        foreach (var c in sidecar.Chords) shim.Chords.Add(c);
-        GpPostProcessor.MergeTiedNotes(shim, arr.StringCount);
-        GpDeadNoteSlide.Resolve(shim, arr.Capo, GpPickScrape.LastFret(track.Frets), deadSlideSounds);
-        GpPostProcessor.LinkSlides(shim, arr.StringCount);
-        sidecar.Notes.Clear();
-        foreach (var n in shim.Notes) sidecar.Notes.Add(n);
-        sidecar.Chords.Clear();
-        foreach (var c in shim.Chords) sidecar.Chords.Add(c);
-
-        arr.NotationVoices.Add(sidecar);
+        if (_sidecarByTrack.TryGetValue(track.Id, out var sidecar))
+            GpSidecarFinish.Attach(sidecar, arr, GpPickScrape.LastFret(track.Frets), deadSlideSounds);
     }
 
     private Arrangement BuildArrangement(TrackHeader track, ChartLevel _)

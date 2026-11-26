@@ -132,10 +132,18 @@ internal sealed class RsPackageArrangement
     /// </summary>
     public bool DemotedToAlternate { get; set; }
 
+    /// <summary>
+    ///     Ships an Alternate or Bonus arrangement as Main in this package alone (the standard
+    ///     package's lone stock arrangement on a path whose Main is extended and left out), so the
+    ///     path still has its Main in game. Set before <see cref="Properties" /> is first read.
+    /// </summary>
+    public bool PromotedToMain { get; set; }
+
     private ArrangementProperties Resolve(Arrangement domain)
     {
         var properties = ArrangementPropertiesDeriver.Derive(domain);
         if (DemotedToAlternate) properties.Represent = 0;
+        if (PromotedToMain) (properties.Represent, properties.BonusArr) = (1, 0);
         return properties;
     }
 
@@ -174,5 +182,5 @@ internal sealed class RsPackageArrangement
     }
 
     public bool IsRepresentative =>
-        Domain is { Subtype: ArrangementSubtype.Main } && !DemotedToAlternate;
+        (Domain is { Subtype: ArrangementSubtype.Main } && !DemotedToAlternate) || PromotedToMain;
 }

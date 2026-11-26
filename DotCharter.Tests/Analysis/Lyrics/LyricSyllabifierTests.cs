@@ -132,6 +132,31 @@ public sealed class LyricSyllabifierTests
         Assert.Null(LyricSheetSyllabifier.DetectLanguage(LyricSheetParser.Parse("Mizu tamari ni ashi wo tsukkonde sora ga aoi")));
     }
 
+    /// <summary>#921: a word-initial y before a vowel is a consonant (the glide of "you"), never a syllable of its own.</summary>
+    [Theory]
+    [InlineData("you", "you")]
+    [InlineData("You", "You")]
+    [InlineData("your", "your")]
+    [InlineData("yours", "yours")]
+    [InlineData("young", "young")]
+    [InlineData("you'd", "you'd")]
+    [InlineData("you’re", "you’re")]
+    [InlineData("yellow", "yel-low")]
+    [InlineData("beyond", "be-yond")]
+    [InlineData("yesterday", "yes-ter-day")]
+    [InlineData("happy", "hap-py")]
+    public void A_glide_y_is_not_a_syllable(string word, string expected) => Assert.Equal(expected, Joined(word, SyllableLanguage.English));
+
+    /// <summary>#921: only the LAST syllable of a split line-final word ends the line (<c>to- geth- er+</c>).</summary>
+    [Fact]
+    public void A_split_line_final_word_ends_the_line_only_on_its_last_syllable()
+    {
+        var sheet = LyricSheetSyllabifier.Apply(LyricSheetParser.Parse("we stay together\nhello water"), SyllableLanguage.English);
+
+        Assert.Equal(["we", "stay", "to-", "geth-", "er", "hel-", "lo", "wa-", "ter"], Display(sheet));
+        Assert.Equal([false, false, false, false, true, false, false, false, true], sheet.Syllables.Select(s => s.EndsLine));
+    }
+
     private static string Joined(string word, SyllableLanguage language) => string.Join('-', LyricSyllabifier.Split(word, language));
 
     private static IEnumerable<string> Display(LyricSheet sheet) => sheet.Syllables.Select(s => s.Text + (s.ContinuesWord ? "-" : ""));

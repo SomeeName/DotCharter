@@ -1,4 +1,5 @@
 using DotCharter.Core.Linking;
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.Tracks;
 using DotCharter.Services.State;
 
@@ -21,7 +22,8 @@ internal static class LetRingHandShapes
         var existing = level.HandShapes.Where(h => h.Position < end && h.EndPosition > start && h.Position < h.EndPosition)
             .OrderBy(h => h.Position).ToArray();
         var onsets = strikes.Where(s => s.Position.IsWithin(start, end)).GroupBy(s => s.Position).OrderBy(g => g.Key);
-        var grips = new HeldGripBatch(track.Arrangement);
+        var grips = new HeldGripBatch(track.Arrangement,
+            ArrangementFingeringStyle.OfSong(track.Project, track.Arrangement));
         var pass = new ShapePass(grips, track.Beats, ChartSpacingEnforcer.SpacingGapOf(config));
         Build(pass, onsets, selection, existing, start, end);
 

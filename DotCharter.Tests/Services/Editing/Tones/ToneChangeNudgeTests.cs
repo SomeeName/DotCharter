@@ -3,8 +3,9 @@ using DotCharter.Services.Editing.Tones;
 namespace DotCharter.Tests.Services.Editing.Tones;
 
 /// <summary>
-///     #759: the I30 fix moves a tone change on a note ONE 16th note earlier, measured on the beat grid
-///     (a quarter of a 4/4 beat, half of a 6/8 beat, the previous beat's own meter once it reaches back
+///     #759: the I30 fix moves a tone change on a note ONE 32nd note earlier (it was a 16th until the
+///     charting conventions asked for about a 32nd), measured on the beat grid (an eighth of a 4/4 beat, a
+///     quarter of a 6/8 beat, the previous beat's own meter once it reaches back
 ///     over a beat line), or not at all when a guard stops it. One undo step; the warning is gone after it.
 /// </summary>
 public sealed class ToneChangeNudgeTests
@@ -29,7 +30,7 @@ public sealed class ToneChangeNudgeTests
             .Count(i => i.Type == ArrangementIssueType.ToneChangeOnNote);
 
     [Fact]
-    public void In44At120Bpm_TheChangeMovesAQuarterBeat_TheWarningGoes_AndUndoBringsItBack()
+    public void In44At120Bpm_TheChangeMovesAnEighthBeat_TheWarningGoes_AndUndoBringsItBack()
     {
         var beats = Beats(500, 4);
         var arr = WithChangeOnNote(new FractionalPosition(2));
@@ -37,11 +38,11 @@ public sealed class ToneChangeNudgeTests
 
         var nudge = ToneChangeNudge.For(arr, beats, 1000)!;
         Assert.True(nudge.CanApply);
-        Assert.Equal(new FractionalPosition(1, new Fraction(3, 4)), nudge.To);
+        Assert.Equal(new FractionalPosition(1, new Fraction(7, 8)), nudge.To);
 
         var history = new HistoryService(new FakeAppLogger());
         history.Do(nudge.Action()!);
-        Assert.Equal(875.0, arr.ToneChanges[0].Position.GetPositionMs(beats), 3);
+        Assert.Equal(937.5, arr.ToneChanges[0].Position.GetPositionMs(beats), 3);
         Assert.Equal(0, I30Count(arr, beats));
 
         history.Undo();
@@ -50,15 +51,15 @@ public sealed class ToneChangeNudgeTests
     }
 
     [Fact]
-    public void In68_TheChangeMovesHalfAnEighthNoteBeat()
+    public void In68_TheChangeMovesAQuarterOfAnEighthNoteBeat()
     {
         var beats = Beats(400, 8);
         var arr = WithChangeOnNote(new FractionalPosition(3));
 
         var nudge = ToneChangeNudge.For(arr, beats, 1200)!;
 
-        Assert.Equal(new FractionalPosition(2, new Fraction(1, 2)), nudge.To);
-        Assert.Equal(1000.0, nudge.To.GetPositionMs(beats), 3);
+        Assert.Equal(new FractionalPosition(2, new Fraction(3, 4)), nudge.To);
+        Assert.Equal(1100.0, nudge.To.GetPositionMs(beats), 3);
         nudge.Action()!.Execute();
         Assert.Equal(0, I30Count(arr, beats));
     }
@@ -69,29 +70,32 @@ public sealed class ToneChangeNudgeTests
         var beats = Beats(500, 4);
         beats[1].NoteDenominator = 8;
 
-        Assert.Equal(new FractionalPosition(1, new Fraction(1, 2)),
-            ToneChangeNudge.SixteenthEarlier(new FractionalPosition(2), beats));
-        Assert.Equal(new FractionalPosition(2, new Fraction(1, 8)),
-            ToneChangeNudge.SixteenthEarlier(new FractionalPosition(2, new Fraction(3, 8)), beats));
+        Assert.Equal(new FractionalPosition(1, new Fraction(3, 4)),
+            ToneChangeNudge.ThirtySecondEarlier(new FractionalPosition(2), beats));
+        Assert.Equal(new FractionalPosition(2, new Fraction(1, 4)),
+            ToneChangeNudge.ThirtySecondEarlier(new FractionalPosition(2, new Fraction(3, 8)), beats));
+        // A 64th on beat 2 (4/4), the other 64th on beat 1 (6/8): an eighth of that beat.
+        Assert.Equal(new FractionalPosition(1, new Fraction(7, 8)),
+            ToneChangeNudge.ThirtySecondEarlier(new FractionalPosition(2, new Fraction(1, 16)), beats));
     }
 
     [Fact]
-    public void AChangeLessThanA16thAfterTheFirstBeat_IsBlocked()
+    public void AChangeLessThanA32ndAfterTheFirstBeat_IsBlocked()
     {
         var beats = Beats(500, 4);
-        var arr = WithChangeOnNote(new FractionalPosition(0, new Fraction(1, 8)));
+        var arr = WithChangeOnNote(new FractionalPosition(0, new Fraction(1, 16)));
 
-        var nudge = ToneChangeNudge.For(arr, beats, 62.5)!;
+        var nudge = ToneChangeNudge.For(arr, beats, 31.25)!;
 
         Assert.Equal(ToneChangeNudgeBlock.ChartStart, nudge.Block);
         Assert.Null(nudge.Action());
     }
 
     [Fact]
-    public void APreviousToneChangeInsideThe16th_OrExactlyThere_IsNeverStacked()
+    public void APreviousToneChangeInsideThe32nd_OrExactlyThere_IsNeverStacked()
     {
         var beats = Beats(500, 4);
-        foreach (var previous in new[] { new FractionalPosition(1, new Fraction(3, 4)), new FractionalPosition(1, new Fraction(7, 8)) })
+        foreach (var previous in new[] { new FractionalPosition(1, new Fraction(7, 8)), new FractionalPosition(1, new Fraction(15, 16)) })
         {
             var arr = WithChangeOnNote(new FractionalPosition(2));
             arr.ToneChanges.Insert(0, new ToneChange { Position = previous, ToneName = "clean" });
@@ -104,11 +108,11 @@ public sealed class ToneChangeNudgeTests
     }
 
     [Fact]
-    public void AnEarlierPhraseStartInsideThe16th_Blocks_ButAChangeOnAPhraseStartMayMoveBeforeIt()
+    public void AnEarlierPhraseStartInsideThe32nd_Blocks_ButAChangeOnAPhraseStartMayMoveBeforeIt()
     {
         var beats = Beats(500, 4);
         var crossing = WithChangeOnNote(new FractionalPosition(2));
-        crossing.EventPoints.Add(new EventPoint { Position = new FractionalPosition(1, new Fraction(7, 8)), Phrase = "verse" });
+        crossing.EventPoints.Add(new EventPoint { Position = new FractionalPosition(1, new Fraction(15, 16)), Phrase = "verse" });
         Assert.Equal(ToneChangeNudgeBlock.PhraseStart, ToneChangeNudge.For(crossing, beats, 1000)!.Block);
 
         var onStart = WithChangeOnNote(new FractionalPosition(2));
@@ -117,11 +121,11 @@ public sealed class ToneChangeNudgeTests
     }
 
     [Fact]
-    public void ANoteA16thEarlier_Blocks_BecauseTheWarningWouldMoveToIt()
+    public void ANoteA32ndEarlier_Blocks_BecauseTheWarningWouldMoveToIt()
     {
         var beats = Beats(500, 4);
         var arr = WithChangeOnNote(new FractionalPosition(2));
-        arr.Levels[0].Notes.Insert(0, new GuitarNote { Position = new FractionalPosition(1, new Fraction(3, 4)), Fret = 3 });
+        arr.Levels[0].Notes.Insert(0, new GuitarNote { Position = new FractionalPosition(1, new Fraction(7, 8)), Fret = 3 });
 
         Assert.Equal(ToneChangeNudgeBlock.Note, ToneChangeNudge.For(arr, beats, 1000)!.Block);
     }
@@ -151,10 +155,10 @@ public sealed class ToneChangeNudgeTests
     [Fact]
     public void ANoteTheWarningWouldMatchAtTheLandingSpot_Blocks()
     {
-        // The move lands on 875 ms; a note at 876.25 ms rounds within I30's slop, so it would be flagged.
+        // The move lands on 937.5 ms; a note at 938.75 ms rounds within I30's slop, so it would be flagged.
         var beats = Beats(500, 4);
         var arr = WithChangeOnNote(new FractionalPosition(2));
-        arr.Levels[0].Notes.Insert(0, new GuitarNote { Position = new FractionalPosition(1, new Fraction(301, 400)), Fret = 3 });
+        arr.Levels[0].Notes.Insert(0, new GuitarNote { Position = new FractionalPosition(1, new Fraction(351, 400)), Fret = 3 });
 
         Assert.Equal(ToneChangeNudgeBlock.Note, ToneChangeNudge.For(arr, beats, 1000)!.Block);
     }
@@ -175,20 +179,20 @@ public sealed class ToneChangeNudgeTests
     [Fact]
     public void BeforeTheFirstBeat_TheLeadInGridIsUsed_AndOnlyTimeZeroBlocks()
     {
-        // First beat at 1000 ms: a change an eighth of a beat after it moves back over the first beat
+        // First beat at 1000 ms: a change a sixteenth of a beat after it moves back over the first beat
         // onto the lead-in extrapolated from the first interval.
         var beats = Beats(500, 4, firstMs: 1000);
-        var arr = WithChangeOnNote(new FractionalPosition(0, new Fraction(1, 8)));
+        var arr = WithChangeOnNote(new FractionalPosition(0, new Fraction(1, 16)));
 
-        var nudge = ToneChangeNudge.For(arr, beats, 1062.5)!;
+        var nudge = ToneChangeNudge.For(arr, beats, 1031.25)!;
 
         Assert.True(nudge.CanApply);
-        Assert.Equal(937.5, nudge.To.GetPositionMs(beats), 3);
+        Assert.Equal(968.75, nudge.To.GetPositionMs(beats), 3);
         nudge.Action()!.Execute();
         Assert.Equal(0, I30Count(arr, beats));
 
-        var early = Beats(500, 4, firstMs: 100);
+        var early = Beats(500, 4, firstMs: 50);
         var onFirst = WithChangeOnNote(new FractionalPosition(0));
-        Assert.Equal(ToneChangeNudgeBlock.ChartStart, ToneChangeNudge.For(onFirst, early, 100)!.Block);
+        Assert.Equal(ToneChangeNudgeBlock.ChartStart, ToneChangeNudge.For(onFirst, early, 50)!.Block);
     }
 }

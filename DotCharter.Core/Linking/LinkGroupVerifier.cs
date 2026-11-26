@@ -9,7 +9,7 @@ public enum LinkLoadReason
     ContentChanged,
 
     /// <summary>The placement does not span whole measures, names no arrangement, overlaps another
-    /// placement, or its arrangement cannot hold a link.</summary>
+    /// placement of its group or partly overlaps another group's, or its arrangement cannot hold a link.</summary>
     PlacementInvalid
 }
 
@@ -35,7 +35,7 @@ public static class LinkGroupVerifier
         ArgumentNullException.ThrowIfNull(storedHashes);
         var notices = new List<LinkLoadNotice>();
         var indexes = new Dictionary<(Arrangement, string), MeasureContentIndex>();
-        var claimed = new Dictionary<Arrangement, List<LinkPlacement>>();
+        var claimed = new Dictionary<Arrangement, List<(LinkPlacement Placement, LinkGroup Group)>>();
 
         foreach (var group in project.LinkGroups.ToList())
         {
@@ -90,7 +90,8 @@ public static class LinkGroupVerifier
 
     private static string HashOf(string canonical) => new MeasureContentKey(canonical, 0).Hash;
 
-    private static int DropInvalid(ChartProject project, LinkGroup group, Dictionary<Arrangement, List<LinkPlacement>> claimed)
+    private static int DropInvalid(ChartProject project, LinkGroup group,
+        Dictionary<Arrangement, List<(LinkPlacement Placement, LinkGroup Group)>> claimed)
     {
         var dropped = 0;
         foreach (var placement in group.Placements.ToList())
@@ -99,8 +100,9 @@ public static class LinkGroupVerifier
             if (ok)
             {
                 if (!claimed.TryGetValue(placement.Arrangement!, out var taken)) claimed[placement.Arrangement!] = taken = [];
-                ok = !taken.Any(t => t.Position < placement.EndPosition && placement.Position < t.EndPosition);
-                if (ok) taken.Add(placement);
+                ok = !taken.Any(t => LinkRuns.Conflict(t.Placement.Position, t.Placement.EndPosition, placement.Position,
+                    placement.EndPosition, ReferenceEquals(t.Group, group)));
+                if (ok) taken.Add((placement, group));
             }
 
             if (ok) continue;

@@ -1,7 +1,7 @@
 # DotCharter.UI Agent Guide
 
-Avalonia 12.1.6 app project and composition root (`App.axaml.cs` builds DI);
-Dock packages use 12.1.5. Versions are pinned in `../Directory.Packages.props`.
+Avalonia 12.2.0 app project and composition root (`App.axaml.cs` builds DI);
+Dock packages use 12.2.0. Versions are pinned in `../Directory.Packages.props`.
 
 This file holds the hard rules, the folder map and ONE routing table. The
 per-area reference lives under `docs/agents/ui/` as plain links (not imports, so

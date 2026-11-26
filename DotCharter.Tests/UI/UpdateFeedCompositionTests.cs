@@ -23,7 +23,7 @@ public sealed class UpdateFeedCompositionTests
         services.AddSingleton<IAppLogger>(new FakeAppLogger());
         using var provider = services.BuildServiceProvider();
         var service = Assert.IsType<GitHubUpdateService>(provider.GetRequiredService<IAppUpdateService>());
-        Assert.Equal("1.4.4", service.CurrentVersionText);
+        Assert.Equal("1.5.0", service.CurrentVersionText);
         return service.Feed;
     }
 

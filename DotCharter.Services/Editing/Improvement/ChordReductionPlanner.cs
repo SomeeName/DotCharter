@@ -1,3 +1,5 @@
+using DotCharter.Services.Editing.Fingering;
+
 namespace DotCharter.Services.Editing.Improvement;
 
 /// <summary>
@@ -22,7 +24,7 @@ namespace DotCharter.Services.Editing.Improvement;
 ///         SHARED). Mints are collected in <see cref="Created" /> for the caller to add.
 ///     </para>
 /// </summary>
-internal sealed class ChordReductionPlanner(Arrangement arrangement)
+internal sealed class ChordReductionPlanner(Arrangement arrangement, ArrangementFingeringStyle? songStyle)
 {
     /// <summary>
     ///     <c>JoinDepth[size - 2][position - 1]</c>: the depth (0 = easiest level, 1 = hardest) from
@@ -87,7 +89,7 @@ internal sealed class ChordReductionPlanner(Arrangement arrangement)
         if (!_resolved.TryGetValue(key, out var template))
         {
             _byId.TryGetValue(chord.TemplateId, out var source);
-            template = ChordTemplateResolver.ResolveReduced(arrangement, source, frets, Created);
+            template = ChordTemplateResolver.ResolveReduced(arrangement, source, frets, Created, songStyle);
             _resolved[key] = template;
         }
 

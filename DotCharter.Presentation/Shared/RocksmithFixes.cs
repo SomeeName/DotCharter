@@ -29,7 +29,7 @@ public sealed class RocksmithFixes(
 {
     /// <summary>A verb exists for the finding and its arrangement can be named unambiguously.</summary>
     public bool CanFix(ExportValidationFinding finding) =>
-        (finding.Fix == ExportFixKind.GenerateShowlights && state.ActiveProject != null) ||
+        (finding.Fix is ExportFixKind.GenerateShowlights or ExportFixKind.TrimMetadataSpaces or ExportFixKind.AssignUniqueDlcKey && state.ActiveProject != null) ||
         RepairFor(finding) != null ||
         (finding.Fix != ExportFixKind.None && ArrangementNamed(state.ActiveProject, finding.ArrangementName) != null);
 
@@ -40,6 +40,8 @@ public sealed class RocksmithFixes(
         return finding.Fix switch
         {
             ExportFixKind.GenerateShowlights => localization["Export_FixTip_Showlights"],
+            ExportFixKind.TrimMetadataSpaces => localization["Export_FixTip_MetadataSpaces"],
+            ExportFixKind.AssignUniqueDlcKey => localization.Format("Export_FixTip_UniqueDlcKey", ProposedKey(finding)),
             ExportFixKind.CreateToneDefinitions => localization.Format("Export_FixTip_DefineTones", finding.ArrangementName),
             ExportFixKind.AutoFix => localization.Format("Export_FixTip_AutoFix", finding.ArrangementName),
             ExportFixKind.FillFhp => localization.Format("Export_FixTip_FillFhp", finding.ArrangementName),
@@ -61,6 +63,18 @@ public sealed class RocksmithFixes(
         if (finding.Fix == ExportFixKind.GenerateShowlights)
         {
             maintenance.GenerateShowlights();
+            return;
+        }
+
+        if (finding.Fix == ExportFixKind.TrimMetadataSpaces)
+        {
+            maintenance.TrimMetadataSpaces();
+            return;
+        }
+
+        if (finding.Fix == ExportFixKind.AssignUniqueDlcKey)
+        {
+            maintenance.AssignDlcKey(ProposedKey(finding));
             return;
         }
 
@@ -88,6 +102,9 @@ public sealed class RocksmithFixes(
             logger.Error(AppLogCategory.Project, "The tone designer could not open.", ex);
         }
     }
+
+    /// <summary>The key a clash finding proposes: the second half of its "clashing|proposed" detail.</summary>
+    private static string ProposedKey(ExportValidationFinding finding) => finding.Detail.Split('|').ElementAtOrDefault(1) ?? "";
 
     /// <summary>The rename that repairs an undefined-tone finding, when the project leaves no doubt.</summary>
     private ToneKeyRepairProposal? RepairFor(ExportValidationFinding finding) =>

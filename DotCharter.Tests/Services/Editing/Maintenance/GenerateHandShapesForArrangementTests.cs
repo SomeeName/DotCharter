@@ -62,7 +62,10 @@ public sealed class GenerateHandShapesForArrangementTests
         Assert.Same(authored, arrangement.Levels[0].HandShapes[0]);
         Assert.Equal(new FractionalPosition(1), authored.EndPosition);
         Assert.Single(arrangement.Levels[1].HandShapes); // the strum pair shares one bar
-        Assert.Equal(2, arrangement.ChordTemplates.Count); // G5 minted once for both levels, A5
+        // G5 minted once for both levels, A5, and the blank-name G5 twin the strum pair's second chord plays
+        // ("name only the first chord of a hand shape", on by default): one extra template, undone with the rest.
+        Assert.Equal(3, arrangement.ChordTemplates.Count);
+        Assert.Single(arrangement.ChordTemplates, t => string.IsNullOrEmpty(t.Name));
         // Every chord a new bar holds now names its template; the one under the
         // authored bar was not this verb's to touch.
         var underAuthored = arrangement.Levels[0].Chords[0];

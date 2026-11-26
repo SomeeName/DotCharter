@@ -15,10 +15,12 @@ internal static class DlcBuilderProjectFile
     /// <summary>
     ///     The project for <paramref name="snapshot" />, whose <c>ArrangementFiles</c> manifest the bundle
     ///     writer has already refreshed. The audio and cover art are named relative to
-    ///     <paramref name="directory" /> when they sit inside it, absolute otherwise.
+    ///     <paramref name="directory" /> when they sit inside it, absolute otherwise. The low bass tuning fix
+    ///     (<paramref name="fixLowBassTuning" />) is the one the bundle's XML was written with, and
+    ///     <paramref name="edition" /> is which of the chart's projects (<see cref="Rs2DlcEditions.For" />) this is.
     /// </summary>
     public static Rs2DlcProjectDto Build(AppConfig config, ChartProject snapshot, string directory, string? audioPath,
-        string? coverArtPath, double? audioLengthMs)
+        string? coverArtPath, double? audioLengthMs, bool fixLowBassTuning, Rs2DlcEdition edition)
     {
         var dto = Rs2DlcProjectBuilder.Build(snapshot, new Rs2DlcProjectBuilder.Rs2DlcBuildOptions(
             AudioFileName: RelativeToProject(directory, audioPath),
@@ -26,7 +28,9 @@ internal static class DlcBuilderProjectFile
             AudioLengthMs: audioLengthMs,
             FallbackCharter: config.DefaultCharterName,
             IncludeVocals: VocalsExportPolicy.IncludeVocals(config),
-            SixStringProjection: config.RsXmlSixStringProjection));
+            SixStringProjection: config.RsXmlSixStringProjection,
+            FixLowBassTuning: fixLowBassTuning,
+            Edition: edition));
         if (!File.Exists(Path.Combine(directory, dto.AudioPreviewFile.Path))) dto.AudioPreviewFile.Path = "";
         return dto;
     }

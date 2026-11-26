@@ -10,8 +10,9 @@ namespace DotCharter.Services.Editing.Fixing;
 /// </summary>
 public interface IArrangementAutoFixService
 {
-    /// <summary>Runs every fixer over one arrangement, accumulating per-fixer change counts.</summary>
-    void Fix(Arrangement arrangement, ArrangementFixResult result);
+    /// <summary>Runs every fixer over one arrangement, accumulating per-fixer change counts. A template
+    /// the fixers mint follows the song-wide 1-3 / 1-4 style of <paramref name="project" /> (null: its own arrangement only).</summary>
+    void Fix(Arrangement arrangement, ArrangementFixResult result, ChartProject? project = null);
 }
 
 /// <summary>

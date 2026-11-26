@@ -36,10 +36,15 @@ namespace DotCharter.Tone.Audio;
 public sealed partial class JuceAudioPlaybackService
 {
     private const double DeviceWatchdogIntervalMs = 3000;
+    // While the device is lost the watchdog checks once a second, so a replug
+    // is noticed right away. The rebuild attempts themselves stay rare:
+    // the counts below are in these one-second probes, so a failed attempt backs
+    // off for 15 s and a dead engine with no hot-plug evidence retries every 30 s.
+    private const double LostDeviceWatchdogIntervalMs = 1000;
 
     private readonly Timer _watchdogTimer;
-    private readonly AudioDeviceRecoveryStateMachine _recovery = new(debounceTicks: 2, cooldownTicks: 5);
-    private readonly AudioCallbackStallDetector _callbackStall = new();
+    private readonly AudioDeviceRecoveryStateMachine _recovery = new(debounceTicks: 2, cooldownTicks: 15, deadRetryTicks: 30);
+    private readonly AudioDeviceProbeBuilder _probe;
 
     // Last config handed to ApplyAudioConfiguration — the recovery target.
     private volatile RigConfig? _watchdogConfig;
@@ -49,11 +54,7 @@ public sealed partial class JuceAudioPlaybackService
     // Reentrancy guard: System.Timers.Timer fires on the thread pool and a
     // recovery attempt (full engine rebuild) can easily outlast one interval.
     private int _watchdogBusy;
-    private string? _outputTopologySignature;
     private volatile bool _deviceLost;
-    // Ticks since the last full device enumeration while healthy. 0 means "scan
-    // on the next tick", which is what a return to health leaves behind.
-    private int _healthyTickIndex;
 
     /// <summary>
     /// Bounded wait for an in-flight <see cref="WatchdogTick"/> to leave the
@@ -107,7 +108,7 @@ public sealed partial class JuceAudioPlaybackService
             switch (_recovery.Tick(probe))
             {
                 case AudioDeviceRecoveryAction.ReportLost:
-                    HandleDeviceLost(cfg);
+                    DeclareDeviceLost(cfg);
                     break;
                 case AudioDeviceRecoveryAction.AttemptRecovery:
                     AttemptDeviceRecovery(cfg);
@@ -121,7 +122,46 @@ public sealed partial class JuceAudioPlaybackService
         finally
         {
             Interlocked.Exchange(ref _watchdogBusy, 0);
+            FollowRecoveryStateWithTheWatchdogInterval();
         }
+    }
+
+    /// <summary>How often the watchdog checks the device in each recovery state:
+    /// every 3 s while healthy, every second while the device is lost.</summary>
+    internal static double WatchdogIntervalFor(AudioDeviceRecoveryState state) =>
+        state == AudioDeviceRecoveryState.Healthy ? DeviceWatchdogIntervalMs : LostDeviceWatchdogIntervalMs;
+
+    private void FollowRecoveryStateWithTheWatchdogInterval()
+    {
+        var wanted = WatchdogIntervalFor(_recovery.State);
+        try
+        {
+            // Setting the interval restarts the timer, so only set it when it changes.
+            if (_watchdogTimer.Interval != wanted) _watchdogTimer.Interval = wanted;
+        }
+        catch (ObjectDisposedException)
+        {
+            // Dispose stopped the timer while this tick ran; there is nothing left to pace.
+        }
+    }
+
+    /// <summary>
+    /// Called by the health monitor's thread when <paramref name="engine"/>
+    /// reported its device closed and it stayed silent. Marks that engine
+    /// dead and runs a watchdog check right away on the thread pool, so the loss
+    /// is declared about a second after the unplug instead of after the stall
+    /// heartbeat. Ignored for an engine that is not the current one, and while a
+    /// settings apply or rebuild is running (those close the device on purpose).
+    /// When a check is already running, the mark stays and the next one sees it.
+    /// </summary>
+    private void OnEngineReportedDeviceClosed(JuceAudioEngine engine)
+    {
+        if (IsDisposing || !ReferenceEquals(engine, _engine)) return;
+        if (Volatile.Read(ref _configApplyDepth) > 0) return;
+        _probe.MarkDeviceClosed(engine);
+        _logger?.Warning(AppLogCategory.Audio,
+            "Audio device watchdog: the engine reported its device closed and no audio callback followed; checking the device now.");
+        ThreadPool.UnsafeQueueUserWorkItem(static service => service.WatchdogTick(), this, preferLocal: false);
     }
 
     private static (string BareName, JuceDriver Driver) DesiredOutputDevice(RigConfig cfg)
@@ -135,138 +175,51 @@ public sealed partial class JuceAudioPlaybackService
         return (name ?? string.Empty, driver);
     }
 
-    /// <summary>
-    /// How often a HEALTHY watchdog tick still pays for a full device
-    /// enumeration. Every 10th tick at the 3 s interval = twice a minute
-    /// instead of twenty times.
-    /// </summary>
-    internal const int HealthyEnumerationEveryNTicks = 10;
-
-    /// <summary>
-    /// Whether this tick needs the (expensive) live device enumeration.
-    /// <para>
-    /// `InitializeAsync` explains why this is not free: the startup device probe
-    /// was REMOVED because "an ASIO scan costs several hundred ms" and because
-    /// holding ASIO driver references from a scan made the real engine's ASIO
-    /// open fail with "No such device". The watchdog then re-introduced exactly
-    /// that scan, on a pool thread, twenty times a minute, for the life of the
-    /// process.
-    /// </para>
-    /// <para>
-    /// It is only genuinely NEEDED when something is already off: the engine is
-    /// dead, or it is parked on a fallback device and we are watching for the
-    /// configured one to reappear, or the recovery state machine is mid-flight.
-    /// While the engine is alive AND bound to the configured device, the cheap
-    /// liveness signal (`engine.SampleRate > 0`, one P/Invoke) is what actually
-    /// catches an unplug — JUCE closes the device and the rate drops to 0 — so
-    /// the enumeration is thinned rather than dropped: it still runs
-    /// periodically, which keeps the narrow "endpoint vanished but JUCE has not
-    /// noticed yet" case detectable, just a few ticks later.
-    /// </para>
-    /// Pure so it can be unit-tested without a device.
-    /// </summary>
-    internal static bool ShouldEnumerateDevices(
-        AudioDeviceRecoveryState state, bool engineAlive, bool engineOnDesiredDevice, int healthyTickIndex)
-    {
-        if (state != AudioDeviceRecoveryState.Healthy) return true;
-        if (!engineAlive || !engineOnDesiredDevice) return true;
-        return healthyTickIndex % HealthyEnumerationEveryNTicks == 0;
-    }
-
     private AudioDeviceProbe BuildDeviceProbe(RigConfig cfg)
     {
         var (desired, driver) = DesiredOutputDevice(cfg);
-
-        var engine = _engine;
-        var engineAlive = false;
-        if (engine != null)
-        {
-            // 0 means JUCE dropped/closed the device out from under us. A
-            // driver that just stops calling back (an unplugged ASIO interface)
-            // keeps the cached rate, so a render clock that stopped advancing
-            // counts as dead too.
-            var clockValid = engine.TryGetRenderClock(out var renderFrames, out _);
-            var stalled = _callbackStall.Observe(engine, clockValid, renderFrames);
-            engineAlive = engine.SampleRate > 0 && !stalled;
-            if (stalled && _recovery.State == AudioDeviceRecoveryState.Healthy)
-            {
-                _logger?.Warning(AppLogCategory.Audio,
-                    "Audio device watchdog: the audio callback has not run for " +
-                    $"{AudioCallbackStallDetector.StalledTicksBeforeDead * DeviceWatchdogIntervalMs / 1000:0} s; treating the device as lost.");
-            }
-        }
-        else
-        {
-            _callbackStall.Observe(null, clockValid: false, 0);
-        }
-
-        var active = _activeEngineConfig;
-        var onDesired = engineAlive
-            && active != null
-            && active.PreferredDriver == driver
-            && (string.IsNullOrEmpty(desired)
-                || string.Equals(active.OutputDeviceId, desired, StringComparison.OrdinalIgnoreCase));
-
-        if (!ShouldEnumerateDevices(_recovery.State, engineAlive, onDesired, _healthyTickIndex))
-        {
-            _healthyTickIndex++;
-            // Skipping the scan means asserting what the open device already
-            // proves: JUCE is holding the configured device, so it is present.
-            // No enumeration ⇒ no topology delta to report either, and
-            // `_outputTopologySignature` is deliberately left untouched so the
-            // next real scan still compares against the last one we saw.
-            return new AudioDeviceProbe(
-                DesiredDevicePresent: true, engineAlive, onDesired, TopologyChanged: false);
-        }
-        _healthyTickIndex = 1; // this tick paid for the scan; count from the next one
-
-        IReadOnlyList<JuceAudioDevice> outs;
-        try
-        {
-            outs = engine != null
-                ? engine.EnumerateOutputDevicesLive()
-                : JuceAudioEngine.EnumerateOutputDevices();
-        }
-        catch (ObjectDisposedException) { throw; }
-        catch { outs = Array.Empty<JuceAudioDevice>(); }
-
-        var present = string.IsNullOrEmpty(desired)
-            // No name saved = "driver default": any device of that driver counts.
-            ? outs.Any(d => d.Driver == driver)
-            : outs.Any(d => d.Driver == driver
-                            && string.Equals(d.Name, desired, StringComparison.OrdinalIgnoreCase));
-
-        var signature = BuildTopologySignature(outs);
-        var topologyChanged = !string.Equals(signature, _outputTopologySignature, StringComparison.Ordinal);
-        _outputTopologySignature = signature;
-
-        return new AudioDeviceProbe(present, engineAlive, onDesired, topologyChanged);
+        return _probe.Build(_engine, _activeEngineConfig, desired, driver, _recovery.State);
     }
 
-    private static string BuildTopologySignature(IReadOnlyList<JuceAudioDevice> devices)
+    /// <summary>Budget for a rebuilt engine's first callbacks before a recovery counts as failed.</summary>
+    private const int RecoveryCallbackBudgetMs = 2000;
+
+    private bool NewEngineCallsBack()
     {
-        if (devices.Count == 0) return string.Empty;
-        return string.Join("\n", devices
-            .Select(d => $"{(int)d.Driver}|{d.Name}")
-            .OrderBy(s => s, StringComparer.Ordinal));
+        var engine = _engine;
+        if (engine == null) return false;
+        return AudioCallbackStallDetector.WaitForCallbackProgress(
+            () => (engine.TryGetRenderClock(out var frames, out _), frames),
+            () => Environment.TickCount64,
+            Thread.Sleep,
+            RecoveryCallbackBudgetMs,
+            pollMs: 20);
     }
 
-    private void HandleDeviceLost(RigConfig cfg)
+    /// <summary>
+    /// The device is gone: stop the transport clock, tell the UI, then pause the
+    /// native sources. The managed transport stops FIRST because pausing a
+    /// source whose device has stopped calling back waits for a callback that never
+    /// comes (JUCE's transport stop polls for up to a second per source), and a
+    /// running transport clock extrapolates the playhead with no audio clock
+    /// behind it, which the user sees as lag and jitter. The loaded song stays loaded;
+    /// ReplaceEngine brings it back on recovery.
+    /// </summary>
+    internal void DeclareDeviceLost(RigConfig cfg)
     {
         _deviceLost = true;
         var (desired, driver) = DesiredOutputDevice(cfg);
         _logger?.Warning(AppLogCategory.Audio,
             $"Audio device lost (driver={driver}, output='{desired}'). " +
             "Playback paused; the engine will be restarted automatically when the device returns.");
-        // Stop the transport + flush hanging MIDI notes so the app stays
-        // fully usable while the device is gone. The loaded song remains
-        // loaded — ReplaceEngine rehydrates it on recovery.
-        try { Pause(); } catch { /* ignored */ }
+        StopTransportClock();
         try { DeviceLost?.Invoke(this, EventArgs.Empty); }
         catch (Exception ex)
         {
             _logger?.Warning(AppLogCategory.Audio, "DeviceLost subscriber threw", ex);
         }
+        // Then the native sources and the hanging MIDI notes.
+        try { Pause(); } catch { /* ignored */ }
     }
 
     private void AttemptDeviceRecovery(RigConfig cfg)
@@ -276,13 +229,21 @@ public sealed partial class JuceAudioPlaybackService
             $"Audio device watchdog: '{desired}' ({driver}) is available again — restarting the engine with the saved configuration.");
 
         var recovered = false;
+        var started = Environment.TickCount64;
         try
         {
             // Full replace on purpose: the in-place reconfigure path can
-            // no-op against a dead device (JUCE sees no setup delta).
-            ApplyAudioConfiguration(cfg, forceEngineReplace: true);
+            // no-op against a dead device (JUCE sees no setup delta). The
+            // channel counts come from the last healthy apply: rescanning
+            // every driver through a dead engine is slow and tells us nothing new.
+            ApplyAudioConfiguration(cfg, forceEngineReplace: true, reuseRememberedChannelCounts: true);
+            _logger?.Info(AppLogCategory.Audio,
+                $"Audio device watchdog: the engine rebuild took {Environment.TickCount64 - started} ms.");
             var probe = BuildDeviceProbe(cfg);
-            recovered = probe.EngineAlive && probe.EngineOnDesiredDevice;
+            // A fresh engine is never "stalled" on its first probe, so the
+            // probe alone would call a driver that opened but never calls back
+            // (hardware still unplugged) a recovery. Require the callback to run.
+            recovered = probe.EngineAlive && probe.EngineOnDesiredDevice && NewEngineCallsBack();
         }
         catch (Exception ex)
         {

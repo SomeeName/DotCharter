@@ -362,7 +362,11 @@ take bounded work and retain the correct pitch class.
   finger crossing → position-dependent spread. `ChordTemplateFingerSetterTests`
   lints every shape of up to four fretted strings for fret-order crossings;
   string order is NOT linted, because the open D (`xx0232` → 1·3·2, 707 chords,
-  10 songs) puts the ring finger between index and middle.
+  10 songs) puts the ring finger between index and middle. That grip is the ONE
+  catalogue entry tied to a position (#1010): it applies only while the lowest
+  fretted note is at or below the 13th fret (the corpus plays it 1·3·2 there);
+  above it the heuristic barres the outer pair (`14 15 14` → 1·2·1). Every
+  other entry is a movable barre form, right at any position.
 - **Seven shapes take a LEARNED fingering before the heuristic (#502) —
   `Utilities/LearnedChordFingerings` over the generated
   `LearnedChordFingeringData.cs`.** Still a function of the shape alone: the key
@@ -423,6 +427,20 @@ take bounded work and retain the correct pitch class.
   (520 of 4,449 train pair chords lost under `halves`, and a loss on holdout too); a strict majority rather than
   2 : 1 (train has 5 narrow-majority templates and all 5 follow it; holdout's one
   mixed arrangement, 2 + 2 templates split by fret, goes the other way).
+- **A grip that is part of its neighbour takes the neighbour's fingers**
+  (`Services/Editing/Fingering/NeighbourGripFingering`): every string it names
+  sits on the same fret in the grip played just before or after it (chords and
+  hand shapes in time order, repeats collapsed) and the neighbour names more
+  strings, so `14 16 x 16` beside a ring-barred `14 16 16 16` is `1 3 x 3`, not
+  ring + pinky. Several qualify: most strings, then most often met, then
+  earliest. Only a FREE grip changes (never an authored or pinned one). Wired
+  into `ImportFhpPass` (after the follower, on a template of its own) and the
+  chord panel's Generate fingerings (in place of the suggestion); measured by
+  `tools/chart-eval` after the follower (`CE_NO_NEIGHBOUR=1` turns it off):
+  guitar fingering after FHP holdout 91.33 → 91.45 %, train 85.02 → 85.02 %,
+  FHP unmoved. **Rejected on the data:** an index barre for `f f+1 f` on three
+  adjacent strings (`1 2 1`): the reference charts finger it `1 3 2` 7 times
+  out of 9.
 - **GHOST GEMS live in a hand shape's GRIP, never in a note (#785).**
   `ChordTemplate.GhostMask` is EOF's per-note ghost bitmask (`song.h:200`, bit n =
   string n, our numbering): strings the hand holds at the opening (frets and
@@ -544,7 +562,16 @@ take bounded work and retain the correct pitch class.
   Ph.D., also split over syllables or followed by 's or a hyphen, and titles such
   as Mr. stay allowed), and a syllable holding a space between words (several
   words or a whole line in one syllable). It never guesses syllable boundaries
-  inside a word.
+  inside a word. `LyricTextRule` adds, on the same lines (`LyricStyleRule.CheckAll`
+  is what the tab and the report run): non-plain characters (curly quotes, long
+  dashes, the ellipsis sign, emoji and other symbols, `# * @ ~ | _ < > [ ] { } \ ^` and the backtick;
+  letters of every script, Japanese kana/kanji and 、。「」 included, are plain), a
+  line of a cased script outside 3-7 words, any line over 40 characters, a whole
+  word on one note the English syllabifier breaks into 2+ syllables (ASCII words
+  only), and a `(` backing vocal in the first vocal track. `LyricStyleFix` is the
+  Fix (one undo step, recomputed on the live project, never automatic):
+  capitalise, strip the stray marks, plain characters, or split a long line
+  (`SetLyricPhraseEndAction`) at the word that best halves it.
   `D14` (`DifficultyLevelCount`, `DifficultyLevelRule`) is a dynamic-difficulty
   Warning from the community charting guides, per arrangement and only when it
   has 2 or more levels (a one-level chart has no authored ladder; the export
@@ -590,6 +617,33 @@ take bounded work and retain the correct pitch class.
   thirds, not half. The finding names the first section of that label as
   written and the count, asks the charter to check the label fits (a strophic
   song is fine) and jumps to that section.
+  `D20`–`D25` (`ToneConventionRule`) are the charting conventions for tones, all
+  warnings over the tones the arrangement USES (its slots and tone changes): a
+  change before the first note (`ToneChangeBeforeFirstNote`, belongs in the
+  starting tone), exactly one change (`SingleToneChange`), a body whose Name
+  differs from its Key (`ToneNameKeyMismatch`), a body without an Amp or
+  Cabinet or with more than `MaxEffects` (4) pedals and racks (`ToneGearContent`;
+  an empty or unreadable body is D04's), two keys under one Name or one name in
+  two of slots A–D (`DuplicateToneName`), and a change to the tone already on,
+  starting from `StartingTone`/`ToneBase` (`RepeatedTone`). `D26`
+  (`CustomTuningRule`) warns once when the tuning is none of
+  `ArrangementSettingsEdit.TuningPresets` (the picker's own `PresetFromOffsets`;
+  an RS-XML bass's six tuning entries are cut to its string count first).
+  A 5-/6-string bass ships on the Bass path, never relabelled at export: it is
+  always an RS Extended Range arrangement, whose package ties the SNXR instrument
+  to the manifest path (the package reader refuses a bass chart on Rhythm). The
+  classic Bonus Rhythm convention is an AUTHORED arrangement (type Rhythm,
+  subtype Bonus, bass tuning; `ArrangementInstrument.IsBassPart`). Pinned by
+  `Export/ExtendedBassRouteTests`.
+  `D70` (`HarmonicVibrato`) and `D71` (`UnpitchedSlideOneFret`) are
+  `TechniqueCombinationRule`'s warnings: vibrato on a harmonic (a note, or a
+  chord once, on its first such string), and an unpitched slide spanning exactly
+  one fret (a slide that ends on its start fret is E01). D70 has a Fix
+  (`HarmonicVibratoFix`, one undo step: clears vibrato and its strength on the
+  harmonic sounds only); D71 has none, since the charter may want a longer slide
+  or none. A note that is both fret-hand muted and palm muted cannot exist:
+  `MuteType` holds one value, so there is no finding. Imports choose one on their
+  own (the RS XML reader keeps the fret-hand mute, Guitar Pro the palm mute).
   Several string formats (tuning names, `EventPoint.Events`, tuning aliases) are
   "compatible with rscharter" — treat them as an external contract.
 

@@ -401,6 +401,20 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
         => Task.Run(() => Align(lyricsText, audioPath, options ?? LyricSyncOptions.Default,
             status, cancellationToken), cancellationToken);
 
+    private static string FoldLookAlikes(string? lyricsText, out int foldedWords) => LyricHomoglyphs.Fold(lyricsText ?? "", out foldedWords);
+
+    /// <summary>
+    ///     The sheet held Cyrillic/Greek look-alikes inside Latin words (lyric sites add them); they are
+    ///     aligned and written as Latin, and the charter is told so.
+    /// </summary>
+    private void ReportFoldedWords(int foldedWords, List<string> warnings, IProgress<string>? progress)
+    {
+        if (foldedWords == 0) return;
+        var notice = _localization.Plural("Progress_LyricHomoglyphsFolded_One", "Progress_LyricHomoglyphsFolded_Many", foldedWords);
+        warnings.Add(notice);
+        progress?.Report(notice);
+    }
+
     private static LyricSheet ParseSheet(string lyricsText, LyricSyncOptions options)
     {
         var sheet = LyricSheetParser.Parse(lyricsText);
@@ -426,10 +440,12 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
             return LyricSyncResult.Failed("no-audio");
         if (!IsModelInstalled) return LyricSyncResult.Failed("no-model");
 
-        var sheet = ParseSheet(lyricsText, options);
+        var sheet = ParseSheet(FoldLookAlikes(lyricsText, out var foldedWords), options);
         if (sheet.Syllables.Count == 0) return LyricSyncResult.Failed("no-lyrics");
 
         var warnings = new List<string>(options.StemWarnings);
+        ReportFoldedWords(foldedWords, warnings, progress);
+
         foreach (var warning in warnings) _logger?.Warning(AppLogCategory.Audio, warning);
 
         // Prefer a vocal stem that ALREADY exists (see the class summary for the
@@ -816,6 +832,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
             phrase.EndPosition = phrase.Lyrics[^1].EndPosition;
 
         LyricPhraseSpacing.CloseGaps(phrases, beats, spacingConfig, options.SpanWordEndToNextWord);
+        LyricMinimumTiming.Apply(phrases, beats);
         return phrases;
     }
 

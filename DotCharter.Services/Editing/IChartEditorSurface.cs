@@ -10,6 +10,9 @@ namespace DotCharter.Services.Editing;
 /// </summary>
 public interface IChartEditorSurface
 {
+    /// <summary>The open project, or null: what a song-wide reading (the fingering style) spans.</summary>
+    ChartProject? ActiveProject { get; }
+
     Arrangement? ActiveArrangement { get; }
     ObservableCollection<GuitarNote> PlacedNotes { get; }
     ObservableCollection<Chord> PlacedChords { get; }

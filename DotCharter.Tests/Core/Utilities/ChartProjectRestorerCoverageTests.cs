@@ -218,6 +218,11 @@ public sealed class ChartProjectRestorerCoverageTests
             if (underlying == typeof(Fraction)) return new Fraction(1 + seed, 16);
             if (underlying == typeof(FractionalPosition))
                 return new FractionalPosition(3 + seed, new Fraction(1 + seed, 16));
+            if (underlying == typeof(AudioCheckSpot))
+                return new AudioCheckSpot(new FractionalPosition(3 + seed, new Fraction(1 + seed, 16)), AudioCheckReason.TempoFromTab);
+            // An immutable record: a fresh instance per seed, its three strings distinct.
+            if (underlying == typeof(IgnoredFinding))
+                return new IgnoredFinding($"{path}.Code#{seed}", $"{path}.Message#{seed}", $"{path}.Subject#{seed}");
             if (underlying.IsEnum)
             {
                 // Anything but the default, so a restorer that never assigns is caught.

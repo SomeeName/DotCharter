@@ -161,6 +161,7 @@ public class RscpArrangementParser
         ParsePhraseIterations(arrNode, arr);
         ParseArrangementProperties(arrNode, arr);
         arr.Provenance = RscpProvenance.Parse(arrNode.Element(RscpProvenance.ArrangementElement)?.Value);
+        RscpAudioCheck.Read(arrNode, arr);
 
         var templates = ParseChordTemplates(arrNode, stc);
         foreach (var t in templates) arr.ChordTemplates.Add(t);

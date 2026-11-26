@@ -126,6 +126,26 @@ public sealed partial class JuceAudioPlaybackService
 
     public IReadOnlyList<Midi.MidiOutputDeviceInfo> GetMidiOutputDevices() => Midi.WinMMMidiOutput.EnumerateDevices();
 
+    private readonly DeviceChannelCountMemory _channelCountMemory = new();
+
+    /// <summary>
+    /// A device's channel count for a settings apply. A normal apply asks the
+    /// engine (a live enumeration of every driver) and remembers the answer; the
+    /// watchdog's recovery rebuild reuses what was remembered, because its engine
+    /// is dead and the rescan only costs time. Falls back to asking when
+    /// nothing is remembered for that device.
+    /// </summary>
+    private int ChannelCountForApply(string driver, string deviceName, bool input, bool reuseRemembered)
+    {
+        if (reuseRemembered && _channelCountMemory.TryRecall(driver, deviceName, input, out var remembered))
+            return remembered;
+        var count = input
+            ? GetInputDeviceChannelCount(driver, deviceName)
+            : GetOutputDeviceChannelCount(driver, deviceName);
+        _channelCountMemory.Remember(driver, deviceName, input, count);
+        return count;
+    }
+
     public int GetInputDeviceChannelCount(string driver, string deviceName) =>
         DeviceChannelCounts.Input(_engine, driver, deviceName);
 

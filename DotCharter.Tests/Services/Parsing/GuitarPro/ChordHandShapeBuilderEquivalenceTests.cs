@@ -53,6 +53,10 @@ public sealed class ChordHandShapeBuilderEquivalenceTests
             {
                 level.HandShapes.Clear();
                 foreach (var chord in level.Chords) chord.TemplateId = -1;
+                // The one intended divergence from the old body: a fully muted strum
+                // joins the bar before it and never opens a bar over a played chord
+                // (GpFullMuteHandShapeTests). Everything else must still agree.
+                foreach (var mute in level.Chords.Where(c => c.IsFullyMuted()).ToList()) level.Chords.Remove(mute);
             }
 
             foreach (var split in new[] { false, true })
@@ -191,7 +195,9 @@ public sealed class ChordHandShapeBuilderEquivalenceTests
     // ---------------------------------------------------------------------------------
     // The pre-#478 ChordHandShapeBuilder.BuildAndTrim, verbatim except: the comments
     // are dropped, the authored fingering/name parameters (null on every path this test
-    // drives) are gone, and the helpers it called are inlined below it. KEEP IT DUMB.
+    // drives) are gone, the helpers it called are inlined below it, and a run whose last
+    // strum is a STACCATO (a written value, no sustain) ends half that value after it —
+    // the one deliberate change since, so a tab's staccato strums are no held bar. KEEP IT DUMB.
     // ---------------------------------------------------------------------------------
 
     private static readonly FractionalPosition MaxMergeGap = new(2);
@@ -266,7 +272,9 @@ public sealed class ChordHandShapeBuilderEquivalenceTests
             }
 
             var last = run[^1];
-            var end = last.Position + OldAuthoredSpan(last);
+            var end = last.NotationDuration is { Numerator: > 0 } staccato && last.GetMaxSustain() == FractionalPosition.Zero
+                ? last.Position + new FractionalPosition(0, staccato * new Fraction(1, 2))
+                : last.Position + OldAuthoredSpan(last);
 
             var clip = end;
             if (i + 1 < chords.Count && chords[i + 1].Position.CompareTo(clip) < 0)

@@ -130,7 +130,7 @@ public sealed class ChartQualityReporter(IArrangementValidationService rules)
 
     /// <summary>Lyrics belong to the project, so their style findings are listed once, under no arrangement.</summary>
     private static IEnumerable<QualityFinding> LyricFindings(ChartProject project) =>
-        LyricStyleRule.Check(project, project.Beats).Select(issue => new QualityFinding(QualityChecks.ChartRules,
+        LyricStyleRule.CheckAll(project, project.Beats).Select(issue => new QualityFinding(QualityChecks.ChartRules,
             Severity(issue), issue.Code, null, null, issue.TimeMs, null, issue, null, null));
 
     /// <summary>

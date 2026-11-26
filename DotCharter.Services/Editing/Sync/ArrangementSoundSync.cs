@@ -16,7 +16,38 @@ public sealed record ArrangementSyncSummary(
 {
     public static readonly ArrangementSyncSummary Empty = new(0, 0, 0, 0, 0);
 
-    public bool WouldChangeAnything => SoundsChanged > 0 || HandShapes > 0 || Anchors > 0;
+    public bool WouldChangeAnything =>
+        SoundsChanged > 0 || HandShapes > 0 || Anchors > 0 || RuleFingerings > 0 || RuleHandShapes > 0 || RuleAnchors > 0;
+
+    /// <summary>
+    ///     True when the pair differs in string count or tuning and sounds were matched by
+    ///     pitch and fret; <see cref="SoundsChanged" /> then counts chord fingerings.
+    /// </summary>
+    public bool ByPitch { get; init; }
+
+    /// <summary>Source sounds the target plays differently or not at all (pitch matching only).</summary>
+    public int UnmatchedSounds { get; init; }
+
+    /// <summary>Source hand shapes that stay behind because the target plays their span differently.</summary>
+    public int HandShapesLeft { get; init; }
+
+    /// <summary>Source fret-hand positions that stay behind because the target plays their span differently.</summary>
+    public int AnchorsLeft { get; init; }
+
+    /// <summary>Re-voiced chord mappings learned from the pair (source pitch set → target voicing).</summary>
+    public int RuleMappings { get; init; }
+
+    /// <summary>Target chords repointed at the fingering authored on another occurrence of their mapping.</summary>
+    public int RuleFingerings { get; init; }
+
+    /// <summary>Target hand shapes given the grip authored on another occurrence of their mapping.</summary>
+    public int RuleHandShapes { get; init; }
+
+    /// <summary>Target fret-hand positions given the fret authored on another occurrence of their mapping.</summary>
+    public int RuleAnchors { get; init; }
+
+    /// <summary>Mapping and kind pairs left alone because their authored variants disagree.</summary>
+    public int RuleConflicts { get; init; }
 }
 
 /// <summary>
@@ -35,6 +66,11 @@ public sealed record ArrangementSyncSummary(
 ///         left completely alone. That is what keeps a Lead-only lick — the slide
 ///         chord at the end of a bar the two otherwise share — out of the Rhythm
 ///         chart while the rest of that bar comes across.
+///     </para>
+///     <para>
+///         When the two differ in string count or tuning (a 7-string and its
+///         6-string twin), a string index means nothing across the pair and
+///         <see cref="ArrangementPitchSync" /> matches by pitch and fret instead.
 ///     </para>
 /// </summary>
 public static class ArrangementSoundSync
@@ -63,6 +99,10 @@ public static class ArrangementSoundSync
         var sourceLevel = ChartLevels.Hardest(source);
         var targetLevel = ChartLevels.Hardest(target);
         if (sourceLevel == null || targetLevel == null) return ArrangementSyncSummary.Empty;
+
+        var strings = ArrangementStringMap.Between(source, target);
+        if (!strings.IsIdentity)
+            return ArrangementPitchSync.Run(source, target, sourceLevel, targetLevel, strings, apply);
 
         var targetNotes = new Dictionary<string, GuitarNote>(StringComparer.Ordinal);
         foreach (var note in targetLevel.Notes) targetNotes.TryAdd(KeyOf(note), note);
@@ -145,7 +185,7 @@ public static class ArrangementSoundSync
         {
             var covered = 0;
             var allShared = true;
-            foreach (var position in SourcePositionsIn(sourceLevel, shape.Position, shape.EndPosition))
+            foreach (var position in PositionsIn(sourceLevel, shape.Position, shape.EndPosition))
             {
                 covered++;
                 if (sourceSharedPositions.Contains(position)) continue;
@@ -258,7 +298,8 @@ public static class ArrangementSoundSync
         return resolved;
     }
 
-    private static IEnumerable<FractionalPosition> SourcePositionsIn(
+    /// <summary>Every note and chord position of <paramref name="level" /> in [start, end).</summary>
+    internal static IEnumerable<FractionalPosition> PositionsIn(
         ChartLevel level, FractionalPosition start, FractionalPosition end)
     {
         foreach (var note in level.Notes)

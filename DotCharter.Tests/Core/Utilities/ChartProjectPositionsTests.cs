@@ -107,6 +107,7 @@ public sealed class ChartProjectPositionsTests
         [
             "ChartProject.Showlights",
             "Arrangement.EventPoints", "Arrangement.ToneChanges", "Arrangement.PhraseIterations",
+            "Arrangement.AudioCheckSpots",
             "ChartLevel.Notes", "ChartLevel.Chords", "ChartLevel.Anchors",
             "ChartLevel.HandShapes", "ChartLevel.FretHandMutes",
             "NotationVoice.Notes", "NotationVoice.Chords",

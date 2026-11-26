@@ -24,8 +24,9 @@ public enum LinkCreateRefusal
 ///     Creates a link group from runs that already hold the same content: the strict rules
 ///     are checked here — at least two runs, whole measures with the same time-signature
 ///     sequence, arrangements that may share (<see cref="LinkCompatibility" />: same strings,
-///     tuning and capo, never bass with guitar, never play-only), no overlap with each other or
-///     with any existing placement, not empty, and equal under the comparison rule. The action
+///     tuning and capo, never bass with guitar, never play-only), no overlap with each other, no
+///     partial overlap with any existing placement (a run may sit whole inside another group's
+///     placement, or hold one whole: <see cref="LinkRuns.Conflict" />), not empty, and equal under the comparison rule. The action
 ///     also normalises the runs' edges, as one undo step: a hand shape crossing a run edge is
 ///     split there, and the fret-hand position in effect at each run start is pinned with an
 ///     anchor.
@@ -44,41 +45,61 @@ public static class LinkGroupCreator
         MeasureContentOptions rule, bool normaliseEdges, out IChartAction? action)
     {
         ArgumentNullException.ThrowIfNull(project);
+        action = null;
+        var refusal = Check(project, runs, name, rule, MeasureGrid.Build(project.Beats), [], out var group);
+        if (refusal != LinkCreateRefusal.None) return refusal;
+        var placements = group!.Placements.ToList();
+        action = new CreateLinkGroupAction(project, group, normaliseEdges ? LinkRunEdges.Plan(placements) : []);
+        return LinkCreateRefusal.None;
+    }
+
+    /// <summary>
+    ///     The strict rules <see cref="TryBuild" /> applies, without building the action: link suggestions run the
+    ///     same check so they never offer what linking refuses. <paramref name="indexes" /> caches one content
+    ///     index per arrangement across calls on one chart state; <paramref name="group" /> is the group to add.
+    /// </summary>
+    internal static LinkCreateRefusal Check(ChartProject project, IReadOnlyList<LinkRunRequest> runs, string name,
+        MeasureContentOptions rule, IReadOnlyList<MeasureSpan> measures, Dictionary<Arrangement, MeasureContentIndex> indexes,
+        out LinkGroup? group)
+    {
+        ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(runs);
         ArgumentNullException.ThrowIfNull(rule);
-        action = null;
+        group = null;
         if (runs.Count < 2) return LinkCreateRefusal.TooFewRuns;
         if (runs.Any(r => !project.Arrangements.Contains(r.Arrangement))) return LinkCreateRefusal.ArrangementNotInProject;
         if (runs.Any(r => !LinkCompatibility.CanShare(runs[0].Arrangement, r.Arrangement)))
             return LinkCreateRefusal.IncompatibleArrangements;
 
-        var measures = MeasureGrid.Build(project.Beats);
         var placements = runs.Select(r => new LinkPlacement { Arrangement = r.Arrangement, Position = r.Start, EndPosition = r.End }).ToList();
         var geometry = placements.Select(p => LinkRuns.Geometry(measures, p)).ToList();
         if (geometry.Any(g => g == null)) return LinkCreateRefusal.NotWholeMeasures;
         if (geometry.Distinct(StringComparer.Ordinal).Count() > 1) return LinkCreateRefusal.DifferentMeasures;
 
-        var taken = placements.Concat(project.LinkGroups.SelectMany(g => g.Placements)).ToList();
-        for (var i = 0; i < placements.Count; i++)
+        var existing = project.LinkGroups.SelectMany(g => g.Placements).ToList();
+        foreach (var p in placements)
         {
-            var p = placements[i];
-            if (taken.Any(t => !ReferenceEquals(t, p) && ReferenceEquals(t.Arrangement, p.Arrangement) &&
-                               t.Position < p.EndPosition && p.Position < t.EndPosition))
+            if (placements.Any(t => !ReferenceEquals(t, p) && Conflict(t, p, sameGroup: true)) ||
+                existing.Any(t => Conflict(t, p, sameGroup: false)))
             {
                 return LinkCreateRefusal.Overlap;
             }
         }
 
-        var group = new LinkGroup { Letter = LinkRuns.NextLetter(project), Name = name, Rule = rule.Header() };
-        foreach (var placement in placements) group.Placements.Add(placement);
-        var keys = LinkRuns.Keys(project, group, rule);
+        var candidate = new LinkGroup { Letter = LinkRuns.NextLetter(project), Name = name, Rule = rule.Header() };
+        foreach (var placement in placements) candidate.Placements.Add(placement);
+        var keys = LinkRuns.Keys(project, candidate, rule, indexes);
         if (keys.Values.Any(k => k is null or { IsEmpty: true })) return LinkCreateRefusal.Empty;
         if (keys.Values.Select(k => k!.Canonical).Distinct(StringComparer.Ordinal).Count() > 1)
             return LinkCreateRefusal.DifferentContent;
 
-        action = new CreateLinkGroupAction(project, group, normaliseEdges ? LinkRunEdges.Plan(placements) : []);
+        group = candidate;
         return LinkCreateRefusal.None;
     }
+
+    private static bool Conflict(LinkPlacement a, LinkPlacement b, bool sameGroup) =>
+        ReferenceEquals(a.Arrangement, b.Arrangement) &&
+        LinkRuns.Conflict(a.Position, a.EndPosition, b.Position, b.EndPosition, sameGroup);
 
     /// <summary>Normalises the run edges and adds the group; undo takes both back.</summary>
     private sealed class CreateLinkGroupAction(ChartProject project, LinkGroup group, List<LinkRunEdges.Edit> edits)

@@ -190,6 +190,28 @@ public sealed class TwoFretPairFingeringTests
     }
 
     [Fact]
+    public void ThePowerChordCommand_FingersAGripAndItsBlankNameTwinAlike_InOneUndoNode()
+    {
+        var h = new ChartPowerToolsTests.Harness();
+        var arrangement = h.State.ActiveArrangement!;
+        var named = Shape(20, [(0, 5), (1, 7)]);
+        named.Name = "A5";
+        var twin = Shape(21, [(0, 5), (1, 7)]);
+        twin.Unnamed = true;
+        arrangement.ChordTemplates.Add(named);
+        arrangement.ChordTemplates.Add(twin);
+
+        h.Maintenance.TogglePowerChordFingering();
+
+        Assert.Equal(named.Fingers, twin.Fingers);
+        Assert.NotEmpty(twin.Fingers);
+        h.History.Undo();
+        Assert.Empty(named.Fingers);
+        Assert.Empty(twin.Fingers);
+        Assert.False(h.History.CanUndo);
+    }
+
+    [Fact]
     public void ThePowerChordCommandFlipsEveryPowerChordBothWaysInOneUndoNodeAndLeavesTheRestAlone()
     {
         var h = new ChartPowerToolsTests.Harness();

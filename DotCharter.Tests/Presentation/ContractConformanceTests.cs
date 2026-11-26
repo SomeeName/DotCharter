@@ -173,6 +173,7 @@ public sealed class ContractConformanceTests
                 new DotCharter.Services.Editing.EditingScope(chart.State), new FakeAppLogger()));
         services.AddSingleton<DotCharter.Tone.Diagnostics.IUiDispatcher>(new TestUiDispatcher());
         services.AddSingleton(Dialogs.RecordingProxy.Create<DotCharter.Services.Session.INewProjectSources>().Proxy);
+        services.AddSingleton(Dialogs.RecordingProxy.Create<DotCharter.Services.Library.Index.ILibraryIndex>().Proxy);
         services.AddSingleton<DotCharter.Services.Audio.Key.ISongKeyAudioEstimator>(new Infrastructure.FakeSongKeyAudioEstimator());
         services.AddSingleton<DotCharter.Services.Editing.Selection.ISelectionService>(
             new DotCharter.Services.Editing.Selection.SelectionService());
@@ -266,6 +267,10 @@ public sealed class ContractConformanceTests
         var violations = new List<string>();
         if (!contract.IsInstanceOfType(screen))
             return [$"{screen.GetType().Name} does not implement {contract.Name}"];
+
+        // The export dialog fills its findings on a worker after it opens; the probe starts once they have landed.
+        if (screen is DotCharter.Presentation.Screens.Dialogs.RocksmithExportViewModel export && !export.FindingsReady.Wait(TimeSpan.FromSeconds(60)))
+            return [$"{screen.GetType().Name} did not finish its findings within 60 s of opening"];
 
         var properties = Properties(contract);
         var before = Snapshot(properties, screen, violations);

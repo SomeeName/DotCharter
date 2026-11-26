@@ -78,6 +78,29 @@ region it governs. Template ids are arrangement-LOCAL, so a copied grip is
 resolved into the target by the full grip and intent, including fingers,
 fingerless status, name and arpeggio flags. A compatible template is reused;
 otherwise a clone is minted, leaving other target users' grips untouched.
+**Different strings or tuning (#913)** — a 7-string drop A and its 6-string drop D
+twin, a 5-string bass and a 4-string — go through `ArrangementPitchSync`: each
+source string stands for the target string with the same open SOUNDING pitch
+(`ArrangementStringMap`, residual cents included, capo checked per note because
+frets are absolute), and a sound matches on (position, sounding pitch, fret).
+Only the hand travels: chord fingerings (the template REMAPPED onto the target's
+strings, then `ChordTemplateResolver.ResolveAuthored`), hand shapes whose source
+AND target sounds all matched, and anchors whose governed region the target
+plays entirely alike. Note edits never cross tunings. Same strings and tuning
+keep the index sync above unchanged. Pinned by `ArrangementPitchSyncTests`.
+**Re-voiced chords, by rule (#914)** — a reduced part re-voices what its strings
+cannot play (a 7-string B5 becomes F#2+B2 on the six), consistently. Before the
+pitch pass, `ArrangementRuleSync` learns each mapping (source chord's sounding
+pitch set at a position -> target chord's string:fret set there) and spreads the
+work authored on ONE target occurrence to the others. Per mapping and kind
+(fingering, hand shape, anchor) items group by value; the DEFAULT is the finger
+suggester's grip for fingering, else the strict-plurality value; exactly one
+other value is the authored one and overwrites every default item. Two or more
+authored values, or a tie, copy nothing and count as a conflict. A bar or an
+anchor window qualifies only when every sound in it is a chord of that one
+mapping; chords and bars are repointed at the authored template (never edited),
+and an in-step bar follows its chord (`ChordHandShapeSync.Follow`). Notes never
+change; same undo node as the pitch pass. Pinned by `ArrangementRuleSyncTests`.
 It OVERWRITES the matched sounds, in one undo
 step, and the dialog previews the counts before you press anything.
 

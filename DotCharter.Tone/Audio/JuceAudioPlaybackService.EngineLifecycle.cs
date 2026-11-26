@@ -108,7 +108,8 @@ public sealed partial class JuceAudioPlaybackService
             // below), so holding the gate across the whole body is safe.
             // A media decode must finish before its engine is destroyed, and a
             // new load must not publish a source that the teardown then frees.
-            lock (_mediaLoadGate) ReplaceEngineGated(cfg);
+            lock (_mediaLoadGate)
+                lock (_stemLoadGate) ReplaceEngineGated(cfg);
         }
         finally
         {

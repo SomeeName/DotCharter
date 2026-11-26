@@ -24,7 +24,12 @@ namespace DotCharter.Services.State;
 /// </summary>
 internal sealed class LinkReconciler(IAppLogger logger)
 {
+    /// <summary>Passes over the groups per commit: an edit a group copied into a bar that a nested
+    /// group also links travels on through that group.</summary>
+    private const int MaxPasses = 4;
+
     private readonly Dictionary<LinkPlacement, MeasureContentKey?> _keys = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<LinkPlacement, string> _ends = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<LinkGroup, string?> _geometry = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<Arrangement, long> _revisions = new(ReferenceEqualityComparer.Instance);
     private ChartProject? _project;
@@ -34,6 +39,7 @@ internal sealed class LinkReconciler(IAppLogger logger)
     {
         _project = null;
         _keys.Clear();
+        _ends.Clear();
         _geometry.Clear();
         _revisions.Clear();
     }
@@ -42,12 +48,13 @@ internal sealed class LinkReconciler(IAppLogger logger)
     /// when it is not the one last read.</summary>
     public void EnsureBaseline(ChartProject? project)
     {
-        if (!ReferenceEquals(project, _project)) Rebuild(project);
+        if (!ReferenceEquals(project, _project)) Rebuild(project, "when the history first read the project");
     }
 
     /// <summary>Re-reads every copy of <paramref name="project" /> as the new "before" state, and logs
-    /// copies that disagree (after an undo or redo that must not happen; nothing is changed).</summary>
-    public void Rebuild(ChartProject? project)
+    /// copies that disagree (after an undo or redo that must not happen; nothing is changed).
+    /// <paramref name="moment" /> names, in the log line, what the project was read after.</summary>
+    public void Rebuild(ChartProject? project, string moment = "after an undo/redo")
     {
         Reset();
         _project = project;
@@ -63,6 +70,7 @@ internal sealed class LinkReconciler(IAppLogger logger)
             {
                 var key = Read(project, placement, rule, indexes);
                 _keys[placement] = key;
+                _ends[placement] = EndTag(project, placement);
                 if (key != null) distinct.Add(key.Canonical);
             }
 
@@ -70,7 +78,7 @@ internal sealed class LinkReconciler(IAppLogger logger)
             if (distinct.Count > 1)
             {
                 logger.Warning(AppLogCategory.History,
-                    $"Link group {group.Letter} has {distinct.Count} different copies after an undo/redo; left as it is.");
+                    $"Link group {group.Letter} has {distinct.Count} different copies {moment}; left as it is. {Divergence(group)}");
             }
         }
 
@@ -85,7 +93,7 @@ internal sealed class LinkReconciler(IAppLogger logger)
     {
         if (project == null || project.LinkGroups.Count == 0)
         {
-            if (!ReferenceEquals(project, _project) || _keys.Count > 0) Rebuild(project);
+            if (!ReferenceEquals(project, _project) || _keys.Count > 0) Rebuild(project, "after an edit");
             return null;
         }
 
@@ -97,6 +105,15 @@ internal sealed class LinkReconciler(IAppLogger logger)
         {
             foreach (var group in project.LinkGroups.ToList())
                 ReconcileGroup(run, group, cold);
+
+            // A bar may sit in a section's group and in a nested short repeat's group: what one
+            // group copied is carried on by the others, until no group copies anything more.
+            for (var pass = 1; pass < MaxPasses && !cold && run.Propagated > run.PropagatedBefore; pass++)
+            {
+                run.PropagatedBefore = run.Propagated;
+                foreach (var group in project.LinkGroups.ToList())
+                    ReconcileGroup(run, group, cold: false);
+            }
         }
         catch (Exception ex)
         {
@@ -105,11 +122,11 @@ internal sealed class LinkReconciler(IAppLogger logger)
             logger.Error(AppLogCategory.History, "Link reconcile failed; the edit is kept, its copies are not touched.", ex);
             for (var i = run.Copies.Count - 1; i >= 0; i--) run.Copies[i].Revert();
             LinkFollowUpAction.Restore(project, before);
-            Rebuild(project);
+            Rebuild(project, "after a failed reconcile");
             return null;
         }
 
-        Rebuild(project);
+        Rebuild(project, "after an edit");
         if (!run.Changed) return null;
 
         var followUp = new LinkFollowUpAction(project, before, LinkFollowUpAction.Capture(project), run.Copies,
@@ -167,6 +184,21 @@ internal sealed class LinkReconciler(IAppLogger logger)
             if (!key.Equals(cached)) changed.Add(placement);
         }
 
+        try
+        {
+            Apply(run, group, rule, now, changed);
+            ShareEndAnchor(run, group, rule);
+        }
+        finally
+        {
+            Remember(run, group);
+        }
+    }
+
+    private void Apply(Run run, LinkGroup group, MeasureContentOptions rule, Dictionary<LinkPlacement, MeasureContentKey> now,
+        List<LinkPlacement> changed)
+    {
+        var project = run.Project;
         if (changed.Count == 0 || run.Policy == LinkPolicy.Retain) return;
 
         // A generator's result is kept once per group: the first copy it changed, in group order.
@@ -290,6 +322,72 @@ internal sealed class LinkReconciler(IAppLogger logger)
         return level => ChartSpacingEnforcer.EnforceLevel(level, project.Beats, config);
     }
 
+    /// <summary>
+    ///     The group's copies as this pass left them become the "before" of the next pass, so a
+    ///     later pass sees only what other groups copied in since.
+    /// </summary>
+    private void Remember(Run run, LinkGroup group)
+    {
+        if (!run.Project.LinkGroups.Contains(group)) return;
+        var rule = RuleOf(group);
+        foreach (var placement in group.Placements)
+        {
+            _keys[placement] = Read(run.Project, placement, rule, run.Indexes);
+            _ends[placement] = EndTag(run.Project, placement);
+        }
+    }
+
+    /// <summary>
+    ///     An anchor on the downbeat right after a placement that the next sounds use first
+    ///     belongs to the placement (<see cref="LinkedRunCopier.EndAnchor" />): when an edit changed
+    ///     it after one placement only, every other placement gets the same hand there. It never
+    ///     splits or unlinks anything (what follows the copies may differ), and a downbeat inside
+    ///     or at the start of any placement is left to that placement's own group.
+    /// </summary>
+    private void ShareEndAnchor(Run run, LinkGroup group, MeasureContentOptions rule)
+    {
+        if (run.Policy is not (LinkPolicy.Propagate or LinkPolicy.ShareFirstChanged)) return;
+        var project = run.Project;
+        var free = group.Placements.Where(p => LinkRuns.IsLive(project, p) && _ends.ContainsKey(p) && !EndIsLinked(project, p)).ToList();
+        // An end pin a propagation stored keeps that copy's own hand for what follows: it is not an edit to share.
+        var moved = free.Where(p => EndTag(project, p) != _ends[p] && !run.Copies.Any(c => c.Copy.EndPin is { } pin &&
+            pin.Position == p.EndPosition && ReferenceEquals(c.Copy.Target, p.Arrangement))).ToList();
+        if (moved.Count == 0 || moved.Select(p => EndTag(project, p)).Distinct(StringComparer.Ordinal).Count() > 1) return;
+        var source = moved[0];
+        if (source.Arrangement!.Levels.MaxBy(l => l.DifficultyIndex) is not { } sourceLevel ||
+            LinkedRunCopier.EndAnchor(sourceLevel, source.EndPosition) is not { } hand)
+        {
+            return;
+        }
+
+        foreach (var target in free.Where(p => !ReferenceEquals(p, source)))
+        {
+            if (target.Arrangement!.Levels.MaxBy(l => l.DifficultyIndex) is not { } level) continue;
+            if (LinkedRunCopier.PlanEndAnchor(target.Arrangement!, level, target.EndPosition, hand) is not { } copy) continue;
+            var step = new LinkCopyStep(copy, CleanUp(project, rule), group.Id);
+            step.Apply();
+            run.Copies.Add(step);
+            run.Propagated++;
+        }
+    }
+
+    /// <summary>
+    ///     The anchors stored exactly at a placement's end, as text; empty when there is none. Only
+    ///     what is stored AT the end counts, never whether the next sounds use it first, so an edit
+    ///     anywhere else (a note or an anchor later in the bar) never reads as a changed end anchor.
+    /// </summary>
+    private static string EndTag(ChartProject project, LinkPlacement placement)
+    {
+        if (!LinkRuns.IsLive(project, placement) || placement.Arrangement!.Levels.MaxBy(l => l.DifficultyIndex) is not { } level)
+            return "";
+        return string.Join(";", level.Anchors.Where(a => a.Position == placement.EndPosition).Select(a => $"{a.Fret}/{a.Width}").Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>Whether the downbeat after <paramref name="placement" /> lies in, or starts, any placement of its arrangement.</summary>
+    private static bool EndIsLinked(ChartProject project, LinkPlacement placement) =>
+        project.LinkGroups.Any(g => g.Placements.Any(p => ReferenceEquals(p.Arrangement, placement.Arrangement) &&
+                                                          p.Position <= placement.EndPosition && placement.EndPosition < p.EndPosition));
+
     private static string? LargestClass(LinkGroup group, Dictionary<LinkPlacement, string> classOf) =>
         classOf.Count == 0
             ? null
@@ -306,6 +404,11 @@ internal sealed class LinkReconciler(IAppLogger logger)
             .OrderByDescending(g => g.Count())
             .Select(g => g.Key)
             .FirstOrDefault();
+
+    private string Divergence(LinkGroup group) =>
+        LinkDivergence.Describe(group.Placements
+            .Where(p => _keys.TryGetValue(p, out var key) && key != null)
+            .Select(p => (p.Arrangement!.Name, _keys[p]!.Canonical)).ToList());
 
     private static MeasureContentOptions RuleOf(LinkGroup group) => LinkRuns.RuleOf(group) ?? MeasureContentOptions.Detection;
 
@@ -333,6 +436,7 @@ internal sealed class LinkReconciler(IAppLogger logger)
         public List<LinkCopyStep> Copies { get; } = [];
         public List<LinkPropagationReport> Reports { get; } = [];
         public int Propagated { get; set; }
+        public int PropagatedBefore { get; set; }
         public int Unlinked { get; set; }
         public bool Changed => Propagated > 0 || Unlinked > 0;
     }

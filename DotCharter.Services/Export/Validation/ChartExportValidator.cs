@@ -1,7 +1,10 @@
 ﻿using System.Globalization;
 using System.Text;
+using DotCharter.Services.Editing;
 using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Services.Export.Sng;
+using DotCharter.Services.Library;
+using DotCharter.Services.Library.Index;
 using DotCharter.Services.Parsing.Xml.Vocals;
 
 namespace DotCharter.Services.Export.Validation;
@@ -65,6 +68,13 @@ public sealed class ChartExportValidator
     public const string KeyLyricsOutOfOrder = "Export.Validation.LyricsOutOfOrder";
     public const string KeyLyricMarkerText = "Export.Validation.LyricMarkerText";
     public const string KeyDisplayNameGlyphs = "Export.Validation.DisplayNameGlyphs";
+    public const string KeyMetadataTitleCase = "Export.Validation.MetadataTitleCase";
+    public const string KeyMetadataStraySpaces = "Export.Validation.MetadataStraySpaces";
+    public const string KeyMetadataMissingTitle = "Export.Validation.MetadataMissingTitle";
+    public const string KeyMetadataMissingArtist = "Export.Validation.MetadataMissingArtist";
+    public const string KeyMetadataMissingAlbum = "Export.Validation.MetadataMissingAlbum";
+    public const string KeyMetadataMissingAlbumYear = "Export.Validation.MetadataMissingAlbumYear";
+    public const string KeyPackageKeyClash = "Export.Validation.PackageKeyClash";
     public const string KeyTooManyLevels = "Export.Validation.TooManyLevels";
     public const string KeyTooManyNotes = "Export.Validation.TooManyNotes";
     public const string KeyFingerOutOfRange = "Export.Validation.FingerOutOfRange";
@@ -78,6 +88,18 @@ public sealed class ChartExportValidator
     ///     On: a 7-/8-string guitar gets one <see cref="KeySixStringDrop" /> finding with what that projection leaves out.
     /// </summary>
     public bool SixStringProjection { get; init; }
+
+    /// <summary>
+    ///     The Library's index, for the one check that needs it: a DLC key an indexed package already
+    ///     uses is a <see cref="KeyPackageKeyClash" /> warning. Null (no Library, a headless caller) skips the check.
+    /// </summary>
+    public ILibraryIndex? LibraryIndex { get; init; }
+
+    /// <summary>
+    ///     The package files this export would write. A Library package at one of these paths is the project's
+    ///     OWN earlier export, so it is no <see cref="KeyPackageKeyClash" />: re-exporting replaces it.
+    /// </summary>
+    public IReadOnlyCollection<string> OwnPackagePaths { get; init; } = [];
 
     private const int MaxPhrases = 100;
     private const double MinFirstNoteMs = 1000.0;
@@ -113,6 +135,8 @@ public sealed class ChartExportValidator
             findings.Add(new ExportValidationFinding("", ExportFindingSeverity.Warning, KeyNoShowlights));
 
         ValidateDisplayNames(project, findings);
+        ValidateMetadata(project, findings);
+        ValidatePackageKey(project, findings);
         ValidateAudioLength(project, audioLengthMs, findings);
         return findings;
     }
@@ -153,6 +177,102 @@ public sealed class ChartExportValidator
             if (RocksmithDlcKey.LacksGameGlyphs(value) && reported.Add(value))
                 findings.Add(new ExportValidationFinding("", ExportFindingSeverity.Warning, KeyDisplayNameGlyphs, null, value));
         }
+    }
+
+    /// <summary>
+    ///     Song-list hygiene, all WARNINGS. Stray spaces (leading, trailing, doubled) are read from the
+    ///     chart's own Title/Artist/Album fields (the ones the Song metadata dialog edits) and each arrangement's
+    ///     artist, artist-sort and album overrides; the fix trims all of them in one undo step.
+    ///     Missing title, artist and album, and a missing album year, are read from the resolved package
+    ///     metadata, so a value an arrangement carries counts. Title case is a gentle suggestion
+    ///     (<see cref="LooksSentenceCased" />) and never a rewrite.
+    /// </summary>
+    private static void ValidateMetadata(ChartProject project, List<ExportValidationFinding> findings)
+    {
+        var chart = project.Chart;
+        var spaced = new List<string?> { chart.SongName, chart.Artist, chart.AlbumName };
+        foreach (var arrangement in project.Arrangements)
+            spaced.AddRange([arrangement.ArtistName, arrangement.ArtistNameSort, arrangement.AlbumName]);
+        foreach (var value in spaced)
+        {
+            if (!string.IsNullOrWhiteSpace(value) && value != SongMetadataSpaces.Tidy(value))
+                findings.Add(new ExportValidationFinding("", ExportFindingSeverity.Warning, KeyMetadataStraySpaces, null, value));
+        }
+
+        var meta = RsPackageMetadataFactory.Create(project, new RocksmithBuildOptions { OutputPath = "", AudioPath = "" });
+        if (string.IsNullOrWhiteSpace(chart.SongName))
+            findings.Add(new ExportValidationFinding("", ExportFindingSeverity.Warning, KeyMetadataMissingTitle));
+        if (meta.Artist == "Unknown Artist" && string.IsNullOrWhiteSpace(chart.Artist))
+            findings.Add(new ExportValidationFinding("", ExportFindingSeverity.Warning, KeyMetadataMissingArtist));
+        if (string.IsNullOrWhiteSpace(meta.Album))
+            findings.Add(new ExportValidationFinding("", ExportFindingSeverity.Warning, KeyMetadataMissingAlbum));
+        if (meta.Year is null)
+            findings.Add(new ExportValidationFinding("", ExportFindingSeverity.Warning, KeyMetadataMissingAlbumYear));
+
+        var reported = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var value in (string[])[meta.Title, meta.Artist, meta.Album])
+        {
+            if (LooksSentenceCased(value) && reported.Add(value))
+                findings.Add(new ExportValidationFinding("", ExportFindingSeverity.Warning, KeyMetadataTitleCase, null, value));
+        }
+    }
+
+    /// <summary>
+    ///     The game lists one song per DLC key, so an export under the key of a package already in the
+    ///     Library hides it, or is hidden by it. A WARNING carrying the clashing key and the key the fix
+    ///     would assign (<see cref="OpenedPackageDlcKey.KeyFor" />), joined by a bar. A read-only index
+    ///     lookup; with no index, or an index that cannot be read, the check says nothing.
+    /// </summary>
+    private void ValidatePackageKey(ChartProject project, List<ExportValidationFinding> findings)
+    {
+        if (LibraryIndex is not { } index) return;
+        var meta = RsPackageMetadataFactory.Create(project, new RocksmithBuildOptions { OutputPath = "", AudioPath = "" });
+        if (!index.HasSongKey(meta.DlcKey)) return;
+        var holders = index.PackagePathsForSongKey(meta.DlcKey);
+        if (holders.Count > 0 && holders.All(IsOwnPackage)) return;
+
+        var proposed = OpenedPackageDlcKey.KeyFor(meta.Artist, meta.Title, meta.DlcKey, index.HasSongKey);
+        findings.Add(new ExportValidationFinding("", ExportFindingSeverity.Warning, KeyPackageKeyClash, null, $"{meta.DlcKey}|{proposed}"));
+    }
+
+    private bool IsOwnPackage(string path)
+    {
+        var full = FullPathOrSelf(path);
+        return OwnPackagePaths.Any(own => string.Equals(FullPathOrSelf(own), full, StringComparison.OrdinalIgnoreCase));
+
+        static string FullPathOrSelf(string value)
+        {
+            try
+            {
+                return Path.GetFullPath(value);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                return value;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     True only for a CLEARLY sentence-cased Latin name: three or more words, a capitalised first
+    ///     word, at least two later words of four or more letters (the ones a title-cased name capitalises
+    ///     whatever the style guide), and every one of those starts lower case. Never true for a name with a
+    ///     letter past Latin Extended-B (Japanese, Cyrillic, ...), an all-lowercase or all-caps styling, a
+    ///     lower-case first word, or an upper-case letter inside a later word (iPhone, DJ): those are
+    ///     deliberate. Short names ("Love me do") have too few long words to judge.
+    /// </summary>
+    internal static bool LooksSentenceCased(string name)
+    {
+        if (name.Any(c => char.IsLetter(c) && c > 'ɏ')) return false;
+        var words = name.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Any(char.IsLetter))
+            .ToArray();
+        if (words.Length < 3 || !char.IsUpper(words[0].First(char.IsLetter))) return false;
+
+        var later = words.Skip(1).ToArray();
+        if (later.Any(w => w.Skip(1).Any(char.IsUpper))) return false;
+        var longWords = later.Where(w => w.Count(char.IsLetter) >= 4).ToArray();
+        return longWords.Length >= 2 && longWords.All(w => char.IsLower(w.First(char.IsLetter)));
     }
 
     private void ValidateArrangement(

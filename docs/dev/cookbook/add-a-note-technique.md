@@ -41,7 +41,8 @@ silently.
    number) skips this step.
 9. **Inspector.** Add a row in the Sound tab:
    `DotCharter.UI/Views/Editor/Inspector/SoundNoteTechniqueView.axaml` for notes,
-   `SoundChordTechniqueView.axaml` for chords, bound through
+   `SoundChordTechniqueView.axaml` (one string) and `SoundChordAllStringsView.axaml`
+   (every string) for chords, bound through
    `DotCharter.UI/ViewModels/Editor/InspectorViewModel.Notes.cs` and
    `InspectorViewModel.Chords.cs`. Write edits through the inspector's mutation
    funnel so they are undoable.

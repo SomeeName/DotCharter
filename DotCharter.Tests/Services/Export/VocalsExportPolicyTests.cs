@@ -162,6 +162,34 @@ public sealed class VocalsExportPolicyTests : IDisposable
         Assert.Equal(includeVocals, UiSourceTree.GetFiles(bundle, "*_Vocals_*.xml").Length == 1);
     }
 
+    [Fact]
+    public void The_xml_bundle_still_reads_the_config_after_the_container_that_built_it_is_disposed()
+    {
+        // The app composes the service through DI; a save companion can outlive the
+        // container (shutdown drain). A captured provider then threw
+        // ObjectDisposedException and the bundle silently used default settings.
+        var logger = new FakeAppLogger();
+        var services = new ServiceCollection();
+        services.AddKeyedSingleton<IChartSerializer, RscpChartSerializer>("rscp");
+        services.AddKeyedSingleton<IChartSerializer, XmlChartSerializer>("xml");
+        services.AddSingleton<IAppLogger>(logger);
+        services.AddSingleton<IConfigurationService>(new FakeConfigurationService
+        {
+            AppConfig = new AppConfig { ExportIncludeVocals = false }
+        });
+        services.AddSingleton<IProjectDocumentService, ProjectDocumentService>();
+        var provider = services.BuildServiceProvider();
+        var documents = provider.GetRequiredService<IProjectDocumentService>();
+        provider.Dispose();
+
+        documents.SaveDlcBuilderXmlBundle(Path.Combine(_dir, "project.rscp"), BuildProject());
+
+        var bundle = Path.Combine(_dir, "export", DlcBuilderBundle.DirectoryName);
+        Assert.NotEmpty(UiSourceTree.GetFiles(bundle, "*_Lead_*.xml"));
+        Assert.Empty(UiSourceTree.GetFiles(bundle, "*_Vocals_*.xml"));
+        Assert.DoesNotContain(logger.Entries, e => e.Level == "WARN");
+    }
+
     // ---- the flag has exactly ONE reader ----------------------------------
 
     [Fact]

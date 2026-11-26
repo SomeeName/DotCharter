@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using DotCharter.Presentation.Contracts.Dialogs;
@@ -141,6 +142,95 @@ public sealed class LinkDialogsUiPerfSmokeTests
         }, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    ///     #964: the two dialogs' lists with German and Japanese text, long group names and many
+    ///     groups, in the 1280 px window and in a 640 px one (the card clamps to its window, so the
+    ///     smaller host stands for the narrowest card). Nothing may overhang the card, overlap its
+    ///     neighbour in a row, or be cut off without a tooltip.
+    /// </summary>
+    [Theory]
+    [InlineData(1280)]
+    [InlineData(640)]
+    public async Task TheListRows_StayInsideTheCard_WithLongAndLocalizedText(int hostWidth) =>
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var offenders = new List<string>();
+            foreach (var variant in FakeScreens.VariantsOf(typeof(ILinkGroupsScreen))
+                         .Where(v => v.Name is FakeVariantNames.Default or FakeVariantNames.LongText or FakeVariantNames.Full))
+            {
+                WithOpenDialog<ILinkGroupsScreen, bool>(() => (ILinkGroupsScreen)variant.Create(),
+                    view => AuditCard($"groups/{variant.Name}@{hostWidth}", view, offenders), hostWidth,
+                    window => NarrowWidthLayout.Capture(window, $"link-groups-{variant.Name}-{hostWidth}"));
+            }
+
+            foreach (var variant in FakeScreens.VariantsOf(typeof(ILinkSuggestionsScreen)))
+            {
+                WithOpenDialog<ILinkSuggestionsScreen, LinkSuggestionsChoice>(() => (ILinkSuggestionsScreen)variant.Create(),
+                    view => AuditCard($"suggestions/{variant.Name}@{hostWidth}", view, offenders), hostWidth,
+                    window => NarrowWidthLayout.Capture(window, $"link-suggestions-{variant.Name}-{hostWidth}"));
+            }
+
+            Assert.True(offenders.Count == 0, $"({HeadlessSessionFixture.SweptCulture}) {string.Join("; ", offenders)} (#964).");
+        }, TestContext.Current.CancellationToken);
+
+    private static void AuditCard(string what, Control view, List<string> offenders)
+    {
+        var card = view.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("DialogCard"));
+        var (cardLeft, cardRight) = NarrowWidthLayout.Span(card, view);
+        NarrowWidthLayout.Report($"[narrow-width] {what}: card {cardLeft:0.#}..{cardRight:0.#}");
+        foreach (var control in view.GetVisualDescendants().OfType<Control>().Where(c => c.IsEffectivelyVisible && c.Bounds.Width > 1))
+        {
+            if (control is not (Button or TextBox or CheckBox or TextBlock)) continue;
+            if (control is TextBlock && control.GetVisualAncestors().Any(a => a is Button or TextBox or CheckBox)) continue;
+            var (left, right) = NarrowWidthLayout.Span(control, view);
+            var name = control is TextBlock t ? $"text '{Shorten(t.Text)}'" : $"{control.GetType().Name} '{Shorten(ContentOf(control))}'";
+            if (left < cardLeft - 0.5 || right > cardRight + 0.5)
+            {
+                offenders.Add($"{what}: {name} spans {left:0.#}..{right:0.#}, outside the card {cardLeft:0.#}..{cardRight:0.#}");
+            }
+
+            if (control is TextBlock trimmed && trimmed.TextTrimming != TextTrimming.None && !string.IsNullOrEmpty(trimmed.Text)
+                && NarrowWidthLayout.NaturalWidth(trimmed) > trimmed.Bounds.Width + 1
+                && ToolTip.GetTip(trimmed) is null)
+            {
+                offenders.Add($"{what}: {name} is trimmed ({NarrowWidthLayout.NaturalWidth(trimmed):0.#} > {trimmed.Bounds.Width:0.#} px) with no tooltip");
+            }
+
+            if (control is TextBox { Text.Length: > 0 } box
+                && NarrowWidthLayout.NaturalWidth(box.Text!, box) > box.Bounds.Width - box.Padding.Left - box.Padding.Right + 1
+                && ToolTip.GetTip(box) is null)
+            {
+                offenders.Add($"{what}: {name} is cut ({NarrowWidthLayout.NaturalWidth(box.Text!, box):0.#} > {box.Bounds.Width:0.#} px box) with no tooltip");
+            }
+
+            if (control is Button { Content: string label } button && label.Length > 0
+                && NarrowWidthLayout.NaturalWidth(label, button) > button.Bounds.Width - button.Padding.Left - button.Padding.Right + 1
+                && ToolTip.GetTip(button) is null)
+            {
+                offenders.Add($"{what}: {name} is cut ({NarrowWidthLayout.NaturalWidth(label, button):0.#} > {button.Bounds.Width:0.#} px button) with no tooltip");
+            }
+        }
+
+        // a row of controls in one grid row must not overlap sideways (the group row: letter, name, Rename, Unlink)
+        foreach (var row in view.GetVisualDescendants().OfType<Grid>().Where(g => g.ColumnDefinitions.Count >= 3 && g.IsEffectivelyVisible))
+        {
+            var parts = row.Children.OfType<Control>().Where(c => c.IsVisible && c.Bounds.Width > 1)
+                .Select(c => (c, span: NarrowWidthLayout.Span(c, view))).OrderBy(p => p.span.Left).ToList();
+            for (var i = 1; i < parts.Count; i++)
+            {
+                if (parts[i].span.Left < parts[i - 1].span.Right - 0.5)
+                {
+                    offenders.Add($"{what}: {parts[i - 1].c.GetType().Name} ({parts[i - 1].span.Left:0.#}..{parts[i - 1].span.Right:0.#}) " +
+                                  $"overlaps {parts[i].c.GetType().Name} ({parts[i].span.Left:0.#}..{parts[i].span.Right:0.#})");
+                }
+            }
+        }
+    }
+
+    private static string ContentOf(Control c) => c switch { ContentControl { Content: string s } => s, TextBox tb => tb.Text ?? "", _ => "" };
+
+    private static string Shorten(string? text) => text is { Length: > 24 } ? text[..24] + "…" : text ?? "";
+
     private static (ChartEditDialogServices Edit, LinkHarness Link) Edit()
     {
         var link = LinkHarness.WithRhythm();
@@ -162,7 +252,8 @@ public sealed class LinkDialogsUiPerfSmokeTests
         }
     }
 
-    private static void WithOpenDialog<TContract, TResult>(Func<TContract> create, Action<Control> assert)
+    private static void WithOpenDialog<TContract, TResult>(Func<TContract> create, Action<Control> assert,
+        double hostWidth = HostWidth, Action<Window>? capture = null)
         where TContract : class, IDialogScreen<TResult>
     {
         var services = new ServiceCollection();
@@ -174,14 +265,16 @@ public sealed class LinkDialogsUiPerfSmokeTests
         var container = new DialogContainerView();
         container.DialogPanel.Children.Clear();
         container.DialogPanel.Children.Add(host);
-        var window = new Window { Width = HostWidth, Height = HostHeight, Content = container };
+        var window = new Window { Width = hostWidth, Height = HostHeight, Content = container };
         window.Show();
         try
         {
             _ = ((IDialogs)host).ShowAsync<TContract, TResult>();
             Dispatcher.UIThread.RunJobs();
-            container.Measure(new Size(HostWidth, HostHeight));
-            container.Arrange(new Rect(0, 0, HostWidth, HostHeight));
+            container.Measure(new Size(hostWidth, HostHeight));
+            container.Arrange(new Rect(0, 0, hostWidth, HostHeight));
+            NarrowWidthLayout.Settle(window);
+            capture?.Invoke(window);
             assert(Assert.Single(host.OpenViews));
             host.CloseTop();
             Dispatcher.UIThread.RunJobs();

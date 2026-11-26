@@ -211,7 +211,7 @@ public sealed class EngineRebuildStateReplayTests
     public void AConfigApply_NeverResetsTheChartSynthInstrument()
     {
         var source = Regex.Replace(ServiceSource(), @"//[^\n]*", " ");
-        var apply = Body(source, "private void ApplyAudioConfigurationCore(RigConfig config, bool forceEngineReplace)");
+        var apply = Body(source, "private void ApplyAudioConfigurationCore(RigConfig config, bool forceEngineReplace, bool reuseRememberedChannelCounts)");
         Assert.True(apply.Length > 500, "ApplyAudioConfigurationCore not found — the lint would pass vacuously");
         foreach (var read in new[] { "ChartSynthInstrumentSelection", "ChartSynthGuitar", "ChartSynthBass", "_guitarInstrument", "_bassInstrument" })
             Assert.DoesNotContain(read, apply, StringComparison.Ordinal);

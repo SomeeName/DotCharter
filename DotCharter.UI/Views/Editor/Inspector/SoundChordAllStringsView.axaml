@@ -1,0 +1,136 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundChordAllStringsView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Technique page of a chord, its CHORD TECHNIQUES card (#953): the note's technique rows (mute, legato,
+         harmonics and pop/slap as none-first segmented choices, Accent and Tremolo) on EVERY string of every chord the
+         "Apply to" ladder reaches, inside the string-edit mask, in one stage (one undo step). A row with no option lit
+         is mixed: the strings differ. The Strings card keeps the per-string rows for the odd string. -->
+    <StackPanel Spacing="{StaticResource SpaceXs}">
+        <TextBlock Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowHeading"
+                   Text="{localization:Loc Inspector_Staged_ChordTechniques}" />
+        <TextBlock x:Name="ChordAllTechniquesHint" Text="{localization:Loc Inspector_Staged_ChordTechniquesHint}" TextWrapping="Wrap"
+                   FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextMuted}" />
+        <StackPanel x:Name="ChordAllTechniqueGroup" Spacing="{StaticResource SpaceXs}"
+                    IsEnabled="{Binding Staged.ChordTechnique.CanEditAllStrings}">
+            <Grid x:Name="ChordAllTechniqueRows" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto"
+                  ColumnSpacing="{StaticResource SpaceSm}" RowSpacing="{StaticResource SpaceXs}">
+                <TextBlock Grid.Row="0" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel" VerticalAlignment="Center"
+                           Text="{localization:Loc Inspector_Mute}" />
+                <WrapPanel Grid.Row="0" Grid.Column="1" x:Name="ChordAllMuteRow" Orientation="Horizontal" LineSpacing="{StaticResource SpaceXxs}">
+                    <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                                  AutomationProperties.Name="{localization:Loc Inspector_None}"
+                                  ToolTip.Tip="{localization:Loc Inspector_None}"
+                                  IsChecked="{Binding Staged.ChordTechnique.AllMute, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0, Mode=OneWay}"
+                                  Command="{Binding Staged.ChordTechnique.SetAllMuteCommand}" CommandParameter="0" />
+                    <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                                  AutomationProperties.Name="{localization:Loc Inspector_FullMute}"
+                                  ToolTip.Tip="{localization:Loc Inspector_FullMute}"
+                                  IsChecked="{Binding Staged.ChordTechnique.AllMute, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1, Mode=OneWay}"
+                                  Command="{Binding Staged.ChordTechnique.SetAllMuteCommand}" CommandParameter="1">
+                        <PathIcon Data="{DynamicResource IconTechMute}" />
+                    </ToggleButton>
+                    <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                                  AutomationProperties.Name="{localization:Loc Inspector_PalmMute}"
+                                  ToolTip.Tip="{localization:Loc Inspector_PalmMute}"
+                                  IsChecked="{Binding Staged.ChordTechnique.AllMute, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2, Mode=OneWay}"
+                                  Command="{Binding Staged.ChordTechnique.SetAllMuteCommand}" CommandParameter="2">
+                        <PathIcon Data="{DynamicResource IconTechPalmMute}" />
+                    </ToggleButton>
+                </WrapPanel>
+                <TextBlock Grid.Row="1" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel" VerticalAlignment="Center"
+                           Text="{localization:Loc Inspector_Hopo}" />
+                <WrapPanel Grid.Row="1" Grid.Column="1" x:Name="ChordAllHopoRow" Orientation="Horizontal" LineSpacing="{StaticResource SpaceXxs}">
+                    <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                                  AutomationProperties.Name="{localization:Loc Inspector_None}"
+                                  ToolTip.Tip="{localization:Loc Inspector_None}"
+                                  IsChecked="{Binding Staged.ChordTechnique.AllHopo, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0, Mode=OneWay}"
+                                  Command="{Binding Staged.ChordTechnique.SetAllHopoCommand}" CommandParameter="0" />
+                    <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                                  AutomationProperties.Name="{localization:Loc Inspector_HammerOn}"
+                                  ToolTip.Tip="{localization:Loc Inspector_HammerOn}"
+                                  IsChecked="{Binding Staged.ChordTechnique.AllHopo, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1, Mode=OneWay}"
+                                  Command="{Binding Staged.ChordTechnique.SetAllHopoCommand}" CommandParameter="1">
+                        <PathIcon Data="{DynamicResource IconTechHammerOn}" />
+                    </ToggleButton>
+                    <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                                  AutomationProperties.Name="{localization:Loc Inspector_PullOff}"
+                                  ToolTip.Tip="{localization:Loc Inspector_PullOff}"
+                                  IsChecked="{Binding Staged.ChordTechnique.AllHopo, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2, Mode=OneWay}"
+                                  Command="{Binding Staged.ChordTechnique.SetAllHopoCommand}" CommandParameter="2">
+                        <PathIcon Data="{DynamicResource IconTechPullOff}" />
+                    </ToggleButton>
+                    <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Tap}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Tap}"
+                                  IsChecked="{Binding Staged.ChordTechnique.AllHopo, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=3, Mode=OneWay}"
+                                  Command="{Binding Staged.ChordTechnique.SetAllHopoCommand}" CommandParameter="3">
+                        <PathIcon Data="{DynamicResource IconTechTap}" />
+                    </ToggleButton>
+                </WrapPanel>
+                <TextBlock Grid.Row="2" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel" VerticalAlignment="Center"
+                           Text="{localization:Loc Inspector_Harmonic}" />
+                <WrapPanel Grid.Row="2" Grid.Column="1" x:Name="ChordAllHarmonicRow" Orientation="Horizontal" LineSpacing="{StaticResource SpaceXxs}">
+                    <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                                  AutomationProperties.Name="{localization:Loc Inspector_None}"
+                                  ToolTip.Tip="{localization:Loc Inspector_None}"
+                                  IsChecked="{Binding Staged.ChordTechnique.AllHarmonic, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0, Mode=OneWay}"
+                                  Command="{Binding Staged.ChordTechnique.SetAllHarmonicCommand}" CommandParameter="0" />
+                    <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Normal}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Normal}"
+                                  IsChecked="{Binding Staged.ChordTechnique.AllHarmonic, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1, Mode=OneWay}"
+                                  Command="{Binding Staged.ChordTechnique.SetAllHarmonicCommand}" CommandParameter="1">
+                        <PathIcon Data="{DynamicResource IconTechHarmonic}" />
+                    </ToggleButton>
+                    <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Pinch}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Pinch}"
+                                  IsChecked="{Binding Staged.ChordTechnique.AllHarmonic, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2, Mode=OneWay}"
+                                  Command="{Binding Staged.ChordTechnique.SetAllHarmonicCommand}" CommandParameter="2">
+                        <PathIcon Data="{DynamicResource IconTechHarmonicPinch}" />
+                    </ToggleButton>
+                </WrapPanel>
+                <TextBlock Grid.Row="3" Theme="{StaticResource ColumnFlowText}" Classes="ColumnFlowLabel" VerticalAlignment="Center"
+                           Text="{localization:Loc Inspector_Picking}" />
+                <WrapPanel Grid.Row="3" Grid.Column="1" x:Name="ChordAllPickingRow" Orientation="Horizontal" LineSpacing="{StaticResource SpaceXxs}">
+                    <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                                  AutomationProperties.Name="{localization:Loc Inspector_None}"
+                                  ToolTip.Tip="{localization:Loc Inspector_None}"
+                                  IsChecked="{Binding Staged.ChordTechnique.AllBassPicking, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0, Mode=OneWay}"
+                                  Command="{Binding Staged.ChordTechnique.SetAllBassPickingCommand}" CommandParameter="0" />
+                    <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Pop}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Pop}"
+                                  IsChecked="{Binding Staged.ChordTechnique.AllBassPicking, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1, Mode=OneWay}"
+                                  Command="{Binding Staged.ChordTechnique.SetAllBassPickingCommand}" CommandParameter="1">
+                        <PathIcon Data="{DynamicResource IconTechPop}" />
+                    </ToggleButton>
+                    <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Slap}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Slap}"
+                                  IsChecked="{Binding Staged.ChordTechnique.AllBassPicking, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2, Mode=OneWay}"
+                                  Command="{Binding Staged.ChordTechnique.SetAllBassPickingCommand}" CommandParameter="2">
+                        <PathIcon Data="{DynamicResource IconTechSlap}" />
+                    </ToggleButton>
+                </WrapPanel>
+            </Grid>
+            <UniformGrid Columns="2" ColumnSpacing="{StaticResource SpaceXs}">
+                <ToggleButton x:Name="ChordAccentChip" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                              HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_Accent}"
+                              IsChecked="{Binding Staged.ChordTechnique.Accent}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Accent}"
+                              ToolTip.Tip="{localization:Loc Inspector_Chord_AccentTip}" />
+                <ToggleButton x:Name="ChordAllTremoloToggle" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                              HorizontalAlignment="Stretch" Content="{localization:Loc Inspector_Tremolo}"
+                              IsChecked="{Binding Staged.ChordTechnique.AllTremolo, Mode=OneWay}"
+                              Command="{Binding Staged.ChordTechnique.ToggleAllTremoloCommand}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Tremolo}"
+                              ToolTip.Tip="{localization:Loc Inspector_TremoloTip}" />
+            </UniformGrid>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

@@ -54,6 +54,20 @@ public interface ILibraryIndex
     ///     <see cref="FindCoverImage" />.
     /// </summary>
     string FindCoverImageByTitle(string artist, string title) => "";
+
+    /// <summary>
+    ///     True when a package with this song key (case-insensitive) is indexed: the export check
+    ///     that warns a project would hide a package already in the Library. Read-only and
+    ///     best-effort like <see cref="ReadFacts" />; false when the index cannot be read.
+    /// </summary>
+    bool HasSongKey(string songKey) => false;
+
+    /// <summary>
+    ///     The package paths of every indexed package with this song key (case-insensitive), as the index
+    ///     stored them: how the export check tells the project's OWN earlier export (not a clash) from
+    ///     another package. Empty when none or when the index cannot be read; best-effort like <see cref="HasSongKey" />.
+    /// </summary>
+    IReadOnlyList<string> PackagePathsForSongKey(string songKey) => [];
 }
 
 /// <summary>

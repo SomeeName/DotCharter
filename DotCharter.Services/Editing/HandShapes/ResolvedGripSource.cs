@@ -1,3 +1,5 @@
+using DotCharter.Services.Editing.Fingering;
+
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
 
 namespace DotCharter.Services.Editing.HandShapes;
@@ -13,7 +15,7 @@ namespace DotCharter.Services.Editing.HandShapes;
 ///         grips, so their strums do not share a bar.
 ///     </para>
 /// </summary>
-public sealed class ResolvedGripSource(Arrangement arrangement) : IHandShapeGripSource
+public sealed class ResolvedGripSource(Arrangement arrangement, ArrangementFingeringStyle? songStyle) : IHandShapeGripSource
 {
     private readonly Dictionary<int, ChordTemplate> _byId = ChordTemplateResolver.IndexById(arrangement.ChordTemplates);
 
@@ -22,7 +24,7 @@ public sealed class ResolvedGripSource(Arrangement arrangement) : IHandShapeGrip
         var frets = ChordTemplateResolver.FretsOf(chord);
         var own = Own(chord);
         if (own != null && own.HasFrets(frets)) return own;
-        return ChordTemplateResolver.Resolve(arrangement, frets, ArpeggioFlavour.Of(own), null, minted);
+        return ChordTemplateResolver.Resolve(arrangement, frets, ArpeggioFlavour.Of(own), null, minted, songStyle);
     }
 
     public bool Holds(ChordTemplate grip, Chord chord)

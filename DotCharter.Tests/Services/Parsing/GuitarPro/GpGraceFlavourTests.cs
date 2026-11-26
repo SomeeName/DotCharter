@@ -44,14 +44,16 @@ public sealed class GpGraceFlavourTests
 
     // ---- binary (.gp3/.gp4/.gp5) fixtures ---------------------------------
 
-    private static ChartLevel ImportLevel(string path)
+    private static ChartLevel ImportLevel(string path) => Assert.Single(ImportArrangement(path).Levels);
+
+    private static Arrangement ImportArrangement(string path)
     {
         try
         {
             var importer = new GpImporter();
             var tracks = importer.GetAvailableTracks(path);
             var result = importer.ImportTracksWithMetadata(path, tracks.Select(t => t.Id).ToList());
-            return Assert.Single(Assert.Single(result.Arrangements).Levels);
+            return Assert.Single(result.Arrangements);
         }
         finally
         {
@@ -266,7 +268,9 @@ public sealed class GpGraceFlavourTests
 
     // ---- the GPIF path must not move --------------------------------------
 
-    private static ChartLevel ImportGpif(string gpif)
+    private static ChartLevel ImportGpif(string gpif) => ImportGpifArrangement(gpif).Levels[0];
+
+    private static Arrangement ImportGpifArrangement(string gpif)
     {
         var path = Path.Combine(Path.GetTempPath(), $"dotcharter-gpflavour-{Guid.NewGuid():N}.gp");
         using (var fs = File.Create(path))
@@ -281,7 +285,7 @@ public sealed class GpGraceFlavourTests
             var importer = new GpImporter();
             var tracks = importer.GetAvailableTracks(path);
             var arrangements = importer.ImportTracks(path, tracks.Select(t => t.Id).ToList());
-            return Assert.Single(arrangements).Levels[0];
+            return Assert.Single(arrangements);
         }
         finally
         {
@@ -373,5 +377,64 @@ public sealed class GpGraceFlavourTests
             Assert.True(origin.Position.CompareTo(authored) < 0);
             Assert.Equal(authored, target.Position);
         }
+    }
+
+    // ---- D110: a grace placement the tab does not state needs an audio check
+
+    [Theory]
+    [InlineData("3.00")]
+    [InlineData("4.06")]
+    public void ABinaryGraceBeforeGp5_IsMarkedAsAGuessedPlacement(string version)
+    {
+        var bar = GracedBar(new FxNote(0, 7, GraceFret: 5, GraceSlide: true, GraceOnBeat: false));
+        var arrangement = ImportArrangement(LegacyGpFixtureBuilder.WriteFile(version, new[] { bar }));
+
+        var target = Assert.Single(arrangement.Levels[0].Notes, n => n.Fret == 7);
+        Assert.Equal(new AudioCheckSpot(target.Position, AudioCheckReason.GraceTiming), Assert.Single(arrangement.AudioCheckSpots));
+    }
+
+    [Fact]
+    public void ABinaryChordGraceBeforeGp5_IsMarkedAsAGuessedPlacement()
+    {
+        var bar = new FxMeasure().AddVoice(
+            FxBeat.Chord(0, new FxNote(2, 3), new FxNote(3, 3)),
+            FxBeat.Chord(0,
+                new FxNote(0, 7, GraceFret: 5, GraceSlide: true),
+                new FxNote(1, 7, GraceFret: 5, GraceSlide: true)));
+        var arrangement = ImportArrangement(LegacyGpFixtureBuilder.WriteFile("4.06", new[] { bar }));
+
+        var strum = arrangement.Levels[0].Chords.OrderBy(c => c.Position).Last();
+        Assert.Equal(new AudioCheckSpot(strum.Position, AudioCheckReason.GraceTiming), Assert.Single(arrangement.AudioCheckSpots));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AGp5GraceWithAStatedFlavour_IsNotMarked(bool onBeat)
+    {
+        var bar = GracedBar(new FxNote(0, 7, GraceFret: 5, GraceSlide: true, GraceOnBeat: onBeat));
+        var arrangement = ImportArrangement(LegacyGpFixtureBuilder.WriteFile("5.10", new[] { bar }));
+
+        Assert.Empty(arrangement.AudioCheckSpots);
+    }
+
+    [Theory]
+    [InlineData("BeforeBeat")]
+    [InlineData("OnBeat")]
+    public void AGpifGraceWithAStatedFlavour_IsNotMarked(string flavour)
+    {
+        var graceBeat = $"""<Beat id="1"><GraceNotes>{flavour}</GraceNotes><Rhythm ref="1" /><Notes>1</Notes></Beat>""";
+
+        Assert.Empty(ImportGpifArrangement(GpifScore(graceBeat)).AudioCheckSpots);
+    }
+
+    [Fact]
+    public void AGpifGraceWithoutAStatedFlavour_IsMarkedAsAGuessedPlacement()
+    {
+        var graceBeat = """<Beat id="1"><GraceNotes /><Rhythm ref="1" /><Notes>1</Notes></Beat>""";
+        var arrangement = ImportGpifArrangement(GpifScore(graceBeat));
+
+        var target = Assert.Single(arrangement.Levels[0].Notes, n => n.Fret == 5);
+        Assert.Equal(new AudioCheckSpot(target.Position, AudioCheckReason.GraceTiming), Assert.Single(arrangement.AudioCheckSpots));
     }
 }

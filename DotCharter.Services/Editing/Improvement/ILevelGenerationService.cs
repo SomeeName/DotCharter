@@ -1,3 +1,5 @@
+using DotCharter.Services.Editing.Fingering;
+
 namespace DotCharter.Services.Editing.Improvement;
 
 public interface ILevelGenerationService
@@ -13,6 +15,8 @@ public interface ILevelGenerationService
     /// <param name="levelCount">How many levels to generate (top level = the source chart).</param>
     /// <param name="beats">Optional beat grid for detecting measure downbeats;
     /// without it only on-beat/off-beat importance is distinguished.</param>
+    /// <param name="songStyle">The song-wide 1-3 / 1-4 style a reduced grip minted from nothing
+    /// follows (<see cref="ArrangementFingeringStyle.OfSong" />), from a caller that holds the project.</param>
     /// <param name="levelProgress">Optional per-level report — the number of
     /// levels BUILT so far, raised after each one. Twenty levels over a dense
     /// chart is the slow case, and it is the only part of level generation
@@ -20,5 +24,5 @@ public interface ILevelGenerationService
     /// reporting. Called on the calling thread; nothing is reported when the
     /// method refuses the request.</param>
     bool TryGenerate(Arrangement arrangement, int levelCount, IList<BeatMarker>? beats = null,
-        IProgress<int>? levelProgress = null);
+        IProgress<int>? levelProgress = null, ArrangementFingeringStyle? songStyle = null);
 }

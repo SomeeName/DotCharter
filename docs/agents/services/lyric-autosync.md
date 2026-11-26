@@ -179,6 +179,13 @@ Stem time-base consumers checked for #619:
     With it off, word endings keep their measured duration up to the same spacing
     limit. Lyric imports and the inspector's **Close gaps in phrases** command
     follow the same preference. Timing gestures use the same spacing limit.
+  - **No placed syllable is 0 long or shares the previous start (#1041).** The LAST
+    step of `BuildPhrases`, after the grid fold and `CloseGaps` (both can collapse a
+    syllable), is `LyricMinimumTiming` over `Core/Domain/Vocals/VocalTiming.EnforceMinimum`: the export's own
+    25 ms rule, plus every syllable at least 25 ms or the room to the next start. Only
+    the syllables it changes move, onto the next 1/192 tick, never past the next
+    start. `LyricAlignmentReview` judges `Compressed` on the RAW spans, across a line
+    end too, so the spread pair stays flagged (`LyricMinimumTimingTests`).
   - **Phrase-final chart ends use the alignment and vocal envelope by default.**
     `LyricSpanPhraseGap` defaults off. Turning it on extends the last syllable
     toward the next phrase using the measured span rules. `LyricSyllableEnds.ComputeWithReview`

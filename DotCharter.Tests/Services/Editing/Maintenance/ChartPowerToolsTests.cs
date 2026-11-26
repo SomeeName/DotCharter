@@ -655,7 +655,7 @@ public sealed class ChartPowerToolsTests
 
     private sealed class NoOpAutoFixService : IArrangementAutoFixService
     {
-        public void Fix(Arrangement arrangement, ArrangementFixResult result) { }
+        public void Fix(Arrangement arrangement, ArrangementFixResult result, ChartProject? project = null) { }
     }
 
     /// <summary>

@@ -43,9 +43,14 @@ public static class RsVocalLyricEncoding
     ///         <c>-</c> or <c>+</c> is written as it is, and <see cref="Decode" /> reads that last
     ///         character as a marker. "a-" that joins no word comes back as a word part and "a+" as
     ///         a line end — a new line break; a word part "a-" keeps its structure but comes back
-    ///         as "a", the hyphen gone. Nothing is normalised on the way out: every syllable whose
+    ///         as "a", the hyphen gone. No marker is escaped on the way out: every syllable whose
     ///         text does not survive (<see cref="LosesText" />) is reported by the export check
     ///         (<c>ChartExportValidator.KeyLyricMarkerText</c>), so the charter decides.
+    ///     </para>
+    ///     <para>
+    ///         <b>The characters are the game's</b> (<see cref="RsLyricText.ForGame" />): a curly
+    ///         apostrophe goes out as ASCII and a letter the lyric font lacks as its base letter, in
+    ///         both files; the chart keeps what the charter typed.
     ///     </para>
     /// </summary>
     /// <param name="text">The syllable as stored — the hyphen is input syntax, never stored text.</param>
@@ -54,7 +59,7 @@ public static class RsVocalLyricEncoding
     /// <returns>The <c>lyric</c> attribute value.</returns>
     public static string Encode(string? text, bool continuesWord, bool endsPhrase)
     {
-        var value = text ?? "";
+        var value = RsLyricText.ForGame(text ?? "");
         if (endsPhrase) return value + "+";
         if (continuesWord && !value.EndsWith('-')) return value + "-";
         return value;
@@ -115,13 +120,14 @@ public static class RsVocalLyricEncoding
     /// <summary>
     ///     True when the syllable as written reads back with a different text: its text ends in
     ///     a marker the writer does not follow with a marker of its own. A syllable that is not
-    ///     written loses nothing here.
+    ///     written loses nothing here, and neither does the game's character substitution
+    ///     (<see cref="RsLyricText.ForGame" />), which is compared on both sides.
     /// </summary>
     public static bool LosesText(LyricPhrase phrase, int index)
     {
         var lyric = phrase.Lyrics[index];
         foreach (var token in EncodeLine(phrase))
-            if (ReferenceEquals(token.Syllable, lyric)) return Decode(token.Lyric).Text != WrittenText(lyric);
+            if (ReferenceEquals(token.Syllable, lyric)) return Decode(token.Lyric).Text != RsLyricText.ForGame(WrittenText(lyric));
 
         return false;
     }

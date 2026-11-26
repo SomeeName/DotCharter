@@ -186,7 +186,8 @@ public sealed class LyricStyleRuleTests
     [InlineData(3)]
     public void TheQualityReport_ListsEachLyricFindingOnce(int arrangements)
     {
-        var project = CreateProject(Line(2, "hold", "on"));
+        // Three words, so the line-length check (#977) adds nothing to the one lowercase finding.
+        var project = CreateProject(Line(2, "hold", "on", "now"));
         project.Arrangements.Clear();
         for (var i = 0; i < arrangements; i++) project.Arrangements.Add(new Arrangement { Name = $"Lead {i}" });
 

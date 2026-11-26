@@ -416,21 +416,9 @@ public class AppConfig : FolderConfig
     public bool InspectorApplyStep { get; set; }
 
     /// <summary>
-    ///     Leave two-string shapes without an automatic chord name, and strip any
-    ///     they already carry on export.
-    ///     <para>
-    ///         <b>On by default.</b> Two pitches do not determine a chord, so a
-    ///         detected name for a double stop is a guess the charter cannot tell
-    ///         apart from a real one. Editor on Fire ships the same switch
-    ///         (<c>eof_dont_auto_name_double_stops</c>) and rscharter never
-    ///         auto-names at all; both draw a blank name as nothing.
-    ///     </para>
-    ///     <para>
-    ///         It gates the AUTOMATIC namer only — the inspector's candidate list
-    ///         is never filtered, so a double stop the charter wants labelled can
-    ///         still be labelled by hand, and a hand-written name survives the
-    ///         export strip. See <see cref="DoubleStopNameOptions" />.
-    ///     </para>
+    ///     Leave two-string shapes without an automatic chord name, and strip any they already carry on
+    ///     export. On by default (Editor on Fire's switch); the reasoning, the power-chord exemption and
+    ///     what it does not gate live on <see cref="DoubleStopNameOptions" />.
     /// </summary>
     public bool SuppressDoubleStopChordNames { get; set; } = true;
 
@@ -449,6 +437,14 @@ public class AppConfig : FolderConfig
     ///     EOF's behaviour exactly.
     /// </summary>
     public bool KeepPowerChordNames { get; set; }
+
+    /// <summary>
+    ///     Within one hand shape only the first chord shows its name: Guitar Pro import and Generate hand
+    ///     shapes point a later chord that repeats the same grip at an unnamed copy of it. Never renames a
+    ///     chord that already plays a template, and loading a project never runs it. On by default. Read
+    ///     through <c>RepeatedChordNames</c>.
+    /// </summary>
+    public bool NameOnlyFirstChordInHandShape { get; set; } = true;
 
     /// <summary>
     ///     How the chord panel's Suggest pills and "Auto-fill fingerings &amp; names"

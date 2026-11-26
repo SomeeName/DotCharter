@@ -223,6 +223,11 @@ public sealed class SqliteLibraryIndex : ILibraryIndex
             value is null or DBNull ? 0 : (int)Math.Min(int.MaxValue, Convert.ToInt64(value, CultureInfo.InvariantCulture));
     }
 
+    public bool HasSongKey(string songKey) => new SongKeyLookup(_dbPath, _logger).HasSongKey(songKey);
+
+    public IReadOnlyList<string> PackagePathsForSongKey(string songKey) =>
+        new SongKeyLookup(_dbPath, _logger).PackagePathsForSongKey(songKey);
+
     public string FindCoverImage(string songKey) =>
         FindCoverImage(songKey, LibraryCoverCache.GetCachedAlbumArtPngPath);
 

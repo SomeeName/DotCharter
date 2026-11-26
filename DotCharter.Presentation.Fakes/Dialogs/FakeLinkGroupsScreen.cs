@@ -58,13 +58,15 @@ public sealed class FakeLinkGroupsScreen : FakeDialog<bool>, ILinkGroupsScreen
 
     public static FakeLinkGroupsScreen LongText() => new(
     [
-        Group("A", "Refrain mit Zwischenspiel und Wiederholung", "Leadgitarre (alternative Stimmung) ×3, Rhythmusgitarre ×3",
+        Group("A", "Refrain mit Zwischenspiel, Gitarrensolo und Wiederholung bis zum Schluss", "Leadgitarre (alternative Stimmung) ×3, Rhythmusgitarre ×3",
             "Leadgitarre (alternative Stimmung) · Takte 17–24", "Rhythmusgitarre · Takte 17–24"),
         Group("B", "サビのリフ", "リード ×2", "リード · 小節 5–8", "リード · 小節 29–32")
     ],
     [
         new Suggestion("Zwischenspiel nach dem zweiten Refrain · 12 Takte",
-            "Leadgitarre (alternative Stimmung) ×2, Rhythmusgitarre ×2 · Takte 57–68, 93–104 · aus den Wiederholungen der Partitur", true)
+            "Leadgitarre (alternative Stimmung) ×2, Rhythmusgitarre ×2 · Takte 57–68, 93–104 · aus den Wiederholungen der Partitur", true),
+        new Suggestion("Gitarrensolo mit Überleitung zum langsamen Schlussteil der Komposition · 16 Takte",
+            "Leadgitarre ×2 · Takte 105–120, 137–152", false)
     ]);
 
     /// <summary>A song linked throughout: the list scrolls.</summary>

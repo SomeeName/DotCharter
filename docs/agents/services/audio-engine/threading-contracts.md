@@ -69,7 +69,11 @@
   split `ApplyGuitarVstChainCore` uses: **read state + detach under the lock,
   open UNLOCKED, publish under the lock.** Two things make the unlocked window
   safe and both are required: `_mediaLoadGate` (a separate lock only the
-  background load paths take) serializes the publishes, and the publish step
+  background load paths take) serializes the master publishes and
+  `_stemLoadGate` the stem-set ones (#960: kept apart so a project's stems open
+  while its song decodes; `ReplaceEngine` holds both, media first,
+  `StemLoadMediaGateTests`; the stem publish also takes `_mediaOperationGate`, so it
+  never overlaps the master's Pause/Seek/Play `Activate`), and the publish step
   re-checks `ReferenceEquals(_engine, engine)` and DISCARDS what it opened if a
   device change replaced the engine mid-decode — a source belonging to a
   destroyed engine must never reach the mixer. Pinned by

@@ -163,9 +163,19 @@
   - and after the walk, `FretAnchors/AnchorSmoothing` drops A → B → A bounces
     whose middle span (≤ 8 struck positions) is playable from A, and on BASS
     pulls a forced up-shift back over the run (≤ 2 notes) that already played
-    above the old anchor. Neither post-pass moves a slide landing.
+    above the old anchor. On a SEVEN-string guitar a third pass folds a
+    passing higher anchor (≤ 2 struck positions, ≤ 2 frets above) into the
+    lower one right after it when its shape recurs under the lower one
+    (`FoldHigherIntoLower`; ungated it cost 0.03 pp holdout guitar FHP).
+    No post-pass moves a slide landing.
+    A single-note pitched slide that lands in a LATER hand shape whose anchor is
+    decided starts under an anchor that puts the landing finger on it (the shape's
+    anchor minus the slide distance, or the start fret when lower; pinned), since
+    the shape's anchor wins at the landing and I43 would fire otherwise (#1008,
+    `SlideIntoHandShapeAnchorTests`; guitar FHP train / holdout 84.91 / 91.02 →
+    84.96 / 91.05 %, bass and fingering unchanged).
 
-  **The abandonment and both post-passes run for EVERY caller of the walk**, not
+  **The abandonment and every post-pass run for EVERY caller of the walk**, not
   just the two that pass a `freeGrip`: Refret, the export findings' FHP Fix and
   Generate FHP for a selection get them too.
   Templates are resolved by `Id` (`ChordTemplateResolver.IndexById`), never by
@@ -248,7 +258,11 @@
   - it moves only onto the note that plays the new position's lowest fret —
     the charters move one note later than the look-ahead would;
   - a group descend may not leave the opening note at + 3 (the charters
-    matched such descends 0-21% of the time).
+    matched such descends 0-21% of the time);
+  - it waits one note when the next note plays the same fret on a LOWER
+    string (`FretAnchorGenerationService.RootFollowsBelow`, #930): the charters
+    move onto that note, the root the index finger takes (108 of 108 such
+    holdout re-plants, 121 of 163 train).
 
   | `auto`, train / holdout | guitar FHP | bass FHP | bass changes gen / ref (train · holdout) | chord fingering after FHP |
   |---|---|---|---|---|
@@ -258,6 +272,7 @@
   | + descend width 3 | = | 85.9 / 85.6 % | 7,045 · 1,790 | = |
   | + scan bounded at 24 | = | 85.8 / 85.3 % | 7,047 · 1,792 | = |
   | + learned chord shapes (`core/guitar-and-tuning.md`) | 84.9 / 91.0 % | = | = | 81.4 / 85.7 % |
+  | + wait for the root below (#930) | = | 86.1 / 86.1 % | 7,045 · 1,788 | = |
 
   The bound is not a corpus gain: train is flat from 16 up, and the Guitar Pro
   answer key, whose judge re-plants a long 2 → 4 bass figure, loses 0.9 pp of

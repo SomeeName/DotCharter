@@ -45,8 +45,16 @@ internal static class GpBeatCarry
     /// </summary>
     internal sealed class PendingGrace
     {
-        public PendingGrace(bool beforeBeat) => BeforeBeat = beforeBeat;
+        public PendingGrace(bool beforeBeat, bool placementStated = true)
+        {
+            BeforeBeat = beforeBeat;
+            PlacementStated = placementStated;
+        }
+
         public bool BeforeBeat { get; }
+
+        /// <summary>Whether the tab names the flavour; an assumed one is an audio-check spot.</summary>
+        public bool PlacementStated { get; }
         public List<GraceEntry> Entries { get; } = [];
     }
 
@@ -61,7 +69,8 @@ internal static class GpBeatCarry
     ///     a GP grace beat attaches to the very next beat only.
     /// </summary>
     internal static void ApplyPendingGrace(GuitarNote note, ref PendingGrace? pendingGrace,
-        IList<GuitarNote> notesOut, IList<Chord> chordsOut, ISet<IGuitarSound>? graceTargets = null)
+        IList<GuitarNote> notesOut, IList<Chord> chordsOut, ISet<IGuitarSound>? graceTargets = null,
+        ISet<IGuitarSound>? timingGuesses = null)
     {
         var grace = pendingGrace;
         pendingGrace = null;
@@ -105,6 +114,7 @@ internal static class GpBeatCarry
             NotationDuration = GpPostProcessor.GraceLeadIn
         });
         if (!entry.Slide) MarkLegatoTarget(note, entry.Fret);
+        GpAudioCheck.NoteGraceTiming(timingGuesses, grace.PlacementStated, note);
         note.Position += place.TargetShift;
         note.Sustain = GpPostProcessor.ShortenSustain(note.Sustain, place.TargetShift);
         if (!entry.Slide && place.TargetShift.CompareTo(FractionalPosition.Zero) > 0) graceTargets?.Add(note);
@@ -124,7 +134,8 @@ internal static class GpBeatCarry
     ///     (<see cref="ChordNote"/> has a field for it).
     /// </summary>
     internal static void ApplyPendingGrace(Chord chord, ref PendingGrace? pendingGrace,
-        IList<GuitarNote> notesOut, IList<Chord> chordsOut, ISet<IGuitarSound>? graceTargets = null)
+        IList<GuitarNote> notesOut, IList<Chord> chordsOut, ISet<IGuitarSound>? graceTargets = null,
+        ISet<IGuitarSound>? timingGuesses = null)
     {
         var grace = pendingGrace;
         pendingGrace = null;
@@ -197,6 +208,7 @@ internal static class GpBeatCarry
         {
             cn.Sustain = GpPostProcessor.ShortenSustain(cn.Sustain, place.TargetShift);
             if (legato) graceTargets?.Add(cn);
+            GpAudioCheck.NoteGraceTiming(timingGuesses, grace.PlacementStated, cn);
         }
     }
 
@@ -459,6 +471,8 @@ internal static class GpBeatCarry
             var at = onsets[i];
             if (chordAt.Contains(at) || !singles.TryGetValue(at, out var note)) continue;
             if (note.NotationDuration is not { } value || value <= Fraction.Zero) continue;
+            // A note the tab already marks STACCATO is a strike, never an accent.
+            if (note.Sustain == FractionalPosition.Zero) continue;
 
             var own = new FractionalPosition(value);
             var rest = onsets[i + 1] - (at + own);
@@ -527,7 +541,9 @@ internal static class GpBeatCarry
             single = notesOut[i];
         }
 
-        if (single == null) return;
+        // A note the tab already marks STACCATO imports as a strike (sustain 0):
+        // its articulation is written, so the rest after it adds no accent.
+        if (single == null || single.Sustain == FractionalPosition.Zero) return;
         carry.Note = single;
         carry.OwnRhythm = rhythm;
     }

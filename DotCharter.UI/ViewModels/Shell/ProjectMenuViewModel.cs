@@ -48,6 +48,7 @@ public sealed partial class ProjectMenuViewModel : ViewModelBase, IDisposable
     private readonly IShellLauncher? _shell;
     private readonly IExportTargetWriter _exportFiles;
     private readonly ReferencePitchOffer? _referencePitchOffer;
+    private readonly IPackageFileOpener? _packageOpener;
     private int _recentProjectsGeneration;
 
     public ProjectMenuViewModel(
@@ -63,8 +64,10 @@ public sealed partial class ProjectMenuViewModel : ViewModelBase, IDisposable
         IFileStorageService? fileStorage = null,
         IShellLauncher? shell = null,
         IExportTargetWriter? exportFiles = null,
-        ReferencePitchOffer? referencePitchOffer = null)
+        ReferencePitchOffer? referencePitchOffer = null,
+        IPackageFileOpener? packageOpener = null)
     {
+        _packageOpener = packageOpener;
         _referencePitchOffer = referencePitchOffer;
         _projectSession = projectSession;
         _projectState = projectState;
@@ -244,10 +247,18 @@ public sealed partial class ProjectMenuViewModel : ViewModelBase, IDisposable
                 return;
 
             case DroppedFileRoute.RocksmithPackage:
+                // Opened in place through the Library row's own load path; the
+                // opener shows any failure on the status rail itself.
                 _logger.Info(AppLogCategory.Import,
-                    $"Rocksmith package dropped/opened; there is no single-file load seam. Path='{filePath}'.");
-                _projectState.MainDisplayMessage =
-                    _localization.Format("Status_DroppedPsarcNotSupported", Path.GetFileName(filePath));
+                    $"Rocksmith package dropped/opened. Opening it as a project. Path='{filePath}'.");
+                if (_packageOpener is null)
+                {
+                    _projectState.MainDisplayMessage = _localization.Format("Status_DroppedUnsupportedFileType",
+                        DroppedFileRouter.ExtensionOf(filePath), Path.GetFileName(filePath));
+                    return;
+                }
+
+                if (await _packageOpener.OpenPackageFileAsync(filePath)) ProjectOpened?.Invoke();
                 return;
 
             case DroppedFileRoute.Unsupported:

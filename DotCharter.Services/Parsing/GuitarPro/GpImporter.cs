@@ -159,6 +159,8 @@ public sealed class GpImporter
             var legacy = new GpLegacyImporter().Import(gpFilePath, trackIdsToImport, settings);
             GpMeterGrid.ToBeatGrid(legacy, settings.ImportTimeSignatures);
             GpDeadNoteSlide.TrimSustains(legacy);
+            GpAudioCheck.Mark(legacy);
+            GpPostProcessor.FinishHandShapes(legacy);
             return legacy;
         }
 
@@ -174,9 +176,14 @@ public sealed class GpImporter
             result.ArrangementsByTrackId[id] = arrangement;
         foreach (var (arrangement, slideIns) in arrangementParser.SlideInsMaterialized)
             result.SlideInsMaterialized[arrangement] = slideIns;
+        foreach (var (arrangement, dropped) in arrangementParser.DroppedNotes)
+            result.DroppedNotes[arrangement] = dropped;
         result.DeadSlideSounds.UnionWith(arrangementParser.DeadSlideSounds);
+        result.GraceTimingGuesses.UnionWith(arrangementParser.GraceTimingGuesses);
         GpMeterGrid.ToBeatGrid(result, settings.ImportTimeSignatures);
         GpDeadNoteSlide.TrimSustains(result);
+        GpAudioCheck.Mark(result);
+        GpPostProcessor.FinishHandShapes(result);
         return result;
     }
 

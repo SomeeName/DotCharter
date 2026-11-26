@@ -264,7 +264,7 @@ public sealed class ProjectSnapshotUndoIntegrityTests
 
     private sealed class NoOpAutoFixService : IArrangementAutoFixService
     {
-        public void Fix(Arrangement arrangement, ArrangementFixResult result) { }
+        public void Fix(Arrangement arrangement, ArrangementFixResult result, ChartProject? project = null) { }
     }
 
     private sealed class NoOpProjectSessionService : IProjectSessionService

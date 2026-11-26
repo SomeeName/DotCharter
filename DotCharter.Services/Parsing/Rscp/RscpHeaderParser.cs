@@ -31,7 +31,7 @@ public class RscpHeaderParser
         "stems", "arrangementFiles", "showlights", "bookmarks", "dcAnnotations",
         "dcToneDefinitions", "dcSynthPlayStyle", "dcProjectId", "dcProvenance", "dcVersion",
         "dcAudioVolume", "dcPreviewVolume", "dcAudioVolumeSig", "dcPreviewVolumeSig", "dcAudioVolumeManual", "dcPreviewVolumeManual",
-        "dcTitleSort", "dcAlbumSort", "dcDlcKey", "dcPreviewStartMs"
+        "dcTitleSort", "dcAlbumSort", "dcDlcKey", "dcPreviewStartMs", "dcIgnoredFindings"
     ];
 
     public void ParseChartHeader(XDocument doc, string filePath, ChartProject project)
@@ -128,6 +128,7 @@ public class RscpHeaderParser
         ParseShowlights(header, project);
         ParseBookmarks(header, project);
         ParseAnnotations(header, project);
+        RscpIgnoredFindings.Parse(header.First("dcIgnoredFindings"), project);
         ParseToneDefinitions(header, project);
 
         project.TextContent = header.First("text")?.Value ?? "";

@@ -273,7 +273,15 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
     "Ask the assistant" — the fix menu, the AI row, or a disabled "No default fix"), its row marked by the accent
     spine (`IssueListRow.IsOnFixesCard`). The list is ONE flat list of row models (`Issues.Rows` =
     `InspectorIssueRows`, `IssueListRow`: no `$parent` lookups, message / stamp / Fix check computed on first read),
-    with a Difficulty filter once the arrangement has levels (arrangement-wide findings always show), and Auto-fix
+    with a Difficulty filter once the arrangement has levels (arrangement-wide findings always show). Identical
+    findings (same code and English sentence) fold into ONE group row with a count (`IssueRowKind.Group`, `×75`)
+    that expands to its occurrences, each still a jump. A WARNING row carries Ignore (a group row Ignore all); an
+    ignored finding leaves the count and the list until Show ignored lists it with Stop ignoring. The ignores are
+    `ChartProject.IgnoredFindings` (`dcIgnoredFindings` in the `.dcproj`, one undo step each through
+    `SetIgnoredFindingsAction`); `Services/Editing/Validation/FindingIgnores` matches code + sentence + a hash of the
+    subject (the element's fields, a lyric's whole line), so an edit to the subject brings the finding back, and
+    never matches an Important finding. Export validation and Fix chart errors do not read the list
+    (`FindingIgnoresTests`, `InspectorIssueIgnoreTests`, `Perf/IssuesIgnoreGroupUiPerfSmokeTests`). Auto-fix
     asks first through the card's `InspectorConfirmRow` over an `InspectorPendingAction`
     (`Issues.AutoFixConfirm`, withdrawn by a project / arrangement switch or an undoable edit) — the confirm
     grammar every design-D reset shares. Not virtualized on purpose: the list's ScrollViewer sizes from its content
@@ -455,7 +463,11 @@ Part of the inspector / misc-surfaces reference. Router: [../misc-surfaces.md](.
   holds one view model per page — `StagedPlacementViewModel` (Placement: the board, Position and Import
   cards), `StagedSelectionViewModel` (Selection: Move, Values for Apply, Summary), `StagedNoteTechniqueViewModel`
   and `StagedChordTechniqueViewModel` (Technique: a note's techniques and detail; a chord's string card, one
-  string at a time with its key lit and a Mask key, and its Whole chord card) — and `StagedFooterViewModel`.
+  string at a time with its key lit and a Mask key; its Chord techniques card (#953, `SoundChordAllStringsView`,
+  the partial `StagedChordTechniqueViewModel.AllStrings.cs`): the note's rows — mute, HOPO, harmonic, picking with
+  a none option, Accent, Tremolo — staged on EVERY masked string of every chord the ladder reaches in one stage
+  (one undo step), a row lit nowhere when those strings differ (`ChordAllStringsTechniqueTests`); and its Whole
+  chord card) — and `StagedFooterViewModel`.
   A page control STAGES and writes nothing; the footer's Apply writes at once for one sound with nothing
   passed by and otherwise shows the review sentence with Confirm / Cancel in the footer's place
   (`NoteFooterAsk`); a draft that lands nowhere still offers Apply, so the review can say why. Leaving a page

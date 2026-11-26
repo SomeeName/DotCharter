@@ -78,7 +78,7 @@ public sealed partial class ProjectSessionAttachAudioTests
         var entry = Assert.Single(await service.ScanAsync(library));
         var browser = new SongBrowserViewModel(h.Storage, h.Config, service, h.Logger, h.Session,
             h.State, h.Editor, h.Transport, new DotCharter.Presentation.Dialogs.DialogsSlot(),
-            FakeLocalization.English(), playability: service);
+            FakeLocalization.English(), new DotCharter.Tests.UI.ViewModels.Panels.StubPackageFileReader(), playability: service);
         Assert.True(await browser.LoadSongItem(new PsarcSongListItem(entry, FakeLocalization.English(), packages.BlockFor(entry))));
         Assert.Equal("song.flac", h.State.ActiveProject!.AudioFileName);
         Assert.Empty(h.State.CurrentProjectPath);

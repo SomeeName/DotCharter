@@ -13,6 +13,7 @@ public sealed partial class FakeEditorSettingsScreen : ObservableObject, IEditor
     [ObservableProperty] private bool _autoNameNewChords = true;
     [ObservableProperty] private bool _suppressDoubleStopChordNames = true;
     [ObservableProperty] private bool _keepPowerChordNames;
+    [ObservableProperty] private bool _nameOnlyFirstChordInHandShape;
     [ObservableProperty] private bool _musicalChordNames;
     [ObservableProperty] private int _tappedHarmonicFretOffset = 12;
     [ObservableProperty] private bool _lyricSpanWordGap = true;
@@ -88,6 +89,7 @@ public sealed partial class FakeEditorSettingsScreen : ObservableObject, IEditor
         SyncAnchorToChordFingering = true,
         InspectorApplyStep = true,
         KeepPowerChordNames = true,
+        NameOnlyFirstChordInHandShape = true,
         LyricSpanPhraseGap = true,
         StringOrderIndex = 1,
         Timeline2DLaneTint = true,

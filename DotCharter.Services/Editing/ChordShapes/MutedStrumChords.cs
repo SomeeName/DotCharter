@@ -1,3 +1,4 @@
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.HandShapes;
 using DotCharter.Services.State;
 using HandShape = DotCharter.Core.Domain.Guitar.HandShape;
@@ -64,7 +65,8 @@ public static class MutedStrumChords
         Arrangement arrangement,
         ChartLevel level,
         IReadOnlySet<GuitarNote> candidates,
-        Func<FractionalPosition, bool> inSpan)
+        Func<FractionalPosition, bool> inSpan,
+        ArrangementFingeringStyle? songStyle = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         ArgumentNullException.ThrowIfNull(level);
@@ -79,7 +81,7 @@ public static class MutedStrumChords
         var anchors = level.Anchors.Select(a => a.Position).Order().ToList();
         var bars = level.HandShapes.OrderBy(h => h.Position).ToList();
 
-        var grips = new ResolvedGripSource(arrangement);
+        var grips = new ResolvedGripSource(arrangement, songStyle);
         var minted = new List<ChordTemplate>();
         var runs = new List<Run>();
         Run? run = null;

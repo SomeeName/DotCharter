@@ -1,3 +1,5 @@
+using DotCharter.Services.Editing.ChordShapes;
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.State;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
 using HandShape = DotCharter.Core.Domain.Guitar.HandShape;
@@ -48,10 +50,10 @@ public static class ArrangementHandShapeGenerator
 {
     private static readonly ChordHandShapePlanOptions EditorOptions = new(CoverEveryChord: true, KeepAnchorsOutside: true);
 
-    public static ArrangementHandShapePlan Plan(Arrangement arrangement)
+    public static ArrangementHandShapePlan Plan(Arrangement arrangement, ArrangementFingeringStyle? songStyle = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
-        var grips = new ResolvedGripSource(arrangement);
+        var grips = new ResolvedGripSource(arrangement, songStyle);
         var minted = new List<ChordTemplate>();
         var levels = new List<LevelHandShapePlan>();
         foreach (var level in arrangement.Levels)
@@ -76,10 +78,18 @@ public static class ArrangementHandShapeGenerator
         ArgumentNullException.ThrowIfNull(plan);
 
         var actions = new List<IChartAction>();
-        if (plan.MintedTemplates.Count > 0)
-            actions.Add(new AddChordTemplatesAction(arrangement.ChordTemplates, plan.MintedTemplates));
-
         var known = KnownIds(arrangement);
+        var repeats = RepeatedChordNames.Enabled ? RepeatsOf(arrangement, plan, known) : null;
+        var added = repeats == null ? plan.MintedTemplates.ToList() : plan.MintedTemplates.Concat(repeats.Twins).ToList();
+        if (added.Count > 0)
+            actions.Add(new AddChordTemplatesAction(arrangement.ChordTemplates, added));
+
+        var repointTo = new Dictionary<Chord, int>(ReferenceEqualityComparer.Instance);
+        if (repeats != null)
+        {
+            foreach (var (chord, id) in repeats.Repoints) repointTo[chord] = id;
+        }
+
         foreach (var levelPlan in plan.Levels)
         {
             var level = levelPlan.Level;
@@ -94,7 +104,7 @@ public static class ArrangementHandShapeGenerator
                 {
                     if (known.Contains(chord.TemplateId)) continue;
                     var repointed = chord.Clone();
-                    repointed.TemplateId = bar.Template.Id;
+                    repointed.TemplateId = repointTo.TryGetValue(chord, out var twin) ? twin : bar.GripOf(chord).Id;
                     targets.Add(chord);
                     oldStates.Add(chord.Clone());
                     newStates.Add(repointed);
@@ -142,6 +152,18 @@ public static class ArrangementHandShapeGenerator
 
     /// <summary>The ids the arrangement declares BEFORE this step. A chord naming
     /// none of them is on the sentinel or dangling, and takes its bar's template.</summary>
+    // Only the first chord of a bar shows its name; a later chord this run assigns plays an unnamed twin.
+    private static RepeatedChordNamePlan RepeatsOf(Arrangement arrangement, ArrangementHandShapePlan plan, HashSet<int> known)
+    {
+        var templates = arrangement.ChordTemplates.Concat(plan.MintedTemplates).ToList();
+        var nextId = templates.Count == 0 ? 0 : templates.Max(t => t.Id) + 1;
+        var shapes = plan.Levels.SelectMany(l => l.HandShapes).Select(bar =>
+            (IReadOnlyList<ShapeChord>)bar.Chords
+                .Select(chord => new ShapeChord(chord, bar.GripOf(chord), !known.Contains(chord.TemplateId)))
+                .ToList());
+        return RepeatedChordNames.Plan(templates, shapes, nextId);
+    }
+
     private static HashSet<int> KnownIds(Arrangement arrangement)
     {
         var ids = new HashSet<int>();

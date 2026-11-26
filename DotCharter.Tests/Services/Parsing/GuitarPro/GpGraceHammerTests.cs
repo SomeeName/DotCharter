@@ -289,11 +289,13 @@ public sealed class GpGraceHammerTests
         var (grace, target) = (onString[0], onString[1]);
 
         // The written quarter is a sustained note; the next note on the string clips it
-        // only as far as the grace slot it shifted by.
+        // only as far as the grace slot it shifted by, and the import ends it the D90 gap
+        // (a 32nd note, 1/8 beat in 4/4) before that note.
         var slot = target.Position - authored;
+        var gap = new FractionalPosition(0, new Fraction(1, 8));
         Assert.Equal(authored, grace.Position);
-        Assert.Equal(new FractionalPosition(1) - slot, target.Sustain);
-        Assert.Equal(onString[2].Position, target.Position + target.Sustain);
+        Assert.Equal(new FractionalPosition(1) - slot - gap, target.Sustain);
+        Assert.Equal(onString[2].Position - gap, target.Position + target.Sustain);
     }
 
     [Fact]

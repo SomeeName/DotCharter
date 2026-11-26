@@ -154,7 +154,8 @@ public class HandShapeInteractionTool : IEditorTool
             {
                 // A click on a dashed suggested bar accepts it: plain, or an
                 // arpeggio with Alt — one undo node either way.
-                _acceptor.Accept(track.Arrangement, level, [hit.Suggestion], context.Modifiers.HasFlag(KeyModifiers.Alt));
+                _acceptor.Accept(track.Arrangement, level, [hit.Suggestion], context.Modifiers.HasFlag(KeyModifiers.Alt),
+                    ArrangementFingeringStyle.OfSong(track.Project, track.Arrangement));
                 _hintedSuggestion = null;
             }
             else

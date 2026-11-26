@@ -91,8 +91,8 @@ public sealed class ApplyDlcBuilderFixesTests
     [Fact]
     public void EveryChartFix_HasAFixture()
     {
-        // The show-light and tone-definition fixes are not snapshot fixes: each has its own entry point and its own test below.
-        var covered = FixableKeyList.Append(ChartExportValidator.KeyNoShowlights).Append(ChartExportValidator.KeyToneNotDefined).ToHashSet();
+        // The show-light, tone-definition, metadata-space and DLC-key fixes are not snapshot fixes: each has its own entry point and its own test (the last two in ExportOneClickFixesTests).
+        var covered = FixableKeyList.Append(ChartExportValidator.KeyNoShowlights).Append(ChartExportValidator.KeyToneNotDefined).Append(ChartExportValidator.KeyMetadataStraySpaces).Append(ChartExportValidator.KeyPackageKeyClash).ToHashSet();
         var chartFixes = ExportFindingFixes.Fixes.Where(kv => kv.Value != ExportFixKind.OpenToneDesigner).Select(kv => kv.Key);
         Assert.DoesNotContain(chartFixes, k => !covered.Contains(k));
     }

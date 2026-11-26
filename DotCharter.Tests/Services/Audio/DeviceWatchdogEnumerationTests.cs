@@ -19,7 +19,7 @@ namespace DotCharter.Tests.Services.Audio;
 /// </summary>
 public sealed class DeviceWatchdogEnumerationTests
 {
-    private const int Every = JuceAudioPlaybackService.HealthyEnumerationEveryNTicks;
+    private const int Every = AudioDeviceProbeBuilder.HealthyEnumerationEveryNTicks;
 
     [Fact]
     public void AHealthyEngineOnItsOwnDeviceSkipsMostScans()
@@ -27,7 +27,7 @@ public sealed class DeviceWatchdogEnumerationTests
         var scans = 0;
         for (var tick = 0; tick < Every * 3; tick++)
         {
-            if (JuceAudioPlaybackService.ShouldEnumerateDevices(
+            if (AudioDeviceProbeBuilder.ShouldEnumerateDevices(
                     AudioDeviceRecoveryState.Healthy, engineAlive: true, engineOnDesiredDevice: true,
                     healthyTickIndex: tick % Every))
             {
@@ -43,7 +43,7 @@ public sealed class DeviceWatchdogEnumerationTests
     [Fact]
     public void TheFirstHealthyTickAfterAResetStillScans()
     {
-        Assert.True(JuceAudioPlaybackService.ShouldEnumerateDevices(
+        Assert.True(AudioDeviceProbeBuilder.ShouldEnumerateDevices(
             AudioDeviceRecoveryState.Healthy, engineAlive: true, engineOnDesiredDevice: true,
             healthyTickIndex: 0));
     }
@@ -54,7 +54,7 @@ public sealed class DeviceWatchdogEnumerationTests
     {
         for (var tick = 0; tick < Every * 2; tick++)
         {
-            Assert.True(JuceAudioPlaybackService.ShouldEnumerateDevices(
+            Assert.True(AudioDeviceProbeBuilder.ShouldEnumerateDevices(
                 AudioDeviceRecoveryState.Healthy, engineAlive: false, engineOnDesiredDevice: false,
                 healthyTickIndex: tick));
         }
@@ -70,7 +70,7 @@ public sealed class DeviceWatchdogEnumerationTests
     {
         for (var tick = 0; tick < Every * 2; tick++)
         {
-            Assert.True(JuceAudioPlaybackService.ShouldEnumerateDevices(
+            Assert.True(AudioDeviceProbeBuilder.ShouldEnumerateDevices(
                 AudioDeviceRecoveryState.Healthy, engineAlive: true, engineOnDesiredDevice: false,
                 healthyTickIndex: tick));
         }
@@ -87,7 +87,7 @@ public sealed class DeviceWatchdogEnumerationTests
     {
         for (var tick = 0; tick < Every * 2; tick++)
         {
-            Assert.True(JuceAudioPlaybackService.ShouldEnumerateDevices(
+            Assert.True(AudioDeviceProbeBuilder.ShouldEnumerateDevices(
                 state, engineAlive: true, engineOnDesiredDevice: true, healthyTickIndex: tick));
         }
     }

@@ -1,4 +1,6 @@
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.Improvement;
+using DotCharter.Services.State;
 
 namespace DotCharter.Services.Audio.LivePlay;
 
@@ -26,14 +28,20 @@ public static class DynamicDifficultyLadder
     public static bool IsGenerated(Arrangement? arrangement) =>
         CanLadder(arrangement) && !DynamicDifficultyEngine.CanLevel(arrangement);
 
+    /// <summary>The ladder for the open project: its beat grid, and the song-wide 1-3 / 1-4 style
+    /// a reduced grip minted from nothing follows.</summary>
+    public static Arrangement For(Arrangement arrangement, ProjectState state) =>
+        For(arrangement, state.Beats, ArrangementFingeringStyle.OfSong(state.ActiveProject, arrangement));
+
     /// <summary>The chart's own arrangement when it has levels; otherwise a clone carrying a
     /// generated ladder (or the arrangement itself, should generation refuse it).</summary>
-    public static Arrangement For(Arrangement arrangement, IList<BeatMarker> beats)
+    public static Arrangement For(Arrangement arrangement, IList<BeatMarker> beats,
+        ArrangementFingeringStyle? songStyle = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         if (!IsGenerated(arrangement)) return arrangement;
 
         var ladder = ChartProjectCloner.CloneArrangement(arrangement);
-        return new LevelGenerationService().TryGenerate(ladder, GeneratedLevels, beats) ? ladder : arrangement;
+        return new LevelGenerationService().TryGenerate(ladder, GeneratedLevels, beats, songStyle: songStyle) ? ladder : arrangement;
     }
 }

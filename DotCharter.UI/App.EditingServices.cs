@@ -165,6 +165,10 @@ public partial class App
         // probes through it, so each question reaches the source that owns the file.
         services.AddSingleton<ILibrarySongPlayability>(sp =>
             (ILibrarySongPlayability)sp.GetRequiredService<ILibraryService>());
+        // A dropped / File-opened package outside the Library: read by the same sources,
+        // opened through the song browser's own load path.
+        services.AddSingleton<ILibraryPackageFileReader>(sp => (ILibraryPackageFileReader)sp.GetRequiredService<ILibraryService>());
+        services.AddSingleton<IPackageFileOpener>(sp => sp.GetRequiredService<ViewModels.Panels.SongBrowserViewModel>());
         services.AddSingleton<DotCharter.Services.Infrastructure.LibraryDoctor.ILibraryPackageProbe>(sp =>
             (DotCharter.Services.Infrastructure.LibraryDoctor.ILibraryPackageProbe)sp.GetRequiredService<ILibraryService>());
         // Convert-on-select: prepares the selected song's audio through the

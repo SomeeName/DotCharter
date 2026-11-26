@@ -456,18 +456,69 @@ public sealed class ExportBytePinTests
     // Musica Caelestis RE-CAPTURED for the bend gesture labels: a plain Guitar Pro bend or release no longer
     // keeps its middle point when it lies on the straight line between origin and destination. With that
     // drop switched off the bytes hash to the old pin exactly; the other three files carry no such bend.
+    //
+    // Fireworks Beneath My Shoes and TABS.gp5 RE-CAPTURED for fully muted strums: a dead strum
+    // after a chord joins that chord's hand shape and keeps its own frets and template, and a
+    // dead strum never opens a hand shape over a played chord. With both planner rules switched
+    // off the bytes hash to the old pins exactly; the other two files carry no full mute.
+    //
+    // All four RE-CAPTURED for the hand-shape gap at import: every shape now ends the default
+    // minimum note distance before the next attack instead of on it. With that trim switched off
+    // the bytes hash to the old pins exactly; the leading grip tone and the dropped-note rule move
+    // none of the four.
+    //
+    // All four RE-CAPTURED for staccato: a Guitar Pro staccato imports as a strike (sustain 0)
+    // with no accent, and a run of strums that ends on a staccato ends its hand shape half the
+    // strum's written value after it. Every <Accent> in the three gpif files is the staccato
+    // value 1 (no accent bits), and TABS.gp5 carries the note-effects staccato bit, so the
+    // staccato notes and strums (and what is derived from them) are all that moved.
+    //
+    // All four RE-CAPTURED for #1009, in two measured steps. (1) The #986 chord strike sustain is
+    // reverted at the owner's request: a plain struck chord imports with zero sustain again. With
+    // only that revert the four hashed 3c20b7c0, a3c8004f, eb9e896f and 40d835a2 (Parade, Musica
+    // Caelestis, Fireworks, TABS.gp5); with StrikeSustain back they are the previous pins. (2) The
+    // import trims every sustain D90 reports to end a 32nd note before the next sound
+    // (ChartSpacingFix.TrimSustainsToGap); with that call switched off the bytes hash to step (1).
+    //
+    // Fireworks, Musica Caelestis and TABS.gp5 RE-CAPTURED for #1007: a hand shape's reach
+    // (ShapeMaxFret) no longer counts a sound AT the shape's end, which belongs to the next
+    // shape. Diffed against the code before it, only generated anchors at such shapes move
+    // (Musica Caelestis 44 lose width 5, 4 merge away; Fireworks 1 and TABS.gp5 4 merge away),
+    // plus TABS.gp5's four dead strums at those anchors, which now take the existing 3-4
+    // fingering of the same frets (template 48) under the held hand. With the comparison
+    // back at > the bytes hash to the previous pins exactly; Parade is unchanged.
+    //
+    // Fireworks, Musica Caelestis and TABS.gp5 RE-CAPTURED when #1009 merged over #1007 (and
+    // #1010's position-aware fingering), in two measured steps: with ChordHandShapeBuilder.cs and
+    // GpPostProcessor.cs put back to main's (StrikeSustain on, no TrimSustainsToGap) all four hash
+    // to main's pins exactly (219da2b1, 7922244e, 88e39eab, 6886477a); with #1009's change on,
+    // to these. Parade is unchanged by #1007, so its #1009 pin stands.
+    //
+    // Musica Caelestis RE-CAPTURED for slides into a hand shape: a single-note slide that lands in
+    // a shape with a decided anchor now starts under an anchor that puts the landing finger on it.
+    // Diffed against the code before it, only five anchors move, each at such a slide's start
+    // (9 -> 7 at 192 1/2 and 656 1/2, a 9 -> 10 slide into an FHP-8 shape); nothing else changes.
+    // With the rule switched off the bytes hash to main's pin exactly (a745aae6, after #1009).
+    //
+    // ALL FOUR RE-CAPTURED for #1027: repeated measures get one anchor pattern (RepeatedMeasureAnchors).
+    // Diffed against the code before it, only anchors move (anchor lines removed -> added: Fireworks 10 -> 12,
+    // Musica Caelestis 15 -> 58, Parade 7 -> 13, TABS 2 -> 1), plus, in Fireworks and TABS, the
+    // suggested fingering of a double stop that follows its moved anchor (two chords in Fireworks,
+    // one in TABS, with their hand shapes),
+    // which leaves one template unused and drops it. With the pass switched off all four hash to
+    // the pins before it.
 
     [Theory]
     [InlineData(@"EOF\Yorushika - Fireworks Beneath My Shoes\Yorushika - Firworks Beneath My Shoes.gp",
-        "b0580ffeaeee835d361b81ef0006503f")] // Guitar Pro import fixes
+        "cf501e3d6bc2b802c753ba609abe771d")] // Guitar Pro import fixes; #943 grip subset fingers; #973 hand shapes end a 32nd note early; repeats in a hand shape play an unnamed twin; #1007 shape reach excludes the sound at its end; #1009 strike sustain reverted, D90 sustain gap
     [InlineData(@"EOF\Ave Mujica - Musica Caelestis\Ave Mujica - Musica Caelestis.gp",
-        "7808ddc6867f81010ca542f2709b64fc")]
+        "51b151872df406e9c87577536f9d7094")] // slide-into-shape start anchors; #1007 shape reach; staccato + #940 barline arpeggio split; #943 grip subset fingers; #973 shape gap; #981 guessed dead-note slide landings saved as dcAudioCheck spots; #1009 strike sustain reverted, D90 sustain gap
     [InlineData(@"EOF\Yorushika - Parade\Yorushika - Parade.gp",
-        "6c6a8e971f14691efb3a94fba9535278")]
+        "84d571f7e87c8626f13b6e09ea08c7e3")] // #973 hand shapes end a 32nd note before the next attack; #981 guessed dead-note slide landings saved as dcAudioCheck spots; #1009 strike sustain reverted, D90 sustain gap
     // The GP3-5 BINARY reader, which shares none of the gpif property code —
     // here so a change to one importer that silently moves the other is caught.
     [InlineData("TABS.gp5",
-        "e3153bfe4fefeaa0026ba0f5826eb2c1")] // Legacy swing placement, including derived anchors and hand shapes.
+        "6795ee794ef458ed63de956bf0ce92c0")] // #1007 shape reach; #973 shape gap; Legacy swing placement, including derived anchors and hand shapes; #943 grip subset fingers; #985 swung strums end on the swung grid; #986 strike sustain (reverted in #1009); #1009 D90 sustain gap; a pitched slide on a tie's tail merges into the tied note; #981 guessed dead-note slide landings saved as dcAudioCheck spots (merged pin: both change the output)
     public void GuitarProImport_IsByteIdenticalToThePreOptimisationParser(string relative, string expected)
     {
         var path = Resolve(relative);

@@ -350,7 +350,8 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase, IChordFingerS
         // matches; otherwise build the display template from the chord's notes.
         if (selectedChords.Count > 0 && arr != null)
         {
-            var display = ChordDisplayTemplates.Resolve(selectedChords[0], arr, _fingeringService, Names.ChordNaming);
+            var display = ChordDisplayTemplates.Resolve(selectedChords[0], arr, _fingeringService, Names.ChordNaming,
+                ArrangementFingeringStyle.OfSong(_editor.ActiveProject, arr));
             SelectedDropdownTemplate = AvailableTemplates.FirstOrDefault(t => t.Template.Id == display.Id);
             LoadTemplate(display, arr.Tuning.Length);
             _isUpdatingUi = false;

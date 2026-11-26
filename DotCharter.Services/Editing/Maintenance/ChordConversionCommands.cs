@@ -1,5 +1,6 @@
 using DotCharter.Localization;
 using DotCharter.Services.Editing.ChordShapes;
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.Fixing;
 using DotCharter.Services.State;
 
@@ -118,7 +119,8 @@ internal sealed class ChordConversionCommands(
             scope = start is { } at ? $"phrase at {FormatPosition(at)}" : "level";
         }
 
-        var plan = ChordShapes.MutedStrumChords.Plan(arrangement, level, candidates, inSpan);
+        var plan = ChordShapes.MutedStrumChords.Plan(arrangement, level, candidates, inSpan,
+            ArrangementFingeringStyle.OfSong(_projectState.ActiveProject, arrangement));
         if (plan.Action is not { } action)
         {
             _projectState.MainDisplayMessage = L("Status_MutedStrums_None");
@@ -170,6 +172,7 @@ internal sealed class ChordConversionCommands(
         }
 
         var newTemplates = new List<ChordTemplate>();
+        var songStyle = ArrangementFingeringStyle.OfSong(_projectState.ActiveProject, arrangement);
         var newChords = new List<Chord>();
         var notesToRemove = new List<GuitarNote>();
         var chordsToRemove = new List<Chord>();
@@ -209,7 +212,7 @@ internal sealed class ChordConversionCommands(
             // fingering + name) with its id allocated by the resolver — so
             // there is no local id arithmetic to drift either.
             var finalTemplate = ChordTemplateResolver.Resolve(
-                arrangement, frets, ArpeggioFlavour.Plain, null, newTemplates);
+                arrangement, frets, ArpeggioFlavour.Plain, null, newTemplates, songStyle);
 
             var chord = existing.FirstOrDefault()?.Clone() ?? new Chord { Position = note.Position, NotationDuration = note.NotationDuration };
             chord.TemplateId = finalTemplate.Id;
@@ -299,6 +302,7 @@ internal sealed class ChordConversionCommands(
         }
 
         var newTemplates = new List<ChordTemplate>();
+        var songStyle = ArrangementFingeringStyle.OfSong(_projectState.ActiveProject, arrangement);
         var newChords = new List<Chord>();
         var notesToRemove = new List<GuitarNote>();
 
@@ -317,7 +321,7 @@ internal sealed class ChordConversionCommands(
             // fingering + name) and allocates the id, so there is no local id
             // arithmetic to drift either.
             var template = ChordTemplateResolver.Resolve(
-                arrangement, frets, ArpeggioFlavour.Plain, null, newTemplates);
+                arrangement, frets, ArpeggioFlavour.Plain, null, newTemplates, songStyle);
 
             var chord = new Chord
             {

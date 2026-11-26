@@ -55,6 +55,26 @@
                                 </RadioButton>
                             </StackPanel>
                         </Border>
+
+                        <!-- Add-new keeps the project's (often hand-synced)
+                             tempo map unless this is ticked. A locked map is never
+                             replaced, so the box then shows disabled with why. -->
+                        <Grid x:Name="TempoMapRow" Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Sub" ColumnDefinitions="*,Auto"
+                              ColumnSpacing="12" IsVisible="{Binding ShowsTempoMapChoice}">
+                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" TextWrapping="Wrap"
+                                           Text="{localization:Loc Dialog_GpImport_ReplaceTempoMap}" />
+                                <TextBlock x:Name="TempoMapNote" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap"
+                                           IsVisible="{Binding !IsTempoMapLocked}"
+                                           Text="{localization:Loc Dialog_GpImport_ReplaceTempoMap_Desc}" />
+                                <TextBlock x:Name="TempoMapLockedNote" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap"
+                                           IsVisible="{Binding IsTempoMapLocked}"
+                                           Text="{localization:Loc Dialog_GpImport_ReplaceTempoMap_Locked}" />
+                            </StackPanel>
+                            <CheckBox x:Name="ReplaceTempoMapCheck" VerticalAlignment="Center" Grid.Column="1"
+                                      IsChecked="{Binding ReplaceTempoMap, Mode=TwoWay}" IsEnabled="{Binding !IsTempoMapLocked}"
+                                      AutomationProperties.Name="{localization:Loc Dialog_GpImport_ReplaceTempoMap}" />
+                        </Grid>
                     </StackPanel>
 
                     <!-- Only the diff mode needs a second file; the row states

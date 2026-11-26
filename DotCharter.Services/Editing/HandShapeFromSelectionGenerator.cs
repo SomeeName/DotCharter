@@ -81,7 +81,8 @@ public sealed class HandShapeFromSelectionGenerator
             ChordTemplate? grip = null;
             if (seed != null && arpeggio)
             {
-                grip = ResolveArpeggio(track.Arrangement, seed.Frets, newTemplates);
+                grip = ResolveArpeggio(track.Arrangement, seed.Frets, newTemplates,
+                    ArrangementFingeringStyle.OfSong(track.Project, track.Arrangement));
             }
             else if (seed != null)
             {
@@ -136,7 +137,8 @@ public sealed class HandShapeFromSelectionGenerator
     ///     finds it, so two runs share one template.
     /// </summary>
     public static ChordTemplate ResolveArpeggio(
-        Arrangement arrangement, IReadOnlyDictionary<int, int> frets, List<ChordTemplate> minted)
+        Arrangement arrangement, IReadOnlyDictionary<int, int> frets, List<ChordTemplate> minted,
+        ArrangementFingeringStyle? songStyle = null)
     {
         foreach (var spelling in ArpeggioSpellings)
         {
@@ -144,7 +146,7 @@ public sealed class HandShapeFromSelectionGenerator
                 return declared;
         }
 
-        return ChordTemplateResolver.Resolve(arrangement, frets, ArpeggioSpellings[0], null, minted);
+        return ChordTemplateResolver.Resolve(arrangement, frets, ArpeggioSpellings[0], null, minted, songStyle);
     }
 
     /// <summary>

@@ -2,24 +2,24 @@ using DotCharter.Services.State;
 
 namespace DotCharter.Services.Editing.Tones;
 
-/// <summary>Why <see cref="ToneChangeNudge" /> cannot move a tone change a 16th note earlier.</summary>
+/// <summary>Why <see cref="ToneChangeNudge" /> cannot move a tone change a 32nd note earlier.</summary>
 public enum ToneChangeNudgeBlock
 {
     /// <summary>Nothing stands in the way: the fix moves the change.</summary>
     None,
 
-    /// <summary>A 16th note earlier lies before time 0, where the song has not started.</summary>
+    /// <summary>A 32nd note earlier lies before time 0, where the song has not started.</summary>
     ChartStart,
 
-    /// <summary>Another tone change sits in the 16th before it (or exactly a 16th earlier):
+    /// <summary>Another tone change sits in the 32nd before it (or exactly a 32nd earlier):
     /// moving would stack two changes or swap their order.</summary>
     ToneChange,
 
-    /// <summary>A phrase or section starts strictly inside the 16th before it: moving would carry
+    /// <summary>A phrase or section starts strictly inside the 32nd before it: moving would carry
     /// the change into the previous phrase.</summary>
     PhraseStart,
 
-    /// <summary>A note or chord on any level also starts a 16th earlier: the change would land on
+    /// <summary>A note or chord on any level also starts a 32nd earlier: the change would land on
     /// that note and raise the same warning there.</summary>
     Note,
 
@@ -30,22 +30,22 @@ public enum ToneChangeNudgeBlock
 
 /// <summary>
 ///     The one-click fix for I30 (<see cref="ArrangementIssueType.ToneChangeOnNote" />): moves the
-///     tone change on the flagged note ONE 16th note earlier, so the new tone is already on when the
-///     note sounds.
+///     tone change on the flagged note ONE 32nd note earlier, so the new tone is already on when the
+///     note sounds. About a 32nd is the offset experienced charters use (it was a 16th before).
 ///     <para>
-///         <b>A 16th is measured on the beat grid, not in milliseconds.</b> A beat is one
-///         1/<c>NoteDenominator</c> note, so a 16th is <c>NoteDenominator/16</c> of the beat it lies
-///         in: a quarter of a 4/4 beat, half of a 6/8 beat. When the 16th reaches back over a beat
+///         <b>A 32nd is measured on the beat grid, not in milliseconds.</b> A beat is one
+///         1/<c>NoteDenominator</c> note, so a 32nd is <c>NoteDenominator/32</c> of the beat it lies
+///         in: an eighth of a 4/4 beat, a quarter of a 6/8 beat. When the 32nd reaches back over a beat
 ///         line, the part before the line is measured on the PREVIOUS beat (its own tempo and meter),
-///         so the move is exactly a 16th of music at every tempo. Before the first beat it is measured
+///         so the move is exactly a 32nd of music at every tempo. Before the first beat it is measured
 ///         on the lead-in the timeline extrapolates from the first interval and the first beat's meter.
 ///     </para>
 ///     <para>
-///         <b>The rule: the fix moves exactly one 16th or not at all.</b> It is offered DISABLED, with
+///         <b>The rule: the fix moves exactly one 32nd or not at all.</b> It is offered DISABLED, with
 ///         the reason, when more than one tone change sits on the note, the move would reach before time 0,
 ///         reach another tone change (never two
 ///         on one time, never swapped), cross a phrase or section start (a change sitting ON a start
-///         may move before it — that note is what the 16th protects), or land on another note's onset.
+///         may move before it — that note is what the 32nd protects), or land on another note's onset.
 ///         Each move is one undo step.
 ///     </para>
 ///     <para>
@@ -58,7 +58,7 @@ public enum ToneChangeNudgeBlock
 /// </summary>
 public sealed class ToneChangeNudge
 {
-    private static readonly Fraction Sixteenth = new(1, 16);
+    private static readonly Fraction ThirtySecond = new(1, 32);
 
     private ToneChangeNudge(ToneChange change, FractionalPosition to, ToneChangeNudgeBlock block)
     {
@@ -70,7 +70,7 @@ public sealed class ToneChangeNudge
     /// <summary>The tone change on the note.</summary>
     public ToneChange Change { get; }
 
-    /// <summary>Where the change goes: one 16th earlier (meaningful when <see cref="CanApply" />).</summary>
+    /// <summary>Where the change goes: one 32nd earlier (meaningful when <see cref="CanApply" />).</summary>
     public FractionalPosition To { get; }
 
     /// <summary>What stops the move, or <see cref="ToneChangeNudgeBlock.None" />.</summary>
@@ -97,21 +97,21 @@ public sealed class ToneChangeNudge
         var change = matches[0];
         if (matches.Count > 1) return new ToneChangeNudge(change, change.Position, ToneChangeNudgeBlock.SeveralChanges);
 
-        var to = SixteenthEarlier(change.Position, beats);
+        var to = ThirtySecondEarlier(change.Position, beats);
         return to.GetPositionMs(beats) < 0
             ? new ToneChangeNudge(change, change.Position, ToneChangeNudgeBlock.ChartStart)
             : new ToneChangeNudge(change, to, BlockFor(arrangement, beats, change, to));
     }
 
     /// <summary>
-    ///     <paramref name="position" /> moved one 16th note earlier on the beat grid. Before the first
+    ///     <paramref name="position" /> moved one 32nd note earlier on the beat grid. Before the first
     ///     beat it goes on into the lead-in (negative beats), measured in the first beat's meter as the
     ///     timeline extrapolates it; the caller decides whether that time is still at or after 0 ms.
     /// </summary>
-    public static FractionalPosition SixteenthEarlier(FractionalPosition position, IList<BeatMarker> beats)
+    public static FractionalPosition ThirtySecondEarlier(FractionalPosition position, IList<BeatMarker> beats)
     {
         ArgumentNullException.ThrowIfNull(beats);
-        var remaining = Sixteenth;
+        var remaining = ThirtySecond;
         var beat = position.BeatId;
         var fraction = position.Fraction;
         while (true)

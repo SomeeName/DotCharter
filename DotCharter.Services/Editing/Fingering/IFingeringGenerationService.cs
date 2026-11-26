@@ -22,9 +22,12 @@ public interface IFingeringGenerationService
     /// <summary>
     /// <see cref="SuggestFingeringFor(ChordTemplate, int)" /> following
     /// <paramref name="arrangement" />'s own style for a power chord or a two-fret
-    /// octave (<see cref="ArrangementFingeringStyle" />).
+    /// octave (<see cref="ArrangementFingeringStyle" />); a pair the arrangement
+    /// has no majority for follows <paramref name="songStyle" />
+    /// (<see cref="ArrangementFingeringStyle.OfOtherArrangements" />), when given.
     /// </summary>
-    ChordTemplate? SuggestFingeringFor(Arrangement arrangement, ChordTemplate template);
+    ChordTemplate? SuggestFingeringFor(Arrangement arrangement, ChordTemplate template,
+        ArrangementFingeringStyle? songStyle = null);
 
     /// <summary>
     /// Templates that share <paramref name="source" />'s fret pattern but are

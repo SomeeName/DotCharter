@@ -18,7 +18,7 @@ public static class RomajiMoraSplitter
     {
         ArgumentNullException.ThrowIfNull(word);
 
-        var text = word.ToLowerInvariant();
+        var text = LyricApostrophes.Normalize(word).ToLowerInvariant();
         var morae = new List<string>();
         var i = 0;
         while (i < text.Length)

@@ -495,7 +495,8 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
         var selected = _selectionManager.SelectedNotes.Select(n => n.Position)
             .Concat(_selectionManager.SelectedChords.Select(c => c.Position));
         var picks = HandShapeSuggestionAcceptor.Holding(HandShapeSuggester.Suggest(track.Arrangement, level), selected);
-        var accepted = _suggestions.Accept(track.Arrangement, level, picks, arpeggio);
+        var accepted = _suggestions.Accept(track.Arrangement, level, picks, arpeggio,
+            ArrangementFingeringStyle.OfSong(track.Project, track.Arrangement));
         _projectState.MainDisplayMessage = accepted == 0
             ? _localization.Format("Status_NoSuggestedHandShapesInSelection")
             : _localization.Plural("Status_SuggestedHandShapesAcceptedOne", "Status_SuggestedHandShapesAccepted", accepted);

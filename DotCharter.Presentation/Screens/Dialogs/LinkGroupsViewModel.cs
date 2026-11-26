@@ -118,14 +118,21 @@ public sealed class LinkGroupsViewModel : DialogViewModel<bool>, ILinkGroupsScre
 
     private void ShowSuggestions(IReadOnlyList<LinkSuggestion> suggestions)
     {
-        var l = _edit.Localization;
         Suggestions =
         [
-            .. suggestions.Select(ILinkSuggestionRow (s) => new SuggestionRow(s,
-                l.Format("LinkGroups_SuggestionTitle", LinkGroupText.Name(l, s.Name),
-                    l.Plural("LinkGroups_MeasuresOne", "LinkGroups_Measures", s.MeasureCount)),
+            .. suggestions.Select(ILinkSuggestionRow (s) => new SuggestionRow(s, SuggestionTitle(s),
                 SuggestionDetail(s), _linkSelected.NotifyCanExecuteChanged))
         ];
+    }
+
+    /// <summary>"Verse · 4 measures", or "Join link B · 1 measure" for runs that join an existing group.</summary>
+    private string SuggestionTitle(LinkSuggestion suggestion)
+    {
+        var l = _edit.Localization;
+        var length = l.Plural("LinkGroups_MeasuresOne", "LinkGroups_Measures", suggestion.MeasureCount);
+        return suggestion.Join is { } join
+            ? l.Format("LinkGroups_SuggestionJoinTitle", join.Letter, length)
+            : l.Format("LinkGroups_SuggestionTitle", LinkGroupText.Name(l, suggestion.Name), length);
     }
 
     private async Task DetectAsync(CancellationToken cancellation)
@@ -202,7 +209,13 @@ public sealed class LinkGroupsViewModel : DialogViewModel<bool>, ILinkGroupsScre
         var ranges = string.Join(", ", suggestion.FirstMeasures.Distinct().Order()
             .Select(m => LinkGroupText.Bars(m, suggestion.MeasureCount)));
         var detail = $"{LinkGroupText.PerArrangement(l, suggestion.Runs.Select(r => r.Arrangement))} · {ranges}";
-        if (suggestion.RequiresReview) return $"{detail} · {l["LinkGroups_DifferentContent"]}";
+        if (suggestion.RequiresReview)
+        {
+            return suggestion.Mismatch is { } mismatch
+                ? $"{detail} · {l["LinkGroups_NearMatch"]}: {LinkGroupText.Mismatch(l, mismatch)}"
+                : $"{detail} · {l["LinkGroups_DifferentContent"]}";
+        }
+
         return suggestion.FromRepeats ? $"{detail} · {l["LinkGroups_FromRepeats"]}" : detail;
     }
 

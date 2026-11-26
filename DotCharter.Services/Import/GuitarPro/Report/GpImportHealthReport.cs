@@ -32,6 +32,12 @@ public sealed class GpProbeArrangement
     /// <summary>A sound before the first measure or past the last beat.</summary>
     public int OffGrid { get; init; }
 
+    /// <summary>Hand shapes wider than four frets, kept as imported.</summary>
+    public int WideHandShapes { get; init; }
+
+    /// <summary>Source notes the import dropped: a string the track lacks or a negative fret.</summary>
+    public int DroppedNotes { get; init; }
+
     public int Measures { get; init; }
 
     /// <summary>Measures in which at least one sound starts.</summary>

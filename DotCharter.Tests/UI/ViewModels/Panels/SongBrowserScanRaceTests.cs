@@ -187,7 +187,7 @@ public sealed class SongBrowserScanRaceTests
             Vm = new SongBrowserViewModel(
                 new FakeFileStorageService(), Config, Library, logger,
                 new StubProjectSessionService(), state, editor, transport,
-                new DotCharter.Presentation.Dialogs.DialogsSlot(), DotCharter.Localization.LocalizationService.Instance,
+                new DotCharter.Presentation.Dialogs.DialogsSlot(), DotCharter.Localization.LocalizationService.Instance, new DotCharter.Tests.UI.ViewModels.Panels.StubPackageFileReader(),
                 audioPrefetcher: audioPrefetcher);
         }
 

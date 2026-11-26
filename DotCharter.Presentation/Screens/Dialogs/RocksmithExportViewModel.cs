@@ -17,6 +17,7 @@ using DotCharter.Services.Export.DlcBuilder;
 using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Services.Export.Validation;
 using DotCharter.Services.Infrastructure.Documents;
+using DotCharter.Services.Library.Index;
 using DotCharter.Tone.Infrastructure.Configuration;
 using DotCharter.Tone.Infrastructure.Shell;
 using DotCharter.Tone.Infrastructure.Storage;
@@ -28,9 +29,15 @@ public sealed record RocksmithExportServices(
     IEditorTransport Transport, IProjectDocumentService Documents, IFileStorageService Storage,
     IExportTargetWriter Files, IShellLauncher Shell, IMessagePrompt Prompt, IRocksmithGameProbe Game)
 {
+    /// <summary>The Library index the DLC-key check reads (always set by the container).</summary>
+    public required ILibraryIndex Library { get; init; }
+
     internal RocksmithVolumeMeasure? VolumeMeasure { get; init; }
     internal Func<string, string>? VolumeSignature { get; init; }
     internal Func<string?, string, string, RocksmithTestPackageOwnership>? TestOwnershipFactory { get; init; }
+
+    /// <summary>How the findings check runs off the UI thread; null = <c>Task.Run</c>. A test swaps it to hold or record the work.</summary>
+    internal Func<Func<IReadOnlyList<ExportValidationFinding>>, Task<IReadOnlyList<ExportValidationFinding>>>? RunValidation { get; init; }
 }
 
 /// <summary>
@@ -63,6 +70,7 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
     private string _defaultTestFolder = "";
     private readonly AsyncRelayCommand _browseOutput;
     private IReadOnlyList<ExportValidationFinding> _findings = [];
+    private readonly RocksmithExportFindingsCheck _check;
     internal bool IsDisposed { get; private set; }
 
     [ObservableProperty][NotifyPropertyChangedFor(nameof(TestFolderWatermark))] private string _outputPath = "";
@@ -93,6 +101,7 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
             static screen => screen.OnPropertyChanged(nameof(MainAudioWatermark)));
         _fixes = new RocksmithFixes(maintenance, edit.Editor, edit.State, dialogs, edit.Localization, edit.Logger);
         _io = io;
+        _check = new RocksmithExportFindingsCheck(io, edit.Logger, () => IsDisposed, OnGateChanged);
         _dialogs = dialogs;
         _memory = memory;
         Target = new ExportTargetViewModel(edit.Localization);
@@ -136,7 +145,7 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
         UpdateOutputName();
         Revalidate();
         edit.Logger.Info(AppLogCategory.Project,
-            $"Rocksmith export dialog opened. Song='{_project.Chart.SongName}', arrangements={Arrangements.Count}, errors={ErrorCount}, warnings={WarningCount}.");
+            $"Rocksmith export dialog opened. Song='{_project.Chart.SongName}', arrangements={Arrangements.Count}, findings pending.");
     }
 
     /// <summary>The PC package name the song's title, artist and version derive now; an output file named so follows them.</summary>
@@ -159,6 +168,10 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
 
     public int ErrorCount => _findings.Count(f => f.Severity == ExportFindingSeverity.Error);
     public int WarningCount => _findings.Count(f => f.Severity == ExportFindingSeverity.Warning);
+    /// <summary>The findings are being computed off the UI thread; Export waits for them.</summary>
+    public bool IsCheckingFindings => _check.IsChecking;
+    internal Task FindingsReady => _check.Ready;
+
     public bool HasFindings => _findings.Count > 0;
 
     public string ValidationSummary => HasFindings
@@ -184,7 +197,7 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
     {
         if (_project is not { } project) return null;
         Assemble(project);
-        return new DlcBuilderProjectInput(ChartProjectCloner.Clone(project), AudioPath, AlbumArtPath, OutputPath);
+        return new DlcBuilderProjectInput(ChartProjectCloner.Clone(project), AudioPath, AlbumArtPath, OutputPath, FixLowBassTuning);
     }
 
     /// <summary>Why Mac is unavailable for accepted content: missing encryption.</summary>
@@ -257,9 +270,11 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
     public bool IsExportBlocked => ExportBlockedReason.Length > 0;
 
     /// <summary>Every gate clause that is false, in gate order, as the sentence the dialog prints for it.</summary>
-    internal IReadOnlyList<string> BlockingReasons() => Gate.Reasons(_edit.Localization, MacBlock);
+    internal IReadOnlyList<string> BlockingReasons() => _check.IsChecking
+        ? [_edit.Localization["Dialog_Export_CheckingFindings"], .. Gate.Reasons(_edit.Localization, MacBlock)]
+        : Gate.Reasons(_edit.Localization, MacBlock);
 
-    private RocksmithExportGate Gate => new(IsBuilding, MacOnlyBlocked, HasBlockingErrors, HasInvalidDlcKey, HasInvalidPreviewStart, MissingPaths,
+    private RocksmithExportGate Gate => new(IsBuilding || _check.IsChecking, MacOnlyBlocked, HasBlockingErrors, HasInvalidDlcKey, HasInvalidPreviewStart, MissingPaths,
         NothingSelectedToExport);
 
     /// <summary>The target is Mac alone and no Mac package can be written.</summary>

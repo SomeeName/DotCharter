@@ -1,3 +1,4 @@
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.Tracks;
 using DotCharter.Services.State;
 
@@ -14,7 +15,8 @@ internal static class HeldNoteGrips
         var shapes = level.HandShapes.Where(selection.Contains).OrderBy(h => h.Position).ToArray();
         if (shapes.Length == 0) return default;
 
-        var pass = new FillPass(track.Arrangement, level);
+        var pass = new FillPass(track.Arrangement, level,
+            ArrangementFingeringStyle.OfSong(track.Project, track.Arrangement));
         var targets = new List<HandShape>();
         var states = new List<HandShape>();
         var spacing = ChartSpacingEnforcer.SpacingGapOf(config);
@@ -38,11 +40,11 @@ internal static class HeldNoteGrips
         return (changed, shapes.Length, pass.Conflicts);
     }
 
-    private sealed class FillPass(Arrangement arrangement, ChartLevel level)
+    private sealed class FillPass(Arrangement arrangement, ChartLevel level, ArrangementFingeringStyle? songStyle)
     {
         private readonly IGrouping<FractionalPosition, Strike>[] _onsets = Strikes(level)
             .GroupBy(n => n.Position).OrderBy(g => g.Key).ToArray();
-        private readonly HeldGripBatch _grips = new(arrangement);
+        private readonly HeldGripBatch _grips = new(arrangement, songStyle);
         private int _start;
 
         public int Conflicts { get; private set; }

@@ -106,7 +106,7 @@ public sealed class BatchChartLintService : IBatchChartLintService
             }
 
             var fixResult = new ArrangementFixResult();
-            _autoFixService.Fix(arrangement, fixResult);
+            _autoFixService.Fix(arrangement, fixResult, project);
             anyFixes |= fixResult.TotalChanges > 0;
 
             var after = fixResult.TotalChanges > 0

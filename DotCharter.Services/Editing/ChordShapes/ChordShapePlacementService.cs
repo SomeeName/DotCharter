@@ -1,4 +1,5 @@
 using DotCharter.Localization;
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.Highway;
 using DotCharter.Services.Editing.Pen;
 using DotCharter.Services.State;
@@ -96,7 +97,8 @@ public sealed class ChordShapePlacementService : IChordShapePlacementService
         if (Target() is not { } target) return Refuse(ChordShapePlacementRefusal.NoChart);
 
         var position = _pen.PenPosition(gridDivisor);
-        return Commit(ChordShapePlacement.PlanRepeatPrevious(target, position), null,
+        return Commit(ChordShapePlacement.PlanRepeatPrevious(target, position,
+            ArrangementFingeringStyle.OfSong(_scope.Project, target.Arrangement)), null,
             (name, _) => _localization.Format("ChordShapes_Status_Repeated", name));
     }
 

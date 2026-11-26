@@ -116,26 +116,78 @@ public sealed class AudioDeviceRecoveryStateMachineTests
         Assert.Equal(AudioDeviceRecoveryAction.None, sm.Tick(EngineDead(present: true)));
         Assert.Equal(AudioDeviceRecoveryState.DeviceMissing, sm.State);
 
-        // Device "present" forever (ASIO registry ghost) but nothing changed:
-        // never retry — this is what prevents periodic restart glitches.
-        for (var i = 0; i < 10; i++)
-            Assert.Equal(AudioDeviceRecoveryAction.None, sm.Tick(EngineDead(present: true)));
+        // Device "present" forever (ASIO registry ghost) but nothing changed
+        // while audio plays on a fallback: never retry — this is what prevents
+        // periodic restart glitches.
+        for (var i = 0; i < 30; i++)
+            Assert.Equal(AudioDeviceRecoveryAction.None, sm.Tick(OnFallback(present: true)));
 
         // Real hot-plug (topology delta) re-arms the retry.
         Assert.Equal(AudioDeviceRecoveryAction.AttemptRecovery,
             sm.Tick(EngineDead(present: true, topologyChanged: true)));
     }
 
+    /// <summary>
+    /// An ASIO interface stays listed while unplugged and its replug
+    /// changes nothing in the enumeration. With the engine dead there is no
+    /// audio a restart could glitch, so the machine keeps retrying, slowly.
+    /// </summary>
     [Fact]
-    public void Topology_change_during_cooldown_arms_retry_after_cooldown()
+    public void Dead_engine_after_a_failed_recovery_retries_without_a_topology_change()
+    {
+        var sm = new AudioDeviceRecoveryStateMachine(debounceTicks: 1, cooldownTicks: 2, deadRetryTicks: 6);
+        sm.Tick(EngineDead(present: true));
+        Assert.Equal(AudioDeviceRecoveryAction.AttemptRecovery, sm.Tick(EngineDead(present: true)));
+        sm.NotifyRecoveryFailed();
+
+        // Five dead probes (two of them cooldown) issue nothing ...
+        for (var i = 0; i < 5; i++)
+            Assert.Equal(AudioDeviceRecoveryAction.None, sm.Tick(EngineDead(present: true)));
+        // ... the sixth re-arms and, with the device listed, retries.
+        Assert.Equal(AudioDeviceRecoveryAction.AttemptRecovery, sm.Tick(EngineDead(present: true)));
+
+        // The replugged interface comes back.
+        sm.NotifyRecoverySucceeded();
+        Assert.Equal(AudioDeviceRecoveryState.Healthy, sm.State);
+    }
+
+    [Fact]
+    public void A_live_probe_restarts_the_dead_retry_count()
+    {
+        var sm = new AudioDeviceRecoveryStateMachine(debounceTicks: 1, cooldownTicks: 1, deadRetryTicks: 3);
+        sm.Tick(EngineDead(present: true));
+        Assert.Equal(AudioDeviceRecoveryAction.AttemptRecovery, sm.Tick(EngineDead(present: true)));
+        sm.NotifyRecoveryFailed();
+
+        Assert.Equal(AudioDeviceRecoveryAction.None, sm.Tick(EngineDead(present: true)));
+        Assert.Equal(AudioDeviceRecoveryAction.None, sm.Tick(EngineDead(present: true)));
+        Assert.Equal(AudioDeviceRecoveryAction.None, sm.Tick(OnFallback(present: true)));
+        Assert.Equal(AudioDeviceRecoveryAction.None, sm.Tick(EngineDead(present: true)));
+        Assert.Equal(AudioDeviceRecoveryAction.None, sm.Tick(EngineDead(present: true)));
+        Assert.Equal(AudioDeviceRecoveryAction.AttemptRecovery, sm.Tick(EngineDead(present: true)));
+    }
+
+    [Fact]
+    public void Topology_change_during_cooldown_ends_the_backoff()
     {
         var sm = new AudioDeviceRecoveryStateMachine(debounceTicks: 1, cooldownTicks: 3);
         sm.Tick(EngineDead());
         Assert.Equal(AudioDeviceRecoveryAction.AttemptRecovery, sm.Tick(EngineDead()));
         sm.NotifyRecoveryFailed();
 
-        // Hot-plug happens while we're still cooling down.
-        Assert.Equal(AudioDeviceRecoveryAction.None, sm.Tick(EngineDead(topologyChanged: true)));
+        // Hot-plug happens while we're still cooling down: retry right away (#1053).
+        Assert.Equal(AudioDeviceRecoveryAction.AttemptRecovery, sm.Tick(EngineDead(topologyChanged: true)));
+    }
+
+    [Fact]
+    public void Topology_change_while_the_device_is_absent_still_waits_out_the_cooldown()
+    {
+        var sm = new AudioDeviceRecoveryStateMachine(debounceTicks: 1, cooldownTicks: 3);
+        sm.Tick(EngineDead());
+        Assert.Equal(AudioDeviceRecoveryAction.AttemptRecovery, sm.Tick(EngineDead()));
+        sm.NotifyRecoveryFailed();
+
+        Assert.Equal(AudioDeviceRecoveryAction.None, sm.Tick(EngineDead(present: false, topologyChanged: true)));
         Assert.Equal(AudioDeviceRecoveryAction.None, sm.Tick(EngineDead()));
         Assert.Equal(AudioDeviceRecoveryAction.None, sm.Tick(EngineDead()));
         Assert.Equal(AudioDeviceRecoveryState.DeviceMissing, sm.State);

@@ -59,7 +59,7 @@ public sealed class IssueFixRowUiPerfSmokeTests
             }
         }, CancellationToken.None);
 
-    /// <summary>#759: an I30 whose 16th-earlier move is blocked shows the disabled fix and its reason, both measured.</summary>
+    /// <summary>#759: an I30 whose 32nd-earlier move is blocked (a 32nd is 1/8 beat in 4/4, so 1/16 reaches before time 0) shows the disabled fix and its reason, both measured.</summary>
     [Fact]
     public async Task ABlockedToneFix_ShowsItsReason_AndMeasures() =>
         await HeadlessSessionFixture.Dispatch(() =>
@@ -69,7 +69,7 @@ public sealed class IssueFixRowUiPerfSmokeTests
             var beats = Enumerable.Range(0, 8).Select(i => new BeatMarker { Time = i * 500, Bpm = 120 }).ToList();
             var arr = new Arrangement();
             arr.Levels.Add(new ChartLevel());
-            var at = new FractionalPosition(0, new Fraction(1, 8));
+            var at = new FractionalPosition(0, new Fraction(1, 16));
             var note = new GuitarNote { Position = at, Fret = 5 };
             arr.Levels[0].Notes.Add(note);
             arr.ToneChanges.Add(new ToneChange { Position = at, ToneName = "lead" });

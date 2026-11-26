@@ -75,6 +75,7 @@ public static class TempoMapBeats
                 if (At(arrangement.ToneChanges[i].Position)) arrangement.ToneChanges.RemoveAt(i);
             for (var i = arrangement.PhraseIterations.Count - 1; i >= 0; i--)
                 if (At(arrangement.PhraseIterations[i].Position)) arrangement.PhraseIterations.RemoveAt(i);
+            arrangement.AudioCheckSpots.RemoveAll(s => At(s.Position));
         }
 
         foreach (var vocalTrack in project.VocalTracks)

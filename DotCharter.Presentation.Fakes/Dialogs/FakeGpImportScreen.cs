@@ -8,10 +8,13 @@ namespace DotCharter.Presentation.Fakes.Dialogs;
 public sealed class FakeGpImportScreen : FakeDialog<bool>, IGpImportScreen
 {
     private int _mode;
+    private bool _replaceTempoMap;
 
     private FakeGpImportScreen(IReadOnlyList<IGpTrackRow> tracks, int mode = 0, string oldFile = "", bool isBusy = false,
-        string error = "")
+        string error = "", bool replaceTempoMap = false, bool tempoMapLocked = false)
     {
+        _replaceTempoMap = replaceTempoMap;
+        IsTempoMapLocked = tempoMapLocked;
         Tracks = tracks;
         _mode = mode;
         OldFilePath = oldFile;
@@ -29,7 +32,8 @@ public sealed class FakeGpImportScreen : FakeDialog<bool>, IGpImportScreen
         new(FakeVariantNames.LongText, LongText),
         new(FakeVariantNames.Full, Full),
         new(FakeVariantNames.Busy, Busy),
-        new(FakeVariantNames.Error, Error)
+        new(FakeVariantNames.Error, Error),
+        new("TempoMapLocked", TempoMapLocked)
     ];
 
     private static readonly IReadOnlyList<string> Arrangements = ["Lead", "Rhythm", "Bass"];
@@ -66,6 +70,9 @@ public sealed class FakeGpImportScreen : FakeDialog<bool>, IGpImportScreen
     public static FakeGpImportScreen Error() => new([new Track("Lead", true, Arrangements, 0)],
         error: "Guitar Pro import failed: the file is not a Guitar Pro 3–7 score.");
 
+    /// <summary>Add-new over a project whose beat map is locked: the tempo choice shows off, with why.</summary>
+    public static FakeGpImportScreen TempoMapLocked() => new([new Track("Lead", true, Arrangements, 0)], tempoMapLocked: true);
+
     public bool IsAddNewMode
     {
         get => _mode == 0;
@@ -92,6 +99,16 @@ public sealed class FakeGpImportScreen : FakeDialog<bool>, IGpImportScreen
 
     public bool RequiresTargetSelection => _mode != 0;
 
+    public bool ShowsTempoMapChoice => _mode == 0;
+
+    public bool ReplaceTempoMap
+    {
+        get => _replaceTempoMap;
+        set => SetProperty(ref _replaceTempoMap, value);
+    }
+
+    public bool IsTempoMapLocked { get; }
+
     public bool HasTracks => Tracks.Count > 0;
 
     public IReadOnlyList<IGpTrackRow> Tracks { get; }
@@ -113,6 +130,7 @@ public sealed class FakeGpImportScreen : FakeDialog<bool>, IGpImportScreen
         OnPropertyChanged(nameof(IsDiffCompareMode));
         OnPropertyChanged(nameof(RequiresOldFile));
         OnPropertyChanged(nameof(RequiresTargetSelection));
+        OnPropertyChanged(nameof(ShowsTempoMapChoice));
     }
 
     private sealed class Track(string name, bool selected, IReadOnlyList<string> targets, int target)

@@ -318,7 +318,7 @@ public sealed class ChordFingeringFollowerTests
         var originalFingers = new Dictionary<int, int>(original.Fingers);
         var level = arrangement.Levels[0];
 
-        ImportFhpPass.Run(arrangement, level, bassArrangement: false);
+        ImportFhpPass.Run(arrangement, level, bassArrangement: false, barlines: []);
 
         Assert.Equal([8], level.Anchors.Select(a => a.Fret));
         var chord = Assert.Single(level.Chords);
@@ -357,7 +357,7 @@ public sealed class ChordFingeringFollowerTests
             Position = new FractionalPosition(8), EndPosition = new FractionalPosition(9), TemplateId = 1
         });
 
-        ImportFhpPass.Run(arrangement, level, bassArrangement: false);
+        ImportFhpPass.Run(arrangement, level, bassArrangement: false, barlines: []);
 
         Assert.Equal([0, 1], arrangement.ChordTemplates.Select(t => t.Id));
         Assert.Same(kept, arrangement.ChordTemplates[0]);
@@ -381,7 +381,7 @@ public sealed class ChordFingeringFollowerTests
         level.Notes.Add(new GuitarNote { Position = new FractionalPosition(6), StringIndex = 3, Fret = 14 });
         level.Chords.Add(Chord(8, 0, new Dictionary<int, int> { [3] = 9, [4] = 10 }));
 
-        ImportFhpPass.Run(arrangement, level, bassArrangement: false);
+        ImportFhpPass.Run(arrangement, level, bassArrangement: false, barlines: []);
 
         Assert.Equal(2, arrangement.ChordTemplates.Count);
         Assert.Same(original, arrangement.ChordTemplates[0]);

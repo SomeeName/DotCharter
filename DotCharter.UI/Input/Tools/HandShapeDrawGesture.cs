@@ -47,7 +47,8 @@ public sealed class HandShapeDrawGesture(
 
         var minted = new List<ChordTemplate>();
         var bar = HandShapeLaneSpan.BuildBar(track.Arrangement, fingering, track.Notes, track.Chords,
-            span.Start, span.End, minted);
+            span.Start, span.End, minted,
+            ArrangementFingeringStyle.OfSong(track.Project, track.Arrangement));
         var grip = minted.FirstOrDefault(t => t.Id == bar.TemplateId)
                    ?? track.Arrangement.FindChordTemplate(bar.TemplateId);
         bar.Name = HandShapeLaneSpan.GripLabel(grip, track.StringCount);
@@ -77,7 +78,8 @@ public sealed class HandShapeDrawGesture(
 
         var minted = new List<ChordTemplate>();
         var bar = HandShapeLaneSpan.BuildBar(track.Arrangement, fingering, track.Notes, track.Chords,
-            span.Value.Start, span.Value.End, minted);
+            span.Value.Start, span.Value.End, minted,
+            ArrangementFingeringStyle.OfSong(track.Project, track.Arrangement));
         editing.AddHandShape(bar, minted);
         return bar;
     }

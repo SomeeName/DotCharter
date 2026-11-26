@@ -57,8 +57,20 @@ public static class ChordKeyEstimator
             : null;
 
         var histogram = arrangement != null ? PitchClassHistogram(arrangement) : null;
-        return Resolve(histogram, authored);
+        var key = Resolve(histogram, authored);
+        return key is { } estimated && key != authored && arrangement != null && TuningDisplayNames.PreferFlats(arrangement)
+            ? FlatSpelling(estimated)
+            : key;
     }
+
+    /// <summary>
+    ///     An ESTIMATED key in a down-tuned arrangement (<see cref="TuningDisplayNames.PreferFlats(Arrangement)" />)
+    ///     takes the flat side of an enharmonic pair, as the tuning's own names do: G#m (relative B, five sharps)
+    ///     becomes Abm (seven flats). The other pairs already resolve flat (Gb, Ebm, Db, Bbm); a major B stays B,
+    ///     since nobody charts in Cb. An authored or locked key is never respelled.
+    /// </summary>
+    public static ChordKeySignature FlatSpelling(ChordKeySignature key) =>
+        key is { IsMinor: true, Accidentals: 5 } ? new ChordKeySignature(-7, true) : key;
 
     /// <summary>
     ///     <see cref="Resolve(Arrangement, ChartData)" /> on a pitch-class count

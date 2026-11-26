@@ -33,6 +33,8 @@ internal interface IShapeRowOwner
 
     void SetNoName(ShapePanelRowViewModel row, bool value);
 
+    void SetPinned(ShapePanelRowViewModel row, bool value);
+
     /// <summary>A card was ticked or unticked.</summary>
     void SelectionChanged();
 
@@ -52,6 +54,7 @@ public sealed partial class ShapePanelRowViewModel : ObservableObject, IShapePan
     private readonly IShapeRowOwner _owner;
     private string _readName = "";
     private bool _isNoName;
+    private bool _isPinned;
     private string _suggestedName = "";
 
     [ObservableProperty] private string _nameText = "";
@@ -74,6 +77,7 @@ public sealed partial class ShapePanelRowViewModel : ObservableObject, IShapePan
     [ObservableProperty] private bool _canMergeHere;
     [ObservableProperty] private bool _canSplitSelection;
     [ObservableProperty] private bool _isCurrent;
+    [ObservableProperty] private bool _canTogglePin;
 
     internal ShapePanelRowViewModel(ChordTemplate template, IShapeRowOwner owner, ILocalizationService localization)
     {
@@ -114,6 +118,19 @@ public sealed partial class ShapePanelRowViewModel : ObservableObject, IShapePan
         {
             if (value == _isNoName) return;
             _owner.SetNoName(this, value);
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsPinned
+    {
+        get => _isPinned;
+        set
+        {
+            if (value == _isPinned) return;
+            _owner.SetPinned(this, value);
+            // The box shows what the shape holds now: a pin that could not change is put back.
+            _isPinned = Template.IsPinned;
             OnPropertyChanged();
         }
     }
@@ -175,6 +192,14 @@ public sealed partial class ShapePanelRowViewModel : ObservableObject, IShapePan
         {
             _isNoName = template.Unnamed;
             OnPropertyChanged(nameof(IsNoName));
+        }
+
+        // A ghost grip is pinned by definition, so its box shows ticked and cannot change.
+        CanTogglePin = template.GhostMask == 0;
+        if (_isPinned != template.IsPinned)
+        {
+            _isPinned = template.IsPinned;
+            OnPropertyChanged(nameof(IsPinned));
         }
 
         // The namer's first name, offered only to a shape with no name that is not deliberately nameless.

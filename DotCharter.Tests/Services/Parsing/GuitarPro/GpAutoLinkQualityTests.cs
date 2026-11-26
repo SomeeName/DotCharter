@@ -10,8 +10,8 @@ public sealed class GpAutoLinkQualityTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData("AABA", "1:0,1,3")]
-    [InlineData("ABCDXABCDYABZAB", "4:0,5;2:10,13")]
-    [InlineData("ABCDXABCDYAZA", "4:0,5;1:10,12")]
+    [InlineData("ABCDXABCDYABZAB", "4:0,5;2:0,5,10,13")]
+    [InlineData("ABCDXABCDYAZA", "4:0,5;1:0,5,10,12")]
     public void RecoversWholeRunsAndTheirCopies(string pattern, string expected)
     {
         var (project, metadata) = Import([.. pattern.Select(NoteBar)]);
@@ -27,7 +27,7 @@ public sealed class GpAutoLinkQualityTests(ITestOutputHelper output)
 
     [Theory]
     [InlineData("ABCDEFGHIJKLMNXABCDEFGHIJKLMNYEFGHIJKLMN", "10:4,19,30;4:0,15")]
-    [InlineData("ABCDXABCDYBCD", "4:0,5")]
+    [InlineData("ABCDXABCDYBCD", "4:0,5;3:1,6,10")]
     public void ASharedSectionCanOutrankAPairWithoutPromotingShortFragments(string pattern, string expected)
     {
         var bars = pattern.Select(letter =>
@@ -150,7 +150,7 @@ public sealed class GpAutoLinkQualityTests(ITestOutputHelper output)
         var (project, metadata) = Import(bars);
         project.GpSourceBars = [.. GpSourceMap.Capture(metadata, project.Beats)];
 
-        Assert.Equal("2:1,3", ApplyAndMeasure(project, null, new HashSet<int> { 1, 3, 5 }));
+        Assert.Equal("2:1,3;1:0,2,4", ApplyAndMeasure(project, null, new HashSet<int> { 1, 3, 5 }));
     }
 
     private string ApplyAndMeasure(ChartProject project, IReadOnlyList<int>? source, IReadOnlySet<int>? markers = null)
@@ -159,7 +159,7 @@ public sealed class GpAutoLinkQualityTests(ITestOutputHelper output)
         var before = ChartProjectCloner.CloneLevel(Assert.Single(arrangement.Levels));
         var rule = MeasureContentOptions.Detection;
         var suggestions = LinkSuggestionFinder.Find(project, [arrangement], source, rule);
-        LinkSuggestionFinder.LinkAll(project, suggestions, rule)?.Execute();
+        LinkSuggestionFinder.LinkAll(project, suggestions, rule).Action?.Execute();
         var score = GpAutoLinkScorecard.Measure(project, arrangement, before, source, markers);
         output.WriteLine(score.ToString());
         Assert.Equal(0, score.CrossedEdges);

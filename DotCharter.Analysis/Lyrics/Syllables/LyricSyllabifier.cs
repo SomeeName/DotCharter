@@ -31,7 +31,9 @@ public static class LyricSyllabifier
     public static IReadOnlyList<string> Split(string word, SyllableLanguage language)
     {
         ArgumentNullException.ThrowIfNull(word);
-        if (word.Length < 3 || !word.All(c => char.IsLetter(c) || c == '\'' || c == '’')) return [word];
+        var original = word;
+        word = LyricApostrophes.Normalize(word);
+        if (word.Length < 3 || !word.All(c => char.IsLetter(c) || c == '\'')) return [original];
 
         // The file's left/right margin keywords are not applied: they exist for line breaks,
         // and a singer sings "a-bout" and "pret-ty".
@@ -41,11 +43,11 @@ public static class LyricSyllabifier
         var start = 0;
         foreach (var point in points)
         {
-            parts.Add(word[start..point]);
+            parts.Add(original[start..point]);
             start = point;
         }
 
-        parts.Add(word[start..]);
+        parts.Add(original[start..]);
         MergeVowelless(parts);
         if (language == SyllableLanguage.English) MergeSilentEnding(parts);
         return parts;
@@ -59,7 +61,7 @@ public static class LyricSyllabifier
     /// </summary>
     private static void AddOpeningVowelBreak(string word, SyllableLanguage language, List<int> points)
     {
-        var apostrophe = word.IndexOfAny(['\'', '’']);
+        var apostrophe = word.IndexOf('\'');
         var start = apostrophe is >= 0 and < 3 ? apostrophe + 1 : 0;
         if (word.Length < start + 3) return;
         var first = char.ToLowerInvariant(word[start]);
@@ -70,11 +72,16 @@ public static class LyricSyllabifier
         points.Sort();
     }
 
+    /// <summary>
+    ///     Joins every part without a vowel NUCLEUS to a neighbour. A <c>y</c> directly before a vowel is
+    ///     the consonant glide of "you" / "young" / "beyond", not a nucleus, so the patterns' <c>y-ou</c>
+    ///     becomes one syllable again; the <c>y</c> of "hap-py" or "play" still counts as a vowel.
+    /// </summary>
     private static void MergeVowelless(List<string> parts)
     {
         for (var i = 0; i < parts.Count && parts.Count > 1;)
         {
-            if (HasVowel(parts[i])) { i++; continue; }
+            if (HasNucleus(parts, i)) { i++; continue; }
 
             // An opening cluster joins the next syllable, anything else the previous one.
             if (i == 0) { parts[1] = parts[0] + parts[1]; parts.RemoveAt(0); }
@@ -98,6 +105,20 @@ public static class LyricSyllabifier
     }
 
     private static bool HasVowel(string text) => text.Any(IsVowel);
+
+    private static bool HasNucleus(List<string> parts, int index)
+    {
+        var part = parts[index];
+        for (var i = 0; i < part.Length; i++)
+        {
+            if (!IsVowel(part[i])) continue;
+            if (char.ToLowerInvariant(part[i]) != 'y') return true;
+            var next = i + 1 < part.Length ? part[i + 1] : index + 1 < parts.Count ? parts[index + 1][0] : '\0';
+            if (!IsVowel(next) || char.ToLowerInvariant(next) == 'y') return true;
+        }
+
+        return false;
+    }
 
     private static bool IsVowel(char c) => "aeiouyáéíóúàèìòùâêîôûäöüëïæœ".Contains(char.ToLowerInvariant(c));
 }

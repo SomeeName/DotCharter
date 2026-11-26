@@ -42,7 +42,7 @@ public sealed class GpAutoLinkCorpusTests(ITestOutputHelper output)
         var rule = LinkSuggestionFinder.RuleFor(new AppConfig());
         var before = project.Arrangements.ToDictionary(a => a,
             a => ChartProjectCloner.CloneLevel(a.Levels.MaxBy(l => l.DifficultyIndex) ?? new ChartLevel()));
-        LinkSuggestionFinder.LinkAll(project, LinkSuggestionFinder.Find(project, project.Arrangements, source, rule), rule)?.Execute();
+        LinkSuggestionFinder.LinkAll(project, LinkSuggestionFinder.Find(project, project.Arrangements, source, rule), rule).Action?.Execute();
         foreach (var part in project.Arrangements.Where(a => a.Levels.Count > 0))
         {
             var score = GpAutoLinkScorecard.Measure(project, part, before[part], source);

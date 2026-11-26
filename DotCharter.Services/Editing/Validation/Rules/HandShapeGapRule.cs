@@ -15,9 +15,10 @@ namespace DotCharter.Services.Editing.Validation.Rules;
 ///         the file's level order, and the Issues tab hides easier levels by default).
 ///     </para>
 ///     <para>
-///         The gap is the app's minimum note distance setting, read on every run, so the check
-///         agrees with the spacing clean-up the editor runs after each change; without a
-///         configuration service it is <see cref="SpacingGap.AppDefault" />.
+///         The gap is a 32nd note, or the app's minimum note distance setting when that is larger
+///         (read on every run); without a configuration service the setting is
+///         <see cref="SpacingGap.AppDefault" />. The finding's fix (<c>ChartSpacingFix</c>) trims the
+///         shape to it.
 ///     </para>
 /// </summary>
 public sealed class HandShapeGapRule : IArrangementRule

@@ -1,5 +1,6 @@
 using DotCharter.Services.Editing.Tempo.Estimate;
 using DotCharter.Tests.Analysis;
+using JuceSharp.AudioIo;
 
 namespace DotCharter.Tests.Services.Tempo;
 
@@ -167,11 +168,36 @@ public sealed class TempoEstimateTests
     [Fact]
     public async Task NoAudioFile_IsReportedNotThrown()
     {
-        var service = new TempoEstimateService(new FakeAppLogger());
+        var service = new TempoEstimateService(new AudioTempoEstimateStore(), new FakeAppLogger());
 
         var outcome = await service.EstimateAsync(null, null, null, TestContext.Current.CancellationToken);
 
         Assert.Equal(TempoEstimateFailure.NoAudio, outcome.Failure);
         Assert.Null(outcome.Estimate);
+    }
+
+    [Fact]
+    public async Task AWholeSongEstimate_IsRememberedForValidation_APartIsNot()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "dc-tempo-store-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var path = Path.Combine(dir, "song.wav");
+            WavIo.WriteFloat32(path, new AudioBuffer(Clicks(30, 120), AnalysisTestSignals.SampleRate, 1));
+            var store = new AudioTempoEstimateStore();
+            var service = new TempoEstimateService(store, new FakeAppLogger());
+
+            await service.EstimateAsync(path, 0, 20_000, TestContext.Current.CancellationToken);
+            Assert.Null(store.Find("song.wav"));
+
+            var outcome = await service.EstimateAsync(path, null, null, TestContext.Current.CancellationToken);
+            Assert.NotNull(outcome.Estimate);
+            Assert.Equal(outcome.Estimate.Bpm, store.Find("song.wav")?.Bpm);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
     }
 }

@@ -1,4 +1,5 @@
-﻿using System.Collections.ObjectModel;
+﻿using DotCharter.Services.Editing.Fingering;
+using System.Collections.ObjectModel;
 using DotCharter.Services.Editing.HandShapes;
 using DotCharter.Services.Editing.Improvement;
 
@@ -14,12 +15,13 @@ namespace DotCharter.Services.Editing.Fixing;
 /// </summary>
 public sealed class ArrangementAutoFixService : IArrangementAutoFixService
 {
-    public void Fix(Arrangement arrangement, ArrangementFixResult result)
+    public void Fix(Arrangement arrangement, ArrangementFixResult result, ChartProject? project = null)
     {
+        var songStyle = ArrangementFingeringStyle.OfSong(project, arrangement);
         result.ArrangementsProcessed++;
 
         result.Add("sortedCollections", SortTimedCollections(arrangement));
-        result.Add("invalidChordsFixed", RemoveInvalidChords(arrangement));
+        result.Add("invalidChordsFixed", RemoveInvalidChords(arrangement, songStyle));
         result.Add("duplicatesRemoved", RemoveDuplicatePositions(arrangement));
         result.Add("linkedNotesJoined", JoinSimilarLinkedNotes(arrangement));
         result.Add("noteLengthsFixed", FixNoteLengths(arrangement));
@@ -27,7 +29,7 @@ public sealed class ArrangementAutoFixService : IArrangementAutoFixService
         result.Add("slidesFixed", FixSlides(arrangement));
         result.Add("capoFretsRaised", FixCapoFrets(arrangement));
         result.Add("anchorsAddedAtPhrases", AddMissingAnchorsAtPhraseStarts(arrangement));
-        result.Add("handShapesAddedOverChords", CoverChordsOutsideHandShapes(arrangement));
+        result.Add("handShapesAddedOverChords", CoverChordsOutsideHandShapes(arrangement, songStyle));
         result.Add("templateFingersCleaned", FixTemplateFingers(arrangement));
         result.Add("tonesDeclared", DeclareTonesUsedByChanges(arrangement));
     }
@@ -92,7 +94,7 @@ public sealed class ArrangementAutoFixService : IArrangementAutoFixService
     ///         first lost it from the CHART.
     ///     </para>
     /// </summary>
-    private static int RemoveInvalidChords(Arrangement arrangement)
+    private static int RemoveInvalidChords(Arrangement arrangement, ArrangementFingeringStyle songStyle)
     {
         var templateIds = arrangement.ChordTemplates.Select(t => t.Id).ToHashSet();
         var changed = 0;
@@ -116,7 +118,7 @@ public sealed class ArrangementAutoFixService : IArrangementAutoFixService
                 // resolver keeps the arpeggio flavour of whatever the id pointed
                 // at — nothing, here — so this is the plain one, and a minted
                 // template arrives with suggested fingering and name.
-                var template = ChordTemplateResolver.ResolveForChord(arrangement, chord, created);
+                var template = ChordTemplateResolver.ResolveForChord(arrangement, chord, created, songStyle);
                 chord.TemplateId = template.Id;
                 changed++;
             }
@@ -637,8 +639,8 @@ public sealed class ArrangementAutoFixService : IArrangementAutoFixService
     ///     every sustain, and runs after the phrase-start anchors so no new bar
     ///     straddles one (I20).
     /// </summary>
-    private static int CoverChordsOutsideHandShapes(Arrangement arrangement) =>
-        ArrangementHandShapeGenerator.ApplyInPlace(arrangement, ArrangementHandShapeGenerator.Plan(arrangement));
+    private static int CoverChordsOutsideHandShapes(Arrangement arrangement, ArrangementFingeringStyle songStyle) =>
+        ArrangementHandShapeGenerator.ApplyInPlace(arrangement, ArrangementHandShapeGenerator.Plan(arrangement, songStyle));
 
     private static int FixTemplateFingers(Arrangement arrangement)
     {

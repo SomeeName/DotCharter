@@ -135,7 +135,8 @@
                         </ItemsControl.ItemsPanel>
                     </ctl:ShapeRowsList>
                 </ScrollViewer>
-                <Grid Grid.Row="5" ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceXs}">
+                <Grid Grid.Row="5" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto"
+                      ColumnSpacing="{StaticResource FireSpaceXs}" RowSpacing="{StaticResource FireSpaceXs}">
                     <Button Grid.Column="0" x:Name="ShapesRepeatPrevious" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
                             HorizontalAlignment="Stretch"
                             AutomationProperties.Name="{localization:Loc Keybind_RepeatPreviousChord}"
@@ -153,6 +154,14 @@
                             <TextBlock Text="{Binding CleanUpLabel}" IsVisible="{Binding HasCleanUp}" TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{localization:Loc Shapes_CleanUpNone}" IsVisible="{Binding !HasCleanUp}" />
                         </Panel>
+                    </Button>
+                    <!-- Pins every unpinned grip at once; off, with the reason as its tip, while none is left. -->
+                    <Button Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" x:Name="ShapesPinAll" Theme="{StaticResource ColumnFlowButton}" Classes="ColumnFlowButton"
+                            HorizontalAlignment="Stretch" IsEnabled="{Binding HasPinAll}"
+                            AutomationProperties.Name="{localization:Loc Shapes_PinAllNone}"
+                            ToolTip.Tip="{Binding PinAllTip}" ToolTip.ShowOnDisabled="True"
+                            Command="{Binding PinAllCommand}">
+                        <TextBlock Text="{Binding PinAllLabel}" TextWrapping="Wrap" TextAlignment="Center" />
                     </Button>
                 </Grid>
             </Grid>
@@ -270,6 +279,12 @@
                                     AutomationProperties.Name="{localization:Loc ChordShapes_Delete}"
                                     ToolTip.Tip="{localization:Loc ChordShapes_Delete_Tip}"
                                     Command="{Binding DeleteCommand}" />
+                            <!-- The authored-grip pin: automatic fingering leaves a pinned grip alone. -->
+                            <ToggleButton Grid.Row="1" Grid.Column="1" x:Name="ShapePin" Theme="{StaticResource ColumnFlowToggle}" Classes="ColumnFlowToggle"
+                                          HorizontalAlignment="Stretch" IsChecked="{Binding IsPinned}" IsEnabled="{Binding CanTogglePin}"
+                                          Content="{localization:Loc Inspector_Grip_Pin}"
+                                          AutomationProperties.Name="{localization:Loc Inspector_Grip_Pin}"
+                                          ToolTip.Tip="{localization:Loc Inspector_Grip_PinTip}" />
                         </Grid>
                     </StackPanel>
                     </Panel>

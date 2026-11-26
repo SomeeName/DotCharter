@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using DotCharter.Services.Editing.ChordShapes;
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.HandShapes;
 using DotCharter.Services.State;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
@@ -482,7 +483,11 @@ internal sealed class CommitHighwayDragDropCommand : IHighwayEditCommand
                       ?? _createdTemplates.FirstOrDefault(t => t.Id == mergedChord.TemplateId);
         // A transfer that did not change the played grip keeps its complete authored identity.
         if (current == null || !current.HasFrets(ChordTemplateResolver.FretsOf(mergedChord)))
-            mergedChord.TemplateId = ChordTemplateResolver.ResolveForChord(arrangement, mergedChord, _createdTemplates).Id;
+        {
+            mergedChord.TemplateId = ChordTemplateResolver.ResolveForChord(arrangement, mergedChord, _createdTemplates,
+                ArrangementFingeringStyle.OfSong(_scope.Project, arrangement)).Id;
+        }
+
         if (existingChords.FirstOrDefault(c => c.TemplateId >= 0) is not { } replaced) return;
 
         result.TemplateMoves.Add(new ChordHandShapeSync.ChordMove(replaced, replaced.TemplateId, mergedChord.TemplateId));

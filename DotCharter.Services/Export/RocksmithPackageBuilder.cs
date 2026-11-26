@@ -95,9 +95,13 @@ public sealed record RocksmithBuildOptions
     /// RS Extended Range package overrides.</summary>
     public bool? StandardPlainPackage { get; init; }
 
-    /// <summary>The persistent and master ids drawn per arrangement, shared by the two packages
-    /// of one export. Filled by the first build and read by the second.</summary>
-    internal Dictionary<string, RsArrangementIdentity>? SharedArrangementIds { get; init; }
+    /// <summary>The persistent and master ids and the song partition drawn per arrangement, shared
+    /// by the two packages of one export. Filled by the first build and read by the second.</summary>
+    internal Dictionary<string, RsSharedArrangement>? SharedArrangementIds { get; init; }
+
+    /// <summary>This build is the standard package of a mixed export: a path whose Main was
+    /// extended and left out ships its first stock arrangement as Main.</summary>
+    internal bool StandardCompanion { get; init; }
 
 
     /// <summary>
@@ -296,7 +300,7 @@ public sealed partial class RocksmithPackageBuilder
         cancellationToken.ThrowIfCancellationRequested();
 
         var songLengthMs = options.SongLengthMs;
-        var arrangements = DemoteStockDuplicateMains(ConvertArrangements(project, options, songLengthMs, warnings));
+        var arrangements = ResolvePathMains(ConvertArrangements(project, options, songLengthMs, warnings), options.StandardCompanion);
         if (arrangements.Count == 0)
         {
             // Say WHY (an 8-string guitar is refused).
@@ -575,6 +579,7 @@ public sealed partial class RocksmithPackageBuilder
 
             var partition = partitionCounters.TryGetValue(typeName, out var count) ? count + 1 : 1;
             partitionCounters[typeName] = partition;
+            partition = SharedPartition(options, chartArrangement.Name, partition);
             var partitionName = partition == 1
                 ? typeName.ToLowerInvariant()
                 : $"{typeName.ToLowerInvariant()}{partition}";
@@ -621,7 +626,7 @@ public sealed partial class RocksmithPackageBuilder
                 var declaresTone = !string.IsNullOrWhiteSpace(toneBase) || slots.Any(s => !string.IsNullOrWhiteSpace(s));
                 if (string.IsNullOrWhiteSpace(toneBase)) toneBase = $"{partitionName}_base";
 
-                var ids = ArrangementIds(options, result.Count, chartArrangement.Name);
+                var ids = ArrangementIds(options, result.Count, chartArrangement.Name, partition);
                 result.Add(new RsPackageArrangement
                 {
                     ArrangementName = typeName,
@@ -649,7 +654,7 @@ public sealed partial class RocksmithPackageBuilder
 
         if (VocalsExportPolicy.PackageTrack(project, options.IncludeVocals) is { Track: var vocalTrack })
         {
-            var ids = ArrangementIds(options, result.Count, VocalsIdentityKey);
+            var ids = ArrangementIds(options, result.Count, VocalsIdentityKey, 1);
             result.Add(new RsPackageArrangement
             {
                 ArrangementName = "Vocals",
@@ -678,13 +683,13 @@ public sealed partial class RocksmithPackageBuilder
     private static string ToolkitVersion(string version) =>
         string.IsNullOrWhiteSpace(version) ? "1" : string.Join(' ', version.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).Trim();
 
-    private static RsArrangementIdentity ArrangementIds(RocksmithBuildOptions options, int index, string name)
+    private static RsArrangementIdentity ArrangementIds(RocksmithBuildOptions options, int index, string name, int partition)
     {
-        if (options.SharedArrangementIds?.TryGetValue(name, out var shared) == true) return shared;
+        if (options.SharedArrangementIds?.TryGetValue(name, out var shared) == true) return shared.Ids;
         var ids = options.Identity is { } identity
             ? identity.Arrangements[index]
             : new RsArrangementIdentity(Guid.NewGuid(), RandomNumberGenerator.GetInt32(RsMasterIds.CustomMasterIdFloor, int.MaxValue));
-        options.SharedArrangementIds?.TryAdd(name, ids);
+        options.SharedArrangementIds?.TryAdd(name, new RsSharedArrangement(ids, partition));
         return ids;
     }
 

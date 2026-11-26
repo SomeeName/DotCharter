@@ -8,12 +8,13 @@ namespace DotCharter.Services.Editing.HandShapes;
 ///     never produces a shape the check reports. Gaps are measured in grid beats; a minimum note
 ///     distance set in milliseconds is converted at the shape start, so it depends on tempo.
 ///     <para>
-///         A shape TOUCHES the next attack when it ends on it or closer to it than the app's
-///         minimum note distance (<see cref="SpacingGap" />, 1/64 of a measure by default: 1/16
-///         beat in 4/4). That is the gap <c>ChartSpacingEnforcer</c> parks every shape at before
-///         the next sound, so a shape the clean-up spaced is never reported (a fixed 1/8 beat
-///         flagged every one of them). On the finished-chart corpus almost every gap shorter
-///         than 1/8 beat is zero. A held chord gets no larger gap.
+///         A shape TOUCHES the next attack when it ends on it or closer to it than a 32nd note
+///         (<see cref="SpacingGap.ThirtySecondNote" />, 1/8 beat in 4/4), the gap community
+///         charters leave, or than the app's minimum note distance when that is set larger. The
+///         spacing clean-up (<c>ChartSpacingEnforcer</c>) keeps parking shapes at the minimum note
+///         distance alone (1/16 beat by default), which Rocksmith is fine with, so a shape it spaced
+///         can still be reported; the finding's fix and Tools ▸ Improve Chart trim to this gap, and
+///         the Guitar Pro import ends its shapes there. A held chord gets no larger gap.
 ///     </para>
 ///     <para>
 ///         An ATTACK is a note or chord the player strikes. A note that only continues a linked
@@ -66,10 +67,11 @@ public sealed class HandShapeGap
     }
 
     /// <summary>
-    ///     The gap <paramref name="shape" /> must leave before the next attack: the minimum note
-    ///     distance at the shape's start (where <c>ChartSpacingEnforcer</c> measures it).
+    ///     The gap <paramref name="shape" /> must leave before the next attack: a 32nd note, or the
+    ///     minimum note distance when larger, both at the shape's start (where
+    ///     <c>ChartSpacingEnforcer</c> measures it).
     /// </summary>
-    public FractionalPosition RequiredGap(HandShape shape) => _spacing.At(shape.Position, _beats);
+    public FractionalPosition RequiredGap(HandShape shape) => _spacing.AtLeastThirtySecondNote(shape.Position, _beats);
 
     /// <summary>Whether the next attack at or after the shape's end comes on it or before the gap is over.</summary>
     public bool IsTooClose(HandShape shape) =>

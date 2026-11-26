@@ -48,6 +48,18 @@ public interface IShapePanelScreen : INotifyPropertyChanged
     /// <summary>Runs Clean up shapes: the shapes nothing uses are removed in one undo step.</summary>
     ICommand CleanUpCommand { get; }
 
+    /// <summary>True while "Pin all grips" would pin something: a fingered shape of the arrangement is not pinned yet.</summary>
+    bool HasPinAll { get; }
+
+    /// <summary>"Pin all grips (38)", or "Pin all grips" while none is left.</summary>
+    string PinAllLabel { get; }
+
+    /// <summary>What Pin all grips does, or why it is off: every fingered shape is pinned already.</summary>
+    string PinAllTip { get; }
+
+    /// <summary>Pins every unpinned fingered shape of the arrangement in one undo step.</summary>
+    ICommand PinAllCommand { get; }
+
     /// <summary>True while the "Needs attention (N)" toggle is offered: some card has a problem, or the filter is on.</summary>
     bool HasAttentionFilter { get; }
 
@@ -171,6 +183,12 @@ public interface IShapePanelRow : INotifyPropertyChanged
 
     /// <summary>True when the shape deliberately has no name.</summary>
     bool IsNoName { get; set; }
+
+    /// <summary>The shape's authored-grip pin: automatic fingering leaves a pinned grip alone. Setting it is one undo step.</summary>
+    bool IsPinned { get; set; }
+
+    /// <summary>False for a grip with ghost strings, which is pinned by definition.</summary>
+    bool CanTogglePin { get; }
 
     /// <summary>True while the card offers a suggested chord name: the shape has no name, is not marked No name, and the chord namer has one.</summary>
     bool HasSuggestion { get; }

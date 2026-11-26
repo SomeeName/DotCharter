@@ -213,6 +213,14 @@
   Pinned by `Services/Export/RsPhraseNameTests` (both writers) and
   `ChartSpacingEnforcerTests.EnforceProject_KeepsAuthoredPhraseNames_AndTheirPhraseInfoStillResolves`.
 
+## Lyric characters are made legal for the game at the export boundary, in BOTH vocal files
+
+`Parsing/Xml/Vocals/RsLyricText.ForGame` (#921) runs inside `RsVocalLyricEncoding.Encode`, so the vocals XML (`RsXmlVocalsWriter`, `RsVocalsSecondsWriter`) and the vocals SNG (`SngFromDomainMapper.BuildVocals`) write the same characters; the chart keeps what the charter typed. Typographic punctuation (curly apostrophes and quotes, dashes, ellipsis, odd spaces) always becomes ASCII: EOF's own Rocksmith export drops those characters and its import reads the file as Windows-1252. A letter the game's lyric font lacks folds to its base letter when the font has that one (EOF's `rs_lyric_substitute_char_extended`: Ã ã Í Õ õ Ý ý Ÿ ÿ Ž), and every character the font draws (`DefaultVocalSymbols.HasGlyph`, which matches EOF's "allow RS2 extended ASCII lyrics" set) stays. `RsVocalLyricEncoding.LosesText` compares the substituted text on both sides, so a substitution is never reported as a lost marker. A package round trip therefore reads back ASCII where the source package carried typographic punctuation; that is this rule, not a loss.
+
+## Vocals XML timing: no length 0, no shared start (both XML writers)
+
+Core `Domain/Vocals/VocalTiming.Normalize` (#1039) runs on the written values of BOTH vocals XML writers (`RsXmlVocalsWriter`, `RsVocalsSecondsWriter`): a zero-length entry gets 25 ms (or the gap to the next start), and entries that share a millisecond are spread after the first, at most 25 ms apart and never past the next start. Editor on Fire's lyric import (foflc `EndLyricLine`) merges a zero-duration piece into the next one at the same start, across a line end too, and then reports "Invalid lyric file". An EARLIER start is left alone (the export check blocks it as `KeyLyricsOutOfOrder`). The chart's lyrics and the vocals SNG are unchanged. Pinned by `Export/Lyrics/RsVocalTimingTests`, whose `EofLyricImportFaults` ports EOF's checks.
+
 ## A phrase between beats: the chart holds the real time, `moveR<N>` exists only in files
 
 - **A phrase (and the section on it) may start on a note between two beats.** The
@@ -643,3 +651,18 @@ shared clamp above 6 on loose notes and chord strings. The live chart is unchang
   `.rs2dlc` keeps DLC Builder's own key rule (`Rs2DlcStrings`, already ASCII).
   Pinned by `RocksmithDlcKeyTests` and the Japanese-title cases in
   `RocksmithPackageBuilderTests`.
+- Metadata hygiene (`ValidateMetadata`, all warnings): stray leading, trailing or
+  doubled spaces in the chart's title, artist and album (`KeyMetadataStraySpaces`,
+  the only one with a fix: `TrimMetadataSpaces`, one undo step, spaces only),
+  missing title, artist, album and album year (`KeyMetadataMissing*`, read from
+  the resolved package metadata), and a title-case suggestion
+  (`KeyMetadataTitleCase`) that fires only for a CLEARLY sentence-cased Latin name
+  (`LooksSentenceCased`: 3+ words, capitalised first word, 2+ later words of 4+
+  letters all lower case). Never for non-Latin text, all-lowercase or all-caps
+  stylings, or an upper-case letter inside a later word. No code, no rewrite.
+- Package key clash (`ValidatePackageKey`, warning `KeyPackageKeyClash`): the DLC key the export
+  would use equals the song key of a package in the Library index (`ILibraryIndex.HasSongKey`,
+  read-only, case-insensitive; the validator's `LibraryIndex` is null outside the export dialog and the
+  check is then silent). Fix `AssignUniqueDlcKey` sets the key the finding proposes
+  (`OpenedPackageDlcKey.KeyFor`, the same rule as on open), one undo step. Covers projects saved
+  from a package before the key was stamped on open (#980).

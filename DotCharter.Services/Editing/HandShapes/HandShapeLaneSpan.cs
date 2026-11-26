@@ -155,7 +155,8 @@ public static class HandShapeLaneSpan
         IEnumerable<Chord> chords,
         FractionalPosition start,
         FractionalPosition end,
-        IList<ChordTemplate> minted)
+        IList<ChordTemplate> minted,
+        ArrangementFingeringStyle? songStyle = null)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
         ArgumentNullException.ThrowIfNull(fingering);
@@ -163,7 +164,7 @@ public static class HandShapeLaneSpan
         var shape = fingering.BuildTemplateForRange(arrangement, notes, chords, start, end);
         if (shape == null) return bar;
 
-        var template = ChordTemplateResolver.Resolve(arrangement, shape.Frets, ArpeggioFlavour.Plain, null, minted);
+        var template = ChordTemplateResolver.Resolve(arrangement, shape.Frets, ArpeggioFlavour.Plain, null, minted, songStyle);
         bar.TemplateId = template.Id;
         bar.Name = template.Name;
         return bar;

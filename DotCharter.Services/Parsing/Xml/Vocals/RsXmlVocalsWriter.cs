@@ -60,9 +60,15 @@ internal sealed class RsXmlVocalsWriter
         // order still reads back as one line (the export check reports it as an error).
         var allLyrics = lines.OrderBy(l => l[0].TimeMs).SelectMany(l => l).ToList();
 
-        var vocalEls = allLyrics.Select(l => new XElement("vocal",
-            new XAttribute("time", Fmt.Time(l.TimeMs)),
-            new XAttribute("length", Fmt.Time(l.LengthMs)),
+        // No written length 0 and no two equal starts (Editor on Fire's import), on the
+        // written values only: the chart's own lyrics stay as they are.
+        var timesMs = allLyrics.Select(l => l.TimeMs).ToArray();
+        var lengthsMs = allLyrics.Select(l => l.LengthMs).ToArray();
+        VocalTiming.Normalize(timesMs, lengthsMs);
+
+        var vocalEls = allLyrics.Select((l, i) => new XElement("vocal",
+            new XAttribute("time", Fmt.Time(timesMs[i])),
+            new XAttribute("length", Fmt.Time(lengthsMs[i])),
             new XAttribute("lyric", l.Lyric),
             new XAttribute("note", l.Note)));
 

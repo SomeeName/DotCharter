@@ -228,7 +228,7 @@ public sealed class ArrangementFingeringStyleTests
             level.Chords.Add(chord);
         }
 
-        ImportFhpPass.Run(arrangement, level, bassArrangement: false, t => ReferenceEquals(t, authored));
+        ImportFhpPass.Run(arrangement, level, bassArrangement: false, barlines: [], t => ReferenceEquals(t, authored));
 
         Assert.Equal(4, suggested.Fingers[1]);
         Assert.Equal(new Dictionary<int, int> { [1] = 2, [2] = 4 }, deliberate.Fingers);
@@ -242,5 +242,39 @@ public sealed class ArrangementFingeringStyleTests
 
         Assert.Equal(0, ArrangementFingeringStyle.FollowAuthored(arrangement, _ => false));
         Assert.Equal(3, arrangement.ChordTemplates[1].Fingers[1]);
+    }
+
+    // An arrangement with no clear power-chord majority of its own (its first
+    // power chord, or a tie) plays the way the song's OTHER arrangements on the same
+    // instrument finger it; its own majority still wins, and a bass part never votes
+    // for a guitar part.
+    [Fact]
+    public void WithNoMajorityOfItsOwnAPairFollowsTheSongsOtherArrangements()
+    {
+        var lead = With(PowerChord(0, 5, 4), PowerChord(1, 7, 4), PowerChord(2, 3, 3));
+        var bass = With(PowerChord(0, 5, 3), PowerChord(1, 7, 3), PowerChord(2, 3, 3));
+        bass.ArrangementType = ArrangementType.Bass;
+        var rhythm = With(PowerChord(0, 6, 3));
+        var song = new[] { lead, bass, rhythm };
+
+        var fallback = ArrangementFingeringStyle.OfOtherArrangements(song, rhythm);
+        Assert.Equal(PairFingering.IndexPinky, fallback.PowerChord);
+        Assert.Null(fallback.TwoFretOctave);
+
+        // The rhythm part's only power chord does not vote for itself: the song decides.
+        Assert.Equal(PairFingering.IndexPinky, ArrangementFingeringStyle.HintsFromOthers(rhythm, fallback)(rhythm.ChordTemplates[0]));
+        Assert.Null(ArrangementFingeringStyle.HintsFromOthers(rhythm)(rhythm.ChordTemplates[0]));
+
+        // A new grip minted in a part with no power chord yet follows the song too.
+        var fresh = With();
+        var minted = Shape(-1, [(0, 8), (1, 10)]);
+        ArrangementFingeringStyle.SetSuggestedFingers(fresh, minted, 6,
+            ArrangementFingeringStyle.OfOtherArrangements([lead, bass, fresh], fresh));
+        Assert.Equal(4, minted.Fingers[1]);
+
+        // Its own clear majority wins over the song's.
+        var ownMajority = With(PowerChord(0, 6, 3), PowerChord(1, 8, 3), PowerChord(2, 1, 3));
+        Assert.Equal(PairFingering.IndexRing,
+            ArrangementFingeringStyle.HintsFromOthers(ownMajority, fallback)(ownMajority.ChordTemplates[0]));
     }
 }

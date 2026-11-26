@@ -36,6 +36,17 @@ internal static class AppValidationServices
         services.AddSingleton<IArrangementRule, DifficultyLevelRule>();
         services.AddSingleton<IArrangementRule, HandShapeGapRule>();
         services.AddSingleton<IArrangementRule, SectionNameVarietyRule>();
+        services.AddSingleton<IArrangementRule, BoundaryCrossingRule>();
+        services.AddSingleton<IArrangementRule, ToneConventionRule>();
+        services.AddSingleton<IArrangementRule, CustomTuningRule>();
+        services.AddSingleton<IArrangementRule, PhraseStructureRule>();
+        services.AddSingleton<IArrangementRule, FretHandPositionRule>();
+        services.AddSingleton<IArrangementRule, OffGridRule>();
+        services.AddSingleton<IArrangementRule, LeadInRule>();
+        services.AddSingleton<IArrangementRule, TechniqueCombinationRule>();
+        services.AddSingleton<IArrangementRule, TempoMapRule>();
+        services.AddSingleton<IArrangementRule, SustainSpacingRule>();
+        services.AddSingleton<IArrangementRule, AudioCheckRule>();
         services.AddSingleton<IArrangementAutoFixService, ArrangementAutoFixService>();
         // Batch library lint over a folder of projects; IChartSerializer is only registered keyed.
         services.AddSingleton<DotCharter.Services.Editing.Linting.IBatchChartLintService>(sp =>

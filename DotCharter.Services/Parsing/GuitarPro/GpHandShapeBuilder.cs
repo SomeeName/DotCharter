@@ -28,9 +28,10 @@ internal static class GpHandShapeBuilder
     public static void BuildLetRingHandShapes(ChartLevel level, Arrangement arrangement,
         HashSet<FractionalPosition>? letRingPositions, GpChordDiagrams? diagrams = null,
         GpAuthoredFingering? authoredFingers = null, ChordNamingOptions? naming = null,
-        HashSet<FractionalPosition>? otherRunPositions = null)
+        HashSet<FractionalPosition>? otherRunPositions = null, GpBarTimeline? bars = null)
     {
         if (letRingPositions == null || letRingPositions.Count == 0) return;
+        bars ??= GpBarTimeline.None;
 
         var beatBuckets = CollectBeats(level);
 
@@ -39,8 +40,17 @@ internal static class GpHandShapeBuilder
         // it (owner report: let-ring bars overlapped the following note).
         var allOnsets = beatBuckets.Keys.ToList();
 
-        foreach (var run in SplitIntoRuns(beatBuckets.Values, letRingPositions, otherRunPositions))
+        var ordered = beatBuckets.Values.ToList();
+        var runs = SplitIntoRuns(ordered, letRingPositions, otherRunPositions, bars);
+        var claimed = runs.SelectMany(r => r).Select(b => b.Position).ToHashSet();
+        foreach (var run in runs)
         {
+            if (LeadingGripTone(ordered, run, letRingPositions, otherRunPositions, claimed, level) is { } lead)
+            {
+                run.Insert(0, lead);
+                claimed.Add(lead.Position);
+            }
+
             // Aggregate every (string, fret) pair the run touches into one
             // shape; "first wins" if the same string is fretted twice (the
             // hand shape only displays one fret per string anyway).
@@ -55,7 +65,7 @@ internal static class GpHandShapeBuilder
 
             var template = FindOrCreateTemplate(arrangement, frets, diagrams, authoredFingers, naming);
             var first = run[0];
-            var end = RunEnd(run, allOnsets);
+            var end = RunEnd(run, allOnsets, bars);
 
             SupersedeShapesInside(level, first.Position, end);
             level.HandShapes.Add(new HandShape
@@ -77,6 +87,27 @@ internal static class GpHandShapeBuilder
                 if (!NeedsSustain(sound))
                     sound.Sustain = FractionalPosition.Zero;
             }
+
+            ZeroCarriedTail(run[^1], letRingPositions, end);
+        }
+    }
+
+    /// <summary>
+    ///     The run's trailing grip tone (<see cref="IsTrailingGripTone" />) when its sustain reaches
+    ///     no further than the shape's end: the shape carries that length, so the note becomes a
+    ///     strike like the let-ring notes before it. In the owner's tab every arpeggio bar ends on a
+    ///     plain dotted quarter that sustained exactly to the barline, and the owner zeroed it 18
+    ///     times. A note held PAST the shape (tied over the barline) keeps its sustain, and
+    ///     so does one whose technique needs the length.
+    /// </summary>
+    private static void ZeroCarriedTail(BeatInfo tail, HashSet<FractionalPosition> letRingPositions,
+        FractionalPosition end)
+    {
+        if (letRingPositions.Contains(tail.Position)) return;
+        foreach (var sound in tail.Sounds)
+        {
+            if (sound is GuitarNote note && !NeedsSustain(note) && (note.Position + note.Sustain).CompareTo(end) <= 0)
+                note.Sustain = FractionalPosition.Zero;
         }
     }
 
@@ -147,7 +178,8 @@ internal static class GpHandShapeBuilder
     /// plus the plain note that directly follows a run when the run's grip plays it
     /// (<see cref="IsTrailingGripTone" />).</summary>
     private static List<List<BeatInfo>> SplitIntoRuns(IEnumerable<BeatInfo> orderedBeats,
-        HashSet<FractionalPosition> letRingPositions, HashSet<FractionalPosition>? otherRunPositions)
+        HashSet<FractionalPosition> letRingPositions, HashSet<FractionalPosition>? otherRunPositions,
+        GpBarTimeline bars)
     {
         var runs = new List<List<BeatInfo>>();
         List<BeatInfo>? current = null;
@@ -166,7 +198,10 @@ internal static class GpHandShapeBuilder
                 // fret 2 there" (owner report: one let-ring bar ran
                 // across five measures of a real GP8 file and flagged twice).
                 // The hand moved; the bar has to move with it.
-                if (current != null && (RefretsHeldString(held, beat) || WidensPastAHand(held, beat)))
+                // A barline ends the run too: a bar that restarts the same arpeggio is a new
+                // shape, not the previous one held on (owner cut 8 two-bar shapes).
+                if (current != null && (RefretsHeldString(held, beat) || WidensPastAHand(held, beat) ||
+                                        bars.CrossesBarline(current[0].Position, beat.Position)))
                 {
                     if (current.Count >= 2) runs.Add(current);
                     current = null;
@@ -185,7 +220,12 @@ internal static class GpHandShapeBuilder
             {
                 if (current.Count >= 2)
                 {
-                    if (IsTrailingGripTone(current[^1], held, beat, otherRunPositions)) current.Add(beat);
+                    if (!bars.CrossesBarline(current[0].Position, beat.Position) &&
+                        IsTrailingGripTone(current[^1], held, beat, otherRunPositions))
+                    {
+                        current.Add(beat);
+                    }
+
                     runs.Add(current);
                 }
 
@@ -202,8 +242,9 @@ internal static class GpHandShapeBuilder
     ///     Whether <paramref name="beat" />, the beat right after a let-ring run, is the arpeggio's last
     ///     note played inside the run's grip: s1f1 LR, s2f3 LR, s4f3 LR, then s3f3 with no
     ///     let ring is one hand shape over four notes. It must be one single note, start no later than
-    ///     the run's last beat rings to (no rest in between), sit on a string the run does not hold
-    ///     and fit the grip (<see cref="HandShapeGripFit" />). A beat the OTHER run set rings from
+    ///     the run's last beat rings to (no rest in between), and either re-strike a held string at
+    ///     its held fret (the grip already plays it) or sit on a free string and fit the grip
+    ///     (<see cref="HandShapeGripFit" />). A beat the OTHER run set rings from
     ///     (roll vs authored let ring) opens its own run and is never a tail.
     /// </summary>
     private static bool IsTrailingGripTone(BeatInfo last, Dictionary<int, int> held, BeatInfo beat,
@@ -213,10 +254,69 @@ internal static class GpHandShapeBuilder
         if (otherRunPositions?.Contains(beat.Position) == true) return false;
         var ringOut = last.AuthoredSpan.CompareTo(FractionalPosition.Zero) > 0 ? last.AuthoredSpan : last.Sustain;
         if (beat.Position.CompareTo(last.Position + ringOut) > 0) return false;
-        return !held.ContainsKey(beat.Notes[0].StringIndex) && HandShapeGripFit.Grow(held, beat.Notes) != null;
+        var (stringIdx, fret) = beat.Notes[0];
+        if (held.TryGetValue(stringIdx, out var heldFret)) return heldFret == fret;
+        return HandShapeGripFit.Grow(held, beat.Notes) != null;
     }
 
-    private static FractionalPosition RunEnd(List<BeatInfo> run, List<FractionalPosition> allOnsets)
+    /// <summary>
+    ///     The single note right before <paramref name="run" /> that the run's grip already holds:
+    ///     it still rings when the run starts (let ring, or its authored length reaches the
+    ///     run), sits on a string the run leaves free and inside the run's fret span, so the hand
+    ///     shape starts at that note and its grip includes it, as an arpeggio shape does. A note
+    ///     that slides or links away is the hand moving, so a slide-in origin never qualifies and
+    ///     the shape starts on the slide's TARGET; a full mute keeps the pick-slide convention. A
+    ///     note another run or an existing shape owns is left alone. EOF (gp_import.c) and Charter
+    ///     (GP7NoteConverter) both ignore let ring at import, so neither has this rule.
+    /// </summary>
+    private static BeatInfo? LeadingGripTone(List<BeatInfo> ordered, List<BeatInfo> run,
+        HashSet<FractionalPosition> letRingPositions, HashSet<FractionalPosition>? otherRunPositions,
+        HashSet<FractionalPosition> claimed, ChartLevel level)
+    {
+        var at = ordered.IndexOf(run[0]);
+        if (at <= 0) return null;
+        var lead = ordered[at - 1];
+        if (lead.Sounds.Count != 1 || lead.Sounds[0] is not GuitarNote note) return null;
+        if (claimed.Contains(lead.Position) || otherRunPositions?.Contains(lead.Position) == true) return null;
+        if (note.SlideTo is > 0 || note.LinkNext || note.UnpitchedSlide || note.Mute == MuteType.Full) return null;
+        var ringOut = lead.AuthoredSpan.CompareTo(FractionalPosition.Zero) > 0 ? lead.AuthoredSpan : lead.Sustain;
+        if (!letRingPositions.Contains(lead.Position) && (lead.Position + ringOut).CompareTo(run[0].Position) < 0) return null;
+        if (level.HandShapes.Any(h => h.Position.CompareTo(lead.Position) <= 0 && h.EndPosition.CompareTo(lead.Position) > 0))
+            return null;
+
+        var grip = new HashSet<int>();
+        var fretted = new List<int>();
+        foreach (var (stringIdx, fret) in run.SelectMany(b => b.Notes))
+        {
+            grip.Add(stringIdx);
+            if (fret > 0) fretted.Add(fret);
+        }
+
+        return note.Fret > 0 && fretted.Count > 0 && !grip.Contains(note.StringIndex) &&
+               note.Fret >= fretted.Min() && note.Fret <= fretted.Max()
+            ? lead
+            : null;
+    }
+
+    /// <summary>Hand shapes whose fretted notes span more than <see cref="ReportedFretSpan" /> frets
+    /// (lowest to highest): reported by the import, never changed.</summary>
+    public static int CountWideShapes(ChartLevel level, Arrangement arrangement)
+    {
+        var count = 0;
+        foreach (var shape in level.HandShapes)
+        {
+            var template = arrangement.FindChordTemplate(shape.TemplateId);
+            var fretted = template?.Frets.Values.Where(f => f > 0).ToList();
+            if (fretted is { Count: > 1 } && fretted.Max() - fretted.Min() > ReportedFretSpan) count++;
+        }
+
+        return count;
+    }
+
+    /// <summary>Frets a hand shape may span before the import report names it: four.</summary>
+    public const int ReportedFretSpan = 4;
+
+    private static FractionalPosition RunEnd(List<BeatInfo> run, List<FractionalPosition> allOnsets, GpBarTimeline bars)
     {
         var first = run[0];
         var last = run[^1];
@@ -230,7 +330,12 @@ internal static class GpHandShapeBuilder
         var ringOut = last.AuthoredSpan.CompareTo(FractionalPosition.Zero) > 0
             ? last.AuthoredSpan
             : last.Sustain;
-        var end = last.Position + ringOut;
+        // The written end on the swung grid, the rule the chord shapes use: a triplet feel
+        // moves an off-beat note later but not its written end, so swung onset + written
+        // length overshot by the swing shift (and a downbeat one fell short of the swung
+        // off-beat). A barline ends the bar too, even when only a rest bar follows.
+        var end = bars.PlacedEnd(last.Position, ringOut);
+        if (bars.NextBarline(last.Position) is { } barline && end.CompareTo(barline) > 0) end = barline;
 
         // Clip the bar to the first sound STRICTLY after the run's last note:
         // a let-ring run rings until the next played thing, never past it

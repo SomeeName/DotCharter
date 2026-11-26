@@ -1,4 +1,5 @@
 // ChartMaintenanceService: whole-chart generation and repair - auto-fix, improve, the FHP forwards, hand shapes, level squash, arrangement/vocal delete and the single-undo-step runner.
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.Fixing;
 using DotCharter.Services.Editing.HandShapes;
 using DotCharter.Services.Editing.Improvement;
@@ -337,7 +338,8 @@ public sealed partial class ChartMaintenanceService
             return;
         }
 
-        var plan = ArrangementHandShapeGenerator.Plan(arrangement);
+        var plan = ArrangementHandShapeGenerator.Plan(arrangement,
+            ArrangementFingeringStyle.OfSong(_projectState.ActiveProject, arrangement));
         if (plan.IsEmpty)
         {
             _projectState.MainDisplayMessage = L("Status_HandShapesAllChordsCovered");

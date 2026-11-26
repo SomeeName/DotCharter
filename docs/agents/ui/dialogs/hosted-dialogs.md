@@ -210,3 +210,7 @@ widening the message contract (severity, details), an `IMessagePrompt` adapter
 over `IDialogs` that marshals and queues, a decision on which of the two cards
 survives, and a plan for messages raised before the host attaches — its own
 slice, not a line in this one.
+
+## Package song picker
+
+A game package with several songs, opened from outside the Library (window drop, File > Open Recent), asks which song to open: `PackageSongPickerRequest` (`IPackageSongPickerScreen`, result = the song's index, null = cancelled) from `SongBrowserViewModel.OpenPackageFileAsync`. One song opens directly; Cancel or Esc opens nothing and the status rail says so (`Status_PackageSongPickCancelled`). Enter opens the selected row (the first on open). Smoke: `Perf/PackageSongPickerDialogUiPerfSmokeTests` (in the release's layout filter); behaviour: `UI/ViewModels/Shell/ProjectMenuPackageSongPickerTests`.

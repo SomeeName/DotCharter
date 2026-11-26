@@ -514,7 +514,7 @@ public sealed class SongBrowserFilterChipsTests
             Vm = new SongBrowserViewModel(
                 new FakeFileStorageService(), config, Library, logger,
                 new StubProjectSession(), state, editor, transport,
-                new DotCharter.Presentation.Dialogs.DialogsSlot(), localization ?? DotCharter.Localization.LocalizationService.Instance,
+                new DotCharter.Presentation.Dialogs.DialogsSlot(), localization ?? DotCharter.Localization.LocalizationService.Instance, new DotCharter.Tests.UI.ViewModels.Panels.StubPackageFileReader(),
                 _queue.Add);
         }
 

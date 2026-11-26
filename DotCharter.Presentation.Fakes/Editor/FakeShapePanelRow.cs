@@ -18,6 +18,7 @@ public sealed class FakeShapePanelRow : ObservableObject, IShapePanelRow
     private bool _isMergeSource;
     private bool _isMergeTarget;
     private bool _isNoName;
+    private bool _isPinned;
     private bool _isSelected;
     private string _nameText;
 
@@ -106,6 +107,14 @@ public sealed class FakeShapePanelRow : ObservableObject, IShapePanelRow
         get => _canMergeHere;
         internal set => SetProperty(ref _canMergeHere, value);
     }
+
+    public bool IsPinned
+    {
+        get => _isPinned;
+        set => SetProperty(ref _isPinned, value);
+    }
+
+    public bool CanTogglePin => true;
 
     public bool IsNoName
     {

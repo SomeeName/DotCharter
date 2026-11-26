@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Dialogs;
 using DotCharter.Presentation.Shared.Library;
 using DotCharter.Services.Library.Prefetch;
@@ -14,7 +15,7 @@ using DotCharter.Services.Library;
 
 namespace DotCharter.UI.ViewModels.Panels;
 
-public sealed partial class SongBrowserViewModel : ViewModelBase, IDisposable
+public sealed partial class SongBrowserViewModel : ViewModelBase, IDisposable, DotCharter.UI.ViewModels.Shell.IPackageFileOpener
 {
     private readonly List<PsarcSongListItem> _allSongs = [];
 
@@ -26,6 +27,10 @@ public sealed partial class SongBrowserViewModel : ViewModelBase, IDisposable
     private readonly ILibraryService _libraryService;
     private readonly ILibraryAudioPrefetcher? _audioPrefetcher;
     private readonly ILibrarySongPlayability? _playability;
+    private readonly ILibraryPackageFileReader _packageReader;
+
+    /// <summary>The last <see cref="LoadSongItem" /> failure, for a caller outside the browser to show.</summary>
+    private string? _lastLoadFailure;
     private readonly IAppLogger _logger;
     private readonly ILocalizationService _localization;
 
@@ -300,10 +305,12 @@ public sealed partial class SongBrowserViewModel : ViewModelBase, IDisposable
         TransportViewModel transport,
         DotCharter.Presentation.Dialogs.IDialogs dialogs,
         ILocalizationService localization,
+        ILibraryPackageFileReader packageReader,
         Action<Action>? filterPassScheduler = null,
         ILibraryAudioPrefetcher? audioPrefetcher = null,
         ILibrarySongPlayability? playability = null)
     {
+        _packageReader = packageReader;
         _audioPrefetcher = audioPrefetcher;
         _playability = playability;
         FilterPass = new CoalescedFilterPass(ApplyFilter, filterPassScheduler);
@@ -724,11 +731,7 @@ public sealed partial class SongBrowserViewModel : ViewModelBase, IDisposable
                 $"PSARC song load failed. Psarc='{item.Song.PackagePath}', title='{item.Title}'.", ex);
             // A refused package says why in the user's language, and so does an
             // encrypted one read without the user's keys.
-            StatusText = _localization.Format("Status_PsarcLoadFailed", ex switch
-            {
-                ILibraryReadError refused => _localization[refused.ResourceKey],
-                _ => ex.Message
-            });
+            StatusText = _lastLoadFailure = _localization.Format("Status_PsarcLoadFailed", DescribeReadFailure(ex));
         }
         finally
         {
@@ -756,6 +759,95 @@ public sealed partial class SongBrowserViewModel : ViewModelBase, IDisposable
 
         return loaded;
     }
+
+    /// <summary>
+    ///     A dropped / File-opened package outside the Library folder: read it with the
+    ///     same source a Library scan uses (nothing is copied or indexed) and open its
+    ///     first song through <see cref="LoadSongItem" />, so hardest-level-only, the
+    ///     replace guard and the audio path are the Library row's own. Every failure
+    ///     lands on the status rail with its reason, not only in the log.
+    /// </summary>
+    public async Task<bool> OpenPackageFileAsync(string path)
+    {
+        var name = Path.GetFileName(path);
+        IReadOnlyList<LibrarySongEntry> songs;
+        try
+        {
+            songs = await _packageReader.ReadPackageAsync(path);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(AppLogCategory.Import, $"Opened package could not be read. Path='{path}'.", ex);
+            return ShowPackageFailure(_localization.Format("Status_PsarcLoadFailed", DescribeReadFailure(ex)));
+        }
+
+        if (songs.Count == 0)
+        {
+            _logger.Warning(AppLogCategory.Import, $"Opened package holds no songs. Path='{path}'.");
+            return ShowPackageFailure(_localization.Format("Status_DroppedPackageHasNoSongs", name));
+        }
+
+        var chosen = songs[0];
+        if (songs.Count > 1)
+        {
+            var picked = await PickPackageSongAsync(name, songs);
+            if (picked is not { } index || index < 0 || index >= songs.Count)
+            {
+                _logger.Info(AppLogCategory.Import, $"No song was chosen from a multi-song package. Path='{path}', songs={songs.Count}.");
+                return ShowPackageFailure(_localization.Format("Status_PackageSongPickCancelled", name));
+            }
+
+            chosen = songs[index];
+        }
+
+        _logger.Info(AppLogCategory.Import,
+            $"Opening a package outside the Library. Path='{path}', songs={songs.Count}, opening='{chosen.Title}'.");
+        var item = new PsarcSongListItem(chosen, _localization, BlockFor(chosen));
+        if (!item.CanLoad)
+            return ShowPackageFailure(_localization.Format("Status_PsarcLoadFailed", item.StatusLabel));
+
+        _lastLoadFailure = null;
+        if (await LoadSongItem(item)) return true;
+        if (_lastLoadFailure is { } failure) _projectState.MainDisplayMessage = failure;
+        return false;
+    }
+
+    /// <summary>Asks which song of a multi-song package to open; null when the user cancels
+    /// or no dialog host is attached (nothing can be asked, so nothing opens).</summary>
+    private async Task<int?> PickPackageSongAsync(string packageName, IReadOnlyList<LibrarySongEntry> songs)
+    {
+        var request = new PackageSongPickerRequest(packageName, [.. songs.Select(DescribePackageSong)]);
+        try
+        {
+            return await _dialogs.ShowAsync(request);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.Error(AppLogCategory.Import, "The package song picker could not open.", ex);
+            return null;
+        }
+    }
+
+    private static PackageSongChoice DescribePackageSong(LibrarySongEntry song)
+    {
+        var length = song.SongLength > 0 ? TimeSpan.FromSeconds(song.SongLength).ToString(@"m\:ss", CultureInfo.InvariantCulture) : "";
+        var detail = string.Join(" · ", new[] { song.Artist, length }.Where(part => part.Length > 0));
+        return new PackageSongChoice(song.Title, detail);
+    }
+
+    private bool ShowPackageFailure(string message)
+    {
+        _projectState.MainDisplayMessage = message;
+        return false;
+    }
+
+    /// <summary>A refused package says why in the user's language, and so does an
+    /// encrypted one read without the user's keys.</summary>
+    private string DescribeReadFailure(Exception ex) => ex switch
+    {
+        ILibraryReadError refused => _localization[refused.ResourceKey],
+        _ => ex.Message
+    };
 
     /// <summary>The ONE place a filter pass is asked for. TYPING coalesces (see
     /// <see cref="CoalescedFilterPass" />); every other trigger is a single

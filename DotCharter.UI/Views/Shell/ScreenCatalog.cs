@@ -119,6 +119,7 @@ public sealed class ScreenCatalog
         Dialog<IBatchLintScreen, BatchLintDialogView>(Dialogs, "BatchLint"),
         Dialog<IShowlightsScreen, ShowlightsDialogView>(Dialogs, "Showlights"),
         Dialog<ICheckpointsScreen, CheckpointsDialogView>(Dialogs, "Checkpoints"),
+        Dialog<IPackageSongPickerScreen, PackageSongPickerDialogView>(Dialogs, "PackageSongPicker"),
         Dialog<IBookmarksScreen, BookmarksDialogView>(Dialogs, "Bookmarks"),
         Dialog<IGpImportScreen, GpImportDialogView>(Dialogs, "GpImport"),
         Dialog<ILinkSuggestionsScreen, LinkSuggestionsDialogView>(Dialogs, "LinkSuggestions"),

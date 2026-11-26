@@ -90,7 +90,7 @@ public sealed class RefretService : IRefretService
             result.CostAfter = plan.CostAfter;
             result.TravelAfter = plan.TravelAfter;
 
-            if (!ApplyPlan(arrangement, level, plan)) break;
+            if (!ApplyPlan(arrangement, level, plan, opt.SongStyle)) break;
         }
 
         result.NotesChanged = noteSnapshot
@@ -109,7 +109,8 @@ public sealed class RefretService : IRefretService
     // ─── Write-back ─────────────────────────────────────────────────────────
 
     /// <summary>Writes the chosen assignments back. Returns true when anything changed.</summary>
-    private bool ApplyPlan(Arrangement arrangement, ChartLevel level, RefretPlan plan)
+    private bool ApplyPlan(Arrangement arrangement, ChartLevel level, RefretPlan plan,
+        ArrangementFingeringStyle? songStyle)
     {
         var changed = false;
         foreach (var unit in plan.Units)
@@ -134,7 +135,7 @@ public sealed class RefretService : IRefretService
                 continue;
             }
 
-            changed |= ApplyChordGroup(arrangement, level, unit, candidate);
+            changed |= ApplyChordGroup(arrangement, level, unit, candidate, songStyle);
         }
 
         return changed;
@@ -144,7 +145,8 @@ public sealed class RefretService : IRefretService
         Arrangement arrangement,
         ChartLevel level,
         RefretUnit unit,
-        RefretCandidate candidate)
+        RefretCandidate candidate,
+        ArrangementFingeringStyle? songStyle)
     {
         var map = candidate.ShapeMap!;
         var sourceTemplate = unit.ChordMembers![0].Template;
@@ -152,7 +154,7 @@ public sealed class RefretService : IRefretService
 
         ChordTemplate? newTemplate = null;
         if (sourceTemplate != null)
-            newTemplate = FindOrCreateTemplate(arrangement, sourceTemplate, map);
+            newTemplate = FindOrCreateTemplate(arrangement, sourceTemplate, map, songStyle);
 
         var changed = false;
         foreach (var member in unit.ChordMembers)
@@ -207,7 +209,8 @@ public sealed class RefretService : IRefretService
     private ChordTemplate FindOrCreateTemplate(
         Arrangement arrangement,
         ChordTemplate source,
-        Dictionary<int, (int Str, int Fret)> map)
+        Dictionary<int, (int Str, int Fret)> map,
+        ArrangementFingeringStyle? songStyle)
     {
         var newFrets = new Dictionary<int, int>(source.Frets.Count);
         foreach (var kv in source.Frets)
@@ -244,15 +247,16 @@ public sealed class RefretService : IRefretService
             Frets = newFrets
         };
         flavour.ApplyTo(created); // both flags, or the mint carries half a flavour
-        ApplyFingering(created, arrangement);
+        ApplyFingering(created, arrangement, songStyle);
 
         arrangement.ChordTemplates.Add(created);
         return created;
     }
 
-    private void ApplyFingering(ChordTemplate template, Arrangement arrangement)
+    private void ApplyFingering(ChordTemplate template, Arrangement arrangement,
+        ArrangementFingeringStyle? songStyle)
     {
-        var suggested = _fingeringService.SuggestFingeringFor(arrangement, template);
+        var suggested = _fingeringService.SuggestFingeringFor(arrangement, template, songStyle);
         if (suggested != null && suggested.Fingers.Count > 0)
         {
             template.Fingers = new Dictionary<int, int>(suggested.Fingers);

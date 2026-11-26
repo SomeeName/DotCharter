@@ -418,6 +418,7 @@ public class RscpWriter
 
         BuildAnnotationsNode(root, project);
         BuildToneDefinitionsNode(root, project);
+        RscpIgnoredFindings.Write(root, project);
     }
 
     private void BuildAnnotationsNode(XElement root, ChartProject project)
@@ -608,6 +609,7 @@ public class RscpWriter
             BuildFretHandMuteTemplatesNode(arrNode, arr);
             if (arr.Provenance != ChartProvenance.Unrestricted)
                 arrNode.Add(new XElement(RscpProvenance.ArrangementElement, RscpProvenance.Format(arr.Provenance)));
+            RscpAudioCheck.Write(arrNode, arr);
 
             arrangementsNode.Add(arrNode);
         }

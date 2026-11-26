@@ -1,4 +1,5 @@
 // ChartMaintenanceService: the charting power tools - level generation, phrase-iteration propagation, the MIDI draft apply and refret.
+using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.Improvement;
 using DotCharter.Services.Parsing.Midi;
 using DotCharter.Services.State;
@@ -108,13 +109,14 @@ public sealed partial class ChartMaintenanceService
             // built on the UI thread. A second Progress<T> here would post a
             // post, and make the report order untestable.
             var levelProgress = progress == null ? null : new LevelProgressAdapter(progress, levelCount);
+            var songStyle = ArrangementFingeringStyle.OfSong(project, live);
 
             // The beat grid is what tells the generator which sounds sit on a
             // measure downbeat — without it only on/off-beat importance survives.
             var generated = offThread
                 ? await Task.Run(() =>
-                    _levelGenerationService.TryGenerate(target, levelCount, beats, levelProgress))
-                : _levelGenerationService.TryGenerate(target, levelCount, beats, levelProgress);
+                    _levelGenerationService.TryGenerate(target, levelCount, beats, levelProgress, songStyle))
+                : _levelGenerationService.TryGenerate(target, levelCount, beats, levelProgress, songStyle);
 
             if (!generated)
             {
@@ -349,14 +351,8 @@ public sealed partial class ChartMaintenanceService
                 return false;
             }
 
-            // One arrangement changes, so the step snapshots one.
-            var before = ChartProjectCloner.CloneArrangement(live, retainIdentities: true);
-            var target = ChartProjectCloner.CloneArrangement(live, retainIdentities: true);
-
-            var result = range != null && levelIndex >= 0 && levelIndex < target.Levels.Count
-                ? _refretService.RefretRange(target, target.Levels[levelIndex], project.Beats,
-                    range.Value.Start, range.Value.End)
-                : _refretService.RefretArrangement(target, project.Beats);
+            var run = RefretRun.Execute(_refretService, project, live, levelIndex, range);
+            var result = run.Result;
 
             if (!result.HasChanges)
             {
@@ -364,18 +360,13 @@ public sealed partial class ChartMaintenanceService
                 return false;
             }
 
-            _historyService.Do(new ArrangementSnapshotAction(this, arrangementIndex, before, target,
+            _historyService.Do(new ArrangementSnapshotAction(this, arrangementIndex, run.Before, run.Target,
                 levelIndex, vocalTrackIndex));
 
             _projectState.MainDisplayMessage =
                 _localization.Plural("Status_RefretAppliedOne", "Status_RefretApplied", result.SoundsChanged,
                     result.TravelImprovementPercent);
-            _logger.Info(AppLogCategory.Editing,
-                $"Refret applied to arrangement '{target.Name}'. Scope={(range != null ? "selection" : "arrangement")}, " +
-                $"sounds={result.SoundsConsidered}, notesChanged={result.NotesChanged}, chordsChanged={result.ChordsChanged}, " +
-                $"templatesAdded={result.TemplatesAdded}, anchorsRegenerated={result.AnchorsRegenerated}, " +
-                $"cost {result.CostBefore:0.##}→{result.CostAfter:0.##}, " +
-                $"travel {result.TravelBefore:0.#}→{result.TravelAfter:0.#} (−{result.TravelImprovementPercent}%).");
+            _logger.Info(AppLogCategory.Editing, run.LogLine());
             return true;
         }
         catch (Exception ex)

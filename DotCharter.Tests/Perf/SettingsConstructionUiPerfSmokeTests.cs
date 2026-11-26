@@ -2,6 +2,7 @@
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
 using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 using DotCharter.Localization;
@@ -88,6 +89,70 @@ public sealed class SettingsConstructionUiPerfSmokeTests
                 Assert.False(string.IsNullOrWhiteSpace(hint.Text));
             });
         }, CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     The "Name only the first chord of a hand shape" row measures, its switch binds both ways, and
+    ///     with the capture variables set the Editor tab is written around it twice: with the row hidden
+    ///     by the settings search (the tab as it was before the row) and shown.
+    /// </summary>
+    [Fact]
+    public async Task EditorTab_NameOnlyFirstChordRowMeasuresAndBinds()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var screen = FakeEditorSettingsScreen.Default();
+            var tab = new EditorSettingsView { DataContext = screen };
+            WithLaidOutTab(tab, () =>
+            {
+                var row = tab.GetLogicalDescendants().OfType<Grid>().Single(g => g.Name == "EditorNameOnlyFirstChordRow");
+                var toggle = tab.GetLogicalDescendants().OfType<ToggleSwitch>().Single(t => t.Name == "EditorNameOnlyFirstChordToggle");
+                Assert.True(row.IsEffectivelyVisible && row.Bounds is { Width: > 0, Height: > 0 }, $"the row laid out as {row.Bounds}");
+                Assert.True(toggle.Bounds is { Width: > 0, Height: > 0 }, $"the switch laid out as {toggle.Bounds}");
+                Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(toggle)));
+                toggle.IsChecked = true;
+                Assert.True(screen.NameOnlyFirstChordInHandShape);
+                screen.NameOnlyFirstChordInHandShape = false;
+                Assert.False(toggle.IsChecked);
+            });
+
+            CaptureNameOnlyFirstChordRow();
+        }, CancellationToken.None);
+    }
+
+    private static void CaptureNameOnlyFirstChordRow()
+    {
+        var dir = Environment.GetEnvironmentVariable("DOTCHARTER_RIG_CAPTURE_DIR");
+        if (!UiSweepRunner.CaptureEnabled || string.IsNullOrWhiteSpace(dir)) return;
+        Directory.CreateDirectory(dir);
+        foreach (var (hidden, name) in new[] { (true, "before"), (false, "after") })
+        {
+            var screen = FakeEditorSettingsScreen.Default();
+            screen.NameOnlyFirstChordInHandShape = true;
+            if (hidden) ((HashSet<string>)screen.HiddenKeys).Add("editor.nameOnlyFirstChord");
+            var tab = new EditorSettingsView { DataContext = screen };
+            var window = new Window { Width = TabWidth, Height = 700, Content = tab };
+            window.Show();
+            try
+            {
+                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                // The row above the new one, which lays out in both captures.
+                var row = tab.GetLogicalDescendants().OfType<Grid>().Single(g => g.Name == "EditorNameOnlyFirstChordRow");
+                var siblings = ((Panel)row.Parent!).Children;
+                var anchor = siblings[siblings.IndexOf(row) - 1];
+                var scroller = tab.GetVisualDescendants().OfType<ScrollViewer>().First();
+                var top = anchor.TranslatePoint(new Point(0, 0), (Visual)scroller.Content!)?.Y ?? 0;
+                scroller.Offset = new Vector(0, Math.Max(0, top - 220));
+                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                using var frame = window.CaptureRenderedFrame();
+                Assert.NotNull(frame);
+                frame.Save(Path.Combine(dir, $"settings-editor-name-only-first-chord-{name}.png"), new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
     }
 
     /// <summary>#805: the inspector's Apply step row measures and its switch binds both ways.</summary>

@@ -25,7 +25,9 @@ generators — hand shapes, anchors — as measured on the import path)
 
 - **Scoped grip edits preserve other template users (#556).** Hand-shape resize
   checks ownership across every level and notation voice before rebuilding a grip.
-  `ArrangementSoundSync` reuses a fully compatible template or clones the source;
+  `ArrangementSoundSync` reuses a fully compatible template or clones the source
+  (across string counts it remaps a CLONE onto the target's strings first, #913;
+  its rule pass only repoints chords and bars at an existing authored template, #914);
   it never writes fingering into a same-fret target template. Bulk shape deletion
   excludes selected merge targets by reference, since value-equal survivors are valid.
   Power-chord conversion groups selected notes by position: the lowest convertible
@@ -442,7 +444,9 @@ focused level, using the configured minimum note distance. Open-only or
 fret-hand-muted onsets clear the carried frets. The current bar keeps every
 fret played within it, including the open fret at an open-only reset. A grip
 string absent from the first pitched onset the bar covers is a ghost, whether
-it is picked later or held throughout. The timeline draws those gems at the
+it is picked later or held throughout. A bar covering no pitched onset (only
+fret-hand-muted strikes, or silence) infers no ghosts, in the inspector as in the
+Rocksmith reader (#952). The timeline draws those gems at the
 bar start. A later pick remains a playable note. A bar with two frets on one
 string stays as authored and appears in the result count.
 

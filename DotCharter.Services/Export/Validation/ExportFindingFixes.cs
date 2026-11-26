@@ -27,7 +27,13 @@ public enum ExportFixKind
     GenerateShowlights,
 
     /// <summary>Adds a default definition for every tone name the arrangement uses and the project does not define: ONE undo step.</summary>
-    CreateToneDefinitions
+    CreateToneDefinitions,
+
+    /// <summary>Trims and de-doubles the spaces in the chart's title, artist and album: ONE undo step. Case and wording are never touched.</summary>
+    TrimMetadataSpaces,
+
+    /// <summary>Gives the project a DLC key no Library package uses, taken from the finding: ONE undo step. Nothing else changes.</summary>
+    AssignUniqueDlcKey
 }
 
 /// <summary>
@@ -47,7 +53,9 @@ public static class ExportFindingFixes
         [ChartExportValidator.KeyMissingBaseTone] = ExportFixKind.OpenToneDesigner,
         [ChartExportValidator.KeyTooManyTones] = ExportFixKind.OpenToneDesigner,
         [ChartExportValidator.KeyToneNotDefined] = ExportFixKind.CreateToneDefinitions,
-        [ChartExportValidator.KeyNoShowlights] = ExportFixKind.GenerateShowlights
+        [ChartExportValidator.KeyNoShowlights] = ExportFixKind.GenerateShowlights,
+        [ChartExportValidator.KeyMetadataStraySpaces] = ExportFixKind.TrimMetadataSpaces,
+        [ChartExportValidator.KeyPackageKeyClash] = ExportFixKind.AssignUniqueDlcKey
     };
 
     /// <summary>Keys with no automatic fix, each with the reason a machine should not decide it.</summary>
@@ -75,6 +83,11 @@ public static class ExportFindingFixes
         [ChartExportValidator.KeyFingerOutOfRange] = "A finger past the little finger is a typo in the chord box; only the charter knows which finger was meant.",
         [ChartExportValidator.KeyStringBeyondTuning] = "A note on a string the tuning lacks has no string to move to without changing what is played.",
         [ChartExportValidator.KeyStringCountUnsupported] = "A package spells six strings (eight for a guitar); dropping strings is a rearrangement the charter decides.",
+        [ChartExportValidator.KeyMetadataTitleCase] = "Only a suggestion: capitalisation is the artist's styling (lower-case stylings, brand names, acronyms), so a machine never rewrites it.",
+        [ChartExportValidator.KeyMetadataMissingTitle] = "Only the charter knows the song's name; a placeholder would ship as the real title.",
+        [ChartExportValidator.KeyMetadataMissingArtist] = "Only the charter knows the artist; a placeholder would ship as the real name.",
+        [ChartExportValidator.KeyMetadataMissingAlbum] = "A single or an unknown album is a legitimate answer; only the charter fills the field in.",
+        [ChartExportValidator.KeyMetadataMissingAlbumYear] = "The release year is a fact to look up, never one to guess.",
         [ChartExportValidator.KeyDisplayNameGlyphs] = "A romanised or English title is a choice of words, never a transliteration a machine should guess (#747)."
     };
 

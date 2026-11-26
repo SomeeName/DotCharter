@@ -52,6 +52,39 @@ public sealed class StemSetOpenerTests
         Assert.All(results, r => Assert.Null(r.Error));
     }
 
+    [Theory]
+    [InlineData(32, 6)]
+    [InlineData(12, 6)]
+    [InlineData(8, 4)]
+    [InlineData(1, 1)]
+    public void A_six_stem_set_opens_in_one_wave_given_the_cores(int processorCount, int expected)
+    {
+        // #962: three in flight opened six stems in two waves (~440 ms for 260 s stems,
+        // ~320 ms in one). The cap is the separator's largest set; fewer cores still
+        // limit it, one open per two hardware threads.
+        Assert.Equal(6, StemSetOpener.MaxOpensInFlightCap);
+        Assert.Equal(expected, StemSetOpener.OpensInFlightFor(processorCount));
+    }
+
+    [Fact]
+    public void Six_opens_run_together_at_the_cap()
+    {
+        var paths = Paths(6);
+        using var allEntered = new CountdownEvent(paths.Length);
+        var satisfied = new ConcurrentBag<bool>();
+
+        StemSetOpener.OpenAll(paths, _ => 0, path =>
+        {
+            allEntered.Signal();
+            // Only reachable when all six opens are in flight at once: one wave.
+            satisfied.Add(allEntered.Wait(DeadlockCap));
+            return path;
+        }, StemSetOpener.OpensInFlightFor(32));
+
+        Assert.Equal(6, satisfied.Count);
+        Assert.True(satisfied.All(s => s), "A six-stem set opened in two waves instead of one (#962).");
+    }
+
     [Fact]
     public void TheReadsRunAheadOfTheOpens_EvenWithOneOpenInFlight()
     {

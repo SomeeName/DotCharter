@@ -101,6 +101,66 @@ public sealed class ArrangementSyncViewModelTests
         Assert.False(vm.Result.IsCompleted);
     }
 
+    /// <summary>
+    ///     #913: a 7-string and its 6-string twin match by pitch, and the preview says what
+    ///     carries over and what stays behind — its own wording, not the same-strings one.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "ArrangementSync_PreviewByPitch(1, 1, 0, 0, 1, 0, 0)")]
+    [InlineData(false, "ArrangementSync_NothingSharedByPitch")]
+    public void A_pair_on_different_strings_previews_by_pitch(bool shared, string expected)
+    {
+        var h = TwoArrangements(shared: false);
+        var seven = h.Project.Arrangements[0];
+        var six = h.Project.Arrangements[1];
+        seven.StringCount = 7;
+        foreach (var step in new[] { -2, 0, 0, 0, 0, 0, 0 }) seven.TuningPitches.Add(new TuningOffset(step));
+        six.StringCount = 6;
+        foreach (var step in new[] { -2, 0, 0, 0, 0, 0 }) six.TuningPitches.Add(new TuningOffset(step));
+        var position = h.Editor.SnapToGrid(500);
+        seven.Levels[0].Notes.Add(new GuitarNote { Position = position, StringIndex = 3, Fret = 5 });
+        seven.Levels[0].Notes.Add(new GuitarNote { Position = position, StringIndex = 0, Fret = 3 });
+        seven.Levels[0].Anchors.Add(new FretAnchor(position, 5, 4));
+        six.Levels[0].Notes.Add(new GuitarNote { Position = position, StringIndex = shared ? 2 : 0, Fret = 5 });
+
+        var (maintenance, _) = RecordingProxy.Create<IChartMaintenanceService>();
+        var vm = new ArrangementSyncViewModel(h.State, maintenance, FakeLocalization.KeysOnly(), new FakeAppLogger());
+
+        Assert.Equal(expected, vm.Preview);
+        Assert.Equal(shared, vm.CanApply);
+    }
+
+    /// <summary>
+    ///     #914: a re-voiced chord is a learned mapping, and the preview says what the rule
+    ///     pass carries between its occurrences instead of "nothing would be copied".
+    /// </summary>
+    [Fact]
+    public void A_re_voiced_chord_previews_the_rule_pass()
+    {
+        var h = TwoArrangements(shared: false);
+        var seven = h.Project.Arrangements[0];
+        var six = h.Project.Arrangements[1];
+        seven.StringCount = 7;
+        foreach (var step in new[] { -2, 0, 0, 0, 0, 0, 0 }) seven.TuningPitches.Add(new TuningOffset(step));
+        six.StringCount = 6;
+        foreach (var step in new[] { -2, 0, 0, 0, 0, 0 }) six.TuningPitches.Add(new TuningOffset(step));
+        var position = h.Editor.SnapToGrid(500);
+        var low = new Chord { Position = position };
+        low.ChordNotes.Add(new ChordNote { StringIndex = 0, Fret = 2 });
+        low.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 2 });
+        seven.Levels[0].Chords.Add(low);
+        var reVoiced = new Chord { Position = position };
+        reVoiced.ChordNotes.Add(new ChordNote { StringIndex = 0, Fret = 4 });
+        reVoiced.ChordNotes.Add(new ChordNote { StringIndex = 1, Fret = 2 });
+        six.Levels[0].Chords.Add(reVoiced);
+
+        var (maintenance, _) = RecordingProxy.Create<IChartMaintenanceService>();
+        var vm = new ArrangementSyncViewModel(h.State, maintenance, FakeLocalization.KeysOnly(), new FakeAppLogger());
+
+        Assert.Equal("ArrangementSync_PreviewByRule(1, 0, 0, 0, 0)", vm.Preview);
+        Assert.False(vm.CanApply);
+    }
+
     [Fact]
     public void Cancel_answers_false()
     {

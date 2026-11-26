@@ -107,6 +107,10 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
     private RootSource _lastRootSource;
     private int _capo;
     private bool _bassArrangement;
+
+    // A guitar with seven or more strings: its bounce collapse also holds a
+    // one-fret grip (OneFretGripWithin).
+    private bool _extendedRange;
     private Dictionary<FractionalPosition, List<SoundAtPosition>> _byPosition = [];
     private List<(FractionalPosition Start, FractionalPosition End)> _handShapes = [];
 
@@ -212,6 +216,7 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
 
         _capo = Math.Max(0, capo);
         _bassArrangement = bassArrangement;
+        _extendedRange = !bassArrangement && tuning?.StringCount >= 7;
 
         BuildIndexes(level, chordTemplates, freeGrip);
         (_octaveStarts, _octaveNotes) = _bassArrangement ? BassOctaveFigures.Find(level.Notes, _capo, tuning) : ([], []);
@@ -230,6 +235,7 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
 
         Smooth(walk.Hints, walk.Pinned);
         var result = BuildAnchors(allPositions, walk.Hints);
+        BendFingerShift.Apply(result, level, chordTemplates, _capo, rangeEnd);
         AnchorLeadingOpenSounds(result, level, rangeStart, rangeEnd);
         _logger?.Info(AppLogCategory.Editing,
             $"Generated {result.Count} fret anchors from {allPositions.Count} candidate positions.");
@@ -483,6 +489,14 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
     {
         var before = RuleTrace != null ? hints.Keys.ToList() : null;
         AnchorSmoothing.CollapseBounces(hints, pinned, this);
+        if (_extendedRange)
+        {
+            foreach (var (from, to) in AnchorSmoothing.FoldHigherIntoLower(hints, pinned, this))
+            {
+                if (RuleTrace?.Remove(from, out var trace) == true) RuleTrace[to] = trace;
+            }
+        }
+
         if (_bassArrangement)
         {
             foreach (var (from, to) in AnchorSmoothing.PullBackUpshifts(hints, pinned, this, _octaveNotes))
@@ -511,6 +525,19 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
         foreach (var s in GetFrettedSoundsAt(_struckOrder[index].Pos))
             max = Math.Max(max, s.Fret);
         return max;
+    }
+
+    bool IStruckSounds.OneFretGripWithin(int index, int fret, int width) =>
+        _extendedRange && GetFrettedSoundsAt(_struckOrder[index].Pos) is { Count: >= 2 } grip &&
+        grip.All(s => s.Fret == grip[0].Fret) && grip[0].Fret >= fret && grip[0].Fret <= fret + width - 1;
+
+    bool IStruckSounds.SameShapeAt(int index, int other)
+    {
+        var a = GetFrettedSoundsAt(_struckOrder[index].Pos);
+        var b = GetFrettedSoundsAt(_struckOrder[other].Pos);
+        if (a.Count == 0 || a.Count != b.Count) return false;
+        var shift = a.Count == 1 ? 0 : _struckOrder[index].MinFret - _struckOrder[other].MinFret;
+        return a.All(s => b.Any(t => t.StringIndex == s.StringIndex && t.Fret + shift == s.Fret));
     }
 
     int? IStruckSounds.HardRootAt(int index) => ComputeHardRoot(GetFrettedSoundsAt(_struckOrder[index].Pos));
@@ -560,6 +587,10 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
         return Math.Clamp(maxFret - root + 1, BaseAnchorWidth, MaxHandSpanWidth(root));
     }
 
+    // The highest fret a shape's hand must reach. End is EXCLUSIVE, as in
+    // FindActiveHandShape: a sound AT End belongs to the next shape (an untrimmed
+    // import shape ends exactly on the next chord), so its frets are not reach.
+    // CanHoldFreeShape, ComputeHandShapeWidth and the wide-shape test all read it.
     private int ShapeMaxFret((FractionalPosition Start, FractionalPosition End) shape, int root)
     {
         var maxFret = root;
@@ -567,7 +598,7 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
         for (var i = idx; i < _sortedByStart.Count; i++)
         {
             var s = _sortedByStart[i];
-            if (s.Position > shape.End) break;
+            if (s.Position >= shape.End) break;
             if (s.Position < shape.Start) continue;
             if (s.Fret > maxFret) maxFret = s.Fret;
         }
@@ -643,9 +674,23 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
     // Re-anchor UP when the fret hand has clearly abandoned the low position
     // (HandAbandonment). Null holds the current anchor.
     private int? AbandonmentRoot(FractionalPosition position, int currentFret) =>
-        _struckOrdinal.TryGetValue(position, out var ordinal)
+        _struckOrdinal.TryGetValue(position, out var ordinal) && !(_bassArrangement && RootFollowsBelow(ordinal))
             ? HandAbandonment.Root(this, ordinal, currentFret, _bassArrangement, MinAnchorFret, Math.Max(MinAnchorFret, FretLimits.MaxAnchorFretFor(BaseAnchorWidth)))
             : null;
+
+    // Bass: a single note whose very next note plays the same fret on a LOWER
+    // string. The charters re-plant one note later, on that lower note (the root
+    // of the figure the index finger takes), not on this one: 108 of 108 such
+    // holdout re-plants, 121 of 163 on train. Bass FHP train / holdout
+    // 85.8 / 85.3 -> 86.1 / 86.1 % (tools/chart-eval).
+    private bool RootFollowsBelow(int ordinal)
+    {
+        if (ordinal + 1 >= _struckOrder.Count) return false;
+        var here = GetFrettedSoundsAt(_struckOrder[ordinal].Pos);
+        var next = GetFrettedSoundsAt(_struckOrder[ordinal + 1].Pos);
+        return here.Count == 1 && next.Count == 1 && next[0].Fret == here[0].Fret &&
+               next[0].StringIndex < here[0].StringIndex;
+    }
 
     // ─── Slide handling ─────────────────────────────────────────────────────
 
@@ -678,6 +723,7 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
         _handShapeSoftLow = [];
         _wideShapeStarts = [];
         _handShapeRootTrace = RuleTrace != null ? [] : null;
+        var shapeStarts = _handShapes.Select(h => h.Start).ToHashSet();
 
         foreach (var shape in _handShapes)
         {
@@ -714,15 +760,18 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
                     // its own fret 3. A SINGLE note at End is left IN: it is the same
                     // running arpeggio sweeping on, and the hand-corrected corpus
                     // anchors those continuations together (excluding them
-                    // over-segmented the anchor stream).
-                    var endIsChord = GetFrettedSoundsAt(shape.End).Count > 1;
+                    // over-segmented the anchor stream). A sound at End that STARTS
+                    // another hand shape is that shape's, chord or single note (before
+                    // an import trims them, shapes abut and the next
+                    // arpeggio's first note dragged this root two frets down).
+                    var endStartsNextPosition = GetFrettedSoundsAt(shape.End).Count > 1 || shapeStarts.Contains(shape.End);
                     var arpeggioSounds = new List<SoundAtPosition>();
                     for (var i = idx; i < _sortedByStart.Count; i++)
                     {
                         var s = _sortedByStart[i];
                         if (s.Position > shape.End) break;
                         if (s.Position < shape.Start) continue;
-                        if (endIsChord && s.Position == shape.End) continue;
+                        if (endStartsNextPosition && s.Position == shape.End) continue;
                         arpeggioSounds.Add(s);
                     }
 
@@ -1073,6 +1122,7 @@ public sealed partial class FretAnchorGenerationService : IFretAnchorGenerationS
         P1HandShapeArpeggio,
         P1HandShapeInferred,
         P2SlideDestination,
+        P2SlideIntoShape,
         P3RunMin,
         P4P5StruckWalk,
         P6Abandonment,

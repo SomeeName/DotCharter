@@ -142,7 +142,9 @@ public sealed class GpChordDiagramTests
         // The FIRST strum of a shape creates its template, so without borrowing
         // the name would depend on whether the first one carried the reference.
         var arr = Import([Strum(null, Dm7Frets), Strum(0, Dm7Frets)]);
-        var template = Assert.Single(arr.ChordTemplates);
+        // The second strum repeats the grip inside one hand shape, so it plays the grip's unnamed twin.
+        var template = Assert.Single(arr.ChordTemplates, t => t.Name.Length > 0);
+        Assert.Single(arr.ChordTemplates, t => t.Name.Length == 0 && t.HasSameShapeAs(template));
 
         Assert.Equal("Dm7", template.Name);
         Assert.Equal(Dm7Fingers, template.Fingers);
@@ -337,7 +339,11 @@ public sealed class GpChordDiagramTests
             beatXml.Add($"""<Beat id="{b}"><Rhythm ref="0" />{chordRef}<Notes>{string.Join(' ', ids)}</Notes></Beat>""");
         }
 
-        var range = Enumerable.Range(0, beats.Count).ToList();
+        // One quarter-note bar per beat, except a let-ring arpeggio: it rings inside ONE bar, since
+        // a barline ends a let-ring run.
+        var range = Enumerable.Range(0, letRing ? 1 : beats.Count).ToList();
+        var time = letRing ? $"{beats.Count}/4" : "1/4";
+        string VoiceBeats(int i) => letRing ? string.Join(' ', Enumerable.Range(0, beats.Count)) : $"{i}";
         return $"""
             <GPIF>
               <Score><Title>Diagram Fixture</Title></Score>
@@ -352,9 +358,9 @@ public sealed class GpChordDiagramTests
                   </Properties></Staff></Staves>
                 </Track>
               </Tracks>
-              <MasterBars>{string.Concat(range.Select(i => $"<MasterBar><Time>1/4</Time><Bars>{i}</Bars></MasterBar>"))}</MasterBars>
+              <MasterBars>{string.Concat(range.Select(i => $"<MasterBar><Time>{time}</Time><Bars>{i}</Bars></MasterBar>"))}</MasterBars>
               <Bars>{string.Concat(range.Select(i => $"<Bar id=\"{i}\"><Voices>{i} -1 -1 -1</Voices></Bar>"))}</Bars>
-              <Voices>{string.Concat(range.Select(i => $"<Voice id=\"{i}\"><Beats>{i}</Beats></Voice>"))}</Voices>
+              <Voices>{string.Concat(range.Select(i => $"<Voice id=\"{i}\"><Beats>{VoiceBeats(i)}</Beats></Voice>"))}</Voices>
               <Beats>{string.Concat(beatXml)}</Beats>
               <Notes>{string.Concat(notes)}</Notes>
               <Rhythms><Rhythm id="0"><NoteValue>Quarter</NoteValue></Rhythm></Rhythms>

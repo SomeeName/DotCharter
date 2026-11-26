@@ -21,7 +21,7 @@ internal static class ChordDisplayTemplates
     /// still-untemplated chord neither dirties the project nor bloats the list.
     /// </summary>
     internal static ChordTemplate Resolve(Chord chord, Arrangement arr, IFingeringGenerationService fingeringService,
-        Func<Arrangement, ChordNamingOptions> naming)
+        Func<Arrangement, ChordNamingOptions> naming, ArrangementFingeringStyle songStyle)
     {
         var assigned = arr.FindChordTemplate(chord.TemplateId);
         if (assigned != null && !assigned.IsArpeggio && ChordTemplateEditPlanner.TemplateMatchesChord(assigned, chord))
@@ -34,7 +34,7 @@ internal static class ChordDisplayTemplates
         var equiv = fingeringService.FindEquivalentTemplate(arr, seed);
         if (equiv != null) return equiv;
 
-        ArrangementFingeringStyle.SetSuggestedFingers(arr, seed, arr.StringCount);
+        ArrangementFingeringStyle.SetSuggestedFingers(arr, seed, arr.StringCount, songStyle);
         seed.Name = NewChordNames.For(arr, seed.Frets, naming(arr));
         return seed;
     }

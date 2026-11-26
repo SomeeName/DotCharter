@@ -154,6 +154,8 @@ internal static class RichProjectFactory
             WrittenBar = 3, Pass = 2, EndingMask = 3, StartsBlock = true, EndsBlock = true, Marker = "Verse"
         });
 
+        project.IgnoredFindings.Add(new IgnoredFinding("D13", "The word “baddy” puts 2 syllables on one note", "0123456789abcdef"));
+
         project.Stems.Add(new Stem
         {
             Local = false, Name = "drums", Offset = -12.5, Path = "stems/drums.ogg",
@@ -349,6 +351,7 @@ internal static class RichProjectFactory
         arr.Phrases.Add("verse");
         arr.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(0), 0));
         arr.PhraseIterations.Add(new PhraseIteration(new FractionalPosition(16, new Fraction(1, 3)), 1));
+        arr.AudioCheckSpots.Add(new AudioCheckSpot(new FractionalPosition(3, new Fraction(1, 4)), AudioCheckReason.DeadNoteSlideLanding));
         arr.PhraseInfos["intro"] = new PhraseInfo(3, true);
         arr.PhraseInfos["verse"] = new PhraseInfo(7, false);
 

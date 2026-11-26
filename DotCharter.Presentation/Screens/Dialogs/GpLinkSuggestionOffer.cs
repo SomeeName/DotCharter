@@ -49,17 +49,27 @@ public sealed class GpLinkSuggestionOffer(IDialogs dialogs, GpImportApplier appl
     {
         var rule = LinkSuggestionFinder.RuleFor(edit.Config.LoadAppConfig());
         var before = project.LinkGroups.Count;
-        var action = LinkSuggestionFinder.LinkAll(project, [.. suggestions], rule);
+        var (action, skipped) = LinkSuggestionFinder.LinkAll(project, [.. suggestions], rule);
+        foreach (var skip in skipped)
+        {
+            edit.Logger.Info(AppLogCategory.Editing,
+                $"Link all skipped \"{skip.Suggestion.Name}\" at measure {skip.Mismatch.Measure + 1}: {skip.Mismatch.Kind} " +
+                $"{skip.Mismatch.Difference?.Kind} {skip.Mismatch.Difference?.Reference} -> {skip.Mismatch.Difference?.Other} {skip.Mismatch.Refusal}.");
+        }
+
+        var skippedText = skipped.Count == 0
+            ? ""
+            : " " + edit.Localization.Plural("Status_LinkSuggestionsSkippedOne", "Status_LinkSuggestionsSkipped", skipped.Count);
         if (action == null || !edit.History.Do(action))
         {
-            edit.State.SetMessage(edit.Localization["Status_LinkSuggestionsNone"], StatusSeverity.Warning);
+            edit.State.SetMessage(edit.Localization["Status_LinkSuggestionsNone"] + skippedText, StatusSeverity.Warning);
             return 0;
         }
 
         var linked = project.LinkGroups.Count - before;
-        edit.State.SetMessage(edit.Localization.Plural("Status_LinkSuggestionsLinkedOne", "Status_LinkSuggestionsLinked", linked),
-            StatusSeverity.Success);
-        edit.Logger.Info(AppLogCategory.Editing, $"Linked {linked} suggested groups as one undo step.");
+        edit.State.SetMessage(edit.Localization.Plural("Status_LinkSuggestionsLinkedOne", "Status_LinkSuggestionsLinked", linked) + skippedText,
+            skipped.Count == 0 ? StatusSeverity.Success : StatusSeverity.Warning);
+        edit.Logger.Info(AppLogCategory.Editing, $"Linked {linked} suggested groups as one undo step; skipped {skipped.Count}.");
         return linked;
     }
 }

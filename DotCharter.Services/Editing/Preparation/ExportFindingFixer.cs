@@ -22,7 +22,7 @@ public sealed class ExportFindingFixer(IArrangementAutoFixService autoFix, IFret
             case ExportFixKind.AutoFix:
             {
                 var result = new ArrangementFixResult();
-                autoFix.Fix(arrangement, result);
+                autoFix.Fix(arrangement, result, project);
                 return result.TotalChanges;
             }
             case ExportFixKind.FillFhp:

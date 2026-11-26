@@ -58,7 +58,7 @@ public sealed class FixChartRunner(IArrangementAutoFixService autoFix, IChartImp
         if (groups.HasFlag(FixChartGroups.Errors))
         {
             var result = new ArrangementFixResult();
-            foreach (var arrangement in target.Arrangements) autoFix.Fix(arrangement, result);
+            foreach (var arrangement in target.Arrangements) autoFix.Fix(arrangement, result, target);
             errors = [.. result.Changes.Select(c => new FixChartChange(c.Key, c.Value))];
         }
 

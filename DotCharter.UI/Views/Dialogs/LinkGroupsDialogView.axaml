@@ -70,6 +70,7 @@
                                                               AutomationProperties.Name="{Binding Title}" />
                                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                         <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{Binding Title}"
+                                                                   ToolTip.Tip="{Binding Title}"
                                                                    TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                                                         <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding Detail}"
                                                                    TextWrapping="Wrap" />
@@ -105,6 +106,7 @@
                                                                Foreground="{DynamicResource FireTextPrimary}" />
                                                 </Border>
                                                 <TextBox Grid.Column="1" Text="{Binding Name}" VerticalContentAlignment="Center"
+                                                         ToolTip.Tip="{Binding Name}"
                                                          PlaceholderText="{localization:Loc LinkGroups_NamePlaceholder}"
                                                          AutomationProperties.Name="{localization:Loc LinkGroups_NamePlaceholder}" />
                                                 <Button Grid.Column="2" Theme="{DynamicResource SecondaryButton}" Classes="Secondary"

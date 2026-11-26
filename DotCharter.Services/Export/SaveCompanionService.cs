@@ -63,7 +63,9 @@ public interface ISaveCompanionService
     ///     droppable onto CustomsForge's "Import rs2dlc" control — without a manual
     ///     export step. Returns the path, or null when disabled, when the bundle is
     ///     absent, or when the <c>.rs2dlc</c> on disk is one the charter edited in
-    ///     DLC Builder (see <see cref="CompanionOwnership" />).
+    ///     DLC Builder (see <see cref="CompanionOwnership" />). A chart with RS Extended Range paths also gets
+    ///     the <c>_rsxr</c> project beside it (<see cref="Rs2DlcEditions" />), under the same ownership rule; the
+    ///     returned path is the standard one. Both follow <c>AppConfig.ExportFixLowBassTuning</c>, as the bundle does.
     /// </summary>
     /// <remarks>
     ///     Must run AFTER <c>IProjectDocumentService.SaveDlcBuilderXmlBundle</c>: it
@@ -222,7 +224,6 @@ public sealed class SaveCompanionService : ISaveCompanionService
         if (!config.SaveCompanionRs2Dlc) return null;
         if (RefusedAsPlayOnly(snapshot, "SaveCompanionRs2Dlc")) return null;
 
-        var directory = ProjectDirectory(projectPath);
         var bundleDirectory = DlcBuilderBundle.DirectoryFor(projectPath);
 
         // The bundle is written by SaveDlcBuilderXmlBundle and swapped in by
@@ -238,28 +239,43 @@ public sealed class SaveCompanionService : ISaveCompanionService
         // Reference what actually resolved on disk, by name relative to the
         // project folder — the builder turns that into the bundle-relative "..\".
         var media = EnsureCompanionMedia(projectPath, snapshot, audioLengthMs, config);
-        directory = ProjectFolderLayout.ExportDirectory(projectPath);
-        var dto = DlcBuilderProjectFile.Build(config, snapshot, directory, media.Audio, media.Cover, audioLengthMs);
+        var directory = ProjectFolderLayout.ExportDirectory(projectPath);
 
         // The PROJECT ROOT, not the bundle: SaveDlcBuilderXmlBundle swaps the
         // bundle in by renaming the old one aside, so a file written inside it is
         // moved to 'DTRS XML.old' on the next save and deleted on the one after.
         var path = ProjectFolderLayout.CompanionPath(projectPath, ".rs2dlc");
+        string? written = null;
+        foreach (var edition in Rs2DlcEditions.For(snapshot))
+        {
+            var dto = DlcBuilderProjectFile.Build(config, snapshot, directory, media.Audio, media.Cover, audioLengthMs,
+                config.ExportFixLowBassTuning, edition);
+            var target = Rs2DlcEditions.PathFor(path, edition);
+            if (WriteOwnedRs2Dlc(target, dto) && edition != Rs2DlcEdition.ExtendedRange) written = target;
+        }
+        if (Rs2DlcEditions.RemoveStaleExtendedRangeProject(snapshot, path, _recycle))
+            _logger.Info(AppLogCategory.Project, $"Removed the stale RS Extended Range .rs2dlc beside '{path}'.");
+        return written;
+    }
 
-        // The .rs2dlc is DLC Builder's own project format, so the charter opens it
-        // and assigns TONES there — which we always write empty. Overwrite only the
-        // file we ourselves last wrote.
+    /// <summary>
+    ///     The .rs2dlc is DLC Builder's own project format, so the charter opens it
+    ///     and assigns TONES there — which we always write empty. Overwrite only the
+    ///     file we ourselves last wrote.
+    /// </summary>
+    private bool WriteOwnedRs2Dlc(string path, Rs2DlcProjectDto dto)
+    {
         if (!CompanionOwnership.WriteIfUnmodified(path, target => Rs2DlcWriter.WriteTo(target, dto),
                 out var skipReason))
         {
             _logger.Info(AppLogCategory.Project,
                 $"Leaving the .rs2dlc alone: {skipReason}. Path='{path}'.");
-            return null;
+            return false;
         }
 
         _logger.Info(AppLogCategory.Project,
             $"DLC Builder project written. Path='{path}', arrangements={dto.Arrangements.Length}, key='{dto.DlcKey}'.");
-        return path;
+        return true;
     }
 
     /// <summary>

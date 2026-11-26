@@ -65,7 +65,7 @@ ChartsMode.Run(opt);
 
 internal sealed record Options(string? Corpus, string Kind, string Split, bool ReferenceFingers, string? Song,
     string? Json, string? Baseline, string? Detail, string? Tabs, string? Gold, bool FreeFingering, string? Octaves, string? Sounds,
-    string? Learn, string? Fixture, string Style)
+    string? Learn, string? Fixture, string Style, bool SongStyle)
 {
     public static Options Parse(string[] a)
     {
@@ -73,7 +73,7 @@ internal sealed record Options(string? Corpus, string Kind, string Split, bool R
         return new Options(Get("--corpus"), Get("--kind") ?? "all", Get("--split") ?? "all",
             (Get("--fhp-fingers") ?? "auto") == "reference", Get("--song"), Get("--json"), Get("--baseline"),
             Get("--detail"), Get("--tabs"), Get("--gold"), (Get("--free-fingering") ?? "suggested") != "none", Get("--octaves"), Get("--sounds"),
-            Get("--learn"), Get("--fixture"), Get("--style") ?? "prefix");
+            Get("--learn"), Get("--fixture"), Get("--style") ?? "prefix", (Get("--song-style") ?? "others") != "none");
     }
 }
 
@@ -149,6 +149,18 @@ internal static class ChartsMode
             var holdout = IsHoldout(name);
             if (opt.Split == "train" && holdout || opt.Split == "holdout" && !holdout) continue;
 
+            // The song's other arrangements, for the style an arrangement has no majority of its own for.
+            var siblings = new List<(string Kind, Arrangement Arr, string Sig)>();
+            foreach (var a in song.GetProperty("arrangements").EnumerateArray())
+            {
+                try
+                {
+                    var sa = new XmlChartSerializer().Load(a.GetProperty("xml").GetString()!).Arrangements.FirstOrDefault();
+                    if (sa is { Levels.Count: 1 }) siblings.Add((a.GetProperty("kind").GetString()!, sa, Signature(sa.Levels[0])));
+                }
+                catch (Exception) { /* unreadable: reported by the loop below */ }
+            }
+
             foreach (var a in song.GetProperty("arrangements").EnumerateArray())
             {
                 var kind = a.GetProperty("kind").GetString()!;
@@ -171,7 +183,11 @@ internal static class ChartsMode
                 var sig = Signature(level);
                 if (!seen.Add(name + "|" + sig)) continue;
 
-                var s = ScoreArrangement(name, Path.GetFileName(path), kind, project, arr, level, opt.ReferenceFingers, opt.FreeFingering, detail, octaves, holdout, sounds, opt.Style);
+                // Another export of the SAME chart (same signature) would hand the arrangement its own answers.
+                var others = siblings.Where(o => o.Kind == kind && o.Sig != sig).Select(o => o.Arr).ToList();
+                foreach (var o in others) o.ArrangementType = arr.ArrangementType;
+                var songStyle = opt.SongStyle ? ArrangementFingeringStyle.OfOtherArrangements(others, arr) : null;
+                var s = ScoreArrangement(name, Path.GetFileName(path), kind, project, arr, level, opt.ReferenceFingers, opt.FreeFingering, detail, octaves, holdout, sounds, opt.Style, songStyle);
                 fixture?.Collect(name + "|" + Path.GetFileName(path), kind, arr, level);
                 total[kind].Add(s);
                 var splitKey = $"{(holdout ? "holdout" : "train")} {kind}";
@@ -220,7 +236,7 @@ internal static class ChartsMode
 
     private static Score ScoreArrangement(string song, string file, string kind, ChartProject project, Arrangement arr,
         ChartLevel level, bool referenceFingers, bool freeFingering, StreamWriter? detail, StreamWriter? octaves, bool holdout,
-        StreamWriter? soundDump, string style)
+        StreamWriter? soundDump, string style, ArrangementFingeringStyle? songStyle)
     {
         var s = new Score();
         var beats = project.Beats;
@@ -228,7 +244,7 @@ internal static class ChartsMode
         var templateById = arr.ChordTemplates.Where(t => t.Id >= 0).GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.First());
 
         // ---- chord fingering: the suggester on frets only (+ the arrangement's style, #511) vs the charter's fingers
-        var hints = StyleHints.For(style, arr, level);
+        var hints = StyleHints.For(style, arr, level, songStyle);
         var suggested = new Dictionary<int, ChordTemplate>();
         foreach (var t in arr.ChordTemplates)
         {
@@ -297,6 +313,12 @@ internal static class ChartsMode
         foreach (var (chord, _, newId) in follow.Chords) finalId[chord] = newId;
         var finalById = templates.Concat(follow.MintedTemplates).GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.First());
         s.Refingered = follow.Chords.Count;
+        // #943: a free grip that is part of the grip next to it takes that grip's fingers (as ImportFhpPass does).
+        var neighbourFingers = isFree == null || Environment.GetEnvironmentVariable("CE_NO_NEIGHBOUR") == "1"
+            ? new Dictionary<int, Dictionary<int, int>>()
+            : NeighbourGripFingering.Plan(
+                [NeighbourGripFingering.GripSequence(probe, c => finalId.TryGetValue(c, out var fid) ? fid : c.TemplateId)],
+                finalById, t => isFree(t) != null, t => t.Fingers, arr.Capo);
         foreach (var chord in level.Chords)
         {
             if (!templateById.TryGetValue(chord.TemplateId, out var refT)) continue;
@@ -305,7 +327,8 @@ internal static class ChartsMode
             var id = finalId.TryGetValue(chord, out var nid) ? nid : chord.TemplateId;
             if (!finalById.TryGetValue(id, out var fin)) continue;
             s.FollowChords++;
-            if (fretted.All(st => fin.Fingers.TryGetValue(st, out var g) && g == refT.Fingers[st])) s.FollowExact++;
+            var finFingers = neighbourFingers.TryGetValue(id, out var nf) ? nf : fin.Fingers;
+            if (fretted.All(st => finFingers.TryGetValue(st, out var g) && g == refT.Fingers[st])) s.FollowExact++;
         }
         var reference = level.Anchors.OrderBy(x => x.Position).ToList();
         s.AnchorsRef = reference.Count; s.AnchorsGen = generated.Count;
@@ -397,7 +420,8 @@ internal static class ChartsMode
 /// </summary>
 internal static class StyleHints
 {
-    public static Dictionary<int, PairFingering?> For(string style, Arrangement arr, ChartLevel level)
+    public static Dictionary<int, PairFingering?> For(string style, Arrangement arr, ChartLevel level,
+        ArrangementFingeringStyle? songStyle = null)
     {
         var hints = new Dictionary<int, PairFingering?>();
         if (style == "none") return hints;
@@ -423,7 +447,7 @@ internal static class StyleHints
                 "halves" => fromFirst ??= ArrangementFingeringStyle.From(arr, templates.Where(o => firstHalf.Contains(o.Id))),
                 _ => throw new ArgumentException($"--style {style}: halves, loto, oracle or none"),
             };
-            hints[t.Id] = source.HintFor(arr, t);
+            hints[t.Id] = source.Or(songStyle).HintFor(arr, t);
         }
 
         return hints;

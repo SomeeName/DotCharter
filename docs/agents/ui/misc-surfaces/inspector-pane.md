@@ -148,7 +148,11 @@ and [inspector-mixer-and-fehler.md](inspector-mixer-and-fehler.md).
   a shape the selection holds a use of: `CanSplitSelection`). A "Needs attention (N)" chip beside the
   summary (`ShowAttentionOnly`) lists only the cards with an issue, together with the search.
   "Repeat previous chord" (`Ctrl+Shift+C`, the palette's `tools.repeatPreviousChord`)
-  is a command on the same screen; there is no recent strip. All of it drives `Services/Editing/ChordShapes/IChordShapePlacementService`.
+  is a command on the same screen; there is no recent strip. **Pins (#1019):** the Shape page's
+  `ShapePin` toggle ("Pin grip", `IShapePanelRow.IsPinned`, one `SetTemplatePinnedAction`; a ghost grip shows
+  it on and locked) and the list's `ShapesPinAll` ("Pin all grips (N)", `Services/Editing/ChordShapes/GripPins`:
+  every unpinned fingered shape, one undo step; off with its reason as a `ShowOnDisabled` tip when none is left).
+  `Perf/ShapesPanelPinUiPerfSmokeTests`. All of it drives `Services/Editing/ChordShapes/IChordShapePlacementService`.
   **A pen placement leaves the selection alone on purpose**: the selection wins over
   the pen, so selecting the new chord would turn the next click into a reshape of
   it, and a fresh chord selection pulls `InspectorViewModel.AutoSelectTab` off this

@@ -35,6 +35,30 @@ public sealed partial class RocksmithExportDialogViewModelTests
     }
 
     [Fact]
+    public void A_missing_album_year_note_links_to_Song_metadata_and_a_stray_space_note_does_not()
+    {
+        var project = CreateValidProject();
+        project.Chart.AlbumYear = "";
+        project.Chart.SongName = "Dialog  Song";
+        using var vm = new Harness(project) { Dialogs = new MetadataDialogs(() => { }) }.Open();
+
+        Assert.Single(vm.ValidationItems, f => f.HasSongMetadataLink);
+        Assert.Contains(vm.ValidationItems, f => !f.HasSongMetadataLink && f.HasFix);
+    }
+
+    [Fact]
+    public void A_dlc_key_a_library_package_uses_is_flagged_in_the_dialog_with_a_fix()
+    {
+        var project = CreateValidProject();
+        var key = DotCharter.Services.Export.RocksmithDlcKey.Create(project.Chart.Artist, project.Chart.SongName);
+        using var vm = new Harness(project) { LibraryIndex = new DotCharter.Tests.Services.Export.PackageKeyIndex(key) }.Open();
+
+        var item = Assert.Single(vm.ValidationItems, f => f.Message.Contains(key, StringComparison.Ordinal));
+
+        Assert.True(item.HasFix);
+    }
+
+    [Fact]
     public void The_glyph_warning_names_Song_metadata_and_has_a_button_that_opens_it()
     {
         var harness = new Harness(JapaneseTitleProject()) { Dialogs = new MetadataDialogs(() => { }) };
